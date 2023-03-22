@@ -23,15 +23,14 @@ include("AddedAxioms/src/002-PointMove.jl")
 include("Definitions/src/002-Line.jl")
 include("AddedAxioms/src/003-LineHighlight.jl")
 include("AddedAxioms/src/004-LineMove.jl")
+include("AddedAxioms/src/005-LineRotate.jl")
 
 # Defintion 3
 include("Definitions/src/003-LineExtremities.jl")
 
-# Definition 4
+# Definition 4 and resulting axioms
 include("Definitions/src/004-StraightLine.jl")
-include("AddedAxioms/src/005-LineRotate.jl")
 include("AddedAxioms/src/006-LineReflect.jl")
-include("AddedAxioms/src/007-LineIntersect.jl")
 
 
 
@@ -42,14 +41,17 @@ include("AddedAxioms/src/007-LineIntersect.jl")
 # Postulate 1
 include("Postulates/src/001-DrawStraightLine.jl")
 
+
+# Postulate 5 The famous; and its resulting axioms
+
+include("AddedAxioms/src/007-LineIntersect.jl")
+
 # ==============================================
 #               Common Notions
 # ==============================================
 
 # Common Notion 1
 include("CommonNotions/src/001-EqualThings.jl")
-
-
 
 # ==============================================
 #               Propositions
