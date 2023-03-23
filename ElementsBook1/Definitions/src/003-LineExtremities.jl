@@ -18,23 +18,23 @@ Set up highlighting the extremities of a single line in a Euclid diagram
 
 # Arguments
 - `line::EuclidLine2f`: The line to highlight in the diagram
-- `point_width::AbstractFloat`: The width of the circle to draw the highlight
+- `point_width::Union{Float32, Observable{Float32}}`: The width of the circle to draw the highlight
 - `point_color`: The color to use in highlighting the line
 - `text_color`: Color of the text to write the labels of the points with
-- `text_opacity::AbstractFloat`: The opacity to show the labels of the extremities with
+- `text_opacity::Union{Float32, Observable{Float32}}`: The opacity to show the labels of the extremities with
 - `labelA`: The label of the first extremity (in order they were created)
 - `labelB`: The label of the second extremity
 """
 function highlight_extremities(line::EuclidLine2f;
-    point_width::AbstractFloat=0.04f0, point_color=:blue,
-    text_color=:blue, text_opacity::AbstractFloat=1f0, labelA="A", labelB="B")
+    point_width::Union{Float32, Observable{Float32}}=0.04f0, point_color=:blue,
+    text_color=:blue, text_opacity::Union{Float32, Observable{Float32}}=1f0, labelA="A", labelB="B")
 
-    extremity_A = point(line.extremityA[],
+    extremity_A = point(line.extremityA,
                         point_width=point_width*0.001f0, point_color=point_color,
                         text_color=text_color, text_opacity=text_opacity,
                         label=labelA)
     highlight_A = highlight(extremity_A, width=point_width, color=point_color)
-    extremity_B = point(line.extremityB[],
+    extremity_B = point(line.extremityB,
                         point_width=point_width*0.001f0, point_color=point_color,
                         text_color=text_color, text_opacity=text_opacity,
                         label=labelB)

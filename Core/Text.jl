@@ -5,8 +5,9 @@ Describes text to be drawn in Euclid diagrams
 """
 struct EuclidText2f
     location::Observable{Point2f}
+    plots
     current_opacity::Observable{Float32}
-    show_opacity::Float32
+    show_opacity::Observable{Float32}
 end
 
 """
@@ -15,22 +16,23 @@ end
 Create text to draw in a Euclid diagram
 
 # Arguments
-- `at_spot::Point2f`: Point to draw text at
-- `text::String`: The text to draw
+- `at_spot::Observable{Point2f}`: Point to draw text at
+- `text`: The text to draw
 - `color`: The color to draw the text in
-- `opacity`: Maximum opacity of the text to draw
+- `opacity::Union{Float32,Observable{Float32}}`: Maximum opacity of the text to draw
 """
-function text(at_spot::Observable{Point2f}, text::String;
-    color=:blue, opacity::Float32=1f0)
+function text(at_spot::Observable{Point2f}, text;
+    color=:blue, opacity::Union{Float32,Observable{Float32}}=1f0)
 
     observable_location = at_spot
     observable_opacity = Observable(0f0)
+    observable_show_opacity = opacity isa Observable{Float32} ? opacity : Observable(opacity)
 
     rgb_text = get_color(color)
-    text!(observable_location, text=text, color=@lift(RGBA(rgb_text.r, rgb_text.g, rgb_text.b, $observable_opacity)))
+    plots = text!(observable_location, text=text, color=@lift(RGBA(rgb_text.r, rgb_text.g, rgb_text.b, $observable_opacity)))
 
-    EuclidText2f(observable_location,
-        observable_opacity, opacity)
+    EuclidText2f(observable_location, plots,
+        observable_opacity, observable_show_opacity)
 end
 
 """
@@ -40,11 +42,11 @@ Create text to draw in a Euclid diagram
 
 # Arguments
 - `at_spot::Point2f`: Point to draw text at
-- `text::String`: The text to draw
+- `text`: The text to draw
 - `color`: The color to draw the text in
-- `opacity`: Maximum opacity of the text to draw
+- `opacity::Float32`: Maximum opacity of the text to draw
 """
-function text(at_spot::Point2f, text::String;
+function text(at_spot::Point2f, text;
     color=:blue, opacity::Float32=1f0)
 
     observable_location = Observable(at_spot)
@@ -62,7 +64,7 @@ Completely show previously defined text in a Euclid diagram
 - `text::EuclidText2f`: The text to completely show
 """
 function show_complete(text::EuclidText2f)
-    text.current_opacity[] = text.show_opacity
+    text.current_opacity[] = text.show_opacity[]
 end
 
 """
@@ -96,14 +98,14 @@ function animate(
 
     perform(t, hide_until, max_at, fade_start, fade_end,
         () -> text.current_opacity[] = 0f0,
-        () -> text.current_opacity[] = text.show_opacity,
+        () -> text.current_opacity[] = text.show_opacity[],
         () -> text.current_opacity[] = 0f0) do i
         if i == 1
             on_t = (t-hide_until)/(max_at-hide_until)
-            text.current_opacity[] = text.show_opacity * on_t
+            text.current_opacity[] = text.show_opacity[] * on_t
         else
             on_t = (t-fade_start)/(fade_end-fade_start)
-            text.current_opacity[] = text.show_opacity - (text.show_opacity * on_t)
+            text.current_opacity[] = text.show_opacity[] - (text.show_opacity[] * on_t)
         end
     end
 end

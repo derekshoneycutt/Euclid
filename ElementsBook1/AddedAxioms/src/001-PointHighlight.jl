@@ -5,8 +5,9 @@ Describes highlighting a point in a Euclid diagram
 """
 mutable struct EuclidPoint2fHighlight
     baseOn::EuclidPoint2f
+    plots
     current_width::Observable{Float32}
-    max_width::Float32
+    max_width::Observable{Float32}
 end
 
 """
@@ -16,17 +17,19 @@ Set up highlighting a single point in a Euclid diagram
 
 # Arguments
 - `point::EuclidPoint2f`: The point to highlight in the diagram
-- `width::AbstractFloat`: The width of the circle to draw the highlight
+- `width::Union{Float32, Observable{Float32}}`: The width of the circle to draw the highlight
 - `color`: The color to use in highlighting the point
 """
-function highlight(point::EuclidPoint2f; width::AbstractFloat=0.02f0, color=:red)
+function highlight(point::EuclidPoint2f;
+                   width::Union{Float32, Observable{Float32}}=0.02f0, color=:red)
 
     observable_highlight = Observable(0f0)
+    observable_max_width = width isa Observable{Float32} ? width : Observable(width)
 
     use_color = get_color(color)
-    poly!(@lift(Circle($(point.data), $observable_highlight)), color=RGBA(use_color.r, use_color.g, use_color.b, 0.6))
+    plots = poly!(@lift(Circle($(point.data), $observable_highlight)), color=RGBA(use_color.r, use_color.g, use_color.b, 0.6))
 
-    EuclidPoint2fHighlight(point, observable_highlight, width)
+    EuclidPoint2fHighlight(point, plots, observable_highlight, observable_max_width)
 end
 
 """
@@ -70,14 +73,14 @@ function animate(
 
     perform(t, hide_until, max_at, max_at + 0.00001, min_at,
         () -> point.current_width[] = 0f0,
-        () -> point.current_width[] = point.max_width,
+        () -> point.current_width[] = point.max_width[],
         () -> point.current_width[] = 0f0) do i
         if i == 1
             on_t = (t-hide_until)/(max_at-hide_until)
-            point.current_width[] = point.max_width * on_t
+            point.current_width[] = point.max_width[] * on_t
         else
             on_t = (t-max_at)/(min_at-max_at)
-            point.current_width[] = point.max_width- (point.max_width * on_t)
+            point.current_width[] = point.max_width[]- (point.max_width[] * on_t)
         end
     end
 end

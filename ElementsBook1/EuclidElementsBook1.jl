@@ -31,6 +31,10 @@ include("Definitions/src/003-LineExtremities.jl")
 # Definition 4 and resulting axioms
 include("Definitions/src/004-StraightLine.jl")
 include("AddedAxioms/src/006-LineReflect.jl")
+include("AddedAxioms/src/007-LineIntersect.jl")
+
+# Definition 5 and resulting axioms
+include("Definitions/src/005-Surface.jl")
 
 
 
@@ -41,10 +45,6 @@ include("AddedAxioms/src/006-LineReflect.jl")
 # Postulate 1
 include("Postulates/src/001-DrawStraightLine.jl")
 
-
-# Postulate 5 The famous; and its resulting axioms
-
-include("AddedAxioms/src/007-LineIntersect.jl")
 
 # ==============================================
 #               Common Notions

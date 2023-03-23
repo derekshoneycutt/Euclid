@@ -8,69 +8,48 @@ Get the point of intersection of 2 lines, if present
 - `line2::EuclidLine2f`: The second line to find intersection with
 """
 function intersection(line1::EuclidLine2f, line2::EuclidLine2f;
-    point_width::AbstractFloat=0.01f0, point_color=:blue,
-    text_color=:blue, text_opacity::AbstractFloat=1f0, label="A")
+    point_width::Union{Float32, Observable{Float32}}=0.01f0, point_color=:blue,
+    text_color=:blue, text_opacity::Union{Float32, Observable{Float32}}=1f0, label="A")
 
-    extremity_1A = line1.extremityA[]
-    extremity_1B = line1.extremityB[]
-    extremity_2A = line2.extremityA[]
-    extremity_2B = line2.extremityB[]
+    extremity_1A = line1.extremityA
+    extremity_1B = line1.extremityB
+    extremity_2A = line2.extremityA
+    extremity_2B = line2.extremityB
+
+    observable_in_width = point_width isa Observable{Float32} ?
+                          point_width :
+                          Observable(point_width)
 
     # Get formulas for line1 and line2
-    m_1 = (extremity_1B[1] - extremity_1A[1] != 0) ?
-        (extremity_1B[2] - extremity_1A[2]) / (extremity_1B[1] - extremity_1A[1]) :
-        nothing
-    b_1 = m_1 !== nothing ?
-        extremity_1A[2] - m_1 * extremity_1A[1] :
-        nothing
-    m_2 = (extremity_2B[1] - extremity_2A[1] != 0) ?
-        (extremity_2B[2] - extremity_2A[2]) / (extremity_2B[1] - extremity_2A[1]) :
-        nothing
-    b_2 = m_2 !== nothing ?
-        extremity_2A[2] - m_2 * extremity_2A[1] :
-        nothing
+    m_1 = @lift(($extremity_1B[2] - $extremity_1A[2]) / ($extremity_1B[1] - $extremity_1A[1]))
+    b_1 = @lift($extremity_1A[2] - $m_1 * $extremity_1A[1])
+    m_2 = @lift(($extremity_2B[2] - $extremity_2A[2]) / ($extremity_2B[1] - $extremity_2A[1]))
+    b_2 = @lift($extremity_2A[2] - $m_2 * $extremity_2A[1])
 
-    # check if we have parallels or an y = # and x = # intersection first
-    if (m_1 === nothing && m_2 === nothing) || m_1 == m_2
-        return nothing
-    elseif abs(m_1) == 0 && m_2 === nothing
-        return point(Observable(Point2f0(extremity_2A[1], b_1)),
-                     point_width=point_width, point_color=point_color,
-                     text_color=text_color, text_opacity=text_opacity, label=label)
-    elseif abs(m_2) == 0 && m_1 === nothing
-        return point(Observable(Point2f0(extremity_1A[1], b_2)),
-                     point_width=point_width, point_color=point_color,
-                     text_color=text_color, text_opacity=text_opacity, label=label)
-    end
+    use_point_width =
+        @lift(($m_1 == $m_2) ?
+               0f0 :
+               $observable_in_width)
+    x = @lift((abs($m_1) === Inf) ?
+               $extremity_1A[1] :
+               ((abs($m_2) === Inf) ?
+                 $extremity_2A[1] :
+                 ($b_1 - $b_2) / ($m_2 - $m_1)))
+    y = @lift((abs($m_1) !== Inf) ?
+               $m_1 * $x + $b_1 :
+               $m_2 * $x + $b_2)
 
-    # solve x and y
-    x = 0
-    y = 0
-    if m_1 === nothing
-        # If line1 is vertical, then extremity_1A[1] is the x Axis
-        x = extremity_1A[1]
-        y = m_2 * x + b_2
-    elseif m_2 === nothing
-        # If line2 is vertical, then extremity_2A[1] is the x Axis
-        x = extremity_2A[1]
-        y = m_1 * x + b_1
-    else
-        # normal times are happy times
-        x = (b_1 - b_2) / (m_2 - m_1)
-        y = m_2 * x + b_2
-    end
+    text_opacity_observable = text_opacity isa Observable{Float32} ?
+                              text_opacity :
+                              Observable(text_opacity)
+    true_text_opacity =
+            @lift((($m_1 === Inf && $m_2 === Inf) || $m_1 == $m_2) ?
+                   0f0 :
+                   $text_opacity_observable)
 
-    # return nothing or the intersection point if it exists
-    min_x = min(extremity_1A[1], extremity_1B[1], extremity_2A[1], extremity_2B[1])
-    max_x = max(extremity_1A[1], extremity_1B[1], extremity_2A[1], extremity_2B[1])
-    min_y = min(extremity_1A[2], extremity_1B[2], extremity_2A[2], extremity_2B[2])
-    max_y = max(extremity_1A[2], extremity_1B[2], extremity_2A[2], extremity_2B[2])
-    if x !== nothing && y !== nothing && x >= min_x && x <= max_x && y >= min_y && y <= max_y
-        return point(Observable(Point2f0(x, y)),
-                     point_width=point_width, point_color=point_color,
-                     text_color=text_color, text_opacity=text_opacity, label=label)
-    end
-    nothing
+    point(@lift(Point2f0($x, $y)),
+            point_width=use_point_width, point_color=point_color,
+            text_color=text_color, text_opacity=true_text_opacity, label=label)
 end
 
 #=

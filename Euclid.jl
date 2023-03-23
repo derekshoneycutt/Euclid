@@ -7,6 +7,7 @@
 using GeometryBasics;
 using LinearAlgebra;
 using Symbolics;
+using LaTeXStrings;
 using Latexify;
 using Colors;
 using GLMakie;
@@ -17,6 +18,7 @@ using Base64;
 include("Core/Paths.jl");
 include("Core/Colors.jl");
 include("Core/Animations.jl");
+include("Core/AxisElements.jl");
 include("Core/Text.jl");
 include("Core/TextMove.jl");
 
