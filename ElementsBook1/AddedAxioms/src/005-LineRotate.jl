@@ -66,8 +66,8 @@ function reset(rotate::EuclidLine2fRotate, rotation::Union{Point2f, Observable{P
 
     observable_rotation = rotation isa Observable{Point2f} ? rotation : Observable(rotation)
     observable_anchor = anchor isa Observable{Point2f} ? anchor : Observable(anchor)
-    vectorA = @lift(line.extremityA[] - $observable_anchor)
-    vectorB = @lift(line.extremityB[] - $observable_anchor)
+    vectorA = @lift(rotate.baseOn.extremityA[] - $observable_anchor)
+    vectorB = @lift(rotate.baseOn.extremityB[] - $observable_anchor)
     rotate.rotation = observable_rotation
     rotate.anchor = observable_anchor
     rotate.vector_startA = vectorA

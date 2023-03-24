@@ -27,7 +27,7 @@ function move(line::EuclidLine2f, new_spot::Observable{Point2f};
 
     move_extremity = move_extremityA ? line.extremityA : line.extremityB
     alt_extremity = move_extremityA ? line.extremityB : line.extremityA
-    v = Observable(alt_extremity[] - move_extremity[])
+    v = @lift($(alt_extremity) - $(move_extremity))
     observable_begin = begin_at isa Observable{Point2f} ? Observable(begin_at[]) : Observable(begin_at)
     EuclidLine2fMove(line, observable_begin, new_spot, v, move_extremityA)
 end
@@ -133,32 +133,36 @@ function animate(
     move::EuclidLine2fMove,
     begin_move::AbstractFloat, end_move::AbstractFloat, t::AbstractFloat)
 
-    begin_at = move.begin_at[]
-    move_to = move.move_to[]
-    v = move_to - begin_at
-    norm_v = norm(v)
-    u = v / norm_v
 
     perform(t, begin_move, end_move,
          () -> nothing,
          () -> nothing) do
+
+        begin_at = move.begin_at[]
+        move_to = move.move_to[]
+        v = move_to - begin_at
+        norm_v = norm(v)
+        u = v / norm_v
+
+        line_vector = move.vector[]
+
         on_t = ((t-begin_move)/(end_move-begin_move)) * norm_v
         if on_t > 0
             x,y = begin_at + on_t * u
             if move.movingA
                 move.baseOn.extremityA[] = Point2f0(x, y)
-                move.baseOn.extremityB[] = Point2f0(x, y) + move.vector[]
+                move.baseOn.extremityB[] = Point2f0(x, y) + line_vector
             else
                 move.baseOn.extremityB[] = Point2f0(x, y)
-                move.baseOn.extremityA[] = Point2f0(x, y) + move.vector[]
+                move.baseOn.extremityA[] = Point2f0(x, y) + line_vector
             end
         else
             if move.movingA
                 move.baseOn.extremityA[] = move_to
-                move.baseOn.extremityB[] = move_to + move.vector[]
+                move.baseOn.extremityB[] = move_to + line_vector
             else
                 move.baseOn.extremityB[] = move_to
-                move.baseOn.extremityA[] = move_to + move.vector[]
+                move.baseOn.extremityA[] = move_to + line_vector
             end
         end
     end

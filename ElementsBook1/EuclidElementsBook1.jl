@@ -36,8 +36,11 @@ include("AddedAxioms/src/007-LineIntersect.jl")
 # Definition 5
 include("Definitions/src/005-Surface.jl")
 
-# Definition 6
+# Definition 6 and its resulting moving axioms
 include("Definitions/src/006-SurfaceExtremities.jl")
+include("AddedAxioms/src/008-SurfaceMove.jl")
+include("AddedAxioms/src/009-SurfaceRotate.jl")
+include("AddedAxioms/src/010-SurfaceReflect.jl")
 
 
 
