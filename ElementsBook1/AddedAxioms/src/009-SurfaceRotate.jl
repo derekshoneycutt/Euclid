@@ -12,7 +12,7 @@ mutable struct EuclidSurface2fRotate
 end
 
 """
-    rotate(surface, rotation[, rotate_extremityA=true, clockwise=true])
+    rotate(surface, rotation[, anchor=surface.from_points[][1], clockwise=true])
 
 Set up a rotation of a line on the Euclid diagram
 
@@ -23,7 +23,7 @@ Set up a rotation of a line on the Euclid diagram
 - `clockwise::Bool`: Whether to perform clockwise rotation. Otherwise does counter-clockwise.
 """
 function rotate(surface::EuclidSurface2f, rotation::Observable{Float32};
-                anchor::Union{Point2f, Observable{Point2f}}=surface.from_points[][1], clockwise::Bool=true)
+                anchor::Union{Point2f, Observable{Point2f}}=surface.from_points[][1], clockwise::Bool=false)
 
     observable_anchor = anchor isa Observable{Point2f} ? anchor : Observable(anchor)
     vectors = Observable([Point2f0(p - anchor) for p in surface.from_points[]])
@@ -31,7 +31,7 @@ function rotate(surface::EuclidSurface2f, rotation::Observable{Float32};
 end
 
 """
-    rotate(surface, rotation[, rotate_extremityA=true, clockwise=true])
+    rotate(surface, rotation[, anchor=surface.from_points[][1], clockwise=true])
 
 Set up a rotation of a surface on the Euclid diagram
 
@@ -42,13 +42,13 @@ Set up a rotation of a surface on the Euclid diagram
 - `clockwise::Bool`: Whether to perform clockwise rotation. Otherwise does counter-clockwise.
 """
 function rotate(surface::EuclidSurface2f, rotation::Float32;
-                anchor::Union{Point2f, Observable{Point2f}}=surface.from_points[][1], clockwise::Bool=true)
+                anchor::Union{Point2f, Observable{Point2f}}=surface.from_points[][1], clockwise::Bool=false)
 
     rotate(surface, Observable(rotation), anchor=anchor, clockwise=clockwise)
 end
 
 """
-    reset(rotate, rotation[, rotate_extremityA=true, clockwise=rotate.rotate_clockwise])
+    reset(rotate, rotation[, anchor=rotate.baseOn.from_points[][1], clockwise=rotate.rotate_clockwise])
 
 Reset a rotation animation for a surface in a Euclid Diagram to new positions
 
@@ -59,7 +59,7 @@ Reset a rotation animation for a surface in a Euclid Diagram to new positions
 - `clockwise::Bool`: Whether to perform clockwise rotation. Otherwise does counter-clockwise.
 """
 function reset(rotate::EuclidSurface2fRotate, rotation::Union{Point2f, Observable{Point2f}};
-                anchor::Union{Point2f, Observable{Point2f}}=rotate.baseOn.extremityA,
+                anchor::Union{Point2f, Observable{Point2f}}=rotate.baseOn.from_points[][1],
                 clockwise::Bool=rotate.rotate_clockwise)
 
     observable_rotation = rotation isa Observable{Point2f} ? rotation : Observable(rotation)

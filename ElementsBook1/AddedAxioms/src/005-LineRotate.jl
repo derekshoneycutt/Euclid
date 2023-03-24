@@ -13,7 +13,7 @@ mutable struct EuclidLine2fRotate
 end
 
 """
-    rotate(line, rotation[, rotate_extremityA=true, clockwise=true])
+    rotate(line, rotation[, anchor=line.extremityA, clockwise=false])
 
 Set up a rotation of a line on the Euclid diagram
 
@@ -24,7 +24,7 @@ Set up a rotation of a line on the Euclid diagram
 - `clockwise::Bool`: Whether to perform clockwise rotation. Otherwise does counter-clockwise.
 """
 function rotate(line::EuclidLine2f, rotation::Observable{Float32};
-                anchor::Union{Point2f, Observable{Point2f}}=line.extremityA, clockwise::Bool=true)
+                anchor::Union{Point2f, Observable{Point2f}}=line.extremityA, clockwise::Bool=false)
 
     observable_anchor = anchor isa Observable{Point2f} ? anchor : Observable(anchor)
     vectorA = @lift(line.extremityA[] - $observable_anchor)
@@ -33,7 +33,7 @@ function rotate(line::EuclidLine2f, rotation::Observable{Float32};
 end
 
 """
-    rotate(line, rotation[, rotate_extremityA=true, clockwise=true])
+    rotate(line, rotation[, anchor=line.extremityA, clockwise=false])
 
 Set up a rotation of a line on the Euclid diagram
 
@@ -44,13 +44,13 @@ Set up a rotation of a line on the Euclid diagram
 - `clockwise::Bool`: Whether to perform clockwise rotation. Otherwise does counter-clockwise.
 """
 function rotate(line::EuclidLine2f, rotation::Float32;
-                anchor::Union{Point2f, Observable{Point2f}}=line.extremityA, clockwise::Bool=true)
+                anchor::Union{Point2f, Observable{Point2f}}=line.extremityA, clockwise::Bool=false)
 
     rotate(line, Observable(rotation), anchor=anchor, clockwise=clockwise)
 end
 
 """
-    reset(rotate, rotation[, rotate_extremityA=true, clockwise=rotate.rotate_clockwise])
+    reset(rotate, rotation[, anchor=rotate.baseOn.extremityA, clockwise=rotate.rotate_clockwise])
 
 Reset a rotation animation for a line in a Euclid Diagram to new positions
 
