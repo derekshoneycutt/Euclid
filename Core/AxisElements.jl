@@ -48,13 +48,13 @@ function square_legend(; width::AbstractFloat=1f0, color=:blue, center::Point2f=
     from_center = width / 2f0
     do_box = [Point2f0(center .- from_center),  Point2f0(center - [from_center, -from_center]),
               Point2f0(center .+ from_center), Point2f0(center - [-from_center, from_center])]
-    PolyElement(points=do_box, color=color, strokecolor=color, strokewidth=1)
+    PolyElement(points=do_box, color=color, strokecolor=color, strokewidth=0)
 end
 
 """
     line_legend([width=0.1f0, color=:blue, linestyle=:solid, linewidth=1.5f0, start_y=0.5f0, end_y=0.5f0])
 
-Create a line legend element for displaying on Euclid diagrams
+Create a horizontal/diagonal line legend element for displaying on Euclid diagrams
 
 # Arguments
 - `width::AbstractFloat`: The width of the line to draw. Is centered horizontally.
@@ -70,5 +70,25 @@ function line_legend(; width::AbstractFloat=0.1f0, color=:blue,
     start_line = width >= 1 ? 0 : width / 2f0
     end_line = width >= 1 ? 1 : 1 - (width / 2f0)
     axis_element_points = [Point2f0(start_line, start_y), Point2f0(end_line, end_y)]
+    LineElement(points=axis_element_points, color=color, linestyle=linestyle, linewidth=linewidth)
+end
+
+"""
+    vline_legend(x[, color=:blue, linestyle=:solid, linewidth=1.5f0, start_y=0.5f0, end_y=0.5f0])
+
+Create a vertical line legend element for displaying on Euclid diagrams
+
+# Arguments
+- `x::AbstractFloat`: The x-position to draw the line at.
+- `color`: The color of line to draw
+- `linestyle`: The style of line to draw
+- `linewidth::AbstractFloat`: The width of the line to draw
+- `start_y::AbstractFloat`: The starting y-position to draw the line at. Defaults in the middle.
+- `end_y::AbstractFloat`: The ending y-position to draw the line at. Defaults in the middle.
+"""
+function vline_legend(x::AbstractFloat; color=:blue,
+                       linestyle=:solid, linewidth::AbstractFloat=1.5f0,
+                       start_y::AbstractFloat=0.5f0, end_y::AbstractFloat=0.5f0)
+    axis_element_points = [Point2f0(x, start_y), Point2f0(x, end_y)]
     LineElement(points=axis_element_points, color=color, linestyle=linestyle, linewidth=linewidth)
 end

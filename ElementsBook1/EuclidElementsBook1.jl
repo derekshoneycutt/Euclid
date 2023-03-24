@@ -19,22 +19,25 @@ include("Definitions/src/001-Point.jl")
 include("AddedAxioms/src/001-PointHighlight.jl")
 include("AddedAxioms/src/002-PointMove.jl")
 
-# Defintion 2 and its highlighting and moving axioms
+# Defintion 2 and its highlighting axioms
 include("Definitions/src/002-Line.jl")
 include("AddedAxioms/src/003-LineHighlight.jl")
+
+# Defintion 3 and resulting moving axioms
+include("Definitions/src/003-LineExtremities.jl")
 include("AddedAxioms/src/004-LineMove.jl")
 include("AddedAxioms/src/005-LineRotate.jl")
-
-# Defintion 3
-include("Definitions/src/003-LineExtremities.jl")
 
 # Definition 4 and resulting axioms
 include("Definitions/src/004-StraightLine.jl")
 include("AddedAxioms/src/006-LineReflect.jl")
 include("AddedAxioms/src/007-LineIntersect.jl")
 
-# Definition 5 and resulting axioms
+# Definition 5
 include("Definitions/src/005-Surface.jl")
+
+# Definition 6
+include("Definitions/src/006-SurfaceExtremities.jl")
 
 
 
