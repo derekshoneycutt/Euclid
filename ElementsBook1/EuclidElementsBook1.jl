@@ -42,6 +42,9 @@ include("AddedAxioms/src/008-SurfaceMove.jl")
 include("AddedAxioms/src/009-SurfaceRotate.jl")
 include("AddedAxioms/src/010-SurfaceReflect.jl")
 
+# Definition 7
+include("Definitions/src/007-PlaneSurface.jl")
+
 
 
 # ==============================================

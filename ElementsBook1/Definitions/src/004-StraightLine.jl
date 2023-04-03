@@ -25,17 +25,17 @@ Set up highlighting a single straight line in a Euclid diagram
 function highlight_straight(line::EuclidLine2f, markers::Integer;
     width::Union{Float32, Observable{Float32}}=0.01f0, color=:red)
 
-    start_base = line.extremityA[]
-    end_base = line.extremityB[]
-    vector = end_base - start_base
-    n_vec = vector / Float32(markers)
+    start_base = line.extremityA
+    end_base = line.extremityB
+    vector = @lift($end_base - $start_base)
+    n_vec = @lift($vector / Float32(markers))
     marker_points = [
-        point(Point2f(n_vec * (i - 1) + start_base),
+        point(@lift(Point2f($n_vec * (i - 1) + $start_base)),
               point_width=width, point_color=color,
               text_opacity=0f0, label="")
         for i in 1:markers]
     marker_moves = [
-        move(p, Point2f(n_vec * i + start_base))
+        move(p, @lift(Point2f($n_vec * i + $start_base)))
         for (i, p) in enumerate(marker_points)]
 
     EuclidStraightLine2f(line, marker_points, marker_moves)
@@ -47,7 +47,7 @@ end
 Complete a previously defined highlight operation for a straight line in a Euclid diagram. It will have the markers non-moving.
 
 # Arguments
-- `line::EuclidLine2fHighlight`: The description of the highlight to show
+- `line::EuclidStraightLine2f`: The description of the highlight to show
 """
 function show_complete(line::EuclidStraightLine2f)
     for marker in line.straight_markers

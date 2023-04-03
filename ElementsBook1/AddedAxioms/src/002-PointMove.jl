@@ -23,7 +23,7 @@ Set up a movement of point on the Euclid diagram
 function move(point::EuclidPoint2f, new_spot::Observable{Point2f};
                 begin_at::Union{Point2f, Observable{Point2f}}=point.data)
 
-    observable_begin = begin_at isa Observable{Point2f} ? Observable(begin_at[]) : Observable(begin_at)
+    observable_begin = begin_at isa Observable{Point2f} ? begin_at : Observable(begin_at)
     EuclidPoint2fMove(point, observable_begin, new_spot, move(point.label, new_spot, begin_at = begin_at))
 end
 
