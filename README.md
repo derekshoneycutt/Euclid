@@ -8,4 +8,4 @@ This uses the Thomas L Heath translation, which remains the standard translation
 
 ## Euclid's Elements
 
-1. [Book I](ElementsBook1/
+1. [Book I](ElementsBook1/)
