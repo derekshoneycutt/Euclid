@@ -1,4 +1,6 @@
 
+export EuclidAngle2fHighlight, highlight, show_complete, hide, animate
+
 """
     EuclidAngle2fHighlight
 

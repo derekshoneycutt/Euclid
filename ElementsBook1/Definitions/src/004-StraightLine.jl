@@ -26,7 +26,8 @@ Set up highlighting a single straight line in a Euclid diagram
 - `color`: The color to use in highlighting the line
 """
 function highlight_straight(line::EuclidLine2f, markers::Integer;
-    width::Union{Float32, Observable{Float32}}=0.01f0, color=:red)
+                            width::Union{Float32, Observable{Float32}}=0.01f0,
+                            color=:red)
 
     start_base = line.extremityA
     end_base = line.extremityB

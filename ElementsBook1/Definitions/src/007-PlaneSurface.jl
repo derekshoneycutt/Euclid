@@ -1,3 +1,6 @@
+
+export EuclidPlaneSurface2f, highlight_plane, show_complete, hide, animate
+
 """
     EuclidPlaneSurface2f
 

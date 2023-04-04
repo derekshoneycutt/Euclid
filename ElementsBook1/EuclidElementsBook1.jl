@@ -49,6 +49,9 @@ include("Definitions/src/007-PlaneSurface.jl")
 include("Definitions/src/008-PlaneAngle.jl")
 include("AddedAxioms/src/011-AngleHighlight.jl")
 
+# Definition 9
+include("Definitions/src/009-RectilinealAngle.jl")
+
 
 
 # ==============================================
