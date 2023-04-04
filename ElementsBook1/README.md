@@ -13,6 +13,7 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Surface Extremities](Definitions/006-SurfaceExtremities.ipynb)
 1. [Plane Surface](Definitions/007-PlaneSurface.ipynb)
 1. [Plane Angle](Definitions/008-PlaneAngle.ipynb)
+1. [Rectilineal Angle](Definitions/009-RectilinealAngle.ipynb)
 
 
 ## Additional Axioms
@@ -30,4 +31,7 @@ These are not in Euclid, and in a strict sense, their need can be discussed. The
 1. [Rotating Surfaces](AddedAxioms/009-RotatingSurfaces.ipynb)
 1. [Reflecting Surfaces](AddedAxioms/010-ReflectingSurfaces.ipynb)
 1. [Highlighting Angles](AddedAxioms/011-HighlightingAngles.ipynb)
+1. [Moving Angles](AddedAxioms/012-MovingAngles.ipynb)
+1. [Rotating Angles](AddedAxioms/013-RotatingAngles.ipynb)
+1. [Reflecting Angles](AddedAxioms/014-ReflectingAngles.ipynb)
 

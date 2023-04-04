@@ -41,8 +41,8 @@ Reset a rotation animation for a line in a Euclid Diagram to new positions
 """
 function reset(reflect::EuclidLine2fReflect; x_axis::Union{Float32,Observable{Float32}}=reflect.reflect_x)
 
-    reflect.start_atA[] = line.extremityA[]
-    reflect.start_atB[] = line.extremityB[]
+    reflect.start_atA[] = reflect.baseOn.extremityA[]
+    reflect.start_atB[] = reflect.baseOn.extremityB[]
     if x_axis isa Observable{Float32}
         reflect.reflect_x = x_axis
     else

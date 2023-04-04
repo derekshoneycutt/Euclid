@@ -48,6 +48,9 @@ include("Definitions/src/007-PlaneSurface.jl")
 # Definition 8 and resulting axioms
 include("Definitions/src/008-PlaneAngle.jl")
 include("AddedAxioms/src/011-AngleHighlight.jl")
+include("AddedAxioms/src/012-AngleMove.jl")
+include("AddedAxioms/src/013-AngleRotate.jl")
+include("AddedAxioms/src/014-AngleReflect.jl")
 
 # Definition 9
 include("Definitions/src/009-RectilinealAngle.jl")
