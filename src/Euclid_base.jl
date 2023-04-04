@@ -18,6 +18,7 @@ using Base64;
 include("Core/Paths.jl");
 include("Core/Angles.jl");
 include("Core/Colors.jl");
+include("Core/ChartSpace.jl");
 include("Core/Animations.jl");
 include("Core/AxisElements.jl");
 include("Core/Text.jl");

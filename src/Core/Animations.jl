@@ -77,3 +77,19 @@ function display_gif(file::String)
     base64gif = base64encode(open(file))
     display(HTML("<img src=\"data:image/gif;base64,$(base64gif)\" />"))
 end
+
+"""
+    draw_animation(chart, filename, timestamps[, framerate=24]) do t ... end
+
+Draws an animation into a gif file and returns an HTML encoding of it
+
+# Arguments
+- `doer::Function`: Animation function to perform each round
+- `chart::EuclidChartSpace2d`: The chart space to draw animations in
+- `filename::String`: The name of the gif file to write
+- `timestamps`: The range of timestamps to draw on
+- `framerate`: The framerate to draw animations at
+"""
+function draw_animation(doer::Function, chart::EuclidChartSpace2d, filename::String, timestamps; framerate=24)
+    display_gif(record(doer, chart.f, filename, timestamps; framerate=framerate))
+end

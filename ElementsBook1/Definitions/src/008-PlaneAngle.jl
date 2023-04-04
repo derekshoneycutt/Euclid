@@ -49,7 +49,13 @@ function plane_angle(point::Observable{Point2f},
 
     EuclidAngle2f(point, extremityA, extremityB, plots, observable_width, observable_show_width)
 end
-
+function plane_angle(point::Point2f,
+                     lengthA::Float32, lengthB::Float32,
+                     theta::Float32;
+                     draw_angle::Float32=0f0,
+                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    plane_angle(Observable(point), lengthA, lengthB, theta; draw_angle=draw_angle, width=width, color=color)
+end
 
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Observable{Point2f};
                      width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
