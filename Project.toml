@@ -1,0 +1,4 @@
+name = "Euclid"
+uuid = "b4fcf3bd-9ac2-4c96-b2a6-cbd4ef5dbc09"
+authors = ["Derek Honeycutt <derekshoneycutt@gmail.com>"]
+version = "0.1.0"

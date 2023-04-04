@@ -1,3 +1,6 @@
+
+export EuclidLine2f, line, show_complete, hide, animate
+
 """
     EuclidLine2f
 

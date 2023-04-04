@@ -189,8 +189,11 @@ function animate(
     for line in plane.lines
         animate(line, hide_until, hide_until+0.1f0, t, fade_start=end_at-0.1f0, fade_end=end_at)
     end
-    for move in plane.line_moves
+    for (i, move) in enumerate(plane.line_moves)
         animate(move, hide_until+0.1f0, end_at-0.1f0, t)
+        for marker_move in plane.straight_markers[i].marker_moves
+            marker_move.begin_at[] = Point2f0(plane.lines[i].extremityA[][1], marker_move.begin_at[][2])
+        end
     end
     for marker in plane.straight_markers
         animate(marker, hide_until+0.1f0, end_at-0.1f0, t)

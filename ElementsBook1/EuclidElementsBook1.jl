@@ -45,8 +45,9 @@ include("AddedAxioms/src/010-SurfaceReflect.jl")
 # Definition 7
 include("Definitions/src/007-PlaneSurface.jl")
 
-# Definition 8
+# Definition 8 and resulting axioms
 include("Definitions/src/008-PlaneAngle.jl")
+include("AddedAxioms/src/011-AngleHighlight.jl")
 
 
 

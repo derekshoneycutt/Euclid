@@ -1,3 +1,6 @@
+
+export EuclidLine2fHighlightExtremities, highlight_extremities, show_complete, hide, animate
+
 """
     EuclidLine2fHighlightExtremities
 

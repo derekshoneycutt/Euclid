@@ -172,6 +172,61 @@ function angle( point::Point2f,
 end
 
 
+function angle( center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Observable{Point2f};
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+
+    observable_width = Observable(0f0)
+    observable_show_width = width isa Observable{Float32} ? width : Observable(width)
+
+    vecA = @lift($pointA - $center)
+    vecB = @lift($pointB - $center)
+    lengthA = @lift(norm($vecA))
+    lengthB = @lift(norm($B))
+
+    theta = @lift(($vecA ⋅ $vecB) / ($lengthA * $lengthB))
+    θ = @lift(min(fix_angle(vector_angle($center, $pointA)),
+                  fix_angle(vector_angle($center, $pointB))))
+
+    plots = lines!(@lift([$extremityA, $point, $extremityB]),
+                   color=color, linewidth=(observable_width))
+
+    EuclidAngle2f(center, lengthA, pointA, lengthB, pointB, theta, θ, plots, observable_width, observable_show_width)
+end
+function angle( center::Observable{Point2f}, pointA::Point2f, pointB::Point2f;
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(center, Observable(pointA), Observable(pointB), draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Point2f;
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(center, pointA, Observable(pointB), draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Observable{Point2f}, pointA::Point2f, pointB::Observable{Point2f};
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(center, Observable(pointA), pointB, draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Point2f, pointA::Observable{Point2f}, pointB::Point2f;
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(Observable(center), pointA, Observable(pointB), draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Point2f, pointA::Observable{Point2f}, pointB::Observable{Point2f};
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(Observable(center), pointA, pointB, draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Point2f, pointA::Point2f, pointB::Observable{Point2f};
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(Observable(center), Observable(pointA), pointB, draw_angle=draw_angle, width=width, color=color)
+end
+function angle( center::Point2f, pointA::Point2f, pointB::Point2f;
+                draw_angle::Union{Float32, Observable{Float32}}=0f0,
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+    angle(Observable(center), Observable(pointA), Observable(pointB), draw_angle=draw_angle, width=width, color=color)
+end
 
 
 """

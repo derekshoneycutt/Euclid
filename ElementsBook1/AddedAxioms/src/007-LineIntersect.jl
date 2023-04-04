@@ -1,3 +1,6 @@
+
+export intersection
+
 """
     intersection(line1, line2)
 

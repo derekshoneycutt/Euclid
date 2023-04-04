@@ -1,3 +1,6 @@
+
+export EuclidSurface2fMove, move, reset, show_complete, hide, animate
+
 """
     EuclidSurface2fMove
 

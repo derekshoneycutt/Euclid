@@ -1,3 +1,6 @@
+
+export EuclidPoint2f, point, show_complete, hide, animate
+
 """
     EuclidPoint2f
 

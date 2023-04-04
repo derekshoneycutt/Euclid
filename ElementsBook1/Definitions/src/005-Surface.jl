@@ -1,3 +1,6 @@
+
+export EuclidSurface2f, just_surface, show_complete, hide, animate
+
 """
     EuclidSurface2f
 

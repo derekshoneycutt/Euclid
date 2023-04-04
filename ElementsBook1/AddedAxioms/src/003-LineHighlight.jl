@@ -1,3 +1,6 @@
+
+export EuclidLine2fHighlight, highlight, show_complete, hide, animate
+
 """
     EuclidLine2fHighlight
 
@@ -17,7 +20,7 @@ Set up highlighting a single line in a Euclid diagram
 
 # Arguments
 - `line::EuclidLine2f`: The line to highlight in the diagram
-- `width::Union{Float32, Observable{Float32}}`: The width of the circle to draw the highlight
+- `width::Union{Float32, Observable{Float32}}`: The width of the line to draw the highlight
 - `color`: The color to use in highlighting the line
 """
 function highlight(line::EuclidLine2f; width::Union{Float32, Observable{Float32}}=2f0, color=:red)
@@ -27,8 +30,8 @@ function highlight(line::EuclidLine2f; width::Union{Float32, Observable{Float32}
 
     use_color = get_color(color)
     plots = lines!(@lift([$(line.extremityA), $(line.extremityB)]),
-           color=RGBA(use_color.r, use_color.g, use_color.b, 0.6),
-           linewidth=observable_highlight)
+                    color=RGBA(use_color.r, use_color.g, use_color.b, 0.6),
+                    linewidth=observable_highlight)
 
     EuclidLine2fHighlight(line, plots, observable_highlight, observable_max_width)
 end

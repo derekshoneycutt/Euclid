@@ -1,3 +1,6 @@
+
+export EuclidPoint2fHighlight, highlight, show_complete, hide, animate
+
 """
     EuclidPoint2fHighlight
 

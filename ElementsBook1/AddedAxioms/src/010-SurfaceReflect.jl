@@ -1,3 +1,6 @@
+
+export EuclidSurface2fReflect, reflect, reset, show_complete, hide, animate
+
 """
     EuclidSurface2fReflect
 

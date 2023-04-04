@@ -1,3 +1,6 @@
+
+export EuclidStraightLine2f, highlight_straight, show_complete, hide, animate
+
 """
     EuclidStraightLine2f
 

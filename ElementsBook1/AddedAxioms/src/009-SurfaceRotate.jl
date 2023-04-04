@@ -1,3 +1,6 @@
+
+export EuclidSurface2fRotate, rotate, reset, show_complete, hide, animate
+
 """
     EuclidSurface2fRotate
 

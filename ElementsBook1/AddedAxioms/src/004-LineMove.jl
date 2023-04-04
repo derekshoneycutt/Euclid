@@ -1,3 +1,6 @@
+
+export EuclidLine2fMove, move, reset, show_complete, hide, animate
+
 """
     EuclidLine2fMove
 
