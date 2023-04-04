@@ -60,7 +60,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
     observable_width = Observable(0f0)
     observable_show_width = width isa Observable{Float32} ? width : Observable(width)
 
-    plots = lines!(@lift([$pointA, $point, $pointB]),
+    plots = lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                    color=color, linewidth=(observable_width))
 
     EuclidAngle2f(center, pointA, pointB, plots, observable_width, observable_show_width)
