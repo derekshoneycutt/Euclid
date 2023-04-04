@@ -6,6 +6,20 @@ This uses the Thomas L Heath translation, which remains the standard translation
 
 ---
 
+This project can be used as a Julia module. Although I have no intention of publishing it as an official package, it can be brought into any other project by adding it directly from the git repository.
+
+```julia
+using Pkg
+Pkg.add(url="https://github.com/derekshoneycutt/Euclid.git")
+
+# ...
+
+using Euclid
+using GLMakie # Assuming graphing, will also need to import GLMakie functions
+```
+
+---
+
 ## Euclid's Elements
 
 1. [Book I](ElementsBook1/)
