@@ -1,5 +1,5 @@
 
-export EuclidStraightLine2f, highlight_straight, show_complete, hide, animate
+export EuclidStraightLine2f, highlight_rectilineal, show_complete, hide, animate
 
 """
     EuclidRectilinealAngle2f
