@@ -96,17 +96,11 @@ function show_complete(rotate::EuclidAngle2fRotate)
     vectorA = rotate.vector_startA[]
     vectorB = rotate.vector_startB[]
     vectorC = rotate.vector_startC[]
-    norm_vA = norm(vectorA)
-    norm_vB = norm(vectorB)
-    norm_vC = norm(vectorC)
-    uA = vectorA / norm_vA
-    uB = vectorB / norm_vB
-    uC = vectorC / norm_vC
-    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * uA * norm_vA
+    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * vectorA
     rotate.baseOn.extremityA[] = Point2f0(x,y)
-    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * uB * norm_vB
+    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * vectorB
     rotate.baseOn.extremityB[] = Point2f0(x,y)
-    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * uC * norm_vC
+    x,y = rotate.anchor[] + [cos(θ) -sin(θ)*clockwise_mod; sin(θ)*clockwise_mod cos(θ)] * vectorC
     rotate.baseOn.point[] = Point2f0(x,y)
 end
 
@@ -145,12 +139,6 @@ function animate(
     vectorA = rotate.vector_startA[]
     vectorB = rotate.vector_startB[]
     vectorC = rotate.vector_startC[]
-    norm_vA = norm(vectorA)
-    norm_vB = norm(vectorB)
-    norm_vC = norm(vectorC)
-    uA = vectorA / norm_vA
-    uB = vectorB / norm_vB
-    uC = vectorC / norm_vC
     clockwise_mod = rotate.rotate_clockwise ? -1 : 1
 
     perform(t, begin_rotate, end_rotate,
@@ -162,19 +150,13 @@ function animate(
          () -> nothing) do
         on_t = ((t - begin_rotate)/(end_rotate - begin_rotate)) * rotate.rotation[]
         if on_t > 0
-            x,y = rotate.anchor[] + [cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * uA * norm_vA
-            rotate.baseOn.extremityA[] = Point2f0(x,y)
-            x,y = rotate.anchor[] + [cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * uB * norm_vB
-            rotate.baseOn.extremityB[] = Point2f0(x,y)
-            x,y = rotate.anchor[] + [cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * uC * norm_vC
-            rotate.baseOn.point[] = Point2f0(x,y)
+            rotate.baseOn.extremityA[] = Point2f0([cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * vectorA + rotate.anchor[])
+            rotate.baseOn.extremityB[] = Point2f0([cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * vectorB + rotate.anchor[])
+            rotate.baseOn.point[] = Point2f0([cos(on_t) -sin(on_t)*clockwise_mod; sin(on_t)*clockwise_mod cos(on_t)] * vectorC + rotate.anchor[])
         else
-            x,y = vectorA + rotate.anchor[]
-            rotate.baseOn.extremityA[] = Point2f0(x,y)
-            x,y = vectorB + rotate.anchor[]
-            rotate.baseOn.extremityB[] = Point2f0(x,y)
-            x,y = vectorC + rotate.anchor[]
-            rotate.baseOn.point[] = Point2f0(x,y)
+            rotate.baseOn.extremityA[] = Point2f0(vectorA + rotate.anchor[])
+            rotate.baseOn.extremityB[] = Point2f0(vectorB + rotate.anchor[])
+            rotate.baseOn.point[] = Point2f0(vectorC + rotate.anchor[])
         end
     end
 end
