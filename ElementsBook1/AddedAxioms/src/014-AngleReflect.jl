@@ -28,7 +28,7 @@ This always reflects on the x-axis. Combine with rotation for other reflections.
 function reflect(angle::EuclidAngle2f; x_axis::Union{Float32,Observable{Float32}}=0f0)
 
     reflect_x = x_axis isa Observable{Float32} ? x_axis : Observable(x_axis)
-    EuclidLine2fReflect(angle, reflect_x, Observable(angle.extremityA[]), Observable(angle.extremityA[]), Observable(angle.point[]))
+    EuclidAngle2fReflect(angle, reflect_x, Observable(angle.extremityA[]), Observable(angle.extremityA[]), Observable(angle.point[]))
 end
 
 """
