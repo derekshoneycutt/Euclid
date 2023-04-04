@@ -29,4 +29,5 @@ These are not in Euclid, and in a strict sense, their need can be discussed. The
 1. [Moving Surfaces](AddedAxioms/008-MovingSurfaces.ipynb)
 1. [Rotating Surfaces](AddedAxioms/009-RotatingSurfaces.ipynb)
 1. [Reflecting Surfaces](AddedAxioms/010-ReflectingSurfaces.ipynb)
+1. [Highlighting Angles](AddedAxioms/011-HighlightingAngles.ipynb)
 
