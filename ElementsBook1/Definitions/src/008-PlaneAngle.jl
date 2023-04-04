@@ -18,10 +18,10 @@ end
 """
     plane_angle(point, lengthA, lengthB, theta[, draw_angle=0f0, width=1.5f0, color=:blue])
 
-Sets up a new angle in a Euclid Diagram for drawing
+Sets up a new angle in a Euclid Diagram for drawing. Basing on theta will not give an angle that watches observables
 
 # Arguments
-- `point::Observable{Point2f}`: The location of the central point of the angle, where the lines meet
+- `point::Point2f`: The location of the central point of the angle, where the lines meet
 - `lengthA::Float32`: The length of side A, the base of the angle
 - `lengthB::Float32`: The length of side B, the rotated side of the angle
 - `theta::Float32`: The angle in radians to draw
@@ -29,34 +29,31 @@ Sets up a new angle in a Euclid Diagram for drawing
 - `width::Union{Float32, Observable{Float32}}`: The width of the line to draw
 - `color`: The color to draw the line with
 """
-function plane_angle(point::Observable{Point2f},
-                     lengthA::Float32, lengthB::Float32,
-                     theta::Float32;
-                     draw_angle::Float32=0f0,
-                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-
-    observable_width = Observable(0f0)
-    observable_show_width = width isa Observable{Float32} ? width : Observable(width)
-
-    θ = draw_angle isa Observable{Float32} ? draw_angle[] : draw_angle
-    θangle = θ + theta
-
-    extremityA = @lift([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + $point)
-    extremityB = @lift([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + $point)
-
-    plots = lines!(@lift([$extremityA, $point, $extremityB]),
-                   color=color, linewidth=(observable_width))
-
-    EuclidAngle2f(point, extremityA, extremityB, plots, observable_width, observable_show_width)
-end
 function plane_angle(point::Point2f,
                      lengthA::Float32, lengthB::Float32,
                      theta::Float32;
                      draw_angle::Float32=0f0,
                      width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(Observable(point), lengthA, lengthB, theta; draw_angle=draw_angle, width=width, color=color)
+    θ = draw_angle isa Observable{Float32} ? draw_angle[] : draw_angle
+    θangle = θ + theta
+
+    extremityA = [cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point[]
+    extremityB = [cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point[]
+    plane_angle(point, extremityA, extremityB, width=width, color=color)
 end
 
+"""
+    plane_angle(point, pointA, point B[, width=1.5f0, color=:blue])
+
+Sets up a new angle in a Euclid Diagram for drawing. May make it an observable angle.
+
+# Arguments
+- `center::Observable{Point2f}: The location of the central point of the angle, where the lines meet
+- `pointA::Observable{Point2f}`: The location of point A, a vector out from the center
+- `pointB::Observable{Point2f}`: The location of point B, a vector out from the center
+- `width::Union{Float32, Observable{Float32}}`: The width of the line to draw
+- `color`: The color to draw the line with
+"""
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Observable{Point2f};
                      width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
 
