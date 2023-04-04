@@ -1,5 +1,5 @@
 
-export EuclidAngle2f, angle, show_complete, hide, animate
+export EuclidAngle2f, plane_angle, show_complete, hide, animate
 
 """
     EuclidAngle2f
