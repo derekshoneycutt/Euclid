@@ -37,8 +37,8 @@ function plane_angle(point::Point2f,
     θ = draw_angle isa Observable{Float32} ? draw_angle[] : draw_angle
     θangle = θ + theta
 
-    extremityA = [cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point
-    extremityB = [cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point
+    extremityA = Point2f0([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point)
+    extremityB = Point2f0([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point)
     plane_angle(point, extremityA, extremityB, width=width, color=color)
 end
 
