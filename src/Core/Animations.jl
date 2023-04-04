@@ -1,5 +1,5 @@
 
-export perform, display_gif
+export perform, display_gif, draw_animation
 
 """
     perform(t, start_at1, end_at1, start_at2, end_at2, begin... end, begin... end, begin... end) do ... end
