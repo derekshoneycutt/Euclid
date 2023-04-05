@@ -93,3 +93,19 @@ Draws an animation into a gif file and returns an HTML encoding of it
 function draw_animation(doer::Function, chart::EuclidChartSpace2d, filename::String, timestamps; framerate=24)
     display_gif(record(doer, chart.f, filename, timestamps; framerate=framerate))
 end
+
+"""
+    draw_animation(chart, filename, timestamps[, duration=24, framerate=24]) do t ... end
+
+Draws an animation into a gif file and returns an HTML encoding of it
+
+# Arguments
+- `doer::Function`: Animation function to perform each round
+- `chart::EuclidChartSpace2d`: The chart space to draw animations in
+- `filename::String`: The name of the gif file to write
+- `duration`: The duration the animation should run for
+- `framerate`: The framerate to draw animations at
+"""
+function draw_animation(doer::Function, chart::EuclidChartSpace2d, filename::String; duration=24, framerate=24)
+    display_gif(record(doer, chart.f, filename, range(0,2π, step=2π/(duration*framerate)); framerate=framerate))
+end
