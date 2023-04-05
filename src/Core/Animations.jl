@@ -97,7 +97,9 @@ end
 """
     draw_animation(chart, filename, timestamps[, duration=24, framerate=24]) do t ... end
 
-Draws an animation into a gif file and returns an HTML encoding of it
+Draws an animation into a gif file and returns an HTML encoding of it.
+
+This call doer with a time between 0 and 2π. 2π will be the complete duration, each step a fraction of 2π.
 
 # Arguments
 - `doer::Function`: Animation function to perform each round
