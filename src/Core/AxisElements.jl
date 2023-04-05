@@ -2,18 +2,19 @@
 export euclid_axis, circle_legend, square_legend, line_legend, vline_legend
 
 """
-    euclid_axis(f[, title=""])
+    euclid_axis(f[, title="", xlabel="https://github.com/derekshoneycutt/Euclid"])
 
 Setup an axis for drawing Euclid diagrams
 
 # Arguments
 - `f`: The figure to draw the axis on. (Consider using a specific scene.)
 - `title`: The title of the axis to draw. Default is empty string.
+- `xlabel`: The label to show on the bottom of the graph, below the x-axis
 """
-function euclid_axis(f; title="")
+function euclid_axis(f; title="", xlabel="https://github.com/derekshoneycutt/Euclid")
     Axis(f,
         aspect=DataAspect(),
-        title=title,
+        title=title, xlabel=xlabel,
         xticklabelsvisible=false, yticklabelsvisible=false,
         yticksvisible=false, xticksvisible=false,
         xgridvisible=false, ygridvisible=false,
