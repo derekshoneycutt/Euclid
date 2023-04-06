@@ -115,3 +115,43 @@ function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, lines
     [LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
      LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)]
 end
+
+"""
+    right_angle_legend([color=:blue, linewidth=1.5f0, linestyle=:solid])
+
+Create a right angle legend element for displaying on Euclid diagrams
+
+# Arguments
+- `color`: The color of angle lines to draw
+- `linewidth::AbstractFloat`: The width of the angle lines to draw
+- `linestyle`: The style of angle lines to draw
+"""
+function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
+    origin = Point2f0(0,0)
+    base_extrem = Point2f0(1,0)
+    angle_extrem = Point2f0(0,1)
+    angle_lines = [Point2f0(0.5,0), Point2f0(0.5, 0.5), Point2f0(0,0.5)]
+
+    [LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
+     LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)]
+end
+
+"""
+    obtuse_angle_legend([color=:blue, linewidth=1.5f0, linestyle=:solid])
+
+Create a right angle legend element for displaying on Euclid diagrams
+
+# Arguments
+- `color`: The color of angle lines to draw
+- `linewidth::AbstractFloat`: The width of the angle lines to draw
+- `linestyle`: The style of angle lines to draw
+"""
+function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
+    origin = Point2f0(0.5,0)
+    base_extrem = Point2f0(1,0)
+    angle_extrem = Point2f0(cos(3π/4) * 0.5f0, sin(3π/4))
+    angle_lines = [Point2f0(cos(θ) * 0.25f0 + 0.5f0, sin(θ) * 0.25f0) for θ in 0:(π/40):(π/4)]
+
+    [LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
+     LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)]
+end
