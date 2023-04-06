@@ -39,7 +39,7 @@ function plane_angle(point::Point2f,
 
     extremityA = Point2f0([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point)
     extremityB = Point2f0([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point)
-    plane_angle(point, extremityA, extremityB, width=width, color=color)
+    plane_angle(point, extremityA, extremityB, width=width, color=color, larger=(theta > π))
 end
 
 """
@@ -81,7 +81,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
                          [Point2f([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
 
     plots = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
-                    color=color, linewidth=(observable_width))
+                    color=color, linewidth=(observable_width)),
              poly!(@lift(vcat($angle_range, $center)), color=color, strokewidth=0f0)]
 
     EuclidAngle2f(center, pointA, pointB, plots, observable_width, observable_show_width)
