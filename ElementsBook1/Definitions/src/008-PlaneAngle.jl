@@ -80,11 +80,12 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
                           Point2f0([cos($θ_end); sin($θ_end)]*√((($draw_at)^2)/2) + $center)] :
                          [Point2f0([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
 
-    plots = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
+    pl = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                     color=color, linewidth=(observable_width)),
-             poly!(@lift(vcat($angle_range, Point2f0($center))), color=color, strokewidth=0f0)]
+                    poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
+                          color=color, strokewidth=0f0)]
 
-    EuclidAngle2f(center, pointA, pointB, plots, observable_width, observable_show_width)
+    EuclidAngle2f(center, pointA, pointB, pl, observable_width, observable_show_width)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Point2f;
                 width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
@@ -114,7 +115,6 @@ function plane_angle(center::Point2f, pointA::Point2f, pointB::Point2f;
                 width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
     plane_angle(Observable(center), Observable(pointA), Observable(pointB), width=width, color=color, larger=larger)
 end
-
 
 """
     show_complete(angle)
