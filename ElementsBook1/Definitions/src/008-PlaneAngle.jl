@@ -11,6 +11,7 @@ mutable struct EuclidAngle2f
     extremityA::Observable{Point2f}
     extremityB::Observable{Point2f}
     plots
+    current_opacity::Observable{Float32}
     current_width::Observable{Float32}
     show_width::Observable{Float32}
 end
@@ -59,6 +60,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
 
     observable_width = Observable(0f0)
     observable_show_width = width isa Observable{Float32} ? width : Observable(width)
+    observable_opacity = Observable(0f0)
 
     vec_θs = @lift(sort([fix_angle(vector_angle($center, $pointA)),
                          fix_angle(vector_angle($center, $pointB))]))
@@ -83,9 +85,9 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
     pl = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                     color=color, linewidth=(observable_width)),
                     poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
-                          color=color, strokewidth=0f0)]
+                          color=@lift(opacify(color,$observable_opacity)), strokewidth=0f0)]
 
-    EuclidAngle2f(center, pointA, pointB, pl, observable_width, observable_show_width)
+    EuclidAngle2f(center, pointA, pointB, pl, observable_opacity, observable_width, observable_show_width)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Point2f;
                 width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
@@ -126,6 +128,7 @@ Completely show previously defined angle in a Euclid diagram
 """
 function show_complete(angle::EuclidAngle2f)
     angle.current_width[] = angle.show_width[]
+    angle.current_opacity[] = 1f0
 end
 
 """
@@ -138,6 +141,7 @@ Completely hide previously defined angle in a Euclid diagram
 """
 function hide(angle::EuclidAngle2f)
     angle.current_width[] = 0f0
+    angle.current_opacity[] = 0f0
 end
 
 """
@@ -164,9 +168,11 @@ function animate(
         if i == 1
             on_t = (t-hide_until)/(max_at-hide_until)
             angle.current_width[] = angle.show_width[] * on_t
+            angle.current_opacity[] = on_t
         else
             on_t = (t-fade_start)/(fade_end-fade_start)
             angle.current_width[] = angle.show_width[]- (angle.show_width[] * on_t)
+            angle.current_opacity[] = 1-on_t
         end
     end
 end
