@@ -78,7 +78,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
                          [Point2f0([cos($θ_start); sin($θ_start)]*√((($draw_at)^2)/2) + $center),
                           Point2f0([cos($θ_start+π/4); sin($θ_start+π/4)]*$draw_at + $center),
                           Point2f0([cos($θ_end); sin($θ_end)]*√((($draw_at)^2)/2) + $center)] :
-                         [Point2f([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
+                         [Point2f0([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
 
     plots = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                     color=color, linewidth=(observable_width)),
