@@ -11,7 +11,7 @@ mutable struct EuclidAngle2f
     extremityA::Observable{Point2f}
     extremityB::Observable{Point2f}
     plots
-    current_opacity::Observable{Float32}
+    current_anglerad::Observable{Float32}
     current_width::Observable{Float32}
     show_width::Observable{Float32}
 end
@@ -60,7 +60,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
 
     observable_width = Observable(0f0)
     observable_show_width = width isa Observable{Float32} ? width : Observable(width)
-    observable_opacity = Observable(0f0)
+    observable_anglerad = Observable(0f0)
 
     vec_θs = @lift(sort([fix_angle(vector_angle($center, $pointA)),
                          fix_angle(vector_angle($center, $pointB))]))
@@ -73,7 +73,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
 
     norm_1 = @lift(norm($pointA - $center))
     norm_2 = @lift(norm($pointB - $center))
-    draw_at = @lift(min($norm_1, $norm_2) * 0.25)
+    draw_at = @lift(min($norm_1, $norm_2) * $observable_anglerad)
 
     rangle = round(π/2f0, digits=4)
     angle_range = @lift($θ == rangle ?
@@ -85,9 +85,9 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
     pl = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                     color=color, linewidth=(observable_width)),
                     poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
-                          color=@lift(opacify(color,$observable_opacity)), strokewidth=0f0)]
+                          color=color, strokewidth=0f0)]
 
-    EuclidAngle2f(center, pointA, pointB, pl, observable_opacity, observable_width, observable_show_width)
+    EuclidAngle2f(center, pointA, pointB, pl, observable_anglerad, observable_width, observable_show_width)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Point2f;
                 width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
@@ -168,11 +168,11 @@ function animate(
         if i == 1
             on_t = (t-hide_until)/(max_at-hide_until)
             angle.current_width[] = angle.show_width[] * on_t
-            angle.current_opacity[] = on_t
+            angle.current_anglerad[] = on_t*0.25
         else
             on_t = (t-fade_start)/(fade_end-fade_start)
             angle.current_width[] = angle.show_width[]- (angle.show_width[] * on_t)
-            angle.current_opacity[] = 1-on_t
+            angle.current_anglerad[] = 0.25-(on_t*0.25)
         end
     end
 end
