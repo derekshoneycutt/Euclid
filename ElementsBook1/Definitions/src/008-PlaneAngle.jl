@@ -128,7 +128,7 @@ Completely show previously defined angle in a Euclid diagram
 """
 function show_complete(angle::EuclidAngle2f)
     angle.current_width[] = angle.show_width[]
-    angle.current_opacity[] = 1f0
+    angle.current_anglerad[] = 0.25f0
 end
 
 """
@@ -141,7 +141,7 @@ Completely hide previously defined angle in a Euclid diagram
 """
 function hide(angle::EuclidAngle2f)
     angle.current_width[] = 0f0
-    angle.current_opacity[] = 0f0
+    angle.current_anglerad[] = 0f0
 end
 
 """
