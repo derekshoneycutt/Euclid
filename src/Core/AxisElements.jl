@@ -126,7 +126,7 @@ Create a right angle legend element for displaying on Euclid diagrams
 - `linewidth::AbstractFloat`: The width of the angle lines to draw
 - `linestyle`: The style of angle lines to draw
 """
-function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
+function right_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
     origin = Point2f0(0,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(0,1)
@@ -146,7 +146,7 @@ Create a right angle legend element for displaying on Euclid diagrams
 - `linewidth::AbstractFloat`: The width of the angle lines to draw
 - `linestyle`: The style of angle lines to draw
 """
-function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
+function obtuse_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
     origin = Point2f0(0.5,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(cos(3π/4) * 0.5f0, sin(3π/4))
