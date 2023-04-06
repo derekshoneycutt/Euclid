@@ -39,7 +39,7 @@ function plane_angle(point::Point2f,
 
     extremityA = Point2f0([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point)
     extremityB = Point2f0([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point)
-    plane_angle(point, extremityA, extremityB, width=width, color=color)
+    plane_angle(point, extremityA, extremityB, width=width, color=color, larger=(theta > π))
 end
 
 """
@@ -55,13 +55,21 @@ Sets up a new angle in a Euclid Diagram for drawing. May make it an observable a
 - `color`: The color to draw the line with
 """
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Observable{Point2f};
-                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
 
     observable_width = Observable(0f0)
     observable_show_width = width isa Observable{Float32} ? width : Observable(width)
 
-    plots = lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
-                   color=color, linewidth=(observable_width))
+    minlength = @lift(min(norm($pointA - $center), norm($pointB - $center)))
+    θ_A = @lift(fix_angle(vector_angle($center, $pointA)))
+    θ_B = @lift(fix_angle(vector_angle($center, $pointB)))
+    θ_start = @lift(($θ_A < $θ_B ⊻ larger) ? $θ_A : $θ_B)
+    θ_end = @lift(($θ_A < $θ_B ⊻ larger) ? $θ_B : $θ_A)
+    angle_range = @lift([Point2f0(cos(θ)*$minlength*0.25f0 + ($center)[1], sin(θ)*$minlength + ($center)[2]) for θ in θ_start:(π/180):θ_end])
+
+    plots = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
+                    color=color, linewidth=(observable_width)),
+             lines!(angle_range, color=color, linewidth=(observable_width))]
 
     EuclidAngle2f(center, pointA, pointB, plots, observable_width, observable_show_width)
 end
