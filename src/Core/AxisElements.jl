@@ -110,9 +110,8 @@ function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, lines
     origin = Point2f0(0,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(cos(π/4), sin(π/4))
-    angle_lines = [Point2f0(cos(θ) * 0.25f0, sin(θ) * 0.25f0) for θ in 0:(π/40):(π/4)]
+    angle_lines = [Point2f0(cos(θ) * 0.5f0, sin(θ) * 0.5f0) for θ in 0:(π/40):(π/4)]
 
-    [LineElement(points=[origin, base_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
-     LineElement(points=[origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
+    [LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle),
      LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)]
 end
