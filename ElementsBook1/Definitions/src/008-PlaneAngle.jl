@@ -91,8 +91,8 @@ function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Point
     plane_angle(center, Observable(pointA), Observable(pointB), width=width, color=color, larger=larger)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Point2f;
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger=larger)
-    plane_angle(center, pointA, Observable(pointB), width=width, color=color, larger::Bool=false)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(center, pointA, Observable(pointB), width=width, color=color, larger=larger)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Observable{Point2f};
                 width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)

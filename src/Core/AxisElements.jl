@@ -1,5 +1,5 @@
 
-export euclid_axis, circle_legend, square_legend, line_legend, vline_legend, acute_angle_legend
+export euclid_axis, circle_legend, square_legend, line_legend, vline_legend, acute_angle_legend, right_angle_legend, obtuse_angle_legend
 
 """
     euclid_axis(f[, title="", xlabel="https://github.com/derekshoneycutt/Euclid"])
