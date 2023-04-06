@@ -55,43 +55,64 @@ Sets up a new angle in a Euclid Diagram for drawing. May make it an observable a
 - `color`: The color to draw the line with
 """
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Observable{Point2f};
-                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
+                     width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
 
     observable_width = Observable(0f0)
     observable_show_width = width isa Observable{Float32} ? width : Observable(width)
 
-    plots = lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
+    vec_θs = @lift(sort([fix_angle(vector_angle($center, $pointA)),
+                         fix_angle(vector_angle($center, $pointB))]))
+    θ = @lift(round(fix_angle(angle_between($pointA - $center, $pointB - $center)), digits=4))
+
+    θ_use = @lift((round(($vec_θs)[1] + $θ, digits=4) == round(($vec_θs)[2], digits=4)) ⊻ larger ? 1 : 2)
+
+    θ_start = @lift(($vec_θs)[$θ_use])
+    θ_end = @lift($θ_use == 2 ? ($vec_θs)[1] + 2π : ($vec_θs)[2])
+
+    norm_1 = @lift(norm($pointA - $center))
+    norm_2 = @lift(norm($pointB - $center))
+    draw_at = @lift(min($norm_1, $norm_2) * 0.25)
+
+    rangle = round(π/2f0, digits=4)
+    angle_range = @lift($θ == rangle ?
+                         [Point2f0([cos($θ_start); sin($θ_start)]*√((($draw_at)^2)/2) + $center),
+                          Point2f0([cos($θ_start+π/4); sin($θ_start+π/4)]*$draw_at + $center),
+                          Point2f0([cos($θ_end); sin($θ_end)]*√((($draw_at)^2)/2) + $center)] :
+                         [Point2f([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
+
+    plots = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                     color=color, linewidth=(observable_width))
+             poly!(@lift(vcat($angle_range, $center)), color=color, strokewidth=0f0)]
 
     EuclidAngle2f(center, pointA, pointB, plots, observable_width, observable_show_width)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Point2f;
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(center, Observable(pointA), Observable(pointB), width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(center, Observable(pointA), Observable(pointB), width=width, color=color, larger=larger)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, pointB::Point2f;
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(center, pointA, Observable(pointB), width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger=larger)
+    plane_angle(center, pointA, Observable(pointB), width=width, color=color, larger::Bool=false)
 end
 function plane_angle(center::Observable{Point2f}, pointA::Point2f, pointB::Observable{Point2f};
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(center, Observable(pointA), pointB, width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(center, Observable(pointA), pointB, width=width, color=color, larger=larger)
 end
 function plane_angle(center::Point2f, pointA::Observable{Point2f}, pointB::Point2f;
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(Observable(center), pointA, Observable(pointB), width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(Observable(center), pointA, Observable(pointB), width=width, color=color, larger=larger)
 end
 function plane_angle(center::Point2f, pointA::Observable{Point2f}, pointB::Observable{Point2f};
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(Observable(center), pointA, pointB, width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(Observable(center), pointA, pointB, width=width, color=color, larger=larger)
 end
 function plane_angle(center::Point2f, pointA::Point2f, pointB::Observable{Point2f};
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(Observable(center), Observable(pointA), pointB, width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(Observable(center), Observable(pointA), pointB, width=width, color=color, larger=larger)
 end
 function plane_angle(center::Point2f, pointA::Point2f, pointB::Point2f;
-                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    plane_angle(Observable(center), Observable(pointA), Observable(pointB), width=width, color=color)
+                width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue, larger::Bool=false)
+    plane_angle(Observable(center), Observable(pointA), Observable(pointB), width=width, color=color, larger=larger)
 end
 
 
