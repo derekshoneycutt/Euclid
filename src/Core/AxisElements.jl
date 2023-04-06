@@ -1,5 +1,5 @@
 
-export euclid_axis, circle_legend, square_legend, line_legend, vline_legend
+export euclid_axis, circle_legend, square_legend, line_legend, vline_legend, acute_angle_legend
 
 """
     euclid_axis(f[, title="", xlabel="https://github.com/derekshoneycutt/Euclid"])
@@ -106,7 +106,7 @@ Create an acute angle legend element for displaying on Euclid diagrams
 - `linewidth::AbstractFloat`: The width of the angle lines to draw
 - `linestyle`: The style of angle lines to draw
 """
-function acute_angle_legend(; color=:blue, linewidth::AbstractFlat=1.5f0, linestyle=:solid)
+function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid)
     origin = Point2f0(0,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(cos(π/4), sin(π/4))
