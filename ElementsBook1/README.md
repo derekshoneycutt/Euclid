@@ -15,7 +15,6 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Plane Angle](Definitions/008-PlaneAngle.ipynb)
 1. [Rectilineal Angle](Definitions/009-RectilinealAngle.ipynb)
 
-
 ## Additional Axioms
 
 These are not in Euclid, and in a strict sense, their need can be discussed. These are necessary for the foundational capabilities of drawing the graph animations. This includes some movement, rotatioan, reflection, and other things that certainly are not needed. However, items like intersections are used quite explicitly by Euclid without definition. Furthermore, the idea of overlaying a triangle on another seen early in Book I suggests many of these additional axioms. They are defined to make it all cohesive.
@@ -34,4 +33,3 @@ These are not in Euclid, and in a strict sense, their need can be discussed. The
 1. [Moving Angles](AddedAxioms/012-MovingAngles.ipynb)
 1. [Rotating Angles](AddedAxioms/013-RotatingAngles.ipynb)
 1. [Reflecting Angles](AddedAxioms/014-ReflectingAngles.ipynb)
-
