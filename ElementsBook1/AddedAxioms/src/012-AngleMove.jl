@@ -120,19 +120,18 @@ function animate(
     move::EuclidAngle2fMove,
     begin_move::AbstractFloat, end_move::AbstractFloat, t::AbstractFloat)
 
+    begin_at = move.begin_at[]
+    move_to = move.move_to[]
+    v = move_to - begin_at
+    norm_v = norm(v)
+    u = v / norm_v
+
+    line_vectorA = move.vectorA[]
+    line_vectorB = move.vectorB[]
 
     perform(t, begin_move, end_move,
          () -> nothing,
          () -> nothing) do
-
-        begin_at = move.begin_at[]
-        move_to = move.move_to[]
-        v = move_to - begin_at
-        norm_v = norm(v)
-        u = v / norm_v
-
-        line_vectorA = move.vectorA[]
-        line_vectorB = move.vectorB[]
 
         on_t = ((t-begin_move)/(end_move-begin_move)) * norm_v
         if on_t > 0
