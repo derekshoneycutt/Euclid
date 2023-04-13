@@ -66,7 +66,7 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
                          fix_angle(vector_angle($center, $pointB))]))
     θ = @lift(round(fix_angle(angle_between($pointA - $center, $pointB - $center)), digits=4))
 
-    θ_use = @lift((round(($vec_θs)[1] + $θ, digits=4) == round(($vec_θs)[2], digits=4)) ⊻ larger ? 1 : 2)
+    θ_use = @lift((round(($vec_θs)[1] + $θ, digits=0) == round(($vec_θs)[2], digits=0)) ⊻ larger ? 1 : 2)
 
     θ_start = @lift(($vec_θs)[$θ_use])
     θ_end = @lift($θ_use == 2 ? ($vec_θs)[1] + 2π : ($vec_θs)[2])
