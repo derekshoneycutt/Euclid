@@ -35,8 +35,8 @@ function plane_angle(point::Point2f,
                      theta::Float32;
                      draw_angle::Float32=0f0,
                      width::Union{Float32, Observable{Float32}}=1.5f0, color=:blue)
-    θ = draw_angle isa Observable{Float32} ? draw_angle[] : draw_angle
-    θangle = θ + theta
+
+    θangle = draw_angle + theta
 
     extremityA = Point2f0([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point)
     extremityB = Point2f0([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point)
@@ -84,8 +84,8 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
 
     pl = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
                  color=color, linewidth=(observable_width)),
-          poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
-                color=color, strokewidth=0f0)]
+          lines!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
+                color=:pink, strokewidth=0f0)]
 
     EuclidAngle2f(center, pointA, pointB, pl, observable_anglerad, observable_width, observable_show_width)
 end
