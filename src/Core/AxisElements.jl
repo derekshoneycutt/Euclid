@@ -107,7 +107,7 @@ Create an acute angle legend element for displaying on Euclid diagrams
 - `linestyle`: The style of angle lines to draw
 - `draw_angle`: Whether to draw the angle between the lines or just the lines
 """
-function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=true)
+function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=:filled)
     origin = Point2f0(0,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(cos(π/4), sin(π/4))
@@ -116,9 +116,14 @@ function acute_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, lines
 
     lines = LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle)
 
-    draw_angle ?
-        [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)] :
-        lines
+    if draw_angle == :outline
+        outline = LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)
+        lines = [lines, outline]
+    elseif draw_angle == :filled
+        lines = [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)]
+    end
+
+    lines
 end
 
 """
@@ -132,7 +137,7 @@ Create a right angle legend element for displaying on Euclid diagrams
 - `linestyle`: The style of angle lines to draw
 - `draw_angle`: Whether to draw the angle between the lines or just the lines
 """
-function right_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=true)
+function right_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=:filled)
     origin = Point2f0(0,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(0,1)
@@ -141,9 +146,14 @@ function right_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, lines
 
     lines = LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle)
 
-    draw_angle ?
-        [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)] :
-        lines
+    if draw_angle == :outline
+        outline = LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)
+        lines = [lines, outline]
+    elseif draw_angle == :filled
+        lines = [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)]
+    end
+
+    lines
 end
 
 """
@@ -157,7 +167,7 @@ Create a right angle legend element for displaying on Euclid diagrams
 - `linestyle`: The style of angle lines to draw
 - `draw_angle`: Whether to draw the angle between the lines or just the lines
 """
-function obtuse_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=true)
+function obtuse_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, linestyle=:solid, draw_angle=:filled)
     origin = Point2f0(0.5,0)
     base_extrem = Point2f0(1,0)
     angle_extrem = Point2f0(cos(3π/4) * 0.5f0, sin(3π/4))
@@ -166,7 +176,12 @@ function obtuse_angle_legend(; color=:blue, linewidth::AbstractFloat=1.5f0, line
 
     lines = LineElement(points=[base_extrem, origin, angle_extrem], color=color, linewidth=linewidth, linestyle=linestyle)
 
-    draw_angle ?
-        [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)] :
-        lines
+    if draw_angle == :outline
+        outline = LineElement(points=angle_lines, color=color, linewidth=linewidth, linestyle=linestyle)
+        lines = [lines, outline]
+    elseif draw_angle == :filled
+        lines = [lines, PolyElement(points=angle_poly, color=color, strokecolor=color, strokewidth=0)]
+    end
+
+    lines
 end
