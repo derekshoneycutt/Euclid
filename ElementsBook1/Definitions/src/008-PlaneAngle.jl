@@ -83,9 +83,9 @@ function plane_angle(center::Observable{Point2f}, pointA::Observable{Point2f}, p
                          [Point2f0([cos(t); sin(t)]*$draw_at + $center) for t in $θ_start:(π/180):$θ_end])
 
     pl = [lines!(@lift([Point2f0($pointA), Point2f0($center), Point2f0($pointB)]),
-                    color=color, linewidth=(observable_width)),
-                    poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
-                          color=color, strokewidth=0f0)]
+                 color=color, linewidth=(observable_width)),
+          poly!(@lift([Point2f0(p) for p in vcat($angle_range, $center)]),
+                color=color, strokewidth=0f0)]
 
     EuclidAngle2f(center, pointA, pointB, pl, observable_anglerad, observable_width, observable_show_width)
 end
