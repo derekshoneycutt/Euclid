@@ -15,7 +15,6 @@ Pkg.add(url="https://github.com/derekshoneycutt/Euclid.git")
 # ...
 
 using Euclid
-using GLMakie # Assuming graphing, will also need to import GLMakie functions
 ```
 
 ---

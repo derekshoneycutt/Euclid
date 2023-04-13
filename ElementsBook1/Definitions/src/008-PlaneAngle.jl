@@ -38,7 +38,7 @@ function plane_angle(point::Point2f,
 
     θangle = draw_angle + theta
 
-    extremityA = Point2f0([cos(θ) -sin(θ); sin(θ) cos(θ)] * [lengthA, 0] + point)
+    extremityA = Point2f0([cos(draw_angle) -sin(draw_angle); sin(draw_angle) cos(draw_angle)] * [lengthA, 0] + point)
     extremityB = Point2f0([cos(θangle) -sin(θangle); sin(θangle) cos(θangle)] * [lengthB, 0] + point)
     plane_angle(point, extremityA, extremityB, width=width, color=color, larger=(theta > π))
 end
