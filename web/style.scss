@@ -9,7 +9,7 @@ $material-symbols-font-path: '~material-symbols/';
 @include fab.core-styles;
 
 :root {
-    --mdc-theme-secondary: rgb(27%,51%,71%);
+    --mdc-theme-secondary: rgb(38%,48%,55%);// rgb(27%,51%,71%);
 }
 
 body {
@@ -39,11 +39,11 @@ body {
 a:link {
     transition: all 0.3s ease-in-out;
     text-decoration: underline;
-    color: rgb(53%,81%,100%);
+    color: rgb(38%,48%,55%);// rgb(53%,81%,100%);
     cursor: pointer;
 }
 a:visited {
-    color: rgb(53%,81%,100%);
+    color: rgb(38%,48%,55%);// rgb(53%,81%,100%);
 }
 a:hover {
     color: rgb(56%,93%,56%);
