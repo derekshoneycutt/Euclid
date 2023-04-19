@@ -17,31 +17,25 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Setup julia for build support
-      uses: julia-actions/setup-julia@v1
-      with:
-        version: 1.8
+    #- name: Setup julia for build support
+    #  uses: julia-actions/setup-julia@v1
+    #  with:
+    #    version: 1.8
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-  
-    - name: Update packages
-      run: sudo apt-get update
-
-    - name: Install packages
-      run: sudo apt-get install --fix-missing libgl1-mesa-dev
 
     - name: Add Julia Packages
       run: |
         julia AddPackages.jl
       shell: bash
 
-    - name: Build Julia bits
-      run: |
-        julia ElementsBook1/build_notebooks.jl
-      shell: bash
+    #- name: Build Julia bits
+    #  run: |
+    #    julia ElementsBook1/build_notebooks.jl
+    #  shell: bash
 
     - name: Build Javascript bits
       run: |
