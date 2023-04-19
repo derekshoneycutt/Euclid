@@ -103,6 +103,10 @@ a:active {
             content: '/';
             margin: 0 1em;
         }
+
+        li:last-child {
+            color: rgb(93%,87%,51%);
+        }
     }
 
     #side-navlist {
