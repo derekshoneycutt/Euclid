@@ -15,7 +15,7 @@ function reverseCleanPath(path) {
 }
 
 function getMatchingPage(searchBy, obj) {
-    if (obj.page === searchBy) {
+    if (obj.page && obj.page === searchBy) {
         return obj;
     }
     else if ('children' in obj) {
