@@ -12,7 +12,11 @@ $material-symbols-font-path: '~material-symbols/';
     --mdc-theme-secondary: rgb(38%,48%,55%);// rgb(27%,51%,71%);
 
 
+    --line-color: rgb(60%,60%,60%);
     --crumb-color: #171726;
+    --on-crumb-color: rgb(93%,87%,51%);
+    --hover-color: rgb(61%,80%,61%);
+    --active-color: rgb(80%,57%,62%);
 }
 
 body {
@@ -27,7 +31,6 @@ body {
 
     background-color: rgb(10%,10%,10%);
     color: rgb(45%,45%,45%);
-    --line-color: rgb(60%,60%,60%);
 
     display: flex;
     flex-direction: column-reverse;
@@ -41,17 +44,17 @@ body {
 a:link {
     transition: all 0.3s ease-in-out;
     text-decoration: underline;
-    color: rgb(38%,48%,55%);// rgb(53%,81%,100%);
+    color: var(--mdc-theme-secondary, rgb(38%,48%,55%));
     cursor: pointer;
 }
 a:visited {
-    color: rgb(38%,48%,55%);
+    color: var(--mdc-theme-secondary, rgb(38%,48%,55%));
 }
 a:hover {
-    color: rgb(61%,80%,61%);
+    color: var(--hover-color, rgb(61%,80%,61%));
 }
 a:active {
-    color: rgb(80%,57%,62%);
+    color: var(--active-color, rgb(80%,57%,62%));
 }
 
 img {
@@ -75,7 +78,7 @@ img {
 }
 
 #sidebar {
-    @include elevation.elevation(4, rgb(60%,60%,60%), 1);
+    @include elevation.elevation(4, var(--line-color, rgb(60%,60%,60%)), 1);
 
     min-height: 75%;
     max-height: 75%;
@@ -109,12 +112,12 @@ img {
         }
 
         li:last-child {
-            color: rgb(93%,87%,51%);
+            color: var(--on-crumb-color, rgb(93%,87%,51%));
             a:link {
-                color: rgb(93%,87%,51%);
+                color: var(--on-crumb-color, rgb(93%,87%,51%));
             }
             a:visited {
-                color: rgb(93%,87%,51%);
+                color: var(--on-crumb-color, rgb(93%,87%,51%));
             }
         }
     }
@@ -223,7 +226,7 @@ img {
             }
 
             & > a:not([href]).nav_link {
-                color: rgb(93%,87%,51%);
+                color: var(--on-crumb-color, rgb(93%,87%,51%));
             }
         }
     }
