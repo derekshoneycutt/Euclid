@@ -5,6 +5,8 @@
     All the following is the structure describing the views in Euclid
 */
 
+import {EUCLID_DATA_PAGES} from './data_pages';
+
 // Elements Book I
 
 // Definition images
