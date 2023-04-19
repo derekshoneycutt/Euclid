@@ -164,12 +164,7 @@ function generateSideBarListFrom(obj, currentPage, num) {
     if (hasChildren) {
         linkElement.emptyAndReplace($_.make('span', {
             class: "material-symbols-outlined collapse-marker",
-            innerHTML: "expand_more",
-            on: {
-                click: e => {
-                    listItem.setClassList({ collapsed: !listItem[0].classList.contains('collapsed') });
-                }
-            }
+            innerHTML: "expand_more"
         }), obj.title);
         listItem.appendChildren(
             linkElement);
