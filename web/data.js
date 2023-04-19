@@ -88,5 +88,5 @@ export var EUCLID_DATA = {
     link_element: null,
     listitem_element: null,
     sublist_element: null,
-    books: [...(EUCLID_DATA_PAGES.books)]
+    books: [...(EUCLID_DATA_PAGES.books.map(book => bookToExport(book)))]
 }
