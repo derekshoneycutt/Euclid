@@ -164,11 +164,11 @@ function bookToExport(book, index) {
         link_element: null,
         listitem_element: null,
         sublist_element: null,
-        definitions: subOjectToExport(book.definitions, index, merge_gifs.definitions),
-        postulates: subOjectToExport(book.postulates, index, merge_gifs.postulates),
-        common_notions: subOjectToExport(book.common_notions, index, merge_gifs.common_notions),
-        propositions: subOjectToExport(book.propositions, index, merge_gifs.propositions),
-        added_axioms: subOjectToExport(book.added_axioms, index, merge_gifs.added_axioms),
+        definitions: subOjectToExport(book.definitions, index, merge_gifs[index].definitions),
+        postulates: subOjectToExport(book.postulates, index, merge_gifs[index].postulates),
+        common_notions: subOjectToExport(book.common_notions, index, merge_gifs[index].common_notions),
+        propositions: subOjectToExport(book.propositions, index, merge_gifs[index].propositions),
+        added_axioms: subOjectToExport(book.added_axioms, index, merge_gifs[index].added_axioms),
     };
 
     return retObj;
