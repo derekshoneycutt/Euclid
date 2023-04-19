@@ -26,10 +26,17 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
+    
+    - uses: openrndr/setup-opengl@v1.1
+    - run: xvfb-run glxinfo
+
+    - name: Add Julia Packages
+      run: |
+        julia AddPackages.jl
+      shell: bash
 
     - name: Build Julia bits
       run: |
-        julia AddPackages.jl
         julia ElementsBook1/build_notebooks.jl
       shell: bash
 
