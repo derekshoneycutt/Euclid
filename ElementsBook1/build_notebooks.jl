@@ -4,41 +4,40 @@ using NBInclude
 # Setup the build directory
 println("Setting up build directories...")
 try; mkpath("build"); catch; end
-cd("build/")
 try; mkpath("ElementsBook1/Definitions/gifs"); catch; end
 try; mkpath("ElementsBook1/AddedAxioms/gifs"); catch; end
-try; mkpath("obj"); catch; end
+try; mkpath("build/obj"); catch; end
 println("Build directories prepared.")
 
 # First, export all the notebooks to the build dir
 println("Extracting Jupyter notebooks to julia files...")
 @time begin
     # Definitions...
-    nbexport("obj/Elements1_Def_001-Point.jl", "../ElementsBook1/Definitions/001-Point.ipynb")
-    nbexport("obj/Elements1_Def_002-Line.jl", "../ElementsBook1/Definitions/002-Line.ipynb")
-    nbexport("obj/Elements1_Def_003-LineExtremities.jl", "../ElementsBook1/Definitions/003-LineExtremities.ipynb")
-    nbexport("obj/Elements1_Def_004-StraightLine.jl", "../ElementsBook1/Definitions/004-StraightLine.ipynb")
-    nbexport("obj/Elements1_Def_005-Surface.jl", "../ElementsBook1/Definitions/005-Surface.ipynb")
-    nbexport("obj/Elements1_Def_006-SurfaceExtremities.jl", "../ElementsBook1/Definitions/006-SurfaceExtremities.ipynb")
-    nbexport("obj/Elements1_Def_007-PlaneSurface.jl", "../ElementsBook1/Definitions/007-PlaneSurface.ipynb")
-    nbexport("obj/Elements1_Def_008-PlaneAngle.jl", "../ElementsBook1/Definitions/008-PlaneAngle.ipynb")
-    nbexport("obj/Elements1_Def_009-RectilinealAngle.jl", "../ElementsBook1/Definitions/009-RectilinealAngle.ipynb")
+    nbexport("build/obj/Elements1_Def_001-Point.jl", "../ElementsBook1/Definitions/001-Point.ipynb")
+    nbexport("build/obj/Elements1_Def_002-Line.jl", "../ElementsBook1/Definitions/002-Line.ipynb")
+    nbexport("build/obj/Elements1_Def_003-LineExtremities.jl", "../ElementsBook1/Definitions/003-LineExtremities.ipynb")
+    nbexport("build/obj/Elements1_Def_004-StraightLine.jl", "../ElementsBook1/Definitions/004-StraightLine.ipynb")
+    nbexport("build/obj/Elements1_Def_005-Surface.jl", "../ElementsBook1/Definitions/005-Surface.ipynb")
+    nbexport("build/obj/Elements1_Def_006-SurfaceExtremities.jl", "../ElementsBook1/Definitions/006-SurfaceExtremities.ipynb")
+    nbexport("build/obj/Elements1_Def_007-PlaneSurface.jl", "../ElementsBook1/Definitions/007-PlaneSurface.ipynb")
+    nbexport("build/obj/Elements1_Def_008-PlaneAngle.jl", "../ElementsBook1/Definitions/008-PlaneAngle.ipynb")
+    nbexport("build/obj/Elements1_Def_009-RectilinealAngle.jl", "../ElementsBook1/Definitions/009-RectilinealAngle.ipynb")
 
     # Added Axioms...
-    nbexport("obj/Elements1_AddAxiom_001-HighlightingPoints.jl", "../ElementsBook1/AddedAxioms/001-HighlightingPoints.ipynb")
-    nbexport("obj/Elements1_AddAxiom_002-MovingPoints.jl", "../ElementsBook1/AddedAxioms/002-MovingPoints.ipynb")
-    nbexport("obj/Elements1_AddAxiom_003-HighlightingLines.jl", "../ElementsBook1/AddedAxioms/003-HighlightingLines.ipynb")
-    nbexport("obj/Elements1_AddAxiom_004-MovingLines.jl", "../ElementsBook1/AddedAxioms/004-MovingLines.ipynb")
-    nbexport("obj/Elements1_AddAxiom_005-RotatingLines.jl", "../ElementsBook1/AddedAxioms/005-RotatingLines.ipynb")
-    nbexport("obj/Elements1_AddAxiom_006-ReflectingLines.jl", "../ElementsBook1/AddedAxioms/006-ReflectingLines.ipynb")
-    nbexport("obj/Elements1_AddAxiom_007-IntersectingLines.jl", "../ElementsBook1/AddedAxioms/007-IntersectingLines.ipynb")
-    nbexport("obj/Elements1_AddAxiom_008-MovingSurfaces.jl", "../ElementsBook1/AddedAxioms/008-MovingSurfaces.ipynb")
-    nbexport("obj/Elements1_AddAxiom_009-RotatingSurfaces.jl", "../ElementsBook1/AddedAxioms/009-RotatingSurfaces.ipynb")
-    nbexport("obj/Elements1_AddAxiom_010-ReflectingSurfaces.jl", "../ElementsBook1/AddedAxioms/010-ReflectingSurfaces.ipynb")
-    nbexport("obj/Elements1_AddAxiom_011-HighlightingAngles.jl", "../ElementsBook1/AddedAxioms/011-HighlightingAngles.ipynb")
-    nbexport("obj/Elements1_AddAxiom_012-MovingAngles.jl", "../ElementsBook1/AddedAxioms/012-MovingAngles.ipynb")
-    nbexport("obj/Elements1_AddAxiom_013-RotatingAngles.jl", "../ElementsBook1/AddedAxioms/013-RotatingAngles.ipynb")
-    nbexport("obj/Elements1_AddAxiom_014-ReflectingAngles.jl", "../ElementsBook1/AddedAxioms/014-ReflectingAngles.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_001-HighlightingPoints.jl", "../ElementsBook1/AddedAxioms/001-HighlightingPoints.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_002-MovingPoints.jl", "../ElementsBook1/AddedAxioms/002-MovingPoints.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_003-HighlightingLines.jl", "../ElementsBook1/AddedAxioms/003-HighlightingLines.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_004-MovingLines.jl", "../ElementsBook1/AddedAxioms/004-MovingLines.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_005-RotatingLines.jl", "../ElementsBook1/AddedAxioms/005-RotatingLines.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_006-ReflectingLines.jl", "../ElementsBook1/AddedAxioms/006-ReflectingLines.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_007-IntersectingLines.jl", "../ElementsBook1/AddedAxioms/007-IntersectingLines.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_008-MovingSurfaces.jl", "../ElementsBook1/AddedAxioms/008-MovingSurfaces.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_009-RotatingSurfaces.jl", "../ElementsBook1/AddedAxioms/009-RotatingSurfaces.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_010-ReflectingSurfaces.jl", "../ElementsBook1/AddedAxioms/010-ReflectingSurfaces.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_011-HighlightingAngles.jl", "../ElementsBook1/AddedAxioms/011-HighlightingAngles.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_012-MovingAngles.jl", "../ElementsBook1/AddedAxioms/012-MovingAngles.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_013-RotatingAngles.jl", "../ElementsBook1/AddedAxioms/013-RotatingAngles.ipynb")
+    nbexport("build/obj/Elements1_AddAxiom_014-ReflectingAngles.jl", "../ElementsBook1/AddedAxioms/014-ReflectingAngles.ipynb")
 end
 println("Extracted Jupyter notebooks to julia files.")
 
