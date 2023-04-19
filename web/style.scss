@@ -10,6 +10,9 @@ $material-symbols-font-path: '~material-symbols/';
 
 :root {
     --mdc-theme-secondary: rgb(38%,48%,55%);// rgb(27%,51%,71%);
+
+
+    --crumb-color: rgb(42,42,69);
 }
 
 body {
@@ -43,13 +46,13 @@ a:link {
     cursor: pointer;
 }
 a:visited {
-    color: rgb(38%,48%,55%);// rgb(53%,81%,100%);
+    color: rgb(38%,48%,55%);
 }
 a:hover {
-    color: rgb(56%,93%,56%);
+    color: rgb(61%,80%,61%);
 }
 a:active {
-    color: rgb(100%,75%,80%);
+    color: rgb(80%,57%,62%);
 }
 
 #main-body {
@@ -83,7 +86,7 @@ a:active {
         left: 0;
         right: 0;
         height: 65px;
-        background-color: rgb(0,0,30%);
+        background-color: var(--crumb-color, rgb(0,0,30%));
         transition: all 0.3s ease-in-out;
     }
 
@@ -201,12 +204,12 @@ a:active {
 
         &.on_page {
             & > .nav_link {
-                background-color: rgb(0,0,30%);
+                background-color: var(--crumb-color, rgb(0,0,30%));
                 padding: 5px;
             }
 
             & > a:not([href]).nav_link {
-                color: rgb(100%,76%,15%);
+                color: rgb(93%,87%,51%);
             }
         }
     }
@@ -234,7 +237,7 @@ a:active {
             left: 0;
             right: 0;
             height: 65px;
-            background-color: rgb(0,0,30%);
+            background-color: var(--crumb-color, rgb(0,0,30%));
             transition: all 0.3s ease-in-out;
         }
 
