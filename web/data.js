@@ -58,7 +58,7 @@ function subOjectToExport(subobj) {
     };
 
     if ('children' in subobj) {
-        retObj.children = [...(subobj.children.map(child))];
+        retObj.children = [...(subobj.children.map(subOjectToExport))];
     }
 }
 
