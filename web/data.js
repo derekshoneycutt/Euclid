@@ -154,7 +154,7 @@ function subOjectToExport(subobj, bookIndex, merge) {
     };
 
     if ('children' in subobj) {
-        retObj.children = [...(subobj.children.map(child => subOjectToExport(child, bookIndex, merge)))];
+        retObj.children = [...(subobj.children.map((child, index) => subOjectToExport(child, bookIndex, merge.children[index])))];
     }
 
     return retObj;
