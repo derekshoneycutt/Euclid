@@ -145,6 +145,7 @@ img {
     &.collapsed {
         min-height: 65px;
         max-height: 65px;
+        font-size: 0px;
 
         #sidebar-collapser {
             transform: rotate(90deg);
@@ -208,6 +209,7 @@ img {
         }
 
         &.collapsed {
+            font-size: 0px;
 
             span.collapse-marker {
                 transform: rotate(-90deg);
