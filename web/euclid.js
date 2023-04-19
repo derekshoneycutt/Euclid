@@ -222,12 +222,7 @@ function loadSideBar() {
             $_.make('span',
                 {
                     class: "material-symbols-outlined collapse-marker",
-                    innerHTML: "expand_more",
-                    on: {
-                        click: e => {
-                            childEl.setClassList({ collapsed: !childEl[0].classList.contains('collapsed') });
-                        }
-                    }
+                    innerHTML: "expand_more"
                 }), book.title);
         childEl.appendChildren(
             linkElement,
