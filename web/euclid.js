@@ -8,10 +8,10 @@ import showdown from 'showdown';
 import DOMPurify from 'dompurify';
 
 function cleanPath(path) {
-    return path.replace('/build/dist', '/Euclid');
+    return path;//.replace('/build/dist', '/Euclid');
 }
 function reverseCleanPath(path) {
-    return path.replace('/Euclid', '/build/dist');
+    return path//;.replace('/Euclid', '/build/dist');
 }
 
 function getMatchingPage(searchBy, obj) {
