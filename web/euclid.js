@@ -312,7 +312,7 @@ $_.runOnLoad(() => {
             }
             else if (pathname.match(/\.(png|jpe?g|gif|svg)$/)) {
                 e.preventDefault();
-                let closeButton = $_.make('div', { class: 'material-symbols-outlined, overlay-x' }, 'close');
+                let closeButton = $_.make('div', { class: 'material-symbols-outlined overlay-x' }, 'close');
                 let sect = $_.make('section', { class: 'image-overlay' },
                                     ['img', { src: pathname }], closeButton)
 

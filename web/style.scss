@@ -245,6 +245,11 @@ section.image-overlay {
     align-items: center;
     overflow: auto;
 
+    img {
+        max-width: unset;
+        max-height: unset;
+    }
+
     .overlay-x {
         position: absolute;
         top: 15px;
