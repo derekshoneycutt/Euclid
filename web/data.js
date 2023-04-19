@@ -45,26 +45,118 @@ import ElementsBook1_AddAxiom_012_AngleMove from "../ElementsBook1/AddedAxioms/g
 import ElementsBook1_AddAxiom_013_AngleRotate from "../ElementsBook1/AddedAxioms/gifs/013-AngleRotate.gif";
 import ElementsBook1_AddAxiom_014_AngleReflect from "../ElementsBook1/AddedAxioms/gifs/014-AngleReflect.gif";
 
+
+const merge_gifs = [
+    {
+        definitions: [
+            {
+                animation2d: ElementsBook1_Def_001_Point,
+                animation3d: ElementsBook1_Def_001_Point3D
+            },
+            {
+                animation2d: ElementsBook1_Def_002_Line,
+                animation3d: ElementsBook1_Def_002_Line3D
+            },
+            {
+                animation2d: ElementsBook1_Def_003_LineExtremities,
+                animation3d: ElementsBook1_Def_003_LineExtremities3D
+            },
+            {
+                animation2d: ElementsBook1_Def_004_StraightLine,
+                animation3d: ElementsBook1_Def_004_StraightLine3D
+            },
+            {
+                animation2d: ElementsBook1_Def_005_Surface,
+            },
+            {
+                animation2d: ElementsBook1_Def_006_SurfaceExtremities,
+            },
+            {
+                animation2d: ElementsBook1_Def_007_PlaneSurface
+            },
+            {
+                animation2d: ElementsBook1_Def_008_PlaneAngle,
+            },
+            {
+                animation2d: ElementsBook1_Def_009_RecitilinealAngle,
+            },
+        ],
+        added_axioms: [
+            {
+                animation2d: ElementsBook1_AddAxiom_001_PointHighlight,
+                animation3d: ElementsBook1_AddAxiom_001_PointHighlight3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_002_PointMove,
+                animation3d: ElementsBook1_AddAxiom_002_PointMove3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_003_LineHighlight,
+                animation3d: ElementsBook1_AddAxiom_003_LineHighlight3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_004_LineMove,
+                animation3d: ElementsBook1_AddAxiom_004_LineMove3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_005_LineRotate,
+                animation3d: ElementsBook1_AddAxiom_005_LineRotate3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_006_LineReflect,
+                animation3d: ElementsBook1_AddAxiom_006_LineReflect3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_007_IntersectingLines,
+                animation3d: ElementsBook1_AddAxiom_007_IntersectingLines3D
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_008_SurfaceMove,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_009_SurfaceRotate,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_010_SurfaceReflect,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_011_AngleHighlight,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_012_AngleMove,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_013_AngleRotate,
+            },
+            {
+                animation2d: ElementsBook1_AddAxiom_014_AngleReflect,
+            },
+        ]
+    }
+];
+
 import { EUCLID_DATA_PAGES } from './data_pages';
 
-function subOjectToExport(subobj) {
+function subOjectToExport(subobj, bookIndex, merge) {
     let retObj = {
         title: subobj.title,
         head: subobj.head,
         page: subobj.page,
+        animation2d: bookIndex && merge && merge[bookIndex] ? merge[bookIndex].animation2d : undefined,
+        animation3d: bookIndex && merge && merge[bookIndex] ? merge[bookIndex].animation3d : undefined,
         link_element: null,
         listitem_element: null,
         sublist_element: null,
     };
 
     if ('children' in subobj) {
-        retObj.children = [...(subobj.children.map(subOjectToExport))];
+        retObj.children = [...(subobj.children.map(subOjectToExport, bookIndex, merge))];
     }
 
     return retObj;
 }
 
-function bookToExport(book) {
+function bookToExport(book, index) {
     let retObj = {
         title: book.title,
         head: book.head,
@@ -72,11 +164,11 @@ function bookToExport(book) {
         link_element: null,
         listitem_element: null,
         sublist_element: null,
-        definitions: subOjectToExport(book.definitions),
-        postulates: subOjectToExport(book.postulates),
-        common_notions: subOjectToExport(book.common_notions),
-        propositions: subOjectToExport(book.propositions),
-        added_axioms: subOjectToExport(book.added_axioms),
+        definitions: subOjectToExport(book.definitions, index, merge_gifs.definitions),
+        postulates: subOjectToExport(book.postulates, index, merge_gifs.postulates),
+        common_notions: subOjectToExport(book.common_notions, index, merge_gifs.common_notions),
+        propositions: subOjectToExport(book.propositions, index, merge_gifs.propositions),
+        added_axioms: subOjectToExport(book.added_axioms, index, merge_gifs.added_axioms),
     };
 
     return retObj;
@@ -90,5 +182,5 @@ export var EUCLID_DATA = {
     link_element: null,
     listitem_element: null,
     sublist_element: null,
-    books: [...(EUCLID_DATA_PAGES.books.map(book => bookToExport(book)))]
+    books: [[...(EUCLID_DATA_PAGES.books.map((book, index) => bookToExport(book, index)))]]
 }
