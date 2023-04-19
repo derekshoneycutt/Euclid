@@ -244,6 +244,8 @@ section.image-overlay {
     justify-content: center;
     align-items: center;
     overflow: auto;
+    background-color: rgb(10%,10%,10%);
+    color: rgb(45%,45%,45%);
 
     img {
         max-width: unset;
