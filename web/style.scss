@@ -78,7 +78,7 @@ img {
 }
 
 #sidebar {
-    @include elevation.elevation(4, var(--line-color, rgb(60%,60%,60%)), 1);
+    @include elevation.elevation(4, rgb(60%,60%,60%), 1);
 
     min-height: 75%;
     max-height: 75%;
