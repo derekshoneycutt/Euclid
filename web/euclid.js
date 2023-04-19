@@ -149,32 +149,33 @@ function tryLoadPage() {
     article.setProperties({ innerHTML: html });
 }
 
-function generateSideBarListFrom(obj, currentPage) {
+function generateSideBarListFrom(obj, currentPage, num) {
     let hasChildren = ('children' in obj);
     let matchPage = getMatchingPage(currentPage, obj);
     let listItem = $_.make('li', {
         class: `${matchPage === null || matchPage === undefined ? 'collapsed' : 'on_page'} ${hasChildren ? "with_children" : "no_children"}`
     });
     let linkHref = reverseCleanPath(obj.page);
-    let linkElement = $_.make('a', { href: matchPage === obj ? undefined : linkHref, class: 'nav_link' }, obj.title);
+    let linkElement = $_.make('a', { href: matchPage === obj ? undefined : linkHref, class: 'nav_link' }, `${num ? num + '. ' : ''}${obj.title}`);
 
     obj.link_element = linkElement;
     obj.listitem_element = listItem;
 
     if (hasChildren) {
+        linkElement.emptyAndReplace($_.make('span', {
+            class: "material-symbols-outlined collapse-marker",
+            innerHTML: "expand_more",
+            on: {
+                click: e => {
+                    listItem.setClassList({ collapsed: !listItem[0].classList.contains('collapsed') });
+                }
+            }
+        }), obj.title);
         listItem.appendChildren(
-            $_.make('span', {
-                    class: "material-symbols-outlined collapse-marker",
-                    innerHTML: "expand_more",
-                    on: {
-                        click: e => {
-                            listItem.setClassList({ collapsed: !listItem[0].classList.contains('collapsed') });
-                        }
-                    }
-                }),
             linkElement);
 
-        let subList = $_.make('ol', { class: 'nav-ord-list' }, ...(obj.children.map(child => generateSideBarListFrom(child, currentPage))));
+        let subList = $_.make('ol', { class: 'nav-ord-list' },
+                                ...(obj.children.map((child, index) => generateSideBarListFrom(child, currentPage, index))));
         listItem.appendChildren(subList);
         obj.sublist_element = subList;
     }
@@ -222,7 +223,7 @@ function loadSideBar() {
                                 generateSideBarListFrom(book.common_notions, currentPage),
                                 generateSideBarListFrom(book.propositions, currentPage),
                                 generateSideBarListFrom(book.added_axioms, currentPage));
-        childEl.appendChildren(
+        linkElement.emptyAndReplace(
             $_.make('span',
                 {
                     class: "material-symbols-outlined collapse-marker",
@@ -232,7 +233,8 @@ function loadSideBar() {
                             childEl.setClassList({ collapsed: !childEl[0].classList.contains('collapsed') });
                         }
                     }
-                }),
+                }), book.title);
+        childEl.appendChildren(
             linkElement,
             subList);
         navlist.appendChildren(childEl);

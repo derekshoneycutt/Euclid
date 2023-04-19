@@ -142,6 +142,11 @@ a:active {
     list-style: none;
 }
 
+.nav-ord-list {
+    list-style: none;
+    counter-reset: li;
+}
+
 .nav-hier-list,.nav-ord-list {
     margin: 5px;
     padding: 0;
