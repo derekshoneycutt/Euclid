@@ -24,7 +24,6 @@ body {
     font-family: "Roboto", sans-serif;
     -moz-osx-font-smoothing: grayscale;
     -webkit-font-smoothing: antialiased;
-    //font-size: 16rem;
 
     background-color: rgb(10%,10%,10%);
     color: rgb(45%,45%,45%);
@@ -61,13 +60,13 @@ a:active {
     padding: 16px;
 
     p {
-        font-size: 1.5rem;
+        font-size: 16px;
     }
     h1 {
-        font-size: 3rem;
+        font-size: 32px;
     }
     h2 {
-        font-size: 2rem;
+        font-size: 22px;
     }
 }
 
@@ -86,6 +85,7 @@ a:active {
         left: 0;
         right: 0;
         height: 65px;
+        font-size: 14px;
         background-color: var(--crumb-color, rgb(0,0,30%));
         transition: all 0.3s ease-in-out;
     }
@@ -156,7 +156,7 @@ a:active {
     li {
         margin-top: 5px;
         margin-bottom: 2px;
-        font-size: 1.5rem;
+        font-size: 16px;
         white-space: nowrap;
 
 
