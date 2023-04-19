@@ -43,7 +43,7 @@ body {
 
 a:link {
     transition: all 0.3s ease-in-out;
-    text-decoration: underline;
+    text-decoration: none;
     color: var(--mdc-theme-secondary, rgb(38%,48%,55%));
     cursor: pointer;
 }
