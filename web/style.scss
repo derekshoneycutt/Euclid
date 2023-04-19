@@ -97,7 +97,7 @@ a:active {
         padding: 15px;
         margin: 0px;
         overflow: hidden;
-        max-width: 300px;
+        justify-content: center;
 
         li:not(:first-child):before {
             content: '/';
@@ -114,7 +114,6 @@ a:active {
         overflow-y: auto;
         padding: 0px 10px 10px 10px;
         margin: 0;
-        max-width: 300px;
         transition: all 0.3s ease-in-out;
     }
 
@@ -162,7 +161,8 @@ a:active {
 
 
         .nav_link {
-            vertical-align: top;
+            width: 100%;
+            display: block;
         }
 
         span.collapse-marker {
