@@ -17,8 +17,10 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Checkout submodules
-      uses: textbook/git-checkout-submodule-action@master
+    - name: Pull & update submodules recursively
+      run: |
+        git submodule update --init --recursive
+        git submodule update --recursive --remote
 
     #- name: Setup julia for build support
     #  uses: julia-actions/setup-julia@v1
