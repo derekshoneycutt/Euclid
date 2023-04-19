@@ -54,6 +54,10 @@ a:active {
     color: rgb(80%,57%,62%);
 }
 
+img {
+    max-width: 90%;
+}
+
 #main-body {
     flex-grow: 1;
     overflow: auto;
