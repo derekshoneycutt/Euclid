@@ -45,7 +45,7 @@ import ElementsBook1_AddAxiom_012_AngleMove from "../ElementsBook1/AddedAxioms/g
 import ElementsBook1_AddAxiom_013_AngleRotate from "../ElementsBook1/AddedAxioms/gifs/013-AngleRotate.gif";
 import ElementsBook1_AddAxiom_014_AngleReflect from "../ElementsBook1/AddedAxioms/gifs/014-AngleReflect.gif";
 
-const EUCLID_DATA_PAGES = require('./data_pages');
+import { EUCLID_DATA_PAGES } from './data_pages';
 
 function subOjectToExport(subobj) {
     let retObj = {

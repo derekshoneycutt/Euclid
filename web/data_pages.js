@@ -1,4 +1,4 @@
-({
+export var EUCLID_DATA_PAGES = ({
     title: "Euclid",
     head: "And this is Euclid book 1!",
     page: "/Euclid/index.html",
