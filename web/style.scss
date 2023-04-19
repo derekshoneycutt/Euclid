@@ -106,6 +106,12 @@ a:active {
 
         li:last-child {
             color: rgb(93%,87%,51%);
+            a:link {
+                color: rgb(93%,87%,51%);
+            }
+            a:visited {
+                color: rgb(93%,87%,51%);
+            }
         }
     }
 
