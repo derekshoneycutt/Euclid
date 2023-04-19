@@ -306,6 +306,15 @@ $_.runOnLoad(() => {
                     });
                 }
             }
+            else if (e.target.classList.contains('collapse-marker')) {
+                e.preventDefault();
+                let match = findMatchingPage(pathname);
+                if (match) {
+                    match.listitem_element.setClassList({
+                        collapsed: !match.listitem_element[0].classList.contains('collapsed')
+                    });
+                }
+            }
             else {
                 let match = findMatchingPage(pathname);
                 if (match !== null && match !== undefined) {
