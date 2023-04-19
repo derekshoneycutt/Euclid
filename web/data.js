@@ -19,6 +19,7 @@ import ElementsBook1_Def_003_LineExtremities3D from "../ElementsBook1/Definition
 import ElementsBook1_Def_004_StraightLine from "../ElementsBook1/Definitions/gifs/004-StraightLine.gif";
 import ElementsBook1_Def_004_StraightLine3D from "../ElementsBook1/Definitions/gifs/004-StraightLine-3D.gif";
 import ElementsBook1_Def_005_Surface from "../ElementsBook1/Definitions/gifs/005-Surface.gif";
+import ElementsBook1_Def_005_Surface3D from "../ElementsBook1/Definitions/gifs/005-Surface-3D.gif";
 import ElementsBook1_Def_006_SurfaceExtremities from "../ElementsBook1/Definitions/gifs/006-SurfaceExtremities.gif";
 import ElementsBook1_Def_007_PlaneSurface from "../ElementsBook1/Definitions/gifs/007-PlaneSurface.gif";
 import ElementsBook1_Def_008_PlaneAngle from "../ElementsBook1/Definitions/gifs/008-PlaneAngle.gif";
@@ -70,6 +71,7 @@ const merge_gifs = [
                 },
                 {
                     animation2d: ElementsBook1_Def_005_Surface,
+                    animation3d: ElementsBook1_Def_005_Surface3D,
                 },
                 {
                     animation2d: ElementsBook1_Def_006_SurfaceExtremities,
