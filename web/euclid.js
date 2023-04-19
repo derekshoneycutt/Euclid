@@ -295,6 +295,7 @@ $_.runOnLoad(() => {
 
     document.addEventListener("click", e => {
         let link = e.target.closest('a');
+        console.log(link);
         if (link) {
             let pathname = cleanPath(link.pathname);
             if (pathname === '' || pathname === undefined || pathname === null) {
