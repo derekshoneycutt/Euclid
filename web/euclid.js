@@ -298,6 +298,7 @@ $_.runOnLoad(() => {
         console.log(link);
         if (link) {
             let pathname = cleanPath(link.pathname);
+            console.log(pathname);
             if (pathname === '' || pathname === undefined || pathname === null) {
                 pathname = cleanPath(window.location.pathname);
                 let match = findMatchingPage(pathname);
