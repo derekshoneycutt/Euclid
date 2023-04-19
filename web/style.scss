@@ -253,10 +253,11 @@ section.image-overlay {
     }
 
     .overlay-x {
-        position: absolute;
+        position: fixed;
         top: 15px;
         right: 15px;
         cursor: pointer;
+        font-size: 32px;
     }
 }
 

@@ -5,7 +5,7 @@
   "main": "web/euclid.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack --config webpack.config.js"
+    "build": "webpack"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,7 @@
   "devDependencies": {
     "@babel/core": "^7.21.4",
     "@babel/preset-env": "^7.21.4",
+    "@babel/register": "^7.21.0",
     "autoprefixer": "^10.4.14",
     "babel-loader": "^9.1.2",
     "css-loader": "^6.7.3",
@@ -34,5 +35,10 @@
     "material-components-web": "^14.0.0",
     "material-symbols": "^0.5.5",
     "showdown": "^2.1.0"
+  },
+  "babel-cli": {
+    "presets": [
+      ["@babel/preset-env", { "modules": false }]
+    ]
   }
 }
