@@ -5,7 +5,7 @@
     All the following is the structure describing the views in Euclid
 */
 
-import {EUCLID_DATA_PAGES} from './data_pages';
+import { EUCLID_DATA_PAGES } from './data_pages';
 
 // Elements Book I
 
@@ -137,8 +137,6 @@ const merge_gifs = [
     }
 ];
 
-import { EUCLID_DATA_PAGES } from './data_pages';
-
 function subOjectToExport(subobj, bookIndex, merge) {
     let retObj = {
         title: subobj.title,
@@ -152,7 +150,7 @@ function subOjectToExport(subobj, bookIndex, merge) {
     };
 
     if ('children' in subobj) {
-        retObj.children = [...(subobj.children.map(subOjectToExport, bookIndex, merge))];
+        retObj.children = [...(subobj.children.map(child => subOjectToExport(child, bookIndex, merge)))];
     }
 
     return retObj;
