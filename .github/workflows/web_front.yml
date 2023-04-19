@@ -26,9 +26,12 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-    
-    - uses: openrndr/setup-opengl@v1.1
-    - run: xvfb-run glxinfo
+  
+    - name: Update packages
+      run: sudo apt-get update
+
+    - name: Install packages
+      run: sudo apt-get install --fix-missing libgl1-mesa-dev
 
     - name: Add Julia Packages
       run: |
@@ -44,3 +47,16 @@ jobs:
       run: |
         npm install
         npx webpack
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Continuously growing until this Euclid thing is done...
+        draft: false
+        prerelease: false
