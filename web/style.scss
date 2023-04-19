@@ -232,6 +232,27 @@ img {
     }
 }
 
+section.image-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+
+    .overlay-x {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        cursor: pointer;
+    }
+}
+
 @media screen and (orientation: landscape) {
     body {
         flex-direction: row;

@@ -138,11 +138,11 @@ function tryLoadPage() {
     let text = `# ${page.title}\n\n${page.head}`;
     if (page.animation2d)
     {
-        text = `${text}\n\n## 2D Animation\n\n![${page.title} 2D](${page.animation2d})`
+        text = `${text}\n\n## 2D Animation\n\n[![${page.title} 2D](${page.animation2d})](${page.animation2d})`
     }
     if (page.animation3d)
     {
-        text = `${text}\n\n## 3D Animation\n\n![${page.title} 3D](${page.animation3d})`
+        text = `${text}\n\n## 3D Animation\n\n[![${page.title} 3D](${page.animation3d})](${page.animation3d})`
     }
     const html = DOMPurify.sanitize(new showdown.Converter().makeHtml(text));
     article.empty();
@@ -290,10 +290,8 @@ $_.runOnLoad(() => {
 
     document.addEventListener("click", e => {
         let link = e.target.closest('a');
-        console.log(link);
         if (link) {
             let pathname = cleanPath(link.pathname);
-            console.log(pathname);
             if (pathname === '' || pathname === undefined || pathname === null) {
                 pathname = cleanPath(window.location.pathname);
                 let match = findMatchingPage(pathname);
@@ -311,6 +309,19 @@ $_.runOnLoad(() => {
                         collapsed: !match.listitem_element[0].classList.contains('collapsed')
                     });
                 }
+            }
+            else if (pathname.match(/\.(png|jpe?g|gif|svg)$/)) {
+                e.preventDefault();
+                let closeButton = $_.make('div', { class: 'material-symbols-outlined, overlay-x' }, 'close');
+                let sect = $_.make('section', { class: 'image-overlay' },
+                                    ['img', { src: pathname }], closeButton)
+
+                closeButton.addEvents({
+                    click: e => {
+                        sect[0].remove();
+                    }
+                });
+                $_.appendChildren(document.body, sect);
             }
             else {
                 let match = findMatchingPage(pathname);
