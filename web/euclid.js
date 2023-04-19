@@ -175,7 +175,7 @@ function generateSideBarListFrom(obj, currentPage, num) {
             linkElement);
 
         let subList = $_.make('ol', { class: 'nav-ord-list' },
-                                ...(obj.children.map((child, index) => generateSideBarListFrom(child, currentPage, index))));
+                                ...(obj.children.map((child, index) => generateSideBarListFrom(child, currentPage, index + 1))));
         listItem.appendChildren(subList);
         obj.sublist_element = subList;
     }

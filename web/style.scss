@@ -155,6 +155,7 @@ a:active {
         margin-top: 5px;
         margin-bottom: 2px;
         font-size: 1.5rem;
+        white-space: nowrap;
 
 
         .nav_link {
@@ -164,6 +165,7 @@ a:active {
         span.collapse-marker {
             transition: all 0.3s ease-in-out;
             margin-right: 6px;
+            vertical-align: text-top;
             cursor: pointer;
         }
 
