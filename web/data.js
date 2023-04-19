@@ -50,90 +50,94 @@ import ElementsBook1_AddAxiom_014_AngleReflect from "../ElementsBook1/AddedAxiom
 
 const merge_gifs = [
     {
-        definitions: [
-            {
-                animation2d: ElementsBook1_Def_001_Point,
-                animation3d: ElementsBook1_Def_001_Point3D
-            },
-            {
-                animation2d: ElementsBook1_Def_002_Line,
-                animation3d: ElementsBook1_Def_002_Line3D
-            },
-            {
-                animation2d: ElementsBook1_Def_003_LineExtremities,
-                animation3d: ElementsBook1_Def_003_LineExtremities3D
-            },
-            {
-                animation2d: ElementsBook1_Def_004_StraightLine,
-                animation3d: ElementsBook1_Def_004_StraightLine3D
-            },
-            {
-                animation2d: ElementsBook1_Def_005_Surface,
-            },
-            {
-                animation2d: ElementsBook1_Def_006_SurfaceExtremities,
-            },
-            {
-                animation2d: ElementsBook1_Def_007_PlaneSurface
-            },
-            {
-                animation2d: ElementsBook1_Def_008_PlaneAngle,
-            },
-            {
-                animation2d: ElementsBook1_Def_009_RecitilinealAngle,
-            },
-        ],
-        added_axioms: [
-            {
-                animation2d: ElementsBook1_AddAxiom_001_PointHighlight,
-                animation3d: ElementsBook1_AddAxiom_001_PointHighlight3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_002_PointMove,
-                animation3d: ElementsBook1_AddAxiom_002_PointMove3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_003_LineHighlight,
-                animation3d: ElementsBook1_AddAxiom_003_LineHighlight3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_004_LineMove,
-                animation3d: ElementsBook1_AddAxiom_004_LineMove3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_005_LineRotate,
-                animation3d: ElementsBook1_AddAxiom_005_LineRotate3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_006_LineReflect,
-                animation3d: ElementsBook1_AddAxiom_006_LineReflect3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_007_IntersectingLines,
-                animation3d: ElementsBook1_AddAxiom_007_IntersectingLines3D
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_008_SurfaceMove,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_009_SurfaceRotate,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_010_SurfaceReflect,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_011_AngleHighlight,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_012_AngleMove,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_013_AngleRotate,
-            },
-            {
-                animation2d: ElementsBook1_AddAxiom_014_AngleReflect,
-            },
-        ]
+        definitions: {
+            children: [
+                {
+                    animation2d: ElementsBook1_Def_001_Point,
+                    animation3d: ElementsBook1_Def_001_Point3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_002_Line,
+                    animation3d: ElementsBook1_Def_002_Line3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_003_LineExtremities,
+                    animation3d: ElementsBook1_Def_003_LineExtremities3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_004_StraightLine,
+                    animation3d: ElementsBook1_Def_004_StraightLine3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_005_Surface,
+                },
+                {
+                    animation2d: ElementsBook1_Def_006_SurfaceExtremities,
+                },
+                {
+                    animation2d: ElementsBook1_Def_007_PlaneSurface
+                },
+                {
+                    animation2d: ElementsBook1_Def_008_PlaneAngle,
+                },
+                {
+                    animation2d: ElementsBook1_Def_009_RecitilinealAngle,
+                },
+            ]
+        },
+        added_axioms: {
+            children: [
+                {
+                    animation2d: ElementsBook1_AddAxiom_001_PointHighlight,
+                    animation3d: ElementsBook1_AddAxiom_001_PointHighlight3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_002_PointMove,
+                    animation3d: ElementsBook1_AddAxiom_002_PointMove3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_003_LineHighlight,
+                    animation3d: ElementsBook1_AddAxiom_003_LineHighlight3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_004_LineMove,
+                    animation3d: ElementsBook1_AddAxiom_004_LineMove3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_005_LineRotate,
+                    animation3d: ElementsBook1_AddAxiom_005_LineRotate3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_006_LineReflect,
+                    animation3d: ElementsBook1_AddAxiom_006_LineReflect3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_007_IntersectingLines,
+                    animation3d: ElementsBook1_AddAxiom_007_IntersectingLines3D
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_008_SurfaceMove,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_009_SurfaceRotate,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_010_SurfaceReflect,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_011_AngleHighlight,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_012_AngleMove,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_013_AngleRotate,
+                },
+                {
+                    animation2d: ElementsBook1_AddAxiom_014_AngleReflect,
+                },
+            ]
+        }
     }
 ];
 
@@ -142,8 +146,8 @@ function subOjectToExport(subobj, bookIndex, merge) {
         title: subobj.title,
         head: subobj.head,
         page: subobj.page,
-        animation2d: merge ? merge.animation2d : undefined,
-        animation3d: merge ? merge.animation3d : undefined,
+        animation2d: merge && merge.animation2d ? merge.animation2d : undefined,
+        animation3d: merge && merge.animation3d ? merge.animation3d : undefined,
         link_element: null,
         listitem_element: null,
         sublist_element: null,
