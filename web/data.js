@@ -81,7 +81,7 @@ const merge_gifs = [
                 },
                 {
                     animation2d: ElementsBook1_Def_007_PlaneSurface,
-                    animation2d: ElementsBook1_Def_007_PlaneSurface3D
+                    animation3d: ElementsBook1_Def_007_PlaneSurface3D
                 },
                 {
                     animation2d: ElementsBook1_Def_008_PlaneAngle,
