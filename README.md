@@ -4,6 +4,9 @@ This first began as a project entirely about trying to code out the propositions
 
 This uses the Thomas L Heath translation, which remains the standard translation for Euclid to this day.
 
+
+See [https://derekshoneycutt.github.io/Euclid/index.html](https://derekshoneycutt.github.io/Euclid/index.html) for the presented version of Euclid's Elements.
+
 ---
 
 ## Euclid's Elements
