@@ -56,6 +56,21 @@ export var EUCLID_DATA_PAGES = ({
                         title: "Rectilineal Angle",
                         head: "And when the lines [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html) containing the angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) are straight [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), the angle is called *rectilineal*.",
                         page: "/Euclid/ElementsBook1_Definitions_009-RectilinealAngle.html"
+                    },
+                    {
+                        title: "Right Angle and Perpendiculars",
+                        head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another, each of the equal angles is *right*, and the adjacent line standing on the other is called a *perpendicular* to that on which it stands.",
+                        page: "/Euclid/ElementsBook1_Definitions_010-RightPerpendicular.html"
+                    },
+                    {
+                        title: "Obtuse Angle",
+                        head: "An *obtuse angle* is an angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) greater than a right angle [[Def I.10]](/Euclid/ElementsBook1_Definitions_019-RightPerpendicular.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_011-ObtuseAngle.html"
+                    },
+                    {
+                        title: "Acute Angle",
+                        head: "An *acute angle* is an angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) less than a right angle [[Def I.10]](/Euclid/ElementsBook1_Definitions_019-RightPerpendicular.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_012-AcuteAngle.html"
                     }
                 ]
             },
