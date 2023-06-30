@@ -29,6 +29,8 @@ import ElementsBook1_Def_009_RecitilinealAngle from "../ElementsBook1/Definition
 import ElementsBook1_Def_010_RightPerpendicular from "../ElementsBook1/Definitions/gifs/010-RightPerpendicular.gif";
 import ElementsBook1_Def_011_ObtuseAngle from "../ElementsBook1/Definitions/gifs/011-ObtuseAngle.gif";
 import ElementsBook1_Def_012_AcuteAngle from "../ElementsBook1/Definitions/gifs/012-AcuteAngle.gif";
+import ElementsBook1_Def_013_Boundary from "../ElementsBook1/Definitions/gifs/013-Boundary.gif";
+import ElementsBook1_Def_014_Figure from "../ElementsBook1/Definitions/gifs/014-Figure.gif";
 
 // Added Axioms Images
 import ElementsBook1_AddAxiom_001_PointHighlight from "../ElementsBook1/AddedAxioms/gifs/001-PointHighlight.gif";
@@ -103,6 +105,12 @@ const merge_gifs = [
                 },
                 {
                     animation2d: ElementsBook1_Def_012_AcuteAngle,
+                },
+                {
+                    animation2d: ElementsBook1_Def_013_Boundary,
+                },
+                {
+                    animation2d: ElementsBook1_Def_014_Figure,
                 },
             ]
         },

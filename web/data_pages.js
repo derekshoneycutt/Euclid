@@ -71,6 +71,16 @@ export var EUCLID_DATA_PAGES = ({
                         title: "Acute Angle",
                         head: "An *acute angle* is an angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) less than a right angle [[Def I.10]](/Euclid/ElementsBook1_Definitions_019-RightPerpendicular.html).",
                         page: "/Euclid/ElementsBook1_Definitions_012-AcuteAngle.html"
+                    },
+                    {
+                        title: "Boundary",
+                        head: "A *boundary* is that which is an extremity [[Def I.3]](/Euclid/ElementsBook1_Definitions_003-LineExtremities.html) [[Def I.6]](/Euclid/ElementsBook1_Definitions_006-SurfaceExtremities.html) of anything.",
+                        page: "/Euclid/ElementsBook1_Definitions_013-Boundary.html"
+                    },
+                    {
+                        title: "Figure",
+                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
                     }
                 ]
             },
