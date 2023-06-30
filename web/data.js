@@ -43,8 +43,11 @@ import ElementsBook1_AddAxiom_006_LineReflect3D from "../ElementsBook1/AddedAxio
 import ElementsBook1_AddAxiom_007_IntersectingLines from "../ElementsBook1/AddedAxioms/gifs/007-IntersectingLines.gif";
 import ElementsBook1_AddAxiom_007_IntersectingLines3D from "../ElementsBook1/AddedAxioms/gifs/007-IntersectingLines-3D.gif";
 import ElementsBook1_AddAxiom_008_SurfaceMove from "../ElementsBook1/AddedAxioms/gifs/008-SurfaceMove.gif";
+import ElementsBook1_AddAxiom_008_SurfaceMove3D from "../ElementsBook1/AddedAxioms/gifs/008-SurfaceMove-3D.gif";
 import ElementsBook1_AddAxiom_009_SurfaceRotate from "../ElementsBook1/AddedAxioms/gifs/009-SurfaceRotate.gif";
+import ElementsBook1_AddAxiom_009_SurfaceRotate3D from "../ElementsBook1/AddedAxioms/gifs/009-SurfaceRotate-3D.gif";
 import ElementsBook1_AddAxiom_010_SurfaceReflect from "../ElementsBook1/AddedAxioms/gifs/010-SurfaceReflect.gif";
+import ElementsBook1_AddAxiom_010_SurfaceReflect3D from "../ElementsBook1/AddedAxioms/gifs/010-SurfaceReflect-3D.gif";
 import ElementsBook1_AddAxiom_011_AngleHighlight from "../ElementsBook1/AddedAxioms/gifs/011-AngleHighlight.gif";
 import ElementsBook1_AddAxiom_012_AngleMove from "../ElementsBook1/AddedAxioms/gifs/012-AngleMove.gif";
 import ElementsBook1_AddAxiom_013_AngleRotate from "../ElementsBook1/AddedAxioms/gifs/013-AngleRotate.gif";
@@ -123,12 +126,15 @@ const merge_gifs = [
                 },
                 {
                     animation2d: ElementsBook1_AddAxiom_008_SurfaceMove,
+                    animation2d: ElementsBook1_AddAxiom_008_SurfaceMove3D
                 },
                 {
                     animation2d: ElementsBook1_AddAxiom_009_SurfaceRotate,
+                    animation2d: ElementsBook1_AddAxiom_009_SurfaceRotate3D
                 },
                 {
                     animation2d: ElementsBook1_AddAxiom_010_SurfaceReflect,
+                    animation2d: ElementsBook1_AddAxiom_010_SurfaceReflect3D
                 },
                 {
                     animation2d: ElementsBook1_AddAxiom_011_AngleHighlight,
