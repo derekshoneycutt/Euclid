@@ -31,9 +31,9 @@ import ElementsBook1_Def_011_ObtuseAngle from "../ElementsBook1/Definitions/gifs
 import ElementsBook1_Def_012_AcuteAngle from "../ElementsBook1/Definitions/gifs/012-AcuteAngle.gif";
 import ElementsBook1_Def_013_Boundary from "../ElementsBook1/Definitions/gifs/013-Boundary.gif";
 import ElementsBook1_Def_014_Figure from "../ElementsBook1/Definitions/gifs/014-Figure.gif";
-import ElementsBook1_Def_015_Circle from "../ElementsBook1/Definitions/gifs/014-Circle.gif";
-import ElementsBook1_Def_016_Center from "../ElementsBook1/Definitions/gifs/014-Center.gif";
-import ElementsBook1_Def_017_Diameter from "../ElementsBook1/Definitions/gifs/014-Diameter.gif";
+import ElementsBook1_Def_015_Circle from "../ElementsBook1/Definitions/gifs/015-Circle.gif";
+import ElementsBook1_Def_016_Center from "../ElementsBook1/Definitions/gifs/016-Center.gif";
+import ElementsBook1_Def_017_Diameter from "../ElementsBook1/Definitions/gifs/017-Diameter.gif";
 
 // Added Axioms Images
 import ElementsBook1_AddAxiom_001_PointHighlight from "../ElementsBook1/AddedAxioms/gifs/001-PointHighlight.gif";
@@ -60,7 +60,7 @@ import ElementsBook1_AddAxiom_011_AngleHighlight from "../ElementsBook1/AddedAxi
 import ElementsBook1_AddAxiom_012_AngleMove from "../ElementsBook1/AddedAxioms/gifs/012-AngleMove.gif";
 import ElementsBook1_AddAxiom_013_AngleRotate from "../ElementsBook1/AddedAxioms/gifs/013-AngleRotate.gif";
 import ElementsBook1_AddAxiom_014_AngleReflect from "../ElementsBook1/AddedAxioms/gifs/014-AngleReflect.gif";
-import ElementsBook1_AddAxiom_015_CircleHighlight from "../ElementsBook1/AddedAxioms/gifs/015-Circlehighlight.gif";
+import ElementsBook1_AddAxiom_015_CircleHighlight from "../ElementsBook1/AddedAxioms/gifs/015-CircleHighlight.gif";
 import ElementsBook1_AddAxiom_016_CircleMove from "../ElementsBook1/AddedAxioms/gifs/016-CircleMove.gif";
 import ElementsBook1_AddAxiom_017_CircleLineIntersect from "../ElementsBook1/AddedAxioms/gifs/017-IntersectingCircleLine.gif";
 import ElementsBook1_AddAxiom_018_CircleIntersect from "../ElementsBook1/AddedAxioms/gifs/018-IntersectingCircles.gif";
