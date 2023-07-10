@@ -83,16 +83,6 @@ export var EUCLID_DATA_PAGES = ({
                         page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
                     },
                     {
-                        title: "Figure",
-                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
-                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
-                    },
-                    {
-                        title: "Figure",
-                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
-                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
-                    },
-                    {
                         title: "Circle",
                         head: "A *circle* is a plane figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by one line such that all the straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.ipynb) falling upon it from one point among those lying within the figure are equal to one another;",
                         page: "/Euclid/ElementsBook1_Definitions_015-Circle.html"
