@@ -81,7 +81,32 @@ export var EUCLID_DATA_PAGES = ({
                         title: "Figure",
                         head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
                         page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
-                    }
+                    },
+                    {
+                        title: "Figure",
+                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
+                    },
+                    {
+                        title: "Figure",
+                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html"
+                    },
+                    {
+                        title: "Circle",
+                        head: "A *circle* is a plane figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by one line such that all the straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.ipynb) falling upon it from one point among those lying within the figure are equal to one another;",
+                        page: "/Euclid/ElementsBook1_Definitions_015-Circle.html"
+                    },
+                    {
+                        title: "Center",
+                        head: "And the point is called the *center* of the circle.",
+                        page: "/Euclid/ElementsBook1_Definitions_016-Center.html"
+                    },
+                    {
+                        title: "Diameter",
+                        head: "A *diameter* of the circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.html) is any straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) drawn through the center [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html) and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle.",
+                        page: "/Euclid/ElementsBook1_Definitions_017-Diameter.html"
+                    },
                 ]
             },
             postulates: {
@@ -176,7 +201,27 @@ export var EUCLID_DATA_PAGES = ({
                         title: "Reflecting Angles",
                         head: "A plane angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) may be *reflected* by moving it [[AddAxiom I.12]](/Euclid/ElementsBook1_AddedAxioms_012-MovingAngles.html) such that both lines are exactly opposite to their beginning position across a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) called the *axis of reflection*.",
                         page: "/Euclid/ElementsBook1_AddedAxioms_014-ReflectingAngles.html"
-                    }
+                    },
+                    {
+                        title: "Highlighting Circles",
+                        head: "A circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.ipynb) may be *highlighted* in its location in space.",
+                        page: "/Euclid/ElementsBook1_AddedAxioms_015-HighlightingCircles.html"
+                    },
+                    {
+                        title: "Moving Circles",
+                        head: "A circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.ipynb) may be *moved* by moving the line so that all points are equal distant to a new point in space.",
+                        page: "/Euclid/ElementsBook1_AddedAxioms_016-MovingCircles.html"
+                    },
+                    {
+                        title: "Intersecting Circles and Lines",
+                        head: "The intersection [[AddAxiom I.7]](/Euclid/ElementsBook1_AddedAxioms_007-IntersectingLines.ipynb) of a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.ipynb) and a circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.ipynb) occurs in exactly 1 or 2 points.",
+                        page: "/Euclid/ElementsBook1_AddedAxioms_017-IntersectingCircleLine.html"
+                    },
+                    {
+                        title: "Intersecting Circles",
+                        head: "The intersection [[AddAxiom I.7]](/Euclid/ElementsBook1_AddedAxioms_007-IntersectingLines.ipynb) of two circles [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.ipynb) occurs in exactly 1 or 2 points.",
+                        page: "/Euclid/ElementsBook1_AddedAxioms_018-IntersectingCircles.html"
+                    },
                 ]
             }
         }
