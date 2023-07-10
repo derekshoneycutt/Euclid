@@ -97,6 +97,11 @@ export var EUCLID_DATA_PAGES = ({
                         head: "A *diameter* of the circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.html) is any straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) drawn through the center [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html) and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle.",
                         page: "/Euclid/ElementsBook1_Definitions_017-Diameter.html"
                     },
+                    {
+                        title: "Semicircle",
+                        head: "A *semicircle* is the figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by the diameter [[Def I.18]](/Euclid/ElementsBook1_Definitions_017-Diameter.html) and the circumference cut off by it. And the center of the semicircle is the same as that of the circle [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_018-Semicircle.html"
+                    },
                 ]
             },
             postulates: {

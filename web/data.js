@@ -34,6 +34,7 @@ import ElementsBook1_Def_014_Figure from "../ElementsBook1/Definitions/gifs/014-
 import ElementsBook1_Def_015_Circle from "../ElementsBook1/Definitions/gifs/015-Circle.gif";
 import ElementsBook1_Def_016_Center from "../ElementsBook1/Definitions/gifs/016-Center.gif";
 import ElementsBook1_Def_017_Diameter from "../ElementsBook1/Definitions/gifs/017-Diameter.gif";
+import ElementsBook1_Def_018_Semicircle from "../ElementsBook1/Definitions/gifs/018-Semicircle.gif";
 
 // Added Axioms Images
 import ElementsBook1_AddAxiom_001_PointHighlight from "../ElementsBook1/AddedAxioms/gifs/001-PointHighlight.gif";
@@ -127,6 +128,9 @@ const merge_gifs = [
                 },
                 {
                     animation2d: ElementsBook1_Def_017_Diameter,
+                },
+                {
+                    animation2d: ElementsBook1_Def_018_Semicircle,
                 },
             ]
         },

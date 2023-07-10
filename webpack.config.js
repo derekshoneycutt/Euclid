@@ -91,6 +91,7 @@ module.exports = {
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_015-Circle.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_016-Center.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_017-Diameter.html' }),
+        new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_018-Semicircle.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Postulates_index.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_CommonNotions_index.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Propositions_index.html' }),
