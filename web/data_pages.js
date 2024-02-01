@@ -107,6 +107,16 @@ export var EUCLID_DATA_PAGES = ({
                         head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three, *quadrilateral* those contained by four, and *multilateral* those contained by more than four straight lines.",
                         page: "/Euclid/ElementsBook1_Definitions_019-RectilinealFigures.html"
                     },
+                    {
+                        title: "Triangles",
+                        head: "Of trilateral figures, an *equilateral triangle* is that which has its three sides equal, an *isosceles triangle* that which has two of its sides alone equal, and a *scalene triangle* that which has its three sides unequal.",
+                        page: "/Euclid/ElementsBook1_Definitions_020-Triangles.html"
+                    },
+                    {
+                        title: "Angled Triangles",
+                        head: "Further, of trilateral figures, a *right-angled triangle* is that which has a right angle, an *obtuse-angled triangle* that which has an obtuse angle, and an *acute-angled triangle* that which has its three angles acute.",
+                        page: "/Euclid/ElementsBook1_Definitions_021-AngledTriangles.html"
+                    },
                 ]
             },
             postulates: {

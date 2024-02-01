@@ -23,3 +23,6 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Center](Definitions/016-Center.ipynb)
 1. [Diameter](Definitions/017-Diameter.ipynb)
 1. [Semicircle](Definitions/018-Semicircle.ipynb)
+1. [Rectilineal Figures](Definitions/019-RectilinealFigures.ipynb)
+1. [Triangles](Definitions/020-Triangles.ipynb)
+1. [Angled Triangles](Definitions/021-AngledTriangles.ipynb)

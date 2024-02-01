@@ -48,6 +48,10 @@ import ElementsBook1_Def_018_Semicircle from "../ElementsBook1/Definitions/gifs/
 import ElementsBook1_Def_018_Semicircle3D from "../ElementsBook1/Definitions/gifs/018-Semicircle-3D.gif";
 import ElementsBook1_Def_019_RectilinealFigures from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures.gif";
 import ElementsBook1_Def_019_RectilinealFigures3D from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures-3D.gif";
+import ElementsBook1_Def_020_Triangles from "../ElementsBook1/Definitions/gifs/020-Triangles.gif";
+import ElementsBook1_Def_020_Triangles3D from "../ElementsBook1/Definitions/gifs/020-Triangles-3D.gif";
+import ElementsBook1_Def_021_AngledTriangles from "../ElementsBook1/Definitions/gifs/021-AngledTriangles.gif";
+import ElementsBook1_Def_021_AngledTriangles3D from "../ElementsBook1/Definitions/gifs/021-AngledTriangles-3D.gif";
 
 
 const merge_gifs = [
@@ -129,6 +133,14 @@ const merge_gifs = [
                 {
                     animation2d: ElementsBook1_Def_019_RectilinealFigures,
                     animation3d: ElementsBook1_Def_019_RectilinealFigures3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_020_Triangles,
+                    animation3d: ElementsBook1_Def_020_Triangles3D
+                },
+                {
+                    animation2d: ElementsBook1_Def_021_AngledTriangles,
+                    animation3d: ElementsBook1_Def_021_AngledTriangles3D
                 }
             ]
         }
