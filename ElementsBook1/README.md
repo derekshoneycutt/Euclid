@@ -14,22 +14,12 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Plane Surface](Definitions/007-PlaneSurface.ipynb)
 1. [Plane Angle](Definitions/008-PlaneAngle.ipynb)
 1. [Rectilineal Angle](Definitions/009-RectilinealAngle.ipynb)
-
-## Additional Axioms
-
-These are not in Euclid, and in a strict sense, their need can be discussed. These are necessary for the foundational capabilities of drawing the graph animations. This includes some movement, rotatioan, reflection, and other things that certainly are not needed. However, items like intersections are used quite explicitly by Euclid without definition. Furthermore, the idea of overlaying a triangle on another seen early in Book I suggests many of these additional axioms. They are defined to make it all cohesive.
-
-1. [Highlighting Points](AddedAxioms/001-HighlightingPoints.ipynb)
-1. [Moving Points](AddedAxioms/002-MovingPoints.ipynb)
-1. [Highlighting Lines](AddedAxioms/003-HighlightingLines.ipynb)
-1. [Moving Lines](AddedAxioms/004-MovingLines.ipynb)
-1. [Rotating Lines](AddedAxioms/005-RotatingLines.ipynb)
-1. [Reflecting Lines](AddedAxioms/006-ReflectingLines.ipynb)
-1. [Intersecting Lines](AddedAxioms/007-IntersectingLines.ipynb)
-1. [Moving Surfaces](AddedAxioms/008-MovingSurfaces.ipynb)
-1. [Rotating Surfaces](AddedAxioms/009-RotatingSurfaces.ipynb)
-1. [Reflecting Surfaces](AddedAxioms/010-ReflectingSurfaces.ipynb)
-1. [Highlighting Angles](AddedAxioms/011-HighlightingAngles.ipynb)
-1. [Moving Angles](AddedAxioms/012-MovingAngles.ipynb)
-1. [Rotating Angles](AddedAxioms/013-RotatingAngles.ipynb)
-1. [Reflecting Angles](AddedAxioms/014-ReflectingAngles.ipynb)
+1. [Right Angle/Perpendicular](Definitions/010-RightPerpendicular.ipynb)
+1. [Obtuse Angle](Definitions/011-ObtuseAngle.ipynb)
+1. [Acute Angle](Definitions/012-AcuteAngle.ipynb)
+1. [Boundary](Definitions/013-Boundary.ipynb)
+1. [Figure](Definitions/014-Figure.ipynb)
+1. [Circle](Definitions/015-Circle.ipynb)
+1. [Center](Definitions/016-Center.ipynb)
+1. [Diameter](Definitions/017-Diameter.ipynb)
+1. [Semicircle](Definitions/018-Semicircle.ipynb)

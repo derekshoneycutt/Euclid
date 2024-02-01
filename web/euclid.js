@@ -44,9 +44,6 @@ function matchingPageFromBook(searchBy, curr) {
     match = getMatchingPage(searchBy, curr.postulates);
     if (match !== null)
         return match;
-    match = getMatchingPage(searchBy, curr.added_axioms);
-    if (match !== null)
-        return match;
     match = getMatchingPage(searchBy, curr.propositions);
     if (match !== null)
         return match;
@@ -111,11 +108,6 @@ function breadcrumb(forPage) {
                 return arr;
             }
             crumbs = breadcrumbPage(forPage, book.propositions)
-            if (crumbs.length > 0) {
-                arr.push(book, ...crumbs);
-                return arr;
-            }
-            crumbs = breadcrumbPage(forPage, book.added_axioms)
             if (crumbs.length > 0) {
                 arr.push(book, ...crumbs);
                 return arr;
@@ -216,8 +208,7 @@ function loadSideBar() {
                                 generateSideBarListFrom(book.definitions, currentPage),
                                 generateSideBarListFrom(book.postulates, currentPage),
                                 generateSideBarListFrom(book.common_notions, currentPage),
-                                generateSideBarListFrom(book.propositions, currentPage),
-                                generateSideBarListFrom(book.added_axioms, currentPage));
+                                generateSideBarListFrom(book.propositions, currentPage));
         linkElement.emptyAndReplace(
             $_.make('span',
                 {
@@ -273,7 +264,6 @@ function refreshTheView(pathname) {
         refreshPageSelection(book.postulates, pathname);
         refreshPageSelection(book.common_notions, pathname);
         refreshPageSelection(book.propositions, pathname);
-        refreshPageSelection(book.added_axioms, pathname);
     });
 
     // Load breadcrumbs
