@@ -46,6 +46,8 @@ import ElementsBook1_Def_017_Diameter from "../ElementsBook1/Definitions/gifs/01
 import ElementsBook1_Def_017_Diameter3D from "../ElementsBook1/Definitions/gifs/017-Diameter-3D.gif";
 import ElementsBook1_Def_018_Semicircle from "../ElementsBook1/Definitions/gifs/018-Semicircle.gif";
 import ElementsBook1_Def_018_Semicircle3D from "../ElementsBook1/Definitions/gifs/018-Semicircle-3D.gif";
+import ElementsBook1_Def_019_RectilinealFigures from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures.gif";
+import ElementsBook1_Def_019_RectilinealFigures3D from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures-3D.gif";
 
 
 const merge_gifs = [
@@ -124,6 +126,10 @@ const merge_gifs = [
                     animation2d: ElementsBook1_Def_018_Semicircle,
                     animation3d: ElementsBook1_Def_018_Semicircle3D
                 },
+                {
+                    animation2d: ElementsBook1_Def_019_RectilinealFigures,
+                    animation3d: ElementsBook1_Def_019_RectilinealFigures3D
+                }
             ]
         }
     }

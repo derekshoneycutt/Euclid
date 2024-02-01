@@ -102,6 +102,11 @@ export var EUCLID_DATA_PAGES = ({
                         head: "A *semicircle* is the figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by the diameter [[Def I.18]](/Euclid/ElementsBook1_Definitions_017-Diameter.html) and the circumference cut off by it. And the center of the semicircle is the same as that of the circle [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html).",
                         page: "/Euclid/ElementsBook1_Definitions_018-Semicircle.html"
                     },
+                    {
+                        title: "Rectilineal Figures",
+                        head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three, *quadrilateral* those contained by four, and *multilateral* those contained by more than four straight lines.",
+                        page: "/Euclid/ElementsBook1_Definitions_019-RectilinealFigures.html"
+                    },
                 ]
             },
             postulates: {
