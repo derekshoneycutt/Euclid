@@ -143,26 +143,40 @@ function tryLoadPage() {
 
 function generateSideBarListFrom(obj, currentPage, num) {
     let hasChildren = ('children' in obj);
+    let childrenSplitDef = hasChildren && ('splitdef' in obj) && (obj.splitdef == true);
     let matchPage = getMatchingPage(currentPage, obj);
     let listItem = $_.make('li', {
-        class: `${matchPage === null || matchPage === undefined ? 'collapsed' : 'on_page'} ${hasChildren ? "with_children" : "no_children"}`
+        class: `${matchPage === null || matchPage === undefined ? (childrenSplitDef ? '' : 'collapsed') : 'on_page'} ` +
+                `${hasChildren && !childrenSplitDef ? "with_children" : "no_children"}`
     });
     let linkHref = reverseCleanPath(obj.page);
-    let linkElement = $_.make('a', { href: matchPage === obj ? undefined : linkHref, class: 'nav_link' }, `${num ? num + '. ' : ''}${obj.title}`);
+    let linkElement = $_.make('a',
+        {
+            href: matchPage === obj ? undefined : linkHref,
+            class: 'nav_link'
+        },
+        `${num ? num + '. ' : ''}${obj.title}`);
 
     obj.link_element = linkElement;
     obj.listitem_element = listItem;
 
     if (hasChildren) {
-        linkElement.emptyAndReplace($_.make('span', {
-            class: "material-symbols-outlined collapse-marker",
-            innerHTML: "expand_more"
-        }), obj.title);
+        if (!childrenSplitDef) {
+            linkElement.emptyAndReplace($_.make('span', {
+                class: "material-symbols-outlined collapse-marker",
+                innerHTML: "expand_more"
+            }), obj.title);
+        }
         listItem.appendChildren(
             linkElement);
 
-        let subList = $_.make('ol', { class: 'nav-ord-list' },
-                                ...(obj.children.map((child, index) => generateSideBarListFrom(child, currentPage, index + 1))));
+        let subList = $_.make('ol',
+            {
+                class: `nav-ord-list${childrenSplitDef ? ' splitdef' : ''}`
+            },
+            ...(obj.children.map((child, index) =>
+                generateSideBarListFrom(child, currentPage,
+                    childrenSplitDef ? (index + 10).toString(26).toLowerCase() : index + 1))));
         listItem.appendChildren(subList);
         obj.sublist_element = subList;
     }
@@ -288,6 +302,7 @@ $_.runOnLoad(() => {
                 if (match) {
                     match.listitem_element.setClassList({
                         collapsed: !match.listitem_element[0].classList.contains('collapsed')
+                                    && !match.listitem_element[0].classList.contains('no_children')
                     });
                 }
             }
@@ -297,6 +312,7 @@ $_.runOnLoad(() => {
                 if (match) {
                     match.listitem_element.setClassList({
                         collapsed: !match.listitem_element[0].classList.contains('collapsed')
+                                    && !match.listitem_element[0].classList.contains('no_children')
                     });
                 }
             }

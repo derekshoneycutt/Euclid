@@ -58,9 +58,22 @@ export var EUCLID_DATA_PAGES = ({
                         page: "/Euclid/ElementsBook1_Definitions_009-RectilinealAngle.html"
                     },
                     {
-                        title: "Right Angle and Perpendiculars",
+                        title: "Right Angles",
                         head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another, each of the equal angles is *right*, and the adjacent line standing on the other is called a *perpendicular* to that on which it stands.",
-                        page: "/Euclid/ElementsBook1_Definitions_010-RightPerpendicular.html"
+                        page: "/Euclid/ElementsBook1_Definitions_010-RightPerpendicular.html",
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Right Angle",
+                                head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another, each of the equal angles is *right*",
+                                page: "/Euclid/ElementsBook1_Definitions_010a-RightAngle.html",
+                            },
+                            {
+                                title: "Perpendicular",
+                                head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another... the adjacent line standing on the other is called a *perpendicular* to that on which it stands.",
+                                page: "/Euclid/ElementsBook1_Definitions_010b-Perpendicular.html",
+                            }
+                        ]
                     },
                     {
                         title: "Obtuse Angle",
@@ -105,18 +118,105 @@ export var EUCLID_DATA_PAGES = ({
                     {
                         title: "Rectilineal Figures",
                         head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three, *quadrilateral* those contained by four, and *multilateral* those contained by more than four straight lines.",
-                        page: "/Euclid/ElementsBook1_Definitions_019-RectilinealFigures.html"
+                        page: "/Euclid/ElementsBook1_Definitions_019-RectilinealFigures.html",
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Trilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three",
+                                page: "/Euclid/ElementsBook1_Definitions_019a-Trilateral.html",
+                            },
+                            {
+                                title: "Quadrilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), ... *quadrilateral* those contained by four",
+                                page: "/Euclid/ElementsBook1_Definitions_019b-Quadrilateral.html",
+                            },
+                            {
+                                title: "Multilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), ... and *multilateral* those contained by more than four straight lines.",
+                                page: "/Euclid/ElementsBook1_Definitions_019c-Multilateral.html",
+                            }
+                        ]
                     },
                     {
-                        title: "Triangles",
+                        title: "Triangles by Sides",
                         head: "Of trilateral figures, an *equilateral triangle* is that which has its three sides equal, an *isosceles triangle* that which has two of its sides alone equal, and a *scalene triangle* that which has its three sides unequal.",
-                        page: "/Euclid/ElementsBook1_Definitions_020-Triangles.html"
+                        page: "/Euclid/ElementsBook1_Definitions_020-Triangles.html",
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Equilateral",
+                                head: "Of trilateral figures, an *equilateral triangle* is that which has its three sides equal",
+                                page: "/Euclid/ElementsBook1_Definitions_020a-Equilateral.html",
+                            },
+                            {
+                                title: "Isosceles",
+                                head: "Of trilateral figures, ... an *isosceles triangle* that which has two of its sides alone equal",
+                                page: "/Euclid/ElementsBook1_Definitions_020b-Isosceles.html",
+                            },
+                            {
+                                title: "Scalene",
+                                head: "Of trilateral figures, ... a *scalene triangle* that which has its three sides unequal.",
+                                page: "/Euclid/ElementsBook1_Definitions_020c-Scalene.html",
+                            }
+                        ]
                     },
                     {
-                        title: "Angled Triangles",
+                        title: "Triangles by Angle",
                         head: "Further, of trilateral figures, a *right-angled triangle* is that which has a right angle, an *obtuse-angled triangle* that which has an obtuse angle, and an *acute-angled triangle* that which has its three angles acute.",
-                        page: "/Euclid/ElementsBook1_Definitions_021-AngledTriangles.html"
+                        page: "/Euclid/ElementsBook1_Definitions_021-AngledTriangles.html",
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Right Triangle",
+                                head: "Further, of trilateral figures, a *right-angled triangle* is that which has a right angle",
+                                page: "/Euclid/ElementsBook1_Definitions_021a-RightTriangle.html"
+                            },
+                            {
+                                title: "Obtuse Triangle",
+                                head: "Further, of trilateral figures, ... an *obtuse-angled triangle* that which has an obtuse angle",
+                                page: "/Euclid/ElementsBook1_Definitions_021b-ObtuseTriangle.html"
+                            },
+                            {
+                                title: "Acute Triangle",
+                                head: "Further, of trilateral figures, ... and an *acute-angled triangle* that which has its three angles acute.",
+                                page: "/Euclid/ElementsBook1_Definitions_021c-AcuteTriangle.html"
+                            },
+                        ]
                     },
+                    /*{
+                        title: "Quadrilaterals",
+                        head: "x",
+                        page: "/Euclid/ElementsBook1_Definitions_022-Quadrilaterals.html",
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Square",
+                                head: "",
+                                page: "/Euclid/ElementsBook1_Definitions_022a_Square.html"
+                            },
+                            {
+                                title: "Oblong",
+                                head: "",
+                                page: "/Euclid/ElementsBook1_Definitions_022b_Oblong.html"
+                            },
+                            {
+                                title: "Rhombus",
+                                head: "",
+                                page: "/Euclid/ElementsBook1_Definitions_022c_Rhombus.html"
+                            },
+                            {
+                                title: "Rhomboid",
+                                head: "",
+                                page: "/Euclid/ElementsBook1_Definitions_022d_Rhomboid.html"
+                            },
+                            {
+                                title: "Trapezia",
+                                head: "",
+                                page: "/Euclid/ElementsBook1_Definitions_022e_Trapezia.html"
+                            }
+                        ]
+                    },*/
                 ]
             },
             postulates: {

@@ -14,7 +14,9 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Plane Surface](Definitions/007-PlaneSurface.ipynb)
 1. [Plane Angle](Definitions/008-PlaneAngle.ipynb)
 1. [Rectilineal Angle](Definitions/009-RectilinealAngle.ipynb)
-1. [Right Angle/Perpendicular](Definitions/010-RightPerpendicular.ipynb)
+1. Right Angle/Perpendicular
+    1. [Right Angle](Definitions/010a-RightAngle.ipynb)
+    1. [Perpendicular](Definitions/010b-Perpendicular.ipynb)
 1. [Obtuse Angle](Definitions/011-ObtuseAngle.ipynb)
 1. [Acute Angle](Definitions/012-AcuteAngle.ipynb)
 1. [Boundary](Definitions/013-Boundary.ipynb)
@@ -23,6 +25,9 @@ Although these are not definitions in the modern sense, we follow the Heath tran
 1. [Center](Definitions/016-Center.ipynb)
 1. [Diameter](Definitions/017-Diameter.ipynb)
 1. [Semicircle](Definitions/018-Semicircle.ipynb)
-1. [Rectilineal Figures](Definitions/019-RectilinealFigures.ipynb)
+1. Rectilineal Figures
+    1. [Trilateral](Definitions/019a-Trilateral.ipynb)
+    1. [Quadrilateral](Definitions/019b-Quadrilateral.ipynb)
+    1. [Multilateral](Definitions/019c-Multilateral.ipynb)
 1. [Triangles](Definitions/020-Triangles.ipynb)
 1. [Angled Triangles](Definitions/021-AngledTriangles.ipynb)

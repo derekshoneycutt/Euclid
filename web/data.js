@@ -28,8 +28,10 @@ import ElementsBook1_Def_008_PlaneAngle from "../ElementsBook1/Definitions/gifs/
 import ElementsBook1_Def_008_PlaneAngle3D from "../ElementsBook1/Definitions/gifs/008-PlaneAngle-3D.gif";
 import ElementsBook1_Def_009_RecitilinealAngle from "../ElementsBook1/Definitions/gifs/009-RectilinealAngle.gif";
 import ElementsBook1_Def_009_RecitilinealAngle3D from "../ElementsBook1/Definitions/gifs/009-RectilinealAngle-3D.gif";
-import ElementsBook1_Def_010_RightPerpendicular from "../ElementsBook1/Definitions/gifs/010-RightPerpendicular.gif";
-import ElementsBook1_Def_010_RightPerpendicular3D from "../ElementsBook1/Definitions/gifs/010-RightPerpendicular-3D.gif";
+import ElementsBook1_Def_010a_RightAngle from "../ElementsBook1/Definitions/gifs/010a-RightAngle.gif";
+import ElementsBook1_Def_010a_RightAngle3D from "../ElementsBook1/Definitions/gifs/010a-RightAngle-3D.gif";
+import ElementsBook1_Def_010b_Perpendicular from "../ElementsBook1/Definitions/gifs/010b-Perpendicular.gif";
+import ElementsBook1_Def_010b_Perpendicular3D from "../ElementsBook1/Definitions/gifs/010b-Perpendicular-3D.gif";
 import ElementsBook1_Def_011_ObtuseAngle from "../ElementsBook1/Definitions/gifs/011-ObtuseAngle.gif";
 import ElementsBook1_Def_011_ObtuseAngle3D from "../ElementsBook1/Definitions/gifs/011-ObtuseAngle-3D.gif";
 import ElementsBook1_Def_012_AcuteAngle from "../ElementsBook1/Definitions/gifs/012-AcuteAngle.gif";
@@ -46,12 +48,24 @@ import ElementsBook1_Def_017_Diameter from "../ElementsBook1/Definitions/gifs/01
 import ElementsBook1_Def_017_Diameter3D from "../ElementsBook1/Definitions/gifs/017-Diameter-3D.gif";
 import ElementsBook1_Def_018_Semicircle from "../ElementsBook1/Definitions/gifs/018-Semicircle.gif";
 import ElementsBook1_Def_018_Semicircle3D from "../ElementsBook1/Definitions/gifs/018-Semicircle-3D.gif";
-import ElementsBook1_Def_019_RectilinealFigures from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures.gif";
-import ElementsBook1_Def_019_RectilinealFigures3D from "../ElementsBook1/Definitions/gifs/019-RectilinealFigures-3D.gif";
-import ElementsBook1_Def_020_Triangles from "../ElementsBook1/Definitions/gifs/020-Triangles.gif";
-import ElementsBook1_Def_020_Triangles3D from "../ElementsBook1/Definitions/gifs/020-Triangles-3D.gif";
-import ElementsBook1_Def_021_AngledTriangles from "../ElementsBook1/Definitions/gifs/021-AngledTriangles.gif";
-import ElementsBook1_Def_021_AngledTriangles3D from "../ElementsBook1/Definitions/gifs/021-AngledTriangles-3D.gif";
+import ElementsBook1_Def_019a_Trilateral from "../ElementsBook1/Definitions/gifs/019a-Trilateral.gif";
+import ElementsBook1_Def_019a_Trilateral3D from "../ElementsBook1/Definitions/gifs/019a-Trilateral-3D.gif";
+import ElementsBook1_Def_019b_Quadrilateral from "../ElementsBook1/Definitions/gifs/019b-Quadrilateral.gif";
+import ElementsBook1_Def_019b_Quadrilateral3D from "../ElementsBook1/Definitions/gifs/019b-Quadrilateral-3D.gif";
+import ElementsBook1_Def_019c_Multilateral from "../ElementsBook1/Definitions/gifs/019c-Multilateral.gif";
+import ElementsBook1_Def_019c_Multilateral3D from "../ElementsBook1/Definitions/gifs/019c-Multilateral-3D.gif";
+import ElementsBook1_Def_020a_Equilateral from "../ElementsBook1/Definitions/gifs/020a-Equilateral.gif";
+import ElementsBook1_Def_020a_Equilateral3D from "../ElementsBook1/Definitions/gifs/020a-Equilateral-3D.gif";
+import ElementsBook1_Def_020b_Isosceles from "../ElementsBook1/Definitions/gifs/020b-Isosceles.gif";
+import ElementsBook1_Def_020b_Isosceles3D from "../ElementsBook1/Definitions/gifs/020b-Isosceles-3D.gif";
+import ElementsBook1_Def_020c_Scalene from "../ElementsBook1/Definitions/gifs/020c-Scalene.gif";
+import ElementsBook1_Def_020c_Scalene3D from "../ElementsBook1/Definitions/gifs/020c-Scalene-3D.gif";
+import ElementsBook1_Def_021a_RightTriangles from "../ElementsBook1/Definitions/gifs/021a-Right.gif";
+import ElementsBook1_Def_021a_RightTriangles3D from "../ElementsBook1/Definitions/gifs/021a-Right-3D.gif";
+import ElementsBook1_Def_021b_ObtuseTriangles from "../ElementsBook1/Definitions/gifs/021b-Obtuse.gif";
+import ElementsBook1_Def_021b_ObtuseTriangles3D from "../ElementsBook1/Definitions/gifs/021b-Obtuse-3D.gif";
+import ElementsBook1_Def_021c_AcuteTriangles from "../ElementsBook1/Definitions/gifs/021c-Acute.gif";
+import ElementsBook1_Def_021c_AcuteTriangles3D from "../ElementsBook1/Definitions/gifs/021c-Acute-3D.gif";
 
 
 const merge_gifs = [
@@ -95,8 +109,16 @@ const merge_gifs = [
                     animation3d: ElementsBook1_Def_009_RecitilinealAngle3D
                 },
                 {
-                    animation2d: ElementsBook1_Def_010_RightPerpendicular,
-                    animation3d: ElementsBook1_Def_010_RightPerpendicular3D
+                    children: [
+                        {
+                            animation2d: ElementsBook1_Def_010a_RightAngle,
+                            animation3d: ElementsBook1_Def_010a_RightAngle3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_010b_Perpendicular,
+                            animation3d: ElementsBook1_Def_010b_Perpendicular3D
+                        },
+                    ]
                 },
                 {
                     animation2d: ElementsBook1_Def_011_ObtuseAngle,
@@ -131,17 +153,67 @@ const merge_gifs = [
                     animation3d: ElementsBook1_Def_018_Semicircle3D
                 },
                 {
-                    animation2d: ElementsBook1_Def_019_RectilinealFigures,
-                    animation3d: ElementsBook1_Def_019_RectilinealFigures3D
+                    children: [
+                        {
+                            animation2d: ElementsBook1_Def_019a_Trilateral,
+                            animation3d: ElementsBook1_Def_019a_Trilateral3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_019b_Quadrilateral,
+                            animation3d: ElementsBook1_Def_019b_Quadrilateral3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_019c_Multilateral,
+                            animation3d: ElementsBook1_Def_019c_Multilateral3D
+                        },
+                    ]
                 },
                 {
-                    animation2d: ElementsBook1_Def_020_Triangles,
-                    animation3d: ElementsBook1_Def_020_Triangles3D
+                    children: [
+                        {
+                            animation2d: ElementsBook1_Def_020a_Equilateral,
+                            animation3d: ElementsBook1_Def_020a_Equilateral3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_020b_Isosceles,
+                            animation3d: ElementsBook1_Def_020b_Isosceles3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_020c_Scalene,
+                            animation3d: ElementsBook1_Def_020c_Scalene3D
+                        }
+                    ]
                 },
                 {
-                    animation2d: ElementsBook1_Def_021_AngledTriangles,
-                    animation3d: ElementsBook1_Def_021_AngledTriangles3D
-                }
+                    children: [
+                        {
+                            animation2d: ElementsBook1_Def_021a_RightTriangles,
+                            animation3d: ElementsBook1_Def_021a_RightTriangles3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_021b_ObtuseTriangles,
+                            animation3d: ElementsBook1_Def_021b_ObtuseTriangles3D
+                        },
+                        {
+                            animation2d: ElementsBook1_Def_021c_AcuteTriangles,
+                            animation3d: ElementsBook1_Def_021c_AcuteTriangles3D
+                        },
+                    ]
+                },
+                /*{
+                    children: [
+                        {
+                        },
+                        {
+                        },
+                        {
+                        },
+                        {
+                        },
+                        {
+                        }
+                    ]
+                }*/
             ]
         }
     }
@@ -157,10 +229,17 @@ function subOjectToExport(subobj, bookIndex, merge) {
         link_element: null,
         listitem_element: null,
         sublist_element: null,
+        splitdef: false
     };
 
     if ('children' in subobj) {
-        retObj.children = [...(subobj.children.map((child, index) => subOjectToExport(child, bookIndex, merge.children[index])))];
+        retObj.children = [
+            ...(subobj.children.map((child, index) =>
+                subOjectToExport(child, bookIndex, merge.children[index])))
+        ];
+        if ('splitdef' in subobj) {
+            retObj.splitdef = !!subobj.splitdef;
+        }
     }
 
     return retObj;
