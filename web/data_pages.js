@@ -184,39 +184,39 @@ export var EUCLID_DATA_PAGES = ({
                             },
                         ]
                     },
-                    /*{
+                    {
                         title: "Quadrilaterals",
-                        head: "x",
+                        head: "Of quadrilateral figures, a *square* is that which is both equilateral and right-angled, an *oblong* that which is right-angled but not equilateral, a *rhombus* that which is equilateral but not right-angled, and a *rhomboid* is that which has its opposite angles and sides equal to one another but is neither equilateral nor right-angled. And let quadrilaterals other than these be called *trapezia*.",
                         page: "/Euclid/ElementsBook1_Definitions_022-Quadrilaterals.html",
                         splitdef: true,
                         children: [
                             {
                                 title: "Square",
-                                head: "",
+                                head: "Of quadrilateral figures, a *square* is that which is both equilateral and right-angled",
                                 page: "/Euclid/ElementsBook1_Definitions_022a_Square.html"
                             },
                             {
                                 title: "Oblong",
-                                head: "",
+                                head: "Of quadrilateral figures, ... an *oblong* that which is right-angled but not equilateral",
                                 page: "/Euclid/ElementsBook1_Definitions_022b_Oblong.html"
                             },
                             {
                                 title: "Rhombus",
-                                head: "",
+                                head: "Of quadrilateral figures, ... a *rhombus* that which is equilateral but not right-angled",
                                 page: "/Euclid/ElementsBook1_Definitions_022c_Rhombus.html"
                             },
                             {
                                 title: "Rhomboid",
-                                head: "",
+                                head: "Of quadrilateral figures, ... a *rhomboid* is that which has its opposite angles and sides equal to one another but is neither equilateral nor right-angled.",
                                 page: "/Euclid/ElementsBook1_Definitions_022d_Rhomboid.html"
                             },
                             {
                                 title: "Trapezia",
-                                head: "",
+                                head: "And let quadrilaterals other than these be called *trapezia*.",
                                 page: "/Euclid/ElementsBook1_Definitions_022e_Trapezia.html"
                             }
                         ]
-                    },*/
+                    },
                 ]
             },
             postulates: {

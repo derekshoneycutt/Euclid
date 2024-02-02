@@ -66,6 +66,16 @@ import ElementsBook1_Def_021b_ObtuseTriangles from "../ElementsBook1/Definitions
 import ElementsBook1_Def_021b_ObtuseTriangles3D from "../ElementsBook1/Definitions/gifs/021b-Obtuse-3D.gif";
 import ElementsBook1_Def_021c_AcuteTriangles from "../ElementsBook1/Definitions/gifs/021c-Acute.gif";
 import ElementsBook1_Def_021c_AcuteTriangles3D from "../ElementsBook1/Definitions/gifs/021c-Acute-3D.gif";
+import ElementsBook1_Def_022a_Square from "../ElementsBook1/Definitions/gifs/022a-Square.gif";
+import ElementsBook1_Def_022a_Square3D from "../ElementsBook1/Definitions/gifs/022a-Square-3D.gif";
+import ElementsBook1_Def_022b_Oblong from "../ElementsBook1/Definitions/gifs/022b-Oblong.gif";
+import ElementsBook1_Def_022b_Oblong3D from "../ElementsBook1/Definitions/gifs/022b-Oblong-3D.gif";
+import ElementsBook1_Def_022c_Rhombus from "../ElementsBook1/Definitions/gifs/022c-Rhombus.gif";
+import ElementsBook1_Def_022c_Rhombus3D from "../ElementsBook1/Definitions/gifs/022c-Rhombus-3D.gif";
+import ElementsBook1_Def_022d_Rhomboid from "../ElementsBook1/Definitions/gifs/022d-Rhomboid.gif";
+import ElementsBook1_Def_022d_Rhomboid3D from "../ElementsBook1/Definitions/gifs/022d-Rhomboid-3D.gif";
+import ElementsBook1_Def_022e_Trapezia from "../ElementsBook1/Definitions/gifs/022e-Trapezia.gif";
+import ElementsBook1_Def_022e_Trapezia3D from "../ElementsBook1/Definitions/gifs/022e-Trapezia-3D.gif";
 
 
 const merge_gifs = [
@@ -200,20 +210,30 @@ const merge_gifs = [
                         },
                     ]
                 },
-                /*{
+                {
                     children: [
                         {
+                            animation2d: ElementsBook1_Def_022a_Square,
+                            animation3d: ElementsBook1_Def_022a_Square3D
                         },
                         {
+                            animation2d: ElementsBook1_Def_022b_Oblong,
+                            animation3d: ElementsBook1_Def_022b_Oblong3D
                         },
                         {
+                            animation2d: ElementsBook1_Def_022c_Rhombus,
+                            animation3d: ElementsBook1_Def_022c_Rhombus3D
                         },
                         {
+                            animation2d: ElementsBook1_Def_022d_Rhomboid,
+                            animation3d: ElementsBook1_Def_022d_Rhomboid3D
                         },
                         {
+                            animation2d: ElementsBook1_Def_022e_Trapezia,
+                            animation3d: ElementsBook1_Def_022e_Trapezia3D
                         }
                     ]
-                }*/
+                }
             ]
         }
     }
