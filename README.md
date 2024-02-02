@@ -7,6 +7,8 @@ This uses the Thomas L Heath translation, which remains the standard translation
 
 See [https://derekshoneycutt.github.io/Euclid/index.html](https://derekshoneycutt.github.io/Euclid/index.html) for the presented version of Euclid's Elements.
 
+For the source of the underlying code drawing the animations, please see [https://github.com/derekshoneycutt/Euclid.jl](https://github.com/derekshoneycutt/Euclid.jl). See below to add as a julia module.
+
 ---
 
 ## Euclid's Elements
@@ -17,7 +19,7 @@ See [https://derekshoneycutt.github.io/Euclid/index.html](https://derekshoneycut
 
 ## Building The Project
 
-This uses a Julia module, Euclid.jl, which is published on GitHub. Although no intentions are to publish it wider, it is required to build here and can be used itself further. This was mostly done to separate build concerns during development, but it also cleans up the repositories and lets this one focus on the Jupyter notebooks and an initial presentation.
+This uses a Julia module, [Euclid.jl](https://github.com/derekshoneycutt/Euclid.jl), which is published on GitHub. Although no intentions are to publish it wider, it is required to build here and can be used itself further. This was mostly done to separate build concerns during development, but it also cleans up the repositories and lets this one focus on the Jupyter notebooks and an initial presentation.
 
 ```bash
 julia AddPackages.jl
