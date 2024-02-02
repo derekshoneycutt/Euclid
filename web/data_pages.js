@@ -193,27 +193,27 @@ export var EUCLID_DATA_PAGES = ({
                             {
                                 title: "Square",
                                 head: "Of quadrilateral figures, a *square* is that which is both equilateral and right-angled",
-                                page: "/Euclid/ElementsBook1_Definitions_022a_Square.html"
+                                page: "/Euclid/ElementsBook1_Definitions_022a-Square.html"
                             },
                             {
                                 title: "Oblong",
                                 head: "Of quadrilateral figures, ... an *oblong* that which is right-angled but not equilateral",
-                                page: "/Euclid/ElementsBook1_Definitions_022b_Oblong.html"
+                                page: "/Euclid/ElementsBook1_Definitions_022b-Oblong.html"
                             },
                             {
                                 title: "Rhombus",
                                 head: "Of quadrilateral figures, ... a *rhombus* that which is equilateral but not right-angled",
-                                page: "/Euclid/ElementsBook1_Definitions_022c_Rhombus.html"
+                                page: "/Euclid/ElementsBook1_Definitions_022c-Rhombus.html"
                             },
                             {
                                 title: "Rhomboid",
                                 head: "Of quadrilateral figures, ... a *rhomboid* is that which has its opposite angles and sides equal to one another but is neither equilateral nor right-angled.",
-                                page: "/Euclid/ElementsBook1_Definitions_022d_Rhomboid.html"
+                                page: "/Euclid/ElementsBook1_Definitions_022d-Rhomboid.html"
                             },
                             {
                                 title: "Trapezia",
                                 head: "And let quadrilaterals other than these be called *trapezia*.",
-                                page: "/Euclid/ElementsBook1_Definitions_022e_Trapezia.html"
+                                page: "/Euclid/ElementsBook1_Definitions_022e-Trapezia.html"
                             }
                         ]
                     },
