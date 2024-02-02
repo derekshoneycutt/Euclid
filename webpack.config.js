@@ -109,6 +109,7 @@ module.exports = {
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_022c-Rhombus.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_022d-Rhomboid.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_022e-Trapezia.html' }),
+        new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Definitions_023-ParallelLines.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Postulates_index.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_CommonNotions_index.html' }),
         new HtmlWebpackPlugin({ hash: true, template: './web/template.html', filename: 'ElementsBook1_Propositions_index.html' }),

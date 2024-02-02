@@ -76,6 +76,8 @@ import ElementsBook1_Def_022d_Rhomboid from "../ElementsBook1/Definitions/gifs/0
 import ElementsBook1_Def_022d_Rhomboid3D from "../ElementsBook1/Definitions/gifs/022d-Rhomboid-3D.gif";
 import ElementsBook1_Def_022e_Trapezia from "../ElementsBook1/Definitions/gifs/022e-Trapezia.gif";
 import ElementsBook1_Def_022e_Trapezia3D from "../ElementsBook1/Definitions/gifs/022e-Trapezia-3D.gif";
+import ElementsBook1_Def_023_ParallelLines from "../ElementsBook1/Definitions/gifs/023-ParallelLines.gif";
+import ElementsBook1_Def_023_ParallelLines3D from "../ElementsBook1/Definitions/gifs/023-ParallelLines-3D.gif";
 
 
 const merge_gifs = [
@@ -233,6 +235,10 @@ const merge_gifs = [
                             animation3d: ElementsBook1_Def_022e_Trapezia3D
                         }
                     ]
+                },
+                {
+                    animation2d: ElementsBook1_Def_023_ParallelLines,
+                    animation3d: ElementsBook1_Def_023_ParallelLines3D
                 }
             ]
         }
