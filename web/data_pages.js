@@ -1,4 +1,37 @@
-export var EUCLID_DATA_PAGES = ({
+
+/**
+ * @typedef {Object} DataPageNode Node of a data page to be displayed for Euclid
+ * @property {string} title Title of the page to display
+ * @property {string} head The head text to display right after the title of the page
+ * @property {string} page The page generated to represent this node (usually ends in .html)
+ * @property {boolean} splidef Whether children split the definition of this node
+ * @property {DataPageNode[]} children Any children present for the specific node
+ */
+
+/**
+ * @typedef {Object} DataPageBook A book representation in data pages
+ * @property {string} title Title of the page to display
+ * @property {string} head The head text to display right after the title of the page
+ * @property {string} page The page generated to represent this node (usually ends in .html)
+ * @property {DataPageNode[]} definitions Definitions present for the book
+ * @property {DataPageNode[]} postulates Postulates present for the book
+ * @property {DataPageNode[]} common_notions Common Notions present for the book
+ * @property {DataPageNode[]} propositions Propositions present for the book
+ */
+
+/**
+ * @typedef {Object} DataPageDefinition A broad definition of data pages for Euclid, starting at home
+ * @property {string} title Title of the page to display
+ * @property {string} head The head text to display right after the title of the page
+ * @property {string} page The page generated to represent this node (usually ends in .html)
+ * @property {DataPageBook[]} books The books represented within the final product
+ */
+
+/**
+ * The full definition of the data pages for display in Euclid
+ * @type {DataPageDefinition}
+ */
+export var EUCLID_DATA_PAGES = {
     title: "Euclid",
     head: "And this is Euclid book 1!",
     page: "/Euclid/index.html",
@@ -244,4 +277,4 @@ export var EUCLID_DATA_PAGES = ({
             }
         }
     ]
-})
+};

@@ -5,7 +5,8 @@
     All the following is the structure describing the views in Euclid
 */
 
-import { EUCLID_DATA_PAGES } from './data_pages';
+import { EUCLID_DATA_PAGES, DataPageNode, DataPageBook, DataPageDefinition } from './data_pages';
+import { Imogene as $_, ImogeneArray } from '../Imogene/Imogene';
 
 // Elements Book I
 
@@ -79,7 +80,25 @@ import ElementsBook1_Def_022e_Trapezia3D from "../ElementsBook1/Definitions/gifs
 import ElementsBook1_Def_023_ParallelLines from "../ElementsBook1/Definitions/gifs/023-ParallelLines.gif";
 import ElementsBook1_Def_023_ParallelLines3D from "../ElementsBook1/Definitions/gifs/023-ParallelLines-3D.gif";
 
+/**
+ * @typedef {Object} GifDictionaryNode Describes a node in a Gif dictionary
+ * @property {string} animation2d Location of the 2D animation
+ * @property {string} animation3d Location of the 3D animation
+ * @property {GifDictionaryNode[]} children Children nodes, if present
+ */
 
+/**
+ * @typedef {Object} GifDictionary Describes a dictionary of Gif animations
+ * @property {GifDictionaryNode} definitions The definitions for the given book of animations
+ * @property {GifDictionaryNode} postulates The postulates for the given book of animations
+ * @property {GifDictionaryNode} common_notions The common notions for the given book of animations
+ * @property {GifDictionaryNode} propositions The propositions for the given book of animations
+ */
+
+/**
+ * The Gifs to merge into the final views
+ * @type {GifDictionary[]}
+ */
 const merge_gifs = [
     {
         definitions: {
@@ -245,7 +264,54 @@ const merge_gifs = [
     }
 ];
 
+/**
+ * @typedef {Object} BookNode Node describing a book to display on Euclid
+ * @property {string} title Title of the page to display for the node
+ * @property {string} head Head data to display for the node
+ * @property {string} page The page to display this node on
+ * @property {string} animation2d Any 2D animation present for this node
+ * @property {string} animation3d Any 3D animation present for this node
+ * @property {ImogeneArray} link_element The built link element for this node
+ * @property {ImogeneArray} listitem_element The built list item element for this node
+ * @property {ImogeneArray} sublist_element The built sub-list item element for this node
+ * @property {boolean} splitdef Whether any children present for the node split the current definition
+ * @property {BookNode[]} children Any children nodes, if present
+ */
+
+/**
+ * @typedef {Object} Book A description of a book to display on Euclid
+ * @property {string} title Title of the page to display for the book
+ * @property {string} head Head data to display for the book
+ * @property {string} page The page to display this book on
+ * @property {ImogeneArray} link_element The built link element for this book
+ * @property {ImogeneArray} listitem_element The built list item element for this book
+ * @property {ImogeneArray} sublist_element The built sub-list item element for this book
+ * @property {BookNode} definitions Definitions to display for this book
+ * @property {BookNode} postulates Postulates to display for this book
+ * @property {BookNode} common_notions Common Notions to display for this book
+ * @property {BookNode} propositions Propositions to display for this book
+ */
+
+/**
+ * @typedef {Object} EuclidData Describes everything shown in Euclid
+ * @property {string} title Title of the home page
+ * @property {string} head Head data to display on home
+ * @property {string} page The page to display as the home page
+ * @property {ImogeneArray} link_element The built link element for the home page
+ * @property {ImogeneArray} listitem_element The built list item element for home
+ * @property {ImogeneArray} sublist_element The built sub-list item element for home
+ * @property {Book[]} books The books to show in Euclid
+ */
+
+/**
+ * Build a book node from existing data
+ * @param {DataPageNode} subobj The data page data to build from
+ * @param {number} bookIndex The current book index being built forp
+ * @param {GifDictionaryNode} merge The Gif data to merge into the node
+ * @returns {BookNode} A new, compiled book node
+ */
 function subOjectToExport(subobj, bookIndex, merge) {
+    /** @type {BookNode} */
     let retObj = {
         title: subobj.title,
         head: subobj.head,
@@ -258,7 +324,7 @@ function subOjectToExport(subobj, bookIndex, merge) {
         splitdef: false
     };
 
-    if ('children' in subobj) {
+    if (('children' in subobj) && (subobj.children.length > 0)) {
         retObj.children = [
             ...(subobj.children.map((child, index) =>
                 subOjectToExport(child, bookIndex, merge.children[index])))
@@ -271,7 +337,14 @@ function subOjectToExport(subobj, bookIndex, merge) {
     return retObj;
 }
 
+/**
+ * Compile a book to export
+ * @param {DataPageBook} book The core book to compile
+ * @param {number} index The index of the current book that is being compiled here
+ * @returns {Book} Compiled book object
+ */
 function bookToExport(book, index) {
+    /** @type {Book} */
     let retObj = {
         title: book.title,
         head: book.head,
@@ -288,7 +361,10 @@ function bookToExport(book, index) {
     return retObj;
 }
 
-
+/**
+ * All of the data to display to users in Euclid
+ * @type {EuclidData}
+ */
 export var EUCLID_DATA = {
     title: EUCLID_DATA_PAGES.title,
     head: EUCLID_DATA_PAGES.head,
