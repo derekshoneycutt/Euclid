@@ -18,7 +18,7 @@ function getMatchingPage(searchBy, obj) {
     if (obj.page && obj.page === searchBy) {
         return obj;
     }
-    else if ('children' in obj) {
+    else if ('children' in obj && !!obj.children) {
         return obj.children.reduce((prev, curr, index) => {
             if (prev != null)
                 return prev;
@@ -139,7 +139,6 @@ function breadcrumb(forPage) {
     }, [EUCLID_DATA]);
 }
 
-
 /**
  * Load the current page into view
  */
@@ -174,45 +173,34 @@ function loadCurrentPage() {
  * @returns {ImogeneArray} The constructed list item
  */
 function generateSideBarListFrom(obj, currentPage, num) {
-    let hasChildren = ('children' in obj);
+    let hasChildren = ('children' in obj && !!obj.children);
     let childrenSplitDef = hasChildren && ('splitdef' in obj) && (obj.splitdef == true);
     let matchPage = getMatchingPage(currentPage, obj);
-    let listItem =
-        <li class={`${matchPage === null || matchPage === undefined ? (childrenSplitDef ? '' : 'collapsed') : 'on_page'} ` +
-                   `${hasChildren && !childrenSplitDef ? "with_children" : "no_children"}`}>
-        </li>
     let linkHref = obj.page;
-    let linkElement =
-        <a href={matchPage === obj ? undefined : linkHref} class="nav_link">
-            {num ? num + '. ' : ''}{obj.title}
-        </a>
+    let listItemClass =
+        (matchPage === null || matchPage === undefined ?
+            (childrenSplitDef ? '' : 'collapsed ') :
+            'on_page ') +
+        (hasChildren && !childrenSplitDef ? "with_children" : "no_children");
+    obj.listitem_element =
+        <li class={listItemClass}>
+            {obj.link_element =
+            <a href={matchPage === obj ? undefined : linkHref} class="nav_link">
+                {hasChildren && !childrenSplitDef ?
+                    <span class="material-symbols-outlined collapse-marker">expand_more</span> :
+                    (num ? num + '. ' : '')}
+                {obj.title}
+            </a>}
+            {hasChildren && (obj.sublist_element =
+            <ol class={`nav-ord-list${childrenSplitDef ? ' splitdef' : ''}`}>
+                {$_.enhance(obj.children.map((child, index) =>
+                    generateSideBarListFrom(child, currentPage,
+                        childrenSplitDef ? (index + 10).toString(26).toLowerCase() : index + 1))
+                    .reduce((p, c) => [...p, ...c], []))}
+            </ol>)}
+        </li>
 
-    obj.link_element = linkElement;
-    obj.listitem_element = listItem;
-
-    if (hasChildren) {
-        if (!childrenSplitDef) {
-            linkElement.emptyAndReplace(
-                <span class="material-symbols-outlined collapse-marker">expand_more</span>,
-                obj.title);
-        }
-        listItem.appendChildren(
-            linkElement);
-
-        let subList =
-            <ol class={`nav-ord-list${childrenSplitDef ? ' splitdef' : ''}`}></ol>
-        subList.appendChildren(
-            ...(obj.children.map((child, index) =>
-                generateSideBarListFrom(child, currentPage,
-                    childrenSplitDef ? (index + 10).toString(26).toLowerCase() : index + 1))))
-        listItem.appendChildren(subList);
-        obj.sublist_element = subList;
-    }
-    else {
-        listItem.appendChildren(linkElement);
-    }
-
-    return listItem;
+    return obj.listitem_element;
 }
 
 /**
@@ -225,48 +213,36 @@ function loadSideBar() {
     }
 
     let navlist = $_.find('#side-navlist');
-
-    navlist.empty();
-
-    navlist.appendChildren(
+    navlist.emptyAndReplace(
         <li class={`home_item ${currentPage === EUCLID_DATA.page ? 'on_page' : ''}`}>
             <a href={currentPage === EUCLID_DATA.page ? undefined : EUCLID_DATA.page}
                class="nav_link">
                 <span class="material-symbols-outlined home_icon">home</span>
                 {EUCLID_DATA.title}
             </a>
-        </li>)
+        </li>);
 
 
     EUCLID_DATA.books.forEach(book => {
         let matchPage = matchingPageFromBook(currentPage, book);
 
-        let childEl =
+        book.listitem_element =
             <li class={matchPage === null || matchPage === undefined ? "collapsed" : 'on_page'}>
+                {book.link_element =
+                <a href={matchPage === book ? undefined : book.page}
+                class="nav_link">
+                    <span class="material-symbols-outlined collapse-marker">expand_more</span>
+                    {book.title}
+                </a>}
+                {book.sublist_element =
+                <ul class="nav-hier-list">
+                    {!!book.definitions && generateSideBarListFrom(book.definitions, currentPage)}
+                    {!!book.postulates && generateSideBarListFrom(book.postulates, currentPage)}
+                    {!!book.common_notions && generateSideBarListFrom(book.common_notions, currentPage)}
+                    {!!book.propositions && generateSideBarListFrom(book.propositions, currentPage)}
+                </ul>}
             </li>
-        let linkElement =
-            <a href={matchPage === book ? undefined : book.page}
-               class="nav_link">
-                {book.title}
-            </a>
-        let subList =
-            <ul class="nav-hier-list">
-                {generateSideBarListFrom(book.definitions, currentPage)}
-                {generateSideBarListFrom(book.postulates, currentPage)}
-                {generateSideBarListFrom(book.common_notions, currentPage)}
-                {generateSideBarListFrom(book.propositions, currentPage)}
-            </ul>
-        linkElement.emptyAndReplace(
-            <span class="material-symbols-outlined collapse-marker">expand_more</span>,
-            book.title);
-        childEl.appendChildren(
-            linkElement,
-            subList);
-        navlist.appendChildren(childEl);
-
-        book.link_element = linkElement;
-        book.listitem_element = childEl;
-        book.sublist_element = subList;
+        navlist.appendChildren(book.listitem_element);
     });
 }
 
@@ -283,7 +259,7 @@ function refreshPageSelection(obj, currentPage) {
     });
     obj.link_element.setProperties({ href: matchPage === obj ? undefined : obj.page});
 
-    if ('children' in obj) {
+    if ('children' in obj && !!obj.children) {
         obj.children.forEach(child => refreshPageSelection(child, currentPage));
     }
 }
@@ -366,20 +342,15 @@ function onDocumentClick(e) {
         }
         else if (pathname.match(/\.(png|jpe?g|gif|svg)$/)) {
             e.preventDefault();
-            let closeButton =
-                <div class="material-symbols-outlined overlay-x">close</div>
-            let sect =
+            let sect;
+            $_.appendChildren(document.body, sect =
                 <section class="image-overlay">
                     <img src={pathname}></img>
-                    {closeButton}
-                </section>
-
-            closeButton.addEvents({
-                click: e => {
-                    sect[0].remove();
-                }
-            });
-            $_.appendChildren(document.body, sect);
+                    <div class="material-symbols-outlined overlay-x"
+                        on={{ click: e => { sect[0].remove(); } }}>
+                        close
+                    </div>
+                </section>);
         }
         else {
             let match = findMatchingPage(pathname);
@@ -393,8 +364,6 @@ function onDocumentClick(e) {
         }
     }
 }
-
-
 
 /**
  * Initialize everything, build the sidebar, and go to the appropriate, matching page
