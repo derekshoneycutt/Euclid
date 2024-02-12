@@ -6,7 +6,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const build_mode = 'production';
 
 module.exports = {
-    entry: './web/euclid.js',
+    entry: './web/euclid.jsx',
 
     output: {
         path: path.resolve(__dirname, 'build/dist'),
@@ -17,12 +17,12 @@ module.exports = {
     module: {
         rules: [
             {
-                test: /\.js$/,
+                test: /\.jsx?/,
                 exclude: /(node_modules)/,
                 use: {
                     loader: 'babel-loader',
                     options: {
-                        presets: ['@babel/preset-env']
+                        presets: ['@babel/preset-env', '@babel/preset-react'],
                     }
                 }
             },

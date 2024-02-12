@@ -12,7 +12,9 @@
   "license": "CC0-1.0",
   "devDependencies": {
     "@babel/core": "^7.23.9",
+    "@babel/plugin-syntax-jsx": "^7.23.3",
     "@babel/preset-env": "^7.23.9",
+    "@babel/preset-react": "^7.23.3",
     "@babel/register": "^7.23.7",
     "@fontsource/roboto": "^5.0.8",
     "autoprefixer": "^10.4.17",

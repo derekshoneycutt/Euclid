@@ -2,27 +2,11 @@ import './style.scss';
 
 import { EuclidData, Book, BookNode, EUCLID_DATA } from './data';
 import { Imogene as $_, ImogeneArray } from '../Imogene/Imogene';
+/** @jsx $_.make */
 
 import {MDCRipple} from '@material/ripple';
 import showdown from 'showdown';
 import DOMPurify from 'dompurify';
-
-/**
- * Cleans up a path string
- * @param {string} path The path to clean up
- * @returns The cleaned up path string
- */
-function cleanPath(path) {
-    return path;//.replace('/', '/Euclid');
-}
-/**
- * Reverse-Cleans a path string
- * @param {string} path The path to reverse-clean
- * @returns The reverse-cleaned up path string
- */
-function reverseCleanPath(path) {
-    return path;//.replace('/Euclid', '/');
-}
 
 /**
  * Get the Book Node that matches the given page, from a top node
@@ -160,7 +144,7 @@ function breadcrumb(forPage) {
  * Load the current page into view
  */
 function loadCurrentPage() {
-    let currentPage = cleanPath(`${window.location.pathname}`);
+    let currentPage = `${window.location.pathname}`;
     if (currentPage.slice(-1) === '/') {
         currentPage = currentPage + "index.html"
     }
@@ -193,38 +177,34 @@ function generateSideBarListFrom(obj, currentPage, num) {
     let hasChildren = ('children' in obj);
     let childrenSplitDef = hasChildren && ('splitdef' in obj) && (obj.splitdef == true);
     let matchPage = getMatchingPage(currentPage, obj);
-    let listItem = $_.make('li', {
-        class: `${matchPage === null || matchPage === undefined ? (childrenSplitDef ? '' : 'collapsed') : 'on_page'} ` +
-                `${hasChildren && !childrenSplitDef ? "with_children" : "no_children"}`
-    });
-    let linkHref = reverseCleanPath(obj.page);
-    let linkElement = $_.make('a',
-        {
-            href: matchPage === obj ? undefined : linkHref,
-            class: 'nav_link'
-        },
-        `${num ? num + '. ' : ''}${obj.title}`);
+    let listItem =
+        <li class={`${matchPage === null || matchPage === undefined ? (childrenSplitDef ? '' : 'collapsed') : 'on_page'} ` +
+                   `${hasChildren && !childrenSplitDef ? "with_children" : "no_children"}`}>
+        </li>
+    let linkHref = obj.page;
+    let linkElement =
+        <a href={matchPage === obj ? undefined : linkHref} class="nav_link">
+            {num ? num + '. ' : ''}{obj.title}
+        </a>
 
     obj.link_element = linkElement;
     obj.listitem_element = listItem;
 
     if (hasChildren) {
         if (!childrenSplitDef) {
-            linkElement.emptyAndReplace($_.make('span', {
-                class: "material-symbols-outlined collapse-marker",
-                innerHTML: "expand_more"
-            }), obj.title);
+            linkElement.emptyAndReplace(
+                <span class="material-symbols-outlined collapse-marker">expand_more</span>,
+                obj.title);
         }
         listItem.appendChildren(
             linkElement);
 
-        let subList = $_.make('ol',
-            {
-                class: `nav-ord-list${childrenSplitDef ? ' splitdef' : ''}`
-            },
+        let subList =
+            <ol class={`nav-ord-list${childrenSplitDef ? ' splitdef' : ''}`}></ol>
+        subList.appendChildren(
             ...(obj.children.map((child, index) =>
                 generateSideBarListFrom(child, currentPage,
-                    childrenSplitDef ? (index + 10).toString(26).toLowerCase() : index + 1))));
+                    childrenSplitDef ? (index + 10).toString(26).toLowerCase() : index + 1))))
         listItem.appendChildren(subList);
         obj.sublist_element = subList;
     }
@@ -239,7 +219,7 @@ function generateSideBarListFrom(obj, currentPage, num) {
  * Load the sidebar based on the EUCLID_DATA structure
  */
 function loadSideBar() {
-    let currentPage = cleanPath(`${window.location.pathname}`);
+    let currentPage = `${window.location.pathname}`;
     if (currentPage.slice(-1) === '/') {
         currentPage = currentPage + "index.html"
     }
@@ -249,37 +229,36 @@ function loadSideBar() {
     navlist.empty();
 
     navlist.appendChildren(
-        $_.make('li', { class: `home_item ${currentPage === EUCLID_DATA.page ? 'on_page' : ''}` },
-                ['a',
-                    {
-                        href: currentPage === EUCLID_DATA.page ? undefined : reverseCleanPath(EUCLID_DATA.page),
-                        class: 'nav_link'
-                    },
-                    ['span', { class: 'material-symbols-outlined home_icon' }, 'home'],
-                    EUCLID_DATA.title]));
+        <li class={`home_item ${currentPage === EUCLID_DATA.page ? 'on_page' : ''}`}>
+            <a href={currentPage === EUCLID_DATA.page ? undefined : EUCLID_DATA.page}
+               class="nav_link">
+                <span class="material-symbols-outlined home_icon">home</span>
+                {EUCLID_DATA.title}
+            </a>
+        </li>)
 
 
     EUCLID_DATA.books.forEach(book => {
         let matchPage = matchingPageFromBook(currentPage, book);
 
-        let childEl = $_.make('li', { class: matchPage === null || matchPage === undefined ? "collapsed" : 'on_page' });
-        let linkElement = $_.make('a',
-                                    {
-                                        href: matchPage === book ? undefined : reverseCleanPath(book.page),
-                                        class: 'nav_link'
-                                    },
-                                    book.title);
-        let subList = $_.make('ul', { class: 'nav-hier-list' },
-                                generateSideBarListFrom(book.definitions, currentPage),
-                                generateSideBarListFrom(book.postulates, currentPage),
-                                generateSideBarListFrom(book.common_notions, currentPage),
-                                generateSideBarListFrom(book.propositions, currentPage));
+        let childEl =
+            <li class={matchPage === null || matchPage === undefined ? "collapsed" : 'on_page'}>
+            </li>
+        let linkElement =
+            <a href={matchPage === book ? undefined : book.page}
+               class="nav_link">
+                {book.title}
+            </a>
+        let subList =
+            <ul class="nav-hier-list">
+                {generateSideBarListFrom(book.definitions, currentPage)}
+                {generateSideBarListFrom(book.postulates, currentPage)}
+                {generateSideBarListFrom(book.common_notions, currentPage)}
+                {generateSideBarListFrom(book.propositions, currentPage)}
+            </ul>
         linkElement.emptyAndReplace(
-            $_.make('span',
-                {
-                    class: "material-symbols-outlined collapse-marker",
-                    innerHTML: "expand_more"
-                }), book.title);
+            <span class="material-symbols-outlined collapse-marker">expand_more</span>,
+            book.title);
         childEl.appendChildren(
             linkElement,
             subList);
@@ -297,12 +276,12 @@ function loadSideBar() {
  * @param {string} currentPage The current page located on
  */
 function refreshPageSelection(obj, currentPage) {
-    let matchPage = getMatchingPage(cleanPath(currentPage), obj);
+    let matchPage = getMatchingPage(currentPage, obj);
     obj.listitem_element.setClassList({
         on_page: !!matchPage,
         collapsed: matchPage !== obj && obj.listitem_element[0].classList.contains('collapsed')
     });
-    obj.link_element.setProperties({ href: matchPage === obj ? undefined : reverseCleanPath(obj.page)});
+    obj.link_element.setProperties({ href: matchPage === obj ? undefined : obj.page});
 
     if ('children' in obj) {
         obj.children.forEach(child => refreshPageSelection(child, currentPage));
@@ -314,11 +293,15 @@ function refreshPageSelection(obj, currentPage) {
  * @param {string} pathname The current path to update the breadcrumbs to
  */
 function updateBreadcrumbs(pathname) {
-    let crumbs = breadcrumb(cleanPath(pathname));
+    let crumbs = breadcrumb(pathname);
     let crumbsList = $_.find('ol#breadcrumb-list');
     crumbsList.emptyAndReplace(
         ...(crumbs.map(crumb =>
-            $_.make('li', ['a', { href: reverseCleanPath(crumb.page) }, crumb.title]))));
+            <li>
+                <a href={crumb.page}>
+                    {crumb.title}
+                </a>
+            </li>)));
 }
 
 /**
@@ -330,18 +313,18 @@ function refreshTheView(pathname) {
 
     let home_item = $_.find('.home_item');
     let home_link = home_item.find('a');
-    home_item.setClassList({ on_page: (cleanPath(pathname) === EUCLID_DATA.page) });
+    home_item.setClassList({ on_page: (pathname === EUCLID_DATA.page) });
     home_link.setProperties({
-        href: cleanPath(pathname) === EUCLID_DATA.page ?
-            undefined : reverseCleanPath(EUCLID_DATA.page)
+        href: pathname === EUCLID_DATA.page ?
+            undefined : EUCLID_DATA.page
     });
     EUCLID_DATA.books.forEach(book => {
-        let matchPage = matchingPageFromBook(cleanPath(pathname), book);
+        let matchPage = matchingPageFromBook(pathname, book);
         book.listitem_element.setClassList({
             on_page: !!matchPage,
             collapsed: matchPage !== book && book.listitem_element[0].classList.contains('collapsed')
         });
-        book.link_element.setProperties({ href: matchPage === book ? undefined : reverseCleanPath(book.page)});
+        book.link_element.setProperties({ href: matchPage === book ? undefined : book.page});
 
         refreshPageSelection(book.definitions, pathname);
         refreshPageSelection(book.postulates, pathname);
@@ -360,9 +343,9 @@ function refreshTheView(pathname) {
 function onDocumentClick(e) {
     let link = e.target.closest('a');
     if (link) {
-        let pathname = cleanPath(link.pathname);
+        let pathname = link.pathname;
         if (pathname === '' || pathname === undefined || pathname === null) {
-            pathname = cleanPath(window.location.pathname);
+            pathname = `${window.location.pathname}`;
             let match = findMatchingPage(pathname);
             if (match) {
                 match.listitem_element.setClassList({
@@ -383,9 +366,13 @@ function onDocumentClick(e) {
         }
         else if (pathname.match(/\.(png|jpe?g|gif|svg)$/)) {
             e.preventDefault();
-            let closeButton = $_.make('div', { class: 'material-symbols-outlined overlay-x' }, 'close');
-            let sect = $_.make('section', { class: 'image-overlay' },
-                                ['img', { src: pathname }], closeButton)
+            let closeButton =
+                <div class="material-symbols-outlined overlay-x">close</div>
+            let sect =
+                <section class="image-overlay">
+                    <img src={pathname}></img>
+                    {closeButton}
+                </section>
 
             closeButton.addEvents({
                 click: e => {
@@ -417,7 +404,7 @@ $_.runOnLoad(() => {
 
     loadCurrentPage();
 
-    updateBreadcrumbs(cleanPath(window.location.pathname));
+    updateBreadcrumbs(window.location.pathname);
 
 
     document.addEventListener("click", onDocumentClick);
