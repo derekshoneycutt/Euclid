@@ -86,7 +86,7 @@ function breadcrumbPage(forPage, obj) {
     if (obj.page === forPage) {
         return [obj];
     }
-    else if ('children' in obj) {
+    else if ('children' in obj && !!obj.children) {
         return obj.children.reduce((arr, child) => {
             if (arr.length > 0)
                 return arr;
@@ -173,7 +173,7 @@ function loadCurrentPage() {
  * @returns {ImogeneArray} The constructed list item
  */
 function generateSideBarListFrom(obj, currentPage, num) {
-    let hasChildren = ('children' in obj && !!obj.children);
+    let hasChildren = ('children' in obj && !!obj.children && obj.children.length > 0);
     let childrenSplitDef = hasChildren && ('splitdef' in obj) && (obj.splitdef == true);
     let matchPage = getMatchingPage(currentPage, obj);
     let linkHref = obj.page;

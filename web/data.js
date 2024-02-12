@@ -5,7 +5,6 @@
     All the following is the structure describing the views in Euclid
 */
 
-import { EUCLID_DATA_PAGES, DataPageNode, DataPageBook, DataPageDefinition } from './data_pages';
 import { Imogene as $_, ImogeneArray } from '../Imogene/Imogene';
 
 // Elements Book I
@@ -81,190 +80,6 @@ import ElementsBook1_Def_023_ParallelLines from "../ElementsBook1/Definitions/gi
 import ElementsBook1_Def_023_ParallelLines3D from "../ElementsBook1/Definitions/gifs/023-ParallelLines-3D.gif";
 
 /**
- * @typedef {Object} GifDictionaryNode Describes a node in a Gif dictionary
- * @property {string} animation2d Location of the 2D animation
- * @property {string} animation3d Location of the 3D animation
- * @property {GifDictionaryNode[]} children Children nodes, if present
- */
-
-/**
- * @typedef {Object} GifDictionary Describes a dictionary of Gif animations
- * @property {GifDictionaryNode} definitions The definitions for the given book of animations
- * @property {GifDictionaryNode} postulates The postulates for the given book of animations
- * @property {GifDictionaryNode} common_notions The common notions for the given book of animations
- * @property {GifDictionaryNode} propositions The propositions for the given book of animations
- */
-
-/**
- * The Gifs to merge into the final views
- * @type {GifDictionary[]}
- */
-const merge_gifs = [
-    {
-        definitions: {
-            children: [
-                {
-                    animation2d: ElementsBook1_Def_001_Point,
-                    animation3d: ElementsBook1_Def_001_Point3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_002_Line,
-                    animation3d: ElementsBook1_Def_002_Line3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_003_LineExtremities,
-                    animation3d: ElementsBook1_Def_003_LineExtremities3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_004_StraightLine,
-                    animation3d: ElementsBook1_Def_004_StraightLine3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_005_Surface,
-                    animation3d: ElementsBook1_Def_005_Surface3D,
-                },
-                {
-                    animation2d: ElementsBook1_Def_006_SurfaceExtremities,
-                    animation3d: ElementsBook1_Def_006_SurfaceExtremities3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_007_PlaneSurface,
-                    animation3d: ElementsBook1_Def_007_PlaneSurface3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_008_PlaneAngle,
-                    animation3d: ElementsBook1_Def_008_PlaneAngle3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_009_RecitilinealAngle,
-                    animation3d: ElementsBook1_Def_009_RecitilinealAngle3D
-                },
-                {
-                    children: [
-                        {
-                            animation2d: ElementsBook1_Def_010a_RightAngle,
-                            animation3d: ElementsBook1_Def_010a_RightAngle3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_010b_Perpendicular,
-                            animation3d: ElementsBook1_Def_010b_Perpendicular3D
-                        },
-                    ]
-                },
-                {
-                    animation2d: ElementsBook1_Def_011_ObtuseAngle,
-                    animation3d: ElementsBook1_Def_011_ObtuseAngle3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_012_AcuteAngle,
-                    animation3d: ElementsBook1_Def_012_AcuteAngle3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_013_Boundary,
-                    animation3d: ElementsBook1_Def_013_Boundary3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_014_Figure,
-                    animation3d: ElementsBook1_Def_014_Figure3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_015_Circle,
-                    animation3d: ElementsBook1_Def_015_Circle3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_016_Center,
-                    animation3d: ElementsBook1_Def_016_Center3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_017_Diameter,
-                    animation3d: ElementsBook1_Def_017_Diameter3D
-                },
-                {
-                    animation2d: ElementsBook1_Def_018_Semicircle,
-                    animation3d: ElementsBook1_Def_018_Semicircle3D
-                },
-                {
-                    children: [
-                        {
-                            animation2d: ElementsBook1_Def_019a_Trilateral,
-                            animation3d: ElementsBook1_Def_019a_Trilateral3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_019b_Quadrilateral,
-                            animation3d: ElementsBook1_Def_019b_Quadrilateral3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_019c_Multilateral,
-                            animation3d: ElementsBook1_Def_019c_Multilateral3D
-                        },
-                    ]
-                },
-                {
-                    children: [
-                        {
-                            animation2d: ElementsBook1_Def_020a_Equilateral,
-                            animation3d: ElementsBook1_Def_020a_Equilateral3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_020b_Isosceles,
-                            animation3d: ElementsBook1_Def_020b_Isosceles3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_020c_Scalene,
-                            animation3d: ElementsBook1_Def_020c_Scalene3D
-                        }
-                    ]
-                },
-                {
-                    children: [
-                        {
-                            animation2d: ElementsBook1_Def_021a_RightTriangles,
-                            animation3d: ElementsBook1_Def_021a_RightTriangles3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_021b_ObtuseTriangles,
-                            animation3d: ElementsBook1_Def_021b_ObtuseTriangles3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_021c_AcuteTriangles,
-                            animation3d: ElementsBook1_Def_021c_AcuteTriangles3D
-                        },
-                    ]
-                },
-                {
-                    children: [
-                        {
-                            animation2d: ElementsBook1_Def_022a_Square,
-                            animation3d: ElementsBook1_Def_022a_Square3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_022b_Oblong,
-                            animation3d: ElementsBook1_Def_022b_Oblong3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_022c_Rhombus,
-                            animation3d: ElementsBook1_Def_022c_Rhombus3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_022d_Rhomboid,
-                            animation3d: ElementsBook1_Def_022d_Rhomboid3D
-                        },
-                        {
-                            animation2d: ElementsBook1_Def_022e_Trapezia,
-                            animation3d: ElementsBook1_Def_022e_Trapezia3D
-                        }
-                    ]
-                },
-                {
-                    animation2d: ElementsBook1_Def_023_ParallelLines,
-                    animation3d: ElementsBook1_Def_023_ParallelLines3D
-                }
-            ]
-        }
-    }
-];
-
-/**
  * @typedef {Object} BookNode Node describing a book to display on Euclid
  * @property {string} title Title of the page to display for the node
  * @property {string} head Head data to display for the node
@@ -304,73 +119,494 @@ const merge_gifs = [
  */
 
 /**
- * Build a book node from existing data
- * @param {DataPageNode} subobj The data page data to build from
- * @param {number} bookIndex The current book index being built forp
- * @param {GifDictionaryNode} merge The Gif data to merge into the node
- * @returns {BookNode} A new, compiled book node
- */
-function subOjectToExport(subobj, bookIndex, merge) {
-    /** @type {BookNode} */
-    let retObj = {
-        title: subobj.title,
-        head: subobj.head,
-        page: subobj.page,
-        animation2d: merge && merge.animation2d ? merge.animation2d : undefined,
-        animation3d: merge && merge.animation3d ? merge.animation3d : undefined,
-        link_element: null,
-        listitem_element: null,
-        sublist_element: null,
-        splitdef: false
-    };
-
-    if (('children' in subobj) && (subobj.children.length > 0)) {
-        retObj.children = [
-            ...(subobj.children.map((child, index) =>
-                subOjectToExport(child, bookIndex, merge.children[index])))
-        ];
-        if ('splitdef' in subobj) {
-            retObj.splitdef = !!subobj.splitdef;
-        }
-    }
-
-    return retObj;
-}
-
-/**
- * Compile a book to export
- * @param {DataPageBook} book The core book to compile
- * @param {number} index The index of the current book that is being compiled here
- * @returns {Book} Compiled book object
- */
-function bookToExport(book, index) {
-    /** @type {Book} */
-    let retObj = {
-        title: book.title,
-        head: book.head,
-        page: book.page,
-        link_element: null,
-        listitem_element: null,
-        sublist_element: null,
-        definitions: subOjectToExport(book.definitions, index, merge_gifs[index].definitions),
-        postulates: subOjectToExport(book.postulates, index, merge_gifs[index].postulates),
-        common_notions: subOjectToExport(book.common_notions, index, merge_gifs[index].common_notions),
-        propositions: subOjectToExport(book.propositions, index, merge_gifs[index].propositions)
-    };
-
-    return retObj;
-}
-
-/**
  * All of the data to display to users in Euclid
  * @type {EuclidData}
  */
 export var EUCLID_DATA = {
-    title: EUCLID_DATA_PAGES.title,
-    head: EUCLID_DATA_PAGES.head,
-    page: EUCLID_DATA_PAGES.page,
+    title: "Euclid",
+    head: "And this is Euclid book 1!",
+    page: "/Euclid/index.html",
     link_element: null,
     listitem_element: null,
     sublist_element: null,
-    books: [...(EUCLID_DATA_PAGES.books.map((book, index) => bookToExport(book, index)))]
-}
+    books: [
+        {
+            title: "Euclid's Elements, Book 1",
+            head: "And this is Euclid book 1!",
+            page: "/Euclid/ElementsBook1_index.html",
+            link_element: null,
+            listitem_element: null,
+            sublist_element: null,
+            definitions: {
+                title: "Definitions",
+                head: "Something about definitions in Euclid Book 1",
+                page: "/Euclid/ElementsBook1_Definitions_index.html",
+                link_element: null,
+                listitem_element: null,
+                sublist_element: null,
+                splitdef: false,
+                children: [
+                    {
+                        title: "Point",
+                        head: "A *point* is that which has no part.",
+                        page: "/Euclid/ElementsBook1_Definitions_001-Point.html",
+                        animation2d: ElementsBook1_Def_001_Point,
+                        animation3d: ElementsBook1_Def_001_Point3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Line",
+                        head: "A *line* is breadthless length.",
+                        page: "/Euclid/ElementsBook1_Definitions_002-Line.html",
+                        animation2d: ElementsBook1_Def_002_Line,
+                        animation3d: ElementsBook1_Def_002_Line3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Line Extremities",
+                        head: "The *extremities* of a line [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html) are points [[Def I.1]](/Euclid/ElementsBook1_Definitions_001-Point.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_003-LineExtremities.html",
+                        animation2d: ElementsBook1_Def_003_LineExtremities,
+                        animation3d: ElementsBook1_Def_003_LineExtremities3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Straight Line",
+                        head: "A *straight line* is a line [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html) which lies evenly with the points [[Def I.1]](/Euclid/ElementsBook1_Definitions_001-Point.html) on itself.",
+                        page: "/Euclid/ElementsBook1_Definitions_004-StraightLine.html",
+                        animation2d: ElementsBook1_Def_004_StraightLine,
+                        animation3d: ElementsBook1_Def_004_StraightLine3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Surface",
+                        head: "A *surface* is that which has length and breadth only.",
+                        page: "/Euclid/ElementsBook1_Definitions_005-Surface.html",
+                        animation2d: ElementsBook1_Def_005_Surface,
+                        animation3d: ElementsBook1_Def_005_Surface3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Surface Extremities",
+                        head: "The *extremities* of a surface [[Def I.5]](/Euclid/ElementsBook1_Definitions_005-Surface.html) are lines [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_006-SurfaceExtremities.html",
+                        animation2d: ElementsBook1_Def_006_SurfaceExtremities,
+                        animation3d: ElementsBook1_Def_006_SurfaceExtremities3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Plane Surface",
+                        head: "A *plane surface* is a surface [[Def I.5]](/Euclid/ElementsBook1_Definitions_005-Surface.html) which lies evenly with the straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) on itself.",
+                        page: "/Euclid/ElementsBook1_Definitions_007-PlaneSurface.html",
+                        animation2d: ElementsBook1_Def_007_PlaneSurface,
+                        animation3d: ElementsBook1_Def_007_PlaneSurface3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Plane Angle",
+                        head: "A *plane angle* is the inclination to one another of two lines [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html) in a plane [[Def I.7]](/Euclid/ElementsBook1_Definitions_007-PlaneSurface.html) which meet one another and do not lie in a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html",
+                        animation2d: ElementsBook1_Def_008_PlaneAngle,
+                        animation3d: ElementsBook1_Def_008_PlaneAngle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Rectilineal Angle",
+                        head: "And when the lines [[Def I.2]](/Euclid/ElementsBook1_Definitions_002-Line.html) containing the angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) are straight [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), the angle is called *rectilineal*.",
+                        page: "/Euclid/ElementsBook1_Definitions_009-RectilinealAngle.html",
+                        animation2d: ElementsBook1_Def_009_RecitilinealAngle,
+                        animation3d: ElementsBook1_Def_009_RecitilinealAngle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Right Angles",
+                        head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another, each of the equal angles is *right*, and the adjacent line standing on the other is called a *perpendicular* to that on which it stands.",
+                        page: "/Euclid/ElementsBook1_Definitions_010-RightPerpendicular.html",
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Right Angle",
+                                head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another, each of the equal angles is *right*",
+                                page: "/Euclid/ElementsBook1_Definitions_010a-RightAngle.html",
+                                animation2d: ElementsBook1_Def_010a_RightAngle,
+                                animation3d: ElementsBook1_Def_010a_RightAngle3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Perpendicular",
+                                head: "When a straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) set up on a straight line makes the adjacent angles [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) equal to one another... the adjacent line standing on the other is called a *perpendicular* to that on which it stands.",
+                                page: "/Euclid/ElementsBook1_Definitions_010b-Perpendicular.html",
+                                animation2d: ElementsBook1_Def_010b_Perpendicular,
+                                animation3d: ElementsBook1_Def_010b_Perpendicular3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            }
+                        ]
+                    },
+                    {
+                        title: "Obtuse Angle",
+                        head: "An *obtuse angle* is an angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) greater than a right angle [[Def I.10]](/Euclid/ElementsBook1_Definitions_019-RightPerpendicular.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_011-ObtuseAngle.html",
+                        animation2d: ElementsBook1_Def_011_ObtuseAngle,
+                        animation3d: ElementsBook1_Def_011_ObtuseAngle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Acute Angle",
+                        head: "An *acute angle* is an angle [[Def I.8]](/Euclid/ElementsBook1_Definitions_008-PlaneAngle.html) less than a right angle [[Def I.10]](/Euclid/ElementsBook1_Definitions_019-RightPerpendicular.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_012-AcuteAngle.html",
+                        animation2d: ElementsBook1_Def_012_AcuteAngle,
+                        animation3d: ElementsBook1_Def_012_AcuteAngle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Boundary",
+                        head: "A *boundary* is that which is an extremity [[Def I.3]](/Euclid/ElementsBook1_Definitions_003-LineExtremities.html) [[Def I.6]](/Euclid/ElementsBook1_Definitions_006-SurfaceExtremities.html) of anything.",
+                        page: "/Euclid/ElementsBook1_Definitions_013-Boundary.html",
+                        animation2d: ElementsBook1_Def_013_Boundary,
+                        animation3d: ElementsBook1_Def_013_Boundary3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Figure",
+                        head: "A *figure* is that which is contained by any boundary or boundaries [[Def I.13]](/Euclid/ElementsBook1_Definitions_013-Boundary.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_014-Figure.html",
+                        animation2d: ElementsBook1_Def_014_Figure,
+                        animation3d: ElementsBook1_Def_014_Figure3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Circle",
+                        head: "A *circle* is a plane figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by one line such that all the straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.ipynb) falling upon it from one point among those lying within the figure are equal to one another;",
+                        page: "/Euclid/ElementsBook1_Definitions_015-Circle.html",
+                        animation2d: ElementsBook1_Def_015_Circle,
+                        animation3d: ElementsBook1_Def_015_Circle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Center",
+                        head: "And the point is called the *center* of the circle.",
+                        page: "/Euclid/ElementsBook1_Definitions_016-Center.html",
+                        animation2d: ElementsBook1_Def_016_Center,
+                        animation3d: ElementsBook1_Def_016_Center3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Diameter",
+                        head: "A *diameter* of the circle [[Def I.15]](/Euclid/ElementsBook1_Definitions_015-Circle.html) is any straight line [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html) drawn through the center [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html) and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle.",
+                        page: "/Euclid/ElementsBook1_Definitions_017-Diameter.html",
+                        animation2d: ElementsBook1_Def_017_Diameter,
+                        animation3d: ElementsBook1_Def_017_Diameter3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Semicircle",
+                        head: "A *semicircle* is the figure [[Def I.14]](/Euclid/ElementsBook1_Definitions_014-Figure.html) contained by the diameter [[Def I.18]](/Euclid/ElementsBook1_Definitions_017-Diameter.html) and the circumference cut off by it. And the center of the semicircle is the same as that of the circle [[Def I.16]](/Euclid/ElementsBook1_Definitions_016-Center.html).",
+                        page: "/Euclid/ElementsBook1_Definitions_018-Semicircle.html",
+                        animation2d: ElementsBook1_Def_018_Semicircle,
+                        animation3d: ElementsBook1_Def_018_Semicircle3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    },
+                    {
+                        title: "Rectilineal Figures",
+                        head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three, *quadrilateral* those contained by four, and *multilateral* those contained by more than four straight lines.",
+                        page: "/Euclid/ElementsBook1_Definitions_019-RectilinealFigures.html",
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Trilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), *trilateral* figures being those contained by three",
+                                page: "/Euclid/ElementsBook1_Definitions_019a-Trilateral.html",
+                                animation2d: ElementsBook1_Def_019a_Trilateral,
+                                animation3d: ElementsBook1_Def_019a_Trilateral3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Quadrilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), ... *quadrilateral* those contained by four",
+                                page: "/Euclid/ElementsBook1_Definitions_019b-Quadrilateral.html",
+                                animation2d: ElementsBook1_Def_019b_Quadrilateral,
+                                animation3d: ElementsBook1_Def_019b_Quadrilateral3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Multilateral",
+                                head: "*Rectilineal figures* are those which are contained by straight lines [[Def I.4]](/Euclid/ElementsBook1_Definitions_004-StraightLine.html), ... and *multilateral* those contained by more than four straight lines.",
+                                page: "/Euclid/ElementsBook1_Definitions_019c-Multilateral.html",
+                                animation2d: ElementsBook1_Def_019c_Multilateral,
+                                animation3d: ElementsBook1_Def_019c_Multilateral3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            }
+                        ]
+                    },
+                    {
+                        title: "Triangles by Sides",
+                        head: "Of trilateral figures, an *equilateral triangle* is that which has its three sides equal, an *isosceles triangle* that which has two of its sides alone equal, and a *scalene triangle* that which has its three sides unequal.",
+                        page: "/Euclid/ElementsBook1_Definitions_020-Triangles.html",
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Equilateral",
+                                head: "Of trilateral figures, an *equilateral triangle* is that which has its three sides equal",
+                                page: "/Euclid/ElementsBook1_Definitions_020a-Equilateral.html",
+                                animation2d: ElementsBook1_Def_020a_Equilateral,
+                                animation3d: ElementsBook1_Def_020a_Equilateral3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Isosceles",
+                                head: "Of trilateral figures, ... an *isosceles triangle* that which has two of its sides alone equal",
+                                page: "/Euclid/ElementsBook1_Definitions_020b-Isosceles.html",
+                                animation2d: ElementsBook1_Def_020b_Isosceles,
+                                animation3d: ElementsBook1_Def_020b_Isosceles3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Scalene",
+                                head: "Of trilateral figures, ... a *scalene triangle* that which has its three sides unequal.",
+                                page: "/Euclid/ElementsBook1_Definitions_020c-Scalene.html",
+                                animation2d: ElementsBook1_Def_020c_Scalene,
+                                animation3d: ElementsBook1_Def_020c_Scalene3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            }
+                        ]
+                    },
+                    {
+                        title: "Triangles by Angle",
+                        head: "Further, of trilateral figures, a *right-angled triangle* is that which has a right angle, an *obtuse-angled triangle* that which has an obtuse angle, and an *acute-angled triangle* that which has its three angles acute.",
+                        page: "/Euclid/ElementsBook1_Definitions_021-AngledTriangles.html",
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Right Triangle",
+                                head: "Further, of trilateral figures, a *right-angled triangle* is that which has a right angle",
+                                page: "/Euclid/ElementsBook1_Definitions_021a-RightTriangle.html",
+                                animation2d: ElementsBook1_Def_021a_RightTriangles,
+                                animation3d: ElementsBook1_Def_021a_RightTriangles3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Obtuse Triangle",
+                                head: "Further, of trilateral figures, ... an *obtuse-angled triangle* that which has an obtuse angle",
+                                page: "/Euclid/ElementsBook1_Definitions_021b-ObtuseTriangle.html",
+                                animation2d: ElementsBook1_Def_021b_ObtuseTriangles,
+                                animation3d: ElementsBook1_Def_021b_ObtuseTriangles3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Acute Triangle",
+                                head: "Further, of trilateral figures, ... and an *acute-angled triangle* that which has its three angles acute.",
+                                page: "/Euclid/ElementsBook1_Definitions_021c-AcuteTriangle.html",
+                                animation2d: ElementsBook1_Def_021c_AcuteTriangles,
+                                animation3d: ElementsBook1_Def_021c_AcuteTriangles3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                        ]
+                    },
+                    {
+                        title: "Quadrilaterals",
+                        head: "Of quadrilateral figures, a *square* is that which is both equilateral and right-angled, an *oblong* that which is right-angled but not equilateral, a *rhombus* that which is equilateral but not right-angled, and a *rhomboid* is that which has its opposite angles and sides equal to one another but is neither equilateral nor right-angled. And let quadrilaterals other than these be called *trapezia*.",
+                        page: "/Euclid/ElementsBook1_Definitions_022-Quadrilaterals.html",
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: true,
+                        children: [
+                            {
+                                title: "Square",
+                                head: "Of quadrilateral figures, a *square* is that which is both equilateral and right-angled",
+                                page: "/Euclid/ElementsBook1_Definitions_022a-Square.html",
+                                animation2d: ElementsBook1_Def_022a_Square,
+                                animation3d: ElementsBook1_Def_022a_Square3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Oblong",
+                                head: "Of quadrilateral figures, ... an *oblong* that which is right-angled but not equilateral",
+                                page: "/Euclid/ElementsBook1_Definitions_022b-Oblong.html",
+                                animation2d: ElementsBook1_Def_022b_Oblong,
+                                animation3d: ElementsBook1_Def_022b_Oblong3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Rhombus",
+                                head: "Of quadrilateral figures, ... a *rhombus* that which is equilateral but not right-angled",
+                                page: "/Euclid/ElementsBook1_Definitions_022c-Rhombus.html",
+                                animation2d: ElementsBook1_Def_022c_Rhombus,
+                                animation3d: ElementsBook1_Def_022c_Rhombus3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Rhomboid",
+                                head: "Of quadrilateral figures, ... a *rhomboid* is that which has its opposite angles and sides equal to one another but is neither equilateral nor right-angled.",
+                                page: "/Euclid/ElementsBook1_Definitions_022d-Rhomboid.html",
+                                animation2d: ElementsBook1_Def_022d_Rhomboid,
+                                animation3d: ElementsBook1_Def_022d_Rhomboid3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            },
+                            {
+                                title: "Trapezia",
+                                head: "And let quadrilaterals other than these be called *trapezia*.",
+                                page: "/Euclid/ElementsBook1_Definitions_022e-Trapezia.html",
+                                animation2d: ElementsBook1_Def_022e_Trapezia,
+                                animation3d: ElementsBook1_Def_022e_Trapezia3D,
+                                link_element: null,
+                                listitem_element: null,
+                                sublist_element: null,
+                                splitdef: false,
+                            }
+                        ]
+                    },
+                    {
+                        title: "Parallel Lines",
+                        head: "*Parallel* straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction.",
+                        page: "/Euclid/ElementsBook1_Definitions_023-ParallelLines.html",
+                        animation2d: ElementsBook1_Def_023_ParallelLines,
+                        animation3d: ElementsBook1_Def_023_ParallelLines3D,
+                        link_element: null,
+                        listitem_element: null,
+                        sublist_element: null,
+                        splitdef: false,
+                    }
+                ]
+            },
+            postulates: {
+                title: "Postulates",
+                head: "Something about postulates in Euclid Book 1",
+                page: "/Euclid/ElementsBook1_Postulates_index.html",
+                link_element: null,
+                listitem_element: null,
+                sublist_element: null,
+                splitdef: false,
+                children: []
+            },
+            common_notions: {
+                title: "Common Notions",
+                head: "Something about common notions in Euclid Book 1",
+                page: "/Euclid/ElementsBook1_CommonNotions_index.html",
+                link_element: null,
+                listitem_element: null,
+                sublist_element: null,
+                splitdef: false,
+                children: []
+            },
+            propositions: {
+                title: "Propositions",
+                head: "Something about propositions in Euclid Book 1",
+                page: "/Euclid/ElementsBook1_Propositions_index.html",
+                link_element: null,
+                listitem_element: null,
+                sublist_element: null,
+                splitdef: false,
+                children: []
+            }
+        }
+    ]
+};
