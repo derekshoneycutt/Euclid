@@ -5,27 +5,8 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
-KineConstraintTrait :: enum {
-    Distance = 1,
-    Floor = (1 << 1),
-    SnapToFloor = (1 << 2),
-    SnapPoint = (1 << 3),
-    MaxAngle = (1 << 4),
-    CenterPivot = (1 << 5)
-}
-
-KineConstraint :: struct {
-    Traits : KineConstraintTrait,
-
-    OnPoint : int,
-    Restriction : ec.Vector3,
-    Bounce : f32,
-    Allowance : f32,
-    DependOn : i32,
-    ChildOffset : Maybe(i32),
-
-    DoApply : bool
-}
+KineConstraintTrait :: ec.KineConstraintTrait
+KineConstraint :: ec.KineConstraint
 
 rotate_around_axis :: proc(vec, axis: ec.Vector3, angle: f32) -> ec.Vector3 {
     c := math.cos(angle)

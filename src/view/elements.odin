@@ -8,11 +8,11 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
-draw_drawing_surface :: proc(room : ^surface.EuclidDrawingSurface, state: ^EuclidGeneralState) {
-    surfaceZeros : ec.Vector3 = room^.Zeros + { room^.EdgeSize, room^.EdgeSize, 0 }
-    surfaceRightUp : ec.Vector3 = room^.RightUp + { -room^.EdgeSize, room^.EdgeSize, 0 }
-    surfaceLeftDown : ec.Vector3 = room^.LeftDown + { room^.EdgeSize, -room^.EdgeSize, 0 }
-    surfaceRightDown : ec.Vector3 = room^.RightDown + { -room^.EdgeSize, -room^.EdgeSize, 0 }
+draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneralState) {
+    surfaceZeros : Vector3 = room^.Zeros + { room^.EdgeSize, room^.EdgeSize, 0 }
+    surfaceRightUp : Vector3 = room^.RightUp + { -room^.EdgeSize, room^.EdgeSize, 0 }
+    surfaceLeftDown : Vector3 = room^.LeftDown + { room^.EdgeSize, -room^.EdgeSize, 0 }
+    surfaceRightDown : Vector3 = room^.RightDown + { -room^.EdgeSize, -room^.EdgeSize, 0 }
 
     rl.DrawTriangle(iso_to_cartesian(room^.Zeros, state^.IsoScale^),
         iso_to_cartesian(room^.LeftDown, state^.IsoScale^),
@@ -32,7 +32,7 @@ draw_kine_points :: proc(
     lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState, alpha: f32) {
 
-    points := &state^.KinePoints
+    points := state^.KinePoints
     for index in 0..<len(points) {
         point := &points^[index]
         if point.DoDraw {
@@ -54,7 +54,7 @@ draw_kine_compass :: proc(
     state: ^EuclidGeneralState,
     point : ^KineShapePoint, alpha : f32) {
 
-    points := &state^.KinePoints
+    points := state^.KinePoints
     if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
         return
     }
@@ -84,8 +84,18 @@ draw_kine_compass :: proc(
 
     useColor := point^.Color.? or_else rl.Color{255, 255, 255, 255}
 
+    if point^.ActiveChild == 1 {
+        activeColor := point^.ActiveColor.? or_else useColor
+        rl.DrawCircleV(Vector2{convPoints[0].x, convPoints[0].y}, point^.BrushSize, activeColor)
+    }
+    else if point^.ActiveChild == 3 {
+        activeColor := point^.ActiveColor.? or_else useColor
+        rl.DrawCircleV(Vector2{convPoints[2].x, convPoints[2].y}, point^.BrushSize, activeColor)        
+    }
+
     rl.DrawSplineLinear(&convPoints[0], 3, point^.BrushSize, useColor)
-    draw_outside_arc_compass(usePoints[0], usePoints[1], usePoints[2], state, point^.BrushSize, useColor)
+    draw_outside_arc_compass(usePoints[0], usePoints[1], usePoints[2], state,
+        point^.BrushSize, useColor)
 }
 
 

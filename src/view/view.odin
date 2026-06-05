@@ -1,21 +1,26 @@
 package view
 
-import ec "../core"
-import surf "../surface"
+import "../core"
+import "../surface"
 import "../kine"
+import "../julia"
 
 import rl "vendor:raylib"
+import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
-Vector2 :: ec.Vector2
-Vector3 :: ec.Vector3
-KineShapePoint :: kine.KineShapePoint
-KineConstraint :: kine.KineConstraint
+Vector2 :: core.Vector2
+Vector3 :: core.Vector3
+IsoScale :: core.IsoScale
+KineShapePoint :: core.KineShapePoint
+KineConstraint :: core.KineConstraint
+EuclidDrawingSurface :: core.EuclidDrawingSurface
+EuclidGeneralState :: core.EuclidGeneralState
 
-IsoScaleValue :: 900
+IsoScaleValue :: 800
 IsoXOffset :: 450
-IsoYOffset :: 250
+IsoYOffset :: 50
 
 FIXED_DT :: f32(1.0 / 120.0)
 MAX_FRAME_DT :: f32(0.25)
@@ -26,89 +31,74 @@ AllowedConstraintError :: 0.0001
 WindowHeight :: 720
 WindowWidth :: 1280
 
+ViewHeight :: 500
+BottomBarHeight :: WindowHeight - ViewHeight
+ViewWidth :: 900
+RightBarWidth :: WindowWidth - ViewWidth
+
 WindowTitle :: "Euclid's Elements"
 
 BackgroundColor :: rl.Color{36, 5, 16, 255}
 ItemColor :: rl.Color{175, 150, 150, 255}
 
-EuclidGeneralState :: struct {
-    IsoScale : ^IsoScale,
+UIBackColor :: rl.Color{66, 35, 46, 255}
+BorderColor :: rl.Color{86, 55, 66, 255}
+TextColor :: rl.Color{175, 150, 150, 255}
 
-    DrawSurface: ^surf.EuclidDrawingSurface,
-
-    KinePoints: [dynamic]KineShapePoint,
-    KineConstraints: [dynamic]KineConstraint,
-
-    ScaleScaler: ^ViewScaler,
-    XOffsetScaler: ^ViewScaler,
-    YOffsetScaler: ^ViewScaler,
-}
 
 run_window_loop :: proc() {
     //rl.SetConfigFlags({.MSAA_4X_HINT})//, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
+	defer rl.CloseWindow()
 
     isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset }
 
-    scaleScaler := init_view_scaler(
-        init = f32(IsoScaleValue) / f32(WindowWidth),
-        position = { 30, 60 },
-        size = 100,
-        indicator = 20,
-        brushes = 5.0,
-        horizontal = false)
-    yOffsetScaler := init_view_scaler(
-        init = f32(IsoYOffset) / f32(WindowHeight),
-        position = { 30, 200 },
-        size = 100,
-        indicator = 20,
-        brushes = 5.0,
-        horizontal = false)
-    xOffsetScaler := init_view_scaler(
-        init = f32(IsoYOffset) / f32(WindowWidth),
-        position = { 30, 340 },
-        size = 100,
-        indicator = 20,
-        brushes = 5.0,
-        horizontal = true)
-
-    drawingSurface := surf.init_drawing_surface()
+    drawingSurface := surface.init_drawing_surface()
 
     kinePoints := make([dynamic]kine.KineShapePoint)
     defer delete(kinePoints)
     kineConstraints := make([dynamic]kine.KineConstraint)
     defer delete(kineConstraints)
 
-    currentRot: f32 = math.PI / 4
-    circleRadius: f32 = 0.25
-    outPos := Vector3{ 0.5 + circleRadius * math.cos(currentRot), 0.5 + circleRadius * math.sin(currentRot), 0 }
-    lastOutPos := outPos
-
     compass := kine.init_kineshape_compass(
         &kinePoints, &kineConstraints,
-        {0.5, 0.5, 0}, {0.675, 0.375, 0.35}, outPos,
+        {0.5, 0.5, 0}, {0.675, 0.375, 0.35}, {0.75, 0.25, 0},
         0.35, ItemColor, 5)
 
-    state := EuclidGeneralState{ &isoScale, &drawingSurface, kinePoints, kineConstraints,
-        &scaleScaler, &xOffsetScaler, &yOffsetScaler }
+    state := EuclidGeneralState{ &isoScale, &drawingSurface, &kinePoints, &kineConstraints,
+        &compass, /* Metadata values start 0: */ 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
-    // Init Julia here e.g. init_euclid_scripts w/ pointer to state
-    // TODO: below needs interface and construction with julia preferrably
-    lockPoint1 := KineConstraint{ .SnapPoint, 1, { 0.5, 0.5, 0 }, 0, 0, 0, nil, true }
-    lockPoint2 := KineConstraint{ .SnapPoint, 3, outPos, 0, 0, 0, nil, true }
-    constraintLock1Id := len(kineConstraints)
-    constraintLock2Id := constraintLock1Id + 1
-    append(&kineConstraints, lockPoint1, lockPoint2)
-    // end temporary section with possible future julia bindings
+    julia.init_euclid_scripts(&state)
 
     kine.apply_all_constraints_to_error(
-        &state.KineConstraints, &state.KinePoints, AllowedConstraintError)
+        state.KineConstraints, state.KinePoints, AllowedConstraintError)
 
     lastPointVecs := make([dynamic]Maybe(Vector3))
     defer delete(lastPointVecs)
     for &point in kinePoints {
         append(&lastPointVecs, point.Position)
     }
+
+    euclidLoopFunc := julia.get_global_euclid_loop()
+
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_NORMAL),
+        i32(rl.ColorToInt(BackgroundColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_FOCUSED),
+        i32(rl.ColorToInt(BorderColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_PRESSED),
+        i32(rl.ColorToInt(BorderColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_NORMAL),
+        i32(rl.ColorToInt(BorderColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_FOCUSED),
+        i32(rl.ColorToInt(BorderColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_PRESSED),
+        i32(rl.ColorToInt(BorderColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_NORMAL),
+        i32(rl.ColorToInt(TextColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_FOCUSED),
+        i32(rl.ColorToInt(TextColor)))
+    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_PRESSED),
+        i32(rl.ColorToInt(TextColor)))
 
     accumulator: f32 = 0
 	for !rl.WindowShouldClose() {
@@ -118,38 +108,15 @@ run_window_loop :: proc() {
         }
         accumulator += frame_dt
 
-        if try_scaler_mouse_adjust(state.ScaleScaler) {
-            isoScale.Scale = scaleScaler.CurrentValue * WindowWidth
-        }
-        else if try_scaler_mouse_adjust(state.XOffsetScaler) {
-            isoScale.XOffset = xOffsetScaler.CurrentValue * WindowWidth
-        }
-        else if try_scaler_mouse_adjust(state.YOffsetScaler) {
-            isoScale.YOffset = yOffsetScaler.CurrentValue * WindowHeight
-        }
-
         for i in 1..<len(kinePoints) {
             lastPointVecs[i] = kinePoints[i].Position
         }
-        lastOutPos = outPos
         stepCount := 0
         for accumulator >= FIXED_DT {
-            // do this animation in julia
-            currentRot -= FIXED_DT * math.PI / 2.0
-            if currentRot < 0 {
-                currentRot += 2.0 * math.PI
-            }
-            outPos := Vector3{
-                0.5 + circleRadius * math.cos(currentRot),
-                0.5 + circleRadius * math.sin(currentRot),
-                0
-            }
-            compass.Joint2^.Position = outPos
-            state.KineConstraints[constraintLock2Id].Restriction = outPos
-            // end temp section to be done in julia
+            julia.call_global_euclid_loop(euclidLoopFunc, &state, FIXED_DT)
 
             kine.apply_all_constraints_to_error(
-                &state.KineConstraints, &state.KinePoints, AllowedConstraintError)
+                state.KineConstraints, state.KinePoints, AllowedConstraintError)
 
             accumulator -= FIXED_DT
             stepCount += 1
@@ -168,13 +135,17 @@ run_window_loop :: proc() {
 
             draw_kine_points(&lastPointVecs, &state, alpha)
 
-            draw_view_scaler(state.ScaleScaler)
-            draw_view_scaler(state.YOffsetScaler)
-            draw_view_scaler(state.XOffsetScaler)
+            rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
+            rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)
+
+            /*rl.GuiSliderBar(rl.Rectangle{ 1130, 600, 100, 20 }, "Scale:",
+                fmt.ctprintf("%f", isoScale.Scale), &isoScale.Scale, 0.0, ViewWidth)
+            rl.GuiSliderBar(rl.Rectangle{ 1130, 640, 100, 20 }, "Y Offset:",
+                fmt.ctprintf("%f", isoScale.YOffset), &isoScale.YOffset, 0.0, ViewHeight)
+            rl.GuiSliderBar(rl.Rectangle{ 1130, 680, 100, 20 }, "X Offset:",
+                fmt.ctprintf("%f", isoScale.XOffset), &isoScale.XOffset, 0.0, ViewWidth)*/
 
             rl.DrawFPS(10, 10)
 		rl.EndDrawing()
 	}
-
-	rl.CloseWindow()
 }

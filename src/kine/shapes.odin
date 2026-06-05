@@ -3,29 +3,10 @@ package kine
 import ec "../core"
 import rl "vendor:raylib"
 
-KineShapePointType :: enum {
-    Point,
-    Line,
-    Circle,
-    Pen,
-    Compass,
-}
+KineShapePointType :: ec.KineShapePointType
+KineShapePoint :: ec.KineShapePoint
 
-KineShapePoint :: struct {
-    Type : KineShapePointType,
-
-    Position : Maybe(ec.Vector3),
-    Color : Maybe(rl.Color),
-    ActiveColor : Maybe(rl.Color),
-    BrushSize : f32,
-
-    ActiveChild: int,
-    ChildCount : int,
-    ChildPointHead : int,
-    NextChildPoint : int,
-
-    DoDraw : bool
-}
+KineShapeCompass :: ec.KineShapeCompass
 
 KineShapeLine :: struct {
     HostId : int,
@@ -37,22 +18,6 @@ KineShapeLine :: struct {
 
     LengthConstraintId : int,
     LengthConstraint : ^KineConstraint,
-}
-
-KineShapeCompass :: struct {
-    HostId : int,
-    Joint1Id : int,
-    PivotId : int,
-    Joint2Id : int,
-    Host : ^KineShapePoint,
-    Joint1 : ^KineShapePoint,
-    Pivot : ^KineShapePoint,
-    Joint2 : ^KineShapePoint,
-
-    Limb1LengthId : int,
-    Limb2LengthId : int,
-    Limb1Length : ^KineConstraint,
-    Limb2Length : ^KineConstraint,
 }
 
 init_kineshape_line :: proc(
@@ -105,19 +70,32 @@ init_kineshape_compass :: proc(
     pivot.NextChildPoint = hostId + 3
 
     centerpivot := KineConstraint{ .CenterPivot, hostId, { 0, 0, 0 }, 0.01, 0, 0, 0, true }
+
     limb1Length := KineConstraint{ .Distance, hostId, { limbLength, 0, 0 }, 0, 0, 0, 0, true }
     limb2Length := KineConstraint{ .Distance, hostId, { limbLength, 0, 0 }, 0, 0, 0, 1, true }
+
     point1Floor := KineConstraint{ .Floor, hostId + 1, { 0, 0, 0 }, 0, 0, 0, 0, true }
     pivotFloor := KineConstraint{ .Floor, hostId + 2, { 0, 0, 0 }, 0, 0, 0, 0, true }
     point2Floor := KineConstraint{ .Floor, hostId + 3, { 0, 0, 0 }, 0, 0, 0, 0, true }
 
-    limb1LengthId := len(constraints) + 1
+    lockPoint1 := KineConstraint{ .SnapPoint, 1, { 0, 0, 0 }, 0, 0, 0, nil, false }
+    lockPoint2 := KineConstraint{ .SnapPoint, 3, { 0, 0, 0 }, 0, 0, 0, nil, false }
+
+    centerPivotId := len(constraints)
 
     append(points, hostPoint, point1, pivot, point2)
-    append(constraints, centerpivot, limb1Length, limb2Length, point1Floor, pivotFloor, point2Floor)
+    append(constraints,
+        centerpivot,
+        limb1Length, limb2Length,
+        point1Floor, pivotFloor, point2Floor,
+        lockPoint1, lockPoint2
+    )
 
     return KineShapeCompass{ hostId, hostId + 1, hostId + 2, hostId + 3,
+        centerPivotId, centerPivotId + 1, centerPivotId + 2, centerPivotId + 3,
+        centerPivotId + 4, centerPivotId + 5, centerPivotId + 6, centerPivotId + 7,
         &points^[hostId], &points^[hostId + 1], &points^[hostId + 2], &points^[hostId + 3],
-        limb1LengthId, limb1LengthId + 1,
-        &constraints^[limb1LengthId], &constraints^[limb1LengthId + 1] }
+        &constraints^[centerPivotId], &constraints^[centerPivotId + 1], &constraints^[centerPivotId + 2],
+        &constraints^[centerPivotId + 3], &constraints^[centerPivotId + 4], &constraints^[centerPivotId + 5],
+        &constraints^[centerPivotId + 6], &constraints^[centerPivotId + 7] }
 }
