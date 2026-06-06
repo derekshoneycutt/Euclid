@@ -3,7 +3,7 @@ package core
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 2048
+MAX_PARTICLES :: 8192
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
@@ -93,13 +93,23 @@ KineShapeCompass :: struct {
 }
 
 
+ParticleType :: enum u8 {
+    Trail,
+    Flicker,
+}
+
 Particle :: struct {
+    Type : ParticleType,
+
     Position : Vector3,
+    Velocities : Vector3,
+
     Age : f32,
     Life : f32,
     Size : f32,
     Color : rl.Color,
     Alive : bool,
+    LitFrames : i16,
 }
 
 ParticleSystem :: struct {
