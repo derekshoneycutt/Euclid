@@ -55,6 +55,7 @@ foreign libjulia {
     jl_exception_occurred :: proc() -> rawptr ---
 
     jl_typeof_str :: proc(v: rawptr) -> rawptr ---
+    jl_string_ptr :: proc(v: ^Jl_Value_T) -> cstring ---
 
     jl_unbox_bool :: proc(v: ^Jl_Value_T) -> i8 ---
     jl_unbox_float64 :: proc(v: ^Jl_Value_T) -> f64 ---
@@ -70,6 +71,37 @@ jl_get_function :: #force_inline proc(m : ^Jl_Module_T, name : cstring) -> ^Jl_V
     return jl_get_global(m, jl_symbol(name))
 }
 
+print_julia_exception :: proc(contextOfErr: string) {
+    ex_raw := jl_exception_occurred()
+    if ex_raw == nil {
+        return
+    }
+
+    ex := (^Jl_Value_T)(ex_raw)
+
+    ex_type := cstring(jl_typeof_str(ex_raw))
+
+    sprint_fn := jl_get_function(jl_base_module, "sprint")
+    showerror_fn := jl_get_function(jl_base_module, "showerror")
+
+    if sprint_fn == nil || showerror_fn == nil {
+        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        return
+    }
+
+    args: [2]^Jl_Value_T = {showerror_fn, ex}
+    msg_val := jl_call(sprint_fn, &args[0], 2)
+
+    // If formatting itself failed, still print type.
+    if jl_exception_occurred() != nil || msg_val == nil {
+        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        return
+    }
+
+    msg := jl_string_ptr(msg_val)
+    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
+}
+
 initiate_julia :: proc() {
     jl_init()
     _ = jl_eval_string("include(\"./julia/scriptbase.jl\")")
@@ -82,7 +114,7 @@ init_euclid_scripts :: proc(state: ^core.EuclidGeneralState) {
 	result := jl_call1(func, state_value)
 
 	if jl_exception_occurred() != nil {
-		// TODO: inspect or print the exception here in the final implementation
+        print_julia_exception("init_euclid_scripts")
 		return
 	}
 
@@ -100,7 +132,7 @@ call_global_euclid_loop :: proc(func: ^Jl_Value_T, state: ^core.EuclidGeneralSta
 	result := jl_call2(func, state_value, dt_value)
 
 	if jl_exception_occurred() != nil {
-		// TODO: inspect or print the exception here in the final implementation
+        print_julia_exception("global_euclid_loop")
 		return
 	}
 
@@ -113,6 +145,86 @@ end_julia :: proc() {
 
 
 
+
+@(export)
+show_pen :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Pen^.Host^.DoDraw = true
+}
+
+@(export)
+hide_pen :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Pen^.Host^.DoDraw = false
+}
+
+@(export)
+set_pen_active :: proc "c" (
+    state: ^core.EuclidGeneralState, active: int, color: Bridge_Color) {
+
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    state^.Pen^.Host^.ActiveColor = rlColor
+    state^.Pen^.Host^.ActiveChild = active
+}
+
+@(export)
+clear_pen_active :: proc "c" (
+    state: ^core.EuclidGeneralState) {
+
+    state^.Pen^.Host^.ActiveChild = -1
+}
+
+@(export)
+lock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Pen^.Joint1^.Position = pos
+    state^.Pen^.LockPoint1^.Restriction = pos
+    state^.Pen^.LockPoint1^.DoApply = true
+}
+
+@(export)
+unlock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Pen^.LockPoint1^.DoApply = false
+}
+
+@(export)
+move_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Pen^.Joint1^.Position = pos
+}
+
+@(export)
+get_pen_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
+    return state^.Pen^.Joint1^.Position.? or_else {0, 0, 0}
+}
+
+@(export)
+lock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Pen^.Joint2^.Position = pos
+    state^.Pen^.LockPoint2^.Restriction = pos
+    state^.Pen^.LockPoint2^.DoApply = true
+}
+
+@(export)
+unlock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Pen^.LockPoint2^.DoApply = false
+}
+
+@(export)
+move_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Pen^.Joint2^.Position = pos
+}
+
+@(export)
+get_pen_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
+    return state^.Pen^.Joint2^.Position.? or_else {0, 0, 0}
+}
+
+@(export)
+show_compass :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Compass^.Host^.DoDraw = true
+}
+
+@(export)
+hide_compass :: proc "c" (state: ^core.EuclidGeneralState) {
+    state^.Compass^.Host^.DoDraw = false
+}
 
 @(export)
 set_compass_active :: proc "c" (
@@ -143,6 +255,16 @@ unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
 }
 
 @(export)
+move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Compass^.Joint1^.Position = pos
+}
+
+@(export)
+get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
+    return state^.Compass^.Joint1^.Position.? or_else {0, 0, 0}
+}
+
+@(export)
 lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
     state^.Compass^.Joint2^.Position = pos
     state^.Compass^.LockPoint2^.Restriction = pos
@@ -152,6 +274,16 @@ lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vect
 @(export)
 unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
     state^.Compass^.LockPoint2^.DoApply = false
+}
+
+@(export)
+move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    state^.Compass^.Joint2^.Position = pos
+}
+
+@(export)
+get_compass_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
+    return state^.Compass^.Joint2^.Position.? or_else {0, 0, 0}
 }
 
 @(export)

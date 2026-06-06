@@ -92,10 +92,33 @@ KineShapeCompass :: struct {
     LockPoint2 : ^KineConstraint,
 }
 
+KineShapePen :: struct {
+    HostId : int,
+    Join1Id : int,
+    Join2Id : int,
+
+    LengthConstraintId : int,
+    Point1FloorId : int,
+    Point2FloorId : int,
+    LockPoint1Id : int,
+    LockPoint2Id : int,
+
+    Host : ^KineShapePoint,
+    Joint1 : ^KineShapePoint,
+    Joint2 : ^KineShapePoint,
+
+    LengthConstraint : ^KineConstraint,
+    Point1Floor : ^KineConstraint,
+    Point2Floor : ^KineConstraint,
+    LockPoint1 : ^KineConstraint,
+    LockPoint2 : ^KineConstraint,
+}
+
 
 ParticleType :: enum u8 {
     Trail,
     Flicker,
+    BurnOut,
 }
 
 Particle :: struct {
@@ -145,6 +168,7 @@ EuclidGeneralState :: struct {
     ParticleSystem: ^ParticleSystem,
 
     Compass: ^KineShapeCompass,
+    Pen: ^KineShapePen,
 
     CurrentDeltaTime: f32,
 
