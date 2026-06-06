@@ -1,6 +1,7 @@
 package julia
 
 import "../core"
+import "../particles"
 
 import "base:runtime"
 import "core:c"
@@ -200,4 +201,14 @@ get_animation_meta :: proc "c" (state: ^core.EuclidGeneralState, pos: int) -> f3
             return state^.AnimMetaFloat9
     }
     return 0;
+}
+
+@(export)
+emit_trailing_particle :: proc "c" (
+    state: ^core.EuclidGeneralState, pos: core.Vector2, color: Bridge_Color) {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    particles.emit_trail_particles(
+        state^.ParticleSystem, state^.CurrentDeltaTime, pos.x, pos.y, rlColor)
 }

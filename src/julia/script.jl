@@ -27,4 +27,5 @@ function global_euclid_loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     euclid_set_animation_meta(state_ptr, 1, currRotation)
     euclid_lock_compass_joint2(state_ptr, outPos[1], outPos[2], outPos[3])
+    euclid_emit_trailing_particle(state_ptr, outPos[1], outPos[2], :steelblue)
 end

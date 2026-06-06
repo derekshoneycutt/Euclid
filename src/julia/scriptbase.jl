@@ -24,11 +24,7 @@ function bridge_color(name::AbstractString)
 end
 
 function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::BridgeColor)
-    @ccall set_compass_active(
-        state_ptr::Ptr{Cvoid},
-        active::Cint,
-        c::BridgeColor
-    )::Cvoid
+    @ccall set_compass_active(state_ptr::Ptr{Cvoid}, active::Cint, c::BridgeColor)::Cvoid
 end
 function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::Colorant)
     euclid_set_compass_active(state_ptr, active, bridge_color(c))
@@ -71,4 +67,21 @@ end
 function euclid_get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
     ret = @ccall get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint)::Cfloat
     return Float32(ret)
+end
+
+function euclid_emit_trailing_particle(state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::BridgeColor)
+    pos = (x, y)
+    @ccall emit_trailing_particle(state_ptr::Ptr{Cvoid}, pos::NTuple{2, Cfloat}, color::BridgeColor)::Cvoid
+end
+
+function euclid_emit_trailing_particle(state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Colorant)
+    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function euclid_emit_trailing_particle(state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Symbol)
+    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function euclid_emit_trailing_particle(state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::AbstractString)
+    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
 end

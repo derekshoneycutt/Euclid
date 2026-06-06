@@ -1,6 +1,9 @@
 package core
 
+import "base:runtime"
 import rl "vendor:raylib"
+
+MAX_PARTICLES :: 2048
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
@@ -90,6 +93,22 @@ KineShapeCompass :: struct {
 }
 
 
+Particle :: struct {
+    Position : Vector3,
+    Age : f32,
+    Life : f32,
+    Size : f32,
+    Color : rl.Color,
+    Alive : bool,
+}
+
+ParticleSystem :: struct {
+    Particles : [MAX_PARTICLES]Particle,
+    NextIndex : int,
+    SpawnTimer : f32,
+}
+
+
 
 EuclidDrawingSurface :: struct {
     Zeros : Vector3,
@@ -104,6 +123,8 @@ EuclidDrawingSurface :: struct {
 }
 
 EuclidGeneralState :: struct {
+    SavedContext : runtime.Context,
+
     IsoScale : ^IsoScale,
 
     DrawSurface: ^EuclidDrawingSurface,
@@ -111,7 +132,11 @@ EuclidGeneralState :: struct {
     KinePoints: ^[dynamic]KineShapePoint,
     KineConstraints: ^[dynamic]KineConstraint,
 
+    ParticleSystem: ^ParticleSystem,
+
     Compass: ^KineShapeCompass,
+
+    CurrentDeltaTime: f32,
 
     AnimMetaFloat1 : f32,
     AnimMetaFloat2 : f32,

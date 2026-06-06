@@ -4,6 +4,7 @@ import "../core"
 import "../surface"
 import "../kine"
 import "../julia"
+import "../particles"
 
 import rl "vendor:raylib"
 import "core:fmt"
@@ -15,6 +16,8 @@ Vector3 :: core.Vector3
 IsoScale :: core.IsoScale
 KineShapePoint :: core.KineShapePoint
 KineConstraint :: core.KineConstraint
+Particle :: core.Particle
+ParticleSystem :: core.ParticleSystem
 EuclidDrawingSurface :: core.EuclidDrawingSurface
 EuclidGeneralState :: core.EuclidGeneralState
 
@@ -47,7 +50,7 @@ TextColor :: rl.Color{175, 150, 150, 255}
 
 
 run_window_loop :: proc() {
-    //rl.SetConfigFlags({.MSAA_4X_HINT})//, .VSYNC_HINT})
+    rl.SetConfigFlags({.MSAA_4X_HINT})//, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
 	defer rl.CloseWindow()
 
@@ -65,8 +68,13 @@ run_window_loop :: proc() {
         {0.5, 0.5, 0}, {0.675, 0.375, 0.35}, {0.75, 0.25, 0},
         0.35, ItemColor, 5)
 
-    state := EuclidGeneralState{ &isoScale, &drawingSurface, &kinePoints, &kineConstraints,
-        &compass, /* Metadata values start 0: */ 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+    particleSystem := new(ParticleSystem)
+    defer free(particleSystem)
+
+    state := EuclidGeneralState{context,
+        &isoScale, &drawingSurface, &kinePoints, &kineConstraints,
+        particleSystem, &compass, FIXED_DT,
+        /* Metadata values start 0: */ 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
     julia.init_euclid_scripts(&state)
 
@@ -115,6 +123,8 @@ run_window_loop :: proc() {
         for accumulator >= FIXED_DT {
             julia.call_global_euclid_loop(euclidLoopFunc, &state, FIXED_DT)
 
+            particles.update_particles(state.ParticleSystem, FIXED_DT)
+
             kine.apply_all_constraints_to_error(
                 state.KineConstraints, state.KinePoints, AllowedConstraintError)
 
@@ -132,6 +142,8 @@ run_window_loop :: proc() {
             rl.ClearBackground(BackgroundColor)
 
             draw_drawing_surface(state.DrawSurface, &state)
+
+            render_particles(state.ParticleSystem, &state)
 
             draw_kine_points(&lastPointVecs, &state, alpha)
 
