@@ -114,6 +114,16 @@ KineShapePen :: struct {
     LockPoint2 : ^KineConstraint,
 }
 
+KineShapeLine :: struct {
+    HostId : int,
+    Join1Id : int,
+    Join2Id : int,
+
+    Host : ^KineShapePoint,
+    Joint1 : ^KineShapePoint,
+    Joint2 : ^KineShapePoint,
+}
+
 
 ParticleType :: enum u8 {
     Trail,

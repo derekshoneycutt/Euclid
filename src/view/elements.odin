@@ -48,9 +48,9 @@ draw_kine_points :: proc(
             // TODO: Print the other things, too, clean this up, etc.
             switch point^.Type {
                 case .Point:
-                    continue
+                    draw_kine_point(lastPoints, state, point, alpha)
                 case .Line:
-                    continue
+                    draw_kine_line(lastPoints, state, point, alpha)
                 case .Circle:
                     continue
                 case .Pen:
@@ -60,6 +60,58 @@ draw_kine_points :: proc(
             }
         }
     }
+}
+
+draw_kine_point :: proc(
+    lastPoints: ^[dynamic]Maybe(Vector3),
+    state: ^EuclidGeneralState,
+    point: ^KineShapePoint, alpha : f32) {
+ 
+    points := state^.KinePoints
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+        return
+    }
+    usePoint : Vector3
+    convPoint : Vector2
+    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := points^[point^.ChildPointHead]
+    usePoint = currPoint.Position.? or_else {0, 0, 0}
+    usePoint = linalg.lerp(lastPoint, usePoint, alpha)
+    convPoint = iso_to_cartesian(usePoint, state^.IsoScale^)
+
+    useColor := point^.Color.? or_else rl.Color{255, 255, 255, 255}
+
+    rl.DrawCircleV(convPoint, point^.BrushSize, useColor)
+}
+
+draw_kine_line :: proc(
+    lastPoints: ^[dynamic]Maybe(Vector3),
+    state: ^EuclidGeneralState,
+    point: ^KineShapePoint, alpha : f32) {
+ 
+    points := state^.KinePoints
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+        return
+    }
+    usePoints : [2]Vector3
+    convPoints : [2]Vector2
+    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := points^[point^.ChildPointHead]
+    usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
+    usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
+    convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points) {
+        return
+    }
+    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = points^[currPoint.NextChildPoint]
+    usePoints[1] = currPoint.Position.? or_else {0, 0, 0}
+    usePoints[1] = linalg.lerp(lastPoint, usePoints[1], alpha)
+    convPoints[1] = iso_to_cartesian(usePoints[1], state^.IsoScale^)
+
+    useColor := point^.Color.? or_else rl.Color{255, 255, 255, 255}
+
+    rl.DrawLineEx(convPoints[0], convPoints[1], point^.BrushSize, useColor)
 }
 
 draw_kine_pen :: proc(
@@ -91,11 +143,11 @@ draw_kine_pen :: proc(
 
     if point^.ActiveChild == 1 {
         activeColor := point^.ActiveColor.? or_else useColor
-        rl.DrawCircleV(Vector2{convPoints[0].x, convPoints[0].y}, point^.BrushSize, activeColor)
+        rl.DrawCircleV(convPoints[0], point^.BrushSize, activeColor)
     }
     else if point^.ActiveChild == 2 {
         activeColor := point^.ActiveColor.? or_else useColor
-        rl.DrawCircleV(Vector2{convPoints[1].x, convPoints[1].y}, point^.BrushSize, activeColor)        
+        rl.DrawCircleV(convPoints[1], point^.BrushSize, activeColor)        
     }
 
     rl.DrawLineEx(convPoints[0], convPoints[1], point^.BrushSize, useColor)
@@ -138,11 +190,11 @@ draw_kine_compass :: proc(
 
     if point^.ActiveChild == 1 {
         activeColor := point^.ActiveColor.? or_else useColor
-        rl.DrawCircleV(Vector2{convPoints[0].x, convPoints[0].y}, point^.BrushSize, activeColor)
+        rl.DrawCircleV(convPoints[0], point^.BrushSize, activeColor)
     }
     else if point^.ActiveChild == 3 {
         activeColor := point^.ActiveColor.? or_else useColor
-        rl.DrawCircleV(Vector2{convPoints[2].x, convPoints[2].y}, point^.BrushSize, activeColor)        
+        rl.DrawCircleV(convPoints[2], point^.BrushSize, activeColor)        
     }
 
     rl.DrawSplineLinear(&convPoints[0], 3, point^.BrushSize, useColor)

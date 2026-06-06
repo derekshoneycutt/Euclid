@@ -8,6 +8,47 @@ KineShapePoint :: core.KineShapePoint
 
 KineShapeCompass :: core.KineShapeCompass
 KineShapePen :: core.KineShapePen
+KineShapeLine :: core.KineShapeLine
+
+init_kineshape_point :: proc(
+    points: ^[dynamic]KineShapePoint,
+    constraints: ^[dynamic]KineConstraint,
+    pos : core.Vector3,
+    color: rl.Color,
+    brushSize: f32) -> (^KineShapePoint, int) {
+
+    point := KineShapePoint{ .Point, pos, color, nil, brushSize, 0, 0, 0, 0, false }
+
+    pointId := len(points)
+
+    append(points, point)
+
+    return &points[pointId], pointId
+}
+
+init_kineshape_line :: proc(
+    points: ^[dynamic]KineShapePoint,
+    constraints: ^[dynamic]KineConstraint,
+    point1pos, point2pos : core.Vector3,
+    length: f32,
+    color: rl.Color,
+    brushSize: f32) -> KineShapeLine {
+
+    hostPoint := KineShapePoint{ .Line, nil, color, nil, brushSize, 0, 2, 0, 0, false }
+    point1 := KineShapePoint{ .Point, point1pos, nil, nil, 0, 0, 0, 0, 0, false }
+    point2 := KineShapePoint{ .Point, point2pos, nil, nil, 0, 0, 0, 0, 0, false }
+
+    hostId := len(points)
+    point1Id := hostId + 1
+    point2Id := hostId + 2
+    hostPoint.ChildPointHead = point1Id
+    point1.NextChildPoint = point2Id
+
+    append(points, hostPoint, point1, point2)
+
+    return KineShapeLine{ hostId, point1Id, point2Id,
+        &points^[hostId], &points^[point1Id], &points^[point2Id] }
+}
 
 init_kineshape_pen :: proc(
     points: ^[dynamic]KineShapePoint,
