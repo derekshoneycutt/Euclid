@@ -26,6 +26,7 @@ KineShapePoint :: struct {
     Type : KineShapePointType,
 
     Position : Maybe(Vector3),
+    Direction : Maybe(Vector3),
     Color : Maybe(rl.Color),
     ActiveColor : Maybe(rl.Color),
     BrushSize : f32,
@@ -35,7 +36,7 @@ KineShapePoint :: struct {
     ChildPointHead : int,
     NextChildPoint : int,
 
-    DoDraw : bool
+    DoDraw : bool,
 }
 
 KineConstraintTrait :: enum {
