@@ -11,5 +11,5 @@ Simply use `./make.sh` to build. You can also use `./make.sh --run` to immediate
 You must have Odin and Julia installed on your system.
 
 <p align="center">
-<img src="./screen.png" >
+<img src="./screen.gif" >
 </p>
