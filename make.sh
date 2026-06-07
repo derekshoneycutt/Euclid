@@ -16,6 +16,7 @@ fi
 
 juliaConfigPath="$(julia -e 'print(joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl"))')"
 juliaFlags="$(${juliaConfigPath} --ldflags --ldlibs | tr '\n' ' ')"
+scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 runAfterBuild=false
 
@@ -26,18 +27,21 @@ elif [[ -n "${1-}" ]]; then
     exit 1
 fi
 
-mkdir -p ./bin/julia/
+mkdir -p "${scriptDir}/bin/julia/"
+mkdir -p "${scriptDir}/bin/shaders/"
 
-cd src
+cd "${scriptDir}/src"
 odin build main.odin -file \
     -out:../bin/euclid \
     -extra-linker-flags:"${juliaFlags}"
 cd julia
 cp ./*.jl ../../bin/julia/
-cd ../..
+cd ../view/shaders
+cp ./* ../../../bin/shaders/
+cd "${scriptDir}"
 
 if [[ "${runAfterBuild}" == "true" ]]; then
-    cd ./bin/
+    cd "${scriptDir}/bin/"
     ./euclid
-    cd ..
+    cd "${scriptDir}"
 fi

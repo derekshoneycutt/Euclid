@@ -45,7 +45,7 @@ RightBarWidth :: WindowWidth - ViewWidth
 WindowTitle :: "Euclid's Elements"
 
 BackgroundColor :: rl.Color{36, 5, 16, 255}
-ItemColor :: rl.Color{175, 150, 150, 255}
+ItemColor :: rl.Color{96, 72, 82, 255}
 
 UIBackColor :: rl.Color{66, 35, 46, 255}
 BorderColor :: rl.Color{86, 55, 66, 255}
@@ -88,9 +88,12 @@ run_window_loop :: proc() {
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
 
-    //rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
 	defer rl.CloseWindow()
+
+    init_stroke3d_shader(state)
+    defer shutdown_stroke3d_shader(state)
 
     rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_NORMAL),
         i32(rl.ColorToInt(BackgroundColor)))

@@ -4,6 +4,7 @@ import "../surface"
 import "../kine"
 import "../core"
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
@@ -19,6 +20,126 @@ SHADOW_ALPHA_BASE :: 90
 SHADOW_ALPHA_MIN :: 35
 SHADOW_ALPHA_HEIGHT_SCALE :: 35.0
 SHADOW_EPSILON_LZ :: 0.0001
+
+STROKE3D_VERTEX_SHADER_PATH :: "./shaders/stroke3d.vs"
+STROKE3D_FRAGMENT_SHADER_PATH :: "./shaders/stroke3d.fs"
+
+STROKE3D_AMBIENT :: f32(0.28)
+STROKE3D_DIFFUSE :: f32(1.05)
+STROKE3D_SPECULAR_STRENGTH :: f32(0.26)
+STROKE3D_SPECULAR_POWER :: f32(18.0)
+
+
+init_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
+    s := &state^.Stroke3D
+
+    if !rl.FileExists(STROKE3D_VERTEX_SHADER_PATH) || !rl.FileExists(STROKE3D_FRAGMENT_SHADER_PATH) {
+        fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
+        s^.Ready = false
+        return
+    }
+
+    s^.Shader = rl.LoadShader(STROKE3D_VERTEX_SHADER_PATH, STROKE3D_FRAGMENT_SHADER_PATH)
+    if s^.Shader.id == 0 {
+        fmt.println("stroke3d shader failed to load; pen/compass 3D shading disabled")
+        s^.Ready = false
+        return
+    }
+
+    s^.LocLightDir = rl.GetShaderLocation(s^.Shader, "uLightDirView")
+    s^.LocAmbient = rl.GetShaderLocation(s^.Shader, "uAmbient")
+    s^.LocDiffuse = rl.GetShaderLocation(s^.Shader, "uDiffuse")
+    s^.LocSpecularStrength = rl.GetShaderLocation(s^.Shader, "uSpecularStrength")
+    s^.LocSpecularPower = rl.GetShaderLocation(s^.Shader, "uSpecularPower")
+    s^.LocP0 = rl.GetShaderLocation(s^.Shader, "uP0")
+    s^.LocP1 = rl.GetShaderLocation(s^.Shader, "uP1")
+    s^.LocRadius = rl.GetShaderLocation(s^.Shader, "uRadius")
+    s^.LocViewportHeight = rl.GetShaderLocation(s^.Shader, "uViewportHeight")
+
+    s^.Ready = true
+}
+
+
+shutdown_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
+    s := &state^.Stroke3D
+
+    if !s^.Ready {
+        return
+    }
+
+    rl.UnloadShader(s^.Shader)
+    s^.Ready = false
+}
+
+
+set_stroke3d_uniform_float :: #force_inline proc(state: ^EuclidGeneralState, location: i32, value: f32) {
+    if location < 0 {
+        return
+    }
+    localValue := value
+    rl.SetShaderValue(state^.Stroke3D.Shader, location, &localValue, .FLOAT)
+}
+
+
+set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^EuclidGeneralState, location: i32, value: Vector2) {
+    if location < 0 {
+        return
+    }
+    vecData := [2]f32{value.x, value.y}
+    rl.SetShaderValue(state^.Stroke3D.Shader, location, &vecData[0], .VEC2)
+}
+
+
+set_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: Vector2, thickness: f32) {
+    s := &state^.Stroke3D
+    set_stroke3d_uniform_vec2(state, s^.LocP0, p0)
+    set_stroke3d_uniform_vec2(state, s^.LocP1, p1)
+    set_stroke3d_uniform_float(state, s^.LocRadius, thickness * 0.5)
+}
+
+
+draw_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: Vector2, thickness: f32, color: rl.Color) {
+    s := &state^.Stroke3D
+    if s^.Ready {
+        rlgl.DrawRenderBatchActive()
+        set_stroke3d_segment(state, p0, p1, thickness)
+    }
+    rl.DrawLineEx(p0, p1, thickness, color)
+}
+
+
+begin_stroke3d_mode :: proc(state: ^EuclidGeneralState) {
+    s := &state^.Stroke3D
+
+    if !s^.Ready {
+        return
+    }
+
+    light := -state^.IsoScale^.MainLightDir
+    light = linalg.normalize(light)
+
+    lightDirData := [3]f32{light.x, light.y, light.z}
+    if s^.LocLightDir >= 0 {
+        rl.SetShaderValue(s^.Shader, s^.LocLightDir, &lightDirData[0], .VEC3)
+    }
+
+    set_stroke3d_uniform_float(state, s^.LocAmbient, STROKE3D_AMBIENT)
+    set_stroke3d_uniform_float(state, s^.LocDiffuse, STROKE3D_DIFFUSE)
+    set_stroke3d_uniform_float(state, s^.LocSpecularStrength, STROKE3D_SPECULAR_STRENGTH)
+    set_stroke3d_uniform_float(state, s^.LocSpecularPower, STROKE3D_SPECULAR_POWER)
+    set_stroke3d_uniform_float(state, s^.LocViewportHeight, f32(rl.GetScreenHeight()))
+
+    rl.BeginShaderMode(s^.Shader)
+}
+
+
+end_stroke3d_mode :: proc(state: ^EuclidGeneralState) {
+    if !state^.Stroke3D.Ready {
+        return
+    }
+    rlgl.DrawRenderBatchActive()
+    rl.EndShaderMode()
+}
 
 compute_sweep_delta :: proc(startTheta, endTheta: f32) -> f32 {
     startN := startTheta
@@ -108,12 +229,24 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
 
 draw_kine_points_high_cached :: proc(state: ^EuclidGeneralState) {
     for i in 0..<state^.PointSystem^.DrawCache.PenCount {
+        draw_cached_pen_active_dot(state, &state^.PointSystem^.DrawCache.Pens[i])
+    }
+
+    for i in 0..<state^.PointSystem^.DrawCache.CompassCount {
+        draw_cached_compass_active_dot(state, &state^.PointSystem^.DrawCache.Compasses[i])
+    }
+
+    begin_stroke3d_mode(state)
+
+    for i in 0..<state^.PointSystem^.DrawCache.PenCount {
         draw_cached_pen(state, &state^.PointSystem^.DrawCache.Pens[i])
     }
 
     for i in 0..<state^.PointSystem^.DrawCache.CompassCount {
         draw_cached_compass(state, &state^.PointSystem^.DrawCache.Compasses[i])
     }
+
+    end_stroke3d_mode(state)
 }
 
 
@@ -182,6 +315,14 @@ draw_cached_pen :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
     c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
     c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
 
+    draw_stroke3d_segment(state, c0, c1, pen^.Base.BrushSize, pen^.Base.Color)
+}
+
+
+draw_cached_pen_active_dot :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
+    c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
+    c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
+
     if pen^.Base.ActiveChild == 1 {
         active := pen^.Base.Color
         if pen^.Base.HasActiveColor {
@@ -195,8 +336,6 @@ draw_cached_pen :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
         }
         rl.DrawCircleV(c1, pen^.Base.BrushSize, active)
     }
-
-    rl.DrawLineEx(c0, c1, pen^.Base.BrushSize, pen^.Base.Color)
 }
 
 
@@ -254,7 +393,7 @@ draw_outside_arc_compass_cached :: proc(
         curr3d := p1 + dir * radius
         curr := iso_to_cartesian(curr3d, state^.IsoScale^)
 
-        rl.DrawLineEx(prev, curr, brushSize, color)
+        draw_stroke3d_segment(state, prev, curr, brushSize, color)
         prev = curr
     }
 }
@@ -263,6 +402,24 @@ draw_outside_arc_compass_cached :: proc(
 draw_cached_compass :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassDraw) {
     c0 := iso_to_cartesian(comp^.Joint1, state^.IsoScale^)
     c1 := iso_to_cartesian(comp^.Pivot, state^.IsoScale^)
+    c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
+
+    draw_stroke3d_segment(state, c0, c1, comp^.Base.BrushSize, comp^.Base.Color)
+    draw_stroke3d_segment(state, c1, c2, comp^.Base.BrushSize, comp^.Base.Color)
+
+    draw_outside_arc_compass_cached(
+        comp^.Joint1,
+        comp^.Pivot,
+        comp^.Joint2,
+        state,
+        comp^.Base.BrushSize,
+        comp^.Base.Color,
+    )
+}
+
+
+draw_cached_compass_active_dot :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassDraw) {
+    c0 := iso_to_cartesian(comp^.Joint1, state^.IsoScale^)
     c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
 
     if comp^.Base.ActiveChild == 1 {
@@ -278,18 +435,6 @@ draw_cached_compass :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassD
         }
         rl.DrawCircleV(c2, comp^.Base.BrushSize, active)
     }
-
-    rl.DrawLineEx(c0, c1, comp^.Base.BrushSize, comp^.Base.Color)
-    rl.DrawLineEx(c1, c2, comp^.Base.BrushSize, comp^.Base.Color)
-
-    draw_outside_arc_compass_cached(
-        comp^.Joint1,
-        comp^.Pivot,
-        comp^.Joint2,
-        state,
-        comp^.Base.BrushSize,
-        comp^.Base.Color,
-    )
 }
 
 

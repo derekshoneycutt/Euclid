@@ -244,6 +244,20 @@ EuclidDrawingSurface :: struct {
     EdgeSize : f32
 }
 
+Stroke3DRenderState :: struct {
+    Shader: rl.Shader,
+    Ready: bool,
+    LocLightDir: i32,
+    LocAmbient: i32,
+    LocDiffuse: i32,
+    LocSpecularStrength: i32,
+    LocSpecularPower: i32,
+    LocP0: i32,
+    LocP1: i32,
+    LocRadius: i32,
+    LocViewportHeight: i32,
+}
+
 EuclidGeneralState :: struct {
     SavedContext : runtime.Context,
 
@@ -256,6 +270,8 @@ EuclidGeneralState :: struct {
     ParticleSystem : ^ParticleSystem,
     Compass : KineShapeCompass,
     Pen : KineShapePen,
+
+    Stroke3D: Stroke3DRenderState,
 
     CurrentDeltaTime : f32,
 
