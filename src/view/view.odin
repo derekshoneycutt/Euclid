@@ -62,6 +62,7 @@ run_window_loop :: proc() {
     
     juliaInterface := julia.retrieve_interface()
     defer free(juliaInterface)
+    juliaInterface^.CurrentAnimation = &juliaInterface^.NullAnimation
 
     pointSystem := new(KinePointSystem)
     defer free(pointSystem)
@@ -81,7 +82,8 @@ run_window_loop :: proc() {
     state^.Compass = compass
     state^.Pen = pen
     state^.CurrentDeltaTime = FIXED_DT
-    julia.init_euclid_scripts(juliaInterface, state)
+    
+    julia.init_euclid_scripts(state)
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
 
@@ -119,7 +121,8 @@ run_window_loop :: proc() {
         kine.kine_update_last_cache_vectors(pointSystem)
         stepCount := 0
         for accumulator >= FIXED_DT {
-            julia.call_global_euclid_loop(juliaInterface, state, FIXED_DT)
+            julia.call_global_euclid_loop(state, FIXED_DT)
+            julia.call_current_animation_loop(state, FIXED_DT)
             particles.update_particles(state^.ParticleSystem, FIXED_DT)
             kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
 

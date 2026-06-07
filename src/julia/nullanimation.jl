@@ -53,6 +53,17 @@ function init_null_animation(state_ptr::Ptr{Cvoid})
     euclid_set_animation_meta(state_ptr, 101, 0f0)
 end
 
+function clean_null_animation(state_ptr::Ptr{Cvoid})
+    euclid_hide_pen(state_ptr)
+    euclid_hide_compass(state_ptr)
+    line1Host = euclid_get_animation_meta(state_ptr, 4)
+    line2Host = euclid_get_animation_meta(state_ptr, 7)
+    circleHost = euclid_get_animation_meta(state_ptr, 10)
+    euclid_hide_point(line1Host)
+    euclid_hide_point(line2Host)
+    euclid_hide_point(circleHost)
+end
+
 function null_animation_draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
     drawLineFlag = euclid_get_animation_meta(state_ptr, 100)
     line1Host = euclid_get_animation_meta(state_ptr, 4)

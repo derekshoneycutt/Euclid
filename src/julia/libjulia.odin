@@ -146,38 +146,69 @@ retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
 }
 
 init_euclid_scripts :: proc(
-    interface: ^core.EuclidJuliaInterface, state: ^core.EuclidGeneralState) {
+    state: ^core.EuclidGeneralState) {
 
 	state_value := jl_box_voidpointer(state)
-	result := jl_call1(interface^.InitScripts, state_value)
 
+	jl_call1(state^.JuliaInterface^.InitScripts, state_value)
 	if jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
 		return
 	}
 
-	_ = result
+    if state^.JuliaInterface^.NullAnimation.Initiate != nil {
+        jl_call1(state^.JuliaInterface^.NullAnimation.Initiate, state_value)
+        if jl_exception_occurred() != nil {
+            print_julia_exception("init_euclid_scripts")
+            return
+        }
+    }
 }
 
 call_global_euclid_loop :: proc(
-    interface: ^core.EuclidJuliaInterface, state: ^core.EuclidGeneralState, dt: f32) {
+    state: ^core.EuclidGeneralState, dt: f32) {
 
 	state_value := jl_box_voidpointer(state)
     dt_value := jl_box_float32(dt)
-	result := jl_call2(interface^.GlobalLoop, state_value, dt_value)
 
+	result := jl_call2(state^.JuliaInterface^.GlobalLoop, state_value, dt_value)
 	if jl_exception_occurred() != nil {
         print_julia_exception("global_euclid_loop")
 		return
 	}
+}
 
-	_ = result
+call_current_animation_loop :: proc(
+    state: ^core.EuclidGeneralState, dt: f32) {
+
+    if state^.JuliaInterface^.NullAnimation.Loop == nil {
+        return
+    }
+
+	state_value := jl_box_voidpointer(state)
+    dt_value := jl_box_float32(dt)
+
+	result := jl_call2(state^.JuliaInterface^.NullAnimation.Loop, state_value, dt_value)
+	if jl_exception_occurred() != nil {
+        print_julia_exception("Current animation loop")
+		return
+	}
 }
 
 end_julia :: proc() {
     jl_atexit_hook(0)
 }
 
+
+@(export)
+set_null_animations :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    init, loop, clean: ^Jl_Function_T) {
+    
+    state^.JuliaInterface^.NullAnimation.Initiate = init
+    state^.JuliaInterface^.NullAnimation.Loop = loop
+    state^.JuliaInterface^.NullAnimation.Clean = clean
+}
 
 @(export)
 create_new_point :: proc "c" (

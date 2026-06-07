@@ -64,6 +64,12 @@ function bridge_color(name::AbstractString)
     bridge_color(parse(Colorant, name))
 end
 
+function euclid_set_null_animations(
+    state_ptr::Ptr{Cvoid}, init, loop, clean)
+
+    @ccall set_null_animations(state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any)::Cvoid
+end
+
 """
 Construct a new point in the Euclid system to be shown as a point on the surface
 
