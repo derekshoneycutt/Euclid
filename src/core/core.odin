@@ -38,7 +38,10 @@ EuclidJuliaInterface :: struct {
 IsoScale :: struct {
     Scale : f32,
     XOffset : f32,
-    YOffset : f32
+    YOffset : f32,
+
+    MainLightDir : Vector3,
+    UseDirectionalShadow : bool,
 }
 
 KineShapePointType :: enum {
@@ -87,8 +90,6 @@ KineConstraint :: struct {
     DoApply : bool
 }
 
-
-
 KineShapeCompass :: struct {
     HostId : int,
     Joint1Id : int,
@@ -129,6 +130,80 @@ KineShapeCircle :: struct {
     EndId : int,
 }
 
+KineDrawBase :: struct {
+    Type: KineShapePointType,
+    SourceIndex: int,
+    BrushSize: f32,
+    Color: rl.Color,
+    ActiveColor: rl.Color,
+    HasActiveColor: bool,
+    ActiveChild: int,
+}
+
+KinePointDraw :: struct {
+    using Base: KineDrawBase,
+    Point1: Vector3,
+}
+
+KineLineDraw :: struct {
+    using Base: KineDrawBase,
+    Point1: Vector3,
+    Point2: Vector3,
+}
+
+KineCircleDraw :: struct {
+    using Base: KineDrawBase,
+    Center: Vector3,
+    Start: Vector3,
+    End: Vector3,
+}
+
+KinePenDraw :: struct {
+    using Base: KineDrawBase,
+    Joint1: Vector3,
+    Joint2: Vector3,
+}
+
+KineCompassDraw :: struct {
+    using Base: KineDrawBase,
+    Joint1: Vector3,
+    Pivot: Vector3,
+    Joint2: Vector3,
+}
+
+KineDrawCache :: struct {
+    Points: [MAX_KINEPOINTS]KinePointDraw,
+    PointCount: int,
+
+    Lines: [MAX_KINEPOINTS]KineLineDraw,
+    LineCount: int,
+
+    Circles: [MAX_KINEPOINTS]KineCircleDraw,
+    CircleCount: int,
+
+    Pens: [MAX_KINEPOINTS]KinePenDraw,
+    PenCount: int,
+
+    Compasses: [MAX_KINEPOINTS]KineCompassDraw,
+    CompassCount: int,
+}
+
+KinePointSystem :: struct {
+    DrawCache : KineDrawCache,
+
+    PreviousVectors : [MAX_KINEPOINTS]Maybe(Vector3),
+    Points : [MAX_KINEPOINTS]KineShapePoint,
+    Constraints : [MAX_KINECONSTRAINTS]KineConstraint,
+    NextPointIndex : int,
+    NextConstraintIndex : int,
+
+    AnimPointsStart : int,
+    AnimConstraintsStart : int,
+}
+
+
+
+
 
 ParticleType :: enum u8 {
     Trail,
@@ -154,19 +229,6 @@ ParticleSystem :: struct {
     Particles : [MAX_PARTICLES]Particle,
     NextIndex : int,
     SpawnTimer : f32,
-}
-
-
-
-KinePointSystem :: struct {
-    PreviousVectors : [MAX_KINEPOINTS]Maybe(Vector3),
-    Points : [MAX_KINEPOINTS]KineShapePoint,
-    Constraints : [MAX_KINECONSTRAINTS]KineConstraint,
-    NextPointIndex : int,
-    NextConstraintIndex : int,
-
-    AnimPointsStart : int,
-    AnimConstraintsStart : int,
 }
 
 

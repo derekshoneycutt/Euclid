@@ -1,18 +1,9 @@
 package kine
 
-import "../core"
-import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
-KineConstraintTrait :: core.KineConstraintTrait
-KineConstraint :: core.KineConstraint
-KinePointSystem :: core.KinePointSystem
-
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
-MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
-
-rotate_around_axis :: proc(vec, axis: core.Vector3, angle: f32) -> core.Vector3 {
+rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
     c := math.cos(angle)
     s := math.sin(angle)
 
@@ -292,7 +283,7 @@ get_constraint_error_centerpivot :: proc(
     }
 
     mid := (position1 + position2) / 2.0
-    moveTo := core.Vector3{ mid.x, mid.y, pivotPosition.z }
+    moveTo := Vector3{ mid.x, mid.y, pivotPosition.z }
     len := math.abs(linalg.length(moveTo - pivotPosition))
     
     return len
@@ -397,8 +388,8 @@ apply_constraint_maxangle :: proc(
 
     rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
 
-    new_vec1 := core.Vector3{0, 0, 0}
-    new_vec2 := core.Vector3{0, 0, 0}
+    new_vec1 := Vector3{0, 0, 0}
+    new_vec2 := Vector3{0, 0, 0}
     if constraint^.DependOn > 0 {
         new_vec1 = rotate_around_axis(vec1, rotaxis, overage)
     }
@@ -431,6 +422,6 @@ apply_constraint_centerpivot :: proc(
     }
 
     mid := (position1 + position2) / 2.0
-    moveTo := core.Vector3{ mid.x, mid.y, pivotPosition.z }
+    moveTo := Vector3{ mid.x, mid.y, pivotPosition.z }
     pivot^.Position = moveTo
 }

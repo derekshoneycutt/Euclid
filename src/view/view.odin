@@ -53,7 +53,8 @@ TextColor :: rl.Color{175, 150, 150, 255}
 
 
 run_window_loop :: proc() {
-    isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset }
+    isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset, {0.35, -0.45, -1.0}, true }
+    isoScale.MainLightDir = linalg.normalize(isoScale.MainLightDir)
 
     drawingSurface := surface.init_drawing_surface()
 
@@ -82,7 +83,7 @@ run_window_loop :: proc() {
     state^.Compass = compass
     state^.Pen = pen
     state^.CurrentDeltaTime = FIXED_DT
-    
+
     julia.init_euclid_scripts(state)
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
@@ -136,14 +137,17 @@ run_window_loop :: proc() {
 
         alpha := accumulator / FIXED_DT
 
+        kine.build_kine_draw_cache(state^.PointSystem, alpha)
+
 		rl.BeginDrawing()
             rl.ClearBackground(BackgroundColor)
 
             draw_drawing_surface(state^.DrawSurface, state)
 
-            draw_kine_points_low(state, alpha)
+            draw_kine_points_low_cached(state)
+            draw_kine_points_shadows_cached(state)
             render_particles(state^.ParticleSystem, state)
-            draw_kine_points_high(state, alpha)
+            draw_kine_points_high_cached(state)
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)

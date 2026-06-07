@@ -1,23 +1,11 @@
 package kine
 
-import "../core"
 import rl "vendor:raylib"
-import "core:fmt"
 import "core:math"
-import "core:math/linalg"
-
-Vector3 :: core.Vector3
-KineShapePointType :: core.KineShapePointType
-KineShapePoint :: core.KineShapePoint
-
-KineShapeCompass :: core.KineShapeCompass
-KineShapePen :: core.KineShapePen
-KineShapeLine :: core.KineShapeLine
-KineShapeCircle :: core.KineShapeCircle
 
 init_kineshape_point :: proc(
     system: ^KinePointSystem,
-    pos : core.Vector3,
+    pos : Vector3,
     color: rl.Color,
     brushSize: f32) -> (^KineShapePoint, int) {
 
@@ -31,7 +19,7 @@ init_kineshape_point :: proc(
 
 init_kineshape_line :: proc(
     system: ^KinePointSystem,
-    point1pos, point2pos : core.Vector3,
+    point1pos, point2pos : Vector3,
     color: rl.Color,
     brushSize: f32) -> KineShapeLine {
 
@@ -55,19 +43,19 @@ init_kineshape_line :: proc(
 
 init_kineshape_circle :: proc(
     system: ^KinePointSystem,
-    center_pos: core.Vector3,
+    center_pos: Vector3,
     radius: f32,
     startTheta, endTheta: f32,
     color: rl.Color,
     brushSize: f32) -> KineShapeCircle {
 
-    start_pos := core.Vector3{
+    start_pos := Vector3{
         center_pos.x + radius * f32(math.cos(startTheta)),
         center_pos.y + radius * f32(math.sin(startTheta)),
         center_pos.z,
     }
 
-    end_pos := core.Vector3{
+    end_pos := Vector3{
         center_pos.x + radius * f32(math.cos(endTheta)),
         center_pos.y + radius * f32(math.sin(endTheta)),
         center_pos.z,
