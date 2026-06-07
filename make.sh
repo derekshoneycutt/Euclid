@@ -17,6 +17,15 @@ fi
 juliaConfigPath="$(julia -e 'print(joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl"))')"
 juliaFlags="$(${juliaConfigPath} --ldflags --ldlibs | tr '\n' ' ')"
 
+runAfterBuild=false
+
+if [[ "${1-}" == "--run" ]]; then
+    runAfterBuild=true
+elif [[ -n "${1-}" ]]; then
+    echo "Usage: ./make.sh [--run]" >&2
+    exit 1
+fi
+
 mkdir -p ./bin/julia/
 
 cd src
@@ -27,7 +36,7 @@ cd julia
 cp ./*.jl ../../bin/julia/
 cd ../..
 
-if [[ "$1" == "--run" ]]; then
+if [[ "${runAfterBuild}" == "true" ]]; then
     cd ./bin/
     ./euclid
     cd ..
