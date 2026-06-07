@@ -96,7 +96,7 @@ run_window_loop :: proc() {
 
     euclidLoopFunc := julia.get_global_euclid_loop()
 
-    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+    //rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
 	defer rl.CloseWindow()
 

@@ -304,27 +304,22 @@ draw_kine_compass :: proc(
         point^.BrushSize, useColor)
 }
 
-build_outside_arc_points :: proc(
+draw_outside_arc_compass :: proc(
     p0, p1, p2: Vector3,
-    segments: int,
-    radiusScale: f32,
-    points: ^[COMPASS_TOPCIRCLE_VECTORS]Vector3) {
+    state: ^EuclidGeneralState,
+    brushSize: f32,
+    color: rl.Color) {
 
     a := p0 - p1
     b := p2 - p1
 
     aLen := linalg.length(a)
     bLen := linalg.length(b)
-    if segments <= 0 {
-        return
-    }
 
     an := a / aLen
     bn := b / bLen
 
-    n := linalg.cross(an, bn)
-    nLen := linalg.length(n)
-    n /= nLen
+    n := linalg.normalize(linalg.cross(an, bn))
 
     dotAB := math.clamp(linalg.dot(an, bn), -1, 1)
     crossAB := linalg.cross(an, bn)
@@ -339,30 +334,19 @@ build_outside_arc_points :: proc(
     u := an
     v := linalg.normalize(linalg.cross(n, u))
 
-    radius := math.min(aLen, bLen) * radiusScale
-    step := thetaOut / f32(segments)
+    radius := math.min(aLen, bLen) * COMPASS_TOPCIRCLE_RADIUS
+    step := thetaOut / f32(COMPASS_TOPCIRCLE_SEGMENTS)
 
-    for i in 0..=segments {
+    prevDir := u
+    prev3d := p1 + prevDir * radius
+    prev := iso_to_cartesian(prev3d, state^.IsoScale^)
+
+    for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
         t := step * f32(i)
         dir := u * math.cos(t) + v * math.sin(t)
-        points^[i] = p1 + dir * radius
+        curr3d := p1 + dir * radius
+        curr := iso_to_cartesian(curr3d, state^.IsoScale^)
+        rl.DrawLineEx(prev, curr, brushSize, color)
+        prev = curr
     }
-}
-
-draw_outside_arc_compass :: proc(
-    p0, p1, p2: Vector3,
-    state: ^EuclidGeneralState,
-    brushSize: f32,
-    color: rl.Color) {
-
-    arc3d : [COMPASS_TOPCIRCLE_VECTORS]Vector3
-    build_outside_arc_points(
-        p0, p1, p2, COMPASS_TOPCIRCLE_SEGMENTS, COMPASS_TOPCIRCLE_RADIUS, &arc3d)
-
-    arc2d : [COMPASS_TOPCIRCLE_VECTORS]Vector2
-    for i in 0..<COMPASS_TOPCIRCLE_VECTORS {
-        arc2d[i] = iso_to_cartesian(arc3d[i], state^.IsoScale^)
-    }
-
-    rl.DrawSplineLinear(&arc2d[0], COMPASS_TOPCIRCLE_VECTORS, brushSize, color)
 }
