@@ -14,12 +14,15 @@ import "core:math/linalg"
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 IsoScale :: core.IsoScale
+KineShapePointType :: core.KineShapePointType
 KineShapePoint :: core.KineShapePoint
 KineConstraint :: core.KineConstraint
+KinePointSystem :: core.KinePointSystem
 Particle :: core.Particle
 ParticleSystem :: core.ParticleSystem
 EuclidDrawingSurface :: core.EuclidDrawingSurface
 EuclidGeneralState :: core.EuclidGeneralState
+MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 
 IsoScaleValue :: 800
 IsoXOffset :: 450
@@ -54,49 +57,33 @@ run_window_loop :: proc() {
 
     drawingSurface := surface.init_drawing_surface()
 
-    kinePoints := make([dynamic]kine.KineShapePoint)
-    defer delete(kinePoints)
-    kineConstraints := make([dynamic]kine.KineConstraint)
-    defer delete(kineConstraints)
-
-    compass := kine.init_kineshape_compass(
-        &kinePoints, &kineConstraints,
-        {0.5, 0.5, 0}, {0.675, 0.375, 0.35}, {0.75, 0.25, 0},
-        0.35, ItemColor, 5)
-
-    pen := kine.init_kineshape_pen(
-        &kinePoints, &kineConstraints,
-        {0.5, 0.5, 0}, {0.675, 0.375, 0.35},
-        0.35, ItemColor, 5)
-
     particleSystem := new(ParticleSystem)
     defer free(particleSystem)
     
     juliaInterface := julia.retrieve_interface()
     defer free(juliaInterface)
 
+    pointSystem := new(KinePointSystem)
+    defer free(pointSystem)
+
+    compass := kine.init_kineshape_compass(pointSystem, 0.35, ItemColor, 5)
+    pen := kine.init_kineshape_pen(pointSystem, 0.35, ItemColor, 5)
+    kine.kine_freeze_system_indices(pointSystem)
+
     state := new(EuclidGeneralState)
     defer free(state)
     state^.SavedContext = context
     state^.IsoScale = &isoScale
     state^.DrawSurface = &drawingSurface
-    state^.KinePoints = &kinePoints
-    state^.KineConstraints = &kineConstraints
-    state^.ParticleSystem = particleSystem
-    state^.Compass = &compass
-    state^.Pen = &pen
-    state^.CurrentDeltaTime = FIXED_DT
     state^.JuliaInterface = juliaInterface
-
+    state^.PointSystem = pointSystem
+    state^.ParticleSystem = particleSystem
+    state^.Compass = compass
+    state^.Pen = pen
+    state^.CurrentDeltaTime = FIXED_DT
     julia.init_euclid_scripts(juliaInterface, state)
-    kine.apply_all_constraints_to_error(
-        state^.KineConstraints, state^.KinePoints, AllowedConstraintError)
-
-    lastPointVecs := make([dynamic]Maybe(Vector3))
-    defer delete(lastPointVecs)
-    for &point in kinePoints {
-        append(&lastPointVecs, point.Position)
-    }
+    kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
+    kine.kine_update_last_cache_vectors(pointSystem)
 
     //rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
@@ -129,15 +116,12 @@ run_window_loop :: proc() {
         }
         accumulator += frame_dt
 
-        for i in 1..<len(kinePoints) {
-            lastPointVecs[i] = kinePoints[i].Position
-        }
+        kine.kine_update_last_cache_vectors(pointSystem)
         stepCount := 0
         for accumulator >= FIXED_DT {
             julia.call_global_euclid_loop(juliaInterface, state, FIXED_DT)
             particles.update_particles(state^.ParticleSystem, FIXED_DT)
-            kine.apply_all_constraints_to_error(
-                state^.KineConstraints, state^.KinePoints, AllowedConstraintError)
+            kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
 
             accumulator -= FIXED_DT
             stepCount += 1
@@ -154,9 +138,9 @@ run_window_loop :: proc() {
 
             draw_drawing_surface(state^.DrawSurface, state)
 
-            draw_kine_points_low(&lastPointVecs, state, alpha)
+            draw_kine_points_low(state, alpha)
             render_particles(state^.ParticleSystem, state)
-            draw_kine_points_high(&lastPointVecs, state, alpha)
+            draw_kine_points_high(state, alpha)
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)

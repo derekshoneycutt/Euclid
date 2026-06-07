@@ -15,6 +15,9 @@ Jl_Function_T :: core.Jl_Function_T
 Jl_Symbol_T :: core.Jl_Symbol_T
 Jl_Module_T :: core.Jl_Module_T
 
+MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
+
 BridgeColor :: struct {
     R: u8,
     G: u8,
@@ -184,7 +187,7 @@ create_new_point :: proc "c" (
     context = state^.SavedContext
     rlColor := rl.Color{ color.R, color.G, color.B, color.A }
     point, index := kine.init_kineshape_point(
-        state^.KinePoints, pos, rlColor, brushSize)
+        state^.PointSystem, pos, rlColor, brushSize)
 
     pos, hasPos := point^.Position.?
     color, hasColor := point^.Color.?
@@ -222,7 +225,7 @@ create_new_line :: proc "c" (
     context = state^.SavedContext
     rlColor := rl.Color{ color.R, color.G, color.B, color.A }
     line := kine.init_kineshape_line(
-        state^.KinePoints, point1, point2, rlColor, brushSize)
+        state^.PointSystem, point1, point2, rlColor, brushSize)
 
     return line
 }
@@ -236,7 +239,7 @@ create_new_circle :: proc "c" (
     context = state^.SavedContext
     rlColor := rl.Color{ color.R, color.G, color.B, color.A }
     circle := kine.init_kineshape_circle(
-        state^.KinePoints, center, radius, startTheta, endTheta, rlColor, brushSize)
+        state^.PointSystem, center, radius, startTheta, endTheta, rlColor, brushSize)
 
     return circle
 }
@@ -246,8 +249,8 @@ get_point_view :: proc "c" (
     state: ^core.EuclidGeneralState,
     index: int) -> BridgePointView {
 
-    if index >= 0 && index <= len(state^.KinePoints^) {
-        point := state^.KinePoints^[index]
+    if index >= 0 && index <= MAX_KINEPOINTS {
+        point := state^.PointSystem^.Points[index]
         type: int = 0
         switch point.Type {
             case .Point:
@@ -316,62 +319,62 @@ get_point_view :: proc "c" (
 
 @(export)
 show_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = true
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = true
     }
 }
 
 @(export)
 hide_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = false
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = false
     }
 }
 
 @(export)
 set_point_position :: proc "c" (state: ^core.EuclidGeneralState, index: int, pos: core.Vector3) {
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
 }
 
 @(export)
 set_point_brush :: proc "c" (state: ^core.EuclidGeneralState, index: int, brushSize: f32) {
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].BrushSize = brushSize
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].BrushSize = brushSize
     }
 }
 
 @(export)
 set_point_color :: proc "c" (state: ^core.EuclidGeneralState, index: int, color: BridgeColor) {
-    if index >= 0 && index < len(state^.KinePoints^) {
+    if index >= 0 && index < MAX_KINEPOINTS {
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-        state^.KinePoints^[index].Color = rlColor
+        state^.PointSystem^.Points[index].Color = rlColor
     }
 }
 
 @(export)
 set_point_active_color :: proc "c" (state: ^core.EuclidGeneralState, index: int, color: BridgeColor) {
-    if index >= 0 && index < len(state^.KinePoints^) {
+    if index >= 0 && index < MAX_KINEPOINTS {
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-        state^.KinePoints^[index].ActiveColor = rlColor
+        state^.PointSystem^.Points[index].ActiveColor = rlColor
     }
 }
 
 
 @(export)
 show_pen :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Pen^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = true
+    index := state^.Pen.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = true
     }
 }
 
 @(export)
 hide_pen :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Pen^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = false
+    index := state^.Pen.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = false
     }
 }
 
@@ -379,11 +382,11 @@ hide_pen :: proc "c" (state: ^core.EuclidGeneralState) {
 set_pen_active :: proc "c" (
     state: ^core.EuclidGeneralState, active: int, color: BridgeColor) {
 
-    index := state^.Pen^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
+    index := state^.Pen.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-        state^.KinePoints^[index].ActiveColor = rlColor
-        state^.KinePoints^[index].ActiveChild = active
+        state^.PointSystem^.Points[index].ActiveColor = rlColor
+        state^.PointSystem^.Points[index].ActiveChild = active
     }
 }
 
@@ -391,101 +394,101 @@ set_pen_active :: proc "c" (
 clear_pen_active :: proc "c" (
     state: ^core.EuclidGeneralState) {
 
-    index := state^.Pen^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].ActiveChild = -1
+    index := state^.Pen.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].ActiveChild = -1
     }
 }
 
 @(export)
 lock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Pen^.Joint1Id
-    constraintIndex := state^.Pen^.LockPoint1Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Pen.Joint1Id
+    constraintIndex := state^.Pen.LockPoint1Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
-    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
-        state^.KineConstraints^[constraintIndex].Restriction = pos
-        state^.KineConstraints^[constraintIndex].DoApply = true
+    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
+        state^.PointSystem^.Constraints[constraintIndex].DoApply = true
     }
 }
 
 @(export)
 unlock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Pen^.LockPoint1Id
-    if index >= 0 && index < len(state^.KineConstraints^) {
-        state^.KineConstraints^[index].DoApply = false
+    index := state^.Pen.LockPoint1Id
+    if index >= 0 && index < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[index].DoApply = false
     }
 }
 
 @(export)
 move_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Pen^.Joint1Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Pen.Joint1Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
 }
 
 @(export)
 get_pen_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    index := state^.Pen^.Joint1Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    index := state^.Pen.Joint1Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        return state^.PointSystem^.Points[index].Position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
 }
 
 @(export)
 lock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Pen^.Joint2Id
-    constraintIndex := state^.Pen^.LockPoint2Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Pen.Joint2Id
+    constraintIndex := state^.Pen.LockPoint2Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
-    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
-        state^.KineConstraints^[constraintIndex].Restriction = pos
-        state^.KineConstraints^[constraintIndex].DoApply = true
+    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
+        state^.PointSystem^.Constraints[constraintIndex].DoApply = true
     }
 }
 
 @(export)
 unlock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Pen^.LockPoint2Id
-    if index >= 0 && index < len(state^.KineConstraints^) {
-        state^.KineConstraints^[index].DoApply = false
+    index := state^.Pen.LockPoint2Id
+    if index >= 0 && index < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[index].DoApply = false
     }
 }
 
 @(export)
 move_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Pen^.Joint2Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Pen.Joint2Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
 }
 
 @(export)
 get_pen_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    index := state^.Pen^.Joint2Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    index := state^.Pen.Joint2Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        return state^.PointSystem^.Points[index].Position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
 }
 
 @(export)
 show_compass :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Compass^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = true
+    index := state^.Compass.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = true
     }
 }
 
 @(export)
 hide_compass :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Compass^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].DoDraw = false
+    index := state^.Compass.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].DoDraw = false
     }
 }
 
@@ -493,11 +496,11 @@ hide_compass :: proc "c" (state: ^core.EuclidGeneralState) {
 set_compass_active :: proc "c" (
     state: ^core.EuclidGeneralState, active: int, color: BridgeColor) {
 
-    index := state^.Compass^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
+    index := state^.Compass.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-        state^.KinePoints^[index].ActiveColor = rlColor
-        state^.KinePoints^[index].ActiveChild = active
+        state^.PointSystem^.Points[index].ActiveColor = rlColor
+        state^.PointSystem^.Points[index].ActiveChild = active
     }
 }
 
@@ -505,84 +508,84 @@ set_compass_active :: proc "c" (
 clear_compass_active :: proc "c" (
     state: ^core.EuclidGeneralState) {
 
-    index := state^.Compass^.HostId
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].ActiveChild = -1
+    index := state^.Compass.HostId
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].ActiveChild = -1
     }
 }
 
 @(export)
 lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    pointIndex := state^.Compass^.Joint1Id
-    constraintIndex := state^.Compass^.LockPoint1Id
-    if pointIndex > 0 && pointIndex < len(state^.KinePoints^) {
-        state^.KinePoints^[pointIndex].Position = pos
+    pointIndex := state^.Compass.Joint1Id
+    constraintIndex := state^.Compass.LockPoint1Id
+    if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[pointIndex].Position = pos
     }
-    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
-        state^.KineConstraints^[constraintIndex].Restriction = pos
-        state^.KineConstraints^[constraintIndex].DoApply = true
+    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
+        state^.PointSystem^.Constraints[constraintIndex].DoApply = true
     }
 }
 
 @(export)
 unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Compass^.LockPoint1Id
-    if index >= 0 && index < len(state^.KineConstraints^) {
-        state^.KineConstraints^[index].DoApply = false
+    index := state^.Compass.LockPoint1Id
+    if index >= 0 && index < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[index].DoApply = false
     }
 }
 
 @(export)
 move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Compass^.Joint1Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Compass.Joint1Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
 }
 
 @(export)
 get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    index := state^.Compass^.Joint1Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    index := state^.Compass.Joint1Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        return state^.PointSystem^.Points[index].Position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
 }
 
 @(export)
 lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    pointIndex := state^.Compass^.Joint2Id
-    constraintIndex := state^.Compass^.LockPoint2Id
-    if pointIndex > 0 && pointIndex < len(state^.KinePoints^) {
-        state^.KinePoints^[pointIndex].Position = pos
+    pointIndex := state^.Compass.Joint2Id
+    constraintIndex := state^.Compass.LockPoint2Id
+    if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[pointIndex].Position = pos
     }
-    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
-        state^.KineConstraints^[constraintIndex].Restriction = pos
-        state^.KineConstraints^[constraintIndex].DoApply = true
+    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
+        state^.PointSystem^.Constraints[constraintIndex].DoApply = true
     }
 }
 
 @(export)
 unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
-    index := state^.Compass^.LockPoint2Id
-    if index >= 0 && index < len(state^.KineConstraints^) {
-        state^.KineConstraints^[index].DoApply = false
+    index := state^.Compass.LockPoint2Id
+    if index >= 0 && index < MAX_KINECONSTRAINTS {
+        state^.PointSystem^.Constraints[index].DoApply = false
     }
 }
 
 @(export)
 move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    index := state^.Compass^.Joint2Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        state^.KinePoints^[index].Position = pos
+    index := state^.Compass.Joint2Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        state^.PointSystem^.Points[index].Position = pos
     }
 }
 
 @(export)
 get_compass_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    index := state^.Compass^.Joint2Id
-    if index >= 0 && index < len(state^.KinePoints^) {
-        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    index := state^.Compass.Joint2Id
+    if index >= 0 && index < MAX_KINEPOINTS {
+        return state^.PointSystem^.Points[index].Position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
 }

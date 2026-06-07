@@ -35,20 +35,18 @@ draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneral
 }
 
 draw_kine_points_low :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState, alpha: f32) {
 
-    points := state^.KinePoints
-    for index in 0..<len(points) {
-        point := &points^[index]
-        if point.DoDraw {
+    for index in 0..<len(state^.PointSystem.Points) {
+        point := &state^.PointSystem.Points[index]
+        if point^.DoDraw {
             switch point^.Type {
                 case .Point:
-                    draw_kine_point(lastPoints, state, point, alpha)
+                    draw_kine_point(state, point, alpha)
                 case .Line:
-                    draw_kine_line(lastPoints, state, point, alpha)
+                    draw_kine_line(state, point, alpha)
                 case .Circle:
-                    draw_kine_circle(lastPoints, state, point, alpha)
+                    draw_kine_circle(state, point, alpha)
                 case .Pen:
                     continue
                 case .Compass:
@@ -59,13 +57,11 @@ draw_kine_points_low :: proc(
 }
 
 draw_kine_points_high :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState, alpha: f32) {
 
-    points := state^.KinePoints
-    for index in 0..<len(points) {
-        point := &points^[index]
-        if point.DoDraw {
+    for index in 0..<len(state^.PointSystem.Points) {
+        point := &state^.PointSystem.Points[index]
+        if point^.DoDraw {
             switch point^.Type {
                 case .Point:
                     continue
@@ -74,27 +70,25 @@ draw_kine_points_high :: proc(
                 case .Circle:
                     continue
                 case .Pen:
-                    draw_kine_pen(lastPoints, state, point, alpha)
+                    draw_kine_pen(state, point, alpha)
                 case .Compass:
-                    draw_kine_compass(lastPoints, state, point, alpha)
+                    draw_kine_compass(state, point, alpha)
             }
         }
     }
 }
 
 draw_kine_point :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point: ^KineShapePoint, alpha : f32) {
  
-    points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= MAX_KINEPOINTS {
         return
     }
     usePoint : Vector3
     convPoint : Vector2
-    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
-    currPoint := points^[point^.ChildPointHead]
+    lastPoint := state^.PointSystem.PreviousVectors[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := state^.PointSystem.Points[point^.ChildPointHead]
     usePoint = currPoint.Position.? or_else {0, 0, 0}
     usePoint = linalg.lerp(lastPoint, usePoint, alpha)
     convPoint = iso_to_cartesian(usePoint, state^.IsoScale^)
@@ -105,26 +99,24 @@ draw_kine_point :: proc(
 }
 
 draw_kine_line :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point: ^KineShapePoint, alpha : f32) {
  
-    points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= MAX_KINEPOINTS {
         return
     }
     usePoints : [2]Vector3
     convPoints : [2]Vector2
-    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
-    currPoint := points^[point^.ChildPointHead]
+    lastPoint := state^.PointSystem.PreviousVectors[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := state^.PointSystem.Points[point^.ChildPointHead]
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= MAX_KINEPOINTS {
         return
     }
-    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
-    currPoint = points^[currPoint.NextChildPoint]
+    lastPoint = state^.PointSystem.PreviousVectors[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = state^.PointSystem.Points[currPoint.NextChildPoint]
     usePoints[1] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[1] = linalg.lerp(lastPoint, usePoints[1], alpha)
     convPoints[1] = iso_to_cartesian(usePoints[1], state^.IsoScale^)
@@ -152,25 +144,23 @@ compute_sweep_delta :: proc(startTheta, endTheta: f32) -> f32 {
 }
 
 draw_kine_circle :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point: ^KineShapePoint, alpha : f32) {
 
-    points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= MAX_KINEPOINTS {
         return
     }
     usePoints : [2]Vector3
     convPoints : [2]Vector2
-    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
-    currPoint := points^[point^.ChildPointHead]
+    lastPoint := state^.PointSystem.PreviousVectors[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := state^.PointSystem.Points[point^.ChildPointHead]
     start := currPoint.Position.? or_else {0, 0, 0}
     start = linalg.lerp(lastPoint, start, alpha)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= MAX_KINEPOINTS {
         return
     }
-    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
-    currPoint = points^[currPoint.NextChildPoint]
+    lastPoint = state^.PointSystem.PreviousVectors[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = state^.PointSystem.Points[currPoint.NextChildPoint]
     end := currPoint.Position.? or_else {0, 0, 0}
     end = linalg.lerp(lastPoint, end, alpha)
 
@@ -217,26 +207,24 @@ draw_kine_circle :: proc(
 }
 
 draw_kine_pen :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point: ^KineShapePoint, alpha : f32) {
  
-    points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= MAX_KINEPOINTS {
         return
     }
     usePoints : [2]Vector3
     convPoints : [2]Vector2
-    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
-    currPoint := points^[point^.ChildPointHead]
+    lastPoint := state^.PointSystem.PreviousVectors[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := state^.PointSystem.Points[point^.ChildPointHead]
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= MAX_KINEPOINTS {
         return
     }
-    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
-    currPoint = points^[currPoint.NextChildPoint]
+    lastPoint = state^.PointSystem.PreviousVectors[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = state^.PointSystem.Points[currPoint.NextChildPoint]
     usePoints[1] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[1] = linalg.lerp(lastPoint, usePoints[1], alpha)
     convPoints[1] = iso_to_cartesian(usePoints[1], state^.IsoScale^)
@@ -256,34 +244,32 @@ draw_kine_pen :: proc(
 }
 
 draw_kine_compass :: proc(
-    lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point : ^KineShapePoint, alpha : f32) {
 
-    points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= MAX_KINEPOINTS {
         return
     }
     usePoints : [3]Vector3
     convPoints : [3]Vector2
-    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
-    currPoint := points^[point^.ChildPointHead]
+    lastPoint := state^.PointSystem.PreviousVectors[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := state^.PointSystem.Points[point^.ChildPointHead]
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= MAX_KINEPOINTS {
         return
     }
-    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
-    currPoint = points^[currPoint.NextChildPoint]
+    lastPoint = state^.PointSystem.PreviousVectors[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = state^.PointSystem.Points[currPoint.NextChildPoint]
     usePoints[1] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[1] = linalg.lerp(lastPoint, usePoints[1], alpha)
     convPoints[1] = iso_to_cartesian(usePoints[1], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= MAX_KINEPOINTS {
         return
     }
-    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
-    currPoint = points^[currPoint.NextChildPoint]
+    lastPoint = state^.PointSystem.PreviousVectors[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = state^.PointSystem.Points[currPoint.NextChildPoint]
     usePoints[2] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[2] = linalg.lerp(lastPoint, usePoints[2], alpha)
     convPoints[2] = iso_to_cartesian(usePoints[2], state^.IsoScale^)

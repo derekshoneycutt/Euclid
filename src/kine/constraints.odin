@@ -7,6 +7,10 @@ import "core:math/linalg"
 
 KineConstraintTrait :: core.KineConstraintTrait
 KineConstraint :: core.KineConstraint
+KinePointSystem :: core.KinePointSystem
+
+MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
 rotate_around_axis :: proc(vec, axis: core.Vector3, angle: f32) -> core.Vector3 {
     c := math.cos(angle)
@@ -18,52 +22,52 @@ rotate_around_axis :: proc(vec, axis: core.Vector3, angle: f32) -> core.Vector3 
 }
 
 get_total_constraint_error :: proc(
-    constraints : ^[dynamic]KineConstraint, points: ^[dynamic]KineShapePoint) -> f32 {
+    system: ^KinePointSystem) -> f32 {
 
     totalError: f32 = 0
-    for &constraint in constraints^ {
-        totalError += get_constraint_error(&constraint, points)
+    for &constraint in system^.Constraints {
+        totalError += get_constraint_error(&constraint, &system^.Points)
     }
     return totalError
 }
 
 apply_all_constraints :: proc(
-    constraints : ^[dynamic]KineConstraint, points: ^[dynamic]KineShapePoint) {
+    system: ^KinePointSystem) {
 
-    for &constraint in constraints^ {
-        apply_constraint(&constraint, points)
+    for &constraint in system.Constraints {
+        apply_constraint(&constraint, &system^.Points)
     }
 }
 
 apply_all_constraints_reverse :: proc(
-    constraints : ^[dynamic]KineConstraint, points: ^[dynamic]KineShapePoint) {
+    system: ^KinePointSystem) {
 
-    #reverse for &constraint in constraints^ {
-        apply_constraint(&constraint, points)
+    #reverse for &constraint in system.Constraints {
+        apply_constraint(&constraint, &system^.Points)
     }
 }
 
 apply_all_constraints_to_error :: proc(
-    constraints : ^[dynamic]KineConstraint, points: ^[dynamic]KineShapePoint, allowError : f32) {
+    system: ^KinePointSystem, allowError : f32) {
 
-    error := get_total_constraint_error(constraints, points)
+    error := get_total_constraint_error(system)
     reverse := false
 
     for error > allowError {
         if reverse {
-            apply_all_constraints(constraints, points)
+            apply_all_constraints(system)
         }
         else {
-            apply_all_constraints_reverse(constraints, points)
+            apply_all_constraints_reverse(system)
         }
         reverse = !reverse
 
-        error = get_total_constraint_error(constraints, points)
+        error = get_total_constraint_error(system)
     }
 }
 
 get_constraint_error :: proc(
-    constraint : ^KineConstraint, points: ^[dynamic]KineShapePoint) -> f32 {
+    constraint : ^KineConstraint, points: ^[MAX_KINEPOINTS]KineShapePoint) -> f32 {
 
     if !constraint^.DoApply {
         return 0
@@ -128,7 +132,7 @@ get_constraint_error :: proc(
 }
 
 apply_constraint :: proc(
-    constraint : ^KineConstraint, points: ^[dynamic]KineShapePoint) {
+    constraint : ^KineConstraint, points: ^[MAX_KINEPOINTS]KineShapePoint) {
 
     if !constraint^.DoApply {
         return

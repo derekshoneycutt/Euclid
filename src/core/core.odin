@@ -4,9 +4,10 @@ import "base:runtime"
 import rl "vendor:raylib"
 
 MAX_PARTICLES :: 1024
-MAX_METAVALUES :: 1024
-MAX_KINEPOINTS :: 1024
-MAX_KINECONSTRAINTS :: 1024
+MAX_METAVALUES :: 256
+MAX_KINEPOINTS :: 256
+MAX_KINECONSTRAINTS :: 256
+MAX_JULIA_INTERFACES :: 64
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
@@ -25,6 +26,13 @@ EuclidJuliaAnimationInterface :: struct {
 EuclidJuliaInterface :: struct {
     InitScripts : ^Jl_Function_T,
     GlobalLoop : ^Jl_Function_T,
+
+    NullAnimation : EuclidJuliaAnimationInterface,
+
+    CurrentAnimation : ^EuclidJuliaAnimationInterface,
+
+    Animations : [MAX_JULIA_INTERFACES]EuclidJuliaAnimationInterface,
+    NextAnimationIndex : int,
 }
 
 IsoScale :: struct {
@@ -151,8 +159,9 @@ ParticleSystem :: struct {
 
 
 KinePointSystem :: struct {
-    KinePoints : [MAX_KINEPOINTS]KineShapePoint,
-    KineConstraints : [MAX_KINECONSTRAINTS]KineConstraint,
+    PreviousVectors : [MAX_KINEPOINTS]Maybe(Vector3),
+    Points : [MAX_KINEPOINTS]KineShapePoint,
+    Constraints : [MAX_KINECONSTRAINTS]KineConstraint,
     NextPointIndex : int,
     NextConstraintIndex : int,
 
@@ -180,17 +189,13 @@ EuclidGeneralState :: struct {
 
     DrawSurface : ^EuclidDrawingSurface,
 
-    KinePoints : ^[dynamic]KineShapePoint,
-    KineConstraints : ^[dynamic]KineConstraint,
-
+    JuliaInterface : ^EuclidJuliaInterface,
+    PointSystem : ^KinePointSystem,
     ParticleSystem : ^ParticleSystem,
-
-    Compass : ^KineShapeCompass,
-    Pen : ^KineShapePen,
+    Compass : KineShapeCompass,
+    Pen : KineShapePen,
 
     CurrentDeltaTime : f32,
-
-    JuliaInterface : ^EuclidJuliaInterface,
 
     AnimMetadata : [MAX_METAVALUES]f32,
 }

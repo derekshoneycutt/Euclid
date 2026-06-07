@@ -781,3 +781,4 @@ function euclid_emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::AbstractString)
     euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
 end
+
