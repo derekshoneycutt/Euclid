@@ -71,6 +71,9 @@ run_window_loop :: proc() {
 
     particleSystem := new(ParticleSystem)
     defer free(particleSystem)
+    
+    juliaInterface := julia.retrieve_interface()
+    defer free(juliaInterface)
 
     state := new(EuclidGeneralState)
     defer free(state)
@@ -83,8 +86,9 @@ run_window_loop :: proc() {
     state^.Compass = &compass
     state^.Pen = &pen
     state^.CurrentDeltaTime = FIXED_DT
-    
-    julia.init_euclid_scripts(state)
+    state^.JuliaInterface = juliaInterface
+
+    julia.init_euclid_scripts(juliaInterface, state)
     kine.apply_all_constraints_to_error(
         state^.KineConstraints, state^.KinePoints, AllowedConstraintError)
 
@@ -93,8 +97,6 @@ run_window_loop :: proc() {
     for &point in kinePoints {
         append(&lastPointVecs, point.Position)
     }
-
-    euclidLoopFunc := julia.get_global_euclid_loop()
 
     //rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
@@ -132,7 +134,7 @@ run_window_loop :: proc() {
         }
         stepCount := 0
         for accumulator >= FIXED_DT {
-            julia.call_global_euclid_loop(euclidLoopFunc, state, FIXED_DT)
+            julia.call_global_euclid_loop(juliaInterface, state, FIXED_DT)
             particles.update_particles(state^.ParticleSystem, FIXED_DT)
             kine.apply_all_constraints_to_error(
                 state^.KineConstraints, state^.KinePoints, AllowedConstraintError)

@@ -3,11 +3,29 @@ package core
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 8192
+MAX_PARTICLES :: 1024
 MAX_METAVALUES :: 1024
+MAX_KINEPOINTS :: 1024
+MAX_KINECONSTRAINTS :: 1024
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
+
+Jl_Value_T  :: struct {}
+Jl_Function_T  :: struct {}
+Jl_Symbol_T  :: struct {}
+Jl_Module_T :: struct {}
+
+EuclidJuliaAnimationInterface :: struct {
+    Initiate : ^Jl_Function_T,
+    Loop : ^Jl_Function_T,
+    Clean : ^Jl_Function_T,
+}
+
+EuclidJuliaInterface :: struct {
+    InitScripts : ^Jl_Function_T,
+    GlobalLoop : ^Jl_Function_T,
+}
 
 IsoScale :: struct {
     Scale : f32,
@@ -132,6 +150,17 @@ ParticleSystem :: struct {
 
 
 
+KinePointSystem :: struct {
+    KinePoints : [MAX_KINEPOINTS]KineShapePoint,
+    KineConstraints : [MAX_KINECONSTRAINTS]KineConstraint,
+    NextPointIndex : int,
+    NextConstraintIndex : int,
+
+    AnimPointsStart : int,
+    AnimConstraintsStart : int,
+}
+
+
 EuclidDrawingSurface :: struct {
     Zeros : Vector3,
     RightUp : Vector3,
@@ -149,17 +178,19 @@ EuclidGeneralState :: struct {
 
     IsoScale : ^IsoScale,
 
-    DrawSurface: ^EuclidDrawingSurface,
+    DrawSurface : ^EuclidDrawingSurface,
 
-    KinePoints: ^[dynamic]KineShapePoint,
-    KineConstraints: ^[dynamic]KineConstraint,
+    KinePoints : ^[dynamic]KineShapePoint,
+    KineConstraints : ^[dynamic]KineConstraint,
 
-    ParticleSystem: ^ParticleSystem,
+    ParticleSystem : ^ParticleSystem,
 
-    Compass: ^KineShapeCompass,
-    Pen: ^KineShapePen,
+    Compass : ^KineShapeCompass,
+    Pen : ^KineShapePen,
 
-    CurrentDeltaTime: f32,
+    CurrentDeltaTime : f32,
+
+    JuliaInterface : ^EuclidJuliaInterface,
 
     AnimMetadata : [MAX_METAVALUES]f32,
 }

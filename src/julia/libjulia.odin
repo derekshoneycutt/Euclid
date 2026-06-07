@@ -10,9 +10,10 @@ import "core:fmt"
 
 import rl "vendor:raylib"
 
-Jl_Value_T  :: struct {}
-Jl_Symbol_T  :: struct {}
-Jl_Module_T :: struct {}
+Jl_Value_T :: core.Jl_Value_T
+Jl_Function_T :: core.Jl_Function_T
+Jl_Symbol_T :: core.Jl_Symbol_T
+Jl_Module_T :: core.Jl_Module_T
 
 BridgeColor :: struct {
     R: u8,
@@ -70,12 +71,12 @@ foreign libjulia {
     jl_box_int8 :: proc(f: i8) -> ^Jl_Value_T ---
     jl_box_voidpointer :: proc(x: rawptr) -> ^Jl_Value_T ---
 
-    jl_call0 :: proc(f: ^Jl_Value_T) -> Jl_Value_T ---
-    jl_call1 :: proc(f: ^Jl_Value_T, a: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call2 :: proc(f: ^Jl_Value_T, a, b: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call3 :: proc(f: ^Jl_Value_T, a, b, c: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call4 :: proc(f: ^Jl_Value_T, a, b, c, d: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call :: proc(f: ^Jl_Value_T, args: ^^Jl_Value_T, nargs: u32) -> ^Jl_Value_T ---
+    jl_call0 :: proc(f: ^Jl_Function_T) -> Jl_Value_T ---
+    jl_call1 :: proc(f: ^Jl_Function_T, a: ^Jl_Value_T) -> ^Jl_Value_T ---
+    jl_call2 :: proc(f: ^Jl_Function_T, a, b: ^Jl_Value_T) -> ^Jl_Value_T ---
+    jl_call3 :: proc(f: ^Jl_Function_T, a, b, c: ^Jl_Value_T) -> ^Jl_Value_T ---
+    jl_call4 :: proc(f: ^Jl_Function_T, a, b, c, d: ^Jl_Value_T) -> ^Jl_Value_T ---
+    jl_call :: proc(f: ^Jl_Function_T, args: ^^Jl_Value_T, nargs: u32) -> ^Jl_Value_T ---
 
     jl_exception_occurred :: proc() -> rawptr ---
 
@@ -92,8 +93,8 @@ foreign libjulia {
     jl_unbox_voidpointer :: proc(v: ^Jl_Value_T) -> rawptr ---
 }
 
-jl_get_function :: #force_inline proc(m : ^Jl_Module_T, name : cstring) -> ^Jl_Value_T {
-    return jl_get_global(m, jl_symbol(name))
+jl_get_function :: #force_inline proc(m : ^Jl_Module_T, name : cstring) -> ^Jl_Function_T {
+    return (^Jl_Function_T)(jl_get_global(m, jl_symbol(name)))
 }
 
 print_julia_exception :: proc(contextOfErr: string) {
@@ -114,7 +115,7 @@ print_julia_exception :: proc(contextOfErr: string) {
         return
     }
 
-    args: [2]^Jl_Value_T = {showerror_fn, ex}
+    args: [2]^Jl_Value_T = {(^Jl_Value_T)(showerror_fn), ex}
     msg_val := jl_call(sprint_fn, &args[0], 2)
 
     if jl_exception_occurred() != nil || msg_val == nil {
@@ -132,10 +133,20 @@ initiate_julia :: proc() {
     _ = jl_eval_string("include(\"./julia/script.jl\")")
 }
 
-init_euclid_scripts :: proc(state: ^core.EuclidGeneralState) {
-	func := jl_get_function(jl_main_module, "init_euclid_scripts")
+retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
+    ret := new(core.EuclidJuliaInterface)
+
+	ret.InitScripts = jl_get_function(jl_main_module, "init_euclid_scripts")
+    ret.GlobalLoop = jl_get_function(jl_main_module, "global_euclid_loop")
+
+    return ret
+}
+
+init_euclid_scripts :: proc(
+    interface: ^core.EuclidJuliaInterface, state: ^core.EuclidGeneralState) {
+
 	state_value := jl_box_voidpointer(state)
-	result := jl_call1(func, state_value)
+	result := jl_call1(interface^.InitScripts, state_value)
 
 	if jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
@@ -145,15 +156,12 @@ init_euclid_scripts :: proc(state: ^core.EuclidGeneralState) {
 	_ = result
 }
 
-get_global_euclid_loop :: proc() -> ^Jl_Value_T {
-	func := jl_get_function(jl_main_module, "global_euclid_loop")
-    return func
-}
+call_global_euclid_loop :: proc(
+    interface: ^core.EuclidJuliaInterface, state: ^core.EuclidGeneralState, dt: f32) {
 
-call_global_euclid_loop :: proc(func: ^Jl_Value_T, state: ^core.EuclidGeneralState, dt: f32) {
 	state_value := jl_box_voidpointer(state)
     dt_value := jl_box_float32(dt)
-	result := jl_call2(func, state_value, dt_value)
+	result := jl_call2(interface^.GlobalLoop, state_value, dt_value)
 
 	if jl_exception_occurred() != nil {
         print_julia_exception("global_euclid_loop")
