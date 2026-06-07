@@ -2,6 +2,7 @@ package julia
 
 import "../core"
 import "../particles"
+import "../kine"
 
 import "base:runtime"
 import "core:c"
@@ -13,12 +14,36 @@ Jl_Value_T  :: struct {}
 Jl_Symbol_T  :: struct {}
 Jl_Module_T :: struct {}
 
-Bridge_Color :: struct {
+BridgeColor :: struct {
     R: u8,
     G: u8,
     B: u8,
     A: u8,
 }
+
+BridgePointView :: struct {
+    Valid: bool,
+    Index: int,
+
+    PointType: int,
+    DoDraw: bool,
+    BrushSize: f32,
+
+    HasPosition: bool,
+    Position: core.Vector3,
+    
+    HasColor: bool,
+    Color: BridgeColor,
+
+    HasActiveColor: bool,
+    ActiveColor: BridgeColor,
+
+    ActiveChild: int,
+    ChildCount: int,
+    ChildPointHead: int,
+    NextChildPoint: int,
+}
+
 
 foreign import libjulia "system:julia"
 foreign libjulia {
@@ -92,7 +117,6 @@ print_julia_exception :: proc(contextOfErr: string) {
     args: [2]^Jl_Value_T = {showerror_fn, ex}
     msg_val := jl_call(sprint_fn, &args[0], 2)
 
-    // If formatting itself failed, still print type.
     if jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
@@ -144,200 +168,435 @@ end_julia :: proc() {
 }
 
 
+@(export)
+create_new_point :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    pos: core.Vector3, color: BridgeColor, brushSize: f32) -> BridgePointView {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    point, index := kine.init_kineshape_point(
+        state^.KinePoints, pos, rlColor, brushSize)
+
+    pos, hasPos := point^.Position.?
+    color, hasColor := point^.Color.?
+    activeColor, hasActiveColor := point^.ActiveColor.?
+
+    return BridgePointView{
+        Valid = true,
+        Index = index,
+
+        PointType = 0,
+        DoDraw = point^.DoDraw,
+        BrushSize = point^.BrushSize,
+
+        HasPosition = hasPos,
+        Position = pos,
+
+        HasColor = hasColor,
+        Color = BridgeColor{ color.r, color.g, color.r, color.a },
+
+        HasActiveColor = hasActiveColor,
+        ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.r, activeColor.a },
+
+        ActiveChild = point^.ActiveChild,
+        ChildCount = point^.ChildCount,
+        ChildPointHead = point^.ChildPointHead,
+        NextChildPoint = point^.NextChildPoint,
+    }
+}
+
+@(export)
+create_new_line :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    point1, point2: core.Vector3, color: BridgeColor, brushSize: f32) -> core.KineShapeLine {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    line := kine.init_kineshape_line(
+        state^.KinePoints, point1, point2, rlColor, brushSize)
+
+    return line
+}
+
+@(export)
+create_new_circle :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    center: core.Vector3, radius, startTheta, endTheta: f32,
+    color: BridgeColor, brushSize: f32) -> core.KineShapeCircle {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    circle := kine.init_kineshape_circle(
+        state^.KinePoints, center, radius, startTheta, endTheta, rlColor, brushSize)
+
+    return circle
+}
+
+@(export)
+get_point_view :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    index: int) -> BridgePointView {
+
+    if index >= 0 && index <= len(state^.KinePoints^) {
+        point := state^.KinePoints^[index]
+        type: int = 0
+        switch point.Type {
+            case .Point:
+                type = 0
+            case .Line:
+                type = 1
+            case .Circle:
+                type = 2
+            case .Pen:
+                type = 3
+            case .Compass:
+                type = 4
+        }
+        pos, hasPos := point.Position.?
+        color, hasColor := point.Color.?
+        activeColor, hasActiveColor := point.ActiveColor.?
+
+        return BridgePointView{
+            Valid = true,
+            Index = index,
+
+            PointType = type,
+            DoDraw = point.DoDraw,
+            BrushSize = point.BrushSize,
+
+            HasPosition = hasPos,
+            Position = pos,
+
+            HasColor = hasColor,
+            Color = BridgeColor{ color.r, color.g, color.r, color.a },
+
+            HasActiveColor = hasActiveColor,
+            ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.r, activeColor.a },
+
+            ActiveChild = point.ActiveChild,
+            ChildCount = point.ChildCount,
+            ChildPointHead = point.ChildPointHead,
+            NextChildPoint = point.NextChildPoint,
+        }
+    }
+
+    return BridgePointView{
+        Valid = false,
+        Index = -1,
+        
+        PointType = -1,
+        DoDraw = false,
+        BrushSize = 0,
+
+        HasPosition = false,
+        Position = {0, 0, 0},
+
+        HasColor = false,
+        Color = BridgeColor{ 0, 0, 0, 0 },
+
+        HasActiveColor = false,
+        ActiveColor = BridgeColor{ 0, 0, 0, 0 },
+
+        ActiveChild = 0,
+        ChildCount = 0,
+        ChildPointHead = 0,
+        NextChildPoint = 0,
+    }
+}
+
+
+@(export)
+show_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = true
+    }
+}
+
+@(export)
+hide_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = false
+    }
+}
+
+@(export)
+set_point_position :: proc "c" (state: ^core.EuclidGeneralState, index: int, pos: core.Vector3) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
+}
+
+@(export)
+set_point_brush :: proc "c" (state: ^core.EuclidGeneralState, index: int, brushSize: f32) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].BrushSize = brushSize
+    }
+}
+
+@(export)
+set_point_color :: proc "c" (state: ^core.EuclidGeneralState, index: int, color: BridgeColor) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+        state^.KinePoints^[index].Color = rlColor
+    }
+}
+
+@(export)
+set_point_active_color :: proc "c" (state: ^core.EuclidGeneralState, index: int, color: BridgeColor) {
+    if index >= 0 && index < len(state^.KinePoints^) {
+        rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+        state^.KinePoints^[index].ActiveColor = rlColor
+    }
+}
 
 
 @(export)
 show_pen :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Pen^.Host^.DoDraw = true
+    index := state^.Pen^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = true
+    }
 }
 
 @(export)
 hide_pen :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Pen^.Host^.DoDraw = false
+    index := state^.Pen^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = false
+    }
 }
 
 @(export)
 set_pen_active :: proc "c" (
-    state: ^core.EuclidGeneralState, active: int, color: Bridge_Color) {
+    state: ^core.EuclidGeneralState, active: int, color: BridgeColor) {
 
-    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-    state^.Pen^.Host^.ActiveColor = rlColor
-    state^.Pen^.Host^.ActiveChild = active
+    index := state^.Pen^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+        state^.KinePoints^[index].ActiveColor = rlColor
+        state^.KinePoints^[index].ActiveChild = active
+    }
 }
 
 @(export)
 clear_pen_active :: proc "c" (
     state: ^core.EuclidGeneralState) {
 
-    state^.Pen^.Host^.ActiveChild = -1
+    index := state^.Pen^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].ActiveChild = -1
+    }
 }
 
 @(export)
 lock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Pen^.Joint1^.Position = pos
-    state^.Pen^.LockPoint1^.Restriction = pos
-    state^.Pen^.LockPoint1^.DoApply = true
+    index := state^.Pen^.Joint1Id
+    constraintIndex := state^.Pen^.LockPoint1Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
+    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
+        state^.KineConstraints^[constraintIndex].Restriction = pos
+        state^.KineConstraints^[constraintIndex].DoApply = true
+    }
 }
 
 @(export)
 unlock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Pen^.LockPoint1^.DoApply = false
+    index := state^.Pen^.LockPoint1Id
+    if index >= 0 && index < len(state^.KineConstraints^) {
+        state^.KineConstraints^[index].DoApply = false
+    }
 }
 
 @(export)
 move_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Pen^.Joint1^.Position = pos
+    index := state^.Pen^.Joint1Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
 }
 
 @(export)
 get_pen_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    return state^.Pen^.Joint1^.Position.? or_else {0, 0, 0}
+    index := state^.Pen^.Joint1Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    }
+    return {0, 0, 0}
 }
 
 @(export)
 lock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Pen^.Joint2^.Position = pos
-    state^.Pen^.LockPoint2^.Restriction = pos
-    state^.Pen^.LockPoint2^.DoApply = true
+    index := state^.Pen^.Joint2Id
+    constraintIndex := state^.Pen^.LockPoint2Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
+    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
+        state^.KineConstraints^[constraintIndex].Restriction = pos
+        state^.KineConstraints^[constraintIndex].DoApply = true
+    }
 }
 
 @(export)
 unlock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Pen^.LockPoint2^.DoApply = false
+    index := state^.Pen^.LockPoint2Id
+    if index >= 0 && index < len(state^.KineConstraints^) {
+        state^.KineConstraints^[index].DoApply = false
+    }
 }
 
 @(export)
 move_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Pen^.Joint2^.Position = pos
+    index := state^.Pen^.Joint2Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
 }
 
 @(export)
 get_pen_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    return state^.Pen^.Joint2^.Position.? or_else {0, 0, 0}
+    index := state^.Pen^.Joint2Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    }
+    return {0, 0, 0}
 }
 
 @(export)
 show_compass :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Compass^.Host^.DoDraw = true
+    index := state^.Compass^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = true
+    }
 }
 
 @(export)
 hide_compass :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Compass^.Host^.DoDraw = false
+    index := state^.Compass^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].DoDraw = false
+    }
 }
 
 @(export)
 set_compass_active :: proc "c" (
-    state: ^core.EuclidGeneralState, active: int, color: Bridge_Color) {
+    state: ^core.EuclidGeneralState, active: int, color: BridgeColor) {
 
-    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-    state^.Compass^.Host^.ActiveColor = rlColor
-    state^.Compass^.Host^.ActiveChild = active
+    index := state^.Compass^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+        state^.KinePoints^[index].ActiveColor = rlColor
+        state^.KinePoints^[index].ActiveChild = active
+    }
 }
 
 @(export)
 clear_compass_active :: proc "c" (
     state: ^core.EuclidGeneralState) {
 
-    state^.Compass^.Host^.ActiveChild = -1
+    index := state^.Compass^.HostId
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].ActiveChild = -1
+    }
 }
 
 @(export)
 lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Compass^.Joint1^.Position = pos
-    state^.Compass^.LockPoint1^.Restriction = pos
-    state^.Compass^.LockPoint1^.DoApply = true
+    pointIndex := state^.Compass^.Joint1Id
+    constraintIndex := state^.Compass^.LockPoint1Id
+    if pointIndex > 0 && pointIndex < len(state^.KinePoints^) {
+        state^.KinePoints^[pointIndex].Position = pos
+    }
+    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
+        state^.KineConstraints^[constraintIndex].Restriction = pos
+        state^.KineConstraints^[constraintIndex].DoApply = true
+    }
 }
 
 @(export)
 unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Compass^.LockPoint1^.DoApply = false
+    index := state^.Compass^.LockPoint1Id
+    if index >= 0 && index < len(state^.KineConstraints^) {
+        state^.KineConstraints^[index].DoApply = false
+    }
 }
 
 @(export)
 move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Compass^.Joint1^.Position = pos
+    index := state^.Compass^.Joint1Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
 }
 
 @(export)
 get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    return state^.Compass^.Joint1^.Position.? or_else {0, 0, 0}
+    index := state^.Compass^.Joint1Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    }
+    return {0, 0, 0}
 }
 
 @(export)
 lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Compass^.Joint2^.Position = pos
-    state^.Compass^.LockPoint2^.Restriction = pos
-    state^.Compass^.LockPoint2^.DoApply = true
+    pointIndex := state^.Compass^.Joint2Id
+    constraintIndex := state^.Compass^.LockPoint2Id
+    if pointIndex > 0 && pointIndex < len(state^.KinePoints^) {
+        state^.KinePoints^[pointIndex].Position = pos
+    }
+    if constraintIndex >= 0 && constraintIndex < len(state^.KineConstraints^) {
+        state^.KineConstraints^[constraintIndex].Restriction = pos
+        state^.KineConstraints^[constraintIndex].DoApply = true
+    }
 }
 
 @(export)
 unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
-    state^.Compass^.LockPoint2^.DoApply = false
+    index := state^.Compass^.LockPoint2Id
+    if index >= 0 && index < len(state^.KineConstraints^) {
+        state^.KineConstraints^[index].DoApply = false
+    }
 }
 
 @(export)
 move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    state^.Compass^.Joint2^.Position = pos
+    index := state^.Compass^.Joint2Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        state^.KinePoints^[index].Position = pos
+    }
 }
 
 @(export)
 get_compass_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Vector3 {
-    return state^.Compass^.Joint2^.Position.? or_else {0, 0, 0}
+    index := state^.Compass^.Joint2Id
+    if index >= 0 && index < len(state^.KinePoints^) {
+        return state^.KinePoints^[index].Position.? or_else {0, 0, 0}
+    }
+    return {0, 0, 0}
 }
 
 @(export)
 set_animation_meta :: proc "c" (state: ^core.EuclidGeneralState, pos: int, metadata: f32) {
-    switch pos {
-        case 1:
-            state^.AnimMetaFloat1 = metadata
-        case 2:
-            state^.AnimMetaFloat2 = metadata
-        case 3:
-            state^.AnimMetaFloat3 = metadata
-        case 4:
-            state^.AnimMetaFloat4 = metadata
-        case 5:
-            state^.AnimMetaFloat5 = metadata
-        case 6:
-            state^.AnimMetaFloat6 = metadata
-        case 7:
-            state^.AnimMetaFloat7 = metadata
-        case 8:
-            state^.AnimMetaFloat8 = metadata
-        case 9:
-            state^.AnimMetaFloat9 = metadata
+    if pos >= 0 && pos <= len(state^.AnimMetadata) {
+        state^.AnimMetadata[pos] = metadata
     }
 }
 
 @(export)
 get_animation_meta :: proc "c" (state: ^core.EuclidGeneralState, pos: int) -> f32 {
-    switch pos {
-        case 1:
-            return state^.AnimMetaFloat1
-        case 2:
-            return state^.AnimMetaFloat2
-        case 3:
-            return state^.AnimMetaFloat3
-        case 4:
-            return state^.AnimMetaFloat4
-        case 5:
-            return state^.AnimMetaFloat5
-        case 6:
-            return state^.AnimMetaFloat6
-        case 7:
-            return state^.AnimMetaFloat7
-        case 8:
-            return state^.AnimMetaFloat8
-        case 9:
-            return state^.AnimMetaFloat9
+    if pos >= 0 && pos <= len(state^.AnimMetadata) {
+        return state^.AnimMetadata[pos]
     }
     return 0;
 }
 
 @(export)
 emit_trailing_particle :: proc "c" (
-    state: ^core.EuclidGeneralState, pos: core.Vector2, color: Bridge_Color) {
+    state: ^core.EuclidGeneralState, pos: core.Vector2, color: BridgeColor) {
 
     context = state^.SavedContext
     rlColor := rl.Color{ color.R, color.G, color.B, color.A }

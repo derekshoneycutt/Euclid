@@ -2,11 +2,13 @@ package view
 
 import "../surface"
 import "../kine"
-import ec "../core"
+import "../core"
 import rl "vendor:raylib"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+
+CIRCLE_ARC_SEGMENTS :: 60
 
 COMPASS_TOPCIRCLE_SEGMENTS :: 30
 COMPASS_TOPCIRCLE_VECTORS :: COMPASS_TOPCIRCLE_SEGMENTS + 1
@@ -32,7 +34,7 @@ draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneral
         iso_to_cartesian(surfaceLeftDown, state^.IsoScale^), room^.Color)
 }
 
-draw_kine_points :: proc(
+draw_kine_points_low :: proc(
     lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState, alpha: f32) {
 
@@ -40,17 +42,35 @@ draw_kine_points :: proc(
     for index in 0..<len(points) {
         point := &points^[index]
         if point.DoDraw {
-            /*lastPointPos, lastok := lastPoints^[index].?
-            if !lastok { continue }
-            pointPos, ok := points^[index].Position.?
-            if !ok { continue }*/
-
-            // TODO: Print the other things, too, clean this up, etc.
             switch point^.Type {
                 case .Point:
                     draw_kine_point(lastPoints, state, point, alpha)
                 case .Line:
                     draw_kine_line(lastPoints, state, point, alpha)
+                case .Circle:
+                    draw_kine_circle(lastPoints, state, point, alpha)
+                case .Pen:
+                    continue
+                case .Compass:
+                    continue
+            }
+        }
+    }
+}
+
+draw_kine_points_high :: proc(
+    lastPoints: ^[dynamic]Maybe(Vector3),
+    state: ^EuclidGeneralState, alpha: f32) {
+
+    points := state^.KinePoints
+    for index in 0..<len(points) {
+        point := &points^[index]
+        if point.DoDraw {
+            switch point^.Type {
+                case .Point:
+                    continue
+                case .Line:
+                    continue
                 case .Circle:
                     continue
                 case .Pen:
@@ -68,7 +88,7 @@ draw_kine_point :: proc(
     point: ^KineShapePoint, alpha : f32) {
  
     points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
         return
     }
     usePoint : Vector3
@@ -90,7 +110,7 @@ draw_kine_line :: proc(
     point: ^KineShapePoint, alpha : f32) {
  
     points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
         return
     }
     usePoints : [2]Vector3
@@ -100,7 +120,7 @@ draw_kine_line :: proc(
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
         return
     }
     lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
@@ -114,13 +134,95 @@ draw_kine_line :: proc(
     rl.DrawLineEx(convPoints[0], convPoints[1], point^.BrushSize, useColor)
 }
 
+compute_sweep_delta :: proc(startTheta, endTheta: f32) -> f32 {
+    startN := startTheta
+    if startN < 0 {
+        startN += 2.0 * math.PI
+    }
+    endN := endTheta
+    if endN < 0 {
+        endN += 2.0 * math.PI
+    }
+
+    delta := endN - startN
+    if delta < 0 {
+        delta += 2.0 * math.PI
+    }
+    return delta
+}
+
+draw_kine_circle :: proc(
+    lastPoints: ^[dynamic]Maybe(Vector3),
+    state: ^EuclidGeneralState,
+    point: ^KineShapePoint, alpha : f32) {
+
+    points := state^.KinePoints
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
+        return
+    }
+    usePoints : [2]Vector3
+    convPoints : [2]Vector2
+    lastPoint := lastPoints^[point^.ChildPointHead].? or_else {0, 0, 0}
+    currPoint := points^[point^.ChildPointHead]
+    start := currPoint.Position.? or_else {0, 0, 0}
+    start = linalg.lerp(lastPoint, start, alpha)
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
+        return
+    }
+    lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
+    currPoint = points^[currPoint.NextChildPoint]
+    end := currPoint.Position.? or_else {0, 0, 0}
+    end = linalg.lerp(lastPoint, end, alpha)
+
+    useColor := point^.Color.? or_else rl.Color{255, 255, 255, 255}
+
+    if point^.ActiveChild > 1 {
+        start, end = end, start
+    }
+
+    center := point^.Position.? or_else {0, 0, 0}
+
+    startVec := start - center
+    endVec := end - center
+    startRadius := f32(math.sqrt(startVec.x*startVec.x + startVec.y*startVec.y))
+    endRadius := f32(math.sqrt(endVec.x*endVec.x + endVec.y*endVec.y))
+
+    col := point^.Color.? or_else rl.WHITE
+    thickness := point^.BrushSize
+
+    segment_count := f32(CIRCLE_ARC_SEGMENTS)
+
+    startTheta := f32(math.atan2(startVec.y, startVec.x))
+    endTheta := f32(math.atan2(endVec.y, endVec.x))
+    sweepDelta := compute_sweep_delta(startTheta, endTheta)
+
+    prev_world := start
+    prev_screen := iso_to_cartesian(prev_world, state^.IsoScale^)
+
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        t := f32(i) / segment_count
+        theta := startTheta + sweepDelta * t
+        radius := math.lerp(startRadius, endRadius, t)
+
+        curr_world := Vector3{
+            center.x + f32(math.cos(theta)) * radius,
+            center.y + f32(math.sin(theta)) * radius,
+            center.z,
+        }
+
+        curr_screen := iso_to_cartesian(curr_world, state^.IsoScale^)
+        rl.DrawLineEx(prev_screen, curr_screen, thickness, col)
+        prev_screen = curr_screen
+    }
+}
+
 draw_kine_pen :: proc(
     lastPoints: ^[dynamic]Maybe(Vector3),
     state: ^EuclidGeneralState,
     point: ^KineShapePoint, alpha : f32) {
  
     points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
         return
     }
     usePoints : [2]Vector3
@@ -130,7 +232,7 @@ draw_kine_pen :: proc(
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
         return
     }
     lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
@@ -159,7 +261,7 @@ draw_kine_compass :: proc(
     point : ^KineShapePoint, alpha : f32) {
 
     points := state^.KinePoints
-    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points) {
+    if point^.ChildPointHead <= 0 && point^.ChildPointHead >= len(points^) {
         return
     }
     usePoints : [3]Vector3
@@ -169,7 +271,7 @@ draw_kine_compass :: proc(
     usePoints[0] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[0] = linalg.lerp(lastPoint, usePoints[0], alpha)
     convPoints[0] = iso_to_cartesian(usePoints[0], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
         return
     }
     lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}
@@ -177,7 +279,7 @@ draw_kine_compass :: proc(
     usePoints[1] = currPoint.Position.? or_else {0, 0, 0}
     usePoints[1] = linalg.lerp(lastPoint, usePoints[1], alpha)
     convPoints[1] = iso_to_cartesian(usePoints[1], state^.IsoScale^)
-    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points) {
+    if currPoint.NextChildPoint <= 0 && currPoint.NextChildPoint >= len(points^) {
         return
     }
     lastPoint = lastPoints^[currPoint.NextChildPoint].? or_else {0, 0, 0}

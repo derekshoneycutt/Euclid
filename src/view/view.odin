@@ -50,10 +50,6 @@ TextColor :: rl.Color{175, 150, 150, 255}
 
 
 run_window_loop :: proc() {
-    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
-	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
-	defer rl.CloseWindow()
-
     isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset }
 
     drawingSurface := surface.init_drawing_surface()
@@ -76,14 +72,21 @@ run_window_loop :: proc() {
     particleSystem := new(ParticleSystem)
     defer free(particleSystem)
 
-    state := EuclidGeneralState{context,
-        &isoScale, &drawingSurface, &kinePoints, &kineConstraints,
-        particleSystem, &compass, &pen, FIXED_DT,
-        /* Metadata values start 0: */ 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-
-    julia.init_euclid_scripts(&state)
+    state := new(EuclidGeneralState)
+    defer free(state)
+    state^.SavedContext = context
+    state^.IsoScale = &isoScale
+    state^.DrawSurface = &drawingSurface
+    state^.KinePoints = &kinePoints
+    state^.KineConstraints = &kineConstraints
+    state^.ParticleSystem = particleSystem
+    state^.Compass = &compass
+    state^.Pen = &pen
+    state^.CurrentDeltaTime = FIXED_DT
+    
+    julia.init_euclid_scripts(state)
     kine.apply_all_constraints_to_error(
-        state.KineConstraints, state.KinePoints, AllowedConstraintError)
+        state^.KineConstraints, state^.KinePoints, AllowedConstraintError)
 
     lastPointVecs := make([dynamic]Maybe(Vector3))
     defer delete(lastPointVecs)
@@ -92,6 +95,10 @@ run_window_loop :: proc() {
     }
 
     euclidLoopFunc := julia.get_global_euclid_loop()
+
+    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
+	defer rl.CloseWindow()
 
     rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_NORMAL),
         i32(rl.ColorToInt(BackgroundColor)))
@@ -125,10 +132,10 @@ run_window_loop :: proc() {
         }
         stepCount := 0
         for accumulator >= FIXED_DT {
-            julia.call_global_euclid_loop(euclidLoopFunc, &state, FIXED_DT)
-            particles.update_particles(state.ParticleSystem, FIXED_DT)
+            julia.call_global_euclid_loop(euclidLoopFunc, state, FIXED_DT)
+            particles.update_particles(state^.ParticleSystem, FIXED_DT)
             kine.apply_all_constraints_to_error(
-                state.KineConstraints, state.KinePoints, AllowedConstraintError)
+                state^.KineConstraints, state^.KinePoints, AllowedConstraintError)
 
             accumulator -= FIXED_DT
             stepCount += 1
@@ -143,11 +150,11 @@ run_window_loop :: proc() {
 		rl.BeginDrawing()
             rl.ClearBackground(BackgroundColor)
 
-            draw_drawing_surface(state.DrawSurface, &state)
+            draw_drawing_surface(state^.DrawSurface, state)
 
-            render_particles(state.ParticleSystem, &state)
-
-            draw_kine_points(&lastPointVecs, &state, alpha)
+            draw_kine_points_low(&lastPointVecs, state, alpha)
+            render_particles(state^.ParticleSystem, state)
+            draw_kine_points_high(&lastPointVecs, state, alpha)
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)
@@ -159,7 +166,7 @@ run_window_loop :: proc() {
             rl.GuiSliderBar(rl.Rectangle{ 1130, 680, 100, 20 }, "X Offset:",
                 fmt.ctprintf("%f", isoScale.XOffset), &isoScale.XOffset, 0.0, ViewWidth)*/
 
-            //rl.DrawFPS(10, 10)
+            rl.DrawFPS(10, 10)
 		rl.EndDrawing()
 	}
 }

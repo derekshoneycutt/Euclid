@@ -4,6 +4,7 @@ import "base:runtime"
 import rl "vendor:raylib"
 
 MAX_PARTICLES :: 8192
+MAX_METAVALUES :: 1024
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
@@ -26,7 +27,6 @@ KineShapePoint :: struct {
     Type : KineShapePointType,
 
     Position : Maybe(Vector3),
-    Direction : Maybe(Vector3),
     Color : Maybe(rl.Color),
     ActiveColor : Maybe(rl.Color),
     BrushSize : f32,
@@ -77,52 +77,30 @@ KineShapeCompass :: struct {
     Point2FloorId : int,
     LockPoint1Id : int,
     LockPoint2Id : int,
-
-    Host : ^KineShapePoint,
-    Joint1 : ^KineShapePoint,
-    Pivot : ^KineShapePoint,
-    Joint2 : ^KineShapePoint,
-
-    CenterPivot : ^KineConstraint,
-    Limb1Length : ^KineConstraint,
-    Limb2Length : ^KineConstraint,
-    Point1Floor : ^KineConstraint,
-    PivotFloor : ^KineConstraint,
-    Point2Floor : ^KineConstraint,
-    LockPoint1 : ^KineConstraint,
-    LockPoint2 : ^KineConstraint,
 }
 
 KineShapePen :: struct {
     HostId : int,
-    Join1Id : int,
-    Join2Id : int,
+    Joint1Id : int,
+    Joint2Id : int,
 
     LengthConstraintId : int,
     Point1FloorId : int,
     Point2FloorId : int,
     LockPoint1Id : int,
     LockPoint2Id : int,
-
-    Host : ^KineShapePoint,
-    Joint1 : ^KineShapePoint,
-    Joint2 : ^KineShapePoint,
-
-    LengthConstraint : ^KineConstraint,
-    Point1Floor : ^KineConstraint,
-    Point2Floor : ^KineConstraint,
-    LockPoint1 : ^KineConstraint,
-    LockPoint2 : ^KineConstraint,
 }
 
 KineShapeLine :: struct {
     HostId : int,
-    Join1Id : int,
-    Join2Id : int,
+    Joint1Id : int,
+    Joint2Id : int,
+}
 
-    Host : ^KineShapePoint,
-    Joint1 : ^KineShapePoint,
-    Joint2 : ^KineShapePoint,
+KineShapeCircle :: struct {
+    HostId : int,
+    StartId : int,
+    EndId : int,
 }
 
 
@@ -183,13 +161,5 @@ EuclidGeneralState :: struct {
 
     CurrentDeltaTime: f32,
 
-    AnimMetaFloat1 : f32,
-    AnimMetaFloat2 : f32,
-    AnimMetaFloat3 : f32,
-    AnimMetaFloat4 : f32,
-    AnimMetaFloat5 : f32,
-    AnimMetaFloat6 : f32,
-    AnimMetaFloat7 : f32,
-    AnimMetaFloat8 : f32,
-    AnimMetaFloat9 : f32,
+    AnimMetadata : [MAX_METAVALUES]f32,
 }
