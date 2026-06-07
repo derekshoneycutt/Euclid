@@ -6,3 +6,10 @@ This is done in Odin for the primary application, with bindings to Julia to driv
 animations.
 
 This is just a start right now, just laying the foundation...
+
+Simply use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
+You must have Odin and Julia installed on your system.
+
+<p align="center">
+<img src="./screen.png" >
+</p>
