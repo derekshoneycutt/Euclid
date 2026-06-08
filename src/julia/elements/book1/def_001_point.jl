@@ -70,8 +70,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr,
         PointX, PointY, PointZ,
         PointColor,
-        0f0,
-    )
+        0f0)
 
     EuclidBridge.set_animation_meta(state_ptr, MetaPointId, Float32(point.index))
     reset_cycle_state(state_ptr)
