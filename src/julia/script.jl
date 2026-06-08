@@ -6,6 +6,9 @@ include("./elements/book1/def_002_line.jl")
 include("./elements/book1/def_003_linextrem.jl")
 
 
+include("./elements/book1/post_01_drawline.jl")
+
+
 function get_view_text_root(state_ptr::Ptr{Cvoid})
     "Welcome to Euclid's Elements!"
 end
@@ -66,10 +69,15 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionLineExtremities.loop,
                     ElementsOneDefinitionLineExtremities.clean,
                     "3. Line Extremities", book1DefsId)
-            book1PostsId = get_view_text_BookI_posts, EuclidBridge.add_child_animation_interface(
+            book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
                 NullAnimation.loop, NullAnimation.clean,
                 "Postulates", book1Id)
+                book1Defs1PointId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOnePostulatesDrawLine.get_view_text,
+                    ElementsOnePostulatesDrawLine.initialize,
+                    ElementsOnePostulatesDrawLine.loop, ElementsOnePostulatesDrawLine.clean,
+                    "1. Draw a Line", book1PostsId)
             book1CommNotsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_common, NullAnimation.initialize,
                 NullAnimation.loop, NullAnimation.clean,
