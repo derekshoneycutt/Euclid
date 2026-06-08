@@ -3,7 +3,7 @@ package core
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 2048
+MAX_PARTICLES :: 4096
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
@@ -217,6 +217,7 @@ ParticleType :: enum u8 {
     Trail,
     Flicker,
     BurnOut,
+    Dust,
 }
 
 Particle :: struct {

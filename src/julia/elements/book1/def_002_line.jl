@@ -21,7 +21,6 @@ const TiltDuration = 0.8f0
 const DrawDuration = 2.7f0
 const EndStraightenDuration = 0.8f0
 const EndLiftDuration = 1.8f0
-const LineFadeSpeed = 8f0
 
 const SegmentVec = EndPoint - StartPoint
 const SegmentVecLen = norm(SegmentVec)
@@ -39,7 +38,6 @@ const PhaseTilt = 1f0
 const PhaseDraw = 2f0
 const PhaseEndStraighten = 3f0
 const PhaseEndLift = 4f0
-const PhaseLineFade = 5f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -61,7 +59,6 @@ end
 
 function hide_line(
     state_ptr::Ptr{Cvoid}, lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
-    EuclidBridge.set_point_brush(state_ptr, lineHostId, 0f0)
     EuclidBridge.hide_point(state_ptr, lineHostId)
     EuclidBridge.set_point_position(
         state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
@@ -112,12 +109,6 @@ function initialize(state_ptr::Ptr{Cvoid})
 end
 
 function clean(state_ptr::Ptr{Cvoid})
-    lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
-
-    hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
-    EuclidBridge.hide_pen(state_ptr)
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
@@ -220,27 +211,11 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            phase = PhaseLineFade
-            timer = 0f0
             EuclidBridge.hide_pen(state_ptr)
             place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, Float32(pi / 2))
-        end
-    else
-        lineHost = EuclidBridge.get_point(state_ptr, lineHostId)
-        nextBrush = lineHost.brushSize - LineFadeSpeed * dt
-
-        if nextBrush <= 0f0
             hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
             reset_cycle_state(state_ptr)
             return
-        else
-            EuclidBridge.show_point(state_ptr, lineHostId)
-            EuclidBridge.set_point_color(state_ptr, lineHostId, LineColor)
-            EuclidBridge.set_point_brush(state_ptr, lineHostId, nextBrush)
-            EuclidBridge.set_point_position(
-                state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
-            EuclidBridge.set_point_position(
-                state_ptr, lineJoint2Id, EndPoint[1], EndPoint[2], EndPoint[3])
         end
     end
 

@@ -91,20 +91,9 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
         peny1 = peny1 - (dt * 0.4f0)
         peny2 = peny2 - (dt * 0.4f0)
 
-        if line2HostDesc.brushSize > 0
-            useSize = line2HostDesc.brushSize - 10f0 * dt
-            if useSize <= 0
-                EuclidBridge.set_point_brush(state_ptr, Integer(line2Host), 0f0)
-                EuclidBridge.hide_point(state_ptr, Integer(line2Host))
-
-                EuclidBridge.set_point_position(state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
-                EuclidBridge.set_point_position(state_ptr, Integer(line2Point2), 0.9f0, 0.1f0, 0f0)
-            else
-                EuclidBridge.set_point_brush(state_ptr, Integer(line2Host), useSize)
-            end
-        else
-            EuclidBridge.hide_point(state_ptr, Integer(line2Host))
-        end
+        EuclidBridge.hide_point(state_ptr, Integer(line2Host))
+        EuclidBridge.set_point_position(state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
+        EuclidBridge.set_point_position(state_ptr, Integer(line2Point2), 0.9f0, 0.1f0, 0f0)
         if drawLineFlag > 0
             EuclidBridge.set_point_position(state_ptr, Integer(line1Point1), 0.9f0, 0.9f0, 0f0)
             EuclidBridge.set_point_position(state_ptr, Integer(line1Point2), penx1, peny1, 0f0)
@@ -130,20 +119,9 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
         peny1 = peny1 + (dt * 0.4f0)
         peny2 = peny2 + (dt * 0.4f0)
 
-        if line1HostDesc.brushSize > 0
-            useSize = line1HostDesc.brushSize - 10f0 * dt
-            if useSize <= 0
-                EuclidBridge.set_point_brush(state_ptr, Integer(line1Host), 0f0)
-                EuclidBridge.hide_point(state_ptr, Integer(line1Host))
-
-                EuclidBridge.set_point_position(state_ptr, Integer(line1Point1), 0.9f0, 0.1f0, 0f0)
-                EuclidBridge.set_point_position(state_ptr, Integer(line1Point2), 0.9f0, 0.1f0, 0f0)
-            else
-                EuclidBridge.set_point_brush(state_ptr, Integer(line1Host), useSize)
-            end
-        else
-            EuclidBridge.hide_point(state_ptr, Integer(line1Host))
-        end
+        EuclidBridge.hide_point(state_ptr, Integer(line1Host))
+        EuclidBridge.set_point_position(state_ptr, Integer(line1Point1), 0.9f0, 0.1f0, 0f0)
+        EuclidBridge.set_point_position(state_ptr, Integer(line1Point2), 0.9f0, 0.1f0, 0f0)
         if drawLineFlag > 0
             EuclidBridge.set_point_position(state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
             EuclidBridge.set_point_position(state_ptr, Integer(line2Point2), penx1, peny1, 0f0)
@@ -199,20 +177,9 @@ function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidBridge.set_point_brush(state_ptr, Integer(circleHost), 5f0)
         EuclidBridge.show_point(state_ptr, Integer(circleHost))
     else
-        if circleHostDesc.brushSize > 0
-            useSize = circleHostDesc.brushSize - 10f0 * dt
-            if useSize <= 0
-                EuclidBridge.set_point_brush(state_ptr, Integer(circleHost), 0f0)
-                EuclidBridge.hide_point(state_ptr, Integer(circleHost))
-
-                EuclidBridge.set_point_position(state_ptr, Integer(circleStart),
-                    StartRotationPos[1], StartRotationPos[2], StartRotationPos[3])
-            else
-                EuclidBridge.set_point_brush(state_ptr, Integer(circleHost), useSize)
-            end
-        else
-            EuclidBridge.hide_point(state_ptr, Integer(circleHost))
-        end
+        EuclidBridge.hide_point(state_ptr, Integer(circleHost))
+        EuclidBridge.set_point_position(state_ptr, Integer(circleStart),
+            StartRotationPos[1], StartRotationPos[2], StartRotationPos[3])
     end
 
     EuclidBridge.set_animation_meta(state_ptr, 1, currRotation)

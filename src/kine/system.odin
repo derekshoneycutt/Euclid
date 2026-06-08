@@ -1,6 +1,7 @@
 package kine
 
 import "../core"
+import "../particles"
 import rl "vendor:raylib"
 import "core:math"
 import "core:math/linalg"
@@ -44,7 +45,10 @@ kine_freeze_system_indices :: proc(
 }
 
 kine_clear_animation_data :: proc(
-    pointSystem: ^KinePointSystem) {
+    pointSystem: ^KinePointSystem,
+    particleSystem: ^core.ParticleSystem) {
+
+    particles.emit_kine_clear_burst(particleSystem, pointSystem)
 
     for i in pointSystem^.AnimPointsStart..<MAX_KINEPOINTS {
         pointSystem^.Points[i] = {}

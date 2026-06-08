@@ -21,7 +21,6 @@ const PenConeTipHeight = Float32(sqrt(PenLength * PenLength - PenConeRadius * Pe
 const DescendDuration = 3f0
 const GroundTrailDuration = 2f0
 const RiseDuration = 3f0
-const PointFadeSpeed = 8f0
 
 const MetaPointId = 1
 const MetaPhase = 2
@@ -30,7 +29,6 @@ const MetaTimer = 3
 const PhaseDescend = 0f0
 const PhaseGroundTrail = 1f0
 const PhaseRise = 2f0
-const PhasePointFade = 3f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -58,7 +56,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     EuclidBridge.hide_point(state_ptr, pointId)
-    EuclidBridge.set_point_brush(state_ptr, pointId, 0f0)
 
     EuclidBridge.show_pen(state_ptr)
     EuclidBridge.set_pen_active(state_ptr, 1, PointColor)
@@ -77,10 +74,6 @@ function initialize(state_ptr::Ptr{Cvoid})
 end
 
 function clean(state_ptr::Ptr{Cvoid})
-    pointId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaPointId))
-    EuclidBridge.set_point_brush(state_ptr, pointId, 0f0)
-    EuclidBridge.hide_point(state_ptr, pointId)
-    EuclidBridge.hide_pen(state_ptr)
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
@@ -147,23 +140,11 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= RiseDuration
-            phase = PhasePointFade
-            timer = 0f0
             EuclidBridge.hide_pen(state_ptr)
             place_pen(state_ptr, PenTopZ)
-        end
-    else
-        point = EuclidBridge.get_point(state_ptr, pointId)
-        nextBrush = point.brushSize - PointFadeSpeed * dt
-
-        if nextBrush <= 0f0
-            EuclidBridge.set_point_brush(state_ptr, pointId, 0f0)
             EuclidBridge.hide_point(state_ptr, pointId)
             reset_cycle_state(state_ptr)
             return
-        else
-            EuclidBridge.show_point(state_ptr, pointId)
-            EuclidBridge.set_point_brush(state_ptr, pointId, nextBrush)
         end
     end
 

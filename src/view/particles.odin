@@ -23,6 +23,8 @@ render_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
                 render_particle_flicker(p, screen)
             case .BurnOut:
                 render_particle_burnout(p, screen)
+            case .Dust:
+                render_particle_dust(p, screen)
         }
     }
 }
@@ -56,4 +58,13 @@ render_particle_burnout :: proc(p: ^Particle, screen: Vector2) {
     a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
 
     rl.DrawCircleV(screen, p^.Size, rl.Color{r, g, b, a})
+}
+
+render_particle_dust :: proc(p: ^Particle, screen: Vector2) {
+    t := math.clamp(p^.Age / p^.Life, 0.0, 1.0)
+    alpha := 1.0 - t
+    a := u8(math.clamp(alpha * 210.0, 0.0, 255.0))
+
+    col := rl.Color{p^.Color.r, p^.Color.g, p^.Color.b, a}
+    rl.DrawCircleV(screen, p^.Size, col)
 }

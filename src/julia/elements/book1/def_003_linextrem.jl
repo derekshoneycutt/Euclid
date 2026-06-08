@@ -29,7 +29,6 @@ const EndMoveToJoint1Duration = 2f0
 const ExtremityTrailDuration = 2f0
 const EndMoveToJoint2Duration = 2f0
 const EndLiftDuration = 1.8f0
-const LineFadeSpeed = 8f0
 
 const SegmentVec = EndPoint - StartPoint
 const SegmentVecLen = norm(SegmentVec)
@@ -53,7 +52,6 @@ const PhasePutJoint1 = 5f0
 const PhaseMoveToJoint2 = 6f0
 const PhasePutJoint2 = 7f0
 const PhaseEndLift = 8f0
-const PhaseLineFade = 9f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -85,7 +83,6 @@ end
 
 function hide_line(
     state_ptr::Ptr{Cvoid}, lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
-    EuclidBridge.set_point_brush(state_ptr, lineHostId, 0f0)
     EuclidBridge.hide_point(state_ptr, lineHostId)
     EuclidBridge.set_point_position(
         state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
@@ -119,9 +116,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
 
     EuclidBridge.hide_point(state_ptr, point1Id)
-    EuclidBridge.set_point_brush(state_ptr, point1Id, 0f0)
     EuclidBridge.hide_point(state_ptr, point2Id)
-    EuclidBridge.set_point_brush(state_ptr, point2Id, 0f0)
 
     EuclidBridge.show_pen(state_ptr)
     EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
@@ -155,12 +150,6 @@ function initialize(state_ptr::Ptr{Cvoid})
 end
 
 function clean(state_ptr::Ptr{Cvoid})
-    lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
-
-    hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
-    EuclidBridge.hide_pen(state_ptr)
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
@@ -353,31 +342,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            phase = PhaseLineFade
-            timer = 0f0
             EuclidBridge.hide_pen(state_ptr)
             place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, π / 2f0)
-        end
-    else
-        lineHost = EuclidBridge.get_point(state_ptr, lineHostId)
-        nextBrush = lineHost.brushSize - LineFadeSpeed * dt
-
-        if nextBrush <= 0f0
             EuclidBridge.hide_point(state_ptr, point1Id)
             EuclidBridge.hide_point(state_ptr, point2Id)
             hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
             reset_cycle_state(state_ptr)
             return
-        else
-            EuclidBridge.set_point_brush(state_ptr, point1Id, nextBrush)
-            EuclidBridge.set_point_brush(state_ptr, point2Id, nextBrush)
-            EuclidBridge.show_point(state_ptr, lineHostId)
-            EuclidBridge.set_point_color(state_ptr, lineHostId, LineColor)
-            EuclidBridge.set_point_brush(state_ptr, lineHostId, nextBrush)
-            EuclidBridge.set_point_position(
-                state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
-            EuclidBridge.set_point_position(
-                state_ptr, lineJoint2Id, EndPoint[1], EndPoint[2], EndPoint[3])
         end
     end
 

@@ -282,7 +282,7 @@ change_current_animation_loop :: proc(
         }
     }
     
-    kine.kine_clear_animation_data(state^.PointSystem)
+    kine.kine_clear_animation_data(state^.PointSystem, state^.ParticleSystem)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.AnimMetadata) {
@@ -314,7 +314,7 @@ reset_current_animation_loop :: proc(
 		return
 	}
     
-    kine.kine_clear_animation_data(state^.PointSystem)
+    kine.kine_clear_animation_data(state^.PointSystem, state^.ParticleSystem)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.AnimMetadata) {
@@ -566,6 +566,8 @@ show_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
 @(export)
 hide_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
     if index >= 0 && index < MAX_KINEPOINTS {
+        context = state^.SavedContext
+        particles.emit_kine_hide_burst(state^.ParticleSystem, state^.PointSystem, index)
         state^.PointSystem^.Points[index].DoDraw = false
     }
 }
