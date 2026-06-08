@@ -64,9 +64,7 @@ kine_clear_animation_data :: proc(
 kine_draw_cache_reset :: proc(
     pointSystem: ^KinePointSystem) {
 
-    pointSystem^.DrawCache.PointCount = 0
-    pointSystem^.DrawCache.LineCount = 0
-    pointSystem^.DrawCache.CircleCount = 0
+    pointSystem^.DrawCache.ItemCount = 0
     pointSystem^.DrawCache.PenCount = 0
     pointSystem^.DrawCache.CompassCount = 0
 }
@@ -144,7 +142,7 @@ cache_push_point :: proc(
     src: ^KineShapePoint,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.PointCount >= len(pointSystem^.DrawCache.Points) {
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
         return
     }
 
@@ -153,10 +151,11 @@ cache_push_point :: proc(
         return
     }
 
-    slot := &pointSystem^.DrawCache.Points[pointSystem^.DrawCache.PointCount]
-    slot^.Base = make_draw_base(sourceIndex, src)
-    slot^.Point1 = p0
-    pointSystem^.DrawCache.PointCount += 1
+    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
+    slot^.Type = .Point
+    slot^.Point.Base = make_draw_base(sourceIndex, src)
+    slot^.Point.Point1 = p0
+    pointSystem^.DrawCache.ItemCount += 1
 }
 
 cache_push_line :: proc(
@@ -165,7 +164,7 @@ cache_push_line :: proc(
     src: ^KineShapePoint,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.LineCount >= len(pointSystem^.DrawCache.Lines) {
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
         return
     }
 
@@ -181,11 +180,12 @@ cache_push_line :: proc(
         return
     }
 
-    slot := &pointSystem^.DrawCache.Lines[pointSystem^.DrawCache.LineCount]
-    slot^.Base = make_draw_base(sourceIndex, src)
-    slot^.Point1 = point1
-    slot^.Point2 = point2
-    pointSystem^.DrawCache.LineCount += 1
+    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
+    slot^.Type = .Line
+    slot^.Line.Base = make_draw_base(sourceIndex, src)
+    slot^.Line.Point1 = point1
+    slot^.Line.Point2 = point2
+    pointSystem^.DrawCache.ItemCount += 1
 }
 
 cache_push_circle :: proc(
@@ -194,7 +194,7 @@ cache_push_circle :: proc(
     src: ^KineShapePoint,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.CircleCount >= len(pointSystem^.DrawCache.Circles) {
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
         return
     }
 
@@ -219,12 +219,13 @@ cache_push_circle :: proc(
         start, end = end, start
     }
 
-    slot := &pointSystem^.DrawCache.Circles[pointSystem^.DrawCache.CircleCount]
-    slot^.Base = make_draw_base(sourceIndex, src)
-    slot^.Center = center
-    slot^.Start = start
-    slot^.End = end
-    pointSystem^.DrawCache.CircleCount += 1
+    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
+    slot^.Type = .Circle
+    slot^.Circle.Base = make_draw_base(sourceIndex, src)
+    slot^.Circle.Center = center
+    slot^.Circle.Start = start
+    slot^.Circle.End = end
+    pointSystem^.DrawCache.ItemCount += 1
 }
 
 cache_push_pen :: proc(

@@ -247,16 +247,20 @@ draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneral
 }
 
 draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
-    for i in 0..<state^.PointSystem^.DrawCache.PointCount {
-        draw_cached_point(state, &state^.PointSystem^.DrawCache.Points[i])
-    }
-
-    for i in 0..<state^.PointSystem^.DrawCache.LineCount {
-        draw_cached_line(state, &state^.PointSystem^.DrawCache.Lines[i])
-    }
-
-    for i in 0..<state^.PointSystem^.DrawCache.CircleCount {
-        draw_cached_circle(state, &state^.PointSystem^.DrawCache.Circles[i])
+    for i in 0..<state^.PointSystem^.DrawCache.ItemCount {
+        item := &state^.PointSystem^.DrawCache.Items[i]
+        switch item^.Type {
+            case .Point:
+                draw_cached_point(state, &item^.Point)
+            case .Line:
+                draw_cached_line(state, &item^.Line)
+            case .Circle:
+                draw_cached_circle(state, &item^.Circle)
+            case .Pen, .Compass:
+                continue
+            case:
+                continue
+        }
     }
 }
 

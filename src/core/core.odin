@@ -184,15 +184,16 @@ KineCompassDraw :: struct {
     Joint2: Vector3,
 }
 
+KineDrawCacheItem :: struct {
+    Type: KineShapePointType,
+    Point: KinePointDraw,
+    Line: KineLineDraw,
+    Circle: KineCircleDraw,
+}
+
 KineDrawCache :: struct {
-    Points: [MAX_KINEPOINTS]KinePointDraw,
-    PointCount: int,
-
-    Lines: [MAX_KINEPOINTS]KineLineDraw,
-    LineCount: int,
-
-    Circles: [MAX_KINEPOINTS]KineCircleDraw,
-    CircleCount: int,
+    Items: [MAX_KINEPOINTS]KineDrawCacheItem,
+    ItemCount: int,
 
     Pens: [MAX_KINEPOINTS]KinePenDraw,
     PenCount: int,
