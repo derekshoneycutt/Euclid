@@ -65,14 +65,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 end
 
 function clean(state_ptr::Ptr{Cvoid})
-    EuclidBridge.hide_pen(state_ptr)
-    EuclidBridge.hide_compass(state_ptr)
-    line1Host = EuclidBridge.get_animation_meta(state_ptr, 4)
-    line2Host = EuclidBridge.get_animation_meta(state_ptr, 7)
-    circleHost = EuclidBridge.get_animation_meta(state_ptr, 10)
-    EuclidBridge.hide_point(state_ptr, Integer(line1Host))
-    EuclidBridge.hide_point(state_ptr, Integer(line2Host))
-    EuclidBridge.hide_point(state_ptr, Integer(circleHost))
+    # nothing special on the julia side; our data is auto-cleared in Odin side
 end
 
 function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)

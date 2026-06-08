@@ -283,6 +283,11 @@ change_current_animation_loop :: proc(
     }
     
     kine.kine_clear_animation_data(state^.PointSystem)
+    hide_pen(state)
+    hide_compass(state)
+    for i in 0..<len(state^.AnimMetadata) {
+        state^.AnimMetadata[i] = 0.0
+    }
 
 	jl_call1(animation^.Initiate, state_value)
 	if jl_exception_occurred() != nil {
@@ -310,6 +315,11 @@ reset_current_animation_loop :: proc(
 	}
     
     kine.kine_clear_animation_data(state^.PointSystem)
+    hide_pen(state)
+    hide_compass(state)
+    for i in 0..<len(state^.AnimMetadata) {
+        state^.AnimMetadata[i] = 0.0
+    }
     
 	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Initiate, state_value)
 	if jl_exception_occurred() != nil {
