@@ -249,15 +249,13 @@ draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneral
 draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
     for i in 0..<state^.PointSystem^.DrawCache.ItemCount {
         item := &state^.PointSystem^.DrawCache.Items[i]
-        switch item^.Type {
-            case .Point:
-                draw_cached_point(state, &item^.Point)
-            case .Line:
-                draw_cached_line(state, &item^.Line)
-            case .Circle:
-                draw_cached_circle(state, &item^.Circle)
-            case .Pen, .Compass:
-                continue
+        switch &itemTyped in item {
+            case core.KinePointDraw:
+                draw_cached_point(state, &itemTyped)
+            case core.KineLineDraw:
+                draw_cached_line(state, &itemTyped)
+            case core.KineCircleDraw:
+                draw_cached_circle(state, &itemTyped)
             case:
                 continue
         }
@@ -266,22 +264,20 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
 
 
 draw_kine_points_high_cached :: proc(state: ^EuclidGeneralState) {
-    for i in 0..<state^.PointSystem^.DrawCache.PenCount {
-        draw_cached_pen_active_dot(state, &state^.PointSystem^.DrawCache.Pens[i])
+    if state^.PointSystem^.DrawCache.DrawPen {
+        draw_cached_pen_active_dot(state, &state^.PointSystem^.DrawCache.Pen)
     }
-
-    for i in 0..<state^.PointSystem^.DrawCache.CompassCount {
-        draw_cached_compass_active_dot(state, &state^.PointSystem^.DrawCache.Compasses[i])
+    if state^.PointSystem^.DrawCache.DrawCompass {
+        draw_cached_compass_active_dot(state, &state^.PointSystem^.DrawCache.Compass)
     }
 
     begin_stroke3d_mode(state)
 
-    for i in 0..<state^.PointSystem^.DrawCache.PenCount {
-        draw_cached_pen(state, &state^.PointSystem^.DrawCache.Pens[i])
+    if state^.PointSystem^.DrawCache.DrawPen {
+        draw_cached_pen(state, &state^.PointSystem^.DrawCache.Pen)
     }
-
-    for i in 0..<state^.PointSystem^.DrawCache.CompassCount {
-        draw_cached_compass(state, &state^.PointSystem^.DrawCache.Compasses[i])
+    if state^.PointSystem^.DrawCache.DrawCompass {
+        draw_cached_compass(state, &state^.PointSystem^.DrawCache.Compass)
     }
 
     end_stroke3d_mode(state)
@@ -289,12 +285,11 @@ draw_kine_points_high_cached :: proc(state: ^EuclidGeneralState) {
 
 
 draw_kine_points_shadows_cached :: proc(state: ^EuclidGeneralState) {
-    for i in 0..<state^.PointSystem^.DrawCache.PenCount {
-        draw_cached_pen_shadow(state, &state^.PointSystem^.DrawCache.Pens[i])
+    if state^.PointSystem^.DrawCache.DrawPen {
+        draw_cached_pen_shadow(state, &state^.PointSystem^.DrawCache.Pen)
     }
-
-    for i in 0..<state^.PointSystem^.DrawCache.CompassCount {
-        draw_cached_compass_shadow(state, &state^.PointSystem^.DrawCache.Compasses[i])
+    if state^.PointSystem^.DrawCache.DrawCompass {
+        draw_cached_compass_shadow(state, &state^.PointSystem^.DrawCache.Compass)
     }
 }
 

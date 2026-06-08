@@ -65,8 +65,8 @@ kine_draw_cache_reset :: proc(
     pointSystem: ^KinePointSystem) {
 
     pointSystem^.DrawCache.ItemCount = 0
-    pointSystem^.DrawCache.PenCount = 0
-    pointSystem^.DrawCache.CompassCount = 0
+    pointSystem^.DrawCache.DrawPen = false
+    pointSystem^.DrawCache.DrawCompass = false
 }
 
 build_kine_draw_cache :: proc(
@@ -152,9 +152,8 @@ cache_push_point :: proc(
     }
 
     slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    slot^.Type = .Point
-    slot^.Point.Base = make_draw_base(sourceIndex, src)
-    slot^.Point.Point1 = p0
+    point := KinePointDraw{ make_draw_base(sourceIndex, src), p0 }
+    slot^ = point
     pointSystem^.DrawCache.ItemCount += 1
 }
 
@@ -181,10 +180,8 @@ cache_push_line :: proc(
     }
 
     slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    slot^.Type = .Line
-    slot^.Line.Base = make_draw_base(sourceIndex, src)
-    slot^.Line.Point1 = point1
-    slot^.Line.Point2 = point2
+    point := KineLineDraw{ make_draw_base(sourceIndex, src), point1, point2 }
+    slot^ = point
     pointSystem^.DrawCache.ItemCount += 1
 }
 
@@ -220,11 +217,8 @@ cache_push_circle :: proc(
     }
 
     slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    slot^.Type = .Circle
-    slot^.Circle.Base = make_draw_base(sourceIndex, src)
-    slot^.Circle.Center = center
-    slot^.Circle.Start = start
-    slot^.Circle.End = end
+    point := KineCircleDraw{ make_draw_base(sourceIndex, src), center, start, end }
+    slot^ = point
     pointSystem^.DrawCache.ItemCount += 1
 }
 
@@ -233,10 +227,6 @@ cache_push_pen :: proc(
     sourceIndex: int,
     src: ^KineShapePoint,
     alpha: f32) {
-
-    if pointSystem^.DrawCache.PenCount >= len(pointSystem^.DrawCache.Pens) {
-        return
-    }
 
     child0 := src^.ChildPointHead
     j1: Vector3
@@ -250,11 +240,10 @@ cache_push_pen :: proc(
         return
     }
 
-    slot := &pointSystem^.DrawCache.Pens[pointSystem^.DrawCache.PenCount]
-    slot^.Base = make_draw_base(sourceIndex, src)
-    slot^.Joint1 = j1
-    slot^.Joint2 = j2
-    pointSystem^.DrawCache.PenCount += 1
+    pointSystem^.DrawCache.Pen.Base = make_draw_base(sourceIndex, src)
+    pointSystem^.DrawCache.Pen.Joint1 = j1
+    pointSystem^.DrawCache.Pen.Joint2 = j2
+    pointSystem^.DrawCache.DrawPen = src^.DoDraw
 }
 
 cache_push_compass :: proc(
@@ -262,10 +251,6 @@ cache_push_compass :: proc(
     sourceIndex: int,
     src: ^KineShapePoint,
     alpha: f32) {
-
-    if pointSystem^.DrawCache.CompassCount >= len(pointSystem^.DrawCache.Compasses) {
-        return
-    }
 
     child0 := src^.ChildPointHead
     p0: Vector3
@@ -285,10 +270,9 @@ cache_push_compass :: proc(
         return
     }
 
-    slot := &pointSystem^.DrawCache.Compasses[pointSystem^.DrawCache.CompassCount]
-    slot^.Base = make_draw_base(sourceIndex, src)
-    slot^.Joint1 = p0
-    slot^.Pivot = p1
-    slot^.Joint2 = p2
-    pointSystem^.DrawCache.CompassCount += 1
+    pointSystem^.DrawCache.Compass.Base = make_draw_base(sourceIndex, src)
+    pointSystem^.DrawCache.Compass.Joint1 = p0
+    pointSystem^.DrawCache.Compass.Pivot = p1
+    pointSystem^.DrawCache.Compass.Joint2 = p2
+    pointSystem^.DrawCache.DrawCompass = src^.DoDraw
 }
