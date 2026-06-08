@@ -1,6 +1,8 @@
 
 include("./nullanimation.jl")
 
+include("./elements/book1/def_001_point.jl")
+
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
     "Welcome to Euclid's Elements!"
@@ -35,23 +37,34 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
 
 
     rootId = EuclidBridge.add_root_animation_interface(
-        state_ptr, get_view_text_root, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
+        state_ptr, get_view_text_root, NullAnimation.initialize,
+        NullAnimation.loop, NullAnimation.clean,
         "Euclid's Elements")
-    book1Id = EuclidBridge.add_child_animation_interface(
-        state_ptr, get_view_text_BookI, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
-        "Book I", rootId)
-    book1DefsId = EuclidBridge.add_child_animation_interface(
-        state_ptr, get_view_text_BookI_defs, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
-        "Definitions", book1Id)
-    book1PostsId = get_view_text_BookI_posts, EuclidBridge.add_child_animation_interface(
-        state_ptr, get_view_text_BookI_posts, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
-        "Postulates", book1Id)
-    book1CommNotsId = EuclidBridge.add_child_animation_interface(
-        state_ptr, get_view_text_BookI_common, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
-        "Common Notions", book1Id)
-    book1PropsId = EuclidBridge.add_child_animation_interface(
-        state_ptr, get_view_text_BookI_props, NullAnimation.initialize, NullAnimation.loop, NullAnimation.clean,
-        "Propositions", book1Id)
+        book1Id = EuclidBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "Book I", rootId)
+            book1DefsId = EuclidBridge.add_child_animation_interface(
+                state_ptr, get_view_text_BookI_defs, NullAnimation.initialize,
+                NullAnimation.loop, NullAnimation.clean,
+                "Definitions", book1Id)
+                book1Defs1PointId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionPoint.get_view_text,
+                    ElementsOneDefinitionPoint.initialize,
+                    ElementsOneDefinitionPoint.loop, ElementsOneDefinitionPoint.clean,
+                    "1. Point", book1DefsId)
+            book1PostsId = get_view_text_BookI_posts, EuclidBridge.add_child_animation_interface(
+                state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
+                NullAnimation.loop, NullAnimation.clean,
+                "Postulates", book1Id)
+            book1CommNotsId = EuclidBridge.add_child_animation_interface(
+                state_ptr, get_view_text_BookI_common, NullAnimation.initialize,
+                NullAnimation.loop, NullAnimation.clean,
+                "Common Notions", book1Id)
+            book1PropsId = EuclidBridge.add_child_animation_interface(
+                state_ptr, get_view_text_BookI_props, NullAnimation.initialize,
+                NullAnimation.loop, NullAnimation.clean,
+                "Propositions", book1Id)
 end
 
 function global_euclid_loop(state_ptr::Ptr{Cvoid}, dt::Float32)

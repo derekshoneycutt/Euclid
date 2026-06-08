@@ -488,7 +488,7 @@ get_point_view :: proc "c" (
     state: ^core.EuclidGeneralState,
     index: int) -> BridgePointView {
 
-    if index >= 0 && index <= MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_KINEPOINTS {
         point := state^.PointSystem^.Points[index]
         type: int = 0
         switch point.Type {

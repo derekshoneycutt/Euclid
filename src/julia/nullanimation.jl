@@ -3,7 +3,7 @@ module NullAnimation
 using LinearAlgebra
 import ..EuclidBridge
 
-export initialize, clean, loop
+export get_view_text, initialize, clean, loop
 
 const StartRotation = π / 4f0
 const CircleRadius = 0.25f0

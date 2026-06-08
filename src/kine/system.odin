@@ -148,9 +148,8 @@ cache_push_point :: proc(
         return
     }
 
-    child := src^.ChildPointHead
     p0: Vector3
-    if !lerped_point_position(pointSystem, child, alpha, &p0) {
+    if !lerped_point_position(pointSystem, sourceIndex, alpha, &p0) {
         return
     }
 
