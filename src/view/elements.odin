@@ -56,6 +56,15 @@ init_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
     s^.LocRadius = rl.GetShaderLocation(s^.Shader, "uRadius")
     s^.LocViewportHeight = rl.GetShaderLocation(s^.Shader, "uViewportHeight")
 
+    if s^.LocP0 < 0 || s^.LocP1 < 0 || s^.LocRadius < 0 || s^.LocViewportHeight < 0 {
+        fmt.println("stroke3d shader missing required uniforms; pen/compass 3D shading disabled")
+        fmt.println("stroke3d uniform locations p0=", s^.LocP0, " p1=", s^.LocP1,
+            " radius=", s^.LocRadius, " viewportHeight=", s^.LocViewportHeight)
+        rl.UnloadShader(s^.Shader)
+        s^.Ready = false
+        return
+    }
+
     s^.Ready = true
 }
 
@@ -90,11 +99,36 @@ set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^EuclidGeneralState, loca
 }
 
 
+get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
+    screenW := f32(rl.GetScreenWidth())
+    screenH := f32(rl.GetScreenHeight())
+    renderW := f32(rl.GetRenderWidth())
+    renderH := f32(rl.GetRenderHeight())
+
+    sx := f32(1.0)
+    sy := f32(1.0)
+
+    if screenW > 0 && renderW > 0 {
+        sx = renderW / screenW
+    }
+    if screenH > 0 && renderH > 0 {
+        sy = renderH / screenH
+    }
+
+    return Vector2{sx, sy}
+}
+
+
 set_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: Vector2, thickness: f32) {
     s := &state^.Stroke3D
-    set_stroke3d_uniform_vec2(state, s^.LocP0, p0)
-    set_stroke3d_uniform_vec2(state, s^.LocP1, p1)
-    set_stroke3d_uniform_float(state, s^.LocRadius, thickness * 0.5)
+    scale := get_stroke3d_render_scale()
+    p0Scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
+    p1Scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
+    avgScale := (scale.x + scale.y) * 0.5
+
+    set_stroke3d_uniform_vec2(state, s^.LocP0, p0Scaled)
+    set_stroke3d_uniform_vec2(state, s^.LocP1, p1Scaled)
+    set_stroke3d_uniform_float(state, s^.LocRadius, thickness * 0.5 * avgScale)
 }
 
 
@@ -127,7 +161,7 @@ begin_stroke3d_mode :: proc(state: ^EuclidGeneralState) {
     set_stroke3d_uniform_float(state, s^.LocDiffuse, STROKE3D_DIFFUSE)
     set_stroke3d_uniform_float(state, s^.LocSpecularStrength, STROKE3D_SPECULAR_STRENGTH)
     set_stroke3d_uniform_float(state, s^.LocSpecularPower, STROKE3D_SPECULAR_POWER)
-    set_stroke3d_uniform_float(state, s^.LocViewportHeight, f32(rl.GetScreenHeight()))
+    set_stroke3d_uniform_float(state, s^.LocViewportHeight, f32(rl.GetRenderHeight()))
 
     rl.BeginShaderMode(s^.Shader)
 }
