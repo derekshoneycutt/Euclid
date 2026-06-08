@@ -1,3 +1,5 @@
+module EuclidBridge
+
 using Colors
 
 struct BridgeColor
@@ -64,10 +66,25 @@ function bridge_color(name::AbstractString)
     bridge_color(parse(Colorant, name))
 end
 
-function euclid_set_null_animations(
+function set_null_animations(
     state_ptr::Ptr{Cvoid}, init, loop, clean)
 
     @ccall set_null_animations(state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any)::Cvoid
+end
+
+function add_root_animation_interface(
+    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String, viewText::String)
+
+    @ccall add_root_animation_interface(
+        state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any, name::Cstring, viewText::Cstring)::Int64
+end
+
+function add_child_animation_interface(
+    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String, viewText::String, parentId::Integer)
+
+    @ccall add_child_animation_interface(
+        state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any, name::Cstring,
+        viewText::Cstring, parentId::Int64)::Int64
 end
 
 """
@@ -86,27 +103,27 @@ Parameters:
 
 Returns: a `BridgePointView` describing the newly created point
 """
-function euclid_create_new_point(state_ptr::Ptr{Cvoid},
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::BridgeColor, brushSize::Float32)
     pos = (x, y, z)
     return @ccall create_new_point(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat},
         color::BridgeColor, brushSize::Cfloat)::BridgePointView
 end
-function euclid_create_new_point(state_ptr::Ptr{Cvoid},
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::Colorant, brushSize::Float32)
-    euclid_create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
+    create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
 end
-function euclid_create_new_point(state_ptr::Ptr{Cvoid},
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::Symbol, brushSize::Float32)
-    euclid_create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
+    create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
 end
-function euclid_create_new_point(state_ptr::Ptr{Cvoid},
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::AbstractString, brushSize::Float32)
-    euclid_create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
+    create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
 end
 
 """
@@ -128,7 +145,7 @@ Parameters:
 
 Returns: a `BridgeShapeLine` describing the newly created line
 """
-function euclid_create_new_line(state_ptr::Ptr{Cvoid},
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::BridgeColor, brushSize::Float32)
@@ -137,23 +154,23 @@ function euclid_create_new_line(state_ptr::Ptr{Cvoid},
     return @ccall create_new_line(state_ptr::Ptr{Cvoid}, pos1::NTuple{3, Cfloat},
         pos2::NTuple{3, Cfloat}, color::BridgeColor, brushSize::Cfloat)::BridgeShapeLine
 end
-function euclid_create_new_line(state_ptr::Ptr{Cvoid},
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::Colorant, brushSize::Float32)
-    euclid_create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
+    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
 end
-function euclid_create_new_line(state_ptr::Ptr{Cvoid},
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::Symbol, brushSize::Float32)
-    euclid_create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
+    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
 end
-function euclid_create_new_line(state_ptr::Ptr{Cvoid},
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::AbstractString, brushSize::Float32)
-    euclid_create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
+    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
 end
 
 """
@@ -175,7 +192,7 @@ Parameters:
 
 Returns: a `BridgeShapeCircle` describing the newly created circle
 """
-function euclid_create_new_circle(state_ptr::Ptr{Cvoid},
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::BridgeColor, brushSize::Float32)
@@ -184,23 +201,23 @@ function euclid_create_new_circle(state_ptr::Ptr{Cvoid},
         radius::Cfloat, startθ::Cfloat, endθ::Cfloat,
         color::BridgeColor, brushSize::Cfloat)::BridgeShapeCircle
 end
-function euclid_create_new_circle(state_ptr::Ptr{Cvoid},
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::Colorant, brushSize::Float32)
-    euclid_create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
-function euclid_create_new_circle(state_ptr::Ptr{Cvoid},
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::Symbol, brushSize::Float32)
-    euclid_create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
-function euclid_create_new_circle(state_ptr::Ptr{Cvoid},
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::AbstractString, brushSize::Float32)
-    euclid_create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
 
 """
@@ -215,7 +232,7 @@ Parameters:
 
 Returns: a `BridgePointView` describing the retrieved point; valid=false if could not retrieve 
 """
-function euclid_get_point(state_ptr::Ptr{Cvoid}, id::Integer)
+function get_point(state_ptr::Ptr{Cvoid}, id::Integer)
     @ccall get_point_view(state_ptr::Ptr{Cvoid}, id::Cint)::BridgePointView
 end
 
@@ -230,7 +247,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 - `id` : Point id to make visible
 """
-function euclid_show_point(state_ptr::Ptr{Cvoid}, id::Integer)
+function show_point(state_ptr::Ptr{Cvoid}, id::Integer)
     @ccall show_point(state_ptr::Ptr{Cvoid}, id::Cint)::Cvoid
 end
 """
@@ -243,7 +260,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 - `id` : Point id to hide
 """
-function euclid_hide_point(state_ptr::Ptr{Cvoid}, id::Integer)
+function hide_point(state_ptr::Ptr{Cvoid}, id::Integer)
     @ccall hide_point(state_ptr::Ptr{Cvoid}, id::Cint)::Cvoid
 end
 """
@@ -259,7 +276,7 @@ Parameters:
 - `y` : New y world coordinate
 - `z` : New z world coordinate
 """
-function euclid_set_point_position(
+function set_point_position(
     state_ptr::Ptr{Cvoid}, id::Integer, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall set_point_position(state_ptr::Ptr{Cvoid}, id::Cint, pos::NTuple{3, Cfloat})::Cvoid
@@ -275,7 +292,7 @@ Parameters:
 - `id` : Point id to update
 - `brushSize` : New point brush size
 """
-function euclid_set_point_brush(state_ptr::Ptr{Cvoid}, id::Integer, brushSize::Float32)
+function set_point_brush(state_ptr::Ptr{Cvoid}, id::Integer, brushSize::Float32)
     @ccall set_point_brush(state_ptr::Ptr{Cvoid}, id::Cint, brushSize::Cfloat)::Cvoid
 end
 """
@@ -291,17 +308,17 @@ Parameters:
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
-function euclid_set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::BridgeColor)
+function set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::BridgeColor)
     @ccall set_point_color(state_ptr::Ptr{Cvoid}, id::Cint, color::BridgeColor)::Cvoid
 end
-function euclid_set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Colorant)
-    euclid_set_point_color(state_ptr, id, bridge_color(color))
+function set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Colorant)
+    set_point_color(state_ptr, id, bridge_color(color))
 end
-function euclid_set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Symbol)
-    euclid_set_point_color(state_ptr, id, bridge_color(color))
+function set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Symbol)
+    set_point_color(state_ptr, id, bridge_color(color))
 end
-function euclid_set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
-    euclid_set_point_color(state_ptr, id, bridge_color(color))
+function set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
+    set_point_color(state_ptr, id, bridge_color(color))
 end
 """
 Set the active/selected color for a point by id.
@@ -316,17 +333,17 @@ Parameters:
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
-function euclid_set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::BridgeColor)
+function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::BridgeColor)
     @ccall set_point_active_color(state_ptr::Ptr{Cvoid}, id::Cint, color::BridgeColor)::Cvoid
 end
-function euclid_set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Colorant)
-    euclid_set_point_active_color(state_ptr, id, bridge_color(color))
+function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Colorant)
+    set_point_active_color(state_ptr, id, bridge_color(color))
 end
-function euclid_set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Symbol)
-    euclid_set_point_active_color(state_ptr, id, bridge_color(color))
+function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Symbol)
+    set_point_active_color(state_ptr, id, bridge_color(color))
 end
-function euclid_set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
-    euclid_set_point_active_color(state_ptr, id, bridge_color(color))
+function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
+    set_point_active_color(state_ptr, id, bridge_color(color))
 end
 
 
@@ -340,7 +357,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_show_pen(state_ptr::Ptr{Cvoid})
+function show_pen(state_ptr::Ptr{Cvoid})
     @ccall show_pen(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -353,7 +370,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_hide_pen(state_ptr::Ptr{Cvoid})
+function hide_pen(state_ptr::Ptr{Cvoid})
     @ccall hide_pen(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -370,19 +387,19 @@ Parameters:
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
-function euclid_set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, c::BridgeColor)
+function set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, c::BridgeColor)
     @ccall set_pen_active(state_ptr::Ptr{Cvoid}, active::Cint, c::BridgeColor)::Cvoid
 end
-function euclid_set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, c::Colorant)
-    euclid_set_pen_active(state_ptr, active, bridge_color(c))
+function set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, c::Colorant)
+    set_pen_active(state_ptr, active, bridge_color(c))
 end
 
-function euclid_set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, name::Symbol)
-    euclid_set_pen_active(state_ptr, active, bridge_color(name))
+function set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, name::Symbol)
+    set_pen_active(state_ptr, active, bridge_color(name))
 end
 
-function euclid_set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, name::AbstractString)
-    euclid_set_pen_active(state_ptr, active, bridge_color(name))
+function set_pen_active(state_ptr::Ptr{Cvoid}, active::Integer, name::AbstractString)
+    set_pen_active(state_ptr, active, bridge_color(name))
 end
 
 """
@@ -394,7 +411,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_clear_pen_active(state_ptr::Ptr{Cvoid})
+function clear_pen_active(state_ptr::Ptr{Cvoid})
     @ccall clear_pen_active(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -410,7 +427,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 """
-function euclid_lock_pen_joint1(
+function lock_pen_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -425,7 +442,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_unlock_pen_joint1(state_ptr::Ptr{Cvoid})
+function unlock_pen_joint1(state_ptr::Ptr{Cvoid})
     @ccall unlock_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
 end
 
@@ -441,7 +458,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 """
-function euclid_move_pen_joint1(
+function move_pen_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -458,7 +475,7 @@ Parameters:
 
 Returns: `NTuple{3, Cfloat}` as `(x, y, z)`
 """
-function euclid_get_pen_joint1_position(state_ptr::Ptr{Cvoid})
+function get_pen_joint1_position(state_ptr::Ptr{Cvoid})
     return @ccall get_pen_joint1_position(state_ptr::Ptr{Cvoid})::NTuple{3, Cfloat}
 end
 
@@ -474,7 +491,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 """
-function euclid_lock_pen_joint2(
+function lock_pen_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -489,7 +506,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_unlock_pen_joint2(state_ptr::Ptr{Cvoid})
+function unlock_pen_joint2(state_ptr::Ptr{Cvoid})
     @ccall unlock_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
 end
 
@@ -505,7 +522,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 """
-function euclid_move_pen_joint2(
+function move_pen_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -522,7 +539,7 @@ Parameters:
 
 Returns: `NTuple{3, Cfloat}` as `(x, y, z)`
 """
-function euclid_get_pen_joint2_position(state_ptr::Ptr{Cvoid})
+function get_pen_joint2_position(state_ptr::Ptr{Cvoid})
     return @ccall get_pen_joint2_position(state_ptr::Ptr{Cvoid})::NTuple{3, Cfloat}
 end
 
@@ -535,7 +552,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_show_compass(state_ptr::Ptr{Cvoid})
+function show_compass(state_ptr::Ptr{Cvoid})
     @ccall show_compass(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -548,7 +565,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_hide_compass(state_ptr::Ptr{Cvoid})
+function hide_compass(state_ptr::Ptr{Cvoid})
     @ccall hide_compass(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -565,19 +582,19 @@ Parameters:
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
-function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::BridgeColor)
+function set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::BridgeColor)
     @ccall set_compass_active(state_ptr::Ptr{Cvoid}, active::Cint, c::BridgeColor)::Cvoid
 end
-function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::Colorant)
-    euclid_set_compass_active(state_ptr, active, bridge_color(c))
+function set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, c::Colorant)
+    set_compass_active(state_ptr, active, bridge_color(c))
 end
 
-function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, name::Symbol)
-    euclid_set_compass_active(state_ptr, active, bridge_color(name))
+function set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, name::Symbol)
+    set_compass_active(state_ptr, active, bridge_color(name))
 end
 
-function euclid_set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, name::AbstractString)
-    euclid_set_compass_active(state_ptr, active, bridge_color(name))
+function set_compass_active(state_ptr::Ptr{Cvoid}, active::Integer, name::AbstractString)
+    set_compass_active(state_ptr, active, bridge_color(name))
 end
 
 """
@@ -589,7 +606,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_clear_compass_active(state_ptr::Ptr{Cvoid})
+function clear_compass_active(state_ptr::Ptr{Cvoid})
     @ccall clear_compass_active(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
@@ -605,7 +622,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 """
-function euclid_lock_compass_joint1(
+function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -620,7 +637,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_unlock_compass_joint1(state_ptr::Ptr{Cvoid})
+function unlock_compass_joint1(state_ptr::Ptr{Cvoid})
     @ccall unlock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
 end
 
@@ -636,7 +653,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 """
-function euclid_move_compass_joint1(
+function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -653,7 +670,7 @@ Parameters:
 
 Returns: `NTuple{3, Cfloat}` as `(x, y, z)`
 """
-function euclid_get_compass_joint1_position(state_ptr::Ptr{Cvoid})
+function get_compass_joint1_position(state_ptr::Ptr{Cvoid})
     return @ccall get_compass_joint1_position(state_ptr::Ptr{Cvoid})::NTuple{3, Cfloat}
 end
 
@@ -669,7 +686,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 """
-function euclid_lock_compass_joint2(
+function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -684,7 +701,7 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
-function euclid_unlock_compass_joint2(state_ptr::Ptr{Cvoid})
+function unlock_compass_joint2(state_ptr::Ptr{Cvoid})
     @ccall unlock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
 end
 
@@ -700,7 +717,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 """
-function euclid_move_compass_joint2(
+function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
@@ -717,7 +734,7 @@ Parameters:
 
 Returns: `NTuple{3, Cfloat}` as `(x, y, z)`
 """
-function euclid_get_compass_joint2_position(state_ptr::Ptr{Cvoid})
+function get_compass_joint2_position(state_ptr::Ptr{Cvoid})
     return @ccall get_compass_joint2_position(state_ptr::Ptr{Cvoid})::NTuple{3, Cfloat}
 end
 
@@ -732,7 +749,7 @@ Parameters:
 - `pos` : Metadata slot index
 - `metadata` : Value to store in the slot
 """
-function euclid_set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer, metadata::Float32)
+function set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer, metadata::Float32)
     @ccall set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint, metadata::Cfloat)::Cvoid
 end
 
@@ -748,7 +765,7 @@ Parameters:
 
 Returns: slot value as `Float32`
 """
-function euclid_get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
+function get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
     ret = @ccall get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint)::Cfloat
     return Float32(ret)
 end
@@ -767,24 +784,26 @@ Parameters:
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
-function euclid_emit_trailing_particle(
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::BridgeColor)
     pos = (x, y)
     @ccall emit_trailing_particle(state_ptr::Ptr{Cvoid}, pos::NTuple{2, Cfloat}, color::BridgeColor)::Cvoid
 end
 
-function euclid_emit_trailing_particle(
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Colorant)
-    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+    emit_trailing_particle(state_ptr, x, y, bridge_color(color))
 end
 
-function euclid_emit_trailing_particle(
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Symbol)
-    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+    emit_trailing_particle(state_ptr, x, y, bridge_color(color))
 end
 
-function euclid_emit_trailing_particle(
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::AbstractString)
-    euclid_emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+    emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+end
+
 end
 

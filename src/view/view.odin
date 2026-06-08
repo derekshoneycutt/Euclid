@@ -85,6 +85,8 @@ run_window_loop :: proc() {
     state^.CurrentDeltaTime = FIXED_DT
 
     julia.init_euclid_scripts(state)
+    defer julia.clean_julia_interfaces(state)
+
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
 

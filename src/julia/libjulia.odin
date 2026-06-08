@@ -7,6 +7,7 @@ import "../kine"
 import "base:runtime"
 import "core:c"
 import "core:fmt"
+import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -181,18 +182,80 @@ call_global_euclid_loop :: proc(
 call_current_animation_loop :: proc(
     state: ^core.EuclidGeneralState, dt: f32) {
 
-    if state^.JuliaInterface^.NullAnimation.Loop == nil {
+    if state^.JuliaInterface^.CurrentAnimation.Loop == nil {
         return
     }
 
 	state_value := jl_box_voidpointer(state)
     dt_value := jl_box_float32(dt)
 
-	result := jl_call2(state^.JuliaInterface^.NullAnimation.Loop, state_value, dt_value)
+	result := jl_call2(state^.JuliaInterface^.CurrentAnimation^.Loop, state_value, dt_value)
 	if jl_exception_occurred() != nil {
         print_julia_exception("Current animation loop")
 		return
 	}
+}
+
+change_current_animation_loop :: proc(
+    state: ^core.EuclidGeneralState, newIndex: int) {
+    
+    if newIndex < -1 || newIndex >= state^.JuliaInterface^.NextAnimationIndex {
+        return
+    }
+
+    animation := &state^.JuliaInterface^.Animations[newIndex]
+    if newIndex < 0 {
+        animation = &state^.JuliaInterface^.NullAnimation
+    }
+    
+	state_value := jl_box_voidpointer(state)
+
+
+    if state^.JuliaInterface^.CurrentAnimation^.Loop != nil {
+        jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
+        if jl_exception_occurred() != nil {
+            print_julia_exception("Cleaning previous animation loop")
+            return
+        }
+    }
+    
+	jl_call1(animation^.Initiate, state_value)
+	if jl_exception_occurred() != nil {
+        print_julia_exception("Initiating new animation loop")
+		return
+	}
+
+    state^.JuliaInterface^.CurrentAnimation = animation
+}
+
+reset_current_animation_loop :: proc(
+    state: ^core.EuclidGeneralState) {
+
+    if state^.JuliaInterface^.CurrentAnimation^.Loop == nil {
+        return
+    }
+    
+	state_value := jl_box_voidpointer(state)
+
+	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
+	if jl_exception_occurred() != nil {
+        print_julia_exception("Cleaning previous animation loop")
+		return
+	}
+    
+	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Initiate, state_value)
+	if jl_exception_occurred() != nil {
+        print_julia_exception("Initiating new animation loop")
+		return
+	}
+}
+
+clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
+    for i in 0..<state^.JuliaInterface^.NextAnimationIndex {
+        animation := state^.JuliaInterface^.Animations[i]
+        delete(animation.Name)
+        delete(animation.ViewText)
+    }
 }
 
 end_julia :: proc() {
@@ -208,6 +271,73 @@ set_null_animations :: proc "c" (
     state^.JuliaInterface^.NullAnimation.Initiate = init
     state^.JuliaInterface^.NullAnimation.Loop = loop
     state^.JuliaInterface^.NullAnimation.Clean = clean
+}
+
+@(export)
+add_root_animation_interface :: proc "c" (
+    state : ^core.EuclidGeneralState,
+    init, loop, clean : ^Jl_Function_T,
+    name, viewText : cstring) -> int {
+
+    context = state^.SavedContext
+    newIndex := state^.JuliaInterface^.NextAnimationIndex
+    state^.JuliaInterface^.NextAnimationIndex += 1
+
+    animation := &state^.JuliaInterface^.Animations[newIndex]
+
+    animation^.Initiate = init
+    animation^.Loop = loop
+    animation^.Clean = clean
+    animation^.Name = strings.clone(string(name))
+    animation^.Name = strings.clone(string(viewText))
+    animation^.FirstChildId = -1
+    animation^.ParentId = -1
+    animation^.NextSibling = -1
+
+    return newIndex
+}
+
+@(export)
+add_child_animation_interface :: proc "c" (
+    state : ^core.EuclidGeneralState,
+    init, loop, clean : ^Jl_Function_T,
+    name, viewText : cstring,
+    parentId : int) -> int {
+
+    if parentId < 0 || parentId >= state^.JuliaInterface^.NextAnimationIndex {
+        return -1
+    }
+
+    context = state^.SavedContext
+    newIndex := state^.JuliaInterface^.NextAnimationIndex
+    state^.JuliaInterface^.NextAnimationIndex += 1
+
+    parentAnimation := &state^.JuliaInterface^.Animations[parentId]
+    lastChildId := parentAnimation^.FirstChildId
+    if lastChildId < 0 {
+        parentAnimation^.FirstChildId = newIndex
+    }
+    else {
+        reviewChild := &state^.JuliaInterface^.Animations[lastChildId]
+        for reviewChild^.NextSibling >= 0 {
+            lastChildId = reviewChild^.NextSibling
+            reviewChild = &state^.JuliaInterface^.Animations[lastChildId]
+        }
+        reviewChild^.NextSibling = newIndex
+    }
+
+    animation := &state^.JuliaInterface^.Animations[newIndex]
+
+    animation^.Initiate = init
+    animation^.Loop = loop
+    animation^.Clean = clean
+    animation^.Name = strings.clone(string(name))
+    animation^.Name = strings.clone(string(viewText))
+    animation^.FirstChildId = -1
+    animation^.ParentId = parentId
+    animation^.NextSibling = -1
+
+    return newIndex
 }
 
 @(export)

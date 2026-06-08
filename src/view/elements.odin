@@ -263,14 +263,14 @@ draw_kine_points_shadows_cached :: proc(state: ^EuclidGeneralState) {
 
 draw_cached_point :: proc(state: ^EuclidGeneralState, p: ^kine.KinePointDraw) {
     c := iso_to_cartesian(p^.Point1, state^.IsoScale^)
-    rl.DrawCircleV(c, p^.Base.BrushSize, p^.Base.Color)
+    rl.DrawCircleV(c, p^.BrushSize, p^.Color)
 }
 
 
 draw_cached_line :: proc(state: ^EuclidGeneralState, l: ^kine.KineLineDraw) {
     c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
     c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
-    rl.DrawLineEx(c0, c1, l^.Base.BrushSize, l^.Base.Color)
+    rl.DrawLineEx(c0, c1, l^.BrushSize, l^.Color)
 }
 
 
@@ -305,7 +305,7 @@ draw_cached_circle :: proc(state: ^EuclidGeneralState, c: ^kine.KineCircleDraw) 
         }
 
         currScreen := iso_to_cartesian(currWorld, state^.IsoScale^)
-        rl.DrawLineEx(prevScreen, currScreen, c^.Base.BrushSize, c^.Base.Color)
+        rl.DrawLineEx(prevScreen, currScreen, c^.BrushSize, c^.Color)
         prevScreen = currScreen
     }
 }
@@ -315,7 +315,7 @@ draw_cached_pen :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
     c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
     c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
 
-    draw_stroke3d_segment(state, c0, c1, pen^.Base.BrushSize, pen^.Base.Color)
+    draw_stroke3d_segment(state, c0, c1, pen^.BrushSize, pen^.Color)
 }
 
 
@@ -323,18 +323,18 @@ draw_cached_pen_active_dot :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePe
     c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
     c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
 
-    if pen^.Base.ActiveChild == 1 {
-        active := pen^.Base.Color
-        if pen^.Base.HasActiveColor {
-            active = pen^.Base.ActiveColor
+    if pen^.ActiveChild == 1 {
+        active := pen^.Color
+        if pen^.HasActiveColor {
+            active = pen^.ActiveColor
         }
-        rl.DrawCircleV(c0, pen^.Base.BrushSize, active)
-    } else if pen^.Base.ActiveChild == 2 {
-        active := pen^.Base.Color
-        if pen^.Base.HasActiveColor {
-            active = pen^.Base.ActiveColor
+        rl.DrawCircleV(c0, pen^.BrushSize, active)
+    } else if pen^.ActiveChild == 2 {
+        active := pen^.Color
+        if pen^.HasActiveColor {
+            active = pen^.ActiveColor
         }
-        rl.DrawCircleV(c1, pen^.Base.BrushSize, active)
+        rl.DrawCircleV(c1, pen^.BrushSize, active)
     }
 }
 
@@ -404,16 +404,16 @@ draw_cached_compass :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassD
     c1 := iso_to_cartesian(comp^.Pivot, state^.IsoScale^)
     c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
 
-    draw_stroke3d_segment(state, c0, c1, comp^.Base.BrushSize, comp^.Base.Color)
-    draw_stroke3d_segment(state, c1, c2, comp^.Base.BrushSize, comp^.Base.Color)
+    draw_stroke3d_segment(state, c0, c1, comp^.BrushSize, comp^.Color)
+    draw_stroke3d_segment(state, c1, c2, comp^.BrushSize, comp^.Color)
 
     draw_outside_arc_compass_cached(
         comp^.Joint1,
         comp^.Pivot,
         comp^.Joint2,
         state,
-        comp^.Base.BrushSize,
-        comp^.Base.Color,
+        comp^.BrushSize,
+        comp^.Color,
     )
 }
 
@@ -422,18 +422,18 @@ draw_cached_compass_active_dot :: proc(state: ^EuclidGeneralState, comp: ^kine.K
     c0 := iso_to_cartesian(comp^.Joint1, state^.IsoScale^)
     c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
 
-    if comp^.Base.ActiveChild == 1 {
-        active := comp^.Base.Color
-        if comp^.Base.HasActiveColor {
-            active = comp^.Base.ActiveColor
+    if comp^.ActiveChild == 1 {
+        active := comp^.Color
+        if comp^.HasActiveColor {
+            active = comp^.ActiveColor
         }
-        rl.DrawCircleV(c0, comp^.Base.BrushSize, active)
-    } else if comp^.Base.ActiveChild == 3 {
-        active := comp^.Base.Color
-        if comp^.Base.HasActiveColor {
-            active = comp^.Base.ActiveColor
+        rl.DrawCircleV(c0, comp^.BrushSize, active)
+    } else if comp^.ActiveChild == 3 {
+        active := comp^.Color
+        if comp^.HasActiveColor {
+            active = comp^.ActiveColor
         }
-        rl.DrawCircleV(c2, comp^.Base.BrushSize, active)
+        rl.DrawCircleV(c2, comp^.BrushSize, active)
     }
 }
 
@@ -443,8 +443,8 @@ draw_cached_pen_shadow :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDra
     s1 := shadow_to_screen(pen^.Joint2, state)
 
     avgHeight := (pen^.Joint1.z + pen^.Joint2.z) * 0.5
-    shadowColor := make_shadow_color(pen^.Base.Color, avgHeight)
-    thickness := math.max(pen^.Base.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
+    shadowColor := make_shadow_color(pen^.Color, avgHeight)
+    thickness := math.max(pen^.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
 
     rl.DrawLineEx(s0, s1, thickness, shadowColor)
 }
@@ -520,8 +520,8 @@ draw_cached_compass_shadow :: proc(state: ^EuclidGeneralState, comp: ^kine.KineC
     s2 := shadow_to_screen(comp^.Joint2, state)
 
     avgHeight := (comp^.Joint1.z + comp^.Pivot.z + comp^.Joint2.z) / 3.0
-    shadowColor := make_shadow_color(comp^.Base.Color, avgHeight)
-    thickness := math.max(comp^.Base.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
+    shadowColor := make_shadow_color(comp^.Color, avgHeight)
+    thickness := math.max(comp^.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
 
     rl.DrawLineEx(s0, s1, thickness, shadowColor)
     rl.DrawLineEx(s1, s2, thickness, shadowColor)

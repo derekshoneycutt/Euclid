@@ -18,9 +18,18 @@ Jl_Symbol_T  :: struct {}
 Jl_Module_T :: struct {}
 
 EuclidJuliaAnimationInterface :: struct {
-    Initiate : ^Jl_Function_T,
-    Loop : ^Jl_Function_T,
-    Clean : ^Jl_Function_T,
+    Initiate : ^Jl_Function_T, // initiate the animation type
+    Loop : ^Jl_Function_T, // ran each dt in the main window loop
+    Clean : ^Jl_Function_T, // stop and clear animations
+
+    Name : string,
+    ViewText : string,
+    IsExpanded : bool,
+    IsSelected : bool,
+
+    FirstChildId : int,
+    ParentId : int,
+    NextSibling : int,
 }
 
 EuclidJuliaInterface :: struct {
