@@ -135,7 +135,6 @@ print_julia_exception :: proc(contextOfErr: string) {
 
 initiate_julia :: proc() {
     jl_init()
-    _ = jl_eval_string("include(\"./julia/scriptbase.jl\")")
     _ = jl_eval_string("include(\"./julia/script.jl\")")
 }
 
