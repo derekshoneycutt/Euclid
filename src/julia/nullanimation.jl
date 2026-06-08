@@ -17,6 +17,10 @@ const CompassDrawColor = Color1
 const PenDrawColor1 = Color2
 const PenDrawColor2 = Color3
 
+function get_view_text(state_ptr::Ptr{Cvoid})
+    "Welcome to Euclid"
+end
+
 function initialize(state_ptr::Ptr{Cvoid})
     useRotation = π - PenRotation
 
@@ -66,9 +70,9 @@ function clean(state_ptr::Ptr{Cvoid})
     line1Host = EuclidBridge.get_animation_meta(state_ptr, 4)
     line2Host = EuclidBridge.get_animation_meta(state_ptr, 7)
     circleHost = EuclidBridge.get_animation_meta(state_ptr, 10)
-    EuclidBridge.hide_point(line1Host)
-    EuclidBridge.hide_point(line2Host)
-    EuclidBridge.hide_point(circleHost)
+    EuclidBridge.hide_point(state_ptr, Integer(line1Host))
+    EuclidBridge.hide_point(state_ptr, Integer(line2Host))
+    EuclidBridge.hide_point(state_ptr, Integer(circleHost))
 end
 
 function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)

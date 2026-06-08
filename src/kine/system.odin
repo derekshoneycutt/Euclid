@@ -54,6 +54,9 @@ kine_clear_animation_data :: proc(
         pointSystem^.Constraints[i] = {}
         pointSystem^.Constraints[i].DoApply = false
     }
+
+    pointSystem^.NextPointIndex = pointSystem^.AnimPointsStart
+    pointSystem^.NextConstraintIndex = pointSystem^.AnimConstraintsStart
 }
 
 

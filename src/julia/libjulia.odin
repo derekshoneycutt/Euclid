@@ -19,6 +19,8 @@ Jl_Module_T :: core.Jl_Module_T
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
+ANIMATION_RESET_MIN_INTERVAL :: f32(0.35)
+
 BridgeColor :: struct {
     R: u8,
     G: u8,
@@ -142,6 +144,9 @@ retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
 
 	ret.InitScripts = jl_get_function(jl_main_module, "init_euclid_scripts")
     ret.GlobalLoop = jl_get_function(jl_main_module, "global_euclid_loop")
+    ret.CurrentAnimationIndex = -1
+    ret.SelectedAnimationIndex = -1
+    ret.AnimationResetCooldownRemaining = 0
 
     return ret
 }
@@ -162,6 +167,43 @@ init_euclid_scripts :: proc(
         if jl_exception_occurred() != nil {
             print_julia_exception("init_euclid_scripts")
             return
+        }
+    }
+}
+
+update_running_animations :: proc(
+    state: ^core.EuclidGeneralState, dt: f32) {
+
+    if state^.JuliaInterface^.AnimationResetCooldownRemaining > 0 {
+        state^.JuliaInterface^.AnimationResetCooldownRemaining -= dt
+        if state^.JuliaInterface^.AnimationResetCooldownRemaining < 0 {
+            state^.JuliaInterface^.AnimationResetCooldownRemaining = 0
+        }
+    }
+
+    switched_animation := false
+    if state^.JuliaInterface^.SelectedAnimationIndex !=
+        state^.JuliaInterface^.CurrentAnimationIndex {
+        previous_animation_index := state^.JuliaInterface^.CurrentAnimationIndex
+        change_current_animation_loop(
+            state,
+            state^.JuliaInterface^.SelectedAnimationIndex,
+        )
+        switched_animation =
+            state^.JuliaInterface^.CurrentAnimationIndex == state^.JuliaInterface^.SelectedAnimationIndex &&
+            state^.JuliaInterface^.CurrentAnimationIndex != previous_animation_index
+    }
+
+    if state^.JuliaInterface^.PendingAnimationReset &&
+        state^.JuliaInterface^.CurrentAnimationIndex == state^.JuliaInterface^.SelectedAnimationIndex {
+        if switched_animation {
+            state^.JuliaInterface^.PendingAnimationReset = false
+        } else {
+            if state^.JuliaInterface^.AnimationResetCooldownRemaining <= 0 {
+                reset_current_animation_loop(state)
+                state^.JuliaInterface^.AnimationResetCooldownRemaining = ANIMATION_RESET_MIN_INTERVAL
+                state^.JuliaInterface^.PendingAnimationReset = false
+            }
         }
     }
 }
@@ -196,6 +238,28 @@ call_current_animation_loop :: proc(
 	}
 }
 
+call_current_animation_get_view_text :: proc(
+    state: ^core.EuclidGeneralState) -> string {
+
+    if state^.JuliaInterface^.CurrentAnimation == nil ||
+        state^.JuliaInterface^.CurrentAnimation^.GetViewText == nil {
+        return ""
+    }
+
+    state_value := jl_box_voidpointer(state)
+
+    result := jl_call1(state^.JuliaInterface^.CurrentAnimation^.GetViewText, state_value)
+    if jl_exception_occurred() != nil {
+        print_julia_exception("Current animation get view text")
+        return ""
+    }
+    if result == nil {
+        return ""
+    }
+
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
+}
+
 change_current_animation_loop :: proc(
     state: ^core.EuclidGeneralState, newIndex: int) {
     
@@ -210,7 +274,6 @@ change_current_animation_loop :: proc(
     
 	state_value := jl_box_voidpointer(state)
 
-
     if state^.JuliaInterface^.CurrentAnimation^.Loop != nil {
         jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
         if jl_exception_occurred() != nil {
@@ -219,6 +282,8 @@ change_current_animation_loop :: proc(
         }
     }
     
+    kine.kine_clear_animation_data(state^.PointSystem)
+
 	jl_call1(animation^.Initiate, state_value)
 	if jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
@@ -226,6 +291,7 @@ change_current_animation_loop :: proc(
 	}
 
     state^.JuliaInterface^.CurrentAnimation = animation
+    state^.JuliaInterface^.CurrentAnimationIndex = newIndex
 }
 
 reset_current_animation_loop :: proc(
@@ -243,6 +309,8 @@ reset_current_animation_loop :: proc(
 		return
 	}
     
+    kine.kine_clear_animation_data(state^.PointSystem)
+    
 	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Initiate, state_value)
 	if jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
@@ -254,7 +322,6 @@ clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
     for i in 0..<state^.JuliaInterface^.NextAnimationIndex {
         animation := state^.JuliaInterface^.Animations[i]
         delete(animation.Name)
-        delete(animation.ViewText)
     }
 }
 
@@ -266,8 +333,9 @@ end_julia :: proc() {
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.EuclidGeneralState,
-    init, loop, clean: ^Jl_Function_T) {
+    getViewText, init, loop, clean: ^Jl_Function_T) {
     
+    state^.JuliaInterface^.NullAnimation.GetViewText = getViewText
     state^.JuliaInterface^.NullAnimation.Initiate = init
     state^.JuliaInterface^.NullAnimation.Loop = loop
     state^.JuliaInterface^.NullAnimation.Clean = clean
@@ -276,8 +344,8 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.EuclidGeneralState,
-    init, loop, clean : ^Jl_Function_T,
-    name, viewText : cstring) -> int {
+    getViewText, init, loop, clean : ^Jl_Function_T,
+    name : cstring) -> int {
 
     context = state^.SavedContext
     newIndex := state^.JuliaInterface^.NextAnimationIndex
@@ -285,11 +353,11 @@ add_root_animation_interface :: proc "c" (
 
     animation := &state^.JuliaInterface^.Animations[newIndex]
 
+    animation^.GetViewText = getViewText
     animation^.Initiate = init
     animation^.Loop = loop
     animation^.Clean = clean
     animation^.Name = strings.clone(string(name))
-    animation^.Name = strings.clone(string(viewText))
     animation^.FirstChildId = -1
     animation^.ParentId = -1
     animation^.NextSibling = -1
@@ -300,8 +368,8 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.EuclidGeneralState,
-    init, loop, clean : ^Jl_Function_T,
-    name, viewText : cstring,
+    getViewText, init, loop, clean : ^Jl_Function_T,
+    name : cstring,
     parentId : int) -> int {
 
     if parentId < 0 || parentId >= state^.JuliaInterface^.NextAnimationIndex {
@@ -328,11 +396,11 @@ add_child_animation_interface :: proc "c" (
 
     animation := &state^.JuliaInterface^.Animations[newIndex]
 
+    animation^.GetViewText = getViewText
     animation^.Initiate = init
     animation^.Loop = loop
     animation^.Clean = clean
     animation^.Name = strings.clone(string(name))
-    animation^.Name = strings.clone(string(viewText))
     animation^.FirstChildId = -1
     animation^.ParentId = parentId
     animation^.NextSibling = -1

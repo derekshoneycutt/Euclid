@@ -67,24 +67,26 @@ function bridge_color(name::AbstractString)
 end
 
 function set_null_animations(
-    state_ptr::Ptr{Cvoid}, init, loop, clean)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean)
 
-    @ccall set_null_animations(state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any)::Cvoid
+    @ccall set_null_animations(state_ptr::Ptr{Cvoid},
+        getViewText::Any, init::Any, loop::Any, clean::Any)::Cvoid
 end
 
 function add_root_animation_interface(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String, viewText::String)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String)
 
     @ccall add_root_animation_interface(
-        state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any, name::Cstring, viewText::Cstring)::Int64
+        state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
+        name::Cstring)::Int64
 end
 
 function add_child_animation_interface(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String, viewText::String, parentId::Integer)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, parentId::Integer)
 
     @ccall add_child_animation_interface(
-        state_ptr::Ptr{Cvoid}, init::Any, loop::Any, clean::Any, name::Cstring,
-        viewText::Cstring, parentId::Int64)::Int64
+        state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
+        name::Cstring, parentId::Int64)::Int64
 end
 
 """

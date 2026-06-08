@@ -51,6 +51,8 @@ UIBackColor :: rl.Color{66, 35, 46, 255}
 BorderColor :: rl.Color{86, 55, 66, 255}
 TextColor :: rl.Color{175, 150, 150, 255}
 
+ComponentBackgroundColor :: rl.Color{25, 25, 25, 255}
+
 
 run_window_loop :: proc() {
     isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset, {0.35, -0.45, -1.0}, true }
@@ -64,6 +66,10 @@ run_window_loop :: proc() {
     juliaInterface := julia.retrieve_interface()
     defer free(juliaInterface)
     juliaInterface^.CurrentAnimation = &juliaInterface^.NullAnimation
+    juliaInterface^.CurrentAnimationIndex = -1
+    juliaInterface^.SelectedAnimationIndex = -1
+    juliaInterface^.PendingAnimationReset = false
+    juliaInterface^.AnimationResetCooldownRemaining = 0
 
     pointSystem := new(KinePointSystem)
     defer free(pointSystem)
@@ -71,6 +77,9 @@ run_window_loop :: proc() {
     compass := kine.init_kineshape_compass(pointSystem, 0.35, ItemColor, 5)
     pen := kine.init_kineshape_pen(pointSystem, 0.35, ItemColor, 5)
     kine.kine_freeze_system_indices(pointSystem)
+
+    tree_scroll_y: f32 = 0
+    view_text_scroll_y: f32 = 0
 
     state := new(EuclidGeneralState)
     defer free(state)
@@ -90,9 +99,11 @@ run_window_loop :: proc() {
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
 
-    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+    rl.SetConfigFlags({.MSAA_4X_HINT})//, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
 	defer rl.CloseWindow()
+
+    rl.SetTargetFPS(60)
 
     init_stroke3d_shader(state)
     defer shutdown_stroke3d_shader(state)
@@ -127,6 +138,7 @@ run_window_loop :: proc() {
         kine.kine_update_last_cache_vectors(pointSystem)
         stepCount := 0
         for accumulator >= FIXED_DT {
+            julia.update_running_animations(state, FIXED_DT)
             julia.call_global_euclid_loop(state, FIXED_DT)
             julia.call_current_animation_loop(state, FIXED_DT)
             particles.update_particles(state^.ParticleSystem, FIXED_DT)
@@ -155,7 +167,10 @@ run_window_loop :: proc() {
             draw_kine_points_high_cached(state)
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
+            draw_view_text_panel(state, &view_text_scroll_y)
+
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)
+            draw_tree_view(state, &tree_scroll_y)
 
             /*rl.GuiSliderBar(rl.Rectangle{ 1130, 600, 100, 20 }, "Scale:",
                 fmt.ctprintf("%f", isoScale.Scale), &isoScale.Scale, 0.0, ViewWidth)
@@ -166,5 +181,7 @@ run_window_loop :: proc() {
 
             rl.DrawFPS(10, 10)
 		rl.EndDrawing()
+
+        free_all(context.temp_allocator)
 	}
 }

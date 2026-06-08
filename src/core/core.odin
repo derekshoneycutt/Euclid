@@ -3,7 +3,7 @@ package core
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 1024
+MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
@@ -18,12 +18,12 @@ Jl_Symbol_T  :: struct {}
 Jl_Module_T :: struct {}
 
 EuclidJuliaAnimationInterface :: struct {
+    GetViewText : ^Jl_Function_T,
     Initiate : ^Jl_Function_T, // initiate the animation type
     Loop : ^Jl_Function_T, // ran each dt in the main window loop
     Clean : ^Jl_Function_T, // stop and clear animations
 
     Name : string,
-    ViewText : string,
     IsExpanded : bool,
     IsSelected : bool,
 
@@ -39,6 +39,10 @@ EuclidJuliaInterface :: struct {
     NullAnimation : EuclidJuliaAnimationInterface,
 
     CurrentAnimation : ^EuclidJuliaAnimationInterface,
+    CurrentAnimationIndex : int,
+    SelectedAnimationIndex : int,
+    PendingAnimationReset : bool,
+    AnimationResetCooldownRemaining : f32,
 
     Animations : [MAX_JULIA_INTERFACES]EuclidJuliaAnimationInterface,
     NextAnimationIndex : int,
