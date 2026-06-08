@@ -35,7 +35,7 @@ odin build main.odin -file \
     -out:../bin/euclid \
     -extra-linker-flags:"${juliaFlags}"
 cd julia
-cp ./*.jl ../../bin/julia/
+find . -type f -name "*.jl" -exec cp --parents {} ../../bin/julia/ \;
 cd ../view/shaders
 cp ./* ../../../bin/shaders/
 cd "${scriptDir}"
