@@ -1,7 +1,8 @@
 module NullAnimation
 
+include("./euclidbridge.jl")
+
 using LinearAlgebra
-import ..EuclidBridge
 
 export get_view_text, initialize, clean, loop
 

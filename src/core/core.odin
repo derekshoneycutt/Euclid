@@ -1,5 +1,6 @@
 package core
 
+import "../julialib"
 import "base:runtime"
 import rl "vendor:raylib"
 
@@ -12,16 +13,11 @@ MAX_JULIA_INTERFACES :: 64
 Vector2 :: [2]f32
 Vector3 :: [3]f32
 
-Jl_Value_T  :: struct {}
-Jl_Function_T  :: struct {}
-Jl_Symbol_T  :: struct {}
-Jl_Module_T :: struct {}
-
 EuclidJuliaAnimationInterface :: struct {
-    GetViewText : ^Jl_Function_T,
-    Initiate : ^Jl_Function_T, // initiate the animation type
-    Loop : ^Jl_Function_T, // ran each dt in the main window loop
-    Clean : ^Jl_Function_T, // stop and clear animations
+    GetViewText : ^julialib.jl_value_t,
+    Initiate : ^julialib.jl_value_t, // initiate the animation type
+    Loop : ^julialib.jl_value_t, // ran each dt in the main window loop
+    Clean : ^julialib.jl_value_t, // stop and clear animations
 
     Name : string,
     IsExpanded : bool,
@@ -33,8 +29,8 @@ EuclidJuliaAnimationInterface :: struct {
 }
 
 EuclidJuliaInterface :: struct {
-    InitScripts : ^Jl_Function_T,
-    GlobalLoop : ^Jl_Function_T,
+    InitScripts : ^julialib.jl_value_t,
+    GlobalLoop : ^julialib.jl_value_t,
 
     NullAnimation : EuclidJuliaAnimationInterface,
 

@@ -2,7 +2,7 @@ module ElementsOnePostulatesDrawLine
 
 using LinearAlgebra
 
-import ..EuclidBridge
+include("../../euclidbridge.jl")
 
 export get_view_text, initialize, clean, loop
 

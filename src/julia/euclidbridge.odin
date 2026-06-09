@@ -1,5 +1,6 @@
 package julia
 
+import "../julialib"
 import "../core"
 import "../particles"
 import "../kine"
@@ -10,11 +11,6 @@ import "core:fmt"
 import "core:strings"
 
 import rl "vendor:raylib"
-
-Jl_Value_T :: core.Jl_Value_T
-Jl_Function_T :: core.Jl_Function_T
-Jl_Symbol_T :: core.Jl_Symbol_T
-Jl_Module_T :: core.Jl_Module_T
 
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
@@ -51,98 +47,46 @@ BridgePointView :: struct {
     NextChildPoint: int,
 }
 
-
-foreign import libjulia "system:julia"
-foreign libjulia {
-    jl_init        :: proc() ---
-    jl_atexit_hook :: proc(status: c.int) ---
-
-    jl_eval_string :: proc(code: cstring) -> rawptr ---
-
-    jl_base_module: ^Jl_Module_T
-    jl_main_module: ^Jl_Module_T
-
-    jl_stderr_obj :: proc() -> ^Jl_Value_T ---
-
-    jl_symbol :: proc(str : cstring) -> ^Jl_Symbol_T ---
-
-    jl_get_global :: proc(m : ^Jl_Module_T, var : ^Jl_Symbol_T) -> ^Jl_Value_T ---
-
-    jl_box_bool :: proc(f: i8) -> ^Jl_Value_T ---
-    jl_box_float64 :: proc(f: f64) -> ^Jl_Value_T ---
-    jl_box_float32 :: proc(f: f32) -> ^Jl_Value_T ---
-    jl_box_int64 :: proc(f: i64) -> ^Jl_Value_T ---
-    jl_box_int32 :: proc(f: i32) -> ^Jl_Value_T ---
-    jl_box_int16 :: proc(f: i16) -> ^Jl_Value_T ---
-    jl_box_int8 :: proc(f: i8) -> ^Jl_Value_T ---
-    jl_box_voidpointer :: proc(x: rawptr) -> ^Jl_Value_T ---
-
-    jl_call0 :: proc(f: ^Jl_Function_T) -> Jl_Value_T ---
-    jl_call1 :: proc(f: ^Jl_Function_T, a: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call2 :: proc(f: ^Jl_Function_T, a, b: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call3 :: proc(f: ^Jl_Function_T, a, b, c: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call4 :: proc(f: ^Jl_Function_T, a, b, c, d: ^Jl_Value_T) -> ^Jl_Value_T ---
-    jl_call :: proc(f: ^Jl_Function_T, args: ^^Jl_Value_T, nargs: u32) -> ^Jl_Value_T ---
-
-    jl_exception_occurred :: proc() -> rawptr ---
-
-    jl_typeof_str :: proc(v: rawptr) -> rawptr ---
-    jl_string_ptr :: proc(v: ^Jl_Value_T) -> cstring ---
-
-    jl_unbox_bool :: proc(v: ^Jl_Value_T) -> i8 ---
-    jl_unbox_float64 :: proc(v: ^Jl_Value_T) -> f64 ---
-    jl_unbox_float32 :: proc(v: ^Jl_Value_T) -> f32 ---
-    jl_unbox_int64 :: proc(v: ^Jl_Value_T) -> i64 ---
-    jl_unbox_int32 :: proc(v: ^Jl_Value_T) -> i32 ---
-    jl_unbox_int16 :: proc(v: ^Jl_Value_T) -> i16 ---
-    jl_unbox_int8 :: proc(v: ^Jl_Value_T) -> i8 ---
-    jl_unbox_voidpointer :: proc(v: ^Jl_Value_T) -> rawptr ---
-}
-
-jl_get_function :: #force_inline proc(m : ^Jl_Module_T, name : cstring) -> ^Jl_Function_T {
-    return (^Jl_Function_T)(jl_get_global(m, jl_symbol(name)))
-}
-
 print_julia_exception :: proc(contextOfErr: string) {
-    ex_raw := jl_exception_occurred()
+    ex_raw := julialib.jl_exception_occurred()
     if ex_raw == nil {
         return
     }
 
-    ex := (^Jl_Value_T)(ex_raw)
+    ex := (^julialib.jl_value_t)(ex_raw)
 
-    ex_type := cstring(jl_typeof_str(ex_raw))
+    ex_type := cstring(julialib.jl_typeof_str(ex_raw))
 
-    sprint_fn := jl_get_function(jl_base_module, "sprint")
-    showerror_fn := jl_get_function(jl_base_module, "showerror")
+    sprint_fn := julialib.jl_get_function(julialib.jl_base_module, "sprint")
+    showerror_fn := julialib.jl_get_function(julialib.jl_base_module, "showerror")
 
     if sprint_fn == nil || showerror_fn == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
     }
 
-    args: [2]^Jl_Value_T = {(^Jl_Value_T)(showerror_fn), ex}
-    msg_val := jl_call(sprint_fn, &args[0], 2)
+    args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
+    msg_val := julialib.jl_call(sprint_fn, &args[0], 2)
 
-    if jl_exception_occurred() != nil || msg_val == nil {
+    if julialib.jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
     }
 
-    msg := jl_string_ptr(msg_val)
+    msg := julialib.jl_string_ptr(msg_val)
     fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
 }
 
 initiate_julia :: proc() {
-    jl_init()
-    _ = jl_eval_string("include(\"./julia/script.jl\")")
+    julialib.jl_init()
+    _ = julialib.jl_eval_string("include(\"./julia/script.jl\")")
 }
 
 retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
     ret := new(core.EuclidJuliaInterface)
 
-	ret.InitScripts = jl_get_function(jl_main_module, "init_euclid_scripts")
-    ret.GlobalLoop = jl_get_function(jl_main_module, "global_euclid_loop")
+    ret.InitScripts = julialib.jl_get_function(julialib.jl_main_module, "init_euclid_scripts")
+    ret.GlobalLoop = julialib.jl_get_function(julialib.jl_main_module, "global_euclid_loop")
     ret.CurrentAnimationIndex = -1
     ret.SelectedAnimationIndex = -1
     ret.AnimationResetCooldownRemaining = 0
@@ -153,17 +97,17 @@ retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
 init_euclid_scripts :: proc(
     state: ^core.EuclidGeneralState) {
 
-	state_value := jl_box_voidpointer(state)
+    state_value := julialib.jl_box_voidpointer(state)
 
-	jl_call1(state^.JuliaInterface^.InitScripts, state_value)
-	if jl_exception_occurred() != nil {
+    julialib.jl_call1(state^.JuliaInterface^.InitScripts, state_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
-		return
-	}
+        return
+    }
 
     if state^.JuliaInterface^.NullAnimation.Initiate != nil {
-        jl_call1(state^.JuliaInterface^.NullAnimation.Initiate, state_value)
-        if jl_exception_occurred() != nil {
+        julialib.jl_call1(state^.JuliaInterface^.NullAnimation.Initiate, state_value)
+        if julialib.jl_exception_occurred() != nil {
             print_julia_exception("init_euclid_scripts")
             return
         }
@@ -210,14 +154,14 @@ update_running_animations :: proc(
 call_global_euclid_loop :: proc(
     state: ^core.EuclidGeneralState, dt: f32) {
 
-	state_value := jl_box_voidpointer(state)
-    dt_value := jl_box_float32(dt)
+    state_value := julialib.jl_box_voidpointer(state)
+    dt_value := julialib.jl_box_float32(dt)
 
-	result := jl_call2(state^.JuliaInterface^.GlobalLoop, state_value, dt_value)
-	if jl_exception_occurred() != nil {
+    result := julialib.jl_call2(state^.JuliaInterface^.GlobalLoop, state_value, dt_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("global_euclid_loop")
-		return
-	}
+        return
+    }
 }
 
 call_current_animation_loop :: proc(
@@ -227,14 +171,14 @@ call_current_animation_loop :: proc(
         return
     }
 
-	state_value := jl_box_voidpointer(state)
-    dt_value := jl_box_float32(dt)
+    state_value := julialib.jl_box_voidpointer(state)
+    dt_value := julialib.jl_box_float32(dt)
 
-	result := jl_call2(state^.JuliaInterface^.CurrentAnimation^.Loop, state_value, dt_value)
-	if jl_exception_occurred() != nil {
+    result := julialib.jl_call2(state^.JuliaInterface^.CurrentAnimation^.Loop, state_value, dt_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Current animation loop")
-		return
-	}
+        return
+    }
 }
 
 call_current_animation_get_view_text :: proc(
@@ -245,10 +189,10 @@ call_current_animation_get_view_text :: proc(
         return ""
     }
 
-    state_value := jl_box_voidpointer(state)
+    state_value := julialib.jl_box_voidpointer(state)
 
-    result := jl_call1(state^.JuliaInterface^.CurrentAnimation^.GetViewText, state_value)
-    if jl_exception_occurred() != nil {
+    result := julialib.jl_call1(state^.JuliaInterface^.CurrentAnimation^.GetViewText, state_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Current animation get view text")
         return ""
     }
@@ -256,7 +200,7 @@ call_current_animation_get_view_text :: proc(
         return ""
     }
 
-    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
+    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
 }
 
 change_current_animation_loop :: proc(
@@ -271,11 +215,11 @@ change_current_animation_loop :: proc(
         animation = &state^.JuliaInterface^.NullAnimation
     }
     
-	state_value := jl_box_voidpointer(state)
+    state_value := julialib.jl_box_voidpointer(state)
 
     if state^.JuliaInterface^.CurrentAnimation^.Loop != nil {
-        jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
-        if jl_exception_occurred() != nil {
+        julialib.jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
+        if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Cleaning previous animation loop")
             return
         }
@@ -288,11 +232,11 @@ change_current_animation_loop :: proc(
         state^.AnimMetadata[i] = 0.0
     }
 
-	jl_call1(animation^.Initiate, state_value)
-	if jl_exception_occurred() != nil {
+   julialib.jl_call1(animation^.Initiate, state_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
-		return
-	}
+        return
+    }
 
     state^.JuliaInterface^.CurrentAnimation = animation
     state^.JuliaInterface^.CurrentAnimationIndex = newIndex
@@ -305,13 +249,13 @@ reset_current_animation_loop :: proc(
         return
     }
     
-	state_value := jl_box_voidpointer(state)
+    state_value := julialib.jl_box_voidpointer(state)
 
-	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
-	if jl_exception_occurred() != nil {
+   julialib.jl_call1(state^.JuliaInterface^.CurrentAnimation^.Clean, state_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Cleaning previous animation loop")
-		return
-	}
+        return
+    }
     
     kine.kine_clear_animation_data(state^.PointSystem, state^.ParticleSystem)
     hide_pen(state)
@@ -320,11 +264,11 @@ reset_current_animation_loop :: proc(
         state^.AnimMetadata[i] = 0.0
     }
     
-	jl_call1(state^.JuliaInterface^.CurrentAnimation^.Initiate, state_value)
-	if jl_exception_occurred() != nil {
+   julialib.jl_call1(state^.JuliaInterface^.CurrentAnimation^.Initiate, state_value)
+    if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
-		return
-	}
+        return
+    }
 }
 
 clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
@@ -335,14 +279,14 @@ clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
 }
 
 end_julia :: proc() {
-    jl_atexit_hook(0)
+    julialib.jl_atexit_hook(0)
 }
 
 
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.EuclidGeneralState,
-    getViewText, init, loop, clean: ^Jl_Function_T) {
+    getViewText, init, loop, clean: ^julialib.jl_value_t) {
     
     state^.JuliaInterface^.NullAnimation.GetViewText = getViewText
     state^.JuliaInterface^.NullAnimation.Initiate = init
@@ -353,7 +297,7 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.EuclidGeneralState,
-    getViewText, init, loop, clean : ^Jl_Function_T,
+    getViewText, init, loop, clean : ^julialib.jl_value_t,
     name : cstring) -> int {
 
     context = state^.SavedContext
@@ -377,7 +321,7 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.EuclidGeneralState,
-    getViewText, init, loop, clean : ^Jl_Function_T,
+    getViewText, init, loop, clean : ^julialib.jl_value_t,
     name : cstring,
     parentId : int) -> int {
 
