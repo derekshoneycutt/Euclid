@@ -5,6 +5,7 @@ include("./nullanimation.jl")
 include("./elements/book1/def_001_point.jl")
 include("./elements/book1/def_002_line.jl")
 include("./elements/book1/def_003_linextrem.jl")
+include("./elements/book1/def_004_straightline.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -64,12 +65,18 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionLine.initialize,
                     ElementsOneDefinitionLine.loop, ElementsOneDefinitionLine.clean,
                     "2. Line", book1DefsId)
-                book1Defs3LineId = EuclidBridge.add_child_animation_interface(
+                book1Defs3LineExId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionLineExtremities.get_view_text,
                     ElementsOneDefinitionLineExtremities.initialize,
                     ElementsOneDefinitionLineExtremities.loop,
                     ElementsOneDefinitionLineExtremities.clean,
                     "3. Line Extremities", book1DefsId)
+                book1Defs4StraightLineId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionStraightLine.get_view_text,
+                    ElementsOneDefinitionStraightLine.initialize,
+                    ElementsOneDefinitionStraightLine.loop,
+                    ElementsOneDefinitionStraightLine.clean,
+                    "4. Straight Line", book1DefsId)
                 
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
