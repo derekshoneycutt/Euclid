@@ -83,7 +83,8 @@ KineConstraintTrait :: enum {
     SnapToFloor = (1 << 2),
     SnapPoint = (1 << 3),
     MaxAngle = (1 << 4),
-    CenterPivot = (1 << 5)
+    MinAngle = (1 << 5),
+    CenterPivot = (1 << 6)
 }
 
 KineConstraint :: struct {

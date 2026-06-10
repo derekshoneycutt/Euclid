@@ -114,6 +114,10 @@ get_constraint_error :: proc(
         totalError += get_constraint_error_maxangle(constraint,
             children[0], children[1], children[2])
     }
+    if constraint^.Traits & .MinAngle == .MinAngle {
+        totalError += get_constraint_error_minangle(constraint,
+            children[0], children[1], children[2])
+    }
     if constraint^.Traits & .CenterPivot == .CenterPivot {
         totalError += get_constraint_error_centerpivot(constraint,
             children[0], children[1], children[2])
@@ -175,6 +179,10 @@ apply_constraint :: proc(
 
     if constraint^.Traits & .MaxAngle == .MaxAngle {
         apply_constraint_maxangle(constraint,
+            children[0], children[1], children[2])
+    }
+    if constraint^.Traits & .MinAngle == .MinAngle {
+        apply_constraint_minangle(constraint,
             children[0], children[1], children[2])
     }
     if constraint^.Traits & .CenterPivot == .CenterPivot {
@@ -260,6 +268,38 @@ get_constraint_error_maxangle :: proc(
 
     if theta > constraint^.Restriction[0] {
         radians := theta - constraint^.Restriction[0]
+        return radians * (180.0 / math.PI)
+    }
+
+    return 0
+}
+
+get_constraint_error_minangle :: proc(
+    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) -> f32 {
+
+    position1, ok := point1^.Position.?
+    if !ok {
+        return 0
+    }
+    position2, ok2 := point2^.Position.?
+    if !ok2 {
+        return 0
+    }
+    pivotPosition, ok3 := pivot^.Position.?
+    if !ok3 {
+        return 0
+    }
+    vec1 := position1 - pivotPosition
+    vec2 := position2 - pivotPosition
+
+    dot := linalg.dot(vec1, vec2)
+    vec1len := linalg.length(vec1)
+    vec2len := linalg.length(vec2)
+
+    theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
+
+    if theta < constraint^.Restriction[0] {
+        radians := constraint^.Restriction[0] - theta
         return radians * (180.0 / math.PI)
     }
 
@@ -399,6 +439,56 @@ apply_constraint_maxangle :: proc(
     }
     else {
         new_vec2 = rotate_around_axis(vec2, rotaxis, -overage)
+    }
+
+    point1^.Position = pivotPosition + new_vec1
+    point2^.Position = pivotPosition + new_vec2
+}
+
+apply_constraint_minangle :: proc(
+    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) {
+
+    position1, ok := point1^.Position.?
+    if !ok {
+        return
+    }
+    position2, ok2 := point2^.Position.?
+    if !ok2 {
+        return
+    }
+    pivotPosition, ok3 := pivot^.Position.?
+    if !ok3 {
+        return
+    }
+    vec1 := position1 - pivotPosition
+    vec2 := position2 - pivotPosition
+
+    dot := linalg.dot(vec1, vec2)
+    vec1len := linalg.length(vec1)
+    vec2len := linalg.length(vec2)
+
+    theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
+
+    if theta >= constraint^.Restriction[0] {
+        return
+    }
+
+    underage := constraint^.Restriction[0] - theta
+    halfunderage := underage / 2.0
+
+    rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
+
+    new_vec1 := Vector3{0, 0, 0}
+    new_vec2 := Vector3{0, 0, 0}
+    if constraint^.DependOn > 0 {
+        new_vec1 = rotate_around_axis(vec1, rotaxis, -underage)
+    }
+    else if constraint^.DependOn == 0 {
+        new_vec1 = rotate_around_axis(vec1, rotaxis, -halfunderage)
+        new_vec2 = rotate_around_axis(vec2, rotaxis, halfunderage)
+    }
+    else {
+        new_vec2 = rotate_around_axis(vec2, rotaxis, underage)
     }
 
     point1^.Position = pivotPosition + new_vec1
