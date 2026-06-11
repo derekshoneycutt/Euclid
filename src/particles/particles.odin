@@ -58,6 +58,9 @@ DUST_VZ_MAX :: 0.011
 DUST_XY_MIN :: 0.0
 DUST_XY_MAX :: 1.0
 
+DUST_CONTACT_PUSH_RADIUS :: f32(0.02)
+DUST_CONTACT_PUSH_SPEED :: f32(0.0035)
+
 DUST_KICK_FADE_MIN :: 0.03
 DUST_KICK_FADE_MAX :: 0.08
 DUST_EXISTING_UP_KICK_MIN :: 0.0012
@@ -212,7 +215,7 @@ emit_silence :: proc(ps: ^ParticleSystem, dt: f32) {
     }
 }
 
-clamp_xy_bounds :: proc(p: ^Particle) {
+clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
     if p.Position.x < DUST_XY_MIN {
         p.Position.x = DUST_XY_MIN
         p.Velocities.x = -p.Velocities.x * 0.45
@@ -227,6 +230,46 @@ clamp_xy_bounds :: proc(p: ^Particle) {
     } else if p.Position.y > DUST_XY_MAX {
         p.Position.y = DUST_XY_MAX
         p.Velocities.y = -p.Velocities.y * 0.45
+    }
+}
+
+push_dust_away_from_xy :: proc (ps: ^ParticleSystem, x, y: f32) {
+    push_radius_sq := DUST_CONTACT_PUSH_RADIUS * DUST_CONTACT_PUSH_RADIUS
+
+    for i in 0..<MAX_PARTICLES {
+        p := &ps.Particles[i]
+        if !p.Alive || p.Type != .Dust {
+            continue
+        }
+
+        dx := p.Position.x - x
+        dy := p.Position.y - y
+        dist_sq := dx * dx + dy * dy
+        if dist_sq > push_radius_sq {
+            continue
+        }
+
+        dist := f32(math.sqrt(f64(dist_sq)))
+        nx, ny: f32
+        if dist > f32(0.00001) {
+            inv_dist := f32(1.0) / dist
+            nx = dx * inv_dist
+            ny = dy * inv_dist
+        } else {
+            theta := random_f32_range(f32(0.0), f32(2.0 * math.PI))
+            nx = f32(math.cos(theta))
+            ny = f32(math.sin(theta))
+        }
+
+        falloff := f32(1.0) - math.clamp(dist / DUST_CONTACT_PUSH_RADIUS, f32(0.0), f32(1.0))
+        push := DUST_CONTACT_PUSH_SPEED * falloff
+
+        p.Velocities.x += nx * push
+        p.Velocities.y += ny * push
+
+        p.Position.x += nx * push
+        p.Position.y += ny * push
+        clamp_xy_bounds(p)
     }
 }
 

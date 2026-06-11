@@ -8,6 +8,7 @@ import "../kine"
 import "base:runtime"
 import "core:c"
 import "core:fmt"
+import "core:math"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -16,6 +17,7 @@ MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
 ANIMATION_RESET_MIN_INTERVAL :: f32(0.35)
+FLOOR_CONTACT_Z_EPSILON :: f32(0.015)
 
 BridgeColor :: struct {
     R: u8,
@@ -45,6 +47,12 @@ BridgePointView :: struct {
     ChildCount: int,
     ChildPointHead: int,
     NextChildPoint: int,
+}
+
+push_dust_if_floor_contact :: proc(state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
+        particles.push_dust_away_from_xy(state^.ParticleSystem, pos.x, pos.y)
+    }
 }
 
 print_julia_exception :: proc(contextOfErr: string) {
@@ -586,10 +594,12 @@ clear_pen_active :: proc "c" (
 
 @(export)
 lock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Pen.Joint1Id
     constraintIndex := state^.Pen.LockPoint1Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -607,9 +617,11 @@ unlock_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
 
 @(export)
 move_pen_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Pen.Joint1Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
 }
 
@@ -624,10 +636,12 @@ get_pen_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> core.Ve
 
 @(export)
 lock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Pen.Joint2Id
     constraintIndex := state^.Pen.LockPoint2Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -645,9 +659,11 @@ unlock_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
 
 @(export)
 move_pen_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Pen.Joint2Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
 }
 
@@ -700,10 +716,12 @@ clear_compass_active :: proc "c" (
 
 @(export)
 lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     pointIndex := state^.Compass.Joint1Id
     constraintIndex := state^.Compass.LockPoint1Id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -721,9 +739,11 @@ unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
 
 @(export)
 move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Compass.Joint1Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
 }
 
@@ -738,10 +758,12 @@ get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> cor
 
 @(export)
 lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     pointIndex := state^.Compass.Joint2Id
     constraintIndex := state^.Compass.LockPoint2Id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -759,9 +781,11 @@ unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
 
 @(export)
 move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    context = state^.SavedContext
     index := state^.Compass.Joint2Id
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
+        push_dust_if_floor_contact(state, pos)
     }
 }
 
