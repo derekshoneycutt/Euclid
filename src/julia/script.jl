@@ -6,6 +6,7 @@ include("./elements/book1/def_001_point.jl")
 include("./elements/book1/def_002_line.jl")
 include("./elements/book1/def_003_linextrem.jl")
 include("./elements/book1/def_004_straightline.jl")
+include("./elements/book1/def_005_surface.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -77,6 +78,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionStraightLine.loop,
                     ElementsOneDefinitionStraightLine.clean,
                     "4. Straight Line", book1DefsId)
+                book1Defs5SurfaceId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionSurface.get_view_text,
+                    ElementsOneDefinitionSurface.initialize,
+                    ElementsOneDefinitionSurface.loop,
+                    ElementsOneDefinitionSurface.clean,
+                    "5. Surface", book1DefsId)
                 
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,

@@ -15,7 +15,7 @@ const LineMaxBrush = 5f0
 
 const PenTopZ = 1.4f0
 const PenLength = 0.14f0
-const PenTiltFloorAngle = Float32(pi / 4)
+const PenTiltFloorAngle = π / 4f0
 
 const DescendDuration = 1.8f0
 const TiltDuration = 0.8f0
@@ -94,7 +94,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     EuclidBridge.show_pen(state_ptr)
     EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-    place_pen_at_floor_angle(state_ptr, StartPoint[1], StartPoint[2], PenTopZ, Float32(pi / 2))
+    place_pen_at_floor_angle(state_ptr, StartPoint[1], StartPoint[2], PenTopZ, π / 2f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
@@ -140,18 +140,18 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidBridge.show_pen(state_ptr)
         EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
         place_pen_at_floor_angle(
-            state_ptr, StartPoint[1], StartPoint[2], tipZ, Float32(pi / 2))
+            state_ptr, StartPoint[1], StartPoint[2], tipZ, π / 2f0)
 
         timer += dt
         if timer >= DescendDuration
             phase = PhaseTilt
             timer = 0f0
             place_pen_at_floor_angle(
-                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], Float32(pi / 2))
+                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], π / 2f0)
         end
     elseif phase == PhaseTilt
         t = clamp(timer / TiltDuration, 0f0, 1f0)
-        floorAngle = Float32(pi / 2) + (PenTiltFloorAngle - Float32(pi / 2)) * t
+        floorAngle = π / 2f0 + (PenTiltFloorAngle - π / 2f0) * t
 
         EuclidBridge.show_pen(state_ptr)
         EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
@@ -194,7 +194,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseEndStraighten
         t = clamp(timer / EndStraightenDuration, 0f0, 1f0)
-        floorAngle = PenTiltFloorAngle + (Float32(pi / 2) - PenTiltFloorAngle) * t
+        floorAngle = PenTiltFloorAngle + (π / 2f0 - PenTiltFloorAngle) * t
 
         EuclidBridge.show_pen(state_ptr)
         EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
@@ -207,7 +207,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseEndLift
             timer = 0f0
             place_pen_at_floor_angle(
-                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], Float32(pi / 2))
+                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], π / 2f0)
         end
     elseif phase == PhaseEndLift
         t = clamp(timer / EndLiftDuration, 0f0, 1f0)
@@ -215,14 +215,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         EuclidBridge.show_pen(state_ptr)
         EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], tipZ, Float32(pi / 2))
+        place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], tipZ, π / 2f0)
 
         show_full_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
 
         timer += dt
         if timer >= EndLiftDuration
             EuclidBridge.hide_pen(state_ptr)
-            place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, Float32(pi / 2))
+            place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, π / 2f0)
             hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
             reset_cycle_state(state_ptr)
             return

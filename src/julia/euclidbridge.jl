@@ -66,6 +66,19 @@ function bridge_color(name::AbstractString)
     bridge_color(parse(Colorant, name))
 end
 
+"""
+Set the null animation for the application
+
+---------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `init` : A function that should be called when the animation is being initialized
+- `loop` : A function that should be called when the animation is processing a frame of the loop
+- `clean` : A function that should be called when the animation is being cleaned and ended
+"""
 function set_null_animations(
     state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean)
 
@@ -73,6 +86,22 @@ function set_null_animations(
         getViewText::Any, init::Any, loop::Any, clean::Any)::Cvoid
 end
 
+"""
+Add a new root animation for the application
+
+---------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `init` : A function that should be called when the animation is being initialized
+- `loop` : A function that should be called when the animation is processing a frame of the loop
+- `clean` : A function that should be called when the animation is being cleaned and ended
+- `name` : The name of the animation to show in the tree
+
+Returns the index of the new root animation
+"""
 function add_root_animation_interface(
     state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String)
 
@@ -81,6 +110,24 @@ function add_root_animation_interface(
         name::Cstring)::Int64
 end
 
+
+"""
+Add a new child animation for the application
+
+---------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `init` : A function that should be called when the animation is being initialized
+- `loop` : A function that should be called when the animation is processing a frame of the loop
+- `clean` : A function that should be called when the animation is being cleaned and ended
+- `name` : The name of the animation to show in the tree
+- `parentId` : The index of the parent animation to place the child under in the tree
+
+Returns the index of the new child animation
+"""
 function add_child_animation_interface(
     state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, parentId::Integer)
 
