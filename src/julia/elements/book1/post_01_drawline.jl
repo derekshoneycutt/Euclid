@@ -56,7 +56,7 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Proposition: 1. Draw a Line:
+    """Euclid Elements - Book I - Proposition: Draw a Line:
 
 Let the following be postulated:
 

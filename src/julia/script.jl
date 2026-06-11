@@ -8,6 +8,7 @@ include("./elements/book1/def_003_linextrem.jl")
 include("./elements/book1/def_004_straightline.jl")
 include("./elements/book1/def_005_surface.jl")
 include("./elements/book1/def_006_surfextrem.jl")
+include("./elements/book1/def_007_planesurface.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -61,36 +62,42 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     state_ptr, ElementsOneDefinitionPoint.get_view_text,
                     ElementsOneDefinitionPoint.initialize,
                     ElementsOneDefinitionPoint.loop, ElementsOneDefinitionPoint.clean,
-                    "1. Point", book1DefsId)
+                    "Point", book1DefsId)
                 book1Defs2LineId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionLine.get_view_text,
                     ElementsOneDefinitionLine.initialize,
                     ElementsOneDefinitionLine.loop, ElementsOneDefinitionLine.clean,
-                    "2. Line", book1DefsId)
+                    "Line", book1DefsId)
                 book1Defs3LineExId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionLineExtremities.get_view_text,
                     ElementsOneDefinitionLineExtremities.initialize,
                     ElementsOneDefinitionLineExtremities.loop,
                     ElementsOneDefinitionLineExtremities.clean,
-                    "3. Line Extremities", book1DefsId)
+                    "Line Extremities", book1DefsId)
                 book1Defs4StraightLineId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionStraightLine.get_view_text,
                     ElementsOneDefinitionStraightLine.initialize,
                     ElementsOneDefinitionStraightLine.loop,
                     ElementsOneDefinitionStraightLine.clean,
-                    "4. Straight Line", book1DefsId)
+                    "Straight Line", book1DefsId)
                 book1Defs5SurfaceId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionSurface.get_view_text,
                     ElementsOneDefinitionSurface.initialize,
                     ElementsOneDefinitionSurface.loop,
                     ElementsOneDefinitionSurface.clean,
-                    "5. Surface", book1DefsId)
+                    "Surface", book1DefsId)
                 book1Defs6SurfExtremId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOneDefinitionSurfaceExtremity.get_view_text,
                     ElementsOneDefinitionSurfaceExtremity.initialize,
                     ElementsOneDefinitionSurfaceExtremity.loop,
                     ElementsOneDefinitionSurfaceExtremity.clean,
-                    "6. Surface Extremities", book1DefsId)
+                    "Surface Extremities", book1DefsId)
+                book1Defs7PlaneSurfaceId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionPlaneSurface.get_view_text,
+                    ElementsOneDefinitionPlaneSurface.initialize,
+                    ElementsOneDefinitionPlaneSurface.loop,
+                    ElementsOneDefinitionPlaneSurface.clean,
+                    "Plane Surface", book1DefsId)
                 
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
@@ -100,12 +107,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     state_ptr, ElementsOnePostulatesDrawLine.get_view_text,
                     ElementsOnePostulatesDrawLine.initialize,
                     ElementsOnePostulatesDrawLine.loop, ElementsOnePostulatesDrawLine.clean,
-                    "1. Draw a Line", book1PostsId)
+                    "Draw a Line", book1PostsId)
                 book1Posts2FiniteLineId = EuclidBridge.add_child_animation_interface(
                     state_ptr, ElementsOnePostulatesFiniteLine.get_view_text,
                     ElementsOnePostulatesFiniteLine.initialize,
                     ElementsOnePostulatesFiniteLine.loop, ElementsOnePostulatesFiniteLine.clean,
-                    "2. Produce a Finite Line", book1PostsId)
+                    "Produce a Finite Line", book1PostsId)
                     
             book1CommNotsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_common, NullAnimation.initialize,

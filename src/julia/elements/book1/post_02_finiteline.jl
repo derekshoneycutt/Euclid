@@ -42,7 +42,7 @@ const PhaseEndLift = 4f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Postulates: 2. Produce a Finite Line:
+    """Euclid Elements - Book I - Postulates: Produce a Finite Line:
 
 Let the following be postulated:
 

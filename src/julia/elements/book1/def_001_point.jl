@@ -32,7 +32,7 @@ const PhaseRise = 2f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: 1. Point:
+    """Euclid Elements - Book I - Definition: Point:
 
 A point is that which has no part."""
 end

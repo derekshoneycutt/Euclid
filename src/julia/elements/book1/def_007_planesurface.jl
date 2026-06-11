@@ -1,4 +1,4 @@
-module ElementsOneDefinitionSurface
+module ElementsOneDefinitionPlaneSurface
 
 using LinearAlgebra
 
@@ -49,9 +49,9 @@ const PhaseEndStraighten2 = 7f0
 const PhaseEndLift = 8f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Surface:
+    """Euclid Elements - Book I - Definition: Plane Surface:
 
-A surface is that which has length and breadth only."""
+A plane surface is a surface which lies evenly with the straight lines on itself."""
 end
 
 function place_pen_at_floor_angle(

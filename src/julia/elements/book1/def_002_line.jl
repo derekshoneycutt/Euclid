@@ -41,7 +41,7 @@ const PhaseEndLift = 4f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: 2. Line:
+    """Euclid Elements - Book I - Definition: Line:
 
 A line is breadthless length."""
 end

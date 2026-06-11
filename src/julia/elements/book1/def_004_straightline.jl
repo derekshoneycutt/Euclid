@@ -12,12 +12,19 @@ const EndPoint = [0.75f0, 0.25f0, 0f0]
 const LineColor = :steelblue
 const PointColor = :palevioletred1
 const LineMaxBrush = 5f0
+const PointMaxBrush = 5f0
 
 const PenTopZ = 1.4f0
 const PenLength = 0.14f0
 const PenTiltFloorAngle = π / 4f0
+const PenConeRadius = 0.02f0
+const PenConeSpinSpeed = 8f0
+const PenConeTipHeight = Float32(sqrt(PenLength * PenLength - PenConeRadius * PenConeRadius))
 
 const DescendDuration = 1.8f0
+const EndMoveToPutJoint2Duration = 2f0
+const ExtremityTrailDuration = 2f0
+const EndMoveToStartDuration = 2f0
 const TiltDuration = 0.8f0
 const DrawDuration = 2.7f0
 const EndStraightenDuration = 0.8f0
@@ -35,20 +42,36 @@ const MetaLineJoint1Id = 2
 const MetaLineJoint2Id = 3
 const MetaPhase = 4
 const MetaTimer = 5
+const MetaPoint1Id = 6
+const MetaPoint2Id = 7
 
 const PhaseDescend = 0f0
-const PhaseTilt = 1f0
-const PhaseDraw = 2f0
-const PhaseEndStraighten = 3f0
-const PhaseMoveToJoint1 = 4f0
-const PhaseMoveToJoint2 = 5f0
-const PhaseEndLift = 6f0
+const PhasePutJoint1 = 1f0
+const PhaseMoveToPutJoint2 = 2f0
+const PhasePutJoint2 = 3f0
+const PhaseMoveToStart = 4f0
+const PhaseTilt = 5f0
+const PhaseDraw = 6f0
+const PhaseEndStraighten = 7f0
+const PhaseMoveToJoint1 = 8f0
+const PhaseMoveToJoint2 = 9f0
+const PhaseEndLift = 10f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: 4. Straight Line:
+    """Euclid Elements - Book I - Definition: Straight Line:
 
 A straight line is a line which lies evenly with the points on itself."""
+end
+
+function show_full_point(
+    state_ptr::Ptr{Cvoid}, pointId::Integer, color::Symbol,
+    pointX::Float32, pointY::Float32, pointZ::Float32)
+
+    EuclidBridge.show_point(state_ptr, pointId)
+    EuclidBridge.set_point_color(state_ptr, pointId, color)
+    EuclidBridge.set_point_position(state_ptr, pointId, pointX, pointY, pointZ)
+    EuclidBridge.set_point_brush(state_ptr, pointId, PointMaxBrush)
 end
 
 function show_full_line(
@@ -88,11 +111,16 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostId))
     lineJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
     lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    point1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaPoint1Id))
+    point2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaPoint2Id))
 
     EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
+
+    EuclidBridge.hide_point(state_ptr, point1Id)
+    EuclidBridge.hide_point(state_ptr, point2Id)
 
     EuclidBridge.show_pen(state_ptr)
     EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
@@ -100,6 +128,16 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
+    point1 = EuclidBridge.create_new_point(
+        state_ptr,
+        StartPoint[1], StartPoint[2], StartPoint[3],
+        PointColor,
+        0f0)
+    point2 = EuclidBridge.create_new_point(
+        state_ptr,
+        EndPoint[1], EndPoint[2], EndPoint[3],
+        PointColor,
+        0f0)
     line = EuclidBridge.create_new_line(
         state_ptr,
         StartPoint[1], StartPoint[2], StartPoint[3],
@@ -109,6 +147,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     EuclidBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.hostId))
     EuclidBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(line.joint1Id))
     EuclidBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(line.joint2Id))
+    EuclidBridge.set_animation_meta(state_ptr, MetaPoint1Id, Float32(point1.index))
+    EuclidBridge.set_animation_meta(state_ptr, MetaPoint2Id, Float32(point2.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -120,6 +160,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostId))
     lineJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
     lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    point1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaPoint1Id))
+    point2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaPoint2Id))
 
     if lineHostId < 0
         return
@@ -139,6 +181,94 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= DescendDuration
+            phase = PhasePutJoint1
+            timer = 0f0
+            place_pen_at_floor_angle(
+                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], π / 2f0)
+        end
+    elseif phase == PhasePutJoint1
+        t = clamp(timer / ExtremityTrailDuration, 0f0, 1f0)
+        EuclidBridge.set_pen_active(state_ptr, 1, PointColor)
+
+        theta = timer * PenConeSpinSpeed
+        join2Pos = StartPoint + [
+            PenConeRadius * Float32(cos(theta)),
+            PenConeRadius * Float32(sin(theta)),
+            PenConeTipHeight ]
+
+        EuclidBridge.lock_pen_joint1(state_ptr, StartPoint[1], StartPoint[2], StartPoint[3])
+        EuclidBridge.move_pen_joint2(state_ptr, join2Pos[1], join2Pos[2], join2Pos[3])
+
+        show_full_point(state_ptr, point1Id, PointColor,
+            StartPoint[1], StartPoint[2], StartPoint[3])
+
+        EuclidBridge.emit_trailing_particle(state_ptr, StartPoint[1], StartPoint[2], PointColor)
+
+        timer += dt
+        if timer >= ExtremityTrailDuration
+            phase = PhaseMoveToPutJoint2
+            timer = 0f0
+            place_pen_at_floor_angle(
+                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], π / 2f0)
+        end
+    elseif phase == PhaseMoveToPutJoint2
+        t = clamp(timer / EndMoveToPutJoint2Duration, 0f0, 1f0)
+        EuclidBridge.set_pen_active(state_ptr, 0, PointColor)
+
+        vec = EndPoint - StartPoint
+        tvec = t * vec
+        tvec[3] = sin(t * π) * 0.25f0
+        usePoint = StartPoint + tvec
+        usePoint[3] = clamp(usePoint[3], 0f0, 1f0)
+        place_pen_at_floor_angle(
+            state_ptr, usePoint[1], usePoint[2], usePoint[3], π / 2f0)
+
+        timer += dt
+        if timer >= EndMoveToPutJoint2Duration
+            phase = PhasePutJoint2
+            timer = 0f0
+            place_pen_at_floor_angle(
+                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], π / 2f0)
+        end
+    elseif phase == PhasePutJoint2
+        t = clamp(timer / ExtremityTrailDuration, 0f0, 1f0)
+        EuclidBridge.set_pen_active(state_ptr, 1, PointColor)
+
+        theta = timer * PenConeSpinSpeed
+        join2Pos = EndPoint + [
+            PenConeRadius * Float32(cos(theta)),
+            PenConeRadius * Float32(sin(theta)),
+            PenConeTipHeight ]
+
+        EuclidBridge.lock_pen_joint1(state_ptr, EndPoint[1], EndPoint[2], EndPoint[3])
+        EuclidBridge.move_pen_joint2(state_ptr, join2Pos[1], join2Pos[2], join2Pos[3])
+
+        show_full_point(state_ptr, point2Id, PointColor,
+            EndPoint[1], EndPoint[2], EndPoint[3])
+
+        EuclidBridge.emit_trailing_particle(state_ptr, EndPoint[1], EndPoint[2], PointColor)
+
+        timer += dt
+        if timer >= ExtremityTrailDuration
+            phase = PhaseMoveToStart
+            timer = 0f0
+            place_pen_at_floor_angle(
+                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], π / 2f0)
+        end
+    elseif phase == PhaseMoveToStart
+        t = clamp(timer / EndMoveToStartDuration, 0f0, 1f0)
+        EuclidBridge.set_pen_active(state_ptr, 0, PointColor)
+
+        vec = StartPoint - EndPoint
+        tvec = t * vec
+        tvec[3] = sin(t * π) * 0.25f0
+        usePoint = EndPoint + tvec
+        usePoint[3] = clamp(usePoint[3], 0f0, 1f0)
+        place_pen_at_floor_angle(
+            state_ptr, usePoint[1], usePoint[2], usePoint[3], π / 2f0)
+
+        timer += dt
+        if timer >= EndMoveToStartDuration
             phase = PhaseTilt
             timer = 0f0
             place_pen_at_floor_angle(
