@@ -4,7 +4,7 @@ import "../julialib"
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 4096
+MAX_PARTICLES :: 8192
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256

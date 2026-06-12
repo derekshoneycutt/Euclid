@@ -27,6 +27,7 @@ const LineColor2 = :palevioletred1
 const MarkerColor = :khaki3
 const LineMaxBrush = 5f0
 const MarkerBrush = 1f0
+const MarkerRadialTrailSamples = 16
 
 const PenTopZ = 1.4f0
 const PenLength = 0.14f0
@@ -153,6 +154,15 @@ function update_marker(
         state_ptr, markerStartId, MarkerStart[1], MarkerStart[2], MarkerStart[3])
     EuclidBridge.set_point_position(
         state_ptr, markerEndId, endX, endY, 0f0)
+end
+
+function emit_marker_radius_trail(state_ptr::Ptr{Cvoid}, endX::Float32, endY::Float32)
+    for i in 0:MarkerRadialTrailSamples
+        t = Float32(i) / Float32(MarkerRadialTrailSamples)
+        px = JointPoint[1] + (endX - JointPoint[1]) * t
+        py = JointPoint[2] + (endY - JointPoint[2]) * t
+        EuclidBridge.emit_trailing_particle(state_ptr, px, py, MarkerColor)
+    end
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
@@ -433,7 +443,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         show_full_line(state_ptr, line1HostId, line1Joint1Id, line1Joint2Id, Line1Start, Line1End, LineColor1)
         show_full_line(state_ptr, line2HostId, line2Joint1Id, line2Joint2Id, Line2Start, Line2End, LineColor2)
         update_marker(state_ptr, markerHostId, markerStartId, markerEndId, theta)
-        EuclidBridge.emit_trailing_particle(state_ptr, endX, endY, MarkerColor)
+        emit_marker_radius_trail(state_ptr, endX, endY)
 
         timer += dt
         if timer >= CompassDrawDuration
