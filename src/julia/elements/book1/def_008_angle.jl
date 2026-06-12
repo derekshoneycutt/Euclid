@@ -27,7 +27,7 @@ const LineColor2 = :palevioletred1
 const MarkerColor = :khaki3
 const LineMaxBrush = 5f0
 const MarkerBrush = 1f0
-const MarkerRadialTrailSamples = 16
+const MarkerRadialTrailSamples = 8
 
 const PenTopZ = 1.4f0
 const PenLength = 0.14f0
@@ -45,7 +45,7 @@ const EndLiftDuration = 1.6f0
 const CompassDescendDuration = 1.4f0
 const CompassDrawDuration = 1.25f0
 const CompassLiftDuration = 1.4f0
-const HidePauseDuration = 0.4f0
+const HidePauseDuration = 0.6f0
 
 const SegmentVec1 = Line1End - Line1Start
 const SegmentVecLen1 = norm(SegmentVec1)
@@ -178,9 +178,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     markerStartId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
     markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
 
-    hide_line(state_ptr, line1HostId, line1Joint1Id, line1Joint2Id, Line1Start)
-    hide_line(state_ptr, line2HostId, line2Joint1Id, line2Joint2Id, Line2Start)
     hide_marker(state_ptr, markerHostId, markerStartId, markerEndId)
+    hide_line(state_ptr, line2HostId, line2Joint1Id, line2Joint2Id, Line2Start)
+    hide_line(state_ptr, line1HostId, line1Joint1Id, line1Joint2Id, Line1Start)
 
     EuclidBridge.hide_compass(state_ptr)
     EuclidBridge.show_pen(state_ptr)
@@ -474,9 +474,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseHideAll
-        hide_line(state_ptr, line1HostId, line1Joint1Id, line1Joint2Id, Line1Start)
-        hide_line(state_ptr, line2HostId, line2Joint1Id, line2Joint2Id, Line2Start)
         hide_marker(state_ptr, markerHostId, markerStartId, markerEndId)
+        hide_line(state_ptr, line2HostId, line2Joint1Id, line2Joint2Id, Line2Start)
+        hide_line(state_ptr, line1HostId, line1Joint1Id, line1Joint2Id, Line1Start)
 
         timer += dt
         if timer >= HidePauseDuration

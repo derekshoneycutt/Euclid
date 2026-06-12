@@ -11,6 +11,7 @@ KinePointSystem :: core.KinePointSystem
 import "core:math"
 import rl "vendor:raylib"
 
+MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 SPAWN_INTERVAL :: 0.012 // seconds
@@ -27,7 +28,7 @@ BURNOUT_SIZE_START :: 3.5
 BURNOUT_SIZE_END :: 0.0
 BURNOUT_PER_TRAIL_SPAWN :: 3
 
-FLICKERS_PER_TRAIL_SPAWN :: 5
+FLICKERS_PER_TRAIL_SPAWN :: 4
 FLICKER_LIFE_MIN :: 0.0
 FLICKER_LIFE_MAX :: 0.5
 FLICKER_SPAWN_RADIUS :: 0.001
@@ -79,10 +80,40 @@ random_f32_range :: proc(min_v, max_v: f32) -> f32 {
 reset_particles :: proc(ps: ^ParticleSystem) {
     ps.NextIndex = 0
     ps.SpawnTimer = 0
+    for i in 0..<MAX_LOW_PARTICLES {
+        ps.LowParticles[i].Alive = false
+        ps.LowParticles[i].Age = 0
+    }
     for i in 0..<MAX_PARTICLES {
         ps.Particles[i].Alive = false
         ps.Particles[i].Age = 0
+        ps.HighParticles[i].Alive = false
+        ps.HighParticles[i].Age = 0
     }
+}
+
+reserve_dead_low_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
+    for step in 0..<MAX_LOW_PARTICLES {
+        index := (ps.NextIndex + step) % MAX_LOW_PARTICLES
+        if !ps.LowParticles[index].Alive {
+            ps.NextIndex = (index + 1) % MAX_LOW_PARTICLES
+            return &ps.LowParticles[index], true
+        }
+    }
+
+    return nil, false
+}
+
+reserve_dead_high_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
+    for step in 0..<MAX_PARTICLES {
+        index := (ps.NextIndex + step) % MAX_PARTICLES
+        if !ps.HighParticles[index].Alive {
+            ps.NextIndex = (index + 1) % MAX_PARTICLES
+            return &ps.HighParticles[index], true
+        }
+    }
+
+    return nil, false
 }
 
 reserve_dead_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
@@ -131,7 +162,7 @@ spawn_particle :: proc(
 
 spawn_flicker_particle :: proc(ps: ^ParticleSystem, origin: Vector3) {
 
-    p, ok := reserve_dead_particle_slot(ps)
+    p, ok := reserve_dead_high_particle_slot(ps)
     if !ok {
         return
     }
@@ -236,8 +267,8 @@ clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
 push_dust_away_from_xy :: proc (ps: ^ParticleSystem, x, y: f32) {
     push_radius_sq := DUST_CONTACT_PUSH_RADIUS * DUST_CONTACT_PUSH_RADIUS
 
-    for i in 0..<MAX_PARTICLES {
-        p := &ps.Particles[i]
+    for i in 0..<MAX_LOW_PARTICLES {
+        p := &ps.LowParticles[i]
         if !p.Alive || p.Type != .Dust {
             continue
         }
@@ -274,7 +305,7 @@ push_dust_away_from_xy :: proc (ps: ^ParticleSystem, x, y: f32) {
 }
 
 spawn_dust_particle :: proc(ps: ^ParticleSystem, origin: Vector3, col: rl.Color) {
-    p, ok := reserve_dead_particle_slot(ps)
+    p, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
         return
     }
@@ -300,8 +331,8 @@ spawn_dust_particle :: proc(ps: ^ParticleSystem, origin: Vector3, col: rl.Color)
 }
 
 kick_existing_dust :: proc(ps: ^ParticleSystem) {
-    for i in 0..<MAX_PARTICLES {
-        p := &ps.Particles[i]
+    for i in 0..<MAX_LOW_PARTICLES {
+        p := &ps.LowParticles[i]
         if !p.Alive || p.Type != .Dust {
             continue
         }
@@ -531,30 +562,40 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
 }
 
 update_particles :: proc(ps: ^ParticleSystem, dt: f32) {
+    for i in 0..<MAX_LOW_PARTICLES {
+        lp := &ps.LowParticles[i]
+        update_particle(lp, dt)
+    }
     for i in 0..<MAX_PARTICLES {
         p := &ps.Particles[i]
-        if !p.Alive {
-            continue
-        }
+        update_particle(p, dt)
+        hp := &ps.HighParticles[i]
+        update_particle(hp, dt)
+    }
+}
 
-        if p.Type != .Dust {
-            p.Age += dt
-            if p.Age >= p.Life {
-                p.Alive = false
-                continue
-            }
-        }
+update_particle :: proc(p : ^Particle, dt: f32) {
+    if !p.Alive {
+        return
+    }
 
-        switch p.Type {
-            case .Trail:
-                update_particle_trail(p)
-            case .Flicker:
-                update_particle_flicker(p)
-            case .BurnOut:
-                update_particle_burnout(p)
-            case .Dust:
-                update_particle_dust(p)
+    if p.Type != .Dust {
+        p.Age += dt
+        if p.Age >= p.Life {
+            p.Alive = false
+            return
         }
+    }
+
+    switch p.Type {
+        case .Trail:
+            update_particle_trail(p)
+        case .Flicker:
+            update_particle_flicker(p)
+        case .BurnOut:
+            update_particle_burnout(p)
+        case .Dust:
+            update_particle_dust(p)
     }
 }
 

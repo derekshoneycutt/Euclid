@@ -4,11 +4,12 @@ import "../julialib"
 import "base:runtime"
 import rl "vendor:raylib"
 
-MAX_PARTICLES :: 8192
+MAX_LOW_PARTICLES :: 4096
+MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
-MAX_JULIA_INTERFACES :: 64
+MAX_JULIA_INTERFACES :: 512
 
 Vector2 :: [2]f32
 Vector3 :: [3]f32
@@ -246,7 +247,9 @@ Particle :: struct {
 }
 
 ParticleSystem :: struct {
+    LowParticles : [MAX_LOW_PARTICLES]Particle,
     Particles : [MAX_PARTICLES]Particle,
+    HighParticles : [MAX_PARTICLES]Particle,
     NextIndex : int,
     SpawnTimer : f32,
 }

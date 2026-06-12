@@ -162,9 +162,11 @@ run_window_loop :: proc() {
             draw_drawing_surface(state^.DrawSurface, state)
 
             draw_kine_points_low_cached(state)
+            render_low_particles(state^.ParticleSystem, state)
             draw_kine_points_shadows_cached(state)
             render_particles(state^.ParticleSystem, state)
             draw_kine_points_high_cached(state)
+            render_high_particles(state^.ParticleSystem, state)
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
             draw_view_text_panel(state, &view_text_scroll_y)

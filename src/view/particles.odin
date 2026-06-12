@@ -5,11 +5,56 @@ import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
+MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
+
+render_low_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
+    for i in 0..<MAX_LOW_PARTICLES {
+        p := &ps.LowParticles[i]
+        if !p^.Alive {
+            continue
+        }
+
+        screen := iso_to_cartesian(p^.Position, state^.IsoScale^)
+
+        switch p.Type {
+            case .Trail:
+                render_particle_trail(p, screen)
+            case .Flicker:
+                render_particle_flicker(p, screen)
+            case .BurnOut:
+                render_particle_burnout(p, screen)
+            case .Dust:
+                render_particle_dust(p, screen)
+        }
+    }
+}
 
 render_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
     for i in 0..<MAX_PARTICLES {
         p := &ps.Particles[i]
+        if !p^.Alive {
+            continue
+        }
+
+        screen := iso_to_cartesian(p^.Position, state^.IsoScale^)
+
+        switch p.Type {
+            case .Trail:
+                render_particle_trail(p, screen)
+            case .Flicker:
+                render_particle_flicker(p, screen)
+            case .BurnOut:
+                render_particle_burnout(p, screen)
+            case .Dust:
+                render_particle_dust(p, screen)
+        }
+    }
+}
+
+render_high_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
+    for i in 0..<MAX_PARTICLES {
+        p := &ps.HighParticles[i]
         if !p^.Alive {
             continue
         }
