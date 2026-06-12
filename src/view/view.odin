@@ -23,6 +23,7 @@ ParticleSystem :: core.ParticleSystem
 EuclidDrawingSurface :: core.EuclidDrawingSurface
 EuclidGeneralState :: core.EuclidGeneralState
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+TOOL_LENGTH :: core.TOOL_LENGTH
 
 IsoScaleValue :: 800
 IsoXOffset :: 450
@@ -74,8 +75,8 @@ run_window_loop :: proc() {
     pointSystem := new(KinePointSystem)
     defer free(pointSystem)
 
-    compass := kine.init_kineshape_compass(pointSystem, 0.35, ItemColor, 5)
-    pen := kine.init_kineshape_pen(pointSystem, 0.35, ItemColor, 5)
+    compass := kine.init_kineshape_compass(pointSystem, TOOL_LENGTH, ItemColor, 5)
+    pen := kine.init_kineshape_pen(pointSystem, TOOL_LENGTH, ItemColor, 5)
     kine.kine_freeze_system_indices(pointSystem)
 
     tree_scroll_y: f32 = 0

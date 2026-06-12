@@ -27,7 +27,7 @@ const LineColor2 = :palevioletred1
 const MarkerColor = :khaki3
 const LineMaxBrush = 5f0
 const MarkerBrush = 1f0
-const MarkerRadialTrailSamples = 8
+const MarkerRadialTrailSamples = 8f0
 
 const PenTopZ = 1.4f0
 const PenLength = 0.14f0
@@ -158,10 +158,10 @@ end
 
 function emit_marker_radius_trail(state_ptr::Ptr{Cvoid}, endX::Float32, endY::Float32)
     for i in 0:MarkerRadialTrailSamples
-        t = Float32(i) / Float32(MarkerRadialTrailSamples)
-        px = JointPoint[1] + (endX - JointPoint[1]) * t
-        py = JointPoint[2] + (endY - JointPoint[2]) * t
-        EuclidBridge.emit_trailing_particle(state_ptr, px, py, MarkerColor)
+        t = (Float32(i) / Float32(MarkerRadialTrailSamples)) +
+            Float32(2f0 * rand() - 1f0) / MarkerRadialTrailSamples
+        markerpoint = JointPoint + ([endX, endY, JointPoint[3]] - JointPoint) * t
+        EuclidBridge.emit_trailing_particle(state_ptr, markerpoint[1], markerpoint[2], MarkerColor)
     end
 end
 
