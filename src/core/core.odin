@@ -57,6 +57,7 @@ KineShapePointType :: enum {
     Point,
     Line,
     Circle,
+    FilledCircle,
     Pen,
     Compass,
 }
@@ -110,7 +111,7 @@ KineShapeCompass :: struct {
     Limb1LengthId : int,
     Limb2LengthId : int,
     Point1FloorId : int,
-    PivotFLoorId : int,
+    PivotFloorId : int,
     Point2FloorId : int,
     LockPoint1Id : int,
     LockPoint2Id : int,
@@ -135,6 +136,12 @@ KineShapeLine :: struct {
 }
 
 KineShapeCircle :: struct {
+    HostId : int,
+    StartId : int,
+    EndId : int,
+}
+
+KineShapeFilledCircle :: struct {
     HostId : int,
     StartId : int,
     EndId : int,
@@ -168,6 +175,13 @@ KineCircleDraw :: struct {
     End: Vector3,
 }
 
+KineFilledCircleDraw :: struct {
+    using Base: KineDrawBase,
+    Center: Vector3,
+    Start: Vector3,
+    End: Vector3,
+}
+
 KinePenDraw :: struct {
     using Base: KineDrawBase,
     Joint1: Vector3,
@@ -181,7 +195,7 @@ KineCompassDraw :: struct {
     Joint2: Vector3,
 }
 
-KineDrawCacheItem :: union { KinePointDraw, KineLineDraw, KineCircleDraw }
+KineDrawCacheItem :: union { KinePointDraw, KineLineDraw, KineCircleDraw, KineFilledCircleDraw }
 
 KineDrawCache :: struct {
     Items: [MAX_KINEPOINTS]KineDrawCacheItem,

@@ -395,7 +395,7 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
         return
     }
 
-    if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle {
+    if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle && kp.Type != .FilledCircle {
         return
     }
 
@@ -426,7 +426,7 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
             if a_ok && b_ok {
                 emit_line_dust(ps, a, b, col)
             }
-        case .Circle:
+        case .Circle, .FilledCircle:
             center, center_ok := kp.Position.?
             if !center_ok {
                 return
@@ -467,7 +467,7 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
             continue
         }
 
-        if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle {
+        if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle && kp.Type != .FilledCircle {
             continue
         }
 
@@ -497,7 +497,7 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
                 if a_ok && b_ok {
                     emit_line_dust(ps, a, b, col)
                 }
-            case .Circle:
+            case .Circle, .FilledCircle:
                 center, center_ok := kp.Position.?
                 if !center_ok {
                     continue

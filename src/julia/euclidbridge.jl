@@ -44,6 +44,40 @@ struct BridgeShapeCircle
     endId::Int64
 end
 
+struct BridgeShapeFilledCircle
+    hostId::Int64
+    startId::Int64
+    endId::Int64
+end
+
+struct BridgeShapePen
+    hostId::Int64
+    joint1Id::Int64
+    joint2Id::Int64
+
+    lengthConstraintId::Int64
+    point1FloorId::Int64
+    point2FloorId::Int64
+    lockPoint1Id::Int64
+    lockPoint2Id::Int64
+end
+
+struct BridgeShapeCompass
+    hostId::Int64
+    joint1Id::Int64
+    pivotId::Int64
+    joint2Id::Int64
+
+    centerPivotId::Int64
+    limb1LengthId::Int64
+    limb2LengthId::Int64
+    point1FloorId::Int64
+    pivotFloorId::Int64
+    point2FloorId::Int64
+    lockPoint1Id::Int64
+    lockPoint2Id::Int64
+end
+
 """
 Construct a new BridgeColor from standard Julia color types
 
@@ -267,6 +301,53 @@ function create_new_circle(state_ptr::Ptr{Cvoid},
     radius::Float32, startθ::Float32, endθ::Float32,
     color::AbstractString, brushSize::Float32)
     create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+
+"""
+Construct a new filled circle in the Euclid system to be shown on the surface
+
+------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `x` : The x value for the position of the center point of the circle
+- `y` : The y value for the position of the center point of the circle
+- `z` : The z value for the position of the center point of the circle
+- `radius` : The radius of the circle to draw
+- `startθ` : The starting angle in radians of the circle to draw
+- `endθ` : The ending angle in radians of the circle to draw
+- `color` : The color to show the circle with
+- `brushSize` : The size of the circle to show
+
+Returns: a `BridgeShapeCircle` describing the newly created circle
+"""
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    x::Float32, y::Float32, z::Float32,
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::BridgeColor, brushSize::Float32)
+    pos = (x, y, z)
+    return @ccall create_new_filledcircle(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat},
+        radius::Cfloat, startθ::Cfloat, endθ::Cfloat,
+        color::BridgeColor, brushSize::Cfloat)::BridgeShapeFilledCircle
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    x::Float32, y::Float32, z::Float32,
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    x::Float32, y::Float32, z::Float32,
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    x::Float32, y::Float32, z::Float32,
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
 
 """

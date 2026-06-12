@@ -21,11 +21,13 @@ KineShapeCompass :: core.KineShapeCompass
 KineShapePen :: core.KineShapePen
 KineShapeLine :: core.KineShapeLine
 KineShapeCircle :: core.KineShapeCircle
+KineShapeFilledCircle :: core.KineShapeFilledCircle
 
 KineDrawBase :: core.KineDrawBase
 KinePointDraw :: core.KinePointDraw
 KineLineDraw :: core.KineLineDraw
 KineCircleDraw :: core.KineCircleDraw
+KineFilledCircleDraw :: core.KineFilledCircleDraw
 KinePenDraw :: core.KinePenDraw
 KineCompassDraw :: core.KineCompassDraw
 
@@ -92,6 +94,8 @@ build_kine_draw_cache :: proc(
                 cache_push_line(pointSystem, index, src, alpha)
             case .Circle:
                 cache_push_circle(pointSystem, index, src, alpha)
+            case .FilledCircle:
+                cache_push_filledcircle(pointSystem, index, src, alpha)
             case .Pen:
                 cache_push_pen(pointSystem, index, src, alpha)
             case .Compass:
@@ -222,6 +226,43 @@ cache_push_circle :: proc(
 
     slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
     point := KineCircleDraw{ make_draw_base(sourceIndex, src), center, start, end }
+    slot^ = point
+    pointSystem^.DrawCache.ItemCount += 1
+}
+
+cache_push_filledcircle :: proc(
+    pointSystem: ^KinePointSystem,
+    sourceIndex: int,
+    src: ^KineShapePoint,
+    alpha: f32) {
+
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+        return
+    }
+
+    center, hasCenter := src^.Position.?
+    if !hasCenter {
+        return
+    }
+
+    child0 := src^.ChildPointHead
+    start: Vector3
+    if !lerped_point_position(pointSystem, child0, alpha, &start) {
+        return
+    }
+
+    next := pointSystem.Points[child0].NextChildPoint
+    end: Vector3
+    if !lerped_point_position(pointSystem, next, alpha, &end) {
+        return
+    }
+
+    if src^.ActiveChild > 1 {
+        start, end = end, start
+    }
+
+    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
+    point := KineFilledCircleDraw{ make_draw_base(sourceIndex, src), center, start, end }
     slot^ = point
     pointSystem^.DrawCache.ItemCount += 1
 }

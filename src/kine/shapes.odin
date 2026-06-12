@@ -81,6 +81,46 @@ init_kineshape_circle :: proc(
         hostId, startId, endId }
 }
 
+init_kineshape_filledcircle :: proc(
+    system: ^KinePointSystem,
+    center_pos: Vector3,
+    radius: f32,
+    startTheta, endTheta: f32,
+    color: rl.Color,
+    brushSize: f32) -> KineShapeFilledCircle {
+
+    start_pos := Vector3{
+        center_pos.x + radius * f32(math.cos(startTheta)),
+        center_pos.y + radius * f32(math.sin(startTheta)),
+        center_pos.z,
+    }
+
+    end_pos := Vector3{
+        center_pos.x + radius * f32(math.cos(endTheta)),
+        center_pos.y + radius * f32(math.sin(endTheta)),
+        center_pos.z,
+    }
+
+    hostPoint := KineShapePoint{ .FilledCircle, center_pos, color, nil, brushSize, 1, 2, 0, 0, false }
+    startPoint := KineShapePoint{ .Point, start_pos, nil, nil, 0, 0, 0, 0, 0, false }
+    endPoint := KineShapePoint{ .Point, end_pos, nil, nil, 0, 0, 0, 0, 0, false }
+
+    hostId := system^.NextPointIndex
+    startId := hostId + 1
+    endId := hostId + 2
+    system^.NextPointIndex = endId + 1
+
+    hostPoint.ChildPointHead = startId
+    startPoint.NextChildPoint = endId
+
+    system^.Points[hostId] = hostPoint
+    system^.Points[startId] = startPoint
+    system^.Points[endId] = endPoint
+
+    return KineShapeFilledCircle{
+        hostId, startId, endId }
+}
+
 init_kineshape_pen :: proc(
     system: ^KinePointSystem,
     length: f32,

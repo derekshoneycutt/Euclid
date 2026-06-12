@@ -18,6 +18,7 @@ MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
 ANIMATION_RESET_MIN_INTERVAL :: f32(0.35)
 FLOOR_CONTACT_Z_EPSILON :: f32(0.015)
+COMPASS_LINE_DUST_SAMPLES :: int(24)
 
 BridgeColor :: struct {
     R: u8,
@@ -52,6 +53,31 @@ BridgePointView :: struct {
 push_dust_if_floor_contact :: proc(state: ^core.EuclidGeneralState, pos: core.Vector3) {
     if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
         particles.push_dust_away_from_xy(state^.ParticleSystem, pos.x, pos.y)
+    }
+}
+
+push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.EuclidGeneralState) {
+    pointIndex1 := state^.Compass.Joint1Id
+    pointIndex2 := state^.Compass.Joint2Id
+    if pointIndex1 < 0 || pointIndex1 >= MAX_KINEPOINTS || pointIndex2 < 0 || pointIndex2 >= MAX_KINEPOINTS {
+        return
+    }
+
+    point1 := state^.PointSystem^.Points[pointIndex1].Position.? or_else {0, 0, 0}
+    point2 := state^.PointSystem^.Points[pointIndex2].Position.? or_else {0, 0, 0}
+
+    if f32(math.abs(f64(point1.z))) > FLOOR_CONTACT_Z_EPSILON ||
+        f32(math.abs(f64(point2.z))) > FLOOR_CONTACT_Z_EPSILON {
+        return
+    }
+
+    samples := COMPASS_LINE_DUST_SAMPLES
+    inv_samples := f32(1.0) / f32(samples)
+    for i in 0..<samples {
+        t := f32(i) * inv_samples
+        x := math.lerp(point1.x, point2.x, t)
+        y := math.lerp(point1.y, point2.y, t)
+        particles.push_dust_away_from_xy(state^.ParticleSystem, x, y)
     }
 }
 
@@ -435,6 +461,20 @@ create_new_circle :: proc "c" (
 }
 
 @(export)
+create_new_filledcircle :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    center: core.Vector3, radius, startTheta, endTheta: f32,
+    color: BridgeColor, brushSize: f32) -> core.KineShapeFilledCircle {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    circle := kine.init_kineshape_filledcircle(
+        state^.PointSystem, center, radius, startTheta, endTheta, rlColor, brushSize)
+
+    return circle
+}
+
+@(export)
 get_point_view :: proc "c" (
     state: ^core.EuclidGeneralState,
     index: int) -> BridgePointView {
@@ -449,10 +489,12 @@ get_point_view :: proc "c" (
                 type = 1
             case .Circle:
                 type = 2
-            case .Pen:
+            case .FilledCircle:
                 type = 3
-            case .Compass:
+            case .Pen:
                 type = 4
+            case .Compass:
+                type = 5
         }
         pos, hasPos := point.Position.?
         color, hasColor := point.Color.?
@@ -718,10 +760,19 @@ clear_compass_active :: proc "c" (
 lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
     context = state^.SavedContext
     pointIndex := state^.Compass.Joint1Id
+    pivotIndex := state^.Compass.PivotId
     constraintIndex := state^.Compass.LockPoint1Id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
         push_dust_if_floor_contact(state, pos)
+        push_dust_for_compass_segment_if_floor_contact(state)
+    
+        pointpos := state^.PointSystem^.Points[pointIndex].Position.? or_else { 0, 0, 0 }
+        pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
+        if pointpos.z >= pivotpos.z {
+            state^.PointSystem^.Points[pivotIndex].Position =
+                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+        }
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -741,9 +792,18 @@ unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
 move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
     context = state^.SavedContext
     index := state^.Compass.Joint1Id
+    pivotIndex := state^.Compass.PivotId
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
         push_dust_if_floor_contact(state, pos)
+        push_dust_for_compass_segment_if_floor_contact(state)
+
+        pointpos := state^.PointSystem^.Points[index].Position.? or_else { 0, 0, 0 }
+        pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
+        if pointpos.z >= pivotpos.z {
+            state^.PointSystem^.Points[pivotIndex].Position =
+                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+        }
     }
 }
 
@@ -760,10 +820,19 @@ get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> cor
 lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
     context = state^.SavedContext
     pointIndex := state^.Compass.Joint2Id
+    pivotIndex := state^.Compass.PivotId
     constraintIndex := state^.Compass.LockPoint2Id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
         push_dust_if_floor_contact(state, pos)
+        push_dust_for_compass_segment_if_floor_contact(state)
+
+        pointpos := state^.PointSystem^.Points[pointIndex].Position.? or_else { 0, 0, 0 }
+        pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
+        if pointpos.z >= pivotpos.z {
+            state^.PointSystem^.Points[pivotIndex].Position =
+                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+        }
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.PointSystem^.Constraints[constraintIndex].Restriction = pos
@@ -783,9 +852,18 @@ unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
 move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
     context = state^.SavedContext
     index := state^.Compass.Joint2Id
+    pivotIndex := state^.Compass.PivotId
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
         push_dust_if_floor_contact(state, pos)
+        push_dust_for_compass_segment_if_floor_contact(state)
+
+        pointpos := state^.PointSystem^.Points[index].Position.? or_else { 0, 0, 0 }
+        pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
+        if pointpos.z >= pivotpos.z {
+            state^.PointSystem^.Points[pivotIndex].Position =
+                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+        }
     }
 }
 

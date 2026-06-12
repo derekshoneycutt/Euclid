@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
-CIRCLE_ARC_SEGMENTS :: 60
+CIRCLE_ARC_SEGMENTS :: 96
 
 COMPASS_TOPCIRCLE_SEGMENTS :: 30
 COMPASS_TOPCIRCLE_VECTORS :: COMPASS_TOPCIRCLE_SEGMENTS + 1
@@ -256,6 +256,8 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
                 draw_cached_line(state, &itemTyped)
             case core.KineCircleDraw:
                 draw_cached_circle(state, &itemTyped)
+            case core.KineFilledCircleDraw:
+                draw_cached_filledcircle(state, &itemTyped)
             case:
                 continue
         }
@@ -341,6 +343,44 @@ draw_cached_circle :: proc(state: ^EuclidGeneralState, c: ^kine.KineCircleDraw) 
         rl.DrawLineEx(prevScreen, currScreen, c^.BrushSize, c^.Color)
         prevScreen = currScreen
     }
+}
+
+draw_cached_filledcircle :: proc(state: ^EuclidGeneralState, c: ^kine.KineFilledCircleDraw) {
+    start := c^.Start
+    finish := c^.End
+    center := c^.Center
+    isocenter := iso_to_cartesian(center, state^.IsoScale^)
+
+    startVec := start - center
+    endVec := finish - center
+
+    startRadius := f32(math.sqrt(startVec.x * startVec.x + startVec.y * startVec.y))
+    endRadius := f32(math.sqrt(endVec.x * endVec.x + endVec.y * endVec.y))
+
+    startTheta := f32(math.atan2(startVec.y, startVec.x))
+    endTheta := f32(math.atan2(endVec.y, endVec.x))
+    sweepDelta := compute_sweep_delta(startTheta, endTheta)
+
+    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
+    points[0] = isocenter
+    points[1] = iso_to_cartesian(finish, state^.IsoScale^)
+
+    segCount := f32(CIRCLE_ARC_SEGMENTS)
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        t := f32(i) / segCount
+        theta := endTheta - sweepDelta * t
+        radius := math.lerp(startRadius, endRadius, t)
+
+        currWorld := Vector3{
+            center.x + f32(math.cos(theta)) * radius,
+            center.y + f32(math.sin(theta)) * radius,
+            center.z,
+        }
+
+        points[i + 1] = iso_to_cartesian(currWorld, state^.IsoScale^)
+    }
+
+    rl.DrawTriangleFan(&points[0], len(points), c^.Color)
 }
 
 

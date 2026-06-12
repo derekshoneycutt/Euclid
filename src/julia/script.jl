@@ -9,6 +9,7 @@ include("./elements/book1/def_004_straightline.jl")
 include("./elements/book1/def_005_surface.jl")
 include("./elements/book1/def_006_surfextrem.jl")
 include("./elements/book1/def_007_planesurface.jl")
+include("./elements/book1/def_008_angle.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -98,6 +99,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionPlaneSurface.loop,
                     ElementsOneDefinitionPlaneSurface.clean,
                     "Plane Surface", book1DefsId)
+                book1Defs8PlaneAngleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionPlaneAngle.get_view_text,
+                    ElementsOneDefinitionPlaneAngle.initialize,
+                    ElementsOneDefinitionPlaneAngle.loop,
+                    ElementsOneDefinitionPlaneAngle.clean,
+                    "Plane Angle", book1DefsId)
                 
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
