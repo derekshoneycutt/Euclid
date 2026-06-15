@@ -1,6 +1,7 @@
 module NullAnimation
 
-include("./euclidbridge.jl")
+using ..EuclidBridge
+using ..EuclidAnimations
 
 using LinearAlgebra
 

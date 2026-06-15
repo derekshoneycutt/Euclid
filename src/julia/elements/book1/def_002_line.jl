@@ -1,31 +1,22 @@
 module ElementsOneDefinitionLine
 
-using LinearAlgebra
+using ..EuclidBridge
+using ..EuclidAnimations
 
-include("../../euclidbridge.jl")
+using LinearAlgebra
 
 export get_view_text, initialize, clean, loop
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
 const EndPoint = [0.75f0, 0.25f0, 0f0]
+const PenTopZ = 1.4f0
 
 const LineColor = :steelblue
 const LineMaxBrush = 5f0
 
-const PenTopZ = 1.4f0
-const PenLength = 0.14f0
-const PenTiltFloorAngle = π / 4f0
-
 const DescendDuration = 1.8f0
-const TiltDuration = 0.8f0
-const DrawDuration = 2.7f0
-const EndStraightenDuration = 0.8f0
+const LineDrawDuration = 4.2f0
 const EndLiftDuration = 1.8f0
-
-const SegmentVec = EndPoint - StartPoint
-const SegmentVecLen = norm(SegmentVec)
-const PenDirX = SegmentVecLen > 0f0 ? SegmentVec[1] / SegmentVecLen : 1f0
-const PenDirY = SegmentVecLen > 0f0 ? SegmentVec[2] / SegmentVecLen : 0f0
 
 const MetaLineHostId = 1
 const MetaLineJoint1Id = 2
@@ -34,10 +25,8 @@ const MetaPhase = 4
 const MetaTimer = 5
 
 const PhaseDescend = 0f0
-const PhaseTilt = 1f0
-const PhaseDraw = 2f0
-const PhaseEndStraighten = 3f0
-const PhaseEndLift = 4f0
+const PhaseDrawLine = 1f0
+const PhaseEndLift = 2f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -46,52 +35,17 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A line is breadthless length."""
 end
 
-function show_full_line(
-    state_ptr::Ptr{Cvoid}, lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
-    EuclidBridge.show_point(state_ptr, lineHostId)
-    EuclidBridge.set_point_color(state_ptr, lineHostId, LineColor)
-    EuclidBridge.set_point_brush(state_ptr, lineHostId, LineMaxBrush)
-    EuclidBridge.set_point_position(
-        state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
-    EuclidBridge.set_point_position(
-        state_ptr, lineJoint2Id, EndPoint[1], EndPoint[2], EndPoint[3])
-end
-
-function hide_line(
-    state_ptr::Ptr{Cvoid}, lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
-    EuclidBridge.hide_point(state_ptr, lineHostId)
-    EuclidBridge.set_point_position(
-        state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
-    EuclidBridge.set_point_position(
-        state_ptr, lineJoint2Id, StartPoint[1], StartPoint[2], StartPoint[3])
-end
-
-function place_pen_at_floor_angle(
-    state_ptr::Ptr{Cvoid}, tipX::Float32, tipY::Float32, tipZ::Float32, floorAngle::Float32)
-    horizontalLength = PenLength * Float32(cos(floorAngle))
-    verticalLength = PenLength * Float32(sin(floorAngle))
-
-    shaftX = tipX + PenDirX * horizontalLength
-    shaftY = tipY + PenDirY * horizontalLength
-    shaftZ = tipZ + verticalLength
-
-    EuclidBridge.lock_pen_joint1(state_ptr, tipX, tipY, tipZ)
-    EuclidBridge.move_pen_joint2(state_ptr, shaftX, shaftY, shaftZ)
-end
-
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
     lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
 
     EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
-    hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
-
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-    place_pen_at_floor_angle(state_ptr, StartPoint[1], StartPoint[2], PenTopZ, π / 2f0)
+    EuclidBridge.hide_pen(state_ptr)
+    EuclidBridge.hide_point(state_ptr, lineHostId)
+    EuclidBridge.set_point_position(
+        state_ptr, lineJoint2Id, StartPoint[1], StartPoint[2], StartPoint[3])
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
@@ -124,96 +78,30 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhaseDescend
-        t = clamp(timer / DescendDuration, 0f0, 1f0)
-
-        tipZ = PenTopZ + (StartPoint[3] - PenTopZ) * t
-        EuclidBridge.show_pen(state_ptr)
-        EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(
-            state_ptr, StartPoint[1], StartPoint[2], tipZ, π / 2f0)
+        EuclidAnimations.animate_pen_descend(
+            state_ptr, timer, DescendDuration, PenTopZ, StartPoint[1], StartPoint[2])
 
         timer += dt
         if timer >= DescendDuration
-            phase = PhaseTilt
+            phase = PhaseDrawLine
             timer = 0f0
-            place_pen_at_floor_angle(
-                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], π / 2f0)
         end
-    elseif phase == PhaseTilt
-        t = clamp(timer / TiltDuration, 0f0, 1f0)
-        floorAngle = π / 2f0 + (PenTiltFloorAngle - π / 2f0) * t
-
-        EuclidBridge.show_pen(state_ptr)
-        EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], floorAngle)
+    elseif phase == PhaseDrawLine
+        EuclidAnimations.animate_draw_line(
+            state_ptr, timer, LineDrawDuration, StartPoint, EndPoint,
+            LineMaxBrush, LineColor, lineHostId, lineJoint1Id, lineJoint2Id)
 
         timer += dt
-        if timer >= TiltDuration
-            phase = PhaseDraw
-            timer = 0f0
-            place_pen_at_floor_angle(
-                state_ptr, StartPoint[1], StartPoint[2], StartPoint[3], PenTiltFloorAngle)
-        end
-    elseif phase == PhaseDraw
-        t = clamp(timer / DrawDuration, 0f0, 1f0)
-
-        tipX = StartPoint[1] + (EndPoint[1] - StartPoint[1]) * t
-        tipY = StartPoint[2] + (EndPoint[2] - StartPoint[2]) * t
-        tipZ = StartPoint[3] + (EndPoint[3] - StartPoint[3]) * t
-
-        EuclidBridge.show_pen(state_ptr)
-        EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(state_ptr, tipX, tipY, tipZ, PenTiltFloorAngle)
-
-        EuclidBridge.show_point(state_ptr, lineHostId)
-        EuclidBridge.set_point_color(state_ptr, lineHostId, LineColor)
-        EuclidBridge.set_point_brush(state_ptr, lineHostId, LineMaxBrush)
-        EuclidBridge.set_point_position(
-            state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
-        EuclidBridge.set_point_position(state_ptr, lineJoint2Id, tipX, tipY, tipZ)
-
-        EuclidBridge.emit_trailing_particle(state_ptr, tipX, tipY, LineColor)
-
-        timer += dt
-        if timer >= DrawDuration
-            phase = PhaseEndStraighten
-            timer = 0f0
-            show_full_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
-            place_pen_at_floor_angle(
-                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], PenTiltFloorAngle)
-        end
-    elseif phase == PhaseEndStraighten
-        t = clamp(timer / EndStraightenDuration, 0f0, 1f0)
-        floorAngle = PenTiltFloorAngle + (π / 2f0 - PenTiltFloorAngle) * t
-
-        EuclidBridge.show_pen(state_ptr)
-        EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], floorAngle)
-
-        show_full_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
-
-        timer += dt
-        if timer >= EndStraightenDuration
+        if timer >= LineDrawDuration
             phase = PhaseEndLift
             timer = 0f0
-            place_pen_at_floor_angle(
-                state_ptr, EndPoint[1], EndPoint[2], EndPoint[3], π / 2f0)
         end
     elseif phase == PhaseEndLift
-        t = clamp(timer / EndLiftDuration, 0f0, 1f0)
-        tipZ = EndPoint[3] + (PenTopZ - EndPoint[3]) * t
-
-        EuclidBridge.show_pen(state_ptr)
-        EuclidBridge.set_pen_active(state_ptr, 1, LineColor)
-        place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], tipZ, π / 2f0)
-
-        show_full_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
+        EuclidAnimations.animate_pen_rise(
+            state_ptr, timer, EndLiftDuration, PenTopZ, EndPoint[1], EndPoint[2])
 
         timer += dt
         if timer >= EndLiftDuration
-            EuclidBridge.hide_pen(state_ptr)
-            place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, π / 2f0)
-            hide_line(state_ptr, lineHostId, lineJoint1Id, lineJoint2Id)
             reset_cycle_state(state_ptr)
             return
         end

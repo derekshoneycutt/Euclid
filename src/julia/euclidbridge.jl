@@ -181,6 +181,7 @@ Parameters:
 - `x` : The x value for the position of the point
 - `y` : The y value for the position of the point
 - `z` : The z value for the position of the point
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 - `color` : The color to show the point with
 - `brushSize` : The size of the point to show
 
@@ -194,9 +195,19 @@ function create_new_point(state_ptr::Ptr{Cvoid},
         color::BridgeColor, brushSize::Cfloat)::BridgePointView
 end
 function create_new_point(state_ptr::Ptr{Cvoid},
+    pos::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_point(state_ptr, pos[1], pos[2], pos[3], color, brushSize)
+end
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::Colorant, brushSize::Float32)
     create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_point(state_ptr::Ptr{Cvoid},
+    pos::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_point(state_ptr, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
 end
 function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
@@ -204,9 +215,19 @@ function create_new_point(state_ptr::Ptr{Cvoid},
     create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
 end
 function create_new_point(state_ptr::Ptr{Cvoid},
+    pos::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_point(state_ptr, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_point(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     color::AbstractString, brushSize::Float32)
     create_new_point(state_ptr, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_point(state_ptr::Ptr{Cvoid},
+    pos::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_point(state_ptr, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
 end
 
 """
@@ -220,9 +241,11 @@ Parameters:
 - `x1` : The x value for the position of the first point bounding the line
 - `y1` : The y value for the position of the first point bounding the line
 - `z1` : The z value for the position of the first point bounding the line
+- `pos1` : A vector can be provided in [x1, y1, z1] form instead of individual parameters
 - `x2` : The x value for the position of the second point bounding the line
 - `y2` : The y value for the position of the second point bounding the line
 - `z2` : The z value for the position of the second point bounding the line
+- `pos2` : A vector can be provided in [x2, y2, z2] form instead of individual parameters
 - `color` : The color to show the line with
 - `brushSize` : The size of the line to show
 
@@ -238,10 +261,20 @@ function create_new_line(state_ptr::Ptr{Cvoid},
         pos2::NTuple{3, Cfloat}, color::BridgeColor, brushSize::Cfloat)::BridgeShapeLine
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], color, brushSize)
+end
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::Colorant, brushSize::Float32)
     create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
+end
+function create_new_line(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
@@ -250,10 +283,20 @@ function create_new_line(state_ptr::Ptr{Cvoid},
     create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
+end
+function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Float32, y1::Float32, z1::Float32,
     x2::Float32, y2::Float32, z2::Float32,
     color::AbstractString, brushSize::Float32)
     create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brushSize)
+end
+function create_new_line(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
 end
 
 """
@@ -267,6 +310,7 @@ Parameters:
 - `x` : The x value for the position of the center point of the circle
 - `y` : The y value for the position of the center point of the circle
 - `z` : The z value for the position of the center point of the circle
+- `center` : A vector can be provided in [x, y, z] form instead of individual parameters
 - `radius` : The radius of the circle to draw
 - `startθ` : The starting angle in radians of the circle to draw
 - `endθ` : The ending angle in radians of the circle to draw
@@ -285,10 +329,22 @@ function create_new_circle(state_ptr::Ptr{Cvoid},
         color::BridgeColor, brushSize::Cfloat)::BridgeShapeCircle
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::BridgeColor, brushSize::Float32)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, color, brushSize)
+end
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::Colorant, brushSize::Float32)
     create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_circle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
@@ -297,10 +353,22 @@ function create_new_circle(state_ptr::Ptr{Cvoid},
     create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::AbstractString, brushSize::Float32)
     create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_circle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
 end
 
 """
@@ -314,6 +382,7 @@ Parameters:
 - `x` : The x value for the position of the center point of the circle
 - `y` : The y value for the position of the center point of the circle
 - `z` : The z value for the position of the center point of the circle
+- `center` : A vector can be provided in [x, y, z] form instead of individual parameters
 - `radius` : The radius of the circle to draw
 - `startθ` : The starting angle in radians of the circle to draw
 - `endθ` : The ending angle in radians of the circle to draw
@@ -332,10 +401,23 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
         color::BridgeColor, brushSize::Cfloat)::BridgeShapeFilledCircle
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::BridgeColor, brushSize::Float32)
+    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, color, brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::Colorant, brushSize::Float32)
     create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
+        startθ, endθ, bridge_color(color), brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
@@ -344,10 +426,24 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
+        startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Float32, y::Float32, z::Float32,
     radius::Float32, startθ::Float32, endθ::Float32,
     color::AbstractString, brushSize::Float32)
     create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+end
+function create_new_filledcircle(state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    radius::Float32, startθ::Float32, endθ::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
+        startθ, endθ, bridge_color(color), brushSize)
 end
 
 """
@@ -405,12 +501,19 @@ Parameters:
 - `x` : New x world coordinate
 - `y` : New y world coordinate
 - `z` : New z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function set_point_position(
     state_ptr::Ptr{Cvoid}, id::Integer, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall set_point_position(state_ptr::Ptr{Cvoid}, id::Cint, pos::NTuple{3, Cfloat})::Cvoid
 end
+function set_point_position(
+    state_ptr::Ptr{Cvoid}, id::Integer, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall set_point_position(state_ptr::Ptr{Cvoid}, id::Cint, postupled::NTuple{3, Cfloat})::Cvoid
+end
+
 """
 Set the rendered brush size for a point by id.
 
@@ -425,6 +528,7 @@ Parameters:
 function set_point_brush(state_ptr::Ptr{Cvoid}, id::Integer, brushSize::Float32)
     @ccall set_point_brush(state_ptr::Ptr{Cvoid}, id::Cint, brushSize::Cfloat)::Cvoid
 end
+
 """
 Set the display color for a point by id.
 
@@ -450,6 +554,7 @@ end
 function set_point_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
     set_point_color(state_ptr, id, bridge_color(color))
 end
+
 """
 Set the active/selected color for a point by id.
 
@@ -556,11 +661,17 @@ Parameters:
 - `x` : Lock x world coordinate
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function lock_pen_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function lock_pen_joint1(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall lock_pen_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -587,11 +698,17 @@ Parameters:
 - `x` : Target x world coordinate
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function move_pen_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function move_pen_joint1(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall move_pen_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -620,11 +737,17 @@ Parameters:
 - `x` : Lock x world coordinate
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function lock_pen_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function lock_pen_joint2(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall lock_pen_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -651,11 +774,17 @@ Parameters:
 - `x` : Target x world coordinate
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function move_pen_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function move_pen_joint2(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall move_pen_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -751,11 +880,17 @@ Parameters:
 - `x` : Lock x world coordinate
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function lock_compass_joint1(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -782,11 +917,17 @@ Parameters:
 - `x` : Target x world coordinate
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function move_compass_joint1(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -815,11 +956,17 @@ Parameters:
 - `x` : Lock x world coordinate
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function lock_compass_joint2(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -846,11 +993,17 @@ Parameters:
 - `x` : Target x world coordinate
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
 """
 function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
     pos = (x, y, z)
     @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+end
+function move_compass_joint2(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -910,6 +1063,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 - `x` : Particle x coordinate
 - `y` : Particle y coordinate
+- `pos` : A vector can be provided in [x, y] form instead of individual parameters
 - `color` : Particle color
 
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
@@ -921,8 +1075,18 @@ function emit_trailing_particle(
 end
 
 function emit_trailing_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::BridgeColor)
+    emit_trailing_particle(state_ptr, pos[1], pos[2], color)
+end
+
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Colorant)
     emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function emit_trailing_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::Colorant)
+    emit_trailing_particle(state_ptr, pos[1], pos[2], bridge_color(color))
 end
 
 function emit_trailing_particle(
@@ -931,8 +1095,18 @@ function emit_trailing_particle(
 end
 
 function emit_trailing_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::Symbol)
+    emit_trailing_particle(state_ptr, pos[1], pos[2], bridge_color(color))
+end
+
+function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::AbstractString)
     emit_trailing_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function emit_trailing_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::AbstractString)
+    emit_trailing_particle(state_ptr, pos[1], pos[2], bridge_color(color))
 end
 
 end

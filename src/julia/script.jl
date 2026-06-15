@@ -1,4 +1,5 @@
 include("./euclidbridge.jl")
+include("./animations.jl")
 
 include("./nullanimation.jl")
 

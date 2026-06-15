@@ -100,7 +100,7 @@ run_window_loop :: proc() {
     kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
     kine.kine_update_last_cache_vectors(pointSystem)
 
-    rl.SetConfigFlags({.MSAA_4X_HINT})//, .VSYNC_HINT})
+    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
 	rl.InitWindow(WindowWidth, WindowHeight, WindowTitle)
 	defer rl.CloseWindow()
 
