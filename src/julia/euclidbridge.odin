@@ -475,6 +475,32 @@ create_new_filledcircle :: proc "c" (
 }
 
 @(export)
+create_new_triangle :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    point1, point2, point3: core.Vector3, color: BridgeColor) -> core.KineShapeTriangle {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    line := kine.init_kineshape_triangle(
+        state^.PointSystem, point1, point2, point3, rlColor)
+
+    return line
+}
+
+@(export)
+create_new_square :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    point1, point2, point3, point4: core.Vector3, color: BridgeColor) -> core.KineShapeSquare {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    line := kine.init_kineshape_square(
+        state^.PointSystem, point1, point2, point3, point4, rlColor)
+
+    return line
+}
+
+@(export)
 get_point_view :: proc "c" (
     state: ^core.EuclidGeneralState,
     index: int) -> BridgePointView {
@@ -491,10 +517,14 @@ get_point_view :: proc "c" (
                 type = 2
             case .FilledCircle:
                 type = 3
-            case .Pen:
+            case .Triangle:
                 type = 4
-            case .Compass:
+            case .Square:
                 type = 5
+            case .Pen:
+                type = 10
+            case .Compass:
+                type = 50
         }
         pos, hasPos := point.Position.?
         color, hasColor := point.Color.?

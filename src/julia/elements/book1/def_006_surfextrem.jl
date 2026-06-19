@@ -51,7 +51,7 @@ const PhaseEndLift = 13f0
 const PhaseHideLines = 14f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Surface Extremities:
+    """Euclid Elements - Book I - Definition: Surface Extremities
 
 The extremities of a surface are lines."""
 end

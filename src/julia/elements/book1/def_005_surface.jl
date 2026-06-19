@@ -32,7 +32,7 @@ const PhaseDrag2 = 3f0
 const PhaseEndLift = 4f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Surface:
+    """Euclid Elements - Book I - Definition: Surface
 
 A surface is that which has length and breadth only."""
 end

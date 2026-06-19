@@ -258,6 +258,10 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
                 draw_cached_circle(state, &itemTyped)
             case core.KineFilledCircleDraw:
                 draw_cached_filledcircle(state, &itemTyped)
+            case core.KineTriangleDraw:
+                draw_cached_triangle(state, &itemTyped)
+            case core.KineSquareDraw:
+                draw_cached_square(state, &itemTyped)
             case:
                 continue
         }
@@ -381,6 +385,24 @@ draw_cached_filledcircle :: proc(state: ^EuclidGeneralState, c: ^kine.KineFilled
     }
 
     rl.DrawTriangleFan(&points[0], len(points), c^.Color)
+}
+
+
+draw_cached_triangle :: proc(state: ^EuclidGeneralState, l: ^kine.KineTriangleDraw) {
+    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
+    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
+    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
+    rl.DrawTriangle(c0, c1, c2, l^.Color)
+}
+
+
+draw_cached_square :: proc(state: ^EuclidGeneralState, l: ^kine.KineSquareDraw) {
+    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
+    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
+    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
+    c3 := iso_to_cartesian(l^.Point4, state^.IsoScale^)
+    rl.DrawTriangle(c0, c1, c2, l^.Color)
+    rl.DrawTriangle(c0, c2, c3, l^.Color)
 }
 
 

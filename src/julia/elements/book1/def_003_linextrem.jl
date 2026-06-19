@@ -41,7 +41,7 @@ const PhaseEndLift = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Line Extremities:
+    """Euclid Elements - Book I - Definition: Line Extremities
 
 The extremities of a line are points."""
 end

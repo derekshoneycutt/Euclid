@@ -45,7 +45,7 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Straight Line:
+    """Euclid Elements - Book I - Definition: Straight Line
 
 A straight line is a line which lies evenly with the points on itself."""
 end

@@ -366,6 +366,47 @@ emit_line_dust :: proc(ps: ^ParticleSystem, a, b: Vector3, col: rl.Color) {
     }
 }
 
+emit_polygon_edge_dust :: proc(
+    ps: ^ParticleSystem,
+    ks: ^KinePointSystem,
+    first_child_id: int,
+    vertex_count: int,
+    col: rl.Color,
+) {
+    if vertex_count < 3 {
+        return
+    }
+
+    if first_child_id < 0 || first_child_id >= MAX_KINEPOINTS {
+        return
+    }
+
+    vertices: [4]Vector3
+
+    current_id := first_child_id
+    for i in 0..<vertex_count {
+        if current_id < 0 || current_id >= MAX_KINEPOINTS {
+            return
+        }
+
+        v, ok := ks.Points[current_id].Position.?
+        if !ok {
+            return
+        }
+
+        vertices[i] = v
+        current_id = ks.Points[current_id].NextChildPoint
+    }
+
+    for i in 0..<vertex_count {
+        next_i := i + 1
+        if next_i >= vertex_count {
+            next_i = 0
+        }
+        emit_line_dust(ps, vertices[i], vertices[next_i], col)
+    }
+}
+
 normalize_theta :: proc(theta: f32) -> f32 {
     t := theta
     if t < 0 {
@@ -426,7 +467,8 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
         return
     }
 
-    if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle && kp.Type != .FilledCircle {
+    if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
+        kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square {
         return
     }
 
@@ -457,6 +499,10 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
             if a_ok && b_ok {
                 emit_line_dust(ps, a, b, col)
             }
+        case .Triangle:
+            emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 3, col)
+        case .Square:
+            emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 4, col)
         case .Circle, .FilledCircle:
             center, center_ok := kp.Position.?
             if !center_ok {
@@ -498,7 +544,8 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
             continue
         }
 
-        if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle && kp.Type != .FilledCircle {
+        if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
+            kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square {
             continue
         }
 
@@ -528,6 +575,10 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
                 if a_ok && b_ok {
                     emit_line_dust(ps, a, b, col)
                 }
+            case .Triangle:
+                emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 3, col)
+            case .Square:
+                emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 4, col)
             case .Circle, .FilledCircle:
                 center, center_ok := kp.Position.?
                 if !center_ok {

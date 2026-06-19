@@ -50,6 +50,21 @@ struct BridgeShapeFilledCircle
     endId::Int64
 end
 
+struct BridgeShapeTriangle
+    hostId::Int64
+    joint1Id::Int64
+    joint2Id::Int64
+    joint3Id::Int64
+end
+
+struct BridgeShapeSquare
+    hostId::Int64
+    joint1Id::Int64
+    joint2Id::Int64
+    joint3Id::Int64
+    joint4Id::Int64
+end
+
 struct BridgeShapePen
     hostId::Int64
     joint1Id::Int64
@@ -444,6 +459,224 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     color::Symbol, brushSize::Float32)
     create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
         startθ, endθ, bridge_color(color), brushSize)
+end
+
+"""
+Construct a new triangle in the Euclid system to be shown on the surface
+
+------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `x1` : The x value for the position of the first point bounding the triangle
+- `y1` : The y value for the position of the first point bounding the triangle
+- `z1` : The z value for the position of the first point bounding the triangle
+- `pos1` : A vector can be provided in [x1, y1, z1] form instead of individual parameters
+- `x2` : The x value for the position of the second point bounding the triangle
+- `y2` : The y value for the position of the second point bounding the triangle
+- `z2` : The z value for the position of the second point bounding the triangle
+- `pos2` : A vector can be provided in [x2, y2, z2] form instead of individual parameters
+- `x3` : The x value for the position of the third point bounding the triangle
+- `y3` : The y value for the position of the third point bounding the triangle
+- `z3` : The z value for the position of the third point bounding the triangle
+- `pos3` : A vector can be provided in [x3, y3, z3] form instead of individual parameters
+- `color` : The color to show the triangle with
+
+Returns: a `BridgeShapeTriangle` describing the newly created triangle
+"""
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    color::BridgeColor)
+    pos1 = (x1, y1, z1)
+    pos2 = (x2, y2, z2)
+    pos3 = (x3, y3, z3)
+    return @ccall create_new_triangle(
+        state_ptr::Ptr{Cvoid}, pos1::NTuple{3, Cfloat},
+        pos2::NTuple{3, Cfloat}, pos3::NTuple{3, Cfloat},
+        color::BridgeColor)::BridgeShapeTriangle
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    color::BridgeColor)
+    create_new_triangle(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        color)
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    color::Colorant)
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    color::Colorant)
+    create_new_triangle(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        bridge_color(color))
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    color::Symbol)
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    color::Symbol)
+    create_new_triangle(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        bridge_color(color))
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    color::AbstractString)
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+end
+function create_new_triangle(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    color::AbstractString)
+    create_new_triangle(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        bridge_color(color))
+end
+
+"""
+Construct a new square in the Euclid system to be shown on the surface
+
+------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `x1` : The x value for the position of the first point bounding the square
+- `y1` : The y value for the position of the first point bounding the square
+- `z1` : The z value for the position of the first point bounding the square
+- `pos1` : A vector can be provided in [x1, y1, z1] form instead of individual parameters
+- `x2` : The x value for the position of the second point bounding the square
+- `y2` : The y value for the position of the second point bounding the square
+- `z2` : The z value for the position of the second point bounding the square
+- `pos2` : A vector can be provided in [x2, y2, z2] form instead of individual parameters
+- `x3` : The x value for the position of the third point bounding the square
+- `y3` : The y value for the position of the third point bounding the square
+- `z3` : The z value for the position of the third point bounding the square
+- `pos3` : A vector can be provided in [x3, y3, z3] form instead of individual parameters
+- `x4` : The x value for the position of the fourth point bounding the square
+- `y4` : The y value for the position of the fourth point bounding the square
+- `z4` : The z value for the position of the fourth point bounding the square
+- `pos4` : A vector can be provided in [x4, y4, z4] form instead of individual parameters
+- `color` : The color to show the square with
+
+Returns: a `BridgeShapeSquare` describing the newly created square
+"""
+function create_new_square(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    color::BridgeColor)
+    pos1 = (x1, y1, z1)
+    pos2 = (x2, y2, z2)
+    pos3 = (x3, y3, z3)
+    pos4 = (x4, y4, z4)
+    return @ccall create_new_square(
+        state_ptr::Ptr{Cvoid}, pos1::NTuple{3, Cfloat},
+        pos2::NTuple{3, Cfloat}, pos3::NTuple{3, Cfloat}, pos4::NTuple{3, Cfloat},
+        color::BridgeColor)::BridgeShapeSquare
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32}, pos4::Vector{Float32},
+    color::BridgeColor)
+    create_new_square(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        color)
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    color::Colorant)
+    create_new_square(
+        state_ptr, x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        bridge_color(color))
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32}, pos4::Vector{Float32},
+    color::Colorant)
+    create_new_square(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        bridge_color(color))
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    color::Symbol)
+    create_new_square(
+        state_ptr, x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        bridge_color(color))
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32}, pos4::Vector{Float32},
+    color::Symbol)
+    create_new_square(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        color)
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    color::AbstractString)
+    create_new_square(
+        state_ptr, x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        bridge_color(color))
+end
+function create_new_square(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32}, pos4::Vector{Float32},
+    color::AbstractString)
+    create_new_square(
+        state_ptr, pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        color)
 end
 
 """

@@ -532,6 +532,60 @@ function animate_draw_line(
 end
 
 """
+Animate drawing a circle sector using compass motion.
+
+--------
+
+Parameters:
+
+- state_ptr : Pointer to the Euclid application state.
+- timer : Elapsed animation time.
+- duration : Total duration for the circle draw sequence.
+- jointPoint : Compass pivot position vector [x, y, z].
+- startPoint : Marker start point vector [x, y, z].
+- angleTheta : Sweep angle in radians.
+- radius : Marker radius.
+- brush : Brush size for the marker host primitive.
+- color : Marker and trail color.
+- markerHostId : Host id for the filled marker primitive.
+- markerStartId : Start control point id for marker geometry.
+- markerEndId : End control point id for marker geometry.
+
+Returns:
+
+- nothing
+"""
+function animate_draw_circle(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
+    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    theta = startTheta + angleTheta * t
+
+    endPoint = [
+        jointPoint[1] + radius * Float32(cos(theta)),
+        jointPoint[2] + radius * Float32(sin(theta)),
+        0f0]
+
+    EuclidBridge.lock_compass_joint1(state_ptr, jointPoint)
+    EuclidBridge.set_compass_active(state_ptr, 3, color)
+    EuclidBridge.lock_compass_joint2(state_ptr, endPoint)
+    EuclidBridge.show_compass(state_ptr)
+
+    EuclidBridge.set_point_color(state_ptr, markerHostId, color)
+    EuclidBridge.set_point_brush(state_ptr, markerHostId, brush)
+    EuclidBridge.set_point_position(state_ptr, markerStartId, startPoint)
+    EuclidBridge.set_point_position(state_ptr, markerEndId, endPoint)
+    EuclidBridge.show_point(state_ptr, markerHostId)
+
+    EuclidBridge.emit_trailing_particle(state_ptr, endPoint, color)
+end
+
+"""
 Animate drawing a filled circular sector marker using compass motion.
 
 --------
@@ -563,7 +617,8 @@ function animate_draw_filledcircle(
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    theta = angleTheta * t
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    theta = startTheta + angleTheta * t
 
     endPoint = [
         jointPoint[1] + radius * Float32(cos(theta)),

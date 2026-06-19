@@ -32,7 +32,7 @@ const PhaseDrag2 = 3f0
 const PhaseEndLift = 4f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Plane Surface:
+    """Euclid Elements - Book I - Definition: Plane Surface
 
 A plane surface is a surface which lies evenly with the straight lines on itself."""
 end

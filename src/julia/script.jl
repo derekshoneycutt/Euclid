@@ -11,6 +11,7 @@ include("./elements/book1/def_005_surface.jl")
 include("./elements/book1/def_006_surfextrem.jl")
 include("./elements/book1/def_007_planesurface.jl")
 include("./elements/book1/def_008_angle.jl")
+include("./elements/book1/def_010_perpendicular.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -106,6 +107,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionPlaneAngle.loop,
                     ElementsOneDefinitionPlaneAngle.clean,
                     "Plane Angle", book1DefsId)
+                book1Defs10PerpendicularId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionPerpendicular.get_view_text,
+                    ElementsOneDefinitionPerpendicular.initialize,
+                    ElementsOneDefinitionPerpendicular.loop,
+                    ElementsOneDefinitionPerpendicular.clean,
+                    "Right Angles and Perpendicular", book1DefsId)
                 
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
