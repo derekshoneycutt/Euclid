@@ -20,6 +20,29 @@ ANIMATION_RESET_MIN_INTERVAL :: f32(0.35)
 FLOOR_CONTACT_Z_EPSILON :: f32(0.015)
 COMPASS_LINE_DUST_SAMPLES :: int(24)
 
+BRIDGE_VERSION :: i32(1)
+BRIDGE_FEATURE_FLAGS :: i32(1)
+
+BRIDGE_STATUS_OK :: i32(0)
+BRIDGE_STATUS_INVALID_INDEX :: i32(1)
+BRIDGE_STATUS_INVALID_ARGUMENT :: i32(2)
+BRIDGE_STATUS_INVALID_GRAPH :: i32(3)
+BRIDGE_STATUS_INVALID_CONSTRAINT :: i32(4)
+BRIDGE_STATUS_OUT_OF_CAPACITY :: i32(5)
+BRIDGE_STATUS_ILLEGAL_STATE :: i32(6)
+BRIDGE_STATUS_NON_CONVERGED :: i32(7)
+
+KINE_CONSTRAINT_VALID_MASK :: i32((1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6))
+
+CONSTRAINT_SPEC_TRAITS :: i32(1 << 0)
+CONSTRAINT_SPEC_ONPOINT :: i32(1 << 1)
+CONSTRAINT_SPEC_RESTRICTION :: i32(1 << 2)
+CONSTRAINT_SPEC_BOUNCE :: i32(1 << 3)
+CONSTRAINT_SPEC_ALLOWANCE :: i32(1 << 4)
+CONSTRAINT_SPEC_DEPENDON :: i32(1 << 5)
+CONSTRAINT_SPEC_CHILDOFFSET :: i32(1 << 6)
+CONSTRAINT_SPEC_DOAPPLY :: i32(1 << 7)
+
 BridgeColor :: struct {
     R: u8,
     G: u8,
@@ -48,6 +71,76 @@ BridgePointView :: struct {
     ChildCount: int,
     ChildPointHead: int,
     NextChildPoint: int,
+}
+
+BridgeConstraintView :: struct {
+    Valid: u8,
+    Index: i32,
+
+    Traits: i32,
+    OnPoint: i32,
+    Restriction: core.Vector3,
+    Bounce: f32,
+    Allowance: f32,
+    DependOn: i32,
+    HasChildOffset: u8,
+    ChildOffset: i32,
+    DoApply: u8,
+}
+
+BridgeConstraintSpec :: struct {
+    Traits: i32,
+    OnPoint: i32,
+    Restriction: core.Vector3,
+    Bounce: f32,
+    Allowance: f32,
+    DependOn: i32,
+    HasChildOffset: u8,
+    ChildOffset: i32,
+    DoApply: u8,
+}
+
+BridgeSolveResult :: struct {
+    Status: i32,
+    Iterations: i32,
+    InitialError: f32,
+    FinalError: f32,
+    Converged: u8,
+}
+
+is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
+    return index >= 0 && index < MAX_KINEPOINTS
+}
+
+is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
+    return index >= 0 && index < MAX_KINECONSTRAINTS
+}
+
+is_valid_constraint_traits_mask :: #force_inline proc(mask: i32) -> bool {
+    return mask != 0 && (mask & ~KINE_CONSTRAINT_VALID_MASK) == 0
+}
+
+to_u8 :: #force_inline proc(v: bool) -> u8 {
+    if v {
+        return 1
+    }
+    return 0
+}
+
+constraint_view_invalid :: #force_inline proc() -> BridgeConstraintView {
+    return BridgeConstraintView{
+        Valid = 0,
+        Index = -1,
+        Traits = 0,
+        OnPoint = -1,
+        Restriction = {0, 0, 0},
+        Bounce = 0,
+        Allowance = 0,
+        DependOn = -1,
+        HasChildOffset = 0,
+        ChildOffset = 0,
+        DoApply = 0,
+    }
 }
 
 push_dust_if_floor_contact :: proc(state: ^core.EuclidGeneralState, pos: core.Vector3) {
@@ -421,10 +514,10 @@ create_new_point :: proc "c" (
         Position = pos,
 
         HasColor = hasColor,
-        Color = BridgeColor{ color.r, color.g, color.r, color.a },
+        Color = BridgeColor{ color.r, color.g, color.b, color.a },
 
         HasActiveColor = hasActiveColor,
-        ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.r, activeColor.a },
+        ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
 
         ActiveChild = point^.ActiveChild,
         ChildCount = point^.ChildCount,
@@ -542,10 +635,10 @@ get_point_view :: proc "c" (
             Position = pos,
 
             HasColor = hasColor,
-            Color = BridgeColor{ color.r, color.g, color.r, color.a },
+            Color = BridgeColor{ color.r, color.g, color.b, color.a },
 
             HasActiveColor = hasActiveColor,
-            ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.r, activeColor.a },
+            ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
 
             ActiveChild = point.ActiveChild,
             ChildCount = point.ChildCount,
@@ -623,6 +716,862 @@ set_point_active_color :: proc "c" (state: ^core.EuclidGeneralState, index: int,
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
         state^.PointSystem^.Points[index].ActiveColor = rlColor
     }
+}
+
+@(export)
+get_bridge_version :: proc "c" () -> i32 {
+    return BRIDGE_VERSION
+}
+
+@(export)
+get_bridge_feature_flags :: proc "c" () -> i32 {
+    return BRIDGE_FEATURE_FLAGS
+}
+
+@(export)
+get_point_capacity :: proc "c" () -> i32 {
+    return i32(MAX_KINEPOINTS)
+}
+
+@(export)
+get_point_next_index :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    return i32(state^.PointSystem^.NextPointIndex)
+}
+
+@(export)
+is_point_index_in_range :: proc "c" (state: ^core.EuclidGeneralState, index: i32) -> u8 {
+    context = state^.SavedContext
+    _ = state
+    return to_u8(is_point_index_in_bounds(int(index)))
+}
+
+@(export)
+set_point_draw_enabled :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, enabled: u8) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].DoDraw = enabled != 0
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_point_position_status :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, pos: core.Vector3) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].Position = pos
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+clear_point_position :: proc "c" (state: ^core.EuclidGeneralState, index: i32) -> i32 {
+    context = state^.SavedContext
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].Position = nil
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_point_color_status :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, color: BridgeColor) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    state^.PointSystem^.Points[pointIndex].Color = rlColor
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+clear_point_color :: proc "c" (state: ^core.EuclidGeneralState, index: i32) -> i32 {
+    context = state^.SavedContext
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].Color = nil
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_point_active_color_status :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, color: BridgeColor) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    state^.PointSystem^.Points[pointIndex].ActiveColor = rlColor
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+clear_point_active_color :: proc "c" (state: ^core.EuclidGeneralState, index: i32) -> i32 {
+    context = state^.SavedContext
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].ActiveColor = nil
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_point_brush_size :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, brush: f32) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].BrushSize = brush
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+attach_child_point :: proc "c" (
+    state: ^core.EuclidGeneralState, parentIndex, childIndex: i32) -> i32 {
+
+    context = state^.SavedContext
+
+    parent := int(parentIndex)
+    child := int(childIndex)
+    if !is_point_index_in_bounds(parent) || !is_point_index_in_bounds(child) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if parent == child {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    parentPoint := &state^.PointSystem^.Points[parent]
+    childPoint := &state^.PointSystem^.Points[child]
+
+    if childPoint^.NextChildPoint >= 0 {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    if parentPoint^.ChildPointHead < 0 {
+        parentPoint^.ChildPointHead = child
+        parentPoint^.ChildCount = 1
+        return BRIDGE_STATUS_OK
+    }
+
+    visited: [MAX_KINEPOINTS]bool
+    current := parentPoint^.ChildPointHead
+    tail := current
+    count := 0
+    for current >= 0 {
+        if !is_point_index_in_bounds(current) {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        if visited[current] {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        visited[current] = true
+        if current == child {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+
+        tail = current
+        count += 1
+        next := state^.PointSystem^.Points[current].NextChildPoint
+        if next < 0 {
+            break
+        }
+        current = next
+    }
+
+    state^.PointSystem^.Points[tail].NextChildPoint = child
+    parentPoint^.ChildCount = count + 1
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+detach_child_point :: proc "c" (
+    state: ^core.EuclidGeneralState, parentIndex, childIndex: i32) -> i32 {
+
+    context = state^.SavedContext
+
+    parent := int(parentIndex)
+    child := int(childIndex)
+    if !is_point_index_in_bounds(parent) || !is_point_index_in_bounds(child) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    parentPoint := &state^.PointSystem^.Points[parent]
+    head := parentPoint^.ChildPointHead
+    if head < 0 {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    visited: [MAX_KINEPOINTS]bool
+    current := head
+    prev := -1
+    removed := false
+
+    for current >= 0 {
+        if !is_point_index_in_bounds(current) {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        if visited[current] {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        visited[current] = true
+
+        next := state^.PointSystem^.Points[current].NextChildPoint
+        if current == child {
+            removed = true
+            if prev < 0 {
+                parentPoint^.ChildPointHead = next
+            } else {
+                state^.PointSystem^.Points[prev].NextChildPoint = next
+            }
+            state^.PointSystem^.Points[current].NextChildPoint = -1
+            break
+        }
+
+        prev = current
+        current = next
+    }
+
+    if !removed {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    _ = rebuild_child_count(state, parentIndex)
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+rebuild_child_count :: proc "c" (state: ^core.EuclidGeneralState, parentIndex: i32) -> i32 {
+    context = state^.SavedContext
+    parent := int(parentIndex)
+    if !is_point_index_in_bounds(parent) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    parentPoint := &state^.PointSystem^.Points[parent]
+    if parentPoint^.ChildPointHead < 0 {
+        parentPoint^.ChildCount = 0
+        return BRIDGE_STATUS_OK
+    }
+
+    visited: [MAX_KINEPOINTS]bool
+    current := parentPoint^.ChildPointHead
+    count := 0
+    for current >= 0 {
+        if !is_point_index_in_bounds(current) {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        if visited[current] {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        visited[current] = true
+        count += 1
+        current = state^.PointSystem^.Points[current].NextChildPoint
+    }
+
+    parentPoint^.ChildCount = count
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+validate_parent_child_chain :: proc "c" (
+    state: ^core.EuclidGeneralState, parentIndex: i32) -> i32 {
+
+    context = state^.SavedContext
+
+    parent := int(parentIndex)
+    if !is_point_index_in_bounds(parent) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    parentPoint := &state^.PointSystem^.Points[parent]
+    if parentPoint^.ChildPointHead < 0 {
+        if parentPoint^.ChildCount != 0 {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        return BRIDGE_STATUS_OK
+    }
+
+    visited: [MAX_KINEPOINTS]bool
+    current := parentPoint^.ChildPointHead
+    count := 0
+    for current >= 0 {
+        if !is_point_index_in_bounds(current) {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        if visited[current] {
+            return BRIDGE_STATUS_INVALID_GRAPH
+        }
+        visited[current] = true
+        count += 1
+        current = state^.PointSystem^.Points[current].NextChildPoint
+    }
+
+    if parentPoint^.ChildCount != count {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    if parentPoint^.ActiveChild < -1 || parentPoint^.ActiveChild >= count {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
+
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+get_constraint_capacity :: proc "c" () -> i32 {
+    return i32(MAX_KINECONSTRAINTS)
+}
+
+@(export)
+get_constraint_next_index :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    return i32(state^.PointSystem^.NextConstraintIndex)
+}
+
+@(export)
+is_constraint_index_in_range :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32) -> u8 {
+
+    context = state^.SavedContext
+
+    _ = state
+    return to_u8(is_constraint_index_in_bounds(int(index)))
+}
+
+@(export)
+get_constraint_view :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32) -> BridgeConstraintView {
+
+    context = state^.SavedContext
+
+    constraintIndex := int(index)
+    if !is_constraint_index_in_bounds(constraintIndex) {
+        return constraint_view_invalid()
+    }
+
+    constraint := state^.PointSystem^.Constraints[constraintIndex]
+    childOffset, hasChildOffset := constraint.ChildOffset.?
+
+    return BridgeConstraintView{
+        Valid = 1,
+        Index = index,
+        Traits = i32(constraint.Traits),
+        OnPoint = i32(constraint.OnPoint),
+        Restriction = constraint.Restriction,
+        Bounce = constraint.Bounce,
+        Allowance = constraint.Allowance,
+        DependOn = constraint.DependOn,
+        HasChildOffset = to_u8(hasChildOffset),
+        ChildOffset = childOffset,
+        DoApply = to_u8(constraint.DoApply),
+    }
+}
+
+@(export)
+create_constraint :: proc "c" (
+    state: ^core.EuclidGeneralState, spec: BridgeConstraintSpec, outIndex: ^i32) -> i32 {
+
+    context = state^.SavedContext
+
+    if !is_valid_constraint_traits_mask(spec.Traits) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    onPoint := int(spec.OnPoint)
+    if !is_point_index_in_bounds(onPoint) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    if spec.DependOn >= 0 && !is_constraint_index_in_bounds(int(spec.DependOn)) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    if spec.HasChildOffset != 0 && spec.ChildOffset < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    nextIndex := state^.PointSystem^.NextConstraintIndex
+    if nextIndex < 0 || nextIndex >= MAX_KINECONSTRAINTS {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+
+    state^.PointSystem^.Constraints[nextIndex] = core.KineConstraint{
+        Traits = core.KineConstraintTrait(spec.Traits),
+        OnPoint = onPoint,
+        Restriction = spec.Restriction,
+        Bounce = spec.Bounce,
+        Allowance = spec.Allowance,
+        DependOn = spec.DependOn,
+        ChildOffset = nil,
+        DoApply = spec.DoApply != 0,
+    }
+    if spec.HasChildOffset != 0 {
+        state^.PointSystem^.Constraints[nextIndex].ChildOffset = spec.ChildOffset
+    }
+
+    state^.PointSystem^.NextConstraintIndex += 1
+    if outIndex != nil {
+        outIndex^ = i32(nextIndex)
+    }
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+update_constraint :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, specMask: i32, spec: BridgeConstraintSpec) -> i32 {
+
+    context = state^.SavedContext
+
+    constraintIndex := int(index)
+    if !is_constraint_index_in_bounds(constraintIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    constraint := &state^.PointSystem^.Constraints[constraintIndex]
+
+    if specMask & CONSTRAINT_SPEC_TRAITS != 0 {
+        if !is_valid_constraint_traits_mask(spec.Traits) {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+        constraint^.Traits = core.KineConstraintTrait(spec.Traits)
+    }
+    if specMask & CONSTRAINT_SPEC_ONPOINT != 0 {
+        onPoint := int(spec.OnPoint)
+        if !is_point_index_in_bounds(onPoint) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.OnPoint = onPoint
+    }
+    if specMask & CONSTRAINT_SPEC_RESTRICTION != 0 {
+        constraint^.Restriction = spec.Restriction
+    }
+    if specMask & CONSTRAINT_SPEC_BOUNCE != 0 {
+        constraint^.Bounce = spec.Bounce
+    }
+    if specMask & CONSTRAINT_SPEC_ALLOWANCE != 0 {
+        constraint^.Allowance = spec.Allowance
+    }
+    if specMask & CONSTRAINT_SPEC_DEPENDON != 0 {
+        if spec.DependOn >= 0 && !is_constraint_index_in_bounds(int(spec.DependOn)) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.DependOn = spec.DependOn
+    }
+    if specMask & CONSTRAINT_SPEC_CHILDOFFSET != 0 {
+        if spec.HasChildOffset != 0 {
+            if spec.ChildOffset < 0 {
+                return BRIDGE_STATUS_INVALID_ARGUMENT
+            }
+            constraint^.ChildOffset = spec.ChildOffset
+        } else {
+            constraint^.ChildOffset = nil
+        }
+    }
+    if specMask & CONSTRAINT_SPEC_DOAPPLY != 0 {
+        constraint^.DoApply = spec.DoApply != 0
+    }
+
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_constraint_enabled :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, enabled: u8) -> i32 {
+
+    context = state^.SavedContext
+
+    constraintIndex := int(index)
+    if !is_constraint_index_in_bounds(constraintIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Constraints[constraintIndex].DoApply = enabled != 0
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+clear_constraint :: proc "c" (state: ^core.EuclidGeneralState, index: i32) -> i32 {
+    context = state^.SavedContext
+    constraintIndex := int(index)
+    if !is_constraint_index_in_bounds(constraintIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Constraints[constraintIndex] = {}
+    state^.PointSystem^.Constraints[constraintIndex].DoApply = false
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+get_total_constraint_error_bridge :: proc "c" (
+    state: ^core.EuclidGeneralState) -> f32 {
+    context = state^.SavedContext
+    return kine.get_total_constraint_error(state^.PointSystem)
+}
+
+@(export)
+get_constraint_error_bridge :: proc "c" (
+    state: ^core.EuclidGeneralState, constraintIndex: i32, outError: ^f32) -> i32 {
+
+    context = state^.SavedContext
+
+    idx := int(constraintIndex)
+    if !is_constraint_index_in_bounds(idx) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if outError == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    constraint := &state^.PointSystem^.Constraints[idx]
+    outError^ = kine.get_constraint_error(constraint, &state^.PointSystem^.Points)
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+apply_constraint_bridge :: proc "c" (
+    state: ^core.EuclidGeneralState, constraintIndex: i32) -> i32 {
+
+    context = state^.SavedContext
+
+    idx := int(constraintIndex)
+    if !is_constraint_index_in_bounds(idx) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    constraint := &state^.PointSystem^.Constraints[idx]
+    kine.apply_constraint(constraint, &state^.PointSystem^.Points)
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+apply_all_constraints_bridge :: proc "c" (
+    state: ^core.EuclidGeneralState, reverse: u8) -> i32 {
+
+    context = state^.SavedContext
+
+    if reverse != 0 {
+        kine.apply_all_constraints_reverse(state^.PointSystem)
+    } else {
+        kine.apply_all_constraints(state^.PointSystem)
+    }
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+solve_constraints_to_error :: proc "c" (
+    state: ^core.EuclidGeneralState, allowableError: f32, maxIterations: i32) -> BridgeSolveResult {
+
+    context = state^.SavedContext
+
+    if allowableError < 0 {
+        return BridgeSolveResult{
+            Status = BRIDGE_STATUS_INVALID_ARGUMENT,
+            Iterations = 0,
+            InitialError = 0,
+            FinalError = 0,
+            Converged = 0,
+        }
+    }
+
+    iterationLimit := maxIterations
+    if iterationLimit <= 0 {
+        iterationLimit = 32
+    }
+    if iterationLimit > 4096 {
+        iterationLimit = 4096
+    }
+
+    initialError := kine.get_total_constraint_error(state^.PointSystem)
+    if initialError <= allowableError {
+        return BridgeSolveResult{
+            Status = BRIDGE_STATUS_OK,
+            Iterations = 0,
+            InitialError = initialError,
+            FinalError = initialError,
+            Converged = 1,
+        }
+    }
+
+    reverse := false
+    error := initialError
+    iterations: i32 = 0
+    for iterations < iterationLimit && error > allowableError {
+        if reverse {
+            kine.apply_all_constraints_reverse(state^.PointSystem)
+        } else {
+            kine.apply_all_constraints(state^.PointSystem)
+        }
+        reverse = !reverse
+        iterations += 1
+        error = kine.get_total_constraint_error(state^.PointSystem)
+    }
+
+    converged := error <= allowableError
+    status := BRIDGE_STATUS_NON_CONVERGED
+    if converged {
+        status = BRIDGE_STATUS_OK
+    }
+
+    return BridgeSolveResult{
+        Status = status,
+        Iterations = iterations,
+        InitialError = initialError,
+        FinalError = error,
+        Converged = to_u8(converged),
+    }
+}
+
+@(export)
+get_shape_line_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapeLine {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapeLine{ -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .Line {
+        return core.KineShapeLine{ -1, -1, -1 }
+    }
+
+    p1 := point.ChildPointHead
+    if !is_point_index_in_bounds(p1) {
+        return core.KineShapeLine{ -1, -1, -1 }
+    }
+    p2 := state^.PointSystem^.Points[p1].NextChildPoint
+    if !is_point_index_in_bounds(p2) {
+        return core.KineShapeLine{ -1, -1, -1 }
+    }
+
+    return core.KineShapeLine{ host, p1, p2 }
+}
+
+@(export)
+get_shape_circle_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapeCircle {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapeCircle{ -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .Circle {
+        return core.KineShapeCircle{ -1, -1, -1 }
+    }
+
+    start := point.ChildPointHead
+    if !is_point_index_in_bounds(start) {
+        return core.KineShapeCircle{ -1, -1, -1 }
+    }
+    finish := state^.PointSystem^.Points[start].NextChildPoint
+    if !is_point_index_in_bounds(finish) {
+        return core.KineShapeCircle{ -1, -1, -1 }
+    }
+
+    return core.KineShapeCircle{ host, start, finish }
+}
+
+@(export)
+get_shape_filledcircle_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapeFilledCircle {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapeFilledCircle{ -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .FilledCircle {
+        return core.KineShapeFilledCircle{ -1, -1, -1 }
+    }
+
+    start := point.ChildPointHead
+    if !is_point_index_in_bounds(start) {
+        return core.KineShapeFilledCircle{ -1, -1, -1 }
+    }
+    finish := state^.PointSystem^.Points[start].NextChildPoint
+    if !is_point_index_in_bounds(finish) {
+        return core.KineShapeFilledCircle{ -1, -1, -1 }
+    }
+
+    return core.KineShapeFilledCircle{ host, start, finish }
+}
+
+@(export)
+get_shape_triangle_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapeTriangle {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapeTriangle{ -1, -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .Triangle {
+        return core.KineShapeTriangle{ -1, -1, -1, -1 }
+    }
+
+    p1 := point.ChildPointHead
+    if !is_point_index_in_bounds(p1) {
+        return core.KineShapeTriangle{ -1, -1, -1, -1 }
+    }
+    p2 := state^.PointSystem^.Points[p1].NextChildPoint
+    if !is_point_index_in_bounds(p2) {
+        return core.KineShapeTriangle{ -1, -1, -1, -1 }
+    }
+    p3 := state^.PointSystem^.Points[p2].NextChildPoint
+    if !is_point_index_in_bounds(p3) {
+        return core.KineShapeTriangle{ -1, -1, -1, -1 }
+    }
+
+    return core.KineShapeTriangle{ host, p1, p2, p3 }
+}
+
+@(export)
+get_shape_square_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapeSquare {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .Square {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+
+    p1 := point.ChildPointHead
+    if !is_point_index_in_bounds(p1) {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+    p2 := state^.PointSystem^.Points[p1].NextChildPoint
+    if !is_point_index_in_bounds(p2) {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+    p3 := state^.PointSystem^.Points[p2].NextChildPoint
+    if !is_point_index_in_bounds(p3) {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+    p4 := state^.PointSystem^.Points[p3].NextChildPoint
+    if !is_point_index_in_bounds(p4) {
+        return core.KineShapeSquare{ -1, -1, -1, -1, -1 }
+    }
+
+    return core.KineShapeSquare{ host, p1, p2, p3, p4 }
+}
+
+@(export)
+get_pen_view :: proc "c" (state: ^core.EuclidGeneralState) -> core.KineShapePen {
+    return state^.Pen
+}
+
+@(export)
+get_compass_view :: proc "c" (state: ^core.EuclidGeneralState) -> core.KineShapeCompass {
+    return state^.Compass
+}
+
+@(export)
+get_kine_anim_points_start :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    return i32(state^.PointSystem^.AnimPointsStart)
+}
+
+@(export)
+get_kine_anim_constraints_start :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    return i32(state^.PointSystem^.AnimConstraintsStart)
+}
+
+@(export)
+freeze_kine_animation_boundary :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    context = state^.SavedContext
+    kine.kine_freeze_system_indices(state^.PointSystem)
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+clear_kine_animation_data :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    context = state^.SavedContext
+    kine.kine_clear_animation_data(state^.PointSystem, state^.ParticleSystem)
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+get_max_kine_points :: proc "c" () -> i32 {
+    return i32(MAX_KINEPOINTS)
+}
+
+@(export)
+get_max_kine_constraints :: proc "c" () -> i32 {
+    return i32(MAX_KINECONSTRAINTS)
+}
+
+@(export)
+validate_kine_graph :: proc "c" (state: ^core.EuclidGeneralState) -> i32 {
+    context = state^.SavedContext
+
+    for i in 0..<MAX_KINEPOINTS {
+        point := state^.PointSystem^.Points[i]
+        if point.ChildPointHead >= 0 {
+            validateStatus := validate_parent_child_chain(state, i32(i))
+            if validateStatus != BRIDGE_STATUS_OK {
+                return validateStatus
+            }
+        }
+    }
+
+    for i in 0..<MAX_KINECONSTRAINTS {
+        constraint := state^.PointSystem^.Constraints[i]
+        if constraint.DoApply {
+            if !is_point_index_in_bounds(constraint.OnPoint) {
+                return BRIDGE_STATUS_INVALID_CONSTRAINT
+            }
+            if constraint.DependOn >= 0 && !is_constraint_index_in_bounds(int(constraint.DependOn)) {
+                return BRIDGE_STATUS_INVALID_CONSTRAINT
+            }
+        }
+    }
+
+    return BRIDGE_STATUS_OK
 }
 
 

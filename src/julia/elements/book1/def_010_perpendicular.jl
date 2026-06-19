@@ -17,11 +17,7 @@ const MainLineUnit = normalize(Float32[EndPoint[1] - StartPoint[1], EndPoint[2] 
 const MarkerStart = [
     PerpStartPoint[1] - MarkerRadius * MainLineUnit[1],
     PerpStartPoint[2] - MarkerRadius * MainLineUnit[2],
-    0f0] 
-const MarkerMovingStart = [
-    PerpStartPoint[1] - (MarkerRadius - 0.001f0) * MainLineUnit[1],
-    PerpStartPoint[2] - (MarkerRadius - 0.001f0) * MainLineUnit[2],
-    0f0] 
+    0f0]
 const MarkerEnd = [
     PerpStartPoint[1] + MarkerRadius * MainLineUnit[1],
     PerpStartPoint[2] + MarkerRadius * MainLineUnit[2],

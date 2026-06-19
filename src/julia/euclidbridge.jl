@@ -32,6 +32,59 @@ struct BridgePointView
     nextChildPoint::Int64
 end
 
+struct BridgeConstraintView
+    valid::UInt8
+    index::Int32
+
+    traits::Int32
+    onPoint::Int32
+    restriction::NTuple{3, Cfloat}
+    bounce::Cfloat
+    allowance::Cfloat
+    dependOn::Int32
+    hasChildOffset::UInt8
+    childOffset::Int32
+    doApply::UInt8
+end
+
+struct BridgeConstraintSpec
+    traits::Int32
+    onPoint::Int32
+    restriction::NTuple{3, Cfloat}
+    bounce::Cfloat
+    allowance::Cfloat
+    dependOn::Int32
+    hasChildOffset::UInt8
+    childOffset::Int32
+    doApply::UInt8
+end
+
+struct BridgeSolveResult
+    status::Int32
+    iterations::Int32
+    initialError::Cfloat
+    finalError::Cfloat
+    converged::UInt8
+end
+
+const BRIDGE_STATUS_OK = Int32(0)
+const BRIDGE_STATUS_INVALID_INDEX = Int32(1)
+const BRIDGE_STATUS_INVALID_ARGUMENT = Int32(2)
+const BRIDGE_STATUS_INVALID_GRAPH = Int32(3)
+const BRIDGE_STATUS_INVALID_CONSTRAINT = Int32(4)
+const BRIDGE_STATUS_OUT_OF_CAPACITY = Int32(5)
+const BRIDGE_STATUS_ILLEGAL_STATE = Int32(6)
+const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
+
+const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
+const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
+const CONSTRAINT_SPEC_RESTRICTION = Int32(1 << 2)
+const CONSTRAINT_SPEC_BOUNCE = Int32(1 << 3)
+const CONSTRAINT_SPEC_ALLOWANCE = Int32(1 << 4)
+const CONSTRAINT_SPEC_DEPENDON = Int32(1 << 5)
+const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
+const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
+
 struct BridgeShapeLine
     hostId::Int64
     joint1Id::Int64
@@ -814,6 +867,723 @@ function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Abstr
     set_point_active_color(state_ptr, id, bridge_color(color))
 end
 
+"""
+Get the native bridge version number.
+
+------
+
+Returns: `Int32` bridge API version
+"""
+function get_bridge_version()
+    @ccall get_bridge_version()::Int32
+end
+
+"""
+Get the native bridge feature flags bitmask.
+
+------
+
+Returns: `Int32` feature flags
+"""
+function get_bridge_feature_flags()
+    @ccall get_bridge_feature_flags()::Int32
+end
+
+"""
+Get the maximum number of kine points supported by the bridge.
+
+------
+
+Returns: `Int32` point capacity
+"""
+function get_point_capacity()
+    @ccall get_point_capacity()::Int32
+end
+
+"""
+Get the next point index in the kine point system.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` next point index
+"""
+function get_point_next_index(state_ptr::Ptr{Cvoid})
+    @ccall get_point_next_index(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Check whether a point index is in the valid bridge range.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point index to validate
+
+Returns: `UInt8` where non-zero means valid
+"""
+function is_point_index_in_range(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall is_point_index_in_range(state_ptr::Ptr{Cvoid}, index::Int32)::UInt8
+end
+
+"""
+Enable or disable point drawing for a point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to update
+- `enabled` : `true` to draw, `false` to hide
+
+Returns: `Int32` status code
+"""
+function set_point_draw_enabled(state_ptr::Ptr{Cvoid}, index::Integer, enabled::Bool)
+    @ccall set_point_draw_enabled(state_ptr::Ptr{Cvoid}, index::Int32, UInt8(enabled)::UInt8)::Int32
+end
+
+"""
+Set a point position by id and return bridge status.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to move
+- `x` : New x world coordinate
+- `y` : New y world coordinate
+- `z` : New z world coordinate
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+
+Returns: `Int32` status code
+"""
+function set_point_position_status(state_ptr::Ptr{Cvoid}, index::Integer,
+    x::Float32, y::Float32, z::Float32)
+    pos = (x, y, z)
+    @ccall set_point_position_status(state_ptr::Ptr{Cvoid}, index::Int32, pos::NTuple{3, Cfloat})::Int32
+end
+function set_point_position_status(state_ptr::Ptr{Cvoid}, index::Integer, pos::Vector{Float32})
+    postupled = (pos[1], pos[2], pos[3])
+    @ccall set_point_position_status(state_ptr::Ptr{Cvoid}, index::Int32,
+        postupled::NTuple{3, Cfloat})::Int32
+end
+
+"""
+Clear a point position by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to clear position for
+
+Returns: `Int32` status code
+"""
+function clear_point_position(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall clear_point_position(state_ptr::Ptr{Cvoid}, index::Int32)::Int32
+end
+
+"""
+Set the display color for a point by id and return bridge status.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to recolor
+- `color` : New point color
+
+Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
+
+Returns: `Int32` status code
+"""
+function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
+    @ccall set_point_color_status(state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
+end
+function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Colorant)
+    set_point_color_status(state_ptr, index, bridge_color(color))
+end
+function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Symbol)
+    set_point_color_status(state_ptr, index, bridge_color(color))
+end
+function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
+    set_point_color_status(state_ptr, index, bridge_color(color))
+end
+
+"""
+Clear the display color for a point by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to clear color for
+
+Returns: `Int32` status code
+"""
+function clear_point_color(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall clear_point_color(state_ptr::Ptr{Cvoid}, index::Int32)::Int32
+end
+
+"""
+Set the active/selected color for a point by id and return bridge status.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to update
+- `color` : Active state color
+
+Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
+
+Returns: `Int32` status code
+"""
+function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
+    @ccall set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
+end
+function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Colorant)
+    set_point_active_color_status(state_ptr, index, bridge_color(color))
+end
+function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Symbol)
+    set_point_active_color_status(state_ptr, index, bridge_color(color))
+end
+function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
+    set_point_active_color_status(state_ptr, index, bridge_color(color))
+end
+
+"""
+Clear the active/selected color for a point by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to clear active color for
+
+Returns: `Int32` status code
+"""
+function clear_point_active_color(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall clear_point_active_color(state_ptr::Ptr{Cvoid}, index::Int32)::Int32
+end
+
+"""
+Set brush size for a point by id and return bridge status.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to update
+- `brush` : New brush size
+
+Returns: `Int32` status code
+"""
+function set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Integer, brush::Float32)
+    @ccall set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Int32, brush::Cfloat)::Int32
+end
+
+"""
+Attach a child point to a parent point chain.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `parentIndex` : Parent point id
+- `childIndex` : Child point id to append
+
+Returns: `Int32` status code
+"""
+function attach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
+    @ccall attach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
+end
+
+"""
+Detach a child point from a parent point chain.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `parentIndex` : Parent point id
+- `childIndex` : Child point id to remove
+
+Returns: `Int32` status code
+"""
+function detach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
+    @ccall detach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
+end
+
+"""
+Recompute and store child count for a parent point chain.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `parentIndex` : Parent point id
+
+Returns: `Int32` status code
+"""
+function rebuild_child_count(state_ptr::Ptr{Cvoid}, parentIndex::Integer)
+    @ccall rebuild_child_count(state_ptr::Ptr{Cvoid}, parentIndex::Int32)::Int32
+end
+
+"""
+Validate a parent point child chain for bridge graph consistency.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `parentIndex` : Parent point id
+
+Returns: `Int32` status code
+"""
+function validate_parent_child_chain(state_ptr::Ptr{Cvoid}, parentIndex::Integer)
+    @ccall validate_parent_child_chain(state_ptr::Ptr{Cvoid}, parentIndex::Int32)::Int32
+end
+
+"""
+Get the maximum number of kine constraints supported by the bridge.
+
+------
+
+Returns: `Int32` constraint capacity
+"""
+function get_constraint_capacity()
+    @ccall get_constraint_capacity()::Int32
+end
+
+"""
+Get the next constraint index in the kine constraint system.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` next constraint index
+"""
+function get_constraint_next_index(state_ptr::Ptr{Cvoid})
+    @ccall get_constraint_next_index(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Check whether a constraint index is in the valid bridge range.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Constraint index to validate
+
+Returns: `UInt8` where non-zero means valid
+"""
+function is_constraint_index_in_range(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall is_constraint_index_in_range(state_ptr::Ptr{Cvoid}, index::Int32)::UInt8
+end
+
+"""
+Get one constraint view by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Constraint id to retrieve
+
+Returns: `BridgeConstraintView`
+"""
+function get_constraint_view(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall get_constraint_view(state_ptr::Ptr{Cvoid}, index::Int32)::BridgeConstraintView
+end
+
+"""
+Create a new constraint from a bridge constraint spec.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `spec` : Constraint specification payload
+
+Returns: `(status::Int32, index::Int32)` where index is -1 on failure
+"""
+function create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec)
+    outIndex = Ref{Int32}(-1)
+    status = @ccall create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec,
+        outIndex::Ref{Int32})::Int32
+    return status, outIndex[]
+end
+
+"""
+Update selected fields on an existing constraint.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Constraint id to update
+- `specMask` : Field selection mask using `CONSTRAINT_SPEC_*` constants
+- `spec` : Source values for fields selected in `specMask`
+
+Returns: `Int32` status code
+"""
+function update_constraint(state_ptr::Ptr{Cvoid}, index::Integer,
+    specMask::Integer, spec::BridgeConstraintSpec)
+    @ccall update_constraint(state_ptr::Ptr{Cvoid}, index::Int32,
+        Int32(specMask)::Int32, spec::BridgeConstraintSpec)::Int32
+end
+
+"""
+Enable or disable a constraint by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Constraint id to update
+- `enabled` : `true` to apply constraint, `false` to disable
+
+Returns: `Int32` status code
+"""
+function set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Integer, enabled::Bool)
+    @ccall set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Int32, UInt8(enabled)::UInt8)::Int32
+end
+
+"""
+Clear one constraint slot by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Constraint id to clear
+
+Returns: `Int32` status code
+"""
+function clear_constraint(state_ptr::Ptr{Cvoid}, index::Integer)
+    @ccall clear_constraint(state_ptr::Ptr{Cvoid}, index::Int32)::Int32
+end
+
+"""
+Get total current constraint error across the point system.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Cfloat` total error
+"""
+function get_total_constraint_error_bridge(state_ptr::Ptr{Cvoid})
+    @ccall get_total_constraint_error_bridge(state_ptr::Ptr{Cvoid})::Cfloat
+end
+
+"""
+Get the current error value for one constraint.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `constraintIndex` : Constraint id to inspect
+
+Returns: `(status::Int32, error::Cfloat)`
+"""
+function get_constraint_error_bridge(state_ptr::Ptr{Cvoid}, constraintIndex::Integer)
+    outError = Ref{Cfloat}(0)
+    status = @ccall get_constraint_error_bridge(state_ptr::Ptr{Cvoid},
+        Int32(constraintIndex)::Int32, outError::Ref{Cfloat})::Int32
+    return status, outError[]
+end
+
+"""
+Apply one constraint by id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `constraintIndex` : Constraint id to apply
+
+Returns: `Int32` status code
+"""
+function apply_constraint_bridge(state_ptr::Ptr{Cvoid}, constraintIndex::Integer)
+    @ccall apply_constraint_bridge(state_ptr::Ptr{Cvoid}, Int32(constraintIndex)::Int32)::Int32
+end
+
+"""
+Apply all constraints once in forward or reverse order.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `reverse` : `true` to apply in reverse order, `false` for forward order
+
+Returns: `Int32` status code
+"""
+function apply_all_constraints_bridge(state_ptr::Ptr{Cvoid}, reverse::Bool=false)
+    @ccall apply_all_constraints_bridge(state_ptr::Ptr{Cvoid}, UInt8(reverse)::UInt8)::Int32
+end
+
+"""
+Solve constraints until total error is below threshold or iteration budget is exhausted.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `allowableError` : Error threshold target
+- `maxIterations` : Maximum solve iterations (native side clamps and defaults)
+
+Returns: `BridgeSolveResult`
+"""
+function solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowableError::Float32,
+    maxIterations::Integer)
+    @ccall solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowableError::Cfloat,
+        Int32(maxIterations)::Int32)::BridgeSolveResult
+end
+
+"""
+Get a `BridgeShapeLine` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a line shape
+
+Returns: `BridgeShapeLine`
+"""
+function get_shape_line_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_line_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeLine
+end
+
+"""
+Get a `BridgeShapeCircle` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a circle shape
+
+Returns: `BridgeShapeCircle`
+"""
+function get_shape_circle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_circle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeCircle
+end
+
+"""
+Get a `BridgeShapeFilledCircle` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a filled circle shape
+
+Returns: `BridgeShapeFilledCircle`
+"""
+function get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeFilledCircle
+end
+
+"""
+Get a `BridgeShapeTriangle` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a triangle shape
+
+Returns: `BridgeShapeTriangle`
+"""
+function get_shape_triangle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_triangle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeTriangle
+end
+
+"""
+Get a `BridgeShapeSquare` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a square shape
+
+Returns: `BridgeShapeSquare`
+"""
+function get_shape_square_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_square_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeSquare
+end
+
+"""
+Get the current pen shape view.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `BridgeShapePen`
+"""
+function get_pen_view(state_ptr::Ptr{Cvoid})
+    @ccall get_pen_view(state_ptr::Ptr{Cvoid})::BridgeShapePen
+end
+
+"""
+Get the current compass shape view.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `BridgeShapeCompass`
+"""
+function get_compass_view(state_ptr::Ptr{Cvoid})
+    @ccall get_compass_view(state_ptr::Ptr{Cvoid})::BridgeShapeCompass
+end
+
+"""
+Get the point start index for animation-owned point allocations.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` animation point start index
+"""
+function get_kine_anim_points_start(state_ptr::Ptr{Cvoid})
+    @ccall get_kine_anim_points_start(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Get the constraint start index for animation-owned constraint allocations.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` animation constraint start index
+"""
+function get_kine_anim_constraints_start(state_ptr::Ptr{Cvoid})
+    @ccall get_kine_anim_constraints_start(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Freeze current point and constraint indices as animation boundaries.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` status code
+"""
+function freeze_kine_animation_boundary(state_ptr::Ptr{Cvoid})
+    @ccall freeze_kine_animation_boundary(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Clear animation-owned kine points and constraints.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` status code
+"""
+function clear_kine_animation_data(state_ptr::Ptr{Cvoid})
+    @ccall clear_kine_animation_data(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Get the maximum number of kine points.
+
+------
+
+Returns: `Int32` max point count
+"""
+function get_max_kine_points()
+    @ccall get_max_kine_points()::Int32
+end
+
+"""
+Get the maximum number of kine constraints.
+
+------
+
+Returns: `Int32` max constraint count
+"""
+function get_max_kine_constraints()
+    @ccall get_max_kine_constraints()::Int32
+end
+
+"""
+Run native kine graph validation.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+
+Returns: `Int32` status code
+"""
+function validate_kine_graph(state_ptr::Ptr{Cvoid})
+    @ccall validate_kine_graph(state_ptr::Ptr{Cvoid})::Int32
+end
+
 
 
 """
@@ -917,7 +1687,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
 function unlock_pen_joint1(state_ptr::Ptr{Cvoid})
-    @ccall unlock_pen_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall unlock_pen_joint1(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
 """
@@ -993,7 +1763,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
 function unlock_pen_joint2(state_ptr::Ptr{Cvoid})
-    @ccall unlock_pen_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall unlock_pen_joint2(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
 """
@@ -1136,7 +1906,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
 function unlock_compass_joint1(state_ptr::Ptr{Cvoid})
-    @ccall unlock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall unlock_compass_joint1(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
 """
@@ -1212,7 +1982,7 @@ Parameters:
 - `state_ptr` : The Euclid application state pointer passed to the native API
 """
 function unlock_compass_joint2(state_ptr::Ptr{Cvoid})
-    @ccall unlock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall unlock_compass_joint2(state_ptr::Ptr{Cvoid})::Cvoid
 end
 
 """
