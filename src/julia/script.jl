@@ -12,6 +12,8 @@ include("./elements/book1/def_006_surfextrem.jl")
 include("./elements/book1/def_007_planesurface.jl")
 include("./elements/book1/def_008_angle.jl")
 include("./elements/book1/def_010_perpendicular.jl")
+include("./elements/book1/def_011_obtuseangle.jl")
+include("./elements/book1/def_012_acuteangle.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -113,7 +115,19 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionPerpendicular.loop,
                     ElementsOneDefinitionPerpendicular.clean,
                     "Right Angles and Perpendicular", book1DefsId)
-                
+                book1Defs11ObtuseAngleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionObtuseAngle.get_view_text,
+                    ElementsOneDefinitionObtuseAngle.initialize,
+                    ElementsOneDefinitionObtuseAngle.loop,
+                    ElementsOneDefinitionObtuseAngle.clean,
+                    "Obtuse Angle", book1DefsId)
+                book1Defs12AcuteAngleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionAcuteAngle.get_view_text,
+                    ElementsOneDefinitionAcuteAngle.initialize,
+                    ElementsOneDefinitionAcuteAngle.loop,
+                    ElementsOneDefinitionAcuteAngle.clean,
+                    "Acute Angle", book1DefsId)
+                    
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
                 NullAnimation.loop, NullAnimation.clean,
