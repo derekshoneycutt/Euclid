@@ -392,7 +392,7 @@ emit_polygon_edge_dust :: proc(
         return
     }
 
-    vertices: [4]Vector3
+    vertices: [12]Vector3
 
     current_id := first_child_id
     for i in 0..<vertex_count {
@@ -479,7 +479,8 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
     }
 
     if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
-        kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square {
+        kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square &&
+        kp.Type != .Pentagon {
         return
     }
 
@@ -514,6 +515,8 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
             emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 3, col)
         case .Square:
             emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 4, col)
+        case .Pentagon:
+            emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 5, col)
         case .Circle, .FilledCircle:
             center, center_ok := kp.Position.?
             if !center_ok {
@@ -556,7 +559,8 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
         }
 
         if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
-            kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square {
+            kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square &&
+            kp.Type != .Pentagon {
             continue
         }
 
@@ -590,6 +594,8 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
                 emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 3, col)
             case .Square:
                 emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 4, col)
+            case .Pentagon:
+                emit_polygon_edge_dust(ps, ks, kp.ChildPointHead, 5, col)
             case .Circle, .FilledCircle:
                 center, center_ok := kp.Position.?
                 if !center_ok {

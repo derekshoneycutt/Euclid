@@ -118,6 +118,15 @@ struct BridgeShapeSquare
     joint4Id::Int64
 end
 
+struct BridgeShapePentagon
+    hostId::Int64
+    joint1Id::Int64
+    joint2Id::Int64
+    joint3Id::Int64
+    joint4Id::Int64
+    joint5Id::Int64
+end
+
 struct BridgeShapePen
     hostId::Int64
     joint1Id::Int64
@@ -730,6 +739,139 @@ function create_new_square(state_ptr::Ptr{Cvoid},
         pos3[1], pos3[2], pos3[3],
         pos4[1], pos4[2], pos4[3],
         color)
+end
+
+"""
+Construct a new pentagon in the Euclid system to be shown on the surface
+
+------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `x1`..`z5` : Coordinates for the five pentagon vertices
+- `pos1`..`pos5` : Vectors can be provided in [x, y, z] form instead of individual parameters
+- `color` : The color to show the pentagon with
+
+Returns: a `BridgeShapePentagon` describing the newly created pentagon
+"""
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    x5::Float32, y5::Float32, z5::Float32,
+    color::BridgeColor)
+    pos1 = (x1, y1, z1)
+    pos2 = (x2, y2, z2)
+    pos3 = (x3, y3, z3)
+    pos4 = (x4, y4, z4)
+    pos5 = (x5, y5, z5)
+    return @ccall create_new_pentagon(
+        state_ptr::Ptr{Cvoid},
+        pos1::NTuple{3, Cfloat}, pos2::NTuple{3, Cfloat}, pos3::NTuple{3, Cfloat},
+        pos4::NTuple{3, Cfloat}, pos5::NTuple{3, Cfloat},
+        color::BridgeColor)::BridgeShapePentagon
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    pos4::Vector{Float32}, pos5::Vector{Float32},
+    color::BridgeColor)
+    create_new_pentagon(
+        state_ptr,
+        pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        pos5[1], pos5[2], pos5[3],
+        color)
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    x5::Float32, y5::Float32, z5::Float32,
+    color::Colorant)
+    create_new_pentagon(
+        state_ptr,
+        x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        x5, y5, z5,
+        bridge_color(color))
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    pos4::Vector{Float32}, pos5::Vector{Float32},
+    color::Colorant)
+    create_new_pentagon(
+        state_ptr,
+        pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        pos5[1], pos5[2], pos5[3],
+        bridge_color(color))
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    x5::Float32, y5::Float32, z5::Float32,
+    color::Symbol)
+    create_new_pentagon(
+        state_ptr,
+        x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        x5, y5, z5,
+        bridge_color(color))
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    pos4::Vector{Float32}, pos5::Vector{Float32},
+    color::Symbol)
+    create_new_pentagon(
+        state_ptr,
+        pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        pos5[1], pos5[2], pos5[3],
+        bridge_color(color))
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    x1::Float32, y1::Float32, z1::Float32,
+    x2::Float32, y2::Float32, z2::Float32,
+    x3::Float32, y3::Float32, z3::Float32,
+    x4::Float32, y4::Float32, z4::Float32,
+    x5::Float32, y5::Float32, z5::Float32,
+    color::AbstractString)
+    create_new_pentagon(
+        state_ptr,
+        x1, y1, z1,
+        x2, y2, z2,
+        x3, y3, z3,
+        x4, y4, z4,
+        x5, y5, z5,
+        bridge_color(color))
+end
+function create_new_pentagon(state_ptr::Ptr{Cvoid},
+    pos1::Vector{Float32}, pos2::Vector{Float32}, pos3::Vector{Float32},
+    pos4::Vector{Float32}, pos5::Vector{Float32},
+    color::AbstractString)
+    create_new_pentagon(
+        state_ptr,
+        pos1[1], pos1[2], pos1[3],
+        pos2[1], pos2[2], pos2[3],
+        pos3[1], pos3[2], pos3[3],
+        pos4[1], pos4[2], pos4[3],
+        pos5[1], pos5[2], pos5[3],
+        bridge_color(color))
 end
 
 """
@@ -1455,6 +1597,22 @@ Returns: `BridgeShapeSquare`
 """
 function get_shape_square_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
     @ccall get_shape_square_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeSquare
+end
+
+"""
+Get a `BridgeShapePentagon` view by host point id.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `hostId` : Host point id for a pentagon shape
+
+Returns: `BridgeShapePentagon`
+"""
+function get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+    @ccall get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapePentagon
 end
 
 """

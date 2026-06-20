@@ -19,6 +19,9 @@ include("./elements/book1/def_014_figure.jl")
 include("./elements/book1/def_015_circle.jl")
 include("./elements/book1/def_017_diameter.jl")
 include("./elements/book1/def_018_semicircle.jl")
+include("./elements/book1/def_019a_trilateral.jl")
+include("./elements/book1/def_019b_quadrilateral.jl")
+include("./elements/book1/def_019c_multilateral.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -163,6 +166,24 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionSemicircle.loop,
                     ElementsOneDefinitionSemicircle.clean,
                     "Semicircle", book1DefsId)
+                book1Defs19TrilateralId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionTrilateral.get_view_text,
+                    ElementsOneDefinitionTrilateral.initialize,
+                    ElementsOneDefinitionTrilateral.loop,
+                    ElementsOneDefinitionTrilateral.clean,
+                    "Trilateral Rectilineal Figures", book1DefsId)
+                book1Defs19QuadrilateralId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionQuadrilateral.get_view_text,
+                    ElementsOneDefinitionQuadrilateral.initialize,
+                    ElementsOneDefinitionQuadrilateral.loop,
+                    ElementsOneDefinitionQuadrilateral.clean,
+                    "Quadrilateral Rectilineal Figures", book1DefsId)
+                book1Defs19MultilateralId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionMultilateral.get_view_text,
+                    ElementsOneDefinitionMultilateral.initialize,
+                    ElementsOneDefinitionMultilateral.loop,
+                    ElementsOneDefinitionMultilateral.clean,
+                    "Multilateral Rectilineal Figures", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,

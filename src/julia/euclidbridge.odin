@@ -594,6 +594,20 @@ create_new_square :: proc "c" (
 }
 
 @(export)
+create_new_pentagon :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    point1, point2, point3, point4, point5: core.Vector3,
+    color: BridgeColor) -> core.KineShapePentagon {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    line := kine.init_kineshape_pentagon(
+        state^.PointSystem, point1, point2, point3, point4, point5, rlColor)
+
+    return line
+}
+
+@(export)
 get_point_view :: proc "c" (
     state: ^core.EuclidGeneralState,
     index: int) -> BridgePointView {
@@ -614,6 +628,8 @@ get_point_view :: proc "c" (
                 type = 4
             case .Square:
                 type = 5
+            case .Pentagon:
+                type = 6
             case .Pen:
                 type = 10
             case .Compass:
@@ -1499,6 +1515,45 @@ get_shape_square_view :: proc "c" (
     }
 
     return core.KineShapeSquare{ host, p1, p2, p3, p4 }
+}
+
+@(export)
+get_shape_pentagon_view :: proc "c" (
+    state: ^core.EuclidGeneralState, hostId: i32) -> core.KineShapePentagon {
+
+    context = state^.SavedContext
+    host := int(hostId)
+    if !is_point_index_in_bounds(host) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+
+    point := state^.PointSystem^.Points[host]
+    if point.Type != .Pentagon {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+
+    p1 := point.ChildPointHead
+    if !is_point_index_in_bounds(p1) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+    p2 := state^.PointSystem^.Points[p1].NextChildPoint
+    if !is_point_index_in_bounds(p2) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+    p3 := state^.PointSystem^.Points[p2].NextChildPoint
+    if !is_point_index_in_bounds(p3) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+    p4 := state^.PointSystem^.Points[p3].NextChildPoint
+    if !is_point_index_in_bounds(p4) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+    p5 := state^.PointSystem^.Points[p4].NextChildPoint
+    if !is_point_index_in_bounds(p5) {
+        return core.KineShapePentagon{ -1, -1, -1, -1, -1, -1 }
+    }
+
+    return core.KineShapePentagon{ host, p1, p2, p3, p4, p5 }
 }
 
 @(export)

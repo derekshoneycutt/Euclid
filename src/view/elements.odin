@@ -262,6 +262,8 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
                 draw_cached_triangle(state, &itemTyped)
             case core.KineSquareDraw:
                 draw_cached_square(state, &itemTyped)
+            case core.KinePentagonDraw:
+                draw_cached_pentagon(state, &itemTyped)
             case:
                 continue
         }
@@ -403,6 +405,18 @@ draw_cached_square :: proc(state: ^EuclidGeneralState, l: ^kine.KineSquareDraw) 
     c3 := iso_to_cartesian(l^.Point4, state^.IsoScale^)
     rl.DrawTriangle(c0, c1, c2, l^.Color)
     rl.DrawTriangle(c0, c2, c3, l^.Color)
+}
+
+
+draw_cached_pentagon :: proc(state: ^EuclidGeneralState, l: ^kine.KinePentagonDraw) {
+    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
+    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
+    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
+    c3 := iso_to_cartesian(l^.Point4, state^.IsoScale^)
+    c4 := iso_to_cartesian(l^.Point5, state^.IsoScale^)
+    rl.DrawTriangle(c0, c1, c2, l^.Color)
+    rl.DrawTriangle(c0, c2, c3, l^.Color)
+    rl.DrawTriangle(c0, c3, c4, l^.Color)
 }
 
 

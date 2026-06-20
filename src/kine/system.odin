@@ -24,6 +24,7 @@ KineShapeCircle :: core.KineShapeCircle
 KineShapeFilledCircle :: core.KineShapeFilledCircle
 KineShapeTriangle :: core.KineShapeTriangle
 KineShapeSquare :: core.KineShapeSquare
+KineShapePentagon :: core.KineShapePentagon
 
 KineDrawBase :: core.KineDrawBase
 KinePointDraw :: core.KinePointDraw
@@ -32,6 +33,7 @@ KineCircleDraw :: core.KineCircleDraw
 KineFilledCircleDraw :: core.KineFilledCircleDraw
 KineTriangleDraw :: core.KineTriangleDraw
 KineSquareDraw :: core.KineSquareDraw
+KinePentagonDraw :: core.KinePentagonDraw
 KinePenDraw :: core.KinePenDraw
 KineCompassDraw :: core.KineCompassDraw
 
@@ -104,6 +106,8 @@ build_kine_draw_cache :: proc(
                 cache_push_triangle(pointSystem, index, src, alpha)
             case .Square:
                 cache_push_square(pointSystem, index, src, alpha)
+            case .Pentagon:
+                cache_push_pentagon(pointSystem, index, src, alpha)
             case .Pen:
                 cache_push_pen(pointSystem, index, src, alpha)
             case .Compass:
@@ -343,6 +347,51 @@ cache_push_square :: proc(
     }
 
     point := KineSquareDraw{ make_draw_base(sourceIndex, src), point1, point2, point3, point4 }
+    pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount] = point
+    pointSystem^.DrawCache.ItemCount += 1
+}
+
+cache_push_pentagon :: proc(
+    pointSystem: ^KinePointSystem,
+    sourceIndex: int,
+    src: ^KineShapePoint,
+    alpha: f32) {
+
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+        return
+    }
+
+    child0 := src^.ChildPointHead
+    point1: Vector3
+    if !lerped_point_position(pointSystem, child0, alpha, &point1) {
+        return
+    }
+
+    next := pointSystem.Points[child0].NextChildPoint
+    point2: Vector3
+    if !lerped_point_position(pointSystem, next, alpha, &point2) {
+        return
+    }
+
+    next = pointSystem.Points[next].NextChildPoint
+    point3: Vector3
+    if !lerped_point_position(pointSystem, next, alpha, &point3) {
+        return
+    }
+
+    next = pointSystem.Points[next].NextChildPoint
+    point4: Vector3
+    if !lerped_point_position(pointSystem, next, alpha, &point4) {
+        return
+    }
+
+    next = pointSystem.Points[next].NextChildPoint
+    point5: Vector3
+    if !lerped_point_position(pointSystem, next, alpha, &point5) {
+        return
+    }
+
+    point := KinePentagonDraw{ make_draw_base(sourceIndex, src), point1, point2, point3, point4, point5 }
     pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount] = point
     pointSystem^.DrawCache.ItemCount += 1
 }

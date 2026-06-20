@@ -153,7 +153,7 @@ init_kineshape_square :: proc(
     point1, point2, point3, point4: Vector3,
     color: rl.Color) -> KineShapeSquare {
 
-    hostPoint := KineShapePoint{ .Line, nil, color, nil, 0, 0, 4, 0, 0, false }
+    hostPoint := KineShapePoint{ .Square, nil, color, nil, 0, 0, 4, 0, 0, false }
     point1 := KineShapePoint{ .Point, point1, nil, nil, 0, 0, 0, 0, 0, false }
     point2 := KineShapePoint{ .Point, point2, nil, nil, 0, 0, 0, 0, 0, false }
     point3 := KineShapePoint{ .Point, point3, nil, nil, 0, 0, 0, 0, 0, false }
@@ -177,6 +177,41 @@ init_kineshape_square :: proc(
     system^.Points[point4Id] = point4
 
     return KineShapeSquare{ hostId, point1Id, point2Id, point3Id, point4Id }
+}
+
+init_kineshape_pentagon :: proc(
+    system: ^KinePointSystem,
+    point1, point2, point3, point4, point5: Vector3,
+    color: rl.Color) -> KineShapePentagon {
+
+    hostPoint := KineShapePoint{ .Pentagon, nil, color, nil, 0, 0, 5, 0, 0, false }
+    point1 := KineShapePoint{ .Point, point1, nil, nil, 0, 0, 0, 0, 0, false }
+    point2 := KineShapePoint{ .Point, point2, nil, nil, 0, 0, 0, 0, 0, false }
+    point3 := KineShapePoint{ .Point, point3, nil, nil, 0, 0, 0, 0, 0, false }
+    point4 := KineShapePoint{ .Point, point4, nil, nil, 0, 0, 0, 0, 0, false }
+    point5 := KineShapePoint{ .Point, point5, nil, nil, 0, 0, 0, 0, 0, false }
+
+    hostId := system^.NextPointIndex
+    point1Id := hostId + 1
+    point2Id := hostId + 2
+    point3Id := hostId + 3
+    point4Id := hostId + 4
+    point5Id := hostId + 5
+    hostPoint.ChildPointHead = point1Id
+    point1.NextChildPoint = point2Id
+    point2.NextChildPoint = point3Id
+    point3.NextChildPoint = point4Id
+    point4.NextChildPoint = point5Id
+    system^.NextPointIndex = point5Id + 1
+
+    system^.Points[hostId] = hostPoint
+    system^.Points[point1Id] = point1
+    system^.Points[point2Id] = point2
+    system^.Points[point3Id] = point3
+    system^.Points[point4Id] = point4
+    system^.Points[point5Id] = point5
+
+    return KineShapePentagon{ hostId, point1Id, point2Id, point3Id, point4Id, point5Id }
 }
 
 init_kineshape_pen :: proc(
