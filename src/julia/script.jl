@@ -22,6 +22,9 @@ include("./elements/book1/def_018_semicircle.jl")
 include("./elements/book1/def_019a_trilateral.jl")
 include("./elements/book1/def_019b_quadrilateral.jl")
 include("./elements/book1/def_019c_multilateral.jl")
+include("./elements/book1/def_020a_equilateral.jl")
+include("./elements/book1/def_020b_isosceles.jl")
+include("./elements/book1/def_020c_scalene.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -184,6 +187,24 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionMultilateral.loop,
                     ElementsOneDefinitionMultilateral.clean,
                     "Multilateral Rectilineal Figures", book1DefsId)
+                book1Defs20EquilateralId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionEquilateral.get_view_text,
+                    ElementsOneDefinitionEquilateral.initialize,
+                    ElementsOneDefinitionEquilateral.loop,
+                    ElementsOneDefinitionEquilateral.clean,
+                    "Equaliteral Triangle", book1DefsId)
+                book1Defs20IsoscelesId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionIsosceles.get_view_text,
+                    ElementsOneDefinitionIsosceles.initialize,
+                    ElementsOneDefinitionIsosceles.loop,
+                    ElementsOneDefinitionIsosceles.clean,
+                    "Isosceles Triangle", book1DefsId)
+                book1Defs20ScaleneId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionScalene.get_view_text,
+                    ElementsOneDefinitionScalene.initialize,
+                    ElementsOneDefinitionScalene.loop,
+                    ElementsOneDefinitionScalene.clean,
+                    "Scalene Triangle", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
