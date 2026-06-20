@@ -128,8 +128,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     triangle = EuclidBridge.create_new_triangle(
         state_ptr,
         VertexA[1], VertexA[2], VertexA[3],
-        VertexC[1], VertexC[2], VertexC[3],
         VertexB[1], VertexB[2], VertexB[3],
+        VertexC[1], VertexC[2], VertexC[3],
         TriangleColor)
 
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))

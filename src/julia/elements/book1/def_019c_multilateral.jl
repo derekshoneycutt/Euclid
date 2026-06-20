@@ -171,10 +171,10 @@ function initialize(state_ptr::Ptr{Cvoid})
     pentagon = EuclidBridge.create_new_pentagon(
         state_ptr,
         VertexA[1], VertexA[2], VertexA[3],
-        VertexB[1], VertexB[2], VertexB[3],
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexD[1], VertexD[2], VertexD[3],
         VertexE[1], VertexE[2], VertexE[3],
+        VertexD[1], VertexD[2], VertexD[3],
+        VertexC[1], VertexC[2], VertexC[3],
+        VertexB[1], VertexB[2], VertexB[3],
         PentagonColor)
 
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
