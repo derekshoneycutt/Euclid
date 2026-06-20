@@ -68,6 +68,16 @@ DUST_EXISTING_UP_KICK_MIN :: 0.0012
 DUST_EXISTING_UP_KICK_MAX :: 0.0048
 DUST_EXISTING_XY_KICK :: 0.0011
 
+DUST_COLLISION_RADIUS :: f32(0.004)
+DUST_COLLISION_RESTITUTION :: f32(0.42)
+DUST_COLLISION_POSITION_SLOP :: f32(0.0001)
+
+DUST_GRID_CELL_SIZE :: f32(0.02)
+DUST_GRID_DIM :: 50
+DUST_GRID_BUCKET_CAP :: 16
+
+DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
+
 CLEAR_BURST_POINT_COUNT :: 28
 CLEAR_BURST_LINE_SAMPLES :: 75
 CLEAR_BURST_CIRCLE_SAMPLES :: 120
@@ -643,11 +653,106 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
     }
 }
 
+dust_grid_cell_index :: proc(x, y: f32) -> int {
+    cx := clamp(int(x / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
+    cy := clamp(int(y / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
+    return cy * DUST_GRID_DIM + cx
+}
+
+resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
+    dx := b.Position.x - a.Position.x
+    dy := b.Position.y - a.Position.y
+    dist_sq := dx * dx + dy * dy
+    if dist_sq >= radius_sq || dist_sq < 1e-12 {
+        return
+    }
+
+    dist   := math.sqrt(dist_sq)
+    nx, ny := dx / dist, dy / dist
+
+    pen := min_sep - dist
+    if pen > DUST_COLLISION_POSITION_SLOP {
+        corr := (pen - DUST_COLLISION_POSITION_SLOP) * 0.5
+        a.Position.x -= nx * corr
+        a.Position.y -= ny * corr
+        b.Position.x += nx * corr
+        b.Position.y += ny * corr
+        clamp_xy_bounds(a)
+        clamp_xy_bounds(b)
+    }
+
+    vn := (b.Velocities.x - a.Velocities.x) * nx +
+          (b.Velocities.y - a.Velocities.y) * ny
+    if vn >= 0 {
+        return
+    }
+
+    imp := -(1.0 + DUST_COLLISION_RESTITUTION) * vn * 0.5
+    a.Velocities.x -= imp * nx
+    a.Velocities.y -= imp * ny
+    b.Velocities.x += imp * nx
+    b.Velocities.y += imp * ny
+}
+
+resolve_dust_collisions :: proc(ps: ^ParticleSystem) {
+    GridCells := DUST_GRID_DIM * DUST_GRID_DIM
+    Stride := DUST_GRID_BUCKET_CAP
+
+    buckets := make([]i32, GridCells * Stride, context.temp_allocator)
+    counts  := make([]i32, GridCells, context.temp_allocator)
+
+    for i in 0..<MAX_LOW_PARTICLES {
+        p := &ps.LowParticles[i]
+        if !p.Alive || p.Type != .Dust {
+            continue
+        }
+        c := dust_grid_cell_index(p.Position.x, p.Position.y)
+        if counts[c] < i32(Stride) {
+            buckets[c * Stride + int(counts[c])] = i32(i)
+            counts[c] += 1
+        }
+    }
+
+    radius_sq := DUST_COLLISION_RADIUS * DUST_COLLISION_RADIUS
+    min_sep   := DUST_COLLISION_RADIUS * 2.0
+
+    for cy in 0..<DUST_GRID_DIM {
+        for cx in 0..<DUST_GRID_DIM {
+            ca := cy * DUST_GRID_DIM + cx
+            na := int(counts[ca])
+            if na == 0 {
+                continue
+            }
+
+            for off in DUST_GRID_NEIGHBORS {
+                ncx, ncy := cx + off[0], cy + off[1]
+                if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
+                    continue
+                }
+                cb := ncy * DUST_GRID_DIM + ncx
+                nb := int(counts[cb])
+                same_cell := ca == cb
+
+                for li in 0..<na {
+                    a := &ps.LowParticles[buckets[ca * Stride + li]]
+                    lj_start := li + 1 if same_cell else 0
+                    for lj in lj_start..<nb {
+                        resolve_dust_pair(a, &ps.LowParticles[buckets[cb * Stride + lj]], min_sep, radius_sq)
+                    }
+                }
+            }
+        }
+    }
+}
+
 update_particles :: proc(ps: ^ParticleSystem, dt: f32) {
     for i in 0..<MAX_LOW_PARTICLES {
         lp := &ps.LowParticles[i]
         update_particle(lp, dt)
     }
+
+    resolve_dust_collisions(ps)
+
     for i in 0..<MAX_PARTICLES {
         p := &ps.Particles[i]
         update_particle(p, dt)
