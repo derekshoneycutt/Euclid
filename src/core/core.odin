@@ -1,5 +1,10 @@
 package core
 
+// Defines the core structures used in the Euclid Application.
+// The general bias is to just allocate memory upfront inside EuclidGeneralState and
+// stick to that memory, except for a few UI helpers using temp_allocator and Julia's GC.
+// This creates some hard caps on e.g. the particle system, but it also prevents wildness.
+
 import "../julialib"
 import "base:runtime"
 import rl "vendor:raylib"
@@ -13,8 +18,8 @@ MAX_JULIA_INTERFACES :: 512
 
 TOOL_LENGTH :: 0.35
 
-Vector2 :: [2]f32
-Vector3 :: [3]f32
+Vector2 :: rl.Vector2
+Vector3 :: rl.Vector3
 
 EuclidJuliaAnimationInterface :: struct {
     GetViewText : ^julialib.jl_value_t,

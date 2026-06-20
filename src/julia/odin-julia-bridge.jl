@@ -1,4 +1,4 @@
-module EuclidBridge
+module OdinJuliaBridge
 
 using Colors
 

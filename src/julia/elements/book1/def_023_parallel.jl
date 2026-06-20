@@ -1,6 +1,6 @@
 module ElementsOneDefinitionParallel
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 using ..EuclidAnimations
 
 export get_view_text, initialize, clean, loop
@@ -46,48 +46,48 @@ Parallel straight lines are straight lines which, being in the same plane and be
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    EuclidBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId])
 
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, line1Joint2Id,
         Line1Start[1], Line1Start[2], Line1Start[3])
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, line2Joint2Id,
         Line2Start[1], Line2Start[2], Line2Start[3])
 
-    EuclidBridge.hide_pen(state_ptr)
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 0, Line1Color)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, Line1Color)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendLine1)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendLine1)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    line1 = EuclidBridge.create_new_line(
+    line1 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Line1Start[1], Line1Start[2], Line1Start[3],
         Line1Start[1], Line1Start[2], Line1Start[3],
         Line1Color, 0f0)
-    line2 = EuclidBridge.create_new_line(
+    line2 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Line2Start[1], Line2Start[2], Line2Start[3],
         Line2Start[1], Line2Start[2], Line2Start[3],
         Line2Color, 0f0)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
 
     reset_cycle_state(state_ptr)
 end
@@ -96,20 +96,20 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
-    line1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
+    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
-    line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
+    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
     if line1HostId < 0
         return
     end
 
-    phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
+    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhaseDescendLine1
         EuclidAnimations.animate_pen_descend(
@@ -137,7 +137,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ArcMoveDuration
-            EuclidBridge.set_pen_active(state_ptr, 0, Line2Color)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, Line2Color)
             phase = PhaseDrawLine2
             timer = 0f0
         end
@@ -157,7 +157,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= RiseDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             phase = PhaseHideAll
             timer = 0f0
         end
@@ -169,8 +169,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     end
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
 end
 
 end

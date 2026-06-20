@@ -1,6 +1,6 @@
 module ElementsOneDefinitionObtuseAngle
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 using ..EuclidAnimations
 
 using LinearAlgebra
@@ -75,63 +75,63 @@ end
 
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    markerHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    markerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
+    markerEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
 
-    EuclidBridge.hide_point_batch(state_ptr, [markerHostId, line2HostId, line1HostId])
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.hide_point_batch(state_ptr, [markerHostId, line2HostId, line1HostId])
+    OdinJuliaBridge.set_point_position(
         state_ptr, markerEndId, MarkerStart[1], MarkerStart[2], MarkerStart[3])
 
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, line2Joint2Id, Line2Start[1], Line2Start[2], Line2Start[3])
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, line1Joint2Id, Line1Start[1], Line1Start[2], Line1Start[3])
 
-    EuclidBridge.hide_compass(state_ptr)
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 0, LineColor1)
-    EuclidBridge.set_compass_active(state_ptr, 0, LineColor1)
-    EuclidBridge.lock_compass_joint1(state_ptr, JointPoint[1], JointPoint[2], CompassTopZ)
-    EuclidBridge.lock_compass_joint2(state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor1)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, LineColor1)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, JointPoint[1], JointPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    marker = EuclidBridge.create_new_filledcircle(
+    marker = OdinJuliaBridge.create_new_filledcircle(
         state_ptr,
         JointPoint[1], JointPoint[2], JointPoint[3],
         MarkerRadius, 0f0, 0f0,
         MarkerColor, 0f0)
-    line1 = EuclidBridge.create_new_line(
+    line1 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Line1Start[1], Line1Start[2], Line1Start[3],
         Line1Start[1], Line1Start[2], Line1Start[3],
         LineColor1, 0f0)
-    line2 = EuclidBridge.create_new_line(
+    line2 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Line2Start[1], Line2Start[2], Line2Start[3],
         Line2Start[1], Line2Start[2], Line2Start[3],
         LineColor2, 0f0)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.startId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.startId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.endId))
 
     reset_cycle_state(state_ptr)
 end
@@ -140,24 +140,24 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
-    line1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
+    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
-    line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
+    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    markerHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    markerStartId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
-    markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    markerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
+    markerStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
+    markerEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
 
     if line1HostId < 0
         return
     end
 
-    phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
+    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhasePenDescend
         EuclidAnimations.animate_pen_descend(
@@ -208,7 +208,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             phase = PhaseCompassDrawMarker
             timer = 0f0
         end
@@ -230,7 +230,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= CompassLiftDuration
-            EuclidBridge.hide_compass(state_ptr)
+            OdinJuliaBridge.hide_compass(state_ptr)
             phase = PhaseHideAll
             timer = 0f0
         end
@@ -243,8 +243,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     end
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
 end
 
 end

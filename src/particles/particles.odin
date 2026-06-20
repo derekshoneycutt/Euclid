@@ -1,19 +1,19 @@
 package particles
 
 import "../core"
+import "core:math"
+import rl "vendor:raylib"
+
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Particle :: core.Particle
 ParticleSystem :: core.ParticleSystem
 KinePointSystem :: core.KinePointSystem
 
-
-import "core:math"
-import rl "vendor:raylib"
-
 MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+
 SPAWN_INTERVAL :: 0.012 // seconds
 PARTICLE_LIFE :: 0.75  // seconds
 PARTICLE_SIZE_START :: 5.0
@@ -104,7 +104,6 @@ reserve_dead_low_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool)
     index := ps.NextIndex % MAX_LOW_PARTICLES
     ps.NextIndex = (index + 1) % MAX_LOW_PARTICLES
     return &ps.LowParticles[index], true
-    //return nil, false
 }
 
 reserve_dead_high_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
@@ -112,6 +111,7 @@ reserve_dead_high_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool
     ps.NextIndex = (index + 1) % MAX_PARTICLES
     return &ps.HighParticles[index], true
 
+    // TODO: this is preserved for future evaluation, although it seems unnecessary
     /*for step in 0..<MAX_PARTICLES {
         index := (ps.NextIndex + step) % MAX_PARTICLES
         if !ps.HighParticles[index].Alive {
@@ -128,6 +128,7 @@ reserve_dead_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
     ps.NextIndex = (index + 1) % MAX_PARTICLES
     return &ps.Particles[index], true
 
+    // TODO: this is preserved for future evaluation, although it seems unnecessary
     /*for step in 0..<MAX_PARTICLES {
         index := (ps.NextIndex + step) % MAX_PARTICLES
         if !ps.Particles[index].Alive {

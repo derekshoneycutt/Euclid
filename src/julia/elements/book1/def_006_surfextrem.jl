@@ -1,6 +1,6 @@
 module ElementsOneDefinitionSurfaceExtremity
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 using ..EuclidAnimations
 
 using LinearAlgebra
@@ -60,77 +60,77 @@ function hide_edge_and_collapse(
     state_ptr::Ptr{Cvoid}, hostId::Integer, joint1Id::Integer, joint2Id::Integer,
     corner::Vector{Float32})
 
-    EuclidBridge.hide_point(state_ptr, hostId)
-    EuclidBridge.set_point_position(state_ptr, joint1Id, corner[1], corner[2], corner[3])
-    EuclidBridge.set_point_position(state_ptr, joint2Id, corner[1], corner[2], corner[3])
+    OdinJuliaBridge.hide_point(state_ptr, hostId)
+    OdinJuliaBridge.set_point_position(state_ptr, joint1Id, corner[1], corner[2], corner[3])
+    OdinJuliaBridge.set_point_position(state_ptr, joint2Id, corner[1], corner[2], corner[3])
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    edge1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
-    edge1Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
-    edge1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
+    edge1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
+    edge1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
+    edge1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
 
-    edge2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
-    edge2Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
-    edge2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
+    edge2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
+    edge2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
+    edge2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
 
-    edge3HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
-    edge3Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
-    edge3Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
+    edge3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
+    edge3Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
+    edge3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
 
-    edge4HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
-    edge4Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
-    edge4Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
+    edge4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
+    edge4Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
+    edge4Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
 
     hide_edge_and_collapse(state_ptr, edge1HostId, edge1Joint1Id, edge1Joint2Id, Corner1)
     hide_edge_and_collapse(state_ptr, edge2HostId, edge2Joint1Id, edge2Joint2Id, Corner2)
     hide_edge_and_collapse(state_ptr, edge3HostId, edge3Joint1Id, edge3Joint2Id, Corner3)
     hide_edge_and_collapse(state_ptr, edge4HostId, edge4Joint1Id, edge4Joint2Id, Corner4)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 0, LineColor1)
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor1)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    edge1 = EuclidBridge.create_new_line(
+    edge1 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Corner1[1], Corner1[2], Corner1[3],
         Corner1[1], Corner1[2], Corner1[3],
         LineColor1, 0f0)
-    edge2 = EuclidBridge.create_new_line(
+    edge2 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Corner2[1], Corner2[2], Corner2[3],
         Corner2[1], Corner2[2], Corner2[3],
         LineColor2, 0f0)
-    edge3 = EuclidBridge.create_new_line(
+    edge3 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Corner3[1], Corner3[2], Corner3[3],
         Corner3[1], Corner3[2], Corner3[3],
         LineColor3, 0f0)
-    edge4 = EuclidBridge.create_new_line(
+    edge4 = OdinJuliaBridge.create_new_line(
         state_ptr,
         Corner4[1], Corner4[2], Corner4[3],
         Corner4[1], Corner4[2], Corner4[3],
         LineColor4, 0f0)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge1HostId, Float32(edge1.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge1Joint1Id, Float32(edge1.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge1Joint2Id, Float32(edge1.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1HostId, Float32(edge1.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint1Id, Float32(edge1.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint2Id, Float32(edge1.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge2HostId, Float32(edge2.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge2Joint1Id, Float32(edge2.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge2Joint2Id, Float32(edge2.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2HostId, Float32(edge2.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint1Id, Float32(edge2.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint2Id, Float32(edge2.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge3HostId, Float32(edge3.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge3Joint1Id, Float32(edge3.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge3Joint2Id, Float32(edge3.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3HostId, Float32(edge3.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint1Id, Float32(edge3.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint2Id, Float32(edge3.joint2Id))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge4HostId, Float32(edge4.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge4Joint1Id, Float32(edge4.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaEdge4Joint2Id, Float32(edge4.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4HostId, Float32(edge4.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint1Id, Float32(edge4.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint2Id, Float32(edge4.joint2Id))
 
     reset_cycle_state(state_ptr)
 end
@@ -139,28 +139,28 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    edge1HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
-    edge1Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
-    edge1Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
+    edge1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
+    edge1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
+    edge1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
 
-    edge2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
-    edge2Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
-    edge2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
+    edge2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
+    edge2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
+    edge2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
 
-    edge3HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
-    edge3Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
-    edge3Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
+    edge3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
+    edge3Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
+    edge3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
 
-    edge4HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
-    edge4Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
-    edge4Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
+    edge4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
+    edge4Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
+    edge4Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
 
     if edge1HostId < 0
         return
     end
 
-    phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
+    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -217,7 +217,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             phase = PhaseHideLines
             timer = 0f0
         end
@@ -234,8 +234,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     end
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
 end
 
 end

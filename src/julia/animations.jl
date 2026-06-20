@@ -1,6 +1,6 @@
 module EuclidAnimations
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 
 using LinearAlgebra
 
@@ -42,8 +42,8 @@ function place_pen_at_angles(
     tipY = penY + horizontalLength * Float32(sin(azimuth))
     tipZ = baseZ + verticalLength
 
-    EuclidBridge.lock_pen_joint1(state_ptr, penX, penY, baseZ)
-    EuclidBridge.move_pen_joint2(state_ptr, tipX, tipY, tipZ)
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, penX, penY, baseZ)
+    OdinJuliaBridge.move_pen_joint2(state_ptr, tipX, tipY, tipZ)
 end
 
 
@@ -63,7 +63,7 @@ function emit_filledcircle_radius_trail(
         t = (Float32(i) / Float32(MarkerRadialTrailSamples)) +
             Float32(rand() - 0.5f0) / MarkerRadialTrailSamples
         markerpoint = jointPoint + (endPoint - jointPoint) * t
-        EuclidBridge.emit_trailing_particle(state_ptr, markerpoint, color)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, markerpoint, color)
     end
 end
 
@@ -94,10 +94,10 @@ function animate_pen_descend(
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz - (topz * t)
-    EuclidBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
-    EuclidBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
-    EuclidBridge.set_pen_active(state_ptr, 0, :white)
-    EuclidBridge.show_pen(state_ptr)
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
+    OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+    OdinJuliaBridge.show_pen(state_ptr)
 end
 
 """
@@ -128,10 +128,10 @@ function animate_compass_descend(
 
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = topz + (0f0 - topz) * t
-    EuclidBridge.set_compass_active(state_ptr, 0, :white)
-    EuclidBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
-    EuclidBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
-    EuclidBridge.show_compass(state_ptr)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
+    OdinJuliaBridge.show_compass(state_ptr)
 end
 
 """
@@ -159,10 +159,10 @@ function animate_pen_rise(
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz * t
-    EuclidBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
-    EuclidBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
-    EuclidBridge.set_pen_active(state_ptr, 0, :white)
-    EuclidBridge.show_pen(state_ptr)
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
+    OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+    OdinJuliaBridge.show_pen(state_ptr)
 end
 
 """
@@ -194,10 +194,10 @@ function animate_compass_rise(
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = 0f0 + (topz - 0f0) * t
 
-    EuclidBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
-    EuclidBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
-    EuclidBridge.set_compass_active(state_ptr, 0, :white)
-    EuclidBridge.show_compass(state_ptr)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
+    OdinJuliaBridge.show_compass(state_ptr)
 end
 
 """
@@ -240,8 +240,8 @@ function animate_pen_tilt(
     floorAngle = startθ + (endθ - startθ) * t
 
     place_pen_at_angles(state_ptr, penpos, floorAngle, azimuth)
-    EuclidBridge.set_pen_active(state_ptr, 0, :white)
-    EuclidBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+    OdinJuliaBridge.show_pen(state_ptr)
 end
 
 """
@@ -281,7 +281,7 @@ function animate_pen_cone(
     θ = timer * spinSpeed
 
     place_pen_at_angles(state_ptr, penpos, penFloorθ, θ)
-    EuclidBridge.show_pen(state_ptr)
+    OdinJuliaBridge.show_pen(state_ptr)
 end
 
 """
@@ -315,11 +315,11 @@ function animate_pen_drag(
 
     tippos = startpos + (endpos - startpos) * t
 
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 1, color)
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 1, color)
     place_pen_at_angles(state_ptr, tippos, dragθ, dragAzimuth)
 
-    EuclidBridge.emit_trailing_particle(state_ptr, tippos, color)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, color)
 
     return tippos
 end
@@ -352,7 +352,7 @@ function animate_pen_arcmove(
     height::Float32, periods::Integer, strikecolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    EuclidBridge.set_pen_active(state_ptr, 0, :white)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
 
     vec = endpos - startpos
     tvec = t * vec
@@ -361,7 +361,7 @@ function animate_pen_arcmove(
     usePoint[3] = abs(clamp(usePoint[3], -1f0, 1f0))
     place_pen_at_angles(state_ptr, usePoint, π / 2f0, 0f0)
     if usePoint[3] < 0.05 && strikecolor != :none
-        EuclidBridge.emit_trailing_particle(state_ptr, usePoint, strikecolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint, strikecolor)
     end
 end
 
@@ -481,7 +481,7 @@ function animate_compass_arcmove(
     height::Float32, periods::Integer, strikecolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    EuclidBridge.set_compass_active(state_ptr, 0, :white)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
 
     vec1 = endJoint1 - startJoint1
     vec2 = endJoint2 - startJoint2
@@ -523,13 +523,13 @@ function animate_compass_arcmove(
     usePoint1[3] = abs(clamp(usePoint1[3], -1f0, 1f0))
     usePoint2[3] = abs(clamp(usePoint2[3], -1f0, 1f0))
 
-    EuclidBridge.lock_compass_joint1(state_ptr, usePoint1)
-    EuclidBridge.lock_compass_joint2(state_ptr, usePoint2)
-    EuclidBridge.show_compass(state_ptr)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, usePoint1)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, usePoint2)
+    OdinJuliaBridge.show_compass(state_ptr)
 
     if usePoint1[3] < 0.05 && strikecolor != :none
-        EuclidBridge.emit_trailing_particle(state_ptr, usePoint1, strikecolor)
-        EuclidBridge.emit_trailing_particle(state_ptr, usePoint2, strikecolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint1, strikecolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint2, strikecolor)
     end
 end
 
@@ -568,9 +568,9 @@ function animate_pen_tilt_and_drag(
             state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
             startpos, endpos, PenDrawLineAngle, azimuth, color)
 
-        EuclidBridge.emit_trailing_particle(state_ptr, tippos, color)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, color)
 
-        EuclidBridge.set_pen_active(state_ptr, 0, color)
+        OdinJuliaBridge.set_pen_active(state_ptr, 0, color)
     else
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,
@@ -615,14 +615,14 @@ function animate_draw_point(
             state_ptr, timer - duration * TiltToConeDuration,
             penpos, PenConeFloorAngle, PenConeSpinSpeed)
 
-        EuclidBridge.set_point_color(state_ptr, pointId, pencolor)
-        EuclidBridge.set_point_position(state_ptr, pointId, penpos)
-        EuclidBridge.set_point_brush(state_ptr, pointId, penbrush)
-        EuclidBridge.show_point(state_ptr, pointId)
+        OdinJuliaBridge.set_point_color(state_ptr, pointId, pencolor)
+        OdinJuliaBridge.set_point_position(state_ptr, pointId, penpos)
+        OdinJuliaBridge.set_point_brush(state_ptr, pointId, penbrush)
+        OdinJuliaBridge.show_point(state_ptr, pointId)
 
-        EuclidBridge.emit_trailing_particle(state_ptr, penpos, pencolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, penpos, pencolor)
 
-        EuclidBridge.set_pen_active(state_ptr, 1, pencolor)
+        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
     else
         endAzimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
         animate_pen_tilt(
@@ -683,15 +683,15 @@ function animate_draw_line(
             state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
             startpos, endpos, PenDrawLineAngle, azimuth, pencolor)
 
-        EuclidBridge.set_point_color(state_ptr, lineHostId, pencolor)
-        EuclidBridge.set_point_brush(state_ptr, lineHostId, penbrush)
-        EuclidBridge.set_point_position(state_ptr, lineJoint1Id, startpos)
-        EuclidBridge.set_point_position(state_ptr, lineJoint2Id, tippos)
-        EuclidBridge.show_point(state_ptr, lineHostId)
+        OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, lineJoint1Id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id, tippos)
+        OdinJuliaBridge.show_point(state_ptr, lineHostId)
 
-        EuclidBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
 
-        EuclidBridge.set_pen_active(state_ptr, 1, pencolor)
+        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
     else
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,
@@ -740,18 +740,18 @@ function animate_draw_circle(
         jointPoint[2] + radius * Float32(sin(theta)),
         0f0]
 
-    EuclidBridge.lock_compass_joint1(state_ptr, jointPoint)
-    EuclidBridge.set_compass_active(state_ptr, 3, color)
-    EuclidBridge.lock_compass_joint2(state_ptr, endPoint)
-    EuclidBridge.show_compass(state_ptr)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint)
+    OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint)
+    OdinJuliaBridge.show_compass(state_ptr)
 
-    EuclidBridge.set_point_color(state_ptr, markerHostId, color)
-    EuclidBridge.set_point_brush(state_ptr, markerHostId, brush)
-    EuclidBridge.set_point_position(state_ptr, markerStartId, startPoint)
-    EuclidBridge.set_point_position(state_ptr, markerEndId, endPoint)
-    EuclidBridge.show_point(state_ptr, markerHostId)
+    OdinJuliaBridge.set_point_color(state_ptr, markerHostId, color)
+    OdinJuliaBridge.set_point_brush(state_ptr, markerHostId, brush)
+    OdinJuliaBridge.set_point_position(state_ptr, markerStartId, startPoint)
+    OdinJuliaBridge.set_point_position(state_ptr, markerEndId, endPoint)
+    OdinJuliaBridge.show_point(state_ptr, markerHostId)
 
-    EuclidBridge.emit_trailing_particle(state_ptr, endPoint, color)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, endPoint, color)
 end
 
 """
@@ -794,16 +794,16 @@ function animate_draw_filledcircle(
         jointPoint[2] + radius * Float32(sin(theta)),
         0f0]
 
-    EuclidBridge.lock_compass_joint1(state_ptr, jointPoint)
-    EuclidBridge.set_compass_active(state_ptr, 3, color)
-    EuclidBridge.lock_compass_joint2(state_ptr, endPoint)
-    EuclidBridge.show_compass(state_ptr)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint)
+    OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint)
+    OdinJuliaBridge.show_compass(state_ptr)
 
-    EuclidBridge.set_point_color(state_ptr, markerHostId, color)
-    EuclidBridge.set_point_brush(state_ptr, markerHostId, brush)
-    EuclidBridge.set_point_position(state_ptr, markerStartId, startPoint)
-    EuclidBridge.set_point_position(state_ptr, markerEndId, endPoint)
-    EuclidBridge.show_point(state_ptr, markerHostId)
+    OdinJuliaBridge.set_point_color(state_ptr, markerHostId, color)
+    OdinJuliaBridge.set_point_brush(state_ptr, markerHostId, brush)
+    OdinJuliaBridge.set_point_position(state_ptr, markerStartId, startPoint)
+    OdinJuliaBridge.set_point_position(state_ptr, markerEndId, endPoint)
+    OdinJuliaBridge.show_point(state_ptr, markerHostId)
 
     emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
 end

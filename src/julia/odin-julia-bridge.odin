@@ -1,5 +1,15 @@
 package julia
 
+// Julia module provides the Odin-Julia Bridge to coordinate all actions between the 2
+// languages. Most of these are wrappers around Odin module functions with some specific
+// behavior for simplicity on the animation.
+// Otherwise, the rest of Julia module is the Julia code.
+
+// We provide a basic Bridge version and feature flags capability for building onto.
+// Effort was made to wrap most of what the animations might need for now in the Kine
+// system especially, and also some access to particle system.
+// Doc comments are verbose in the julia companion to this, and methods are largely 1-to-1.
+
 import "../julialib"
 import "../core"
 import "../particles"

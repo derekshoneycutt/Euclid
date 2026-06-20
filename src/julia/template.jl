@@ -1,6 +1,6 @@
 module AnimationTemplateStyle
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 using ..EuclidAnimations
 
 using LinearAlgebra
@@ -32,8 +32,8 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
@@ -44,8 +44,8 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
+    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhaseDescend
         t = clamp(timer / DescendDuration, 0f0, 1f0)
@@ -72,15 +72,15 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             place_pen_at_floor_angle(state_ptr, EndPoint[1], EndPoint[2], PenTopZ, π / 2f0)
             reset_cycle_state(state_ptr)
             return
         end
     end
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
 end
 
 end

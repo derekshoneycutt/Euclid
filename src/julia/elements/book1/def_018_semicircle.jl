@@ -1,6 +1,6 @@
 module ElementsOneDefinitionSemicircle
 
-using ..EuclidBridge
+using ..OdinJuliaBridge
 using ..EuclidAnimations
 
 using LinearAlgebra
@@ -65,55 +65,55 @@ A semicircle is the figure contained by the diameter and the circumference cut o
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    centerPointId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circleHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    diameterHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
-    diameterJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
+    centerPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
+    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
+    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    diameterHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
+    diameterJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
 
-    EuclidBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId, diameterHostId])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId, diameterHostId])
 
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, circleEndId,
         CircleStartPoint[1], CircleStartPoint[2], CircleStartPoint[3])
-    EuclidBridge.set_point_position(
+    OdinJuliaBridge.set_point_position(
         state_ptr, diameterJoint2Id,
         DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3])
 
-    EuclidBridge.hide_pen(state_ptr)
-    EuclidBridge.hide_compass(state_ptr)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
 
-    EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 0, CenterColor)
-    EuclidBridge.set_compass_active(state_ptr, 0, CircleColor)
-    EuclidBridge.lock_compass_joint1(state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
-    EuclidBridge.lock_compass_joint2(
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, CenterColor)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, CircleColor)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint2(
         state_ptr, CircleStartPoint[1], CircleStartPoint[2], CompassTopZ)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    centerPoint = EuclidBridge.create_new_point(
+    centerPoint = OdinJuliaBridge.create_new_point(
         state_ptr, CenterPoint, CenterColor, 0f0)
-    circle = EuclidBridge.create_new_circle(
+    circle = OdinJuliaBridge.create_new_circle(
         state_ptr, CenterPoint, Radius, 0f0, 0f0, CircleColor, 0f0)
-    diameter = EuclidBridge.create_new_line(
+    diameter = OdinJuliaBridge.create_new_line(
         state_ptr,
         DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3],
         DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3],
         DiameterColor, 0f0)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaCenterPointId, Float32(centerPoint.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, Float32(centerPoint.index))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.startId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.startId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.endId))
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaDiameterHostId, Float32(diameter.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaDiameterJoint1Id, Float32(diameter.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaDiameterJoint2Id, Float32(diameter.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterHostId, Float32(diameter.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterJoint1Id, Float32(diameter.joint1Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterJoint2Id, Float32(diameter.joint2Id))
 
     reset_cycle_state(state_ptr)
 end
@@ -122,20 +122,20 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    centerPointId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circleHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleStartId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circleEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    diameterHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
-    diameterJoint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterJoint1Id))
-    diameterJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
+    centerPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
+    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
+    circleStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
+    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    diameterHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
+    diameterJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint1Id))
+    diameterJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
 
     if centerPointId < 0
         return
     end
 
-    phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
+    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
     if phase == PhasePenDescend
         EuclidAnimations.animate_pen_descend(
@@ -162,7 +162,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= PenRiseDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             phase = PhaseCompassDescend
             timer = 0f0
         end
@@ -194,9 +194,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= CompassRiseDuration
-            EuclidBridge.hide_compass(state_ptr)
-            EuclidBridge.show_pen(state_ptr)
-            EuclidBridge.set_pen_active(state_ptr, 0, DiameterColor)
+            OdinJuliaBridge.hide_compass(state_ptr)
+            OdinJuliaBridge.show_pen(state_ptr)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, DiameterColor)
             phase = PhaseDiameterPenDescend
             timer = 0f0
         end
@@ -228,7 +228,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= DiameterPenRiseDuration
-            EuclidBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_pen(state_ptr)
             phase = PhaseHideAll
             timer = 0f0
         end
@@ -240,8 +240,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     end
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    EuclidBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
 end
 
 end
