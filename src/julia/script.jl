@@ -2,6 +2,7 @@
 # This just loads all the system helpers and animation files, and registers in init for Odin
 
 include("./odin-julia-bridge.jl")
+include("./geometry.jl")
 include("./animations.jl")
 
 include("./nullanimation.jl")
@@ -42,6 +43,7 @@ include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
 include("./elements/book1/post_03_drawcircle.jl")
 include("./elements/book1/post_04_equalright.jl")
+include("./elements/book1/post_05_nonparallel.jl")
 
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
@@ -297,9 +299,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOnePostulatesEqualRightAngles.initialize,
                     ElementsOnePostulatesEqualRightAngles.loop, ElementsOnePostulatesEqualRightAngles.clean,
                     "Equal Right Angles", book1PostsId)
-
-                    
-                    
+                book1Posts5NonParallelLinesId = OdinJuliaBridge.add_child_animation_interface(
+                    state_ptr, ElementsOnePostulatesNonParallelLines.get_view_text,
+                    ElementsOnePostulatesNonParallelLines.initialize,
+                    ElementsOnePostulatesNonParallelLines.loop, ElementsOnePostulatesNonParallelLines.clean,
+                    "Non-Parallel Lines", book1PostsId)
+                
             book1CommNotsId = OdinJuliaBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_common, NullAnimation.initialize,
                 NullAnimation.loop, NullAnimation.clean,

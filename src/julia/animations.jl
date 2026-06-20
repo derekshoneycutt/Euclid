@@ -701,6 +701,65 @@ function animate_draw_line(
 end
 
 """
+Animate extending drawing a line primitive with pen motion and endpoint updates.
+
+--------
+
+Parameters:
+
+- state_ptr : Pointer to the Euclid application state.
+- timer : Elapsed animation time.
+- duration : Total duration for the line draw sequence.
+- startpos : Starting line endpoint vector [x, y, z].
+- midpos : Starting line endpoint vector for the extension (the previous endpos) [x, y, z].
+- endpos : Ending line endpoint vector [x, y, z].
+- penbrush : Brush size for the line host primitive.
+- pencolor : Line and trail color.
+- lineHostId : Host point id representing the line primitive.
+- lineJoint1Id : Start endpoint control id.
+- lineJoint2Id : End endpoint control id.
+
+Returns:
+
+- nothing
+"""
+function animate_extend_line(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
+    penbrush::Float32, pencolor,
+    lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    azimuth = Float32(atan(endpos[2] - startpos[2], endpos[1] - startpos[1]))
+    if t < TiltToLineDuration
+        animate_pen_tilt(
+            state_ptr, timer, duration * TiltToLineDuration, midpos,
+            PenStraightFloorAngle, PenDrawLineAngle, azimuth)
+    elseif t < GroundLineEndTime
+        tippos = animate_pen_drag(
+            state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
+            midpos, endpos, PenDrawLineAngle, azimuth, pencolor)
+
+        OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, lineJoint1Id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id, tippos)
+        OdinJuliaBridge.show_point(state_ptr, lineHostId)
+
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
+
+        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+    else
+        animate_pen_tilt(
+            state_ptr, timer - duration * GroundTrailEndTime,
+            duration * (1f0 - GroundTrailEndTime), endpos,
+            PenDrawLineAngle, PenStraightFloorAngle, azimuth)
+    end
+end
+
+"""
 Animate drawing a circle sector using compass motion.
 
 --------
