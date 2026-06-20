@@ -2112,5 +2112,61 @@ function emit_trailing_particle(
     emit_trailing_particle(state_ptr, pos[1], pos[2], bridge_color(color))
 end
 
+"""
+Emit a flicker-only particle at a 2D position.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `x` : Particle x coordinate
+- `y` : Particle y coordinate
+- `pos` : A vector can be provided in [x, y] form instead of individual parameters
+- `color` : Particle color
+
+Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
+"""
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::BridgeColor)
+    pos = (x, y)
+    @ccall emit_flicker_particle(state_ptr::Ptr{Cvoid}, pos::NTuple{2, Cfloat}, color::BridgeColor)::Cvoid
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::BridgeColor)
+    emit_flicker_particle(state_ptr, pos[1], pos[2], color)
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Colorant)
+    emit_flicker_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::Colorant)
+    emit_flicker_particle(state_ptr, pos[1], pos[2], bridge_color(color))
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::Symbol)
+    emit_flicker_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::Symbol)
+    emit_flicker_particle(state_ptr, pos[1], pos[2], bridge_color(color))
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, color::AbstractString)
+    emit_flicker_particle(state_ptr, x, y, bridge_color(color))
+end
+
+function emit_flicker_particle(
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}, color::AbstractString)
+    emit_flicker_particle(state_ptr, pos[1], pos[2], bridge_color(color))
+end
+
 end
 

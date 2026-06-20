@@ -1879,3 +1879,12 @@ emit_trailing_particle :: proc "c" (
     particles.emit_trail_particles(
         state^.ParticleSystem, state^.CurrentDeltaTime, pos.x, pos.y, rlColor)
 }
+
+@(export)
+emit_flicker_particle :: proc "c" (
+    state: ^core.EuclidGeneralState, pos: core.Vector2, color: BridgeColor) {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    particles.emit_flicker_particles(state^.ParticleSystem, pos.x, pos.y, rlColor, 10)
+}

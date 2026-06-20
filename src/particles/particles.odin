@@ -160,7 +160,7 @@ spawn_particle :: proc(
     return spawn_pos, true
 }
 
-spawn_flicker_particle :: proc(ps: ^ParticleSystem, origin: Vector3) {
+spawn_flicker_particle :: proc(ps: ^ParticleSystem, origin: Vector3, color: rl.Color) {
 
     p, ok := reserve_dead_high_particle_slot(ps)
     if !ok {
@@ -179,13 +179,24 @@ spawn_flicker_particle :: proc(ps: ^ParticleSystem, origin: Vector3) {
     p.Velocities.z = random_f32_range(FLICKER_UP_SPEED_MIN, FLICKER_UP_SPEED_MAX)
 
     p.Type = .Flicker
-    p.Color = rl.WHITE
+    p.Color = color
     p.Size = 1.0
     p.Age = 0
     p.Life = random_f32_range(FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
     p.LitFrames = 0
     p.Alive = true
 
+}
+
+emit_flicker_particles :: proc(ps: ^ParticleSystem, x, y: f32, color: rl.Color, count: int = 1) {
+    origin := Vector3{x, y, 0.0}
+    if count <= 0 {
+        return
+    }
+
+    for _ in 0..<count {
+        spawn_flicker_particle(ps, origin, color)
+    }
 }
 
 spawn_burnout_particle :: proc(
@@ -229,7 +240,7 @@ emit_trail_particles :: proc(ps: ^ParticleSystem, dt, tip_x, tip_y: f32, tip_col
         }
 
         for _ in 0..<FLICKERS_PER_TRAIL_SPAWN {
-            spawn_flicker_particle(ps, trail_pos)
+            spawn_flicker_particle(ps, trail_pos, rl.WHITE)
         }
 
         for _ in 0..<BURNOUT_PER_TRAIL_SPAWN {

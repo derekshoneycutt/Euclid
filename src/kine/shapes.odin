@@ -126,7 +126,7 @@ init_kineshape_triangle :: proc(
     point1, point2, point3: Vector3,
     color: rl.Color) -> KineShapeTriangle {
 
-    hostPoint := KineShapePoint{ .Line, nil, color, nil, 0, 0, 3, 0, 0, false }
+    hostPoint := KineShapePoint{ .Triangle, nil, color, nil, 0, 0, 3, 0, 0, false }
     point1 := KineShapePoint{ .Point, point1, nil, nil, 0, 0, 0, 0, 0, false }
     point2 := KineShapePoint{ .Point, point2, nil, nil, 0, 0, 0, 0, 0, false }
     point3 := KineShapePoint{ .Point, point3, nil, nil, 0, 0, 0, 0, 0, false }
