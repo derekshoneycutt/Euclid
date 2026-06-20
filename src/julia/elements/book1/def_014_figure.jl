@@ -110,6 +110,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
+    triangle = EuclidBridge.create_new_triangle(
+        state_ptr,
+        VertexA[1], VertexA[2], VertexA[3],
+        VertexB[1], VertexB[2], VertexB[3],
+        VertexC[1], VertexC[2], VertexC[3],
+        TriangleColor)
     line1 = EuclidBridge.create_new_line(
         state_ptr,
         VertexA[1], VertexA[2], VertexA[3],
@@ -125,12 +131,6 @@ function initialize(state_ptr::Ptr{Cvoid})
         VertexC[1], VertexC[2], VertexC[3],
         VertexC[1], VertexC[2], VertexC[3],
         TriangleColor, 0f0)
-    triangle = EuclidBridge.create_new_triangle(
-        state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexB[1], VertexB[2], VertexB[3],
-        TriangleColor)
 
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))

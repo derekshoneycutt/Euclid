@@ -111,7 +111,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     markerHostIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i])), 4)
     markerEndIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i])), 4)
 
-    EuclidBridge.hide_point_batch(state_ptr, [lineHostIds_r..., markerHostIds_r...])
+    EuclidBridge.hide_point_batch(state_ptr, [markerHostIds_r..., lineHostIds_r...])
 
     for i in 1:4
         EuclidBridge.set_point_position(
@@ -143,9 +143,15 @@ function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
         marker = EuclidBridge.create_new_filledcircle(
             state_ptr,
-            MarkerCenters[i][1], MarkerCenters[i][2], MarkerCenters[i][3],
-            MarkerRadius, MarkerStartThetas[i], MarkerStartThetas[i],
+            MarkerCenters[i], MarkerRadius,
+            MarkerStartThetas[i], MarkerStartThetas[i],
             MarkerColors[i], 0f0)
+
+        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerHostIds[i], Float32(marker.hostId))
+        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerStartIds[i], Float32(marker.startId))
+        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerEndIds[i], Float32(marker.endId))
+    end
+    for i in 1:4
         line = EuclidBridge.create_new_line(
             state_ptr,
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
@@ -155,10 +161,6 @@ function initialize(state_ptr::Ptr{Cvoid})
         EuclidBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.hostId))
         EuclidBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1Id))
         EuclidBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2Id))
-
-        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerHostIds[i], Float32(marker.hostId))
-        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerStartIds[i], Float32(marker.startId))
-        EuclidBridge.set_animation_meta(state_ptr, MetaMarkerEndIds[i], Float32(marker.endId))
     end
 
     reset_cycle_state(state_ptr)

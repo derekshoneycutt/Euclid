@@ -365,6 +365,90 @@ function animate_pen_arcmove(
     end
 end
 
+@inline xy_cross(ax::Float32, ay::Float32, bx::Float32, by::Float32) = ax * by - ay * bx
+
+@inline function point_on_segment_xy(
+    a::Vector{Float32}, b::Vector{Float32}, p::Vector{Float32}, eps::Float32)
+
+    return (
+        p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
+        p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps
+    )
+end
+
+@inline function segments_intersect_xy(
+    a1::Vector{Float32}, a2::Vector{Float32},
+    b1::Vector{Float32}, b2::Vector{Float32})
+
+    eps = 1f-5
+
+    o1 = xy_cross(a2[1] - a1[1], a2[2] - a1[2], b1[1] - a1[1], b1[2] - a1[2])
+    o2 = xy_cross(a2[1] - a1[1], a2[2] - a1[2], b2[1] - a1[1], b2[2] - a1[2])
+    o3 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a1[1] - b1[1], a1[2] - b1[2])
+    o4 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a2[1] - b1[1], a2[2] - b1[2])
+
+    if ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
+       ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))
+        return true
+    end
+
+    if abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)
+        return true
+    end
+    if abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)
+        return true
+    end
+    if abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)
+        return true
+    end
+    if abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps)
+        return true
+    end
+
+    return false
+end
+
+@inline function avg_radius_to_xy_center(
+    startJoint::Vector{Float32}, endJoint::Vector{Float32}, centerX::Float32, centerY::Float32)
+
+    startRadius = hypot(startJoint[1] - centerX, startJoint[2] - centerY)
+    endRadius = hypot(endJoint[1] - centerX, endJoint[2] - centerY)
+    return (startRadius + endRadius) * 0.5f0
+end
+
+@inline function apply_xy_detour_arc!(
+    outsidePoint::Vector{Float32},
+    outsideStart::Vector{Float32}, outsideEnd::Vector{Float32},
+    insideStart::Vector{Float32}, insideEnd::Vector{Float32},
+    t::Float32)
+
+    dirX = outsideEnd[1] - outsideStart[1]
+    dirY = outsideEnd[2] - outsideStart[2]
+    dirLen = hypot(dirX, dirY)
+    if dirLen <= 1f-6
+        return
+    end
+
+    normalX = -dirY / dirLen
+    normalY = dirX / dirLen
+
+    relX = outsideStart[1] - insideStart[1]
+    relY = outsideStart[2] - insideStart[2]
+    side = sign(xy_cross(dirX, dirY, relX, relY))
+    if side == 0f0
+        side = 1f0
+    end
+
+    spanStart = hypot(outsideStart[1] - insideStart[1], outsideStart[2] - insideStart[2])
+    spanEnd = hypot(outsideEnd[1] - insideEnd[1], outsideEnd[2] - insideEnd[2])
+    avgSpan = (spanStart + spanEnd) * 0.5f0
+    arcAmplitude = clamp(avgSpan * 0.15f0, 0.01f0, 0.05f0)
+
+    offset = sin(t * π) * arcAmplitude * side
+    outsidePoint[1] += normalX * offset
+    outsidePoint[2] += normalY * offset
+end
+
 """
 Animate compass transfer along an elevated arc between two joint pairs.
 
@@ -411,6 +495,30 @@ function animate_compass_arcmove(
 
     usePoint1 = startJoint1 + tvec1
     usePoint2 = startJoint2 + tvec2
+
+    if segments_intersect_xy(startJoint1, endJoint1, startJoint2, endJoint2)
+        centerX = (startJoint1[1] + startJoint2[1] + endJoint1[1] + endJoint2[1]) * 0.25f0
+        centerY = (startJoint1[2] + startJoint2[2] + endJoint1[2] + endJoint2[2]) * 0.25f0
+
+        joint1Radius = avg_radius_to_xy_center(startJoint1, endJoint1, centerX, centerY)
+        joint2Radius = avg_radius_to_xy_center(startJoint2, endJoint2, centerX, centerY)
+
+        if joint1Radius >= joint2Radius
+            apply_xy_detour_arc!(
+                usePoint1,
+                startJoint1, endJoint1,
+                startJoint2, endJoint2,
+                t,
+            )
+        else
+            apply_xy_detour_arc!(
+                usePoint2,
+                startJoint2, endJoint2,
+                startJoint1, endJoint1,
+                t,
+            )
+        end
+    end
 
     usePoint1[3] = abs(clamp(usePoint1[3], -1f0, 1f0))
     usePoint2[3] = abs(clamp(usePoint2[3], -1f0, 1f0))

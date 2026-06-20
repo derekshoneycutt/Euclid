@@ -69,7 +69,7 @@ DUST_EXISTING_UP_KICK_MAX :: 0.0048
 DUST_EXISTING_XY_KICK :: 0.0011
 
 CLEAR_BURST_POINT_COUNT :: 28
-CLEAR_BURST_LINE_SAMPLES :: 40
+CLEAR_BURST_LINE_SAMPLES :: 75
 CLEAR_BURST_CIRCLE_SAMPLES :: 120
 
 random_f32_range :: proc(min_v, max_v: f32) -> f32 {
@@ -101,11 +101,18 @@ reserve_dead_low_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool)
         }
     }
 
-    return nil, false
+    index := ps.NextIndex % MAX_LOW_PARTICLES
+    ps.NextIndex = (index + 1) % MAX_LOW_PARTICLES
+    return &ps.LowParticles[index], true
+    //return nil, false
 }
 
 reserve_dead_high_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
-    for step in 0..<MAX_PARTICLES {
+    index := ps.NextIndex % MAX_PARTICLES
+    ps.NextIndex = (index + 1) % MAX_PARTICLES
+    return &ps.HighParticles[index], true
+
+    /*for step in 0..<MAX_PARTICLES {
         index := (ps.NextIndex + step) % MAX_PARTICLES
         if !ps.HighParticles[index].Alive {
             ps.NextIndex = (index + 1) % MAX_PARTICLES
@@ -113,11 +120,15 @@ reserve_dead_high_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool
         }
     }
 
-    return nil, false
+    return nil, false*/
 }
 
 reserve_dead_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
-    for step in 0..<MAX_PARTICLES {
+    index := ps.NextIndex % MAX_PARTICLES
+    ps.NextIndex = (index + 1) % MAX_PARTICLES
+    return &ps.Particles[index], true
+
+    /*for step in 0..<MAX_PARTICLES {
         index := (ps.NextIndex + step) % MAX_PARTICLES
         if !ps.Particles[index].Alive {
             ps.NextIndex = (index + 1) % MAX_PARTICLES
@@ -125,7 +136,7 @@ reserve_dead_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
         }
     }
 
-    return nil, false
+    return nil, false*/
 }
 
 spawn_particle :: proc(

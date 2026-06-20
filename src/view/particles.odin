@@ -9,11 +9,13 @@ MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
 
 render_low_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
+    countrendered : int = 0
     for i in 0..<MAX_LOW_PARTICLES {
         p := &ps.LowParticles[i]
         if !p^.Alive {
             continue
         }
+        countrendered += 1
 
         screen := iso_to_cartesian(p^.Position, state^.IsoScale^)
 
@@ -28,14 +30,17 @@ render_low_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
                 render_particle_dust(p, screen)
         }
     }
+    ps.LastRenderLow = countrendered
 }
 
 render_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
+    countrendered : int = 0
     for i in 0..<MAX_PARTICLES {
         p := &ps.Particles[i]
         if !p^.Alive {
             continue
         }
+        countrendered += 1
 
         screen := iso_to_cartesian(p^.Position, state^.IsoScale^)
 
@@ -50,14 +55,17 @@ render_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
                 render_particle_dust(p, screen)
         }
     }
+    ps.LastRenderMid = countrendered
 }
 
 render_high_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
+    countrendered : int = 0
     for i in 0..<MAX_PARTICLES {
         p := &ps.HighParticles[i]
         if !p^.Alive {
             continue
         }
+        countrendered += 1
 
         screen := iso_to_cartesian(p^.Position, state^.IsoScale^)
 
@@ -72,6 +80,7 @@ render_high_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
                 render_particle_dust(p, screen)
         }
     }
+    ps.LastRenderHigh = countrendered
 }
 
 render_particle_trail :: proc(p : ^Particle, screen: Vector2) {

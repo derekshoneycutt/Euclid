@@ -233,17 +233,17 @@ draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneral
     surfaceRightDown : Vector3 = room^.RightDown + { -room^.EdgeSize, -room^.EdgeSize, 0 }
 
     rl.DrawTriangle(iso_to_cartesian(room^.Zeros, state^.IsoScale^),
-        iso_to_cartesian(room^.LeftDown, state^.IsoScale^),
-        iso_to_cartesian(room^.RightUp, state^.IsoScale^), room^.EdgeColor)
-    rl.DrawTriangle(iso_to_cartesian(room^.RightDown, state^.IsoScale^),
         iso_to_cartesian(room^.RightUp, state^.IsoScale^),
         iso_to_cartesian(room^.LeftDown, state^.IsoScale^), room^.EdgeColor)
+    rl.DrawTriangle(iso_to_cartesian(room^.RightDown, state^.IsoScale^),
+        iso_to_cartesian(room^.LeftDown, state^.IsoScale^),
+        iso_to_cartesian(room^.RightUp, state^.IsoScale^), room^.EdgeColor)
     rl.DrawTriangle(iso_to_cartesian(surfaceZeros, state^.IsoScale^),
-        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^),
-        iso_to_cartesian(surfaceRightUp, state^.IsoScale^), room^.Color)
-    rl.DrawTriangle(iso_to_cartesian(surfaceRightDown, state^.IsoScale^),
         iso_to_cartesian(surfaceRightUp, state^.IsoScale^),
         iso_to_cartesian(surfaceLeftDown, state^.IsoScale^), room^.Color)
+    rl.DrawTriangle(iso_to_cartesian(surfaceRightDown, state^.IsoScale^),
+        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^),
+        iso_to_cartesian(surfaceRightUp, state^.IsoScale^), room^.Color)
 }
 
 draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
@@ -369,12 +369,12 @@ draw_cached_filledcircle :: proc(state: ^EuclidGeneralState, c: ^kine.KineFilled
 
     points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
     points[0] = isocenter
-    points[1] = iso_to_cartesian(finish, state^.IsoScale^)
+    points[1] = iso_to_cartesian(start, state^.IsoScale^)
 
     segCount := f32(CIRCLE_ARC_SEGMENTS)
     for i in 1..=CIRCLE_ARC_SEGMENTS {
         t := f32(i) / segCount
-        theta := endTheta - sweepDelta * t
+        theta := startTheta + sweepDelta * t
         radius := math.lerp(startRadius, endRadius, t)
 
         currWorld := Vector3{

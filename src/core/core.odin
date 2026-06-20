@@ -5,7 +5,7 @@ import "base:runtime"
 import rl "vendor:raylib"
 
 MAX_LOW_PARTICLES :: 4096
-MAX_PARTICLES :: 4096
+MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
@@ -313,6 +313,10 @@ ParticleSystem :: struct {
     HighParticles : [MAX_PARTICLES]Particle,
     NextIndex : int,
     SpawnTimer : f32,
+
+    LastRenderLow : int,
+    LastRenderMid : int,
+    LastRenderHigh : int,
 }
 
 

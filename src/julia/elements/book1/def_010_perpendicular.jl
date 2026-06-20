@@ -10,17 +10,17 @@ export get_view_text, initialize, clean, loop
 const StartPoint = [0.25f0, 0.75f0, 0f0]
 const EndPoint = [0.75f0, 0.25f0, 0f0]
 const PerpStartPoint = [0.5f0, 0.5f0, 0f0]
-const PerpEndPoint = [0f0, 0f0, 0f0]
+const PerpEndPoint = [1f0, 1f0, 0f0]
 
 const MarkerRadius = 0.20f0
 const MainLineUnit = normalize(Float32[EndPoint[1] - StartPoint[1], EndPoint[2] - StartPoint[2]])
 const MarkerStart = [
-    PerpStartPoint[1] - MarkerRadius * MainLineUnit[1],
-    PerpStartPoint[2] - MarkerRadius * MainLineUnit[2],
-    0f0]
-const MarkerEnd = [
     PerpStartPoint[1] + MarkerRadius * MainLineUnit[1],
     PerpStartPoint[2] + MarkerRadius * MainLineUnit[2],
+    0f0]
+const MarkerEnd = [
+    PerpStartPoint[1] - MarkerRadius * MainLineUnit[1],
+    PerpStartPoint[2] - MarkerRadius * MainLineUnit[2],
     0f0]
 const AngleTheta = Float32(π)
 
@@ -81,6 +81,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
 
     EuclidBridge.hide_point_batch(state_ptr, [markerHostId, lineHostId, perplineHostId])
+
     EuclidBridge.set_point_position(
         state_ptr, markerEndId, MarkerStart[1], MarkerStart[2], MarkerStart[3])
 
@@ -104,7 +105,7 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     marker = EuclidBridge.create_new_circle(
         state_ptr,
-        PerpStartPoint, MarkerRadius, 3f0 * π / 4f0, 7f0 * π / 4f0,
+        PerpStartPoint, MarkerRadius, 7f0 * π / 4f0, 7f0 * π / 4f0,
         MarkerColor, 0f0)
     line = EuclidBridge.create_new_line(
         state_ptr,

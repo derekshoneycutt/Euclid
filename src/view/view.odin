@@ -27,7 +27,7 @@ TOOL_LENGTH :: core.TOOL_LENGTH
 
 IsoScaleValue :: 800
 IsoXOffset :: 450
-IsoYOffset :: 50
+IsoYOffset :: 450
 
 FIXED_DT :: f32(1.0 / 120.0)
 MAX_FRAME_DT :: f32(0.25)
@@ -184,6 +184,9 @@ run_window_loop :: proc() {
 
             rl.DrawFPS(10, 10)
 		rl.EndDrawing()
+
+        //fmt.println("Particles: ", particleSystem^.LastRenderLow, " low, ",
+        //    particleSystem^.LastRenderMid, " mid, ", particleSystem^.LastRenderHigh, " high")
 
         free_all(context.temp_allocator)
 	}

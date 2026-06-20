@@ -22,7 +22,7 @@ const DescendDuration = 1.8f0
 const MoveToJoint1Duration = 1f0
 const MoveToJoint2Duration = 1f0
 const ExtremityTrailDuration = 2f0
-const DrawInitLineDuration = 1f0
+const DrawInitLineDuration = 1.5f0
 const DrawLineDuration = 4.2f0
 const EndLiftDuration = 1.8f0
 
