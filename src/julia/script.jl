@@ -28,6 +28,11 @@ include("./elements/book1/def_020c_scalene.jl")
 include("./elements/book1/def_021a_righttriangle.jl")
 include("./elements/book1/def_021b_obtusetriangle.jl")
 include("./elements/book1/def_021c_acutetriangle.jl")
+include("./elements/book1/def_022a_square.jl")
+include("./elements/book1/def_022b_oblong.jl")
+include("./elements/book1/def_022c_rhombus.jl")
+include("./elements/book1/def_022d_rhomboid.jl")
+include("./elements/book1/def_022d_trapezia.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -226,6 +231,36 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionAcuteTriangle.loop,
                     ElementsOneDefinitionAcuteTriangle.clean,
                     "Acute-Angled Triangle", book1DefsId)
+                book1Defs22SquareId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionSquare.get_view_text,
+                    ElementsOneDefinitionSquare.initialize,
+                    ElementsOneDefinitionSquare.loop,
+                    ElementsOneDefinitionSquare.clean,
+                    "Square", book1DefsId)
+                book1Defs22OblongId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionOblong.get_view_text,
+                    ElementsOneDefinitionOblong.initialize,
+                    ElementsOneDefinitionOblong.loop,
+                    ElementsOneDefinitionOblong.clean,
+                    "Oblong", book1DefsId)
+                book1Defs22RhombusId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionRhombus.get_view_text,
+                    ElementsOneDefinitionRhombus.initialize,
+                    ElementsOneDefinitionRhombus.loop,
+                    ElementsOneDefinitionRhombus.clean,
+                    "Rhombus", book1DefsId)
+                book1Defs22RhomboidId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionRhomboid.get_view_text,
+                    ElementsOneDefinitionRhomboid.initialize,
+                    ElementsOneDefinitionRhomboid.loop,
+                    ElementsOneDefinitionRhomboid.clean,
+                    "Rhomboid", book1DefsId)
+                book1Defs22TrapeziaId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionTrapezia.get_view_text,
+                    ElementsOneDefinitionTrapezia.initialize,
+                    ElementsOneDefinitionTrapezia.loop,
+                    ElementsOneDefinitionTrapezia.clean,
+                    "Trapezia", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
