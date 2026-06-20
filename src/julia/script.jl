@@ -16,9 +16,13 @@ include("./elements/book1/def_011_obtuseangle.jl")
 include("./elements/book1/def_012_acuteangle.jl")
 include("./elements/book1/def_013_boundary.jl")
 include("./elements/book1/def_014_figure.jl")
+include("./elements/book1/def_015_circle.jl")
+include("./elements/book1/def_017_diameter.jl")
+include("./elements/book1/def_018_semicircle.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
+include("./elements/book1/post_03_drawcircle.jl")
 
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
@@ -141,6 +145,24 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionFigure.loop,
                     ElementsOneDefinitionFigure.clean,
                     "Figure", book1DefsId)
+                book1Defs15CircleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionCircle.get_view_text,
+                    ElementsOneDefinitionCircle.initialize,
+                    ElementsOneDefinitionCircle.loop,
+                    ElementsOneDefinitionCircle.clean,
+                    "Circle", book1DefsId)
+                book1Defs17DiameterId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionDiameter.get_view_text,
+                    ElementsOneDefinitionDiameter.initialize,
+                    ElementsOneDefinitionDiameter.loop,
+                    ElementsOneDefinitionDiameter.clean,
+                    "Diameter", book1DefsId)
+                book1Defs18SemicircleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionSemicircle.get_view_text,
+                    ElementsOneDefinitionSemicircle.initialize,
+                    ElementsOneDefinitionSemicircle.loop,
+                    ElementsOneDefinitionSemicircle.clean,
+                    "Semicircle", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
@@ -156,6 +178,11 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOnePostulatesFiniteLine.initialize,
                     ElementsOnePostulatesFiniteLine.loop, ElementsOnePostulatesFiniteLine.clean,
                     "Produce a Finite Line", book1PostsId)
+                book1Posts3DrawCircleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOnePostulatesDrawCircle.get_view_text,
+                    ElementsOnePostulatesDrawCircle.initialize,
+                    ElementsOnePostulatesDrawCircle.loop, ElementsOnePostulatesDrawCircle.clean,
+                    "Draw a Circle", book1PostsId)
                     
             book1CommNotsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_common, NullAnimation.initialize,
