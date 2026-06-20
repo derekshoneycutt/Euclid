@@ -25,6 +25,9 @@ include("./elements/book1/def_019c_multilateral.jl")
 include("./elements/book1/def_020a_equilateral.jl")
 include("./elements/book1/def_020b_isosceles.jl")
 include("./elements/book1/def_020c_scalene.jl")
+include("./elements/book1/def_021a_righttriangle.jl")
+include("./elements/book1/def_021b_obtusetriangle.jl")
+include("./elements/book1/def_021c_acutetriangle.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -205,6 +208,24 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionScalene.loop,
                     ElementsOneDefinitionScalene.clean,
                     "Scalene Triangle", book1DefsId)
+                book1Defs21RightTriangleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionRightTriangle.get_view_text,
+                    ElementsOneDefinitionRightTriangle.initialize,
+                    ElementsOneDefinitionRightTriangle.loop,
+                    ElementsOneDefinitionRightTriangle.clean,
+                    "Right-Angled Triangle", book1DefsId)
+                book1Defs21ObtuseTriangleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionObtuseTriangle.get_view_text,
+                    ElementsOneDefinitionObtuseTriangle.initialize,
+                    ElementsOneDefinitionObtuseTriangle.loop,
+                    ElementsOneDefinitionObtuseTriangle.clean,
+                    "Obtuse-Angled Triangle", book1DefsId)
+                book1Defs21AcuteTriangleId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionAcuteTriangle.get_view_text,
+                    ElementsOneDefinitionAcuteTriangle.initialize,
+                    ElementsOneDefinitionAcuteTriangle.loop,
+                    ElementsOneDefinitionAcuteTriangle.clean,
+                    "Acute-Angled Triangle", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,

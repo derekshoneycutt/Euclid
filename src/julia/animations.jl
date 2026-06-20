@@ -6,6 +6,7 @@ using LinearAlgebra
 
 export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_compass_rise,
     animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
+    animate_compass_arcmove,
     animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle
 
 const PenLength = 0.14f0
@@ -361,6 +362,66 @@ function animate_pen_arcmove(
     place_pen_at_angles(state_ptr, usePoint, π / 2f0, 0f0)
     if usePoint[3] < 0.05 && strikecolor != :none
         EuclidBridge.emit_trailing_particle(state_ptr, usePoint, strikecolor)
+    end
+end
+
+"""
+Animate compass transfer along an elevated arc between two joint pairs.
+
+--------
+
+Parameters:
+
+- state_ptr : Pointer to the Euclid application state.
+- timer : Elapsed animation time.
+- duration : Total duration for the arc move.
+- startJoint1 : Starting position of compass joint 1 [x, y, z].
+- endJoint1 : Ending position of compass joint 1 [x, y, z].
+- startJoint2 : Starting position of compass joint 2 [x, y, z].
+- endJoint2 : Ending position of compass joint 2 [x, y, z].
+- height : Arc peak height scale.
+- periods : Number of sinusoidal periods over the move.
+- strikecolor : Particle strike color near the floor, or :none.
+
+Returns:
+
+- nothing
+"""
+function animate_compass_arcmove(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    startJoint1::Vector{Float32},
+    endJoint1::Vector{Float32},
+    startJoint2::Vector{Float32},
+    endJoint2::Vector{Float32},
+    height::Float32, periods::Integer, strikecolor)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+    EuclidBridge.set_compass_active(state_ptr, 0, :white)
+
+    vec1 = endJoint1 - startJoint1
+    vec2 = endJoint2 - startJoint2
+
+    tvec1 = t * vec1
+    tvec2 = t * vec2
+
+    zArc = sin(t * periods * π) * height
+    tvec1[3] = zArc
+    tvec2[3] = zArc
+
+    usePoint1 = startJoint1 + tvec1
+    usePoint2 = startJoint2 + tvec2
+
+    usePoint1[3] = abs(clamp(usePoint1[3], -1f0, 1f0))
+    usePoint2[3] = abs(clamp(usePoint2[3], -1f0, 1f0))
+
+    EuclidBridge.lock_compass_joint1(state_ptr, usePoint1)
+    EuclidBridge.lock_compass_joint2(state_ptr, usePoint2)
+    EuclidBridge.show_compass(state_ptr)
+
+    if usePoint1[3] < 0.05 && strikecolor != :none
+        EuclidBridge.emit_trailing_particle(state_ptr, usePoint1, strikecolor)
+        EuclidBridge.emit_trailing_particle(state_ptr, usePoint2, strikecolor)
     end
 end
 
