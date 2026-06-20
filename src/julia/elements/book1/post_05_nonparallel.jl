@@ -31,6 +31,8 @@ const Marker2Center = line_intersection_3d(StartPoint2, EndPoint2_1, StartPoint3
 const Marker2Start = Marker2Center + normalize(EndPoint2_2 - Marker2Center) * MarkerRadius
 const Marker2End = Marker2Center + normalize(StartPoint3 - Marker2Center) * MarkerRadius
 
+const Intersection = line_intersection_3d(StartPoint1, EndPoint1_2, StartPoint2, EndPoint2_2)
+
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0
 
@@ -39,6 +41,8 @@ const Line2Color = :palevioletred1
 const Line3Color = :grey60
 const Marker1Color = :palevioletred1
 const Marker2Color = :khaki3
+const PointColor = :khaki3
+const PointMaxBrush = 5f0
 const LineMaxBrush = 5f0
 const MarkerBrush = 5f0
 
@@ -51,6 +55,7 @@ const MarkerDrawDuration = 1.5f0
 const CompassArcMoveDuration = 1.25f0
 const CompassArcMoveHeight = 0.25f0
 const CompassRiseDuration = 1.8f0
+const PointDrawDuration = 4f0
 const HidePauseDuration = 1.5f0
 
 const MetaLine1HostId = 1
@@ -68,6 +73,7 @@ const MetaMarker1EndId = 33
 const MetaMarker2HostId = 41
 const MetaMarker2StartId = 42
 const MetaMarker2EndId = 43
+const MetaPointId = 51
 const MetaPhase = 200
 const MetaTimer = 201
 
@@ -85,6 +91,8 @@ const PhaseCompassRise = 150f0
 const PhaseDrawLine1_2 = 201f0
 const PhasePenArcToLine2_2 = 210f0
 const PhaseDrawLine2_2 = 211f0
+const PhasePenArcToIntersect = 220f0
+const PhaseDrawIntersect = 221f0
 const PhasePenLift2 = 250f0
 const PhaseHideAll = 500f0
 
@@ -115,11 +123,13 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     marker2StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2StartId))
     marker2EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2EndId))
 
+    pointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
+
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.hide_point_batch(
-        state_ptr, [marker1HostId, marker2HostId, line1HostId, line2HostId, line3HostId])
+        state_ptr, [marker1HostId, marker2HostId, line1HostId, line2HostId, line3HostId, pointId])
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.set_point_position(
@@ -165,6 +175,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, StartPoint2, StartPoint2, Line2Color, 0f0)
     line3 = OdinJuliaBridge.create_new_line(
         state_ptr, StartPoint3, StartPoint3, Line3Color, 0f0)
+    point = OdinJuliaBridge.create_new_point(
+        state_ptr, Intersection, PointColor, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1HostId, Float32(marker1.hostId))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1StartId, Float32(marker1.startId))
@@ -185,6 +197,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3HostId, Float32(line3.hostId))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, Float32(line3.joint1Id))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, Float32(line3.joint2Id))
+
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointId, Float32(point.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -213,9 +227,11 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     marker2StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2StartId))
     marker2EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2EndId))
 
+    pointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
+
     if line1HostId < 0 || line2HostId < 0 || line3HostId < 0 ||
         marker1HostId < 0 || marker1HostId < 0 ||
-        marker2HostId < 0 || marker2HostId < 0
+        marker2HostId < 0 || marker2HostId < 0 || pointId < 0
         return
     end
 
@@ -368,12 +384,32 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= LineDrawDuration
+            phase = PhasePenArcToIntersect
+            timer = 0f0
+        end
+    elseif phase == PhasePenArcToIntersect
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration,
+            EndPoint2_2, Intersection, ArcMoveHeight, 1, :none)
+
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseDrawIntersect
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawIntersect
+        EuclidAnimations.animate_draw_point(
+            state_ptr, timer, PointDrawDuration, Intersection,
+            PointMaxBrush, PointColor, pointId)
+
+        timer += dt
+        if timer >= PointDrawDuration
             phase = PhasePenLift2
             timer = 0f0
         end
     elseif phase == PhasePenLift2
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenRiseDuration1, PenTopZ, EndPoint2_2[1], EndPoint2_2[2])
+            state_ptr, timer, PenRiseDuration1, PenTopZ, Intersection[1], Intersection[2])
 
         timer += dt
         if timer >= PenRiseDuration1
