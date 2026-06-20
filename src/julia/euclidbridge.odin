@@ -699,8 +699,24 @@ show_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
 hide_point :: proc "c" (state: ^core.EuclidGeneralState, index: int) {
     if index >= 0 && index < MAX_KINEPOINTS {
         context = state^.SavedContext
-        particles.emit_kine_hide_burst(state^.ParticleSystem, state^.PointSystem, index)
+        particles.emit_kine_hide_burst(state^.ParticleSystem, state^.PointSystem, index, true)
         state^.PointSystem^.Points[index].DoDraw = false
+    }
+}
+
+@(export)
+hide_point_batch :: proc "c" (state: ^core.EuclidGeneralState, indices: [^]i32, count: i32) {
+    if count <= 0 {
+        return
+    }
+    context = state^.SavedContext
+    particles.kick_existing_dust(state^.ParticleSystem)
+    for i in 0..<int(count) {
+        index := int(indices[i])
+        if index >= 0 && index < MAX_KINEPOINTS {
+            particles.emit_kine_hide_burst(state^.ParticleSystem, state^.PointSystem, index, false)
+            state^.PointSystem^.Points[index].DoDraw = false
+        }
     }
 }
 

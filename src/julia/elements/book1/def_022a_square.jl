@@ -106,22 +106,20 @@ Of quadrilateral figures, a square is that which is both equilateral and right-a
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
+    lineHostIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    lineJoint2Ids_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    markerHostIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i])), 4)
+    markerEndIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i])), 4)
+
+    EuclidBridge.hide_point_batch(state_ptr, [lineHostIds_r..., markerHostIds_r...])
+
     for i in 1:4
-        lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostIds[i]))
-        lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i]))
-
-        markerHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i]))
-        markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i]))
-
-        EuclidBridge.hide_point(state_ptr, lineHostId)
-        EuclidBridge.hide_point(state_ptr, markerHostId)
-
         EuclidBridge.set_point_position(
-            state_ptr, lineJoint2Id,
+            state_ptr, lineJoint2Ids_r[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
 
         EuclidBridge.set_point_position(
-            state_ptr, markerEndId,
+            state_ptr, markerEndIds_r[i],
             MarkerStarts[i][1], MarkerStarts[i][2], MarkerStarts[i][3])
     end
 

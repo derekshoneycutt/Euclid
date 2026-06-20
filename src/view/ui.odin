@@ -193,6 +193,7 @@ walk_draw_tree_node :: proc(
     panel: rl.Rectangle,
     content_y: ^f32,
     scroll_y: f32,
+    allow_clicks: bool,
 ) -> TreeHit {
     hit := TreeHit{SelectedID = -1, ToggledID = -1, RestartRequested = false}
 
@@ -208,7 +209,7 @@ walk_draw_tree_node :: proc(
         if node.IsExpanded && node.FirstChildId >= 0 {
             child := node.FirstChildId
             for child >= 0 {
-                child_hit := walk_draw_tree_node(ji, child, depth + 1, panel, content_y, scroll_y)
+                child_hit := walk_draw_tree_node(ji, child, depth + 1, panel, content_y, scroll_y, allow_clicks)
                 if child_hit.SelectedID >= 0 {
                     hit.SelectedID = child_hit.SelectedID
                 }
@@ -226,7 +227,7 @@ walk_draw_tree_node :: proc(
     label_x := int(indent_x + 22)
 
     mouse := rl.GetMousePosition()
-    click := rl.IsMouseButtonPressed(.LEFT)
+    click := allow_clicks && rl.IsMouseButtonPressed(.LEFT)
     hovered := rl.CheckCollisionPointRec(mouse, row_rect)
 
     if node.IsSelected {
@@ -242,7 +243,6 @@ walk_draw_tree_node :: proc(
             }
         }
     }
-
     if node.FirstChildId >= 0 {
         if node.IsExpanded {
             ui_text("v", int(icon_rect.x), int(icon_rect.y), TextColor)
@@ -264,16 +264,13 @@ walk_draw_tree_node :: proc(
     if node.IsExpanded && node.FirstChildId >= 0 {
         child := node.FirstChildId
         for child >= 0 {
-            child_hit := walk_draw_tree_node(ji, child, depth + 1, panel, content_y, scroll_y)
+            child_hit := walk_draw_tree_node(ji, child, depth + 1, panel, content_y, scroll_y, allow_clicks)
             if child_hit.SelectedID >= 0 {
                 hit.SelectedID = child_hit.SelectedID
             }
             if child_hit.ToggledID >= 0 {
                 hit.ToggledID = child_hit.ToggledID
             }
-                if child_hit.RestartRequested {
-                    hit.RestartRequested = true
-                }
             if child_hit.RestartRequested {
                 hit.RestartRequested = true
             }
@@ -286,6 +283,7 @@ walk_draw_tree_node :: proc(
 
 draw_tree_view :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
     ji := state.JuliaInterface
+    ui_runtime := &state.UIRuntime
 
     panel := rl.Rectangle{
         ViewWidth + TREE_PANEL_PADDING,
@@ -329,10 +327,19 @@ draw_tree_view :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
         scroll_y^ = max_scroll
     }
 
+    allow_tree_clicks := true
+    if max_scroll > 0 {
+        track_w := f32(8)
+        track := rl.Rectangle{list_panel.x + list_panel.width - track_w, list_panel.y, track_w, list_panel.height}
+        if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, track) {
+            allow_tree_clicks = false
+        }
+    }
+
     rl.BeginScissorMode(i32(list_panel.x), i32(list_panel.y), i32(list_panel.width), i32(list_panel.height))
     {
         y_cursor := f32(0)
-        hit := walk_draw_tree_node(ji, root_id, 0, list_panel, &y_cursor, scroll_y^)
+        hit := walk_draw_tree_node(ji, root_id, 0, list_panel, &y_cursor, scroll_y^, allow_tree_clicks)
 
         if hit.ToggledID >= 0 {
             ji.Animations[hit.ToggledID].IsExpanded = !ji.Animations[hit.ToggledID].IsExpanded
@@ -353,12 +360,29 @@ draw_tree_view :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
         thumb_y := list_panel.y + (scroll_y^ / max_scroll) * (list_panel.height - thumb_h)
         thumb := rl.Rectangle{track.x, thumb_y, track_w, thumb_h}
 
+        tree_mouse := rl.GetMousePosition()
+        if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(tree_mouse, thumb) {
+            ui_runtime.TreeScrollDragging = true
+            ui_runtime.TreeScrollDragOff = tree_mouse.y - thumb_y
+        }
+        if ui_runtime.TreeScrollDragging {
+            if rl.IsMouseButtonDown(.LEFT) {
+                new_thumb_y := tree_mouse.y - ui_runtime.TreeScrollDragOff
+                t := (new_thumb_y - list_panel.y) / (list_panel.height - thumb_h)
+                scroll_y^ = clamp(t, 0, 1) * max_scroll
+            } else {
+                ui_runtime.TreeScrollDragging = false
+            }
+        }
+
         rl.DrawRectangleRec(track, BackgroundColor)
         rl.DrawRectangleRec(thumb, BorderColor)
     }
 }
 
 draw_view_text_panel :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
+    ui_runtime := &state.UIRuntime
+
     panel := rl.Rectangle{
         TREE_PANEL_PADDING,
         ViewHeight + TREE_PANEL_PADDING,
@@ -408,6 +432,21 @@ draw_view_text_panel :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
         thumb_h := max(f32(24), text_panel.height * (text_panel.height / content_h))
         thumb_y := text_panel.y + (scroll_y^ / max_scroll) * (text_panel.height - thumb_h)
         thumb := rl.Rectangle{track.x, thumb_y, track_w, thumb_h}
+
+        text_mouse := rl.GetMousePosition()
+        if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(text_mouse, thumb) {
+            ui_runtime.TextScrollDragging = true
+            ui_runtime.TextScrollDragOff = text_mouse.y - thumb_y
+        }
+        if ui_runtime.TextScrollDragging {
+            if rl.IsMouseButtonDown(.LEFT) {
+                new_thumb_y := text_mouse.y - ui_runtime.TextScrollDragOff
+                t := (new_thumb_y - text_panel.y) / (text_panel.height - thumb_h)
+                scroll_y^ = clamp(t, 0, 1) * max_scroll
+            } else {
+                ui_runtime.TextScrollDragging = false
+            }
+        }
 
         rl.DrawRectangleRec(track, BackgroundColor)
         rl.DrawRectangleRec(thumb, BorderColor)

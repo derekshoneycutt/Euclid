@@ -70,9 +70,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     diameterHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
     diameterJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
 
-    EuclidBridge.hide_point(state_ptr, centerPointId)
-    EuclidBridge.hide_point(state_ptr, circleHostId)
-    EuclidBridge.hide_point(state_ptr, diameterHostId)
+    EuclidBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId, diameterHostId])
 
     EuclidBridge.set_point_position(
         state_ptr, circleEndId,

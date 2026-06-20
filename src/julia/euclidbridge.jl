@@ -918,6 +918,20 @@ function hide_point(state_ptr::Ptr{Cvoid}, id::Integer)
     @ccall hide_point(state_ptr::Ptr{Cvoid}, id::Cint)::Cvoid
 end
 """
+Hide multiple points in a single call. Kicks dust once and emits a burst for
+each visible point without re-kicking between them.
+
+------
+
+Parameters:
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `ids`       : Collection of point ids to hide (any iterable of Integer)
+"""
+function hide_point_batch(state_ptr::Ptr{Cvoid}, ids)
+    arr = Cint[Cint(id) for id in ids]
+    @ccall hide_point_batch(state_ptr::Ptr{Cvoid}, arr::Ptr{Cint}, length(arr)::Cint)::Cvoid
+end
+"""
 Update a point position by id.
 
 ------

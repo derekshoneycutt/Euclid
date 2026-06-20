@@ -1,25 +1,27 @@
-module ElementsOneDefinitionScalene
+module ElementsOneDefinitionParallel
 
 using ..EuclidBridge
 using ..EuclidAnimations
 
-using LinearAlgebra
-
 export get_view_text, initialize, clean, loop
 
-const VertexA = [0.22f0, 0.75f0, 0f0]
-const VertexB = [0.34f0, 0.47f0, 0f0]
-const VertexC = [0.84f0, 0.66f0, 0f0]
-const PenTopZ = 1.4f0
+const Line1Start = [0.00f0, 0.70f0, 0f0]
+const Line1End = [1.00f0, 0.70f0, 0f0]
+const Line2Start = [0.00f0, 0.30f0, 0f0]
+const Line2End = [1.00f0, 0.30f0, 0f0]
 
-const TriangleColor = :steelblue
-const TriangleColor2 = :palevioletred1
-const TriangleColor3 = :khaki3
-const TriangleMaxBrush = 5f0
+const PenTopZ = 1.4f0
+const LineMaxBrush = 5f0
+
+const Line1Color = :steelblue
+const Line2Color = :khaki3
 
 const DescendDuration = 1.8f0
-const DrawDuration = 3.1f0
+const DrawDuration = 3.2f0
+const ArcMoveDuration = 2.2f0
+const ArcMoveHeight = 0.22f0
 const RiseDuration = 1.8f0
+const HidePauseDuration = 1.5f0
 
 const MetaLine1HostId = 1
 const MetaLine1Joint1Id = 2
@@ -27,23 +29,20 @@ const MetaLine1Joint2Id = 3
 const MetaLine2HostId = 4
 const MetaLine2Joint1Id = 5
 const MetaLine2Joint2Id = 6
-const MetaLine3HostId = 7
-const MetaLine3Joint1Id = 8
-const MetaLine3Joint2Id = 9
-const MetaPhase = 10
-const MetaTimer = 11
+const MetaPhase = 7
+const MetaTimer = 8
 
-const PhaseDescend = 0f0
-const PhaseDrawSide1 = 1f0
-const PhaseDrawSide2 = 2f0
-const PhaseDrawSide3 = 3f0
-const PhaseRise = 4f0
-
+const PhaseDescendLine1 = 0f0
+const PhaseDrawLine1 = 1f0
+const PhaseArcToLine2 = 2f0
+const PhaseDrawLine2 = 3f0
+const PhaseRiseLine2 = 4f0
+const PhaseHideAll = 5f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Scalene Triangle
+    """Euclid Elements - Book I - Definition: Parallel Straight Lines
 
-Of trilateral figures, ... and a scalene triangle that which has its three sides unequal."""
+Parallel straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
@@ -53,42 +52,34 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     line2HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2HostId))
     line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    line3HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
-
-    EuclidBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId, line3HostId])
+    EuclidBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId])
 
     EuclidBridge.set_point_position(
-        state_ptr, line1Joint2Id, VertexA[1], VertexA[2], VertexA[3])
+        state_ptr, line1Joint2Id,
+        Line1Start[1], Line1Start[2], Line1Start[3])
     EuclidBridge.set_point_position(
-        state_ptr, line2Joint2Id, VertexB[1], VertexB[2], VertexB[3])
-    EuclidBridge.set_point_position(
-        state_ptr, line3Joint2Id, VertexC[1], VertexC[2], VertexC[3])
+        state_ptr, line2Joint2Id,
+        Line2Start[1], Line2Start[2], Line2Start[3])
 
     EuclidBridge.hide_pen(state_ptr)
     EuclidBridge.show_pen(state_ptr)
-    EuclidBridge.set_pen_active(state_ptr, 0, TriangleColor)
+    EuclidBridge.set_pen_active(state_ptr, 0, Line1Color)
 
-    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
+    EuclidBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendLine1)
     EuclidBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
     line1 = EuclidBridge.create_new_line(
         state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexA[1], VertexA[2], VertexA[3],
-        TriangleColor, 0f0)
+        Line1Start[1], Line1Start[2], Line1Start[3],
+        Line1Start[1], Line1Start[2], Line1Start[3],
+        Line1Color, 0f0)
     line2 = EuclidBridge.create_new_line(
         state_ptr,
-        VertexB[1], VertexB[2], VertexB[3],
-        VertexB[1], VertexB[2], VertexB[3],
-        TriangleColor2, 0f0)
-    line3 = EuclidBridge.create_new_line(
-        state_ptr,
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexC[1], VertexC[2], VertexC[3],
-        TriangleColor3, 0f0)
+        Line2Start[1], Line2Start[2], Line2Start[3],
+        Line2Start[1], Line2Start[2], Line2Start[3],
+        Line2Color, 0f0)
 
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
     EuclidBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
@@ -97,10 +88,6 @@ function initialize(state_ptr::Ptr{Cvoid})
     EuclidBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
     EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
     EuclidBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
-
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine3HostId, Float32(line3.hostId))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, Float32(line3.joint1Id))
-    EuclidBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, Float32(line3.joint2Id))
 
     reset_cycle_state(state_ptr)
 end
@@ -117,10 +104,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line2Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
     line2Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    line3HostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3Joint1Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3Joint1Id))
-    line3Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
-
     if line1HostId < 0
         return
     end
@@ -128,51 +111,59 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     phase = EuclidBridge.get_animation_meta(state_ptr, MetaPhase)
     timer = EuclidBridge.get_animation_meta(state_ptr, MetaTimer)
 
-    if phase == PhaseDescend
+    if phase == PhaseDescendLine1
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, DescendDuration, PenTopZ, VertexA[1], VertexA[2])
+            state_ptr, timer, DescendDuration, PenTopZ, Line1Start[1], Line1Start[2])
 
         timer += dt
         if timer >= DescendDuration
-            phase = PhaseDrawSide1
+            phase = PhaseDrawLine1
             timer = 0f0
         end
-    elseif phase == PhaseDrawSide1
+    elseif phase == PhaseDrawLine1
         EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexA, VertexB,
-            TriangleMaxBrush, TriangleColor, line1HostId, line1Joint1Id, line1Joint2Id)
+            state_ptr, timer, DrawDuration, Line1Start, Line1End,
+            LineMaxBrush, Line1Color, line1HostId, line1Joint1Id, line1Joint2Id)
 
         timer += dt
         if timer >= DrawDuration
-            phase = PhaseDrawSide2
+            phase = PhaseArcToLine2
             timer = 0f0
         end
-    elseif phase == PhaseDrawSide2
+    elseif phase == PhaseArcToLine2
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration,
+            Line1End, Line2Start, ArcMoveHeight, 1, :none)
+
+        timer += dt
+        if timer >= ArcMoveDuration
+            EuclidBridge.set_pen_active(state_ptr, 0, Line2Color)
+            phase = PhaseDrawLine2
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawLine2
         EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexB, VertexC,
-            TriangleMaxBrush, TriangleColor2, line2HostId, line2Joint1Id, line2Joint2Id)
+            state_ptr, timer, DrawDuration, Line2Start, Line2End,
+            LineMaxBrush, Line2Color, line2HostId, line2Joint1Id, line2Joint2Id)
 
         timer += dt
         if timer >= DrawDuration
-            phase = PhaseDrawSide3
+            phase = PhaseRiseLine2
             timer = 0f0
         end
-    elseif phase == PhaseDrawSide3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexC, VertexA,
-            TriangleMaxBrush, TriangleColor3, line3HostId, line3Joint1Id, line3Joint2Id)
-
-        timer += dt
-        if timer >= DrawDuration
-            phase = PhaseRise
-            timer = 0f0
-        end
-    elseif phase == PhaseRise
+    elseif phase == PhaseRiseLine2
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, RiseDuration, PenTopZ, VertexA[1], VertexA[2])
+            state_ptr, timer, RiseDuration, PenTopZ, Line2End[1], Line2End[2])
 
         timer += dt
         if timer >= RiseDuration
+            EuclidBridge.hide_pen(state_ptr)
+            phase = PhaseHideAll
+            timer = 0f0
+        end
+    elseif phase == PhaseHideAll
+        timer += dt
+        if timer >= HidePauseDuration
             reset_cycle_state(state_ptr)
             return
         end

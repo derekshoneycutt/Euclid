@@ -33,6 +33,7 @@ include("./elements/book1/def_022b_oblong.jl")
 include("./elements/book1/def_022c_rhombus.jl")
 include("./elements/book1/def_022d_rhomboid.jl")
 include("./elements/book1/def_022d_trapezia.jl")
+include("./elements/book1/def_023_parallel.jl")
 
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
@@ -261,6 +262,12 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOneDefinitionTrapezia.loop,
                     ElementsOneDefinitionTrapezia.clean,
                     "Trapezia", book1DefsId)
+                book1Defs23ParallelId = EuclidBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneDefinitionParallel.get_view_text,
+                    ElementsOneDefinitionParallel.initialize,
+                    ElementsOneDefinitionParallel.loop,
+                    ElementsOneDefinitionParallel.clean,
+                    "Parallel Straight Lines", book1DefsId)
                     
             book1PostsId = EuclidBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,

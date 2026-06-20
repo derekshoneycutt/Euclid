@@ -91,10 +91,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     line3Joint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
     triangleHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaTriangleHostId))
 
-    EuclidBridge.hide_point(state_ptr, line1HostId)
-    EuclidBridge.hide_point(state_ptr, line2HostId)
-    EuclidBridge.hide_point(state_ptr, line3HostId)
-    EuclidBridge.hide_point(state_ptr, triangleHostId)
+    EuclidBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId, line3HostId, triangleHostId])
     set_triangle_alpha(state_ptr, triangleHostId, 0f0)
 
     EuclidBridge.set_point_position(

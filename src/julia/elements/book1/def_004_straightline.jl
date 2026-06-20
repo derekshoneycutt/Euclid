@@ -66,8 +66,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     EuclidBridge.set_point_position(
         state_ptr, lineJoint2Id, StartPoint[1], StartPoint[2], StartPoint[3])
 
-    EuclidBridge.hide_point(state_ptr, point1Id)
-    EuclidBridge.hide_point(state_ptr, point2Id)
+    EuclidBridge.hide_point_batch(state_ptr, [point1Id, point2Id])
 
     EuclidBridge.show_pen(state_ptr)
     EuclidBridge.set_pen_active(state_ptr, 0, LineColor)

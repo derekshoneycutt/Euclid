@@ -468,7 +468,7 @@ emit_circle_dust :: proc(ps: ^ParticleSystem, center, start, finish: Vector3, co
     }
 }
 
-emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: int) {
+emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: int, kick_dust: bool = true) {
     if index < 0 || index >= MAX_KINEPOINTS {
         return
     }
@@ -484,7 +484,9 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
         return
     }
 
-    kick_existing_dust(ps)
+    if kick_dust {
+        kick_existing_dust(ps)
+    }
 
     col := kp.Color.? or_else rl.WHITE
     switch kp.Type {

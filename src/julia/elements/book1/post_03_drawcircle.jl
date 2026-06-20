@@ -57,8 +57,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     circleHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleHostId))
     circleEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaCircleEndId))
 
-    EuclidBridge.hide_point(state_ptr, centerPointId)
-    EuclidBridge.hide_point(state_ptr, circleHostId)
+    EuclidBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId])
     EuclidBridge.set_point_position(
         state_ptr, circleEndId,
         CircleStartPoint[1], CircleStartPoint[2], CircleStartPoint[3])

@@ -43,13 +43,14 @@ And let quadrilateral figures besides these be called trapezia."""
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    for i in 1:4
-        lineHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostIds[i]))
-        lineJoint2Id = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i]))
+    lineHostIds_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    lineJoint2Ids_r = ntuple(i -> Integer(EuclidBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
-        EuclidBridge.hide_point(state_ptr, lineHostId)
+    EuclidBridge.hide_point_batch(state_ptr, lineHostIds_r)
+
+    for i in 1:4
         EuclidBridge.set_point_position(
-            state_ptr, lineJoint2Id,
+            state_ptr, lineJoint2Ids_r[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
     end
 

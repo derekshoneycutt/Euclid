@@ -86,14 +86,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     markerHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
     markerEndId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
 
-    EuclidBridge.hide_point(state_ptr, markerHostId)
+    EuclidBridge.hide_point_batch(state_ptr, [markerHostId, line2HostId, line1HostId])
     EuclidBridge.set_point_position(
         state_ptr, markerEndId, MarkerStart[1], MarkerStart[2], MarkerStart[3])
 
-    EuclidBridge.hide_point(state_ptr, line2HostId)
     EuclidBridge.set_point_position(
         state_ptr, line2Joint2Id, Line2Start[1], Line2Start[2], Line2Start[3])
-    EuclidBridge.hide_point(state_ptr, line1HostId)
     EuclidBridge.set_point_position(
         state_ptr, line1Joint2Id, Line1Start[1], Line1Start[2], Line1Start[3])
 

@@ -120,12 +120,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     shapeHostId = Integer(EuclidBridge.get_animation_meta(state_ptr, MetaShapeHostId))
 
-    EuclidBridge.hide_point(state_ptr, line1HostId)
-    EuclidBridge.hide_point(state_ptr, line2HostId)
-    EuclidBridge.hide_point(state_ptr, line3HostId)
-    EuclidBridge.hide_point(state_ptr, line4HostId)
-    EuclidBridge.hide_point(state_ptr, line5HostId)
-    EuclidBridge.hide_point(state_ptr, shapeHostId)
+    EuclidBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId, line3HostId, line4HostId, line5HostId, shapeHostId])
     set_pentagon_alpha(state_ptr, shapeHostId, 0f0)
 
     EuclidBridge.set_point_position(
