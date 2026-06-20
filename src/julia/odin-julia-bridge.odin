@@ -1817,7 +1817,7 @@ clear_compass_active :: proc "c" (
 }
 
 @(export)
-lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3, sweep: bool) {
     context = state^.SavedContext
     pointIndex := state^.Compass.Joint1Id
     pivotIndex := state^.Compass.PivotId
@@ -1825,7 +1825,9 @@ lock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vect
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
         push_dust_if_floor_contact(state, pos)
-        push_dust_for_compass_segment_if_floor_contact(state)
+        if sweep {
+            push_dust_for_compass_segment_if_floor_contact(state)
+        }
     
         pointpos := state^.PointSystem^.Points[pointIndex].Position.? or_else { 0, 0, 0 }
         pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
@@ -1849,14 +1851,16 @@ unlock_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState) {
 }
 
 @(export)
-move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+move_compass_joint1 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3, sweep: bool) {
     context = state^.SavedContext
     index := state^.Compass.Joint1Id
     pivotIndex := state^.Compass.PivotId
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
         push_dust_if_floor_contact(state, pos)
-        push_dust_for_compass_segment_if_floor_contact(state)
+        if sweep {
+            push_dust_for_compass_segment_if_floor_contact(state)
+        }
 
         pointpos := state^.PointSystem^.Points[index].Position.? or_else { 0, 0, 0 }
         pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
@@ -1877,7 +1881,7 @@ get_compass_joint1_position :: proc "c" (state: ^core.EuclidGeneralState) -> cor
 }
 
 @(export)
-lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3, sweep: bool) {
     context = state^.SavedContext
     pointIndex := state^.Compass.Joint2Id
     pivotIndex := state^.Compass.PivotId
@@ -1885,7 +1889,9 @@ lock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vect
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
         state^.PointSystem^.Points[pointIndex].Position = pos
         push_dust_if_floor_contact(state, pos)
-        push_dust_for_compass_segment_if_floor_contact(state)
+        if sweep {
+            push_dust_for_compass_segment_if_floor_contact(state)
+        }
 
         pointpos := state^.PointSystem^.Points[pointIndex].Position.? or_else { 0, 0, 0 }
         pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }
@@ -1909,14 +1915,16 @@ unlock_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState) {
 }
 
 @(export)
-move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3) {
+move_compass_joint2 :: proc "c" (state: ^core.EuclidGeneralState, pos: core.Vector3, sweep: bool) {
     context = state^.SavedContext
     index := state^.Compass.Joint2Id
     pivotIndex := state^.Compass.PivotId
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.PointSystem^.Points[index].Position = pos
         push_dust_if_floor_contact(state, pos)
-        push_dust_for_compass_segment_if_floor_contact(state)
+        if sweep {
+            push_dust_for_compass_segment_if_floor_contact(state)
+        }
 
         pointpos := state^.PointSystem^.Points[index].Position.? or_else { 0, 0, 0 }
         pivotpos := state^.PointSystem^.Points[pivotIndex].Position.? or_else { 0, 0, 0 }

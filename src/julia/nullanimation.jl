@@ -37,8 +37,8 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.show_compass(state_ptr)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, CompassDrawColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, 0.5f0, 0.5f0, 0f0)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, StartRotationPos[1], StartRotationPos[2], StartRotationPos[3])
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, 0.5f0, 0.5f0, 0f0, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, StartRotationPos, sweep = false)
 
     line1 = OdinJuliaBridge.create_new_line(state_ptr,
         0f0, 0f0, 0f0,
@@ -185,7 +185,7 @@ function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
     end
 
     OdinJuliaBridge.set_animation_meta(state_ptr, 1, currRotation)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, outPos[1], outPos[2], outPos[3])
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, outPos, sweep = false)
     OdinJuliaBridge.emit_trailing_particle(state_ptr, outPos[1], outPos[2], CompassDrawColor)
 end
 

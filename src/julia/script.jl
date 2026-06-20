@@ -41,6 +41,7 @@ include("./elements/book1/def_023_parallel.jl")
 include("./elements/book1/post_01_drawline.jl")
 include("./elements/book1/post_02_finiteline.jl")
 include("./elements/book1/post_03_drawcircle.jl")
+include("./elements/book1/post_04_equalright.jl")
 
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
@@ -291,6 +292,13 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     ElementsOnePostulatesDrawCircle.initialize,
                     ElementsOnePostulatesDrawCircle.loop, ElementsOnePostulatesDrawCircle.clean,
                     "Draw a Circle", book1PostsId)
+                book1Posts4EqualRightAnglesId = OdinJuliaBridge.add_child_animation_interface(
+                    state_ptr, ElementsOnePostulatesEqualRightAngles.get_view_text,
+                    ElementsOnePostulatesEqualRightAngles.initialize,
+                    ElementsOnePostulatesEqualRightAngles.loop, ElementsOnePostulatesEqualRightAngles.clean,
+                    "Equal Right Angles", book1PostsId)
+
+                    
                     
             book1CommNotsId = OdinJuliaBridge.add_child_animation_interface(
                 state_ptr, get_view_text_BookI_common, NullAnimation.initialize,

@@ -2056,16 +2056,17 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
 """
 function lock_compass_joint1(
-    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32; sweep::Bool = true)
     pos = (x, y, z)
-    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function lock_compass_joint1(
-    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
+    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -2093,16 +2094,17 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
 """
 function move_compass_joint1(
-    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32; sweep::Bool = true)
     pos = (x, y, z)
-    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function move_compass_joint1(
-    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
+    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -2132,16 +2134,17 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
 """
 function lock_compass_joint2(
-    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32; sweep::Bool = true)
     pos = (x, y, z)
-    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function lock_compass_joint2(
-    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
+    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -2169,16 +2172,17 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
 """
 function move_compass_joint2(
-    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32)
+    state_ptr::Ptr{Cvoid}, x::Float32, y::Float32, z::Float32; sweep::Bool = true)
     pos = (x, y, z)
-    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function move_compass_joint2(
-    state_ptr::Ptr{Cvoid}, pos::Vector{Float32})
+    state_ptr::Ptr{Cvoid}, pos::Vector{Float32}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat})::Cvoid
+    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """

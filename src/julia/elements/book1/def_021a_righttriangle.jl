@@ -15,6 +15,8 @@ const MarkerCenter = [VertexB[1], VertexB[2], 0f0]
 const MarkerRadius = 0.175f0
 const MarkerStart = [MarkerCenter[1], MarkerCenter[2] - MarkerRadius, 0f0]
 const MarkerSweepTheta = Float32(π / 2f0)
+const MarkerEnd = MarkerCenter +
+    [MarkerRadius * cos(MarkerSweepTheta - π/2f0), MarkerRadius * sin(MarkerSweepTheta - π/2f0), 0f0]
 
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0
@@ -243,7 +245,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(
             state_ptr, timer, CompassRiseDuration, CompassTopZ,
-            MarkerCenter[1], MarkerCenter[2], MarkerStart[1], MarkerStart[2])
+            MarkerCenter[1], MarkerCenter[2], MarkerEnd[1], MarkerEnd[2])
 
         timer += dt
         if timer >= CompassRiseDuration

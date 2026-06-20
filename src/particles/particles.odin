@@ -694,12 +694,41 @@ resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
     b.Velocities.y += imp * ny
 }
 
+resolve_dust_collisions_on_grid :: proc(
+    ps: ^ParticleSystem, buckets, counts: ^[]i32,
+    cy, cx, ca, na: int, radius_sq, min_sep: f32) {
+
+    Stride :: DUST_GRID_BUCKET_CAP
+
+    if na == 0 {
+        return
+    }
+
+    for off in DUST_GRID_NEIGHBORS {
+        ncx, ncy := cx + off[0], cy + off[1]
+        if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
+            continue
+        }
+        cb := ncy * DUST_GRID_DIM + ncx
+        nb := int(counts[cb])
+        same_cell := ca == cb
+
+        for li in 0..<na {
+            a := &ps.LowParticles[buckets[ca * Stride + li]]
+            lj_start := li + 1 if same_cell else 0
+            for lj in lj_start..<nb {
+                resolve_dust_pair(a, &ps.LowParticles[buckets[cb * Stride + lj]], min_sep, radius_sq)
+            }
+        }
+    }
+}
+
 resolve_dust_collisions :: proc(ps: ^ParticleSystem) {
-    GridCells := DUST_GRID_DIM * DUST_GRID_DIM
-    Stride := DUST_GRID_BUCKET_CAP
+    GridCells :: DUST_GRID_DIM * DUST_GRID_DIM
+    Stride :: DUST_GRID_BUCKET_CAP
 
     buckets := make([]i32, GridCells * Stride, context.temp_allocator)
-    counts  := make([]i32, GridCells, context.temp_allocator)
+    counts := make([]i32, GridCells, context.temp_allocator)
 
     for i in 0..<MAX_LOW_PARTICLES {
         p := &ps.LowParticles[i]
@@ -714,33 +743,13 @@ resolve_dust_collisions :: proc(ps: ^ParticleSystem) {
     }
 
     radius_sq := DUST_COLLISION_RADIUS * DUST_COLLISION_RADIUS
-    min_sep   := DUST_COLLISION_RADIUS * 2.0
+    min_sep := DUST_COLLISION_RADIUS * 2.0
 
     for cy in 0..<DUST_GRID_DIM {
         for cx in 0..<DUST_GRID_DIM {
             ca := cy * DUST_GRID_DIM + cx
             na := int(counts[ca])
-            if na == 0 {
-                continue
-            }
-
-            for off in DUST_GRID_NEIGHBORS {
-                ncx, ncy := cx + off[0], cy + off[1]
-                if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
-                    continue
-                }
-                cb := ncy * DUST_GRID_DIM + ncx
-                nb := int(counts[cb])
-                same_cell := ca == cb
-
-                for li in 0..<na {
-                    a := &ps.LowParticles[buckets[ca * Stride + li]]
-                    lj_start := li + 1 if same_cell else 0
-                    for lj in lj_start..<nb {
-                        resolve_dust_pair(a, &ps.LowParticles[buckets[cb * Stride + lj]], min_sep, radius_sq)
-                    }
-                }
-            }
+            resolve_dust_collisions_on_grid(ps, &buckets, &counts, cy, cx, ca, na, radius_sq, min_sep)
         }
     }
 }

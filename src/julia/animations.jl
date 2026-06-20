@@ -129,8 +129,8 @@ function animate_compass_descend(
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = topz + (0f0 - topz) * t
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ, sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 end
 
@@ -194,8 +194,8 @@ function animate_compass_rise(
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = 0f0 + (topz - 0f0) * t
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ, sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     OdinJuliaBridge.show_compass(state_ptr)
 end
@@ -523,8 +523,8 @@ function animate_compass_arcmove(
     usePoint1[3] = abs(clamp(usePoint1[3], -1f0, 1f0))
     usePoint2[3] = abs(clamp(usePoint2[3], -1f0, 1f0))
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, usePoint1)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, usePoint2)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, usePoint1; sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, usePoint2; sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 
     if usePoint1[3] < 0.05 && strikecolor != :none
@@ -740,9 +740,9 @@ function animate_draw_circle(
         jointPoint[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint, sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint, sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 
     OdinJuliaBridge.set_point_color(state_ptr, markerHostId, color)

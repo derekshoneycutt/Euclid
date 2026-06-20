@@ -30,7 +30,7 @@ fit to that model, and I froze on it a bit.
 I had some thoughts about making a C application for it, but I hardly like programming in
 C much more than assembly (I **do** like programming in assembly **sometimes**). As I was
 doing another project exploring 76 different programming languages, I encountered Odin and
-enjoyed working with it. On a whim,I was playing with a basic kinematic system in Odin
+enjoyed working with it. On a whim, I was playing with a basic kinematic system in Odin
 when it occurred to me it would be a great basis for this Euclid project.
 
 Ultimately, having a strong solid application base with manual memory management and
