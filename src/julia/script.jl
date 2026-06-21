@@ -45,6 +45,8 @@ include("./elements/book1/post_03_drawcircle.jl")
 include("./elements/book1/post_04_equalright.jl")
 include("./elements/book1/post_05_nonparallel.jl")
 
+include("./elements/book1/commonnotions.jl")
+
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
     "Welcome to Euclid's Elements!"
@@ -60,10 +62,6 @@ end
 
 function get_view_text_BookI_posts(state_ptr::Ptr{Cvoid})
     "Euclid Elements - Book I - Postulates"
-end
-
-function get_view_text_BookI_common(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Common Notions"
 end
 
 function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
@@ -306,8 +304,8 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                     "Non-Parallel Lines", book1PostsId)
                 
             book1CommNotsId = OdinJuliaBridge.add_child_animation_interface(
-                state_ptr, get_view_text_BookI_common, NullAnimation.initialize,
-                NullAnimation.loop, NullAnimation.clean,
+                state_ptr, ElementsOneCommonNotions.get_view_text, ElementsOneCommonNotions.initialize,
+                ElementsOneCommonNotions.loop, ElementsOneCommonNotions.clean,
                 "Common Notions", book1Id)
 
             book1PropsId = OdinJuliaBridge.add_child_animation_interface(
