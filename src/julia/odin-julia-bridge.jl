@@ -16,6 +16,7 @@ struct BridgePointView
     pointType::Int64
     doDraw::UInt8
     brushSize::Cfloat
+    offset::Cfloat
 
     hasPosition::UInt8
     pos::NTuple{3, Cfloat}
@@ -1250,6 +1251,23 @@ Returns: `Int32` status code
 """
 function set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Integer, brush::Float32)
     @ccall set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Int32, brush::Cfloat)::Int32
+end
+
+"""
+Set offset for a point by id and return bridge status.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `index` : Point id to update
+- `offset` : New offset
+
+Returns: `Int32` status code
+"""
+function set_point_offset(state_ptr::Ptr{Cvoid}, index::Integer, offset::Float32)
+    @ccall set_point_offset(state_ptr::Ptr{Cvoid}, index::Int32, offset::Cfloat)::Int32
 end
 
 """

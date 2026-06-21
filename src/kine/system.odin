@@ -237,7 +237,7 @@ cache_push_circle :: proc(
     }
 
     slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KineCircleDraw{ make_draw_base(sourceIndex, src), center, start, end }
+    point := KineCircleDraw{ make_draw_base(sourceIndex, src), center, start, end, src^.Offset }
     slot^ = point
     pointSystem^.DrawCache.ItemCount += 1
 }

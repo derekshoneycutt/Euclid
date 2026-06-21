@@ -9,12 +9,12 @@ using LinearAlgebra
 export get_view_text, initialize, clean, loop
 
 const StartPoint1 = [0.25f0, 0.1f0, 0f0]
-const EndPoint1_2 = [0.65f0, 0.9f0, 0f0]
+const EndPoint1_2 = [0.51f0, 0.9f0, 0f0]
 const EndPoint1_1 = StartPoint1 + (EndPoint1_2 - StartPoint1) * 0.4f0
 const Angle1StartΘ = Float32(atan(EndPoint1_2[2] - StartPoint1[2], EndPoint1_2[1] - StartPoint1[1]))
 
 const StartPoint2 = [0.75f0, 0.1f0, 0f0]
-const EndPoint2_2 = [0.45f0, 0.9f0, 0f0]
+const EndPoint2_2 = [0.49f0, 0.9f0, 0f0]
 const EndPoint2_1 = StartPoint2 + (EndPoint2_2 - StartPoint2) * 0.4f0
 const Angle2StartΘ = Float32(atan(EndPoint2_2[2] - StartPoint2[2], EndPoint2_2[1] - StartPoint2[1]))
 

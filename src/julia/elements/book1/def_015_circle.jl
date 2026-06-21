@@ -10,7 +10,7 @@ export get_view_text, initialize, clean, loop
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
 const CircleStartPoint = [CenterPoint[1] + Radius, CenterPoint[2], 0f0]
-const CircleSweepTheta = Float32(2f0 * π)
+const CircleSweepTheta = 2f0 * π
 
 const CenterColor = :palevioletred1
 const CircleColor = :steelblue
@@ -57,8 +57,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId])
     OdinJuliaBridge.set_point_position(
-        state_ptr, circleEndId,
-        CircleStartPoint[1], CircleStartPoint[2], CircleStartPoint[3])
+        state_ptr, circleEndId, CircleStartPoint)
+    OdinJuliaBridge.set_point_offset(
+        state_ptr, circleHostId, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -154,6 +155,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
+            OdinJuliaBridge.set_point_position(
+                state_ptr, circleEndId, CircleStartPoint)
+            OdinJuliaBridge.set_point_offset(
+                state_ptr, circleHostId, 2f0π)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(

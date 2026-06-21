@@ -67,6 +67,7 @@ BridgePointView :: struct {
     PointType: int,
     DoDraw: bool,
     BrushSize: f32,
+    Offset: f32,
 
     HasPosition: bool,
     Position: core.Vector3,
@@ -519,6 +520,7 @@ create_new_point :: proc "c" (
         PointType = 0,
         DoDraw = point^.DoDraw,
         BrushSize = point^.BrushSize,
+        Offset = point^.Offset,
 
         HasPosition = hasPos,
         Position = pos,
@@ -897,6 +899,21 @@ set_point_brush_size :: proc "c" (
     }
 
     state^.PointSystem^.Points[pointIndex].BrushSize = brush
+    return BRIDGE_STATUS_OK
+}
+
+@(export)
+set_point_offset :: proc "c" (
+    state: ^core.EuclidGeneralState, index: i32, offset: f32) -> i32 {
+
+    context = state^.SavedContext
+
+    pointIndex := int(index)
+    if !is_point_index_in_bounds(pointIndex) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+
+    state^.PointSystem^.Points[pointIndex].Offset = offset
     return BRIDGE_STATUS_OK
 }
 

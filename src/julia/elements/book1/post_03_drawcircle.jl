@@ -61,6 +61,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(
         state_ptr, circleEndId,
         CircleStartPoint[1], CircleStartPoint[2], CircleStartPoint[3])
+    OdinJuliaBridge.set_point_offset(
+        state_ptr, circleHostId, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -156,6 +158,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
+            OdinJuliaBridge.set_point_position(
+                state_ptr, circleEndId, CircleStartPoint)
+            OdinJuliaBridge.set_point_offset(
+                state_ptr, circleHostId, 2f0π)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(

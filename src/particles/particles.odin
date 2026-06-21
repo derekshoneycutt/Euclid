@@ -459,7 +459,7 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     return delta
 }
 
-emit_circle_dust :: proc(ps: ^ParticleSystem, center, start, finish: Vector3, col: rl.Color) {
+emit_circle_dust :: proc(ps: ^ParticleSystem, center, start, finish: Vector3, offset: f32, col: rl.Color) {
     start_vec := start - center
     end_vec := finish - center
 
@@ -471,7 +471,7 @@ emit_circle_dust :: proc(ps: ^ParticleSystem, center, start, finish: Vector3, co
 
     start_theta := f32(math.atan2(start_vec.y, start_vec.x))
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta)
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + offset
 
     sample_count := max(CLEAR_BURST_CIRCLE_SAMPLES, 2)
     denom := f32(sample_count - 1)
@@ -567,7 +567,7 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
                 start, finish = finish, start
             }
 
-            emit_circle_dust(ps, center, start, finish, col)
+            emit_circle_dust(ps, center, start, finish, kp.Offset, col)
         case .Pen, .Compass:
             return
     }
@@ -646,7 +646,7 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
                     start, finish = finish, start
                 }
 
-                emit_circle_dust(ps, center, start, finish, col)
+                emit_circle_dust(ps, center, start, finish, kp.Offset, col)
             case .Pen, .Compass:
                 continue
         }

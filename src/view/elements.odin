@@ -328,7 +328,7 @@ draw_cached_circle :: proc(state: ^EuclidGeneralState, c: ^kine.KineCircleDraw) 
 
     startTheta := f32(math.atan2(startVec.y, startVec.x))
     endTheta := f32(math.atan2(endVec.y, endVec.x))
-    sweepDelta := compute_sweep_delta(startTheta, endTheta)
+    sweepDelta := compute_sweep_delta(startTheta, endTheta) + c^.Offset
 
     prevWorld := start
     prevScreen := iso_to_cartesian(prevWorld, state^.IsoScale^)

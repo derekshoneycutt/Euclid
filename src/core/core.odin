@@ -80,6 +80,7 @@ KineShapePoint :: struct {
     Color : Maybe(rl.Color),
     ActiveColor : Maybe(rl.Color),
     BrushSize : f32,
+    Offset : f32,
 
     ActiveChild: int,
     ChildCount : int,
@@ -208,6 +209,7 @@ KineCircleDraw :: struct {
     Center: Vector3,
     Start: Vector3,
     End: Vector3,
+    Offset: f32,
 }
 
 KineFilledCircleDraw :: struct {
