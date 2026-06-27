@@ -62,6 +62,7 @@ IsoScale :: struct {
 }
 
 KineShapePointType :: enum {
+    Label,
     Point,
     Line,
     Circle,
@@ -81,6 +82,7 @@ KineShapePoint :: struct {
     ActiveColor : Maybe(rl.Color),
     BrushSize : f32,
     Offset : f32,
+    Label : Maybe(rune),
 
     ActiveChild: int,
     ChildCount : int,
@@ -193,6 +195,12 @@ KineDrawBase :: struct {
     ActiveChild: int,
 }
 
+KineLabelDraw :: struct {
+    using Base: KineDrawBase,
+    Point1: Vector3,
+    Label: rune,
+}
+
 KinePointDraw :: struct {
     using Base: KineDrawBase,
     Point1: Vector3,
@@ -257,6 +265,7 @@ KineCompassDraw :: struct {
 }
 
 KineDrawCacheItem :: union {
+    KineLabelDraw,
     KinePointDraw,
     KineLineDraw,
     KineCircleDraw,

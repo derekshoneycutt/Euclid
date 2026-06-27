@@ -27,6 +27,7 @@ KineShapeSquare :: core.KineShapeSquare
 KineShapePentagon :: core.KineShapePentagon
 
 KineDrawBase :: core.KineDrawBase
+KineLabelDraw :: core.KineLabelDraw
 KinePointDraw :: core.KinePointDraw
 KineLineDraw :: core.KineLineDraw
 KineCircleDraw :: core.KineCircleDraw
@@ -94,6 +95,8 @@ build_kine_draw_cache :: proc(
         }
 
         switch src^.Type {
+            case .Label:
+                cache_push_label(pointSystem, index, src, alpha)
             case .Point:
                 cache_push_point(pointSystem, index, src, alpha)
             case .Line:
@@ -155,6 +158,32 @@ make_draw_base :: #force_inline proc(
     }
 }
 
+
+cache_push_label :: proc(
+    pointSystem: ^KinePointSystem,
+    sourceIndex: int,
+    src: ^KineShapePoint,
+    alpha: f32) {
+
+    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+        return
+    }
+
+    p0: Vector3
+    if !lerped_point_position(pointSystem, sourceIndex, alpha, &p0) {
+        return
+    }
+
+    label, ok := src^.Label.?
+    if !ok {
+        return
+    }
+
+    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
+    point := KineLabelDraw{ make_draw_base(sourceIndex, src), p0, label }
+    slot^ = point
+    pointSystem^.DrawCache.ItemCount += 1
+}
 
 cache_push_point :: proc(
     pointSystem: ^KinePointSystem,

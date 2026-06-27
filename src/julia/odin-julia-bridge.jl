@@ -27,6 +27,9 @@ struct BridgePointView
     hasActiveColor::UInt8
     activeColor::BridgeColor
 
+    hasLabel::UInt8
+    label::UInt32
+
     activeChild::Int64
     childCount::Int64
     childPointHead::Int64
@@ -246,6 +249,107 @@ function add_child_animation_interface(
     @ccall add_child_animation_interface(
         state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
         name::Cstring, parentId::Int64)::Int64
+end
+
+"""
+Construct a new label in the Euclid system to be shown at a point on the surface
+
+------
+
+Parameters:
+
+- `state_ptr` : The state of the Euclid application to pass to the API
+- `label` : The codepoint of the label rune to display
+- `x` : The x value for the position of the point
+- `y` : The y value for the position of the point
+- `z` : The z value for the position of the point
+- `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
+- `color` : The color to show the point with
+- `brushSize` : The size of the point to show
+
+Returns: a `BridgePointView` describing the newly created point
+"""
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, x::Float32, y::Float32, z::Float32,
+    color::BridgeColor, brushSize::Float32)
+    pos = (x, y, z)
+    return @ccall create_new_label(state_ptr::Ptr{Cvoid}, label::UInt32,
+        pos::NTuple{3, Cfloat}, color::BridgeColor, brushSize::Cfloat)::BridgePointView
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, x::Float32, y::Float32, z::Float32,
+    color::BridgeColor, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), x, y, z, color, brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, pos::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], color, brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, pos::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], color, brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, x::Float32, y::Float32, z::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_label(state_ptr, label, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, x::Float32, y::Float32, z::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, pos::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, pos::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, x::Float32, y::Float32, z::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_label(state_ptr, label, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, x::Float32, y::Float32, z::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, pos::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, pos::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, x::Float32, y::Float32, z::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_label(state_ptr, label, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, x::Float32, y::Float32, z::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::UInt32, pos::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label(state_ptr::Ptr{Cvoid},
+    label::Char, pos::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
 end
 
 """

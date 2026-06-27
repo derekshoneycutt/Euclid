@@ -500,7 +500,7 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
         return
     }
 
-    if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
+    if kp.Type != .Label && kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
         kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square &&
         kp.Type != .Pentagon {
         return
@@ -512,6 +512,13 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
 
     col := kp.Color.? or_else rl.WHITE
     switch kp.Type {
+        case .Label:
+            p, ok := kp.Position.?
+            if ok {
+                for _ in 0..<CLEAR_BURST_POINT_COUNT {
+                    spawn_dust_particle(ps, p, col)
+                }
+            }
         case .Point:
             p, ok := kp.Position.?
             if ok {
@@ -582,7 +589,7 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
             continue
         }
 
-        if kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
+        if kp.Type != .Label && kp.Type != .Point && kp.Type != .Line && kp.Type != .Circle &&
             kp.Type != .FilledCircle && kp.Type != .Triangle && kp.Type != .Square &&
             kp.Type != .Pentagon {
             continue
@@ -591,6 +598,13 @@ emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
         col := kp.Color.? or_else rl.WHITE
 
         switch kp.Type {
+            case .Label:
+                p, ok := kp.Position.?
+                if ok {
+                    for _ in 0..<CLEAR_BURST_POINT_COUNT {
+                        spawn_dust_particle(ps, p, col)
+                    }
+                }
             case .Point:
                 p, ok := kp.Position.?
                 if ok {

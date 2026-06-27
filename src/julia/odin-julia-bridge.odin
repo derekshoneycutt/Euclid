@@ -78,6 +78,9 @@ BridgePointView :: struct {
     HasActiveColor: bool,
     ActiveColor: BridgeColor,
 
+    HasLabel : bool,
+    Label : rune,
+
     ActiveChild: int,
     ChildCount: int,
     ChildPointHead: int,
@@ -117,6 +120,15 @@ BridgeSolveResult :: struct {
     InitialError: f32,
     FinalError: f32,
     Converged: u8,
+}
+
+initiate_julia :: proc() {
+    julialib.jl_init()
+    _ = julialib.jl_eval_string("include(\"./julia/script.jl\")")
+}
+
+end_julia :: proc() {
+    julialib.jl_atexit_hook(0)
 }
 
 is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
@@ -215,11 +227,6 @@ print_julia_exception :: proc(contextOfErr: string) {
     fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
 }
 
-initiate_julia :: proc() {
-    julialib.jl_init()
-    _ = julialib.jl_eval_string("include(\"./julia/script.jl\")")
-}
-
 retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
     ret := new(core.EuclidJuliaInterface)
 
@@ -230,6 +237,13 @@ retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
     ret.AnimationResetCooldownRemaining = 0
 
     return ret
+}
+
+clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
+    for i in 0..<state^.JuliaInterface^.NextAnimationIndex {
+        animation := state^.JuliaInterface^.Animations[i]
+        delete(animation.Name)
+    }
 }
 
 init_euclid_scripts :: proc(
@@ -409,17 +423,6 @@ reset_current_animation_loop :: proc(
     }
 }
 
-clean_julia_interfaces :: proc(state: ^core.EuclidGeneralState) {
-    for i in 0..<state^.JuliaInterface^.NextAnimationIndex {
-        animation := state^.JuliaInterface^.Animations[i]
-        delete(animation.Name)
-    }
-}
-
-end_julia :: proc() {
-    julialib.jl_atexit_hook(0)
-}
-
 
 @(export)
 set_null_animations :: proc "c" (
@@ -500,24 +503,25 @@ add_child_animation_interface :: proc "c" (
 }
 
 @(export)
-create_new_point :: proc "c" (
+create_new_label :: proc "c" (
     state: ^core.EuclidGeneralState,
-    pos: core.Vector3, color: BridgeColor, brushSize: f32) -> BridgePointView {
+    label: rune, pos: core.Vector3, color: BridgeColor, brushSize: f32) -> BridgePointView {
 
     context = state^.SavedContext
     rlColor := rl.Color{ color.R, color.G, color.B, color.A }
-    point, index := kine.init_kineshape_point(
-        state^.PointSystem, pos, rlColor, brushSize)
+    point, index := kine.init_kineshape_label(
+        state^.PointSystem, label, pos, rlColor, brushSize)
 
     pos, hasPos := point^.Position.?
     color, hasColor := point^.Color.?
     activeColor, hasActiveColor := point^.ActiveColor.?
+    label, hasLabel := point^.Label.?
 
     return BridgePointView{
         Valid = true,
         Index = index,
 
-        PointType = 0,
+        PointType = 1,
         DoDraw = point^.DoDraw,
         BrushSize = point^.BrushSize,
         Offset = point^.Offset,
@@ -530,6 +534,52 @@ create_new_point :: proc "c" (
 
         HasActiveColor = hasActiveColor,
         ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+
+        HasLabel = hasLabel,
+        Label = label,
+
+        ActiveChild = point^.ActiveChild,
+        ChildCount = point^.ChildCount,
+        ChildPointHead = point^.ChildPointHead,
+        NextChildPoint = point^.NextChildPoint,
+    }
+}
+
+@(export)
+create_new_point :: proc "c" (
+    state: ^core.EuclidGeneralState,
+    pos: core.Vector3, color: BridgeColor, brushSize: f32) -> BridgePointView {
+
+    context = state^.SavedContext
+    rlColor := rl.Color{ color.R, color.G, color.B, color.A }
+    point, index := kine.init_kineshape_point(
+        state^.PointSystem, pos, rlColor, brushSize)
+
+    pos, hasPos := point^.Position.?
+    color, hasColor := point^.Color.?
+    activeColor, hasActiveColor := point^.ActiveColor.?
+    label, hasLabel := point^.Label.?
+
+    return BridgePointView{
+        Valid = true,
+        Index = index,
+
+        PointType = 2,
+        DoDraw = point^.DoDraw,
+        BrushSize = point^.BrushSize,
+        Offset = point^.Offset,
+
+        HasPosition = hasPos,
+        Position = pos,
+
+        HasColor = hasColor,
+        Color = BridgeColor{ color.r, color.g, color.b, color.a },
+
+        HasActiveColor = hasActiveColor,
+        ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+
+        HasLabel = hasLabel,
+        Label = label,
 
         ActiveChild = point^.ActiveChild,
         ChildCount = point^.ChildCount,
@@ -628,28 +678,31 @@ get_point_view :: proc "c" (
         point := state^.PointSystem^.Points[index]
         type: int = 0
         switch point.Type {
-            case .Point:
-                type = 0
-            case .Line:
+            case .Label:
                 type = 1
-            case .Circle:
+            case .Point:
                 type = 2
-            case .FilledCircle:
+            case .Line:
                 type = 3
-            case .Triangle:
+            case .Circle:
                 type = 4
-            case .Square:
+            case .FilledCircle:
                 type = 5
-            case .Pentagon:
+            case .Triangle:
                 type = 6
+            case .Square:
+                type = 7
+            case .Pentagon:
+                type = 8
             case .Pen:
-                type = 10
+                type = 100
             case .Compass:
-                type = 50
+                type = 150
         }
         pos, hasPos := point.Position.?
         color, hasColor := point.Color.?
         activeColor, hasActiveColor := point.ActiveColor.?
+        label, hasLabel := point.Label.?
 
         return BridgePointView{
             Valid = true,
@@ -667,6 +720,9 @@ get_point_view :: proc "c" (
 
             HasActiveColor = hasActiveColor,
             ActiveColor = BridgeColor{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+
+            HasLabel = hasLabel,
+            Label = label,
 
             ActiveChild = point.ActiveChild,
             ChildCount = point.ChildCount,
@@ -691,6 +747,9 @@ get_point_view :: proc "c" (
 
         HasActiveColor = false,
         ActiveColor = BridgeColor{ 0, 0, 0, 0 },
+
+        HasLabel = false,
+        Label = 0,
 
         ActiveChild = 0,
         ChildCount = 0,

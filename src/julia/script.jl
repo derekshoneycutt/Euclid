@@ -47,6 +47,11 @@ include("./elements/book1/post_05_nonparallel.jl")
 
 include("./elements/book1/commonnotions.jl")
 
+include("./elements/book1/prop_01.jl")
+
+include("./elements/book1/proclus_01_isosceles.jl")
+include("./elements/book1/proclus_02_scalene.jl")
+
 
 function get_view_text_root(state_ptr::Ptr{Cvoid})
     "Welcome to Euclid's Elements!"
@@ -66,6 +71,13 @@ end
 
 function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
     "Euclid Elements - Book I - Propositions"
+end
+
+
+function get_view_text_BookI_proclus(state_ptr::Ptr{Cvoid})
+    """Euclid Elements - Book I - Proclus's Commentary
+    
+Proclus provided an ancient commentary on Book I, providing additional constructions and analyses. Some will be included here."""
 end
 
 
@@ -312,6 +324,26 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
                 state_ptr, get_view_text_BookI_props, NullAnimation.initialize,
                 NullAnimation.loop, NullAnimation.clean,
                 "Propositions", book1Id)
+                book1Prop01Id = OdinJuliaBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneProposition01.get_view_text,
+                    ElementsOneProposition01.initialize,
+                    ElementsOneProposition01.loop, ElementsOneProposition01.clean,
+                    "Proposition I", book1PropsId)
+
+            book1ProclusId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, get_view_text_BookI_proclus, NullAnimation.initialize,
+                NullAnimation.loop, NullAnimation.clean,
+                "Proclus's Commentary", book1Id)
+                book1ProclusIsoscelesId = OdinJuliaBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneProclusIsosceles.get_view_text,
+                    ElementsOneProclusIsosceles.initialize,
+                    ElementsOneProclusIsosceles.loop, ElementsOneProclusIsosceles.clean,
+                    "Isosceles Triangle", book1ProclusId)
+                book1ProclusScaleneId = OdinJuliaBridge.add_child_animation_interface(
+                    state_ptr, ElementsOneProclusScalene.get_view_text,
+                    ElementsOneProclusScalene.initialize,
+                    ElementsOneProclusScalene.loop, ElementsOneProclusScalene.clean,
+                    "Scalene Triangle", book1ProclusId)
 
 end
 

@@ -250,6 +250,8 @@ draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
     for i in 0..<state^.PointSystem^.DrawCache.ItemCount {
         item := &state^.PointSystem^.DrawCache.Items[i]
         switch &itemTyped in item {
+            case core.KineLabelDraw:
+                draw_cached_label(state, &itemTyped)
             case core.KinePointDraw:
                 draw_cached_point(state, &itemTyped)
             case core.KineLineDraw:
@@ -299,6 +301,13 @@ draw_kine_points_shadows_cached :: proc(state: ^EuclidGeneralState) {
     if state^.PointSystem^.DrawCache.DrawCompass {
         draw_cached_compass_shadow(state, &state^.PointSystem^.DrawCache.Compass)
     }
+}
+
+
+draw_cached_label :: proc(state: ^EuclidGeneralState, p: ^kine.KineLabelDraw) {
+    c := iso_to_cartesian(p^.Point1, state^.IsoScale^)
+    font := rl.GetFontDefault()
+    rl.DrawTextCodepoint(font, p^.Label, c, p^.BrushSize, p^.Color)
 }
 
 
