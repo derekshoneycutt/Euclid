@@ -369,9 +369,13 @@ EuclidUIRuntimeState :: struct {
     TreeScrollDragOff: f32,
 
     ShowTreeSettings: bool,
+    SettingsSliderDragging: bool,
+    SettingsSliderDragOffsetX: f32,
 
     TextScrollDragging: bool,
     TextScrollDragOff: f32,
+
+    DisplayFPS : bool,
 }
 
 EuclidGeneralState :: struct {

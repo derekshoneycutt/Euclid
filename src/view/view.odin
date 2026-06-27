@@ -178,7 +178,9 @@ run_window_loop :: proc() {
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)
             draw_tree_view(state, &tree_scroll_y)
 
-            rl.DrawFPS(10, 10)
+            if state^.UIRuntime.DisplayFPS {
+                rl.DrawFPS(10, 10)
+            }
         }
 		rl.EndDrawing()
 

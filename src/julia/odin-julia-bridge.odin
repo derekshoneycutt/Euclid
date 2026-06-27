@@ -2022,7 +2022,7 @@ get_compass_joint2_position :: proc "c" (state: ^core.EuclidGeneralState) -> cor
 
 @(export)
 set_animation_meta :: proc "c" (state: ^core.EuclidGeneralState, pos: int, metadata: f32) {
-    if pos >= 0 && pos <= len(state^.AnimMetadata) {
+    if pos >= 0 && pos < len(state^.AnimMetadata) {
         state^.AnimMetadata[pos] = metadata
     }
 }
