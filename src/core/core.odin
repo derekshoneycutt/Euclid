@@ -333,6 +333,8 @@ ParticleSystem :: struct {
     LastRenderLow : int,
     LastRenderMid : int,
     LastRenderHigh : int,
+
+    UseMaxDustParticles : int,
 }
 
 
@@ -365,6 +367,9 @@ Stroke3DRenderState :: struct {
 EuclidUIRuntimeState :: struct {
     TreeScrollDragging: bool,
     TreeScrollDragOff: f32,
+
+    ShowTreeSettings: bool,
+
     TextScrollDragging: bool,
     TextScrollDragOff: f32,
 }

@@ -10,7 +10,6 @@ Particle :: core.Particle
 ParticleSystem :: core.ParticleSystem
 KinePointSystem :: core.KinePointSystem
 
-MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 
@@ -90,7 +89,7 @@ random_f32_range :: proc(min_v, max_v: f32) -> f32 {
 reset_particles :: proc(ps: ^ParticleSystem) {
     ps.NextIndex = 0
     ps.SpawnTimer = 0
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         ps.LowParticles[i].Alive = false
         ps.LowParticles[i].Age = 0
     }
@@ -103,16 +102,20 @@ reset_particles :: proc(ps: ^ParticleSystem) {
 }
 
 reserve_dead_low_particle_slot :: proc(ps: ^ParticleSystem) -> (^Particle, bool) {
-    for step in 0..<MAX_LOW_PARTICLES {
-        index := (ps.NextIndex + step) % MAX_LOW_PARTICLES
+    if ps^.UseMaxDustParticles < 1 {
+        return nil, false
+    }
+
+    for step in 0..<ps^.UseMaxDustParticles {
+        index := (ps.NextIndex + step) % ps^.UseMaxDustParticles
         if !ps.LowParticles[index].Alive {
-            ps.NextIndex = (index + 1) % MAX_LOW_PARTICLES
+            ps.NextIndex = (index + 1) % ps^.UseMaxDustParticles
             return &ps.LowParticles[index], true
         }
     }
 
-    index := ps.NextIndex % MAX_LOW_PARTICLES
-    ps.NextIndex = (index + 1) % MAX_LOW_PARTICLES
+    index := ps.NextIndex % ps^.UseMaxDustParticles
+    ps.NextIndex = (index + 1) % ps^.UseMaxDustParticles
     return &ps.LowParticles[index], true
 }
 
@@ -298,9 +301,13 @@ clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
 }
 
 push_dust_away_from_xy :: proc (ps: ^ParticleSystem, x, y: f32) {
+    if ps^.UseMaxDustParticles < 1 {
+        return
+    }
+
     push_radius_sq := DUST_CONTACT_PUSH_RADIUS * DUST_CONTACT_PUSH_RADIUS
 
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         p := &ps.LowParticles[i]
         if !p.Alive || p.Type != .Dust {
             continue
@@ -364,7 +371,7 @@ spawn_dust_particle :: proc(ps: ^ParticleSystem, origin: Vector3, col: rl.Color)
 }
 
 kick_existing_dust :: proc(ps: ^ParticleSystem) {
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         p := &ps.LowParticles[i]
         if !p.Alive || p.Type != .Dust {
             continue
@@ -491,7 +498,7 @@ emit_circle_dust :: proc(ps: ^ParticleSystem, center, start, finish: Vector3, of
 }
 
 emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: int, kick_dust: bool = true) {
-    if index < 0 || index >= MAX_KINEPOINTS {
+    if index < 0 || index >= MAX_KINEPOINTS || ps^.UseMaxDustParticles < 1 {
         return
     }
 
@@ -581,6 +588,10 @@ emit_kine_hide_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem, index: i
 }
 
 emit_kine_clear_burst :: proc(ps: ^ParticleSystem, ks: ^KinePointSystem) {
+    if  ps^.UseMaxDustParticles < 1 {
+        return
+    }
+
     kick_existing_dust(ps)
 
     for i in 0..<MAX_KINEPOINTS {
@@ -738,13 +749,17 @@ resolve_dust_collisions_on_grid :: proc(
 }
 
 resolve_dust_collisions :: proc(ps: ^ParticleSystem) {
+    if ps^.UseMaxDustParticles < 1 {
+        return
+    }
+
     GridCells :: DUST_GRID_DIM * DUST_GRID_DIM
     Stride :: DUST_GRID_BUCKET_CAP
 
     buckets := make([]i32, GridCells * Stride, context.temp_allocator)
     counts := make([]i32, GridCells, context.temp_allocator)
 
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         p := &ps.LowParticles[i]
         if !p.Alive || p.Type != .Dust {
             continue
@@ -769,7 +784,7 @@ resolve_dust_collisions :: proc(ps: ^ParticleSystem) {
 }
 
 update_particles :: proc(ps: ^ParticleSystem, dt: f32) {
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         lp := &ps.LowParticles[i]
         update_particle(lp, dt)
     }

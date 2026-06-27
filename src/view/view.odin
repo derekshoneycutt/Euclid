@@ -64,6 +64,7 @@ run_window_loop :: proc() {
 
     particleSystem := new(ParticleSystem)
     defer free(particleSystem)
+    particleSystem^.UseMaxDustParticles = core.MAX_LOW_PARTICLES
     
     juliaInterface := julia.retrieve_interface()
     defer free(juliaInterface)
@@ -159,6 +160,7 @@ run_window_loop :: proc() {
         kine.build_kine_draw_cache(state^.PointSystem, alpha)
 
 		rl.BeginDrawing()
+        {
             rl.ClearBackground(BackgroundColor)
 
             draw_drawing_surface(state^.DrawSurface, state)
@@ -176,18 +178,9 @@ run_window_loop :: proc() {
             rl.DrawRectangleRec(rl.Rectangle{ViewWidth, 0, RightBarWidth, WindowHeight}, UIBackColor)
             draw_tree_view(state, &tree_scroll_y)
 
-            /*rl.GuiSliderBar(rl.Rectangle{ 1130, 600, 100, 20 }, "Scale:",
-                fmt.ctprintf("%f", isoScale.Scale), &isoScale.Scale, 0.0, ViewWidth)
-            rl.GuiSliderBar(rl.Rectangle{ 1130, 640, 100, 20 }, "Y Offset:",
-                fmt.ctprintf("%f", isoScale.YOffset), &isoScale.YOffset, 0.0, ViewHeight)
-            rl.GuiSliderBar(rl.Rectangle{ 1130, 680, 100, 20 }, "X Offset:",
-                fmt.ctprintf("%f", isoScale.XOffset), &isoScale.XOffset, 0.0, ViewWidth)*/
-
             rl.DrawFPS(10, 10)
+        }
 		rl.EndDrawing()
-
-        //fmt.println("Particles: ", particleSystem^.LastRenderLow, " low, ",
-        //    particleSystem^.LastRenderMid, " mid, ", particleSystem^.LastRenderHigh, " high")
 
         free_all(context.temp_allocator)
 	}

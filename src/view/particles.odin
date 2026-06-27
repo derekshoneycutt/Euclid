@@ -5,12 +5,11 @@ import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
-MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 MAX_PARTICLES :: core.MAX_PARTICLES
 
 render_low_particles :: proc(ps: ^ParticleSystem, state: ^EuclidGeneralState) {
     countrendered : int = 0
-    for i in 0..<MAX_LOW_PARTICLES {
+    for i in 0..<ps^.UseMaxDustParticles {
         p := &ps.LowParticles[i]
         if !p^.Alive {
             continue
