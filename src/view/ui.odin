@@ -156,13 +156,47 @@ set_selected_animation :: proc(ji: ^core.EuclidJuliaInterface, selected_id: int)
     ji.SelectedAnimationIndex = selected_id
 }
 
-find_root_animation_id :: proc(ji: ^core.EuclidJuliaInterface) -> int {
+count_visible_tree_rows_all_roots :: proc(ji: ^core.EuclidJuliaInterface) -> int {
+    count := 0
     for i in 0..<ji.NextAnimationIndex {
         if ji.Animations[i].ParentId < 0 {
-            return i
+            count += count_visible_tree_rows(ji, i)
         }
     }
-    return -1
+    return count
+}
+
+merge_tree_hit :: #force_inline proc(dst: ^TreeHit, src: TreeHit) {
+    if src.SelectedID >= 0 {
+        dst.SelectedID = src.SelectedID
+    }
+    if src.ToggledID >= 0 {
+        dst.ToggledID = src.ToggledID
+    }
+    if src.RestartRequested {
+        dst.RestartRequested = true
+    }
+}
+
+walk_draw_tree_roots :: proc(
+    ji: ^core.EuclidJuliaInterface,
+    panel: rl.Rectangle,
+    content_y: ^f32,
+    scroll_y: f32,
+    allow_clicks: bool,
+) -> TreeHit {
+    hit := TreeHit{SelectedID = -1, ToggledID = -1, RestartRequested = false}
+
+    for i in 0..<ji.NextAnimationIndex {
+        if ji.Animations[i].ParentId >= 0 {
+            continue
+        }
+
+        root_hit := walk_draw_tree_node(ji, i, 0, panel, content_y, scroll_y, allow_clicks)
+        merge_tree_hit(&hit, root_hit)
+    }
+
+    return hit
 }
 
 count_visible_tree_rows :: proc(ji: ^core.EuclidJuliaInterface, id: int) -> int {
@@ -305,12 +339,11 @@ draw_tree_view :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
     rl.DrawRectangleRec(list_panel, ComponentBackgroundColor)
     rl.DrawRectangleLinesEx(list_panel, 1, BorderColor)
 
-    root_id := find_root_animation_id(ji)
-    if root_id < 0 {
+    total_rows := count_visible_tree_rows_all_roots(ji)
+    if total_rows <= 0 {
         return
     }
 
-    total_rows := count_visible_tree_rows(ji, root_id)
     content_h := f32(total_rows) * TREE_ROW_HEIGHT
     max_scroll := max(f32(0), content_h - list_panel.height)
 
@@ -339,7 +372,7 @@ draw_tree_view :: proc(state: ^core.EuclidGeneralState, scroll_y: ^f32) {
     rl.BeginScissorMode(i32(list_panel.x), i32(list_panel.y), i32(list_panel.width), i32(list_panel.height))
     {
         y_cursor := f32(0)
-        hit := walk_draw_tree_node(ji, root_id, 0, list_panel, &y_cursor, scroll_y^, allow_tree_clicks)
+        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^, allow_tree_clicks)
 
         if hit.ToggledID >= 0 {
             ji.Animations[hit.ToggledID].IsExpanded = !ji.Animations[hit.ToggledID].IsExpanded
