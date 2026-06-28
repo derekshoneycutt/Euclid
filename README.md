@@ -5,7 +5,8 @@ This is a basic project to create an application that animates Euclid's Elements
 This is done in Odin for the primary application, with bindings to Julia to drive the
 animations. Raylib is used for rendering.
 
-Simply use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
+On macOS/Linux, use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
+On Windows PowerShell, use `./make.ps1` to build or `./make.ps1 --run` to build and run.
 You must have Odin and Julia installed on your system.
 
 <p align="center">

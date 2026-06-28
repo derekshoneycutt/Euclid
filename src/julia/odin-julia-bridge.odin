@@ -144,8 +144,13 @@ end_julia :: proc() {
 retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
     ret := new(core.EuclidJuliaInterface)
 
-    ret.InitScripts = julialib.jl_get_function(julialib.jl_main_module, "init_euclid_scripts")
-    ret.GlobalLoop = julialib.jl_get_function(julialib.jl_main_module, "global_euclid_loop")
+    main_module := resolve_main_module()
+    if main_module == nil {
+        return ret
+    }
+
+    ret.InitScripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
+    ret.GlobalLoop = julialib.jl_get_function(main_module, "global_euclid_loop")
     ret.AssetArchiveModTimeUnixNano = 0
     ret.CurrentAnimationIndex = -1
     ret.SelectedAnimationIndex = -1
@@ -340,6 +345,22 @@ reset_current_animation_loop :: proc(
     }
 }
 
+resolve_main_module :: proc() -> ^julialib.jl_module_t {
+    main_value := julialib.jl_eval_string("Main")
+    if main_value == nil || julialib.jl_exception_occurred() != nil {
+        return nil
+    }
+    return (^julialib.jl_module_t)(main_value)
+}
+
+resolve_base_module :: proc() -> ^julialib.jl_module_t {
+    base_value := julialib.jl_eval_string("Base")
+    if base_value == nil || julialib.jl_exception_occurred() != nil {
+        return nil
+    }
+    return (^julialib.jl_module_t)(base_value)
+}
+
 include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
     if len(script_path) == 0 {
@@ -351,7 +372,16 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
         return false
     }
 
-    include_fn := julialib.jl_get_function(julialib.jl_main_module, "include")
+    main_module := resolve_main_module()
+    if main_module == nil {
+        fmt.eprintln("Failed to resolve Julia Main module.")
+        if exit_on_failure {
+            runtime.exit(1)
+        }
+        return false
+    }
+
+    include_fn := julialib.jl_get_function(main_module, "include")
     if include_fn == nil {
         fmt.eprintln("Failed to resolve Julia include function from Main.")
         if exit_on_failure {
@@ -378,8 +408,13 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
 }
 
 refresh_julia_interface_handles :: proc(state: ^core.EuclidGeneralState) {
-    state^.JuliaInterface^.InitScripts = julialib.jl_get_function(julialib.jl_main_module, "init_euclid_scripts")
-    state^.JuliaInterface^.GlobalLoop = julialib.jl_get_function(julialib.jl_main_module, "global_euclid_loop")
+    main_module := resolve_main_module()
+    if main_module == nil {
+        return
+    }
+
+    state^.JuliaInterface^.InitScripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
+    state^.JuliaInterface^.GlobalLoop = julialib.jl_get_function(main_module, "global_euclid_loop")
 }
 
 reset_julia_interface_registry :: proc(state: ^core.EuclidGeneralState) {
@@ -533,8 +568,14 @@ print_julia_exception :: proc(contextOfErr: string) {
 
     ex_type := cstring(julialib.jl_typeof_str(ex_raw))
 
-    sprint_fn := julialib.jl_get_function(julialib.jl_base_module, "sprint")
-    showerror_fn := julialib.jl_get_function(julialib.jl_base_module, "showerror")
+    base_module := resolve_base_module()
+    if base_module == nil {
+        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        return
+    }
+
+    sprint_fn := julialib.jl_get_function(base_module, "sprint")
+    showerror_fn := julialib.jl_get_function(base_module, "showerror")
 
     if sprint_fn == nil || showerror_fn == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
