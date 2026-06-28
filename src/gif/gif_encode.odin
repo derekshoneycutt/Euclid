@@ -12,40 +12,20 @@ GIF_MAX_PIXELS :: 268435456
 GIF_HEADER_SIZE :: 32
 GIF_FRAME_DEPTH_BIAS :: 160
 
-GIF_GCE_INTRODUCER :: u8(0x21)
-GIF_GCE_LABEL :: u8(0xF9)
-GIF_GCE_BLOCK_SIZE :: u8(0x04)
-GIF_GCE_PACKED_DISPOSE_BACKGROUND_NO_TRANSPARENCY :: u8(0x05)
-GIF_GCE_PACKED_DISPOSE_BACKGROUND_TRANSPARENCY :: u8(0x09)
-GIF_GCE_TRANSPARENT_INDEX_DEFAULT :: u8(0x00)
-GIF_GCE_BLOCK_TERMINATOR :: u8(0x00)
+GIF_GCE_INTRODUCER :: 0x21
+GIF_GCE_LABEL :: 0xF9
+GIF_GCE_BLOCK_SIZE :: 0x04
+GIF_GCE_PACKED_DISPOSE_BACKGROUND_NO_TRANSPARENCY :: 0x05
+GIF_GCE_PACKED_DISPOSE_BACKGROUND_TRANSPARENCY :: 0x09
+GIF_GCE_TRANSPARENT_INDEX_DEFAULT :: 0x00
+GIF_GCE_BLOCK_TERMINATOR :: 0x00
 
-GIF_IMAGE_SEPARATOR :: u8(0x2C)
-GIF_IMAGE_LOCAL_COLOR_TABLE_FLAG :: u8(0x80)
+GIF_IMAGE_SEPARATOR :: 0x2C
+GIF_IMAGE_LOCAL_COLOR_TABLE_FLAG :: 0x80
 
-GIF_TRAILER :: u8(0x3B)
+GIF_TRAILER :: 0x3B
 
 #assert((GIF_DITHER_TILE_SIZE & (GIF_DITHER_TILE_SIZE - 1)) == 0)
-
-gif_r_depths: [GIF_COLOR_DEPTH_TABLE_SIZE]int = {0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
-gif_g_depths: [GIF_COLOR_DEPTH_TABLE_SIZE]int = {0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6}
-gif_b_depths: [GIF_COLOR_DEPTH_TABLE_SIZE]int = {0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5}
-
-gif_dither_kernel: [GIF_DITHER_TILE_SIZE * GIF_DITHER_TILE_SIZE]int = {
-     0 << GIF_DITHER_SHIFT,  8 << GIF_DITHER_SHIFT,  2 << GIF_DITHER_SHIFT, 10 << GIF_DITHER_SHIFT,
-    12 << GIF_DITHER_SHIFT,  4 << GIF_DITHER_SHIFT, 14 << GIF_DITHER_SHIFT,  6 << GIF_DITHER_SHIFT,
-     3 << GIF_DITHER_SHIFT, 11 << GIF_DITHER_SHIFT,  1 << GIF_DITHER_SHIFT,  9 << GIF_DITHER_SHIFT,
-    15 << GIF_DITHER_SHIFT,  7 << GIF_DITHER_SHIFT, 13 << GIF_DITHER_SHIFT,  5 << GIF_DITHER_SHIFT,
-}
-
-gif89a_header: [6]u8 = {'G', 'I', 'F', '8', '9', 'a'}
-gif_netscape_app_ext: [19]u8 = {
-    0x21, 0xFF, 0x0B, 'N', 'E', 'T', 'S', 'C', 'A', 'P',
-    'E', '2', '.', '0', 0x03, 0x01, 0x00, 0x00, 0x00,
-}
-
-gif_encode_alpha_threshold: int = 0
-gif_encode_bgra_flag: bool = false
 
 GifEncodeResult :: struct {
     Data: []u8,
@@ -83,6 +63,8 @@ GifEncodeState :: struct {
 
     Width: int,
     Height: int,
+    AlphaThreshold: int,
+    UseBGRA: bool,
 
     FramesSubmitted: int,
 
@@ -271,19 +253,38 @@ gif_encode_write_u16le :: #force_inline proc(dst: []u8, offset: int, value: int)
     return true
 }
 
-gif_encode_select_depth_tables :: #force_inline proc() -> (
-    ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
-    ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
-    ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
-) {
-    rdepths := &gif_r_depths
-    gdepths := &gif_g_depths
-    bdepths := &gif_b_depths
-    if gif_encode_bgra_flag {
-        rdepths = &gif_b_depths
-        bdepths = &gif_r_depths
+gif_encode_depth_bits :: #force_inline proc(depth: int, use_bgra: bool) -> (int, int, int) {
+    rdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
+    gdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6}
+    bdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5}
+
+    if use_bgra {
+        return bdepths[depth], gdepths[depth], rdepths[depth]
     }
-    return rdepths, gdepths, bdepths
+    return rdepths[depth], gdepths[depth], bdepths[depth]
+}
+
+gif_encode_dither_kernel_value :: #force_inline proc(dx, dy: int) -> int {
+    idx := dy * GIF_DITHER_TILE_SIZE + dx
+    switch idx {
+    case 0: return 0 << GIF_DITHER_SHIFT
+    case 1: return 8 << GIF_DITHER_SHIFT
+    case 2: return 2 << GIF_DITHER_SHIFT
+    case 3: return 10 << GIF_DITHER_SHIFT
+    case 4: return 12 << GIF_DITHER_SHIFT
+    case 5: return 4 << GIF_DITHER_SHIFT
+    case 6: return 14 << GIF_DITHER_SHIFT
+    case 7: return 6 << GIF_DITHER_SHIFT
+    case 8: return 3 << GIF_DITHER_SHIFT
+    case 9: return 11 << GIF_DITHER_SHIFT
+    case 10: return 1 << GIF_DITHER_SHIFT
+    case 11: return 9 << GIF_DITHER_SHIFT
+    case 12: return 15 << GIF_DITHER_SHIFT
+    case 13: return 7 << GIF_DITHER_SHIFT
+    case 14: return 13 << GIF_DITHER_SHIFT
+    case 15: return 5 << GIF_DITHER_SHIFT
+    }
+    return 0
 }
 
 gif_encode_clear_used_entries :: #force_inline proc(used: []u8, palette_size: int) {
@@ -307,6 +308,7 @@ gif_encode_dither_and_quantize_pixels :: proc(
     bmul: int,
     gmask: int,
     bmask: int,
+    alpha_threshold: int,
 ) {
     for y := 0; y < height; y += 1 {
         for x := 0; x < width; x += 1 {
@@ -316,14 +318,14 @@ gif_encode_dither_and_quantize_pixels :: proc(
             p2 := int(raw_pixels[pixel_idx + 2])
             p3 := int(raw_pixels[pixel_idx + 3])
 
-            if p3 < gif_encode_alpha_threshold {
+            if p3 < alpha_threshold {
                 cooked[y * width + x] = u32(palette_size - 1)
                 continue
             }
 
             dx := x & (GIF_DITHER_TILE_SIZE - 1)
             dy := y & (GIF_DITHER_TILE_SIZE - 1)
-            k := gif_dither_kernel[dy * GIF_DITHER_TILE_SIZE + dx]
+            k := gif_encode_dither_kernel_value(dx, dy)
 
             bq := (
                 min(65535, p2 * bmul + (k >> u32(bbits))) >> u32(16 - rbits - gbits - bbits)
@@ -378,6 +380,7 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
         return false
     }
 
+    gif89a_header := [6]u8{'G', 'I', 'F', '8', '9', 'a'}
     for i := 0; i < len(gif89a_header); i += 1 {
         out[i] = gif89a_header[i]
     }
@@ -393,6 +396,10 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
     out[11] = 0x00
     out[12] = 0x00
 
+    gif_netscape_app_ext := [19]u8{
+        0x21, 0xFF, 0x0B, 'N', 'E', 'T', 'S', 'C', 'A', 'P',
+        'E', '2', '.', '0', 0x03, 0x01, 0x00, 0x00, 0x00,
+    }
     for i := 0; i < len(gif_netscape_app_ext); i += 1 {
         out[13 + i] = gif_netscape_app_ext[i]
     }
@@ -408,13 +415,10 @@ gif_encode_try_cook_depth :: proc(
     height: int,
     pitch: int,
     current_depth: int,
-    rdepth_ptr: ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
-    gdepth_ptr: ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
-    bdepth_ptr: ^[GIF_COLOR_DEPTH_TABLE_SIZE]int,
+    alpha_threshold: int,
+    use_bgra: bool,
 ) -> GifEncodeCookAttempt {
-    rbits := rdepth_ptr^[current_depth]
-    gbits := gdepth_ptr^[current_depth]
-    bbits := bdepth_ptr^[current_depth]
+    rbits, gbits, bbits := gif_encode_depth_bits(current_depth, use_bgra)
 
     palette_size := (1 << u32(rbits + gbits + bbits)) + 1
     gif_encode_clear_used_entries(used, palette_size)
@@ -445,6 +449,7 @@ gif_encode_try_cook_depth :: proc(
         bmul,
         gmask,
         bmask,
+        alpha_threshold,
     )
 
     total_pixels := width * height
@@ -466,10 +471,10 @@ gif_encode_cook_frame :: proc(
     width: int,
     height: int,
     pitch: int,
+    use_bgra: bool,
+    alpha_threshold: int,
     depth: int,
 ) {
-    rdepth_ptr, gdepth_ptr, bdepth_ptr := gif_encode_select_depth_tables()
-
     current_depth := depth
 
     // TODO SIMD: evaluate a future SIMD implementation here.
@@ -484,9 +489,8 @@ gif_encode_cook_frame :: proc(
             height,
             pitch,
             current_depth,
-            rdepth_ptr,
-            gdepth_ptr,
-            bdepth_ptr,
+            alpha_threshold,
+            use_bgra,
         )
 
         if !(attempt.UsedCount >= 256 && current_depth > 1) {
@@ -694,7 +698,7 @@ gif_encode_build_palette_table :: proc(
             b | (b >> u32(frame.BBits)) | (b >> u32(frame.BBits * 2)) | (b >> u32(frame.BBits * 3))
         )
 
-        if gif_encode_bgra_flag {
+        if state.UseBGRA {
             table^[table_idx] = GifRgb{R = bb, G = gg, B = rr}
         } else {
             table^[table_idx] = GifRgb{R = rr, G = gg, B = bb}
@@ -929,6 +933,8 @@ gif_encode_begin :: proc(state: ^GifEncodeState, width, height: int) -> bool {
 
     state.Width = width
     state.Height = height
+    state.AlphaThreshold = 0
+    state.UseBGRA = false
     state.FramesSubmitted = 0
 
     state.LzwMem = make([]i16, GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE)
@@ -1000,6 +1006,8 @@ gif_encode_frame :: proc(
         state.Width,
         state.Height,
         pitch,
+        state.UseBGRA,
+        state.AlphaThreshold,
         next_depth,
     )
 

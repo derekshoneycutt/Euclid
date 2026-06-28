@@ -38,116 +38,116 @@ jl_gc_collection_t :: enum c.int {
 
 jl_nullable_float64_t :: struct {
 	hasvalue: u8,
-	value:    f64,
+	value: f64,
 }
 
 jl_nullable_float32_t :: struct {
 	hasvalue: u8,
-	value:    f32,
+	value: f32,
 }
 
 jl_options_t :: struct {
-	quiet:                          c.int8_t,
-	banner:                         c.int8_t,
-	julia_bindir:                   cstring,
-	julia_bin:                      cstring,
-	cmds:                           ^cstring,
-	image_file:                     cstring,
-	cpu_target:                     cstring,
-	nthreadpools:                   c.int8_t,
-	nthreads:                       c.int16_t,
-	nmarkthreads:                   c.int16_t,
-	nsweepthreads:                  c.int8_t,
-	nthreads_per_pool:              ^c.int16_t,
-	nprocs:                         c.int32_t,
-	machine_file:                   cstring,
-	project:                        cstring,
-	program_file:                   cstring,
-	isinteractive:                  c.int8_t,
-	color:                          c.int8_t,
-	historyfile:                    c.int8_t,
-	startupfile:                    c.int8_t,
-	compile_enabled:                c.int8_t,
-	code_coverage:                  c.int8_t,
-	malloc_log:                     c.int8_t,
-	tracked_path:                   cstring,
-	opt_level:                      c.int8_t,
-	opt_level_min:                  c.int8_t,
-	debug_level:                    c.int8_t,
-	check_bounds:                   c.int8_t,
-	depwarn:                        c.int8_t,
-	warn_overwrite:                 c.int8_t,
-	can_inline:                     c.int8_t,
-	polly:                          c.int8_t,
-	trace_compile:                  cstring,
-	trace_dispatch:                 cstring,
-	fast_math:                      c.int8_t,
-	worker:                         c.int8_t,
-	cookie:                         cstring,
-	handle_signals:                 c.int8_t,
-	use_experimental_features:      c.int8_t,
-	use_sysimage_native_code:       c.int8_t,
-	use_compiled_modules:           c.int8_t,
-	use_pkgimages:                  c.int8_t,
-	bindto:                         cstring,
-	outputbc:                       cstring,
-	outputunoptbc:                  cstring,
-	outputo:                        cstring,
-	outputasm:                      cstring,
-	outputji:                       cstring,
-	output_code_coverage:           cstring,
-	incremental:                    c.int8_t,
-	image_file_specified:           c.int8_t,
-	warn_scope:                     c.int8_t,
-	image_codegen:                  c.int8_t,
-	rr_detach:                      c.int8_t,
-	strip_metadata:                 c.int8_t,
-	strip_ir:                       c.int8_t,
-	permalloc_pkgimg:               c.int8_t,
-	heap_size_hint:                 u64,
-	hard_heap_limit:                u64,
-	heap_target_increment:          u64,
-	trace_compile_timing:           c.int8_t,
-	trim:                           c.int8_t,
-	trace_eval:                     c.int8_t,
-	task_metrics:                   c.int8_t,
+	quiet: c.int8_t,
+	banner: c.int8_t,
+	julia_bindir: cstring,
+	julia_bin: cstring,
+	cmds: ^cstring,
+	image_file: cstring,
+	cpu_target: cstring,
+	nthreadpools: c.int8_t,
+	nthreads: c.int16_t,
+	nmarkthreads: c.int16_t,
+	nsweepthreads: c.int8_t,
+	nthreads_per_pool: ^c.int16_t,
+	nprocs: c.int32_t,
+	machine_file: cstring,
+	project: cstring,
+	program_file: cstring,
+	isinteractive: c.int8_t,
+	color: c.int8_t,
+	historyfile: c.int8_t,
+	startupfile: c.int8_t,
+	compile_enabled: c.int8_t,
+	code_coverage: c.int8_t,
+	malloc_log: c.int8_t,
+	tracked_path: cstring,
+	opt_level: c.int8_t,
+	opt_level_min: c.int8_t,
+	debug_level: c.int8_t,
+	check_bounds: c.int8_t,
+	depwarn: c.int8_t,
+	warn_overwrite: c.int8_t,
+	can_inline: c.int8_t,
+	polly: c.int8_t,
+	trace_compile: cstring,
+	trace_dispatch: cstring,
+	fast_math: c.int8_t,
+	worker: c.int8_t,
+	cookie: cstring,
+	handle_signals: c.int8_t,
+	use_experimental_features: c.int8_t,
+	use_sysimage_native_code: c.int8_t,
+	use_compiled_modules: c.int8_t,
+	use_pkgimages: c.int8_t,
+	bindto: cstring,
+	outputbc: cstring,
+	outputunoptbc: cstring,
+	outputo: cstring,
+	outputasm: cstring,
+	outputji: cstring,
+	output_code_coverage: cstring,
+	incremental: c.int8_t,
+	image_file_specified: c.int8_t,
+	warn_scope: c.int8_t,
+	image_codegen: c.int8_t,
+	rr_detach: c.int8_t,
+	strip_metadata: c.int8_t,
+	strip_ir: c.int8_t,
+	permalloc_pkgimg: c.int8_t,
+	heap_size_hint: u64,
+	hard_heap_limit: u64,
+	heap_target_increment: u64,
+	trace_compile_timing: c.int8_t,
+	trim: c.int8_t,
+	trace_eval: c.int8_t,
+	task_metrics: c.int8_t,
 	timeout_for_safepoint_straggler_s: c.int16_t,
-	gc_sweep_always_full:           c.int8_t,
-	compress_sysimage:              c.int8_t,
-	alert_on_critical_error:        c.int8_t,
-	target_sanitize_memory:         c.int8_t,
-	target_sanitize_thread:         c.int8_t,
-	target_sanitize_address:        c.int8_t,
+	gc_sweep_always_full: c.int8_t,
+	compress_sysimage: c.int8_t,
+	alert_on_critical_error: c.int8_t,
+	target_sanitize_memory: c.int8_t,
+	target_sanitize_thread: c.int8_t,
+	target_sanitize_address: c.int8_t,
 }
 
 jl_image_buf_t :: struct {
-	kind:     jl_image_kind_t,
+	kind: jl_image_kind_t,
 	pointers: rawptr,
-	data:     cstring,
-	size:     c.size_t,
-	base:     u64,
+	data: cstring,
+	size: c.size_t,
+	base: u64,
 	checksum: u32,
 }
 
 jl_cgparams_t :: struct {
 	track_allocations: c.int,
-	code_coverage:     c.int,
-	prefer_specsig:    c.int,
+	code_coverage: c.int,
+	prefer_specsig: c.int,
 
-	gnu_pubnames:      c.int,
-	debug_info_kind:   c.int,
-	debug_info_level:  c.int,
+	gnu_pubnames: c.int,
+	debug_info_kind: c.int,
+	debug_info_level: c.int,
 	safepoint_on_entry: c.int,
-	gcstack_arg:       c.int,
+	gcstack_arg: c.int,
 
-	use_jlplt:         c.int,
-	force_emit_all:    c.int,
+	use_jlplt: c.int,
+	force_emit_all: c.int,
 
-	sanitize_memory:   c.int,
-	sanitize_thread:   c.int,
-	sanitize_address:  c.int,
+	sanitize_memory: c.int,
+	sanitize_thread: c.int,
+	sanitize_address: c.int,
 
-	unique_names:      c.int,
+	unique_names: c.int,
 }
 
 jl_emission_params_t :: struct {
@@ -161,14 +161,14 @@ jl_sym_t :: struct {}
 jl_svec_t :: struct {}
 jl_genericmemory_t :: struct {
 	length: c.size_t,
-	ptr:    rawptr,
+	ptr: rawptr,
 }
 jl_genericmemoryref_t :: struct {
 	ptr_or_offset: rawptr,
-	mem:           ^jl_genericmemory_t,
+	mem: ^jl_genericmemory_t,
 }
 jl_array_t :: struct {
-	ref:     jl_genericmemoryref_t,
+	ref: jl_genericmemoryref_t,
 	dimsize: [1]c.size_t,
 }
 jl_datatype_t :: struct {}
@@ -192,22 +192,22 @@ ios_t :: struct {}
 
 // Common exported globals from libjulia.
 foreign jl {
-	jl_options:        jl_options_t
-	jl_base_module:    ^jl_module_t
-	jl_core_module:    ^jl_module_t
-	jl_main_module:    ^jl_module_t
-	jl_true:           ^jl_value_t
-	jl_false:          ^jl_value_t
-	jl_nothing:        ^jl_value_t
-	jl_any_type:       ^jl_datatype_t
-	jl_float64_type:   ^jl_datatype_t
-	jl_string_type:    ^jl_datatype_t
-	jl_uint8_type:     ^jl_datatype_t
-	jl_uint32_type:    ^jl_datatype_t
-	jl_array_any_type:  ^jl_value_t
+	jl_options: jl_options_t
+	jl_base_module: ^jl_module_t
+	jl_core_module: ^jl_module_t
+	jl_main_module: ^jl_module_t
+	jl_true: ^jl_value_t
+	jl_false: ^jl_value_t
+	jl_nothing: ^jl_value_t
+	jl_any_type: ^jl_datatype_t
+	jl_float64_type: ^jl_datatype_t
+	jl_string_type: ^jl_datatype_t
+	jl_uint8_type: ^jl_datatype_t
+	jl_uint32_type: ^jl_datatype_t
+	jl_array_any_type: ^jl_value_t
 	jl_array_uint8_type: ^jl_value_t
 	jl_array_uint32_type: ^jl_value_t
-	jl_task_type:      ^jl_datatype_t
+	jl_task_type: ^jl_datatype_t
 
 	// Initialization and process lifecycle.
 	jl_get_libdir :: proc() -> cstring ---

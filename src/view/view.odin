@@ -28,8 +28,8 @@ IsoXOffset :: 450
 IsoYOffset :: 450
 
 LIMIT_FPS :: 60
-FIXED_DT :: f32(1.0 / LIMIT_FPS)
-MAX_FRAME_DT :: f32(0.25)
+FIXED_DT :: 1.0 / LIMIT_FPS
+MAX_FRAME_DT :: 0.25
 MAX_STEPS_PER_FRAME :: 6
 
 AllowedConstraintError :: 0.0001

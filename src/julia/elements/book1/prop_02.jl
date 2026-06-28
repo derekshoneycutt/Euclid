@@ -13,8 +13,6 @@ const CPoint = [0.40f0, 0.40f0, 0f0]
 const DPoint = [0.40f0, 0.40f0, 0f0]
 const EPoint = [0.40f0, 0.40f0, 0f0]
 const FPoint = [0.40f0, 0.40f0, 0f0]
-const GPoint = [0.40f0, 0.40f0, 0f0]
-const LPoint = [0.40f0, 0.40f0, 0f0]
 const CircleSweepTheta = 2f0 * π
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0
@@ -30,13 +28,15 @@ const HLabelPoint = [0.83f0, 0.21f0, 0f0]
 const KLabelPoint = [0.83f0, 0.21f0, 0f0]
 const LLabelPoint = [0.83f0, 0.21f0, 0f0]
 
-const LineABColor = :grey60
+const LineABColor = :gray60
 const LineCBColor = :palevioletred1
 const LineCAColor = :khaki3
-const CircleBCDColor = :steelblue
-const CircleACEColor = :palevioletred1
+const TempCircleColor = :plum1
+const CircleCGHColor = :steelblue
+const CircleGKLColor = :palevioletred1
 const LabelColor = :plum1
 const LineMaxBrush = 5f0
+const TempCircleBrush = 1f0
 const CircleBrush = 5f0
 
 const DescendDuration = 1.8f0
@@ -53,12 +53,12 @@ const HidePauseDuration = 1.5f0
 const MetaLineABHostId = 1
 const MetaLineABJoint1Id = 2
 const MetaLineABJoint2Id = 3
-const MetaCircleBCDHostId = 10
-const MetaCircleBCDStartId = 11
-const MetaCircleBCDEndId = 12
-const MetaCircleACEHostId = 20
-const MetaCircleACEStartId = 21
-const MetaCircleACEEndId = 22
+const MetaCircleCGHHostId = 10
+const MetaCircleCGHStartId = 11
+const MetaCircleCGHEndId = 12
+const MetaCircleGKLHostId = 20
+const MetaCircleGKLStartId = 21
+const MetaCircleGKLEndId = 22
 const MetaLineCBHostId = 30
 const MetaLineCBJoint1Id = 31
 const MetaLineCBJoint2Id = 32
@@ -81,16 +81,6 @@ const MetaTimer = 101
 const PhasePenDescend = 0f0
 const PhaseDrawLine = 1f0
 const PhasePenRise = 2f0
-const PhaseCompassDescend = 10f0
-const PhaseDrawCircleBCD = 21f0
-const PhaseCompassArcToBA = 30f0
-const PhaseDrawCircleACE = 31f0
-const PhaseCompassRise = 40f0
-const PhasePenDescend2 = 41f0
-const PhaseDrawLineCB = 51f0
-const PhaseArcMovePen = 60f0
-const PhaseDrawLineCA = 61f0
-const PhasePenRise2 = 90f0
 const PhaseHideAll = 100f0
 
 
@@ -119,13 +109,13 @@ Therefore at the given point A the straight line AL is placed equal to the given
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    #=circleBCDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleBCDHostId))
-    circleBCDStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleBCDStartId))
-    circleBCDEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleBCDEndId))
+    #=circleBCDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHHostId))
+    circleBCDStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHStartId))
+    circleBCDEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHEndId))
 
-    circleACEHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleACEHostId))
-    circleACEStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleACEStartId))
-    circleACEEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleACEEndId))
+    circleACEHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLHostId))
+    circleACEStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLStartId))
+    circleACEEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLEndId))
 
     lineABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
     lineABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
@@ -225,9 +215,9 @@ function initialize(state_ptr::Ptr{Cvoid})
     #=lineAB = OdinJuliaBridge.create_new_line(
         state_ptr, APoint, APoint, LineABColor, 0f0)
     circleBCD = OdinJuliaBridge.create_new_circle(
-        state_ptr, APoint, Radius, 7f0 * π / 4f0, 7f0 * π / 4f0, CircleBCDColor, 0f0)
+        state_ptr, APoint, Radius, 7f0 * π / 4f0, 7f0 * π / 4f0, CircleCGHColor, 0f0)
     circleACE = OdinJuliaBridge.create_new_circle(
-        state_ptr, EndPoint, Radius, 3f0 * π / 4f0, 3f0 * π / 4f0, CircleACEColor, 0f0)
+        state_ptr, EndPoint, Radius, 3f0 * π / 4f0, 3f0 * π / 4f0, CircleGKLColor, 0f0)
     lineCB = OdinJuliaBridge.create_new_line(
         state_ptr, Intersection, Intersection, LineCBColor, 0f0)
     lineCA = OdinJuliaBridge.create_new_line(
@@ -246,13 +236,13 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint1Id, Float32(lineCA.joint1Id))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint2Id, Float32(lineCA.joint2Id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleBCDHostId, Float32(circleBCD.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleBCDStartId, Float32(circleBCD.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleBCDEndId, Float32(circleBCD.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHHostId, Float32(circleBCD.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHStartId, Float32(circleBCD.startId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHEndId, Float32(circleBCD.endId))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleACEHostId, Float32(circleACE.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleACEStartId, Float32(circleACE.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleACEEndId, Float32(circleACE.endId))=#
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLHostId, Float32(circleACE.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLStartId, Float32(circleACE.startId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLEndId, Float32(circleACE.endId))=#
 
     reset_cycle_state(state_ptr)
 end
