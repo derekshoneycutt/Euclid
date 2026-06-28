@@ -1,12 +1,16 @@
 package view
 
+// Here is where we initialize the application state and load up the window, running
+// the loop for the lifetime of this instance.
+
 import "../core"
 import "../kine"
 import "../julia"
 import "../particles"
 
-import rl "vendor:raylib"
 import "core:math/linalg"
+
+import rl "vendor:raylib"
 
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH

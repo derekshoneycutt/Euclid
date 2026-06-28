@@ -1,7 +1,29 @@
 package particles
 
+// Simple particle system kinda took off away from me a bit here, but it has a few important
+// points to discuss:
+
+// 3 Layers : Low, Middle, High.
+// Technically, we try to not be picky about what kind of particle is in each, but there's
+// a clear pattern. Low has dust, Middle has Trail and BurnOut, and the high layer has the
+// Flicker particles.
+
+// Particle types :
+//
+// - Dust particles move around and collide with eachother, giving some Newtonian style
+//   physics to them. They can be emitted from shapes, creating an effect of the shapes
+//   being deconstructed into dust. Their lifetime is dependent on how many times the dust
+//   is kicked up, as opposed to hard time restraints.
+// - Trail and Burnout are always used together and create the kind of flat-magic-fire
+//   feel that trails behind tools on the ground. Trail is just a single color and fades
+//   away, BurnOut starts white and burns into the color as it fades.
+// - Flicker move in a 3D velocity away from the point of emission. They randomly show as
+//   single pixels drawn on the screen. The result is a kind of sparkling flicker effect.
+
 import "../core"
+
 import "core:math"
+
 import rl "vendor:raylib"
 
 Vector2 :: core.Vector2

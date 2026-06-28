@@ -1,5 +1,10 @@
 package kine
 
+// Creates and applies constraints for the shape system. This is kinda where that "kine"
+// name isn't completely lost, although this is just a totally stripped out version.
+// It helps keep the pen and compass in appropriate shape through all animation motions
+// without significant pain
+
 import "core:math"
 import "core:math/linalg"
 

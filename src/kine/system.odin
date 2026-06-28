@@ -1,10 +1,19 @@
 package kine
 
+// The major system calls for the shape system are for creating the immediate draw cache.
+// This just builds the cache into the existing point system.
+
+// TODO: Currently not caching items that are not drawn, resulting in using a separate
+// PreviousVectors cache that kinda doubles up. The PreviousVectors preceded the DrawCache,
+// but consider more if we should just move it to the DrawCache entirely?
+
 import "../core"
 import "../particles"
-import rl "vendor:raylib"
+
 import "core:math"
 import "core:math/linalg"
+
+import rl "vendor:raylib"
 
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS

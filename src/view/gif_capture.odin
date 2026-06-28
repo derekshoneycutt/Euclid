@@ -1,12 +1,18 @@
 package view
 
+// GIFs are captured only from the view area, excluding the UI. The current session for the
+// GIF is always stored on the general state for the application. We need to wait until a
+// new animation cycle begins, record it into a gif, and when the cycle completes, write it
+// out to a new GIF file.
+
 import "../core"
 import "../gif"
 
-import rl "vendor:raylib"
 import "core:fmt"
 import "core:math"
 import "core:os"
+
+import rl "vendor:raylib"
 
 GIF_CAPTURE_QUALITY :: 12
 

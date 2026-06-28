@@ -1,7 +1,10 @@
 package files
 
+// The main point here is to unpack the assets.pkg file into a temporary file and provide
+// the location of the unpacked files to other modules
+
 import "core:bytes"
-import gzip "core:compress/gzip"
+import "core:compress/gzip"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"

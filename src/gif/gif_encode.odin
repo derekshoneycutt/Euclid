@@ -1,6 +1,10 @@
 package gif
 
+// This just encodes gif files. We use the standard allocator in the current context, freeing
+// when aborted or ended.
+
 import "../core"
+
 import "core:mem"
 
 GIF_LZW_TABLE_CAPACITY :: 4096
@@ -328,8 +332,6 @@ gif_encode_next_frame_depth :: #force_inline proc(
         return quality_clamped
     }
 
-    // Heuristic inherited from original encoder: fewer colors in the previous
-    // frame permit a deeper search budget for the next frame.
     return min(quality_clamped, prev_depth + GIF_FRAME_DEPTH_BIAS / max(1, prev_count))
 }
 
@@ -438,9 +440,6 @@ gif_encode_cook_frame :: proc(
     depth: int,
 ) {
     current_depth := depth
-
-    // TODO SIMD: evaluate a future SIMD implementation here.
-    // We intentionally keep only scalar cooking for now.
 
     for {
         attempt := gif_encode_try_cook_depth(

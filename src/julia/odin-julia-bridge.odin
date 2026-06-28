@@ -10,6 +10,11 @@ package julia
 // system especially, and also some access to particle system.
 // Doc comments are verbose in the julia companion to this, and methods are largely 1-to-1.
 
+// Importantly, the catalogue of animations is stored as Julia Animation Interfaces in
+// the Julia Interface. There is really not enough to justify separating them out, although
+// it can feel a little tight here. Ultimately, the Julia is more in control of the catalogue,
+// though it is stored and chosen from via the Odin.
+
 import "../julialib"
 import "../core"
 import "../files"

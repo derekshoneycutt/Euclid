@@ -1,14 +1,21 @@
 package view
 
+// We draw the basic surface and all the shapes and tools here
+
+// Only the tools are drawn with shaders. Everything else is the ordinary 2D tools,
+// drawn with an isometric projection
+
 import "../kine"
 import "../core"
 import "../files"
-import rl "vendor:raylib"
-import rlgl "vendor:raylib/rlgl"
+
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:strings"
+
+import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 CIRCLE_ARC_SEGMENTS :: 96
 

@@ -1,7 +1,10 @@
 package kine
 
-import rl "vendor:raylib"
+// We only create the shapes and their constraints here. It is pretty simple at that.
+
 import "core:math"
+
+import rl "vendor:raylib"
 
 init_kineshape_label :: proc(
     system: ^KinePointSystem,

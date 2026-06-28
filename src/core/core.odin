@@ -2,11 +2,13 @@ package core
 
 // Defines the core structures used in the Euclid Application.
 // The general bias is to just allocate memory upfront inside EuclidGeneralState and
-// stick to that memory, except for a few UI helpers using temp_allocator and Julia's GC.
+// stick to that memory, except for a few UI helpers using temp_allocator, Julia's GC, and GIFs.
 // This creates some hard caps on e.g. the particle system, but it also prevents wildness.
 
 import "../julialib"
+
 import "base:runtime"
+
 import rl "vendor:raylib"
 
 MAX_LOW_PARTICLES :: 4096

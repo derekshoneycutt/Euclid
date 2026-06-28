@@ -1,12 +1,17 @@
 package view
 
+// Here is where we draw and handle all the UI stuff that wraps outside the animations.
+// This is mostly all built off of the Julia Interfaces, and in fact, we call into the
+// Odin-Julia Bridge to get the data as we need it for the view text, etc.
+
 import "../core"
 import "../julia"
 
-import rl "vendor:raylib"
 import "core:fmt"
 import "core:math"
 import "core:strings"
+
+import rl "vendor:raylib"
 
 TREE_PANEL_PADDING :: 10
 TREE_ROW_HEIGHT :: 22

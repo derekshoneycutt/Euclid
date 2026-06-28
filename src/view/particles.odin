@@ -1,8 +1,12 @@
 package view
 
+// Just drawing whatever particles are currently alive. Pretty simple, tbh
+
 import "../core"
+
 import "core:fmt"
 import "core:math"
+
 import rl "vendor:raylib"
 
 MAX_PARTICLES :: core.MAX_PARTICLES
