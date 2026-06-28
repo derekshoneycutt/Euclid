@@ -12,6 +12,7 @@ package julia
 
 import "../julialib"
 import "../core"
+import "../files"
 import "../particles"
 import "../kine"
 
@@ -126,11 +127,28 @@ BridgeSolveResult :: struct {
 
 initiate_julia :: proc() {
     julialib.jl_init()
-    include_result := julialib.jl_eval_string("include(\"./julia/script.jl\")")
+
+    script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
+    if len(script_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia script path.")
+        fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
+        runtime.exit(1)
+    }
+
+    include_fn := julialib.jl_get_function(julialib.jl_main_module, "include")
+    if include_fn == nil {
+        fmt.eprintln("Failed to resolve Julia include function from Main.")
+        runtime.exit(1)
+    }
+
+    script_cstr := strings.clone_to_cstring(script_path, context.temp_allocator)
+    script_value := julialib.jl_cstr_to_string(script_cstr)
+    include_result := julialib.jl_call1(include_fn, script_value)
     if julialib.jl_exception_occurred() != nil || include_result == nil {
-        fmt.eprintln("Failed to initialize Julia scripts via include(\"./julia/script.jl\").")
-        fmt.eprintln("Verify the script path is correct relative to the current working directory.")
-        print_julia_exception("initiate_julia include ./julia/script.jl")
+        fmt.eprintln("Failed to initialize Julia scripts via Main.include(path).")
+        fmt.eprintln("Resolved script path: ", script_path)
+        fmt.eprintln("Verify assets.pkg/julia/script.jl exists next to the executable.")
+        print_julia_exception("initiate_julia include assets.pkg/julia/script.jl")
         runtime.exit(1)
     }
 }

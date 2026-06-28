@@ -2,11 +2,13 @@ package view
 
 import "../kine"
 import "../core"
+import "../files"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:strings"
 
 CIRCLE_ARC_SEGMENTS :: 96
 
@@ -20,9 +22,6 @@ SHADOW_ALPHA_MIN :: 35
 SHADOW_ALPHA_HEIGHT_SCALE :: 35.0
 SHADOW_EPSILON_LZ :: 0.0001
 
-STROKE3D_VERTEX_SHADER_PATH :: "./shaders/stroke3d.vs"
-STROKE3D_FRAGMENT_SHADER_PATH :: "./shaders/stroke3d.fs"
-
 STROKE3D_AMBIENT :: 0.28
 STROKE3D_DIFFUSE :: 1.05
 STROKE3D_SPECULAR_STRENGTH :: 0.26
@@ -32,13 +31,25 @@ STROKE3D_SPECULAR_POWER :: 18.0
 init_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
     s := &state^.Stroke3D
 
-    if !rl.FileExists(STROKE3D_VERTEX_SHADER_PATH) || !rl.FileExists(STROKE3D_FRAGMENT_SHADER_PATH) {
-        fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
+    vertex_path := files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
+    fragment_path := files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
+    if len(vertex_path) == 0 || len(fragment_path) == 0 {
+        fmt.println("stroke3d shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
         s^.Ready = false
         return
     }
 
-    s^.Shader = rl.LoadShader(STROKE3D_VERTEX_SHADER_PATH, STROKE3D_FRAGMENT_SHADER_PATH)
+    vertex_cstr := strings.clone_to_cstring(vertex_path, context.temp_allocator)
+    fragment_cstr := strings.clone_to_cstring(fragment_path, context.temp_allocator)
+
+    if !rl.FileExists(vertex_cstr) || !rl.FileExists(fragment_cstr) {
+        fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
+        fmt.println("stroke3d expected paths: vs=", vertex_path, " fs=", fragment_path)
+        s^.Ready = false
+        return
+    }
+
+    s^.Shader = rl.LoadShader(vertex_cstr, fragment_cstr)
     if s^.Shader.id == 0 {
         fmt.println("stroke3d shader failed to load; pen/compass 3D shading disabled")
         s^.Ready = false

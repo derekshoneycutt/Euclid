@@ -19,25 +19,48 @@ juliaFlags="$(${juliaConfigPath} --ldflags --ldlibs | tr '\n' ' ')"
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 runAfterBuild=false
+doBuild=true
 
 if [[ "${1-}" == "--run" ]]; then
     runAfterBuild=true
+elif [[ "${1-}" == "--run-only" ]]; then
+    runAfterBuild=true
+    doBuild=false
+elif [[ "${1-}" == "--clean" ]]; then
+    rm -rf "${scriptDir}/bin/"
+    exit 0
 elif [[ -n "${1-}" ]]; then
     echo "Usage: ./make.sh [--run]" >&2
     exit 1
 fi
 
-mkdir -p "${scriptDir}/bin/julia/"
-mkdir -p "${scriptDir}/bin/shaders/"
+assetsStagingDir="${scriptDir}/bin/.assets_staging"
+assetsArchivePath="${scriptDir}/bin/assets.pkg"
 
-cd "${scriptDir}/src"
-odin build main.odin -file \
-    -out:../bin/euclid \
-    -extra-linker-flags:"${juliaFlags}"
-cd julia
-find . -type f -name "*.jl" -exec cp --parents {} ../../bin/julia/ \;
-cd ../view/shaders
-cp ./* ../../../bin/shaders/
+if [[ "${doBuild}" == "true" ]]; then
+    rm -rf "${assetsStagingDir}"
+    mkdir -p "${assetsStagingDir}/julia"
+    mkdir -p "${assetsStagingDir}/shaders"
+
+    cd "${scriptDir}/src"
+    odin build main.odin -file \
+        -out:../bin/euclid \
+        -extra-linker-flags:"${juliaFlags}"
+
+    cp -R "${scriptDir}/src/julia/." "${assetsStagingDir}/julia/"
+    cp -R "${scriptDir}/src/view/shaders/." "${assetsStagingDir}/shaders/"
+
+    cat > "${assetsStagingDir}/manifest.txt" <<EOF
+package=assets.pkg
+julia_root=julia
+shader_root=shaders
+format=tar.gz
+EOF
+
+    tar -C "${assetsStagingDir}" -czf "${assetsArchivePath}" .
+    rm -rf "${assetsStagingDir}"
+fi
+
 cd "${scriptDir}"
 
 if [[ "${runAfterBuild}" == "true" ]]; then
