@@ -1,6 +1,14 @@
 # Main Julia script body
 # This just loads all the system helpers and animation files, and registers in init for Odin
 
+using Pkg
+if !haskey(Pkg.project().dependencies, "Colors")
+    Pkg.add("Colors")
+end
+if !haskey(Pkg.project().dependencies, "LinearAlgebra")
+    Pkg.add("LinearAlgebra")
+end
+
 include("./odin-julia-bridge.jl")
 include("./geometry.jl")
 include("./animations.jl")
