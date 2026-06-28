@@ -10,10 +10,7 @@ import "core:os"
 
 GIF_CAPTURE_QUALITY :: 12
 
-GifCaptureSession :: struct {
-    Encoder: gif.GifEncodeState,
-    Active: bool,
-}
+GifCaptureSession :: core.GifCaptureSession
 
 clear_last_gif_path :: proc(ui_runtime: ^core.EuclidUIRuntimeState) {
     ui_runtime.LastGifPathLen = 0
@@ -62,18 +59,17 @@ gif_capture_abort_session :: proc(session: ^GifCaptureSession) {
 
 gif_capture_begin_session :: proc(
     state: ^core.EuclidGeneralState,
-    session: ^GifCaptureSession,
 ) -> bool {
     ui_runtime := &state.UIRuntime
     downsample := clamp(ui_runtime.GifDownsampleFactor, 1, 4)
-    out_w := max(1, ViewWidth / downsample)
-    out_h := max(1, ViewHeight / downsample)
+    out_w := max(1, VIEW_WIDTH / downsample)
+    out_h := max(1, VIEW_HEIGHT / downsample)
 
-    if !gif.gif_encode_begin(&session.Encoder, out_w, out_h) {
+    if !gif.gif_encode_begin(&state^.GifCapture.Encoder, out_w, out_h) {
         return false
     }
 
-    session.Active = true
+    state^.GifCapture.Active = true
     ui_runtime.GifCaptureFrameCounter = 0
     ui_runtime.GifCapturedFrames = 0
     return true
@@ -81,14 +77,13 @@ gif_capture_begin_session :: proc(
 
 gif_capture_finalize_session :: proc(
     state: ^core.EuclidGeneralState,
-    session: ^GifCaptureSession,
 ) -> bool {
-    if !session.Active {
+    if !state^.GifCapture.Active {
         return false
     }
 
-    result := gif.gif_encode_end(&session.Encoder)
-    session.Active = false
+    result := gif.gif_encode_end(&state^.GifCapture.Encoder)
+    state^.GifCapture.Active = false
     if len(result.Data) == 0 {
         return false
     }
@@ -105,9 +100,8 @@ gif_capture_finalize_session :: proc(
 
 gif_capture_submit_frame :: proc(
     state: ^core.EuclidGeneralState,
-    session: ^GifCaptureSession,
 ) -> bool {
-    if !session.Active {
+    if !state^.GifCapture.Active {
         return false
     }
 
@@ -125,7 +119,7 @@ gif_capture_submit_frame :: proc(
     }
     defer rl.UnloadImage(image)
 
-    rl.ImageCrop(&image, rl.Rectangle{0, 0, ViewWidth, ViewHeight})
+    rl.ImageCrop(&image, rl.Rectangle{0, 0, VIEW_WIDTH, VIEW_HEIGHT})
 
     downsample := clamp(ui_runtime.GifDownsampleFactor, 1, 4)
     if downsample > 1 {
@@ -137,7 +131,7 @@ gif_capture_submit_frame :: proc(
     pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
     if !gif.gif_encode_frame(
-        &session.Encoder,
+        &state^.GifCapture.Encoder,
         image.data,
         centiseconds,
         GIF_CAPTURE_QUALITY,
@@ -160,7 +154,6 @@ gif_capture_consume_cycle_boundary :: proc(state: ^core.EuclidGeneralState) -> b
 
 gif_capture_update_fixed_step :: proc(
     state: ^core.EuclidGeneralState,
-    session: ^GifCaptureSession,
 ) {
     ui_runtime := &state.UIRuntime
 
@@ -193,14 +186,14 @@ gif_capture_update_fixed_step :: proc(
     case .Saved:
     case .Error:
     case .Armed:
-        if gif_capture_begin_session(state, session) {
+        if gif_capture_begin_session(state) {
             ui_runtime.GifCapturePhase = .Recording
         } else {
             ui_runtime.GifCapturePhase = .Error
         }
     case .Recording:
         ui_runtime.GifCapturePhase = .Finalizing
-        if gif_capture_finalize_session(state, session) {
+        if gif_capture_finalize_session(state) {
             ui_runtime.GifCapturePhase = .Saved
         } else {
             ui_runtime.GifCapturePhase = .Error

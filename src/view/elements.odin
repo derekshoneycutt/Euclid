@@ -1,6 +1,5 @@
 package view
 
-import "../surface"
 import "../kine"
 import "../core"
 import rl "vendor:raylib"
@@ -226,24 +225,26 @@ shadow_to_screen :: proc(p: Vector3, state: ^EuclidGeneralState) -> Vector2 {
 
 
 
-draw_drawing_surface :: proc(room : ^EuclidDrawingSurface, state: ^EuclidGeneralState) {
-    surfaceZeros : Vector3 = room^.Zeros + { room^.EdgeSize, room^.EdgeSize, 0 }
-    surfaceRightUp : Vector3 = room^.RightUp + { -room^.EdgeSize, room^.EdgeSize, 0 }
-    surfaceLeftDown : Vector3 = room^.LeftDown + { room^.EdgeSize, -room^.EdgeSize, 0 }
-    surfaceRightDown : Vector3 = room^.RightDown + { -room^.EdgeSize, -room^.EdgeSize, 0 }
+draw_drawing_surface :: proc(state: ^EuclidGeneralState) {
+    room := state^.DrawSurface
 
-    rl.DrawTriangle(iso_to_cartesian(room^.Zeros, state^.IsoScale^),
-        iso_to_cartesian(room^.RightUp, state^.IsoScale^),
-        iso_to_cartesian(room^.LeftDown, state^.IsoScale^), room^.EdgeColor)
+    surfaceZeros : Vector3 = room^.Zeros + { room.EdgeSize, room.EdgeSize, 0 }
+    surfaceRightUp : Vector3 = room^.RightUp + { -room.EdgeSize, room.EdgeSize, 0 }
+    surfaceLeftDown : Vector3 = room^.LeftDown + { room.EdgeSize, -room.EdgeSize, 0 }
+    surfaceRightDown : Vector3 = room^.RightDown + { -room.EdgeSize, -room.EdgeSize, 0 }
+
+    rl.DrawTriangle(iso_to_cartesian(room.Zeros, state^.IsoScale^),
+        iso_to_cartesian(room.RightUp, state^.IsoScale^),
+        iso_to_cartesian(room.LeftDown, state^.IsoScale^), room.EdgeColor)
     rl.DrawTriangle(iso_to_cartesian(room^.RightDown, state^.IsoScale^),
-        iso_to_cartesian(room^.LeftDown, state^.IsoScale^),
-        iso_to_cartesian(room^.RightUp, state^.IsoScale^), room^.EdgeColor)
+        iso_to_cartesian(room.LeftDown, state^.IsoScale^),
+        iso_to_cartesian(room.RightUp, state^.IsoScale^), room.EdgeColor)
     rl.DrawTriangle(iso_to_cartesian(surfaceZeros, state^.IsoScale^),
         iso_to_cartesian(surfaceRightUp, state^.IsoScale^),
-        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^), room^.Color)
+        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^), room.Color)
     rl.DrawTriangle(iso_to_cartesian(surfaceRightDown, state^.IsoScale^),
         iso_to_cartesian(surfaceLeftDown, state^.IsoScale^),
-        iso_to_cartesian(surfaceRightUp, state^.IsoScale^), room^.Color)
+        iso_to_cartesian(surfaceRightUp, state^.IsoScale^), room.Color)
 }
 
 draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {

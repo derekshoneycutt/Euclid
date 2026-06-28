@@ -1,5 +1,6 @@
 package gif
 
+import "../core"
 import "core:mem"
 
 GIF_LZW_TABLE_CAPACITY :: 4096
@@ -25,52 +26,13 @@ GIF_IMAGE_LOCAL_COLOR_TABLE_FLAG :: 0x80
 
 GIF_TRAILER :: 0x3B
 
+GifEncodeResult :: core.GifEncodeResult
+GifEncodeFrame :: core.GifEncodeFrame
+GifEncodeBuffer :: core.GifEncodeBuffer
+GifEncodeState :: core.GifEncodeState
+
 #assert((GIF_DITHER_TILE_SIZE & (GIF_DITHER_TILE_SIZE - 1)) == 0)
 
-GifEncodeResult :: struct {
-    Data: []u8,
-    DataSize: int,
-}
-
-GifEncodeFrame :: struct {
-    Pixels: []u32,
-    Depth: int,
-    Count: int,
-    RBits: int,
-    GBits: int,
-    BBits: int,
-    IsCooked: bool,
-}
-
-GifEncodeBuffer :: struct {
-    Next: ^GifEncodeBuffer,
-    Size: int,
-    Data: []u8,
-}
-
-GifEncodeFileWriteFunc :: proc(buffer: rawptr, size, count: int, stream: rawptr) -> int
-
-GifEncodeState :: struct {
-    PreviousFrame: GifEncodeFrame,
-    CurrentFrame: GifEncodeFrame,
-
-    LzwMem: []i16,
-    TlbMem: []u8,
-    UsedMem: []u8,
-
-    ListHead: ^GifEncodeBuffer,
-    ListTail: ^GifEncodeBuffer,
-
-    Width: int,
-    Height: int,
-    AlphaThreshold: int,
-    UseBGRA: bool,
-
-    FramesSubmitted: int,
-
-    FileWriteFunc: GifEncodeFileWriteFunc,
-    FileWriteData: rawptr,
-}
 
 GifLzwState :: struct {
     Len: int,
@@ -1068,65 +1030,4 @@ gif_encode_free :: proc(result: ^GifEncodeResult) {
         delete(result.Data)
     }
     result^ = {}
-}
-
-gif_encode_begin_to_file :: proc(
-    state: ^GifEncodeState,
-    width, height: int,
-    write_func: GifEncodeFileWriteFunc,
-    file_data: rawptr,
-) -> bool {
-    state.FileWriteFunc = write_func
-    state.FileWriteData = file_data
-    return gif_encode_begin(state, width, height)
-}
-
-gif_encode_frame_to_file :: proc(
-    state: ^GifEncodeState,
-    pixel_data: rawptr,
-    centiseconds_per_frame: int,
-    quality: int,
-    pitch_in_bytes: int,
-) -> bool {
-    if !gif_encode_frame(state, pixel_data, centiseconds_per_frame, quality, pitch_in_bytes) {
-        return false
-    }
-
-    if state.FileWriteFunc == nil {
-        return true
-    }
-
-    head := gif_encode_pop_head_buffer(state)
-    if head == nil {
-        return true
-    }
-
-    wrote := 0
-    if head.Size > 0 {
-        wrote = state.FileWriteFunc(rawptr(&head.Data[0]), head.Size, 1, state.FileWriteData)
-    }
-    gif_encode_free_buffer(head)
-
-    if wrote == 0 {
-        gif_encode_free_state(state)
-        return false
-    }
-
-    return true
-}
-
-gif_encode_end_to_file :: proc(state: ^GifEncodeState) -> bool {
-    if state.FileWriteFunc == nil {
-        _ = gif_encode_end(state)
-        return false
-    }
-
-    result := gif_encode_end(state)
-    if len(result.Data) == 0 {
-        return false
-    }
-
-    wrote := state.FileWriteFunc(rawptr(&result.Data[0]), result.DataSize, 1, state.FileWriteData)
-    gif_encode_free(&result)
-    return wrote != 0
 }

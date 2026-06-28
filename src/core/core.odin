@@ -373,7 +373,56 @@ GifCapturePhase :: enum {
     Error,
 }
 
+
+GifEncodeResult :: struct {
+    Data: []u8,
+    DataSize: int,
+}
+
+GifEncodeFrame :: struct {
+    Pixels: []u32,
+    Depth: int,
+    Count: int,
+    RBits: int,
+    GBits: int,
+    BBits: int,
+    IsCooked: bool,
+}
+
+GifEncodeBuffer :: struct {
+    Next: ^GifEncodeBuffer,
+    Size: int,
+    Data: []u8,
+}
+
+GifEncodeState :: struct {
+    PreviousFrame: GifEncodeFrame,
+    CurrentFrame: GifEncodeFrame,
+
+    LzwMem: []i16,
+    TlbMem: []u8,
+    UsedMem: []u8,
+
+    ListHead: ^GifEncodeBuffer,
+    ListTail: ^GifEncodeBuffer,
+
+    Width: int,
+    Height: int,
+    AlphaThreshold: int,
+    UseBGRA: bool,
+
+    FramesSubmitted: int,
+}
+
+GifCaptureSession :: struct {
+    Encoder: GifEncodeState,
+    Active: bool,
+}
+
 EuclidUIRuntimeState :: struct {
+    TreeScrollY: f32,
+    ViewTextScrollY: f32,
+
     TreeScrollDragging: bool,
     TreeScrollDragOff: f32,
 
@@ -411,11 +460,13 @@ EuclidGeneralState :: struct {
 
     Stroke3D: Stroke3DRenderState,
     UIRuntime: EuclidUIRuntimeState,
+    GifCapture: GifCaptureSession,
 
     CycleBoundaryGeneration: u64,
     ConsumedCycleBoundaryGeneration: u64,
 
     CurrentDeltaTime : f32,
+    Accumulator : f32,
 
     AnimMetadata : [MAX_METAVALUES]f32,
 }
