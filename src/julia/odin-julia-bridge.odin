@@ -126,7 +126,13 @@ BridgeSolveResult :: struct {
 
 initiate_julia :: proc() {
     julialib.jl_init()
-    _ = julialib.jl_eval_string("include(\"./julia/script.jl\")")
+    include_result := julialib.jl_eval_string("include(\"./julia/script.jl\")")
+    if julialib.jl_exception_occurred() != nil || include_result == nil {
+        fmt.eprintln("Failed to initialize Julia scripts via include(\"./julia/script.jl\").")
+        fmt.eprintln("Verify the script path is correct relative to the current working directory.")
+        print_julia_exception("initiate_julia include ./julia/script.jl")
+        runtime.exit(1)
+    }
 }
 
 end_julia :: proc() {
