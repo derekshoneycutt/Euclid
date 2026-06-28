@@ -42,6 +42,11 @@ SETTINGS_STATS_ROW_GAP :: 22
 SETTINGS_TOGGLE_TOP_OFFSET :: 118
 SETTINGS_CHECKBOX_SIZE :: 14
 SETTINGS_CHECKBOX_LABEL_GAP :: 8
+SETTINGS_GIF_TOP_OFFSET :: 168
+SETTINGS_GIF_SLIDER_ROW_GAP :: 38
+SETTINGS_GIF_BUTTON_TOP_OFFSET :: 132
+SETTINGS_GIF_BUTTON_HEIGHT :: 24
+SETTINGS_GIF_STATUS_TOP_OFFSET :: 162
 
 TreeHit :: struct {
     SelectedID: int,
@@ -415,6 +420,164 @@ draw_settings_fps_checkbox :: proc(
     ui_text(label, int(label_x), int(row_y - 1), TextColor)
 }
 
+draw_settings_integer_slider :: proc(
+    panel: rl.Rectangle,
+    row_y: f32,
+    mouse: rl.Vector2,
+    label: string,
+    value: ^int,
+    min_value: int,
+    max_value: int,
+) {
+    ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), TextColor)
+
+    track := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y + SETTINGS_TRACK_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        SETTINGS_TRACK_HEIGHT,
+    }
+
+    hit := rl.Rectangle{
+        track.x,
+        track.y - SETTINGS_TRACK_HIT_PAD_Y,
+        track.width,
+        track.height + SETTINGS_TRACK_HIT_PAD_Y * 2,
+    }
+
+    clamped := clamp(value^, min_value, max_value)
+    denom := max(1, max_value - min_value)
+    ratio := f32(clamped - min_value) / f32(denom)
+    knob_center_x, knob := build_slider_knob(track, ratio)
+
+    if rl.CheckCollisionPointRec(mouse, hit) {
+        wheel := rl.GetMouseWheelMove()
+        if wheel != 0 {
+            delta := 1
+            if wheel < 0 {
+                delta = -1
+            }
+            clamped = clamp(clamped + delta, min_value, max_value)
+        }
+    }
+
+    if rl.IsMouseButtonDown(.LEFT) && rl.CheckCollisionPointRec(mouse, hit) {
+        if track.width > 0 {
+            t := clamp((mouse.x - track.x) / track.width, 0, 1)
+            clamped = clamp(min_value + int(t * f32(denom) + 0.5), min_value, max_value)
+        }
+    }
+
+    value^ = clamped
+
+    ratio = f32(clamped - min_value) / f32(denom)
+    knob_center_x, knob = build_slider_knob(track, ratio)
+
+    rl.DrawRectangleRec(track, BackgroundColor)
+    rl.DrawRectangleRec(
+        rl.Rectangle{
+            track.x,
+            track.y,
+            max(0.0, knob_center_x - track.x),
+            track.height,
+        },
+        BorderColor,
+    )
+    rl.DrawRectangleRec(knob, TextColor)
+
+    ui_text(
+        fmt.tprintf("%d", clamped),
+        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 18),
+        int(row_y),
+        TextColor,
+    )
+}
+
+draw_settings_save_gif_button :: proc(
+    panel: rl.Rectangle,
+    row_y: f32,
+    mouse: rl.Vector2,
+    ui_runtime: ^core.EuclidUIRuntimeState,
+) {
+    button := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        SETTINGS_GIF_BUTTON_HEIGHT,
+    }
+
+    is_armed := ui_runtime.GifCapturePhase == .Armed
+    disabled := ui_runtime.GifCapturePhase == .Recording ||
+        ui_runtime.GifCapturePhase == .Finalizing
+    hovered := rl.CheckCollisionPointRec(mouse, button)
+    pressed := hovered && rl.IsMouseButtonDown(.LEFT)
+
+    bg := BackgroundColor
+    fg := TextColor
+    border := BorderColor
+
+    if disabled {
+        bg = rl.Color{48, 48, 48, 255}
+        fg = rl.Color{110, 110, 110, 255}
+        border = rl.Color{78, 78, 78, 255}
+    } else if pressed {
+        bg = BorderColor
+        fg = BackgroundColor
+        border = BorderColor
+    } else if hovered {
+        bg = ComponentBackgroundColor
+    }
+
+    rl.DrawRectangleRec(button, bg)
+    rl.DrawRectangleLinesEx(button, 1, border)
+    button_text := "Save Gif"
+    if is_armed {
+        button_text = "Cancel Gif"
+    }
+    ui_text(button_text, int(button.x + 8), int(button.y + 3), fg)
+
+    if !disabled && rl.IsMouseButtonPressed(.LEFT) && hovered {
+        ui_runtime.SaveGifRequested = true
+    }
+}
+
+gif_capture_status_label :: proc(ui_runtime: ^core.EuclidUIRuntimeState) -> string {
+    switch ui_runtime.GifCapturePhase {
+    case .Idle:
+        return "Status: Idle"
+    case .Armed:
+        return "Status: Armed"
+    case .Recording:
+        return fmt.tprintf("Status: Recording (%d frames)", ui_runtime.GifCapturedFrames)
+    case .Finalizing:
+        return "Status: Saving"
+    case .Saved:
+        return "Status: Saved"
+    case .Error:
+        return "Status: Error"
+    }
+
+    return "Status: Idle"
+}
+
+draw_settings_gif_status :: proc(
+    panel: rl.Rectangle,
+    row_y: f32,
+    ui_runtime: ^core.EuclidUIRuntimeState,
+) {
+    ui_text(gif_capture_status_label(ui_runtime), int(panel.x + SETTINGS_PANEL_INSET), int(row_y), TextColor)
+
+    if ui_runtime.GifCapturePhase == .Saved && ui_runtime.LastGifPathLen > 0 {
+        path_text := string(ui_runtime.LastGifPath[:ui_runtime.LastGifPathLen])
+        ui_text(
+            fmt.tprintf("Path: %s", path_text),
+            int(panel.x + SETTINGS_PANEL_INSET),
+            int(row_y + 18),
+            TextColor,
+        )
+    }
+}
+
 draw_settings_view :: proc(
     state: ^core.EuclidGeneralState, panel: rl.Rectangle, mouse: rl.Vector2) {
 
@@ -464,6 +627,42 @@ draw_settings_view :: proc(
     )
     draw_settings_particle_stats(panel, slider_track, ps)
     draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime)
+
+    gif_section_y := slider_track.y + SETTINGS_GIF_TOP_OFFSET
+    ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), TextColor)
+
+    draw_settings_integer_slider(
+        panel,
+        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP,
+        mouse,
+        "Downsample",
+        &ui_runtime.GifDownsampleFactor,
+        1,
+        4,
+    )
+
+    draw_settings_integer_slider(
+        panel,
+        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP * 2,
+        mouse,
+        "Frame Step",
+        &ui_runtime.GifFrameStep,
+        1,
+        4,
+    )
+
+    draw_settings_save_gif_button(
+        panel,
+        gif_section_y + SETTINGS_GIF_BUTTON_TOP_OFFSET,
+        mouse,
+        ui_runtime,
+    )
+
+    draw_settings_gif_status(
+        panel,
+        gif_section_y + SETTINGS_GIF_STATUS_TOP_OFFSET,
+        ui_runtime,
+    )
 }
 
 chars_per_text_row :: #force_inline proc(width: f32) -> int {

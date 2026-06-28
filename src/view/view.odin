@@ -7,8 +7,6 @@ import "../julia"
 import "../particles"
 
 import rl "vendor:raylib"
-import "core:fmt"
-import "core:math"
 import "core:math/linalg"
 
 Vector2 :: core.Vector2
@@ -55,7 +53,6 @@ TextColor :: rl.Color{175, 150, 150, 255}
 
 ComponentBackgroundColor :: rl.Color{25, 25, 25, 255}
 
-
 run_window_loop :: proc() {
     isoScale := IsoScale{ IsoScaleValue, IsoXOffset, IsoYOffset, {0.35, -0.45, -1.0}, true }
     isoScale.MainLightDir = linalg.normalize(isoScale.MainLightDir)
@@ -95,6 +92,12 @@ run_window_loop :: proc() {
     state^.Compass = compass
     state^.Pen = pen
     state^.CurrentDeltaTime = FIXED_DT
+    state^.UIRuntime.GifDownsampleFactor = 2
+    state^.UIRuntime.GifFrameStep = 2
+    state^.UIRuntime.GifCapturePhase = .Idle
+
+    gif_session := GifCaptureSession{}
+    defer gif_capture_abort_session(&gif_session)
 
     julia.init_euclid_scripts(state)
     defer julia.clean_julia_interfaces(state)
@@ -146,6 +149,7 @@ run_window_loop :: proc() {
             julia.call_current_animation_loop(state, FIXED_DT)
             particles.update_particles(state^.ParticleSystem, FIXED_DT)
             kine.apply_all_constraints_to_error(state^.PointSystem, AllowedConstraintError)
+            gif_capture_update_fixed_step(state, &gif_session)
 
             accumulator -= FIXED_DT
             stepCount += 1
@@ -171,6 +175,13 @@ run_window_loop :: proc() {
             render_particles(state^.ParticleSystem, state)
             draw_kine_points_high_cached(state)
             render_high_particles(state^.ParticleSystem, state)
+
+            if state^.UIRuntime.GifCapturePhase == .Recording {
+                if !gif_capture_submit_frame(state, &gif_session) {
+                    gif_capture_abort_session(&gif_session)
+                    state^.UIRuntime.GifCapturePhase = .Error
+                }
+            }
 
             rl.DrawRectangleRec(rl.Rectangle{0, ViewHeight, ViewWidth, BottomBarHeight}, UIBackColor)
             draw_view_text_panel(state, &view_text_scroll_y)

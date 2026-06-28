@@ -30,8 +30,10 @@ ANIMATION_RESET_MIN_INTERVAL :: f32(0.35)
 FLOOR_CONTACT_Z_EPSILON :: f32(0.015)
 COMPASS_LINE_DUST_SAMPLES :: int(24)
 
+BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY :: i32(1 << 1)
+
 BRIDGE_VERSION :: i32(1)
-BRIDGE_FEATURE_FLAGS :: i32(1)
+BRIDGE_FEATURE_FLAGS :: i32(1 | BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY)
 
 BRIDGE_STATUS_OK :: i32(0)
 BRIDGE_STATUS_INVALID_INDEX :: i32(1)
@@ -301,6 +303,27 @@ update_running_animations :: proc(
             }
         }
     }
+}
+
+notify_animation_cycle_boundary_local :: proc(state: ^core.EuclidGeneralState) {
+    if state == nil {
+        return
+    }
+
+    state^.CycleBoundaryGeneration += 1
+}
+
+consume_animation_cycle_boundary :: proc(state: ^core.EuclidGeneralState) -> bool {
+    if state == nil {
+        return false
+    }
+
+    if state^.ConsumedCycleBoundaryGeneration == state^.CycleBoundaryGeneration {
+        return false
+    }
+
+    state^.ConsumedCycleBoundaryGeneration = state^.CycleBoundaryGeneration
+    return true
 }
 
 call_global_euclid_loop :: proc(
@@ -819,6 +842,12 @@ set_point_active_color :: proc "c" (state: ^core.EuclidGeneralState, index: int,
         rlColor := rl.Color{ color.R, color.G, color.B, color.A }
         state^.PointSystem^.Points[index].ActiveColor = rlColor
     }
+}
+
+@(export)
+notify_animation_cycle_boundary :: proc "c" (state: ^core.EuclidGeneralState) {
+    context = state^.SavedContext
+    notify_animation_cycle_boundary_local(state)
 }
 
 @(export)

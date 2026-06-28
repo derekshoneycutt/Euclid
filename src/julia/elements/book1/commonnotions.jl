@@ -94,6 +94,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
         state_ptr, line2Joint2Id, StartPoint2)
     OdinJuliaBridge.set_point_position(
         state_ptr, line3Joint2Id, StartPoint3)
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})

@@ -364,6 +364,15 @@ Stroke3DRenderState :: struct {
     LocViewportHeight: i32,
 }
 
+GifCapturePhase :: enum {
+    Idle,
+    Armed,
+    Recording,
+    Finalizing,
+    Saved,
+    Error,
+}
+
 EuclidUIRuntimeState :: struct {
     TreeScrollDragging: bool,
     TreeScrollDragOff: f32,
@@ -376,6 +385,15 @@ EuclidUIRuntimeState :: struct {
     TextScrollDragOff: f32,
 
     DisplayFPS : bool,
+
+    SaveGifRequested: bool,
+    GifDownsampleFactor: int,
+    GifFrameStep: int,
+    GifCapturePhase: GifCapturePhase,
+    GifCaptureFrameCounter: int,
+    GifCapturedFrames: int,
+    LastGifPath: [260]u8,
+    LastGifPathLen: int,
 }
 
 EuclidGeneralState :: struct {
@@ -393,6 +411,9 @@ EuclidGeneralState :: struct {
 
     Stroke3D: Stroke3DRenderState,
     UIRuntime: EuclidUIRuntimeState,
+
+    CycleBoundaryGeneration: u64,
+    ConsumedCycleBoundaryGeneration: u64,
 
     CurrentDeltaTime : f32,
 

@@ -110,6 +110,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})

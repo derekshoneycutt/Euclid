@@ -1129,6 +1129,19 @@ function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Abstr
 end
 
 """
+Notify the native host that the current animation has reached a cycle boundary.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+"""
+function notify_animation_cycle_boundary(state_ptr::Ptr{Cvoid})
+    @ccall notify_animation_cycle_boundary(state_ptr::Ptr{Cvoid})::Cvoid
+end
+
+"""
 Get the native bridge version number.
 
 ------

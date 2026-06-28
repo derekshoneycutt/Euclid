@@ -220,6 +220,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
         state_ptr, marker3StartId, Marker3Start)
     OdinJuliaBridge.set_point_position(
         state_ptr, marker3EndId, Marker3Start)
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
