@@ -41,6 +41,7 @@ EuclidJuliaAnimationInterface :: struct {
 EuclidJuliaInterface :: struct {
     InitScripts : ^julialib.jl_value_t,
     GlobalLoop : ^julialib.jl_value_t,
+    AssetArchiveModTimeUnixNano: i64,
 
     NullAnimation : EuclidJuliaAnimationInterface,
 

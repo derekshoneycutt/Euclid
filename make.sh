@@ -43,9 +43,11 @@ if [[ "${doBuild}" == "true" ]]; then
     mkdir -p "${assetsStagingDir}/shaders"
 
     cd "${scriptDir}/src"
+    echo "Building Odin..."
     odin build main.odin -file \
         -out:../bin/euclid \
         -extra-linker-flags:"${juliaFlags}"
+    echo "Build exited $?"
 
     cp -R "${scriptDir}/src/julia/." "${assetsStagingDir}/julia/"
     cp -R "${scriptDir}/src/view/shaders/." "${assetsStagingDir}/shaders/"

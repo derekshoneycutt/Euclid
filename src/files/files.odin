@@ -9,6 +9,7 @@ import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
+import "core:time"
 
 ASSET_PACKAGE_DIR :: ".assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
@@ -125,6 +126,10 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
 }
 
 ensure_packaged_assets_unpacked :: proc(exe_dir: string) -> bool {
+    return ensure_packaged_assets_unpacked_with_force(exe_dir, false)
+}
+
+ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool) -> bool {
     archive_path, archive_err := filepath.join(
         []string{exe_dir, ASSET_PACKAGE_ARCHIVE},
         context.temp_allocator,
@@ -146,6 +151,10 @@ ensure_packaged_assets_unpacked :: proc(exe_dir: string) -> bool {
     if !os.exists(archive_path) {
         fmt.eprintln("asset unpack failed: archive not found at ", archive_path)
         return os.is_directory(unpack_dir)
+    }
+
+    if !force && os.is_directory(unpack_dir) {
+        return true
     }
 
     _ = os.remove_all(unpack_dir)
@@ -178,6 +187,38 @@ ensure_packaged_assets_unpacked_root :: proc() {
     }
 
     _ = ensure_packaged_assets_unpacked(exe_dir)
+}
+
+reload_packaged_assets_root :: proc() -> bool {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return false
+    }
+
+    return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
+}
+
+packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return 0, false
+    }
+
+    archive_path, archive_err := filepath.join(
+        []string{exe_dir, ASSET_PACKAGE_ARCHIVE},
+        context.temp_allocator,
+    )
+    if archive_err != nil || !os.exists(archive_path) {
+        return 0, false
+    }
+
+    info, stat_err := os.stat(archive_path, context.temp_allocator)
+    if stat_err != nil {
+        return 0, false
+    }
+    defer os.file_info_delete(info, context.temp_allocator)
+
+    return time.time_to_unix_nano(info.modification_time), true
 }
 
 packaged_asset_path :: proc(relative_path: string, allocator := context.allocator) -> string {

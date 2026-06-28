@@ -130,132 +130,15 @@ BridgeSolveResult :: struct {
     Converged: u8,
 }
 
+
 initiate_julia :: proc() {
     julialib.jl_init()
 
-    script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
-    if len(script_path) == 0 {
-        fmt.eprintln("Failed to resolve packaged Julia script path.")
-        fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
-        runtime.exit(1)
-    }
-
-    include_fn := julialib.jl_get_function(julialib.jl_main_module, "include")
-    if include_fn == nil {
-        fmt.eprintln("Failed to resolve Julia include function from Main.")
-        runtime.exit(1)
-    }
-
-    script_cstr := strings.clone_to_cstring(script_path, context.temp_allocator)
-    script_value := julialib.jl_cstr_to_string(script_cstr)
-    include_result := julialib.jl_call1(include_fn, script_value)
-    if julialib.jl_exception_occurred() != nil || include_result == nil {
-        fmt.eprintln("Failed to initialize Julia scripts via Main.include(path).")
-        fmt.eprintln("Resolved script path: ", script_path)
-        fmt.eprintln("Verify assets.pkg/julia/script.jl exists next to the executable.")
-        print_julia_exception("initiate_julia include assets.pkg/julia/script.jl")
-        runtime.exit(1)
-    }
+    _ = include_packaged_script(true)
 }
 
 end_julia :: proc() {
     julialib.jl_atexit_hook(0)
-}
-
-is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
-    return index >= 0 && index < MAX_KINEPOINTS
-}
-
-is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
-    return index >= 0 && index < MAX_KINECONSTRAINTS
-}
-
-is_valid_constraint_traits_mask :: #force_inline proc(mask: i32) -> bool {
-    return mask != 0 && (mask & ~KINE_CONSTRAINT_VALID_MASK) == 0
-}
-
-to_u8 :: #force_inline proc(v: bool) -> u8 {
-    if v {
-        return 1
-    }
-    return 0
-}
-
-constraint_view_invalid :: #force_inline proc() -> BridgeConstraintView {
-    return BridgeConstraintView{
-        Valid = 0,
-        Index = -1,
-        Traits = 0,
-        OnPoint = -1,
-        Restriction = {0, 0, 0},
-        Bounce = 0,
-        Allowance = 0,
-        DependOn = -1,
-        HasChildOffset = 0,
-        ChildOffset = 0,
-        DoApply = 0,
-    }
-}
-
-push_dust_if_floor_contact :: proc(state: ^core.EuclidGeneralState, pos: core.Vector3) {
-    if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
-        particles.push_dust_away_from_xy(state^.ParticleSystem, pos.x, pos.y)
-    }
-}
-
-push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.EuclidGeneralState) {
-    pointIndex1 := state^.Compass.Joint1Id
-    pointIndex2 := state^.Compass.Joint2Id
-    if pointIndex1 < 0 || pointIndex1 >= MAX_KINEPOINTS || pointIndex2 < 0 || pointIndex2 >= MAX_KINEPOINTS {
-        return
-    }
-
-    point1 := state^.PointSystem^.Points[pointIndex1].Position.? or_else {0, 0, 0}
-    point2 := state^.PointSystem^.Points[pointIndex2].Position.? or_else {0, 0, 0}
-
-    if f32(math.abs(f64(point1.z))) > FLOOR_CONTACT_Z_EPSILON ||
-        f32(math.abs(f64(point2.z))) > FLOOR_CONTACT_Z_EPSILON {
-        return
-    }
-
-    samples := COMPASS_LINE_DUST_SAMPLES
-    inv_samples := f32(1.0) / f32(samples)
-    for i in 0..<samples {
-        t := f32(i) * inv_samples
-        x := math.lerp(point1.x, point2.x, t)
-        y := math.lerp(point1.y, point2.y, t)
-        particles.push_dust_away_from_xy(state^.ParticleSystem, x, y)
-    }
-}
-
-print_julia_exception :: proc(contextOfErr: string) {
-    ex_raw := julialib.jl_exception_occurred()
-    if ex_raw == nil {
-        return
-    }
-
-    ex := (^julialib.jl_value_t)(ex_raw)
-
-    ex_type := cstring(julialib.jl_typeof_str(ex_raw))
-
-    sprint_fn := julialib.jl_get_function(julialib.jl_base_module, "sprint")
-    showerror_fn := julialib.jl_get_function(julialib.jl_base_module, "showerror")
-
-    if sprint_fn == nil || showerror_fn == nil {
-        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
-        return
-    }
-
-    args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
-    msg_val := julialib.jl_call(sprint_fn, &args[0], 2)
-
-    if julialib.jl_exception_occurred() != nil || msg_val == nil {
-        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
-        return
-    }
-
-    msg := julialib.jl_string_ptr(msg_val)
-    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
 }
 
 retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
@@ -263,6 +146,7 @@ retrieve_interface :: proc() -> ^core.EuclidJuliaInterface {
 
     ret.InitScripts = julialib.jl_get_function(julialib.jl_main_module, "init_euclid_scripts")
     ret.GlobalLoop = julialib.jl_get_function(julialib.jl_main_module, "global_euclid_loop")
+    ret.AssetArchiveModTimeUnixNano = 0
     ret.CurrentAnimationIndex = -1
     ret.SelectedAnimationIndex = -1
     ret.AnimationResetCooldownRemaining = 0
@@ -300,6 +184,8 @@ init_euclid_scripts :: proc(
 update_running_animations :: proc(
     state: ^core.EuclidGeneralState, dt: f32) {
 
+    reload_packaged_assets_if_updated(state)
+
     if state^.JuliaInterface^.AnimationResetCooldownRemaining > 0 {
         state^.JuliaInterface^.AnimationResetCooldownRemaining -= dt
         if state^.JuliaInterface^.AnimationResetCooldownRemaining < 0 {
@@ -332,27 +218,6 @@ update_running_animations :: proc(
             }
         }
     }
-}
-
-notify_animation_cycle_boundary_local :: proc(state: ^core.EuclidGeneralState) {
-    if state == nil {
-        return
-    }
-
-    state^.CycleBoundaryGeneration += 1
-}
-
-consume_animation_cycle_boundary :: proc(state: ^core.EuclidGeneralState) -> bool {
-    if state == nil {
-        return false
-    }
-
-    if state^.ConsumedCycleBoundaryGeneration == state^.CycleBoundaryGeneration {
-        return false
-    }
-
-    state^.ConsumedCycleBoundaryGeneration = state^.CycleBoundaryGeneration
-    return true
 }
 
 call_global_euclid_loop :: proc(
@@ -473,6 +338,240 @@ reset_current_animation_loop :: proc(
         print_julia_exception("Initiating new animation loop")
         return
     }
+}
+
+include_packaged_script :: proc(exit_on_failure: bool) -> bool {
+    script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
+    if len(script_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia script path.")
+        fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
+        if exit_on_failure {
+            runtime.exit(1)
+        }
+        return false
+    }
+
+    include_fn := julialib.jl_get_function(julialib.jl_main_module, "include")
+    if include_fn == nil {
+        fmt.eprintln("Failed to resolve Julia include function from Main.")
+        if exit_on_failure {
+            runtime.exit(1)
+        }
+        return false
+    }
+
+    script_cstr := strings.clone_to_cstring(script_path, context.temp_allocator)
+    script_value := julialib.jl_cstr_to_string(script_cstr)
+    include_result := julialib.jl_call1(include_fn, script_value)
+    if julialib.jl_exception_occurred() != nil || include_result == nil {
+        fmt.eprintln("Failed to initialize Julia scripts via Main.include(path).")
+        fmt.eprintln("Resolved script path: ", script_path)
+        fmt.eprintln("Verify assets.pkg/julia/script.jl exists next to the executable.")
+        print_julia_exception("initiate_julia include assets.pkg/julia/script.jl")
+        if exit_on_failure {
+            runtime.exit(1)
+        }
+        return false
+    }
+
+    return true
+}
+
+refresh_julia_interface_handles :: proc(state: ^core.EuclidGeneralState) {
+    state^.JuliaInterface^.InitScripts = julialib.jl_get_function(julialib.jl_main_module, "init_euclid_scripts")
+    state^.JuliaInterface^.GlobalLoop = julialib.jl_get_function(julialib.jl_main_module, "global_euclid_loop")
+}
+
+reset_julia_interface_registry :: proc(state: ^core.EuclidGeneralState) {
+    clean_julia_interfaces(state)
+
+    state^.JuliaInterface^.NullAnimation = {}
+    state^.JuliaInterface^.CurrentAnimation = &state^.JuliaInterface^.NullAnimation
+    state^.JuliaInterface^.CurrentAnimationIndex = -1
+    state^.JuliaInterface^.SelectedAnimationIndex = -1
+    state^.JuliaInterface^.PendingAnimationReset = false
+    state^.JuliaInterface^.AnimationResetCooldownRemaining = 0
+    state^.JuliaInterface^.NextAnimationIndex = 0
+}
+
+find_animation_index_by_name :: proc(state: ^core.EuclidGeneralState, name: string) -> int {
+    if len(name) == 0 {
+        return -1
+    }
+
+    for i in 0..<state^.JuliaInterface^.NextAnimationIndex {
+        if state^.JuliaInterface^.Animations[i].Name == name {
+            return i
+        }
+    }
+
+    return -1
+}
+
+restore_current_animation_after_reload :: proc(state: ^core.EuclidGeneralState, animation_name: string) {
+    restored_index := find_animation_index_by_name(state, animation_name)
+    if restored_index < 0 {
+        return
+    }
+
+    state^.JuliaInterface^.SelectedAnimationIndex = restored_index
+    change_current_animation_loop(state, restored_index)
+}
+
+reload_packaged_assets_if_updated :: proc(state: ^core.EuclidGeneralState) {
+    archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
+    if !ok {
+        return
+    }
+
+    if state^.JuliaInterface^.AssetArchiveModTimeUnixNano == 0 {
+        state^.JuliaInterface^.AssetArchiveModTimeUnixNano = archive_mtime
+        return
+    }
+    if archive_mtime == state^.JuliaInterface^.AssetArchiveModTimeUnixNano {
+        return
+    }
+
+    if !files.reload_packaged_assets_root() {
+        fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
+        return
+    }
+    if !include_packaged_script(false) {
+        fmt.eprintln("Julia asset reload skipped: failed to re-include script.jl")
+        return
+    }
+
+    current_animation_name := ""
+    if state^.JuliaInterface^.CurrentAnimationIndex >= 0 &&
+       state^.JuliaInterface^.CurrentAnimationIndex < state^.JuliaInterface^.NextAnimationIndex {
+        current_animation_name = strings.clone(
+            state^.JuliaInterface^.Animations[state^.JuliaInterface^.CurrentAnimationIndex].Name,
+            context.temp_allocator,
+        )
+    }
+
+    state^.JuliaInterface^.AssetArchiveModTimeUnixNano = archive_mtime
+    refresh_julia_interface_handles(state)
+    reset_julia_interface_registry(state)
+    init_euclid_scripts(state)
+    restore_current_animation_after_reload(state, current_animation_name)
+}
+
+is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
+    return index >= 0 && index < MAX_KINEPOINTS
+}
+
+is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
+    return index >= 0 && index < MAX_KINECONSTRAINTS
+}
+
+is_valid_constraint_traits_mask :: #force_inline proc(mask: i32) -> bool {
+    return mask != 0 && (mask & ~KINE_CONSTRAINT_VALID_MASK) == 0
+}
+
+to_u8 :: #force_inline proc(v: bool) -> u8 {
+    if v {
+        return 1
+    }
+    return 0
+}
+
+constraint_view_invalid :: #force_inline proc() -> BridgeConstraintView {
+    return BridgeConstraintView{
+        Valid = 0,
+        Index = -1,
+        Traits = 0,
+        OnPoint = -1,
+        Restriction = {0, 0, 0},
+        Bounce = 0,
+        Allowance = 0,
+        DependOn = -1,
+        HasChildOffset = 0,
+        ChildOffset = 0,
+        DoApply = 0,
+    }
+}
+
+push_dust_if_floor_contact :: proc(state: ^core.EuclidGeneralState, pos: core.Vector3) {
+    if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
+        particles.push_dust_away_from_xy(state^.ParticleSystem, pos.x, pos.y)
+    }
+}
+
+push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.EuclidGeneralState) {
+    pointIndex1 := state^.Compass.Joint1Id
+    pointIndex2 := state^.Compass.Joint2Id
+    if pointIndex1 < 0 || pointIndex1 >= MAX_KINEPOINTS || pointIndex2 < 0 || pointIndex2 >= MAX_KINEPOINTS {
+        return
+    }
+
+    point1 := state^.PointSystem^.Points[pointIndex1].Position.? or_else {0, 0, 0}
+    point2 := state^.PointSystem^.Points[pointIndex2].Position.? or_else {0, 0, 0}
+
+    if f32(math.abs(f64(point1.z))) > FLOOR_CONTACT_Z_EPSILON ||
+        f32(math.abs(f64(point2.z))) > FLOOR_CONTACT_Z_EPSILON {
+        return
+    }
+
+    samples := COMPASS_LINE_DUST_SAMPLES
+    inv_samples := f32(1.0) / f32(samples)
+    for i in 0..<samples {
+        t := f32(i) * inv_samples
+        x := math.lerp(point1.x, point2.x, t)
+        y := math.lerp(point1.y, point2.y, t)
+        particles.push_dust_away_from_xy(state^.ParticleSystem, x, y)
+    }
+}
+
+print_julia_exception :: proc(contextOfErr: string) {
+    ex_raw := julialib.jl_exception_occurred()
+    if ex_raw == nil {
+        return
+    }
+
+    ex := (^julialib.jl_value_t)(ex_raw)
+
+    ex_type := cstring(julialib.jl_typeof_str(ex_raw))
+
+    sprint_fn := julialib.jl_get_function(julialib.jl_base_module, "sprint")
+    showerror_fn := julialib.jl_get_function(julialib.jl_base_module, "showerror")
+
+    if sprint_fn == nil || showerror_fn == nil {
+        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        return
+    }
+
+    args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
+    msg_val := julialib.jl_call(sprint_fn, &args[0], 2)
+
+    if julialib.jl_exception_occurred() != nil || msg_val == nil {
+        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        return
+    }
+
+    msg := julialib.jl_string_ptr(msg_val)
+    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
+}
+
+notify_animation_cycle_boundary_local :: proc(state: ^core.EuclidGeneralState) {
+    if state == nil {
+        return
+    }
+
+    state^.CycleBoundaryGeneration += 1
+}
+
+consume_animation_cycle_boundary :: proc(state: ^core.EuclidGeneralState) -> bool {
+    if state == nil {
+        return false
+    }
+
+    if state^.ConsumedCycleBoundaryGeneration == state^.CycleBoundaryGeneration {
+        return false
+    }
+
+    state^.ConsumedCycleBoundaryGeneration = state^.CycleBoundaryGeneration
+    return true
 }
 
 

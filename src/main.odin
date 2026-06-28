@@ -4,7 +4,12 @@ import "files"
 import "julia"
 import "view"
 
+import "core:fmt"
+
 main :: proc() {
+    fmt.println("Initiating Euclid...")
+    defer fmt.println("Euclid ended")
+
     files.ensure_packaged_assets_unpacked_root()
     defer files.cleanup_packaged_assets_dir()
 
