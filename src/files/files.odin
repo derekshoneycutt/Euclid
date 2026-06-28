@@ -13,26 +13,66 @@ import "core:time"
 
 ASSET_PACKAGE_DIR :: ".assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
-ASSET_PACKAGE_MAGIC :: "EAPK1"
 
-read_u16_le :: #force_inline proc(data: []u8, idx: ^int, out: ^int) -> bool {
-    if idx^ + 2 > len(data) {
+is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
+    if !os.is_directory(unpack_dir) {
         return false
     }
-    out^ = int(data[idx^ + 0]) | (int(data[idx^ + 1]) << 8)
-    idx^ += 2
+
+    required_entries := []string{
+        "julia/script.jl",
+        "manifest.txt",
+    }
+
+    for entry in required_entries {
+        path, path_err := filepath.join([]string{unpack_dir, entry}, context.temp_allocator)
+        if path_err != nil || !os.exists(path) {
+            return false
+        }
+    }
+
     return true
 }
 
-read_u32_le :: #force_inline proc(data: []u8, idx: ^int, out: ^int) -> bool {
-    if idx^ + 4 > len(data) {
-        return false
+bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
+    for b in data {
+        if b != 0 {
+            return false
+        }
     }
-    out^ = int(data[idx^ + 0]) |
-        (int(data[idx^ + 1]) << 8) |
-        (int(data[idx^ + 2]) << 16) |
-        (int(data[idx^ + 3]) << 24)
-    idx^ += 4
+    return true
+}
+
+trim_tar_field :: #force_inline proc(data: []u8) -> []u8 {
+    start := 0
+    for start < len(data) && (data[start] == ' ' || data[start] == 0) {
+        start += 1
+    }
+
+    stop := len(data)
+    for stop > start && (data[stop - 1] == ' ' || data[stop - 1] == 0) {
+        stop -= 1
+    }
+
+    return data[start:stop]
+}
+
+parse_tar_octal_i64 :: #force_inline proc(field: []u8, out: ^i64) -> bool {
+    cleaned := trim_tar_field(field)
+    if len(cleaned) == 0 {
+        out^ = 0
+        return true
+    }
+
+    value: i64 = 0
+    for ch in cleaned {
+        if ch < '0' || ch > '7' {
+            return false
+        }
+        value = value * 8 + i64(ch - '0')
+    }
+
+    out^ = value
     return true
 }
 
@@ -57,72 +97,112 @@ is_safe_asset_relative_path :: proc(path: string) -> bool {
 
 extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool {
     idx := 0
-    if len(payload) < len(ASSET_PACKAGE_MAGIC) + 4 {
-        fmt.eprintln("asset payload invalid: too short")
-        return false
-    }
 
-    if string(payload[0:len(ASSET_PACKAGE_MAGIC)]) != ASSET_PACKAGE_MAGIC {
-        fmt.eprintln("asset payload invalid: magic mismatch")
-        return false
-    }
-    idx += len(ASSET_PACKAGE_MAGIC)
-
-    entry_count := 0
-    if !read_u32_le(payload, &idx, &entry_count) || entry_count < 0 || entry_count > 100000 {
-        fmt.eprintln("asset payload invalid: entry count")
-        return false
-    }
-
-    for _ in 0..<entry_count {
-        path_len := 0
-        file_size := 0
-        if !read_u16_le(payload, &idx, &path_len) || !read_u32_le(payload, &idx, &file_size) {
-            fmt.eprintln("asset payload invalid: entry header read")
-            return false
-        }
-        if path_len <= 0 || file_size < 0 || idx + path_len + file_size > len(payload) {
-            fmt.eprintln("asset payload invalid: entry header bounds")
+    for {
+        if idx + 512 > len(payload) {
+            fmt.eprintln("asset payload invalid: truncated tar header")
             return false
         }
 
-        entry_path := string(payload[idx:][:path_len])
-        idx += path_len
-        if !is_safe_asset_relative_path(entry_path) {
-            fmt.eprintln("asset payload invalid path: ", entry_path)
-            return false
+        header := payload[idx:][:512]
+        idx += 512
+
+        if bytes_are_zero(header) {
+            return true
         }
 
-        out_path, out_err := filepath.join(
-            []string{unpack_dir, entry_path},
-            context.temp_allocator,
-        )
-        if out_err != nil {
-            fmt.eprintln("asset payload path join failed: ", entry_path)
-            return false
-        }
-
-        out_dir, _ := filepath.split(out_path)
-        if len(out_dir) > 0 {
-            if os.make_directory_all(out_dir) != nil {
-                fmt.eprintln("asset payload mkdir failed: ", out_dir)
+        name := string(trim_tar_field(header[0:100]))
+        prefix := string(trim_tar_field(header[345:500]))
+        entry_path := name
+        if len(prefix) > 0 {
+            joined, join_err := filepath.join([]string{prefix, name}, context.temp_allocator)
+            if join_err != nil {
+                fmt.eprintln("asset payload invalid: tar path join failed")
                 return false
             }
+            entry_path = joined
+        }
+
+        entry_size: i64 = 0
+        if !parse_tar_octal_i64(header[124:136], &entry_size) || entry_size < 0 {
+            fmt.eprintln("asset payload invalid: tar entry size")
+            return false
+        }
+
+        file_size := int(entry_size)
+        if idx + file_size > len(payload) {
+            fmt.eprintln("asset payload invalid: tar entry size bounds")
+            return false
         }
 
         file_data := payload[idx:][:file_size]
-        idx += file_size
-        if os.write_entire_file(out_path, file_data) != nil {
-            fmt.eprintln("asset payload write failed: ", out_path)
+        padding := (512 - (file_size % 512)) % 512
+        next_idx := idx + file_size + padding
+        if next_idx > len(payload) {
+            fmt.eprintln("asset payload invalid: tar padding bounds")
             return false
         }
-    }
 
-    if idx != len(payload) {
-        fmt.eprintln("asset payload trailing bytes remain")
-        return false
+        typeflag := header[156]
+        switch typeflag {
+        case 0, '0':
+            if !is_safe_asset_relative_path(entry_path) {
+                fmt.eprintln("asset payload invalid path: ", entry_path)
+                return false
+            }
+
+            out_path, out_err := filepath.join(
+                []string{unpack_dir, entry_path},
+                context.temp_allocator,
+            )
+            if out_err != nil {
+                fmt.eprintln("asset payload path join failed: ", entry_path)
+                return false
+            }
+
+            out_dir, _ := filepath.split(out_path)
+            if len(out_dir) > 0 {
+                if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
+                    fmt.eprintln("asset payload mkdir failed: ", out_dir)
+                    return false
+                }
+            }
+
+            if os.write_entire_file(out_path, file_data) != nil {
+                fmt.eprintln("asset payload write failed: ", out_path)
+                return false
+            }
+
+        case '5':
+            if !is_safe_asset_relative_path(entry_path) {
+                fmt.eprintln("asset payload invalid dir path: ", entry_path)
+                return false
+            }
+
+            out_dir, out_err := filepath.join(
+                []string{unpack_dir, entry_path},
+                context.temp_allocator,
+            )
+            if out_err != nil {
+                fmt.eprintln("asset payload dir join failed: ", entry_path)
+                return false
+            }
+
+            if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
+                fmt.eprintln("asset payload mkdir failed: ", out_dir)
+                return false
+            }
+
+        case 'x', 'g':
+            // Skip pax metadata entries; the following real entry will be handled normally.
+
+        case:
+            fmt.eprintln("asset payload invalid: unsupported tar type: ", typeflag)
+            return false
+        }
+
+        idx = next_idx
     }
-    return true
 }
 
 ensure_packaged_assets_unpacked :: proc(exe_dir: string) -> bool {
@@ -153,7 +233,7 @@ ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool)
         return os.is_directory(unpack_dir)
     }
 
-    if !force && os.is_directory(unpack_dir) {
+    if !force && is_assets_unpack_ready(unpack_dir) {
         return true
     }
 
@@ -163,17 +243,18 @@ ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool)
         return false
     }
 
-    desc := os.Process_Desc{
-        command = []string{"tar", "-xzf", archive_path, "-C", unpack_dir},
-    }
+    decompressed := bytes.Buffer{}
+    defer bytes.buffer_destroy(&decompressed)
 
-    state, _, _, exec_err := os.process_exec(desc, context.temp_allocator)
-    if exec_err != nil {
-        fmt.eprintln("asset unpack failed: tar extraction failed")
+    gzip_err := gzip.load_from_file(archive_path, &decompressed)
+    if gzip_err != nil {
+        fmt.eprintln("asset unpack failed: gzip decode failed for ", archive_path)
         return false
     }
-    if !state.exited || state.exit_code != 0 {
-        fmt.eprintln("asset unpack failed: tar exited with code ", state.exit_code)
+
+    payload := bytes.buffer_to_bytes(&decompressed)
+    if !extract_packaged_assets_blob(unpack_dir, payload) {
+        fmt.eprintln("asset unpack failed: tar payload parse/write failed")
         return false
     }
 
