@@ -15,6 +15,9 @@ You must have Odin and Julia installed on your system to build from source.
 
 `tar` should be available on all platforms to compile the assets package.
 
+Clone the git repository as per usual practices and run the make script below.
+`git clone https://github.com/derekshoneycutt/EuclidApp.git`
+
 ### Linux / MacOS
 
 Use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
