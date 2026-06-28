@@ -14,6 +14,19 @@ import "core:time"
 ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
 ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
+GIF_OUTPUT_DIR_NAME :: "gifs"
+
+ensure_directory_exists :: proc(path: string) -> bool {
+    if len(path) == 0 {
+        return false
+    }
+
+    if os.is_directory(path) {
+        return true
+    }
+
+    return os.make_directory_all(path) == nil
+}
 
 resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
     base_dir, base_err := os.user_cache_dir(allocator)
@@ -33,6 +46,54 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
     }
 
     return unpack_dir, true
+}
+
+resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+    pictures_dir, pictures_err := os.user_pictures_dir(allocator)
+    if pictures_err == nil && len(pictures_dir) > 0 {
+        output_dir, output_err := filepath.join(
+            []string{pictures_dir, GIF_OUTPUT_DIR_NAME},
+            allocator,
+        )
+        if output_err == nil && ensure_directory_exists(output_dir) {
+            return output_dir, true
+        }
+    }
+
+    data_dir, data_err := os.user_data_dir(allocator)
+    if data_err == nil && len(data_dir) > 0 {
+        output_dir, output_err := filepath.join(
+            []string{data_dir, GIF_OUTPUT_DIR_NAME},
+            allocator,
+        )
+        if output_err == nil && ensure_directory_exists(output_dir) {
+            return output_dir, true
+        }
+    }
+
+    cache_dir, cache_err := os.user_cache_dir(allocator)
+    if cache_err == nil && len(cache_dir) > 0 {
+        output_dir, output_err := filepath.join(
+            []string{cache_dir, GIF_OUTPUT_DIR_NAME},
+            allocator,
+        )
+        if output_err == nil && ensure_directory_exists(output_dir) {
+            return output_dir, true
+        }
+    }
+
+    temp_dir, temp_err := os.temp_directory(allocator)
+    if temp_err == nil && len(temp_dir) > 0 {
+        output_dir, output_err := filepath.join(
+            []string{temp_dir, GIF_OUTPUT_DIR_NAME},
+            allocator,
+        )
+        if output_err == nil && ensure_directory_exists(output_dir) {
+            return output_dir, true
+        }
+    }
+
+    return "", false
 }
 
 is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {

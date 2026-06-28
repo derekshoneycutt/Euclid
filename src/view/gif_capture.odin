@@ -6,11 +6,14 @@ package view
 // out to a new GIF file.
 
 import "../core"
+import "../files"
 import "../gif"
 
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:path/filepath"
+import "core:time"
 
 import rl "vendor:raylib"
 
@@ -33,9 +36,39 @@ set_last_gif_path :: proc(ui_runtime: ^core.EuclidUIRuntimeState, path: string) 
     ui_runtime.LastGifPathLen = n
 }
 
+gif_output_filename :: proc() -> string {
+    now := time.now()
+    year := time.year(now)
+    month := int(time.month(now))
+    day := time.day(now)
+    hour, minute, second, nanos := time.precise_clock(now)
+    millis := nanos / 1_000_000
+
+    return fmt.tprintf(
+        "Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        millis,
+    )
+}
+
 gif_output_path :: proc() -> string {
-    millis := int(rl.GetTime() * 1000.0)
-    return fmt.tprintf("gif_%d.gif", millis)
+    output_dir, ok := files.resolve_writable_pictures_dir(context.temp_allocator)
+    if !ok {
+        return ""
+    }
+
+    output_name := gif_output_filename()
+    output_path, err := filepath.join([]string{output_dir, output_name}, context.temp_allocator)
+    if err != nil {
+        return ""
+    }
+
+    return output_path
 }
 
 gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
