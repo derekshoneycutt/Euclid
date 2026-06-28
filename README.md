@@ -27,7 +27,7 @@ Odin will require MSVC tools installed on the system.
 
 Julia libraries will not be packaged in a way that easily links on Windows. `gendef` is
 used in the PowerShell script to bridge this gap, which can be installed via e.g.
-Raspberry Perl or MSYS2.
+Strawberry Perl or MSYS2.
 
 ## Questions?
 
