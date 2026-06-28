@@ -1,7 +1,7 @@
 package files
 
-// The main point here is to unpack the assets.pkg file into a temporary file and provide
-// the location of the unpacked files to other modules
+// The main point here is to unpack assets.pkg from next to the executable into a
+// user-writable location and provide the unpacked file paths to other modules.
 
 import "core:bytes"
 import "core:compress/gzip"
@@ -11,8 +11,29 @@ import "core:path/filepath"
 import "core:strings"
 import "core:time"
 
-ASSET_PACKAGE_DIR :: ".assets"
+ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
+ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
+
+resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+    base_dir, base_err := os.user_cache_dir(allocator)
+    if base_err != nil || len(base_dir) == 0 {
+        base_dir, base_err = os.temp_directory(allocator)
+        if base_err != nil || len(base_dir) == 0 {
+            return "", false
+        }
+    }
+
+    unpack_dir, unpack_err := filepath.join(
+        []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR},
+        allocator,
+    )
+    if unpack_err != nil || len(unpack_dir) == 0 {
+        return "", false
+    }
+
+    return unpack_dir, true
+}
 
 is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     if !os.is_directory(unpack_dir) {
@@ -219,12 +240,9 @@ ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool)
         return false
     }
 
-    unpack_dir, unpack_err := filepath.join(
-        []string{exe_dir, ASSET_PACKAGE_DIR},
-        context.temp_allocator,
-    )
-    if unpack_err != nil {
-        fmt.eprintln("asset unpack failed: could not build unpack path")
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        fmt.eprintln("asset unpack failed: could not resolve writable unpack directory")
         return false
     }
 
@@ -312,8 +330,13 @@ packaged_asset_path :: proc(relative_path: string, allocator := context.allocato
         return ""
     }
 
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        return ""
+    }
+
     path, path_err := filepath.join(
-        []string{exe_dir, ASSET_PACKAGE_DIR, relative_path},
+        []string{unpack_dir, relative_path},
         allocator,
     )
     if path_err != nil {
@@ -324,16 +347,8 @@ packaged_asset_path :: proc(relative_path: string, allocator := context.allocato
 }
 
 cleanup_packaged_assets_dir :: proc() {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return
-    }
-
-    unpack_dir, unpack_err := filepath.join(
-        []string{exe_dir, ASSET_PACKAGE_DIR},
-        context.temp_allocator,
-    )
-    if unpack_err != nil || len(unpack_dir) == 0 {
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
         return
     }
 

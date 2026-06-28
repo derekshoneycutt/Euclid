@@ -231,6 +231,8 @@ run_window_loop :: proc() {
     initiate_window(state)
     defer close_window(state)
 
+    free_all(context.temp_allocator)
+
 	for !rl.WindowShouldClose() {
         alpha := accumulate_and_update_systems(state)
 

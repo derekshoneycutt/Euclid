@@ -10,6 +10,8 @@ main :: proc() {
     fmt.println("Initiating Euclid...")
     defer fmt.println("Euclid ended")
 
+    defer free_all(context.temp_allocator)
+
     files.ensure_packaged_assets_unpacked_root()
     defer files.cleanup_packaged_assets_dir()
 
