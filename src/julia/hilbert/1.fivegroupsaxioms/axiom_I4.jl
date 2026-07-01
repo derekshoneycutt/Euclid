@@ -21,9 +21,9 @@ const LineColor = :steelblue
 const PointAColor = :palevioletred1
 const PointBColor = :khaki3
 const PointCColor = :steelblue
-const SurfaceLineColorAB = :steelblue
+const SurfaceLineColorAB = :khaki3
 const SurfaceLineColorBC = :palevioletred1
-const SurfaceLineColorCA = :khaki3
+const SurfaceLineColorCA = :steelblue
 const LineMaxBrush = 5f0
 const PointMaxBrush = 5f0
 

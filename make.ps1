@@ -179,6 +179,7 @@ if ($doBuild) {
 
     Copy-Item -Path (Join-Path $scriptDir "src/julia/*") -Destination (Join-Path $assetsStagingDir "julia") -Recurse -Force
     Copy-Item -Path (Join-Path $scriptDir "src/view/shaders/*") -Destination (Join-Path $assetsStagingDir "shaders") -Recurse -Force
+    Copy-Item -Path (Join-Path $scriptDir "assets/*") -Destination $assetsStagingDir -Recurse -Force
 
     @"
 package=assets.pkg
