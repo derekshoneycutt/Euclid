@@ -465,6 +465,7 @@ EuclidGeneralState :: struct {
     UIRuntime: EuclidUIRuntimeState,
     GifCapture: GifCaptureSession,
     Font: rl.Font,
+    Icon: Maybe(rl.Image),
 
     CycleBoundaryGeneration: u64,
     ConsumedCycleBoundaryGeneration: u64,

@@ -33,10 +33,7 @@ The axioms of this group establish a connection between the concepts indicated a
 
 ...
 
-Axioms I, 1-2 contain statements concerning points and straight lines only; that is,
-concerning the elements of plane geometry. We will call them, therefore, the plane axioms
-of group I, in order to distinguish them from the axioms I, 3-7, which we will designate
-briefly as the space axioms of this group.
+Axioms I, 1-2 contain statements concerning points and straight lines only; that is, concerning the elements of plane geometry. We will call them, therefore, the plane axioms of group I, in order to distinguish them from the axioms I, 3-7, which we will designate briefly as the space axioms of this group.
 Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
 end
 
@@ -82,31 +79,6 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomI5.initialize,
                 HilbertChapterOneAxiomI5.loop, HilbertChapterOneAxiomI5.clean,
                 "Axiom I,5", book1Sec2Id)
-                
-        #=book1PostsId = OdinJuliaBridge.add_child_animation_interface(
-            state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
-            NullAnimation.loop, NullAnimation.clean,
-            "Postulates", book1Id)
-            book1Posts1DrawLineId = OdinJuliaBridge.add_child_animation_interface(
-                state_ptr, ElementsOnePostulatesDrawLine.get_view_text,
-                ElementsOnePostulatesDrawLine.initialize,
-                ElementsOnePostulatesDrawLine.loop, ElementsOnePostulatesDrawLine.clean,
-                "Draw a Line", book1PostsId)
-            
-        book1CommNotsId = OdinJuliaBridge.add_child_animation_interface(
-            state_ptr, ElementsOneCommonNotions.get_view_text, ElementsOneCommonNotions.initialize,
-            ElementsOneCommonNotions.loop, ElementsOneCommonNotions.clean,
-            "Common Notions", book1Id)
-
-        book1PropsId = OdinJuliaBridge.add_child_animation_interface(
-            state_ptr, get_view_text_BookI_props, NullAnimation.initialize,
-            NullAnimation.loop, NullAnimation.clean,
-            "Propositions", book1Id)
-            book1Prop01Id = OdinJuliaBridge.add_child_animation_interface(
-                state_ptr, ElementsOneProposition01.get_view_text,
-                ElementsOneProposition01.initialize,
-                ElementsOneProposition01.loop, ElementsOneProposition01.clean,
-                "Proposition I", book1PropsId)=#
 end
 
 end

@@ -142,8 +142,8 @@ initiate_window :: proc(state : ^EuclidGeneralState) {
         files.packaged_asset_path("compass_icon.png", context.temp_allocator), context.temp_allocator)
     if rl.FileExists(iconFile) {
         iconImage := rl.LoadImage(iconFile)
+        state^.Icon = iconImage
         rl.SetWindowIcon(iconImage)
-        rl.UnloadImage(iconImage)
     }
 
     init_stroke3d_shader(state)
@@ -197,8 +197,13 @@ initiate_window :: proc(state : ^EuclidGeneralState) {
 
 close_window :: proc(state : ^EuclidGeneralState) {
     shutdown_stroke3d_shader(state)
-    rl.UnloadFont(state^.Font)
     rl.CloseWindow()
+    rl.UnloadFont(state^.Font)
+
+    iconImage, hasIcon := state^.Icon.?
+    if hasIcon {
+        rl.UnloadImage(iconImage)
+    }
 }
 
 accumulate_and_update_systems :: proc(state : ^EuclidGeneralState) -> f32 {
