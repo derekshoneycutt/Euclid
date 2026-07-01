@@ -1,0 +1,88 @@
+module HilbertChapterOne
+
+using ..OdinJuliaBridge
+using ..EuclidAnimations
+using ..EuclidGeometry
+using ..NullAnimation
+
+include("./axiom_I1.jl")
+
+
+function get_view_text_BookI(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. §1 The Five Groups of Axioms
+    
+Let us consider three distinct systems of things. The things composing the first system, we will call points and designate them by the letters A, B, C,. . . ; those of the second, we will call straight lines and designate them by the letters a, b, c,. . . ; and those of the third system, we will call planes and designate them by the Greek letters α, β, γ,. . . The points are called the elements of linear geometry; the points and straight lines, the elements of plane geometry; and the points, lines, and planes, the elements of the geometry of space or the elements of space.
+
+We think of these points, straight lines, and planes as having certain mutual relations, which we indicate by means of such words as "are situated," "between," "parallel," "congruent," "continuous," etc. The complete and exact description of these relations follows as a consequence of the axioms of geometry. These axioms may be arranged in five groups. Each of these groups expresses, by itself, certain related fundamental facts of our intuition. We will name these groups as follows:
+
+I, 1-7. Axioms of connection.
+II, 1-5. Axioms of order.
+III. Axiom of parallels (Euclid's axiom).
+IV, 1-6. Axioms of congruence.
+V. Axiom of continuity (Archimedes's axiom)."""
+end
+
+function get_view_text_BookI_connection(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. §2 Group I: Axioms of Connection
+
+The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
+
+...
+
+Axioms I, 1-2 contain statements concerning points and straight lines only; that is,
+concerning the elements of plane geometry. We will call them, therefore, the plane axioms
+of group I, in order to distinguish them from the axioms I, 3-7, which we will designate
+briefly as the space axioms of this group.
+Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
+end
+
+function get_view_text_BookI_posts(state_ptr::Ptr{Cvoid})
+    "Euclid Elements - Book I - Postulates"
+end
+
+function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
+    "Euclid Elements - Book I - Propositions"
+end
+
+function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
+    book1Id = OdinJuliaBridge.add_child_animation_interface(
+        state_ptr, get_view_text_BookI, NullAnimation.initialize,
+        NullAnimation.loop, NullAnimation.clean,
+        "1. §1 The Five Groups of Axioms", rootId)
+        book1Sec2Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_connection, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§2 Group I: Axioms of Connection", book1Id)
+            book1AxiomI1Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI1.get_view_text,
+                HilbertChapterOneAxiomI1.initialize,
+                HilbertChapterOneAxiomI1.loop, HilbertChapterOneAxiomI1.clean,
+                "Axiom I,1", book1Sec2Id)
+                
+        #=book1PostsId = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "Postulates", book1Id)
+            book1Posts1DrawLineId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, ElementsOnePostulatesDrawLine.get_view_text,
+                ElementsOnePostulatesDrawLine.initialize,
+                ElementsOnePostulatesDrawLine.loop, ElementsOnePostulatesDrawLine.clean,
+                "Draw a Line", book1PostsId)
+            
+        book1CommNotsId = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, ElementsOneCommonNotions.get_view_text, ElementsOneCommonNotions.initialize,
+            ElementsOneCommonNotions.loop, ElementsOneCommonNotions.clean,
+            "Common Notions", book1Id)
+
+        book1PropsId = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_props, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "Propositions", book1Id)
+            book1Prop01Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, ElementsOneProposition01.get_view_text,
+                ElementsOneProposition01.initialize,
+                ElementsOneProposition01.loop, ElementsOneProposition01.clean,
+                "Proposition I", book1PropsId)=#
+end
+
+end

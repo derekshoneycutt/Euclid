@@ -51,6 +51,7 @@ if [[ "${doBuild}" == "true" ]]; then
 
     cp -R "${scriptDir}/src/julia/." "${assetsStagingDir}/julia/"
     cp -R "${scriptDir}/src/view/shaders/." "${assetsStagingDir}/shaders/"
+    cp -R "${scriptDir}/assets/." "${assetsStagingDir}/"
 
     cat > "${assetsStagingDir}/manifest.txt" <<EOF
 package=assets.pkg

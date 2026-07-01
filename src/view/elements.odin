@@ -325,8 +325,7 @@ draw_kine_points_shadows_cached :: proc(state: ^EuclidGeneralState) {
 
 draw_cached_label :: proc(state: ^EuclidGeneralState, p: ^kine.KineLabelDraw) {
     c := iso_to_cartesian(p^.Point1, state^.IsoScale^)
-    font := rl.GetFontDefault()
-    rl.DrawTextCodepoint(font, p^.Label, c, p^.BrushSize, p^.Color)
+    rl.DrawTextCodepoint(state^.Font, p^.Label, c, p^.BrushSize, p^.Color)
 }
 
 

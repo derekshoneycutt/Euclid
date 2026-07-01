@@ -19,7 +19,7 @@ TREE_INDENT :: 16
 TREE_FONT_SIZE :: 18
 TEXT_ROW_HEIGHT :: 22
 TEXT_PADDING :: 8
-TEXT_WRAP_ADVANCE :: 9
+TEXT_WRAP_ADVANCE :: 6.605
 SCROLLBAR_WIDTH :: 8
 SCROLLBAR_THUMB_MIN_HEIGHT :: 24
 TREE_TOOLBAR_HEIGHT :: 28
@@ -63,9 +63,9 @@ TreeToolbarHit :: struct {
     ToggleSettingsRequested: bool,
 }
 
-ui_text :: #force_inline proc(text: string, x, y: int, color: rl.Color) {
+ui_text :: #force_inline proc(text: string, x, y: int, color: rl.Color, font: rl.Font) {
     cloned := strings.clone_to_cstring(text, context.temp_allocator)
-    rl.DrawText(cloned, i32(x), i32(y), TREE_FONT_SIZE, color)
+    rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, TREE_FONT_SIZE, 0, color)
 }
 
 draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
@@ -340,6 +340,7 @@ draw_use_max_particles_slider :: proc(
     knob: rl.Rectangle,
     current_value: int,
     max_particles: int,
+    font: rl.Font,
 ) {
     rl.DrawRectangleRec(slider_track, BACKGROUND_COLOR)
     rl.DrawRectangleRec(
@@ -359,28 +360,37 @@ draw_use_max_particles_slider :: proc(
         int(panel.x + SETTINGS_PANEL_INSET),
         int(slider_track.y + SETTINGS_VALUE_TOP_OFFSET),
         UI_TEXT_COLOR,
+        font,
     )
 }
 
-draw_settings_particle_stats :: proc(panel: rl.Rectangle, slider_track: rl.Rectangle, ps: ^core.ParticleSystem) {
+draw_settings_particle_stats :: proc(
+    panel: rl.Rectangle,
+    slider_track: rl.Rectangle,
+    ps: ^core.ParticleSystem,
+    font: rl.Font,
+) {
     stats_y := slider_track.y + SETTINGS_STATS_TOP_OFFSET
     ui_text(
         fmt.tprintf("Dust Particles Rendered: %d", ps.LastRenderLow),
         int(panel.x + SETTINGS_PANEL_INSET),
         int(stats_y),
         UI_TEXT_COLOR,
+        font,
     )
     ui_text(
         fmt.tprintf("Trail Particles Rendered: %d", ps.LastRenderMid),
         int(panel.x + SETTINGS_PANEL_INSET),
         int(stats_y + SETTINGS_STATS_ROW_GAP),
         UI_TEXT_COLOR,
+        font,
     )
     ui_text(
         fmt.tprintf("Flicker Particles Rendered: %d", ps.LastRenderHigh),
         int(panel.x + SETTINGS_PANEL_INSET),
         int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
         UI_TEXT_COLOR,
+        font,
     )
 }
 
@@ -389,6 +399,7 @@ draw_settings_fps_checkbox :: proc(
     slider_track: rl.Rectangle,
     mouse: rl.Vector2,
     ui_runtime: ^core.EuclidUIRuntimeState,
+    font: rl.Font,
 ) {
     row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET
     box := rl.Rectangle{
@@ -422,7 +433,7 @@ draw_settings_fps_checkbox :: proc(
         rl.DrawLineEx(p1, p2, 1.6, UI_TEXT_COLOR)
     }
 
-    ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR)
+    ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR, font)
 }
 
 draw_settings_integer_slider :: proc(
@@ -433,8 +444,9 @@ draw_settings_integer_slider :: proc(
     value: ^int,
     min_value: int,
     max_value: int,
+    font: rl.Font,
 ) {
-    ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR)
+    ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     track := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -495,6 +507,7 @@ draw_settings_integer_slider :: proc(
         int(panel.x + panel.width - SETTINGS_PANEL_INSET - 18),
         int(row_y),
         UI_TEXT_COLOR,
+        font,
     )
 }
 
@@ -503,6 +516,7 @@ draw_settings_save_gif_button :: proc(
     row_y: f32,
     mouse: rl.Vector2,
     ui_runtime: ^core.EuclidUIRuntimeState,
+    font: rl.Font,
 ) {
     button := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -539,7 +553,7 @@ draw_settings_save_gif_button :: proc(
     if is_armed {
         button_text = "Cancel Gif"
     }
-    ui_text(button_text, int(button.x + 8), int(button.y + 3), fg)
+    ui_text(button_text, int(button.x + 8), int(button.y + 3), fg, font)
 
     if !disabled && rl.IsMouseButtonPressed(.LEFT) && hovered {
         ui_runtime.SaveGifRequested = true
@@ -569,8 +583,9 @@ draw_settings_gif_status :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     ui_runtime: ^core.EuclidUIRuntimeState,
+    font: rl.Font,
 ) {
-    ui_text(gif_capture_status_label(ui_runtime), int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR)
+    ui_text(gif_capture_status_label(ui_runtime), int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     if ui_runtime.GifCapturePhase == .Saved && ui_runtime.LastGifPathLen > 0 {
         path_text := string(ui_runtime.LastGifPath[:ui_runtime.LastGifPathLen])
@@ -579,6 +594,7 @@ draw_settings_gif_status :: proc(
             int(panel.x + SETTINGS_PANEL_INSET),
             int(row_y + 18),
             UI_TEXT_COLOR,
+            font,
         )
     }
 }
@@ -592,15 +608,16 @@ draw_settings_view :: proc(
 
     ps := state.ParticleSystem
     ui_runtime := &state.UIRuntime
+    font := state.Font
 
     rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
     rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR)
+    ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
 
     slider_label_y, slider_track, slider_hit := build_settings_slider_layout(panel)
-    ui_text("Maximum Dust Particles", int(panel.x + SETTINGS_PANEL_INSET), int(slider_label_y), UI_TEXT_COLOR)
+    ui_text("Maximum Dust Particles", int(panel.x + SETTINGS_PANEL_INSET), int(slider_label_y), UI_TEXT_COLOR, font)
 
     max_particles := core.MAX_LOW_PARTICLES
     ps.UseMaxDustParticles = clamp(ps.UseMaxDustParticles, 0, max_particles)
@@ -629,12 +646,13 @@ draw_settings_view :: proc(
         knob,
         ps.UseMaxDustParticles,
         max_particles,
+        font,
     )
-    draw_settings_particle_stats(panel, slider_track, ps)
-    draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime)
+    draw_settings_particle_stats(panel, slider_track, ps, font)
+    draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
 
     gif_section_y := slider_track.y + SETTINGS_GIF_TOP_OFFSET
-    ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR)
+    ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
 
     draw_settings_integer_slider(
         panel,
@@ -644,6 +662,7 @@ draw_settings_view :: proc(
         &ui_runtime.GifDownsampleFactor,
         1,
         4,
+        font,
     )
 
     draw_settings_integer_slider(
@@ -654,6 +673,7 @@ draw_settings_view :: proc(
         &ui_runtime.GifFrameStep,
         1,
         4,
+        font,
     )
 
     draw_settings_save_gif_button(
@@ -661,12 +681,14 @@ draw_settings_view :: proc(
         gif_section_y + SETTINGS_GIF_BUTTON_TOP_OFFSET,
         mouse,
         ui_runtime,
+        font,
     )
 
     draw_settings_gif_status(
         panel,
         gif_section_y + SETTINGS_GIF_STATUS_TOP_OFFSET,
         ui_runtime,
+        font,
     )
 }
 
@@ -742,13 +764,13 @@ count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
     return rows
 }
 
-draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f32) {
+draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f32, font: rl.Font) {
     max_chars := chars_per_text_row(panel.width - TEXT_PADDING * 2)
     start := 0
     row := 0
 
     if len(text) == 0 {
-        ui_text("", int(panel.x + TEXT_PADDING), int(panel.y + TEXT_PADDING), UI_TEXT_COLOR)
+        ui_text("", int(panel.x + TEXT_PADDING), int(panel.y + TEXT_PADDING), UI_TEXT_COLOR, font)
         return
     }
 
@@ -757,7 +779,7 @@ draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f
         row_y := panel.y + TEXT_PADDING + f32(row) * TEXT_ROW_HEIGHT - scroll_y
 
         if row_y + TEXT_ROW_HEIGHT >= panel.y && row_y <= panel.y + panel.height {
-            ui_text(text[line_start:line_end], int(panel.x + TEXT_PADDING), int(row_y), UI_TEXT_COLOR)
+            ui_text(text[line_start:line_end], int(panel.x + TEXT_PADDING), int(row_y), UI_TEXT_COLOR, font)
         }
 
         row += 1
@@ -842,12 +864,19 @@ build_vertical_scrollbar :: proc(
     return track, thumb, thumb_h, true
 }
 
-apply_tree_hit :: proc(ji: ^core.EuclidJuliaInterface, hit: TreeHit) {
+apply_tree_hit :: proc(
+    ji: ^core.EuclidJuliaInterface,
+    ui_runtime: ^core.EuclidUIRuntimeState,
+    hit: TreeHit,
+) {
     if hit.ToggledID >= 0 && hit.ToggledID < ji.NextAnimationIndex {
         ji.Animations[hit.ToggledID].IsExpanded = !ji.Animations[hit.ToggledID].IsExpanded
     }
     if hit.SelectedID >= 0 {
         set_selected_animation(ji, hit.SelectedID)
+        ui_runtime.ViewTextScrollY = 0
+        ui_runtime.TextScrollDragging = false
+        ui_runtime.TextScrollDragOff = 0
     }
 }
 
@@ -912,6 +941,7 @@ walk_draw_tree_roots :: proc(
     scroll_y: f32,
     allow_clicks: bool,
     mouse: rl.Vector2,
+    font: rl.Font,
 ) -> TreeHit {
     hit := TreeHit{SelectedID = -1, ToggledID = -1}
 
@@ -930,6 +960,7 @@ walk_draw_tree_roots :: proc(
             allow_clicks,
             mouse,
             ji.NextAnimationIndex,
+            font,
         )
         merge_tree_hit(&hit, root_hit)
     }
@@ -999,6 +1030,7 @@ walk_draw_child_nodes_limited :: proc(
     allow_clicks: bool,
     mouse: rl.Vector2,
     remaining: int,
+    font: rl.Font,
 ) -> TreeHit {
     hit := TreeHit{SelectedID = -1, ToggledID = -1}
 
@@ -1019,6 +1051,7 @@ walk_draw_child_nodes_limited :: proc(
             allow_clicks,
             mouse,
             remaining - 1,
+            font,
         )
         merge_tree_hit(&hit, child_hit)
         child = ji.Animations[child].NextSibling
@@ -1043,6 +1076,7 @@ draw_tree_node_row :: proc(
     allow_clicks: bool,
     mouse: rl.Vector2,
     hit: ^TreeHit,
+    font: rl.Font,
 ) {
     node := &ji.Animations[id]
 
@@ -1070,7 +1104,7 @@ draw_tree_node_row :: proc(
         }
     }
 
-    ui_text(node.Name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y), UI_TEXT_COLOR)
+    ui_text(node.Name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y), UI_TEXT_COLOR, font)
 
     if click && hovered {
         hit.SelectedID = id
@@ -1087,6 +1121,7 @@ walk_draw_tree_node_limited :: proc(
     allow_clicks: bool,
     mouse: rl.Vector2,
     remaining: int,
+    font: rl.Font,
 ) -> TreeHit {
     hit := TreeHit{SelectedID = -1, ToggledID = -1}
 
@@ -1126,13 +1161,14 @@ walk_draw_tree_node_limited :: proc(
                 allow_clicks,
                 mouse,
                 remaining,
+                font,
             )
             merge_tree_hit(&hit, child_hit)
         }
         return hit
     }
 
-    draw_tree_node_row(ji, id, depth, row_rect, allow_clicks, mouse, &hit)
+    draw_tree_node_row(ji, id, depth, row_rect, allow_clicks, mouse, &hit, font)
 
     if child_first >= 0 {
         child_hit := walk_draw_child_nodes_limited(
@@ -1145,6 +1181,7 @@ walk_draw_tree_node_limited :: proc(
             allow_clicks,
             mouse,
             remaining,
+            font,
         )
         merge_tree_hit(&hit, child_hit)
     }
@@ -1189,6 +1226,7 @@ draw_tree_list_panel :: proc(
     list_panel: rl.Rectangle,
     mouse: rl.Vector2,
     scroll_y: ^f32,
+    font: rl.Font,
 ) {
     rl.DrawRectangleRec(list_panel, UI_COMPONENT_BACKGROUND_COLOR)
     rl.DrawRectangleLinesEx(list_panel, 1, UI_BORDER_COLOR)
@@ -1221,8 +1259,8 @@ draw_tree_list_panel :: proc(
         i32(list_panel.width), i32(list_panel.height))
     {
         y_cursor: f32 = 0
-        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^, allow_tree_clicks, mouse)
-        apply_tree_hit(ji, hit)
+        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^, allow_tree_clicks, mouse, font)
+        apply_tree_hit(ji, ui_runtime, hit)
     }
     rl.EndScissorMode()
 
@@ -1275,7 +1313,7 @@ draw_tree_view :: proc(state: ^core.EuclidGeneralState) {
         draw_settings_view(state, list_panel, mouse)
         return
     }
-    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse, &state^.UIRuntime.TreeScrollY)
+    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse, &state^.UIRuntime.TreeScrollY, state.Font)
 }
 
 draw_view_text_panel :: proc(state: ^core.EuclidGeneralState) {
@@ -1324,7 +1362,7 @@ draw_view_text_panel :: proc(state: ^core.EuclidGeneralState) {
 
     rl.BeginScissorMode(i32(text_panel.x), i32(text_panel.y), i32(text_panel.width), i32(text_panel.height))
     {
-        draw_wrapped_text_content(view_text, text_panel, state^.UIRuntime.ViewTextScrollY)
+        draw_wrapped_text_content(view_text, text_panel, state^.UIRuntime.ViewTextScrollY, state.Font)
     }
     rl.EndScissorMode()
 

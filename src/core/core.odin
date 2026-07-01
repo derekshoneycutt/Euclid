@@ -464,6 +464,7 @@ EuclidGeneralState :: struct {
     Stroke3D: Stroke3DRenderState,
     UIRuntime: EuclidUIRuntimeState,
     GifCapture: GifCaptureSession,
+    Font: rl.Font,
 
     CycleBoundaryGeneration: u64,
     ConsumedCycleBoundaryGeneration: u64,
