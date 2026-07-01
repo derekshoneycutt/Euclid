@@ -103,6 +103,8 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
 
     required_entries := []string{
         "julia/script.jl",
+        "compass_icon.png",
+        "font.otf",
         "manifest.txt",
     }
 
