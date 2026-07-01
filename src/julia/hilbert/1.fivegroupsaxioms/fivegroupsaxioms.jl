@@ -6,6 +6,10 @@ using ..EuclidGeometry
 using ..NullAnimation
 
 include("./axiom_I1.jl")
+include("./axiom_I2.jl")
+include("./axiom_I3.jl")
+include("./axiom_I4.jl")
+include("./axiom_I5.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
@@ -58,6 +62,26 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomI1.initialize,
                 HilbertChapterOneAxiomI1.loop, HilbertChapterOneAxiomI1.clean,
                 "Axiom I,1", book1Sec2Id)
+            book1AxiomI2Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI2.get_view_text,
+                HilbertChapterOneAxiomI2.initialize,
+                HilbertChapterOneAxiomI2.loop, HilbertChapterOneAxiomI2.clean,
+                "Axiom I,2", book1Sec2Id)
+            book1AxiomI3Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI3.get_view_text,
+                HilbertChapterOneAxiomI3.initialize,
+                HilbertChapterOneAxiomI3.loop, HilbertChapterOneAxiomI3.clean,
+                "Axiom I,3", book1Sec2Id)
+            book1AxiomI4Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI4.get_view_text,
+                HilbertChapterOneAxiomI4.initialize,
+                HilbertChapterOneAxiomI4.loop, HilbertChapterOneAxiomI4.clean,
+                "Axiom I,4", book1Sec2Id)
+            book1AxiomI5Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI5.get_view_text,
+                HilbertChapterOneAxiomI5.initialize,
+                HilbertChapterOneAxiomI5.loop, HilbertChapterOneAxiomI5.clean,
+                "Axiom I,5", book1Sec2Id)
                 
         #=book1PostsId = OdinJuliaBridge.add_child_animation_interface(
             state_ptr, get_view_text_BookI_posts, NullAnimation.initialize,
