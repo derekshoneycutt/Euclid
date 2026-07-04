@@ -12,6 +12,7 @@ animations. Raylib is used for rendering.
     1. [Q: Why 2 languages?](#q-why-2-languages)
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
+    1. [Q: What's This About Hot-Reload?](#q-whats-this-about-hot-reload)
 
 <p align="center">
 <img src="./screen.gif" >
@@ -31,11 +32,10 @@ git clone https://github.com/derekshoneycutt/EuclidApp.git
 ### Linux / MacOS
 
 Use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
-include by default.
 
 ### Windows
 
-On Windows, use `./make.ps1` to build or `./make.ps1 --run` to build and run.
+On Windows, use `./make.ps1` to build or `./make.ps1 --run` to build and immediately run.
 
 #### Windows requires a few more additions before this will work
 
@@ -55,6 +55,7 @@ environment. Otherwise, the first run will pull and install these, which may tak
 - `LinearAlgebra`
 
 For example:
+
 ```bash
 julia
 # type `]` to enter Package manager
@@ -82,11 +83,11 @@ This whole thing began using Julia with Makie to draw Euclid's Elements via Jupy
 notebooks. Ultimately, it became quite clear that what I was looking for was not a great
 fit to that model, and I froze on it a bit.
 
-I had some thoughts about making a C application for it, but I hardly like programming in
-C much more than assembly (I **do** like programming in assembly **sometimes**). As I was
-doing another project exploring 76 different programming languages, I encountered Odin and
-enjoyed working with it. On a whim, I was playing with a basic kinematic system in Odin
-when it occurred to me it would be a great basis for this Euclid project.
+I had some thoughts about making a C application for it, but I was not very excited about
+it at any given moment. As I was doing another project exploring 76 different programming
+languages, I encountered Odin and enjoyed working with it. On a whim, I was playing with a
+basic kinematic system in Odin when it occurred to me it would be a great basis for this
+Euclid project.
 
 Ultimately, having a strong solid application base with manual memory management and
 potential for optimizations at a relatively low level combined with an intentionally fast,
@@ -106,15 +107,18 @@ Usage: ./make.sh [options]
     OR ./make.ps1 [options]
 
 Options:
-  --run, -r       Run bin/euclid after all other requests.
   --build, -b     Build the project.
+  --assets, -a    Build assets.pkg.
+  --run, -r       Run bin/euclid after all other requests.
   --vet, -v       Build with validation flags.
   --no-build, -n  Skip any build (overrides --build and --vet).
+  --no-assets, -x Skip assets.pkg build (overrides --assets).
   --help, -h      Show this help text.
 
 Notes:
-  - If no options are provided, the default is to build.
-  - Short options can be combined, e.g. -rv or -bnh.
+  - If no options are provided, the default is --build --assets.
+  - That is, --build and --assets are essentially non-altering flags, included for visibility.
+  - Short options can be combined, e.g. -rva or -bnx.
 ```
 
 ### Q: Where Should I Start If I Want In The Code?
@@ -132,3 +136,25 @@ engineer by trade. Additionally, some of the code was initially prototyped for a
 different purpose. The result is some code not quite being as nice to the code standard.
 Nonetheless, the goal is to follow it moving forward, and probably fix up the bits that
 remain a bit off as I go.
+
+### Q: What's This About Hot-Reload?
+
+The project is structured to hot-reload all Julia code if the assets package is updated.
+You can simply call the make script specifying to build only the assets package. Then
+copy the built package next to the running instance. If you run from the `bin` folder of
+a compilation, this will automatically replace the assets package there.
+
+```bash
+./make.sh -na
+```
+
+OR on Windows
+
+```powershell
+./make.ps1 -na
+```
+
+EuclidApp will automatically notice the updated package file, unpack it, and reload all
+the Julia code, restarting the current animation according to the new code. If the current
+animation cannot be found, will simply start the first animation in the tree. This can be
+helpful for simple animation updates.

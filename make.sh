@@ -2,25 +2,12 @@
 
 set -euo pipefail
 
-if ! command -v julia >/dev/null 2>&1; then
-    echo "Error: Julia is required but not installed or not on PATH." >&2
-    echo "Please install Julia to continue." >&2
-    exit 1
-fi
-
-if ! command -v odin >/dev/null 2>&1; then
-    echo "Error: Odin is required but not installed or not on PATH." >&2
-    echo "Please install Odin to continue." >&2
-    exit 1
-fi
-
-juliaConfigPath="$(julia -e 'print(joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl"))')"
-juliaFlags="$(${juliaConfigPath} --ldflags --ldlibs | tr '\n' ' ')"
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 runAfterBuild=false
 doBuild=true
 doVet=false
+doAssets=true
 
 showHelp=false
 hasInvalidArg=false
@@ -29,21 +16,36 @@ requestRun=false
 requestBuild=false
 requestVet=false
 requestNoBuild=false
+requestAssets=false
+requestNoAssets=false
+
+require_command() {
+    local commandName="$1"
+    local installHint="$2"
+    if ! command -v "${commandName}" >/dev/null 2>&1; then
+        echo "Error: ${commandName} is required but not installed or not on PATH." >&2
+        echo "${installHint}" >&2
+        exit 1
+    fi
+}
 
 show_help() {
     cat <<EOF
 Usage: ./make.sh [options]
 
 Options:
-  --run, -r       Run bin/euclid after all other requests.
   --build, -b     Build the project.
+  --assets, -a    Build assets.pkg.
+  --run, -r       Run bin/euclid after all other requests.
   --vet, -v       Build with validation flags.
   --no-build, -n  Skip any build (overrides --build and --vet).
+  --no-assets, -x Skip assets.pkg build (overrides --assets).
   --help, -h      Show this help text.
 
 Notes:
-  - If no options are provided, the default is to build.
-  - Short options can be combined, e.g. -rv or -bnh.
+  - If no options are provided, the default is --build --assets.
+  - That is, --build and --assets are essentially non-altering flags, included for visibility.
+  - Short options can be combined, e.g. -rva or -bnx.
 EOF
 }
 
@@ -55,11 +57,17 @@ for arg in "$@"; do
         --build)
             requestBuild=true
             ;;
+        --assets)
+            requestAssets=true
+            ;;
         --vet)
             requestVet=true
             ;;
         --no-build)
             requestNoBuild=true
+            ;;
+        --no-assets)
+            requestNoAssets=true
             ;;
         --help)
             showHelp=true
@@ -75,11 +83,17 @@ for arg in "$@"; do
                     b)
                         requestBuild=true
                         ;;
+                    a)
+                        requestAssets=true
+                        ;;
                     v)
                         requestVet=true
                         ;;
                     n)
                         requestNoBuild=true
+                        ;;
+                    x)
+                        requestNoAssets=true
                         ;;
                     h)
                         showHelp=true
@@ -122,6 +136,31 @@ elif [[ "${requestVet}" == "true" ]]; then
 elif [[ "${requestBuild}" == "true" ]]; then
     doBuild=true
     doVet=false
+fi
+
+if [[ "${requestNoAssets}" == "true" ]]; then
+    doAssets=false
+elif [[ "${requestAssets}" == "true" ]]; then
+    doAssets=true
+fi
+
+if [[ "${requestAssets}" == "true" && "${requestBuild}" != "true" && "${requestVet}" != "true" && "${requestNoBuild}" != "true" ]]; then
+    doBuild=false
+fi
+
+if [[ "${doBuild}" == "true" ]]; then
+    require_command "julia" "Please install Julia to continue."
+    require_command "odin" "Please install Odin to continue."
+fi
+
+if [[ "${doAssets}" == "true" ]]; then
+    require_command "tar" "Please install tar to continue."
+fi
+
+juliaFlags=""
+if [[ "${doBuild}" == "true" ]]; then
+    juliaConfigPath="$(julia -e 'print(joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl"))')"
+    juliaFlags="$(${juliaConfigPath} --ldflags --ldlibs | tr '\n' ' ')"
 fi
 
 assetsStagingDir="${scriptDir}/bin/.assets_staging"
@@ -172,6 +211,14 @@ if [[ "${doBuild}" == "true" ]]; then
         fi
     fi
 
+fi
+
+if [[ "${doAssets}" == "true" ]]; then
+    echo "Building assets package..."
+    rm -rf "${assetsStagingDir}"
+    mkdir -p "${assetsStagingDir}/julia"
+    mkdir -p "${assetsStagingDir}/shaders"
+
     cp -R "${scriptDir}/src/julia/." "${assetsStagingDir}/julia/"
     cp -R "${scriptDir}/src/view/shaders/." "${assetsStagingDir}/shaders/"
     cp -R "${scriptDir}/assets/." "${assetsStagingDir}/"
@@ -183,7 +230,16 @@ shader_root=shaders
 format=tar.gz
 EOF
 
-    tar -C "${assetsStagingDir}" -czf "${assetsArchivePath}" .
+    if tar -C "${assetsStagingDir}" -czf "${assetsArchivePath}" .; then
+        assetsExitCode=0
+    else
+        assetsExitCode=$?
+    fi
+    echo "Assets package build exited ${assetsExitCode}"
+    if [[ "${assetsExitCode}" -ne 0 ]]; then
+        exit "${assetsExitCode}"
+    fi
+    echo "Wrote ${assetsArchivePath}"
     rm -rf "${assetsStagingDir}"
 fi
 
