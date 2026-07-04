@@ -281,10 +281,6 @@ $assetsStagingDir = Join-Path $scriptDir "bin/.assets_staging"
 $assetsArchivePath = Join-Path $scriptDir "bin/assets.pkg"
 
 if ($doBuild) {
-    if (Test-Path $assetsStagingDir) {
-        Remove-Item -Recurse -Force $assetsStagingDir
-    }
-
     Push-Location (Join-Path $scriptDir "src")
     try {
         Write-Host "Building Odin..."
@@ -341,12 +337,11 @@ format=tar.gz
     & tar -C $assetsStagingDir -czf $assetsArchivePath .
     $assetsExitCode = $LASTEXITCODE
     Write-Host "Assets package build exited $assetsExitCode"
+    Remove-Item -Recurse -Force $assetsStagingDir
     if ($LASTEXITCODE -ne 0) {
         Stop-Build "Error: Failed to package assets archive."
     }
     Write-Host "Wrote $assetsArchivePath"
-
-    Remove-Item -Recurse -Force $assetsStagingDir
 }
 
 if ($runAfterBuild) {

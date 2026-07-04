@@ -167,10 +167,6 @@ assetsStagingDir="${scriptDir}/bin/.assets_staging"
 assetsArchivePath="${scriptDir}/bin/assets.pkg"
 
 if [[ "${doBuild}" == "true" ]]; then
-    rm -rf "${assetsStagingDir}"
-    mkdir -p "${assetsStagingDir}/julia"
-    mkdir -p "${assetsStagingDir}/shaders"
-
     cd "${scriptDir}/src"
     echo "Building Odin..."
     if [[ "${doVet}" == "true" ]]; then
@@ -236,11 +232,11 @@ EOF
         assetsExitCode=$?
     fi
     echo "Assets package build exited ${assetsExitCode}"
+    rm -rf "${assetsStagingDir}"
     if [[ "${assetsExitCode}" -ne 0 ]]; then
         exit "${assetsExitCode}"
     fi
     echo "Wrote ${assetsArchivePath}"
-    rm -rf "${assetsStagingDir}"
 fi
 
 cd "${scriptDir}"
