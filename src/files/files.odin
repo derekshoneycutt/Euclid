@@ -16,38 +16,15 @@ ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 
-ensure_directory_exists :: proc(path: string) -> bool {
-    if len(path) == 0 {
-        return false
-    }
-
-    if os.is_directory(path) {
-        return true
-    }
-
-    return os.make_directory_all(path) == nil
-}
-
-resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
-    base_dir, base_err := os.user_cache_dir(allocator)
-    if base_err != nil || len(base_dir) == 0 {
-        base_dir, base_err = os.temp_directory(allocator)
-        if base_err != nil || len(base_dir) == 0 {
-            return "", false
-        }
-    }
-
-    unpack_dir, unpack_err := filepath.join(
-        []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR},
-        allocator,
-    )
-    if unpack_err != nil || len(unpack_dir) == 0 {
-        return "", false
-    }
-
-    return unpack_dir, true
-}
-
+// Summary:
+//   Resolve a writable directory for GIF output and create it if needed.
+//
+// Parameters:
+//   - allocator: Allocator used for temporary path joins and directory resolution.
+//
+// Returns:
+//   - output_dir: Writable path ending in GIF_OUTPUT_DIR_NAME when successful, otherwise "".
+//   - ok: true when a writable directory was resolved/created, otherwise false.
 resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
     pictures_dir, pictures_err := os.user_pictures_dir(allocator)
     if pictures_err == nil && len(pictures_dir) > 0 {
@@ -96,6 +73,179 @@ resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (s
     return "", false
 }
 
+// Summary:
+//   Ensure assets.pkg is unpacked for the current executable directory.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - none.
+//
+// Notes:
+//   - Safe for startup use; failures are handled internally.
+ensure_packaged_assets_unpacked_root :: proc() {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return
+    }
+
+    _ = ensure_packaged_assets_unpacked(exe_dir)
+}
+
+// Summary:
+//   Force a fresh unpack of assets.pkg from the executable directory.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - ok: true when reload succeeds and assets are ready for path resolution.
+reload_packaged_assets_root :: proc() -> bool {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return false
+    }
+
+    return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
+}
+
+// Summary:
+//   Read the packaged archive modification time as unix nanoseconds.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - mtime_unix_nano: Archive modification timestamp when available, otherwise 0.
+//   - ok: true when the timestamp was retrieved, otherwise false.
+packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return 0, false
+    }
+
+    archive_path, archive_err := filepath.join(
+        []string{exe_dir, ASSET_PACKAGE_ARCHIVE},
+        context.temp_allocator,
+    )
+    if archive_err != nil || !os.exists(archive_path) {
+        return 0, false
+    }
+
+    info, stat_err := os.stat(archive_path, context.temp_allocator)
+    if stat_err != nil {
+        return 0, false
+    }
+    defer os.file_info_delete(info, context.temp_allocator)
+
+    return time.time_to_unix_nano(info.modification_time), true
+}
+
+// Summary:
+//   Resolve an absolute path for a packaged asset relative path.
+//
+// Parameters:
+//   - relative_path: Asset path relative to the unpack root (for example "julia/script.jl").
+//   - allocator: Allocator used for the returned joined path.
+//
+// Returns:
+//   - asset_path: Joined absolute path when successful, otherwise "".
+packaged_asset_path :: proc(relative_path: string, allocator := context.allocator) -> string {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return ""
+    }
+
+    if !ensure_packaged_assets_unpacked(exe_dir) {
+        return ""
+    }
+
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        return ""
+    }
+
+    path, path_err := filepath.join(
+        []string{unpack_dir, relative_path},
+        allocator,
+    )
+    if path_err != nil {
+        return ""
+    }
+
+    return path
+}
+
+// Summary:
+//   Remove the unpacked packaged-assets directory from writable storage.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - none.
+//
+// Notes:
+//   - Intended for process shutdown cleanup.
+cleanup_packaged_assets_dir :: proc() {
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        return
+    }
+
+    _ = os.remove_all(unpack_dir)
+}
+
+
+
+// Summary:
+//   Ensure a directory path exists, creating parent directories as needed.
+//
+// Notes:
+//   - Returns false for empty input paths.
+ensure_directory_exists :: proc(path: string) -> bool {
+    if len(path) == 0 {
+        return false
+    }
+
+    if os.is_directory(path) {
+        return true
+    }
+
+    return os.make_directory_all(path) == nil
+}
+
+// Summary:
+//   Resolve the writable root directory where assets.pkg contents are unpacked.
+//
+// Notes:
+//   - Prefers user cache directory and falls back to temp directory.
+resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+    base_dir, base_err := os.user_cache_dir(allocator)
+    if base_err != nil || len(base_dir) == 0 {
+        base_dir, base_err = os.temp_directory(allocator)
+        if base_err != nil || len(base_dir) == 0 {
+            return "", false
+        }
+    }
+
+    unpack_dir, unpack_err := filepath.join(
+        []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR},
+        allocator,
+    )
+    if unpack_err != nil || len(unpack_dir) == 0 {
+        return "", false
+    }
+
+    return unpack_dir, true
+}
+
+// Summary:
+//   Check whether the unpack directory contains required baseline asset entries.
+//
+// Notes:
+//   - This is a lightweight readiness check, not a full archive integrity check.
 is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     if !os.is_directory(unpack_dir) {
         return false
@@ -118,6 +268,8 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     return true
 }
 
+// Summary:
+//   Return true when every byte in the slice is zero.
 bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
     for b in data {
         if b != 0 {
@@ -127,6 +279,8 @@ bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
     return true
 }
 
+// Summary:
+//   Trim leading and trailing spaces/nulls from a tar header field byte slice.
 trim_tar_field :: #force_inline proc(data: []u8) -> []u8 {
     start := 0
     for start < len(data) && (data[start] == ' ' || data[start] == 0) {
@@ -141,6 +295,11 @@ trim_tar_field :: #force_inline proc(data: []u8) -> []u8 {
     return data[start:stop]
 }
 
+// Summary:
+//   Parse an octal tar header field into an i64 value.
+//
+// Notes:
+//   - Empty trimmed fields are treated as zero.
 parse_tar_octal_i64 :: #force_inline proc(field: []u8, out: ^i64) -> bool {
     cleaned := trim_tar_field(field)
     if len(cleaned) == 0 {
@@ -160,6 +319,11 @@ parse_tar_octal_i64 :: #force_inline proc(field: []u8, out: ^i64) -> bool {
     return true
 }
 
+// Summary:
+//   Validate that an archive entry path is a safe relative path.
+//
+// Notes:
+//   - Rejects absolute paths and parent-directory traversal segments.
 is_safe_asset_relative_path :: proc(path: string) -> bool {
     if len(path) == 0 || filepath.is_abs(path) {
         return false
@@ -179,6 +343,11 @@ is_safe_asset_relative_path :: proc(path: string) -> bool {
     return true
 }
 
+// Summary:
+//   Extract a gzip-decoded tar payload blob into the unpack directory.
+//
+// Notes:
+//   - Supports regular files, directories, and skips pax metadata entries.
 extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool {
     idx := 0
 
@@ -289,10 +458,20 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
     }
 }
 
+// Summary:
+//   Ensure packaged assets are unpacked for a specific executable directory.
+//
+// Notes:
+//   - Uses non-forced behavior and may reuse existing unpacked assets.
 ensure_packaged_assets_unpacked :: proc(exe_dir: string) -> bool {
     return ensure_packaged_assets_unpacked_with_force(exe_dir, false)
 }
 
+// Summary:
+//   Unpack assets.pkg for an executable directory with optional forced refresh.
+//
+// Notes:
+//   - When force is true, existing unpacked content is removed and rebuilt.
 ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool) -> bool {
     archive_path, archive_err := filepath.join(
         []string{exe_dir, ASSET_PACKAGE_ARCHIVE},
@@ -340,80 +519,4 @@ ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool)
     }
 
     return true
-}
-
-ensure_packaged_assets_unpacked_root :: proc() {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return
-    }
-
-    _ = ensure_packaged_assets_unpacked(exe_dir)
-}
-
-reload_packaged_assets_root :: proc() -> bool {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return false
-    }
-
-    return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
-}
-
-packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return 0, false
-    }
-
-    archive_path, archive_err := filepath.join(
-        []string{exe_dir, ASSET_PACKAGE_ARCHIVE},
-        context.temp_allocator,
-    )
-    if archive_err != nil || !os.exists(archive_path) {
-        return 0, false
-    }
-
-    info, stat_err := os.stat(archive_path, context.temp_allocator)
-    if stat_err != nil {
-        return 0, false
-    }
-    defer os.file_info_delete(info, context.temp_allocator)
-
-    return time.time_to_unix_nano(info.modification_time), true
-}
-
-packaged_asset_path :: proc(relative_path: string, allocator := context.allocator) -> string {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return ""
-    }
-
-    if !ensure_packaged_assets_unpacked(exe_dir) {
-        return ""
-    }
-
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
-    if !unpack_ok {
-        return ""
-    }
-
-    path, path_err := filepath.join(
-        []string{unpack_dir, relative_path},
-        allocator,
-    )
-    if path_err != nil {
-        return ""
-    }
-
-    return path
-}
-
-cleanup_packaged_assets_dir :: proc() {
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
-    if !unpack_ok {
-        return
-    }
-
-    _ = os.remove_all(unpack_dir)
 }

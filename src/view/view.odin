@@ -53,67 +53,107 @@ SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
-IsoScale :: core.IsoScale
-KineShapePointType :: core.KineShapePointType
-KineShapePoint :: core.KineShapePoint
-KineConstraint :: core.KineConstraint
-KinePointSystem :: core.KinePointSystem
+Iso_Scale :: core.Iso_Scale
+Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
+Kine_Shape_Point :: core.Kine_Shape_Point
+Kine_Constraint :: core.Kine_Constraint
+Kine_Point_System :: core.Kine_Point_System
 Particle :: core.Particle
-ParticleSystem :: core.ParticleSystem
-EuclidDrawingSurface :: core.EuclidDrawingSurface
-EuclidGeneralState :: core.EuclidGeneralState
+Particle_System :: core.Particle_System
+Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
+Euclid_General_State :: core.Euclid_General_State
 
-initiate_animations_state :: proc() -> ^EuclidGeneralState {
-    isoScale := new(IsoScale)
-    isoScale^.Scale = ISO_SCALE_VALUE
-    isoScale^.XOffset = ISO_X_OFFSET
-    isoScale^.YOffset = ISO_Y_OFFSET
-    isoScale^.MainLightDir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
-    isoScale^.UseDirectionalShadow = true
+// Summary:
+//   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
+//
+// Notes:
+//   - Owns state/window setup and teardown via deferred cleanup calls.
+//   - Resets temp allocator each frame after drawing.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - none.
+run_window_loop :: proc() {
+    state := initiate_animations_state()
+    defer free_animations_state(state)
 
-    drawingSurface := new(EuclidDrawingSurface)
-    drawingSurface^.Zeros = Vector3{0 - SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
-    drawingSurface^.RightUp = Vector3{1 + SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
-    drawingSurface^.LeftDown = Vector3{0 - SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
-    drawingSurface^.RightDown = Vector3{1 + SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
-    drawingSurface^.Color = SURFACE_COLOR
-    drawingSurface^.EdgeColor = SURFACE_EDGE_COLOR
-    drawingSurface^.EdgeSize = SURFACE_EDGE_SIZE
+    initiate_window(state)
+    defer close_window(state)
 
-    particleSystem := new(ParticleSystem)
-    particleSystem^.UseMaxDustParticles = core.MAX_LOW_PARTICLES
-    
-    juliaInterface := julia.retrieve_interface()
-    juliaInterface^.CurrentAnimation = &juliaInterface^.NullAnimation
-    juliaInterface^.CurrentAnimationIndex = -1
-    juliaInterface^.SelectedAnimationIndex = -1
-    juliaInterface^.PendingAnimationReset = false
-    juliaInterface^.AnimationResetCooldownRemaining = 0
+    free_all(context.temp_allocator)
 
-    pointSystem := new(KinePointSystem)
+    for !rl.WindowShouldClose() {
+        alpha := accumulate_and_update_systems(state)
 
-    compass := kine.init_kineshape_compass(pointSystem, TOOL_LENGTH, TOOL_COLOR, 5)
-    pen := kine.init_kineshape_pen(pointSystem, TOOL_LENGTH, TOOL_COLOR, 5)
-    kine.kine_freeze_system_indices(pointSystem)
+        rl.BeginDrawing()
+            draw_frame(state, alpha)
+        rl.EndDrawing()
 
-    kine.apply_all_constraints_to_error(pointSystem, ALLOWED_CONSTRAINT_ERROR)
-    kine.kine_update_last_cache_vectors(pointSystem)
+        free_all(context.temp_allocator)
+    }
+}
 
 
-    state := new(EuclidGeneralState)
-    state^.SavedContext = context
-    state^.IsoScale = isoScale
-    state^.DrawSurface = drawingSurface
-    state^.JuliaInterface = juliaInterface
-    state^.PointSystem = pointSystem
-    state^.ParticleSystem = particleSystem
-    state^.Compass = compass
-    state^.Pen = pen
-    state^.CurrentDeltaTime = FIXED_DT
-    state^.Accumulator = 0
-    state^.UIRuntime.GifDownsampleFactor = 2
-    state^.UIRuntime.GifFrameStep = 2
-    state^.UIRuntime.GifCapturePhase = .Idle
+
+
+// Summary:
+//   Allocate and initialize persistent runtime state for simulation and rendering.
+//
+// Notes:
+//   - Allocates long-lived runtime state and returns ownership to caller.
+initiate_animations_state :: proc() -> ^Euclid_General_State {
+    iso_scale := new(Iso_Scale)
+    iso_scale^.scale = ISO_SCALE_VALUE
+    iso_scale^.x_offset = ISO_X_OFFSET
+    iso_scale^.y_offset = ISO_Y_OFFSET
+    iso_scale^.main_light_dir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
+    iso_scale^.use_directional_shadow = true
+
+    drawing_surface := new(Euclid_Drawing_Surface)
+    drawing_surface^.zeros = Vector3{0 - SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.right_up = Vector3{1 + SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.left_down = Vector3{0 - SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.right_down = Vector3{1 + SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.color = SURFACE_COLOR
+    drawing_surface^.edge_color = SURFACE_EDGE_COLOR
+    drawing_surface^.edge_size = SURFACE_EDGE_SIZE
+
+    particle_system := new(Particle_System)
+    particle_system^.use_max_dust_particles = core.MAX_LOW_PARTICLES
+
+    julia_interface := julia.retrieve_interface()
+    julia_interface^.current_animation = &julia_interface^.null_animation
+    julia_interface^.current_animation_index = -1
+    julia_interface^.selected_animation_index = -1
+    julia_interface^.pending_animation_reset = false
+    julia_interface^.animation_reset_cooldown_remaining = 0
+
+    point_system := new(Kine_Point_System)
+
+    compass := kine.init_kineshape_compass(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
+    pen := kine.init_kineshape_pen(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
+    kine.kine_freeze_system_indices(point_system)
+
+    kine.apply_all_constraints_to_error(point_system, ALLOWED_CONSTRAINT_ERROR)
+    kine.kine_update_last_cache_vectors(point_system)
+
+
+    state := new(Euclid_General_State)
+    state^.saved_context = context
+    state^.iso_scale = iso_scale
+    state^.draw_surface = drawing_surface
+    state^.julia_interface = julia_interface
+    state^.point_system = point_system
+    state^.particle_system = particle_system
+    state^.compass = compass
+    state^.pen = pen
+    state^.current_delta_time = FIXED_DT
+    state^.accumulator = 0
+    state^.ui_runtime.gif_downsample_factor = 2
+    state^.ui_runtime.gif_frame_step = 2
+    state^.ui_runtime.gif_capture_phase = .Idle
 
 
     julia.init_euclid_scripts(state)
@@ -121,34 +161,44 @@ initiate_animations_state :: proc() -> ^EuclidGeneralState {
     return state
 }
 
-free_animations_state :: proc(state : ^EuclidGeneralState) {
-    gif_capture_abort_session(&state^.GifCapture)
+// Summary:
+//   Release runtime state allocations and finalize Julia/GIF runtime resources.
+//
+// Notes:
+//   - Must be paired with initiate_animations_state to release owned allocations.
+free_animations_state :: proc(state : ^Euclid_General_State) {
+    gif_capture_abort_session(&state^.gif_capture)
     julia.clean_julia_interfaces(state)
-    free(state^.JuliaInterface)
-    free(state^.ParticleSystem)
-    free(state^.PointSystem)
-    free(state^.DrawSurface)
-    free(state^.IsoScale)
+    free(state^.julia_interface)
+    free(state^.particle_system)
+    free(state^.point_system)
+    free(state^.draw_surface)
+    free(state^.iso_scale)
     free(state)
 }
 
-initiate_window :: proc(state : ^EuclidGeneralState) {
+// Summary:
+//   Initialize window, shader/font resources, and GUI style settings.
+//
+// Notes:
+//   - Should be paired with close_window on shutdown.
+initiate_window :: proc(state : ^Euclid_General_State) {
     rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
 
     rl.SetTargetFPS(LIMIT_FPS)
 
-    iconFile := strings.clone_to_cstring(
+    icon_file := strings.clone_to_cstring(
         files.packaged_asset_path("compass_icon.png", context.temp_allocator), context.temp_allocator)
-    if rl.FileExists(iconFile) {
-        iconImage := rl.LoadImage(iconFile)
-        state^.Icon = iconImage
-        rl.SetWindowIcon(iconImage)
+    if rl.FileExists(icon_file) {
+        icon_image := rl.LoadImage(icon_file)
+        rl.SetWindowIcon(icon_image)
+        rl.UnloadImage(icon_image)
     }
 
     init_stroke3d_shader(state)
 
-    codepoints := []rune{
+    code_points := []rune{
         // Basic ASCII (0x20 to 0x7E)
         0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
@@ -166,14 +216,14 @@ initiate_window :: proc(state : ^EuclidGeneralState) {
         0x3c0, 0x3c1, 0x3c2, 0x3c3, 0x3c4, 0x3c5, 0x3c6, 0x3c7, 0x3c8, 0x3c9, 0x3ca, 0x3cb, 0x3cc, 0x3cd, 0x3ce,
 
         // etc.
-        0x00a7, 0x2260
+        0x00a7, 0x2260,
     }
-    codepoint_count := i32(len(codepoints))
+    code_point_count := i32(len(code_points))
     font_size: i32 = 32
-    fontFile := strings.clone_to_cstring(
+    font_file := strings.clone_to_cstring(
         files.packaged_asset_path("font.otf", context.temp_allocator), context.temp_allocator)
-    font := rl.LoadFontEx(fontFile, font_size, &codepoints[0], codepoint_count)
-    state^.Font = font
+    font := rl.LoadFontEx(font_file, font_size, &code_points[0], code_point_count)
+    state^.font = font
 
     rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_NORMAL),
         i32(rl.ColorToInt(BACKGROUND_COLOR)))
@@ -195,64 +245,68 @@ initiate_window :: proc(state : ^EuclidGeneralState) {
         i32(rl.ColorToInt(UI_TEXT_COLOR)))
 }
 
-close_window :: proc(state : ^EuclidGeneralState) {
+// Summary:
+//   Shutdown render resources, unload font/shader, and close the window.
+//
+// Notes:
+//   - Intended as the shutdown pair for initiate_window.
+close_window :: proc(state : ^Euclid_General_State) {
     shutdown_stroke3d_shader(state)
+    rl.UnloadFont(state^.font)
     rl.CloseWindow()
-    rl.UnloadFont(state^.Font)
-
-    iconImage, hasIcon := state^.Icon.?
-    if hasIcon {
-        rl.UnloadImage(iconImage)
-    }
 }
 
-accumulate_and_update_systems :: proc(state : ^EuclidGeneralState) -> f32 {
+// Summary:
+//   Run fixed-step simulation updates and return interpolation alpha for rendering.
+accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     frame_dt := rl.GetFrameTime()
     if frame_dt > MAX_FRAME_DT {
         frame_dt = MAX_FRAME_DT
     }
-    state^.Accumulator += frame_dt
+    state^.accumulator += frame_dt
 
-    kine.kine_update_last_cache_vectors(state^.PointSystem)
-    stepCount := 0
-    for state^.Accumulator >= FIXED_DT {
+    kine.kine_update_last_cache_vectors(state^.point_system)
+    step_count := 0
+    for state^.accumulator >= FIXED_DT {
         julia.update_running_animations(state, FIXED_DT)
         julia.call_global_euclid_loop(state, FIXED_DT)
         julia.call_current_animation_loop(state, FIXED_DT)
-        particles.update_particles(state^.ParticleSystem, FIXED_DT)
-        kine.apply_all_constraints_to_error(state^.PointSystem, ALLOWED_CONSTRAINT_ERROR)
+        particles.update_particles(state^.particle_system, FIXED_DT)
+        kine.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
         gif_capture_update_fixed_step(state)
 
-        state^.Accumulator -= FIXED_DT
-        stepCount += 1
-        if stepCount >= MAX_STEPS_PER_FRAME {
-            state^.Accumulator = 0
+        state^.accumulator -= FIXED_DT
+        step_count += 1
+        if step_count >= MAX_STEPS_PER_FRAME {
+            state^.accumulator = 0
             break
         }
     }
 
-    alpha := state^.Accumulator / FIXED_DT
-    kine.build_kine_draw_cache(state^.PointSystem, alpha)
+    alpha := state^.accumulator / FIXED_DT
+    kine.build_kine_draw_cache(state^.point_system, alpha)
 
     return alpha
 }
 
-draw_frame :: proc(state : ^EuclidGeneralState, alpha: f32) {
+// Summary:
+//   Render one full frame including world, particles, UI panels, and capture step.
+draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     rl.ClearBackground(BACKGROUND_COLOR)
 
     draw_drawing_surface(state)
 
     draw_kine_points_low_cached(state)
-    render_low_particles(state^.ParticleSystem, state)
+    render_low_particles(state^.particle_system, state)
     draw_kine_points_shadows_cached(state)
-    render_particles(state^.ParticleSystem, state)
+    render_particles(state^.particle_system, state)
     draw_kine_points_high_cached(state)
-    render_high_particles(state^.ParticleSystem, state)
+    render_high_particles(state^.particle_system, state)
 
-    if state^.UIRuntime.GifCapturePhase == .Recording {
+    if state^.ui_runtime.gif_capture_phase == .Recording {
         if !gif_capture_submit_frame(state) {
-            gif_capture_abort_session(&state^.GifCapture)
-            state^.UIRuntime.GifCapturePhase = .Error
+            gif_capture_abort_session(&state^.gif_capture)
+            state^.ui_runtime.gif_capture_phase = .Error
         }
     }
 
@@ -262,27 +316,7 @@ draw_frame :: proc(state : ^EuclidGeneralState, alpha: f32) {
     rl.DrawRectangleRec(rl.Rectangle{VIEW_WIDTH, 0, RIGHT_BAR_WIDTH, WINDOW_HEIGHT}, UI_BACK_COLOR)
     draw_tree_view(state)
 
-    if state^.UIRuntime.DisplayFPS {
+    if state^.ui_runtime.display_fps {
         rl.DrawFPS(10, 10)
-    }
-}
-
-run_window_loop :: proc() {
-    state := initiate_animations_state()
-    defer free_animations_state(state)
-
-    initiate_window(state)
-    defer close_window(state)
-
-    free_all(context.temp_allocator)
-
-    for !rl.WindowShouldClose() {
-        alpha := accumulate_and_update_systems(state)
-
-        rl.BeginDrawing()
-            draw_frame(state, alpha)
-        rl.EndDrawing()
-
-        free_all(context.temp_allocator)
     }
 }

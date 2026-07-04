@@ -5,8 +5,7 @@ include("./1.fivegroupsaxioms/fivegroupsaxioms.jl")
 function get_view_text_root_hilbert(state_ptr::Ptr{Cvoid})
     """David Hilbert - Foundations of Geometry ; Translated by E. J. Townsend
     
-"All human knowledge begins with intuitions, thence passes to concepts and ends
-with ideas."
+"All human knowledge begins with intuitions, thence passes to concepts and ends with ideas."
 Kant, Critique of Pure Reason
 
 Geometry, like arithmetic, requires for its logical development only a small number of simple, fundamental principles. These fundamental principles are called the axioms of geometry. The choice of the axioms and the investigation of their relations to one another is a problem which, since the time of Euclid, has been discussed in numerous excellent memoirs to be found in the mathematical literature. This problem is tantamount to the logical analysis of our intuition of space.

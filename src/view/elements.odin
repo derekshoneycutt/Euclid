@@ -35,14 +35,22 @@ STROKE3D_SPECULAR_STRENGTH :: 0.26
 STROKE3D_SPECULAR_POWER :: 18.0
 
 
-init_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
-    s := &state^.Stroke3D
+// Summary:
+//   Initialize stroke3d shader handles and uniform locations from packaged assets.
+//
+// Parameters:
+//   - state: Global app state that stores shader handles and uniform locations.
+//
+// Returns:
+//   - none.
+init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+    s := &state^.stroke_3d
 
     vertex_path := files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
     fragment_path := files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println("stroke3d shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
-        s^.Ready = false
+        s^.ready = false
         return
     }
 
@@ -52,106 +60,236 @@ init_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
     if !rl.FileExists(vertex_cstr) || !rl.FileExists(fragment_cstr) {
         fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
         fmt.println("stroke3d expected paths: vs=", vertex_path, " fs=", fragment_path)
-        s^.Ready = false
+        s^.ready = false
         return
     }
 
-    s^.Shader = rl.LoadShader(vertex_cstr, fragment_cstr)
-    if s^.Shader.id == 0 {
+    s^.shader = rl.LoadShader(vertex_cstr, fragment_cstr)
+    if s^.shader.id == 0 {
         fmt.println("stroke3d shader failed to load; pen/compass 3D shading disabled")
-        s^.Ready = false
+        s^.ready = false
         return
     }
 
-    s^.LocLightDir = rl.GetShaderLocation(s^.Shader, "uLightDirView")
-    s^.LocAmbient = rl.GetShaderLocation(s^.Shader, "uAmbient")
-    s^.LocDiffuse = rl.GetShaderLocation(s^.Shader, "uDiffuse")
-    s^.LocSpecularStrength = rl.GetShaderLocation(s^.Shader, "uSpecularStrength")
-    s^.LocSpecularPower = rl.GetShaderLocation(s^.Shader, "uSpecularPower")
-    s^.LocP0 = rl.GetShaderLocation(s^.Shader, "uP0")
-    s^.LocP1 = rl.GetShaderLocation(s^.Shader, "uP1")
-    s^.LocRadius = rl.GetShaderLocation(s^.Shader, "uRadius")
-    s^.LocViewportHeight = rl.GetShaderLocation(s^.Shader, "uViewportHeight")
+    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
+    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
+    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
+    s^.loc_specular_strength = rl.GetShaderLocation(s^.shader, "uSpecularStrength")
+    s^.loc_specular_power = rl.GetShaderLocation(s^.shader, "uSpecularPower")
+    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
+    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
+    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
+    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
 
-    if s^.LocP0 < 0 || s^.LocP1 < 0 || s^.LocRadius < 0 || s^.LocViewportHeight < 0 {
+    if s^.loc_p0 < 0 || s^.loc_p1 < 0 || s^.loc_radius < 0 || s^.loc_viewport_height < 0 {
         fmt.println("stroke3d shader missing required uniforms; pen/compass 3D shading disabled")
-        fmt.println("stroke3d uniform locations p0=", s^.LocP0, " p1=", s^.LocP1,
-            " radius=", s^.LocRadius, " viewportHeight=", s^.LocViewportHeight)
-        rl.UnloadShader(s^.Shader)
-        s^.Ready = false
+        fmt.println("stroke3d uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
+            " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
+        rl.UnloadShader(s^.shader)
+        s^.ready = false
         return
     }
 
-    s^.Ready = true
+    s^.ready = true
 }
 
+// Summary:
+//   Unload stroke3d shader resources and mark shader state as unavailable.
+//
+// Parameters:
+//   - state: Global app state containing stroke3d shader state.
+//
+// Returns:
+//   - none.
+shutdown_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+    s := &state^.stroke_3d
 
-shutdown_stroke3d_shader :: proc(state: ^EuclidGeneralState) {
-    s := &state^.Stroke3D
-
-    if !s^.Ready {
+    if !s^.ready {
         return
     }
 
-    rl.UnloadShader(s^.Shader)
-    s^.Ready = false
+    rl.UnloadShader(s^.shader)
+    s^.ready = false
+}
+
+// Summary:
+//   Render the base isometric drawing plane and its border triangles.
+//
+// Parameters:
+//   - state: Global app state providing surface geometry and iso projection scale.
+//
+// Returns:
+//   - none.
+draw_drawing_surface :: proc(state: ^Euclid_General_State) {
+    room := state^.draw_surface
+
+    surface_zeros : Vector3 = room^.zeros + { room.edge_size, room.edge_size, 0 }
+    surface_right_up : Vector3 = room^.right_up + { -room.edge_size, room.edge_size, 0 }
+    surface_left_down : Vector3 = room^.left_down + { room.edge_size, -room.edge_size, 0 }
+    surface_right_down : Vector3 = room^.right_down + { -room.edge_size, -room.edge_size, 0 }
+
+    rl.DrawTriangle(iso_to_cartesian(room.zeros, state^.iso_scale^),
+        iso_to_cartesian(room.right_up, state^.iso_scale^),
+        iso_to_cartesian(room.left_down, state^.iso_scale^), room.edge_color)
+    rl.DrawTriangle(iso_to_cartesian(room^.right_down, state^.iso_scale^),
+        iso_to_cartesian(room.left_down, state^.iso_scale^),
+        iso_to_cartesian(room.right_up, state^.iso_scale^), room.edge_color)
+    rl.DrawTriangle(iso_to_cartesian(surface_zeros, state^.iso_scale^),
+        iso_to_cartesian(surface_right_up, state^.iso_scale^),
+        iso_to_cartesian(surface_left_down, state^.iso_scale^), room.color)
+    rl.DrawTriangle(iso_to_cartesian(surface_right_down, state^.iso_scale^),
+        iso_to_cartesian(surface_left_down, state^.iso_scale^),
+        iso_to_cartesian(surface_right_up, state^.iso_scale^), room.color)
+}
+
+// Summary:
+//   Render cached low-layer geometry items (labels, primitives, and polygons).
+//
+// Parameters:
+//   - state: Global app state containing the draw cache to render.
+//
+// Returns:
+//   - none.
+draw_kine_points_low_cached :: proc(state: ^Euclid_General_State) {
+    for i in 0..<state^.point_system^.draw_cache.item_count {
+        item := &state^.point_system^.draw_cache.items[i]
+        switch &item_typed in item {
+        case core.Kine_Label_Draw:
+            draw_cached_label(state, &item_typed)
+        case core.Kine_Point_Draw:
+            draw_cached_point(state, &item_typed)
+        case core.Kine_Line_Draw:
+            draw_cached_line(state, &item_typed)
+        case core.Kine_Circle_Draw:
+            draw_cached_circle(state, &item_typed)
+        case core.Kine_Filled_Circle_Draw:
+            draw_cached_filledcircle(state, &item_typed)
+        case core.Kine_Triangle_Draw:
+            draw_cached_triangle(state, &item_typed)
+        case core.Kine_Square_Draw:
+            draw_cached_square(state, &item_typed)
+        case core.Kine_Pentagon_Draw:
+            draw_cached_pentagon(state, &item_typed)
+        case:
+            continue
+        }
+    }
+}
+
+// Summary:
+//   Render cached high-layer tool visuals and active markers with stroke3d mode.
+//
+// Parameters:
+//   - state: Global app state containing pen/compass draw-cache entries.
+//
+// Returns:
+//   - none.
+draw_kine_points_high_cached :: proc(state: ^Euclid_General_State) {
+    if state^.point_system^.draw_cache.draw_pen {
+        draw_cached_pen_active_dot(state, &state^.point_system^.draw_cache.pen)
+    }
+    if state^.point_system^.draw_cache.draw_compass {
+        draw_cached_compass_active_dot(state, &state^.point_system^.draw_cache.compass)
+    }
+
+    begin_stroke3d_mode(state)
+
+    if state^.point_system^.draw_cache.draw_pen {
+        draw_cached_pen(state, &state^.point_system^.draw_cache.pen)
+    }
+    if state^.point_system^.draw_cache.draw_compass {
+        draw_cached_compass(state, &state^.point_system^.draw_cache.compass)
+    }
+
+    end_stroke3d_mode(state)
+}
+
+// Summary:
+//   Render cached shadow overlays for pen and compass tool geometry.
+//
+// Parameters:
+//   - state: Global app state containing tool shadow draw-cache entries.
+//
+// Returns:
+//   - none.
+draw_kine_points_shadows_cached :: proc(state: ^Euclid_General_State) {
+    if state^.point_system^.draw_cache.draw_pen {
+        draw_cached_pen_shadow(state, &state^.point_system^.draw_cache.pen)
+    }
+    if state^.point_system^.draw_cache.draw_compass {
+        draw_cached_compass_shadow(state, &state^.point_system^.draw_cache.compass)
+    }
 }
 
 
-set_stroke3d_uniform_float :: #force_inline proc(state: ^EuclidGeneralState, location: i32, value: f32) {
+
+
+
+
+// Summary:
+//   Set a float uniform on the stroke3d shader when location is valid.
+set_stroke3d_uniform_float :: #force_inline proc(state: ^Euclid_General_State, location: i32, value: f32) {
     if location < 0 {
         return
     }
-    localValue := value
-    rl.SetShaderValue(state^.Stroke3D.Shader, location, &localValue, .FLOAT)
+    local_value := value
+    rl.SetShaderValue(state^.stroke_3d.shader, location, &local_value, .FLOAT)
 }
 
 
-set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^EuclidGeneralState, location: i32, value: Vector2) {
+// Summary:
+//   Set a vec2 uniform on the stroke3d shader when location is valid.
+set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^Euclid_General_State, location: i32, value: Vector2) {
     if location < 0 {
         return
     }
-    vecData := [2]f32{value.x, value.y}
-    rl.SetShaderValue(state^.Stroke3D.Shader, location, &vecData[0], .VEC2)
+    vec_data := [2]f32{value.x, value.y}
+    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC2)
 }
 
 
+// Summary:
+//   Compute render-to-screen scale factors for shader-space thickness correction.
 get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
-    screenW := f32(rl.GetScreenWidth())
-    screenH := f32(rl.GetScreenHeight())
-    renderW := f32(rl.GetRenderWidth())
-    renderH := f32(rl.GetRenderHeight())
+    screen_w := f32(rl.GetScreenWidth())
+    screen_h := f32(rl.GetScreenHeight())
+    render_w := f32(rl.GetRenderWidth())
+    render_h := f32(rl.GetRenderHeight())
 
     sx := f32(1.0)
     sy := f32(1.0)
 
-    if screenW > 0 && renderW > 0 {
-        sx = renderW / screenW
+    if screen_w > 0 && render_w > 0 {
+        sx = render_w / screen_w
     }
-    if screenH > 0 && renderH > 0 {
-        sy = renderH / screenH
+    if screen_h > 0 && render_h > 0 {
+        sy = render_h / screen_h
     }
 
     return Vector2{sx, sy}
 }
 
 
-set_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: Vector2, thickness: f32) {
-    s := &state^.Stroke3D
+// Summary:
+//   Update stroke3d segment uniforms for endpoints and stroke radius.
+set_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32) {
+    s := &state^.stroke_3d
     scale := get_stroke3d_render_scale()
     p0Scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
     p1Scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
-    avgScale := (scale.x + scale.y) * 0.5
+    avg_scale := (scale.x + scale.y) * 0.5
 
-    set_stroke3d_uniform_vec2(state, s^.LocP0, p0Scaled)
-    set_stroke3d_uniform_vec2(state, s^.LocP1, p1Scaled)
-    set_stroke3d_uniform_float(state, s^.LocRadius, thickness * 0.5 * avgScale)
+    set_stroke3d_uniform_vec2(state, s^.loc_p0, p0Scaled)
+    set_stroke3d_uniform_vec2(state, s^.loc_p1, p1Scaled)
+    set_stroke3d_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
 }
 
 
-draw_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: Vector2, thickness: f32, color: rl.Color) {
-    s := &state^.Stroke3D
-    if s^.Ready {
+// Summary:
+//   Draw one segment with stroke3d lighting when available, else standard line draw.
+draw_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
+    s := &state^.stroke_3d
+    if s^.ready {
         rlgl.DrawRenderBatchActive()
         set_stroke3d_segment(state, p0, p1, thickness)
     }
@@ -159,50 +297,62 @@ draw_stroke3d_segment :: #force_inline proc(state: ^EuclidGeneralState, p0, p1: 
 }
 
 
-begin_stroke3d_mode :: proc(state: ^EuclidGeneralState) {
-    s := &state^.Stroke3D
+// Summary:
+//   Bind stroke3d shader and upload per-frame lighting/render uniforms.
+//
+// Notes:
+//   - Must be paired with end_stroke3d_mode in the same draw pass.
+begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+    s := &state^.stroke_3d
 
-    if !s^.Ready {
+    if !s^.ready {
         return
     }
 
-    light := -state^.IsoScale^.MainLightDir
+    light := -state^.iso_scale^.main_light_dir
     light = linalg.normalize(light)
 
-    lightDirData := [3]f32{light.x, light.y, light.z}
-    if s^.LocLightDir >= 0 {
-        rl.SetShaderValue(s^.Shader, s^.LocLightDir, &lightDirData[0], .VEC3)
+    light_dir_data := [3]f32{light.x, light.y, light.z}
+    if s^.loc_light_dir >= 0 {
+        rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
     }
 
-    set_stroke3d_uniform_float(state, s^.LocAmbient, STROKE3D_AMBIENT)
-    set_stroke3d_uniform_float(state, s^.LocDiffuse, STROKE3D_DIFFUSE)
-    set_stroke3d_uniform_float(state, s^.LocSpecularStrength, STROKE3D_SPECULAR_STRENGTH)
-    set_stroke3d_uniform_float(state, s^.LocSpecularPower, STROKE3D_SPECULAR_POWER)
-    set_stroke3d_uniform_float(state, s^.LocViewportHeight, f32(rl.GetRenderHeight()))
+    set_stroke3d_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
+    set_stroke3d_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
+    set_stroke3d_uniform_float(state, s^.loc_specular_strength, STROKE3D_SPECULAR_STRENGTH)
+    set_stroke3d_uniform_float(state, s^.loc_specular_power, STROKE3D_SPECULAR_POWER)
+    set_stroke3d_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
 
-    rl.BeginShaderMode(s^.Shader)
+    rl.BeginShaderMode(s^.shader)
 }
 
 
-end_stroke3d_mode :: proc(state: ^EuclidGeneralState) {
-    if !state^.Stroke3D.Ready {
+// Summary:
+//   Flush pending batch and unbind stroke3d shader mode.
+//
+// Notes:
+//   - Completes the begin_stroke3d_mode/end_stroke3d_mode pair.
+end_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+    if !state^.stroke_3d.ready {
         return
     }
     rlgl.DrawRenderBatchActive()
     rl.EndShaderMode()
 }
 
-compute_sweep_delta :: proc(startTheta, endTheta: f32) -> f32 {
-    startN := startTheta
-    if startN < 0 {
-        startN += 2.0 * math.PI
+// Summary:
+//   Compute positive angular sweep between start and end angles.
+compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
+    start_n := start_theta
+    if start_n < 0 {
+        start_n += 2.0 * math.PI
     }
-    endN := endTheta
-    if endN < 0 {
-        endN += 2.0 * math.PI
+    end_n := end_theta
+    if end_n < 0 {
+        end_n += 2.0 * math.PI
     }
 
-    delta := endN - startN
+    delta := end_n - start_n
     if delta < 0 {
         delta += 2.0 * math.PI
     }
@@ -210,24 +360,30 @@ compute_sweep_delta :: proc(startTheta, endTheta: f32) -> f32 {
 }
 
 
-shadow_alpha_from_height :: proc(avgHeight: f32) -> u8 {
-    atten := f32(SHADOW_ALPHA_BASE) - avgHeight * SHADOW_ALPHA_HEIGHT_SCALE
+// Summary:
+//   Compute shadow alpha attenuation from average object height.
+shadow_alpha_from_height :: proc(avg_height: f32) -> u8 {
+    atten := f32(SHADOW_ALPHA_BASE) - avg_height * SHADOW_ALPHA_HEIGHT_SCALE
     atten = math.clamp(atten, f32(SHADOW_ALPHA_MIN), f32(SHADOW_ALPHA_BASE))
     return u8(atten)
 }
 
-make_shadow_color :: proc(source: rl.Color, avgHeight: f32) -> rl.Color {
+// Summary:
+//   Build a shadow color using computed alpha attenuation.
+make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
     _ = source
-    a := shadow_alpha_from_height(avgHeight)
+    a := shadow_alpha_from_height(avg_height)
     return rl.Color{0, 0, 0, a}
 }
 
-project_to_floor_shadow :: proc(p: Vector3, scale: IsoScale) -> Vector3 {
-    if !scale.UseDirectionalShadow {
+// Summary:
+//   Project a 3D point onto the floor plane using light direction.
+project_to_floor_shadow :: proc(p: Vector3, scale: Iso_Scale) -> Vector3 {
+    if !scale.use_directional_shadow {
         return {p.x, p.y, 0}
     }
 
-    l := scale.MainLightDir
+    l := scale.main_light_dir
     if math.abs(l.z) < SHADOW_EPSILON_LZ {
         return {p.x, p.y, 0}
     }
@@ -236,404 +392,355 @@ project_to_floor_shadow :: proc(p: Vector3, scale: IsoScale) -> Vector3 {
     return p + l * t
 }
 
-shadow_to_screen :: proc(p: Vector3, state: ^EuclidGeneralState) -> Vector2 {
-    pShadow := project_to_floor_shadow(p, state^.IsoScale^)
-    return iso_to_cartesian(pShadow, state^.IsoScale^)
+// Summary:
+//   Project a floor-shadow point into 2D screen coordinates.
+shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
+    p_shadow := project_to_floor_shadow(p, state^.iso_scale^)
+    return iso_to_cartesian(p_shadow, state^.iso_scale^)
 }
 
 
 
-draw_drawing_surface :: proc(state: ^EuclidGeneralState) {
-    room := state^.DrawSurface
 
-    surfaceZeros : Vector3 = room^.Zeros + { room.EdgeSize, room.EdgeSize, 0 }
-    surfaceRightUp : Vector3 = room^.RightUp + { -room.EdgeSize, room.EdgeSize, 0 }
-    surfaceLeftDown : Vector3 = room^.LeftDown + { room.EdgeSize, -room.EdgeSize, 0 }
-    surfaceRightDown : Vector3 = room^.RightDown + { -room.EdgeSize, -room.EdgeSize, 0 }
-
-    rl.DrawTriangle(iso_to_cartesian(room.Zeros, state^.IsoScale^),
-        iso_to_cartesian(room.RightUp, state^.IsoScale^),
-        iso_to_cartesian(room.LeftDown, state^.IsoScale^), room.EdgeColor)
-    rl.DrawTriangle(iso_to_cartesian(room^.RightDown, state^.IsoScale^),
-        iso_to_cartesian(room.LeftDown, state^.IsoScale^),
-        iso_to_cartesian(room.RightUp, state^.IsoScale^), room.EdgeColor)
-    rl.DrawTriangle(iso_to_cartesian(surfaceZeros, state^.IsoScale^),
-        iso_to_cartesian(surfaceRightUp, state^.IsoScale^),
-        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^), room.Color)
-    rl.DrawTriangle(iso_to_cartesian(surfaceRightDown, state^.IsoScale^),
-        iso_to_cartesian(surfaceLeftDown, state^.IsoScale^),
-        iso_to_cartesian(surfaceRightUp, state^.IsoScale^), room.Color)
-}
-
-draw_kine_points_low_cached :: proc(state: ^EuclidGeneralState) {
-    for i in 0..<state^.PointSystem^.DrawCache.ItemCount {
-        item := &state^.PointSystem^.DrawCache.Items[i]
-        switch &itemTyped in item {
-            case core.KineLabelDraw:
-                draw_cached_label(state, &itemTyped)
-            case core.KinePointDraw:
-                draw_cached_point(state, &itemTyped)
-            case core.KineLineDraw:
-                draw_cached_line(state, &itemTyped)
-            case core.KineCircleDraw:
-                draw_cached_circle(state, &itemTyped)
-            case core.KineFilledCircleDraw:
-                draw_cached_filledcircle(state, &itemTyped)
-            case core.KineTriangleDraw:
-                draw_cached_triangle(state, &itemTyped)
-            case core.KineSquareDraw:
-                draw_cached_square(state, &itemTyped)
-            case core.KinePentagonDraw:
-                draw_cached_pentagon(state, &itemTyped)
-            case:
-                continue
-        }
-    }
+// Summary:
+//   Render one cached label draw item.
+draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw) {
+    c := iso_to_cartesian(p^.point1, state^.iso_scale^)
+    rl.DrawTextCodepoint(state^.font, p^.label, c, p^.brush_size, p^.color)
 }
 
 
-draw_kine_points_high_cached :: proc(state: ^EuclidGeneralState) {
-    if state^.PointSystem^.DrawCache.DrawPen {
-        draw_cached_pen_active_dot(state, &state^.PointSystem^.DrawCache.Pen)
-    }
-    if state^.PointSystem^.DrawCache.DrawCompass {
-        draw_cached_compass_active_dot(state, &state^.PointSystem^.DrawCache.Compass)
-    }
-
-    begin_stroke3d_mode(state)
-
-    if state^.PointSystem^.DrawCache.DrawPen {
-        draw_cached_pen(state, &state^.PointSystem^.DrawCache.Pen)
-    }
-    if state^.PointSystem^.DrawCache.DrawCompass {
-        draw_cached_compass(state, &state^.PointSystem^.DrawCache.Compass)
-    }
-
-    end_stroke3d_mode(state)
+// Summary:
+//   Render one cached point draw item.
+draw_cached_point :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
+    c := iso_to_cartesian(p^.point1, state^.iso_scale^)
+    rl.DrawCircleV(c, p^.brush_size, p^.color)
 }
 
 
-draw_kine_points_shadows_cached :: proc(state: ^EuclidGeneralState) {
-    if state^.PointSystem^.DrawCache.DrawPen {
-        draw_cached_pen_shadow(state, &state^.PointSystem^.DrawCache.Pen)
-    }
-    if state^.PointSystem^.DrawCache.DrawCompass {
-        draw_cached_compass_shadow(state, &state^.PointSystem^.DrawCache.Compass)
-    }
+// Summary:
+//   Render one cached line draw item.
+draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
+    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
+    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
+    rl.DrawLineEx(c0, c1, l^.brush_size, l^.color)
 }
 
 
-draw_cached_label :: proc(state: ^EuclidGeneralState, p: ^kine.KineLabelDraw) {
-    c := iso_to_cartesian(p^.Point1, state^.IsoScale^)
-    rl.DrawTextCodepoint(state^.Font, p^.Label, c, p^.BrushSize, p^.Color)
-}
+// Summary:
+//   Render one cached circle/arc draw item.
+draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Draw) {
+    start := c^.start
+    finish := c^.end
+    center := c^.center
 
+    start_vec := start - center
+    end_vec := finish - center
 
-draw_cached_point :: proc(state: ^EuclidGeneralState, p: ^kine.KinePointDraw) {
-    c := iso_to_cartesian(p^.Point1, state^.IsoScale^)
-    rl.DrawCircleV(c, p^.BrushSize, p^.Color)
-}
+    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
 
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
 
-draw_cached_line :: proc(state: ^EuclidGeneralState, l: ^kine.KineLineDraw) {
-    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
-    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
-    rl.DrawLineEx(c0, c1, l^.BrushSize, l^.Color)
-}
-
-
-draw_cached_circle :: proc(state: ^EuclidGeneralState, c: ^kine.KineCircleDraw) {
-    start := c^.Start
-    finish := c^.End
-    center := c^.Center
-
-    startVec := start - center
-    endVec := finish - center
-
-    startRadius := f32(math.sqrt(startVec.x * startVec.x + startVec.y * startVec.y))
-    endRadius := f32(math.sqrt(endVec.x * endVec.x + endVec.y * endVec.y))
-
-    startTheta := f32(math.atan2(startVec.y, startVec.x))
-    endTheta := f32(math.atan2(endVec.y, endVec.x))
-    sweepDelta := compute_sweep_delta(startTheta, endTheta) + c^.Offset
-
-    prevWorld := start
-    prevScreen := iso_to_cartesian(prevWorld, state^.IsoScale^)
-    segCount := f32(CIRCLE_ARC_SEGMENTS)
+    prev_world := start
+    prev_screen := iso_to_cartesian(prev_world, state^.iso_scale^)
+    seg_count := f32(CIRCLE_ARC_SEGMENTS)
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / segCount
-        theta := startTheta + sweepDelta * t
-        radius := math.lerp(startRadius, endRadius, t)
+        t := f32(i) / seg_count
+        theta := start_theta + sweep_delta * t
+        radius := math.lerp(start_radius, end_radius, t)
 
-        currWorld := Vector3{
+        curr_world := Vector3{
             center.x + f32(math.cos(theta)) * radius,
             center.y + f32(math.sin(theta)) * radius,
             center.z,
         }
 
-        currScreen := iso_to_cartesian(currWorld, state^.IsoScale^)
-        rl.DrawLineEx(prevScreen, currScreen, c^.BrushSize, c^.Color)
-        prevScreen = currScreen
+        curr_screen := iso_to_cartesian(curr_world, state^.iso_scale^)
+        rl.DrawLineEx(prev_screen, curr_screen, c^.brush_size, c^.color)
+        prev_screen = curr_screen
     }
 }
 
-draw_cached_filledcircle :: proc(state: ^EuclidGeneralState, c: ^kine.KineFilledCircleDraw) {
-    start := c^.Start
-    finish := c^.End
-    center := c^.Center
-    isocenter := iso_to_cartesian(center, state^.IsoScale^)
+// Summary:
+//   Render one cached filled-circle draw item.
+draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Filled_Circle_Draw) {
+    start := c^.start
+    finish := c^.end
+    center := c^.center
+    isocenter := iso_to_cartesian(center, state^.iso_scale^)
 
-    startVec := start - center
-    endVec := finish - center
+    start_vec := start - center
+    end_vec := finish - center
 
-    startRadius := f32(math.sqrt(startVec.x * startVec.x + startVec.y * startVec.y))
-    endRadius := f32(math.sqrt(endVec.x * endVec.x + endVec.y * endVec.y))
+    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
 
-    startTheta := f32(math.atan2(startVec.y, startVec.x))
-    endTheta := f32(math.atan2(endVec.y, endVec.x))
-    sweepDelta := compute_sweep_delta(startTheta, endTheta)
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta)
 
     points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
     points[0] = isocenter
-    points[1] = iso_to_cartesian(start, state^.IsoScale^)
+    points[1] = iso_to_cartesian(start, state^.iso_scale^)
 
-    segCount := f32(CIRCLE_ARC_SEGMENTS)
+    seg_count := f32(CIRCLE_ARC_SEGMENTS)
     for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / segCount
-        theta := startTheta + sweepDelta * t
-        radius := math.lerp(startRadius, endRadius, t)
+        t := f32(i) / seg_count
+        theta := start_theta + sweep_delta * t
+        radius := math.lerp(start_radius, end_radius, t)
 
-        currWorld := Vector3{
+        curr_world := Vector3{
             center.x + f32(math.cos(theta)) * radius,
             center.y + f32(math.sin(theta)) * radius,
             center.z,
         }
 
-        points[i + 1] = iso_to_cartesian(currWorld, state^.IsoScale^)
+        points[i + 1] = iso_to_cartesian(curr_world, state^.iso_scale^)
     }
 
-    rl.DrawTriangleFan(&points[0], len(points), c^.Color)
+    rl.DrawTriangleFan(&points[0], len(points), c^.color)
 }
 
 
-draw_cached_triangle :: proc(state: ^EuclidGeneralState, l: ^kine.KineTriangleDraw) {
-    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
-    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
-    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
-    rl.DrawTriangle(c0, c1, c2, l^.Color)
+// Summary:
+//   Render one cached triangle draw item.
+draw_cached_triangle :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Triangle_Draw) {
+    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
+    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
+    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
+    rl.DrawTriangle(c0, c1, c2, l^.color)
 }
 
 
-draw_cached_square :: proc(state: ^EuclidGeneralState, l: ^kine.KineSquareDraw) {
-    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
-    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
-    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
-    c3 := iso_to_cartesian(l^.Point4, state^.IsoScale^)
-    rl.DrawTriangle(c0, c1, c2, l^.Color)
-    rl.DrawTriangle(c0, c2, c3, l^.Color)
+// Summary:
+//   Render one cached square draw item.
+draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Draw) {
+    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
+    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
+    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
+    c3 := iso_to_cartesian(l^.point4, state^.iso_scale^)
+    rl.DrawTriangle(c0, c1, c2, l^.color)
+    rl.DrawTriangle(c0, c2, c3, l^.color)
 }
 
 
-draw_cached_pentagon :: proc(state: ^EuclidGeneralState, l: ^kine.KinePentagonDraw) {
-    c0 := iso_to_cartesian(l^.Point1, state^.IsoScale^)
-    c1 := iso_to_cartesian(l^.Point2, state^.IsoScale^)
-    c2 := iso_to_cartesian(l^.Point3, state^.IsoScale^)
-    c3 := iso_to_cartesian(l^.Point4, state^.IsoScale^)
-    c4 := iso_to_cartesian(l^.Point5, state^.IsoScale^)
-    rl.DrawTriangle(c0, c1, c2, l^.Color)
-    rl.DrawTriangle(c0, c2, c3, l^.Color)
-    rl.DrawTriangle(c0, c3, c4, l^.Color)
+// Summary:
+//   Render one cached pentagon draw item.
+draw_cached_pentagon :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Pentagon_Draw) {
+    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
+    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
+    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
+    c3 := iso_to_cartesian(l^.point4, state^.iso_scale^)
+    c4 := iso_to_cartesian(l^.point5, state^.iso_scale^)
+    rl.DrawTriangle(c0, c1, c2, l^.color)
+    rl.DrawTriangle(c0, c2, c3, l^.color)
+    rl.DrawTriangle(c0, c3, c4, l^.color)
 }
 
 
-draw_cached_pen :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
-    c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
-    c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
+// Summary:
+//   Render one cached pen tool draw item.
+draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
+    c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
+    c1 := iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
-    draw_stroke3d_segment(state, c0, c1, pen^.BrushSize, pen^.Color)
+    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
 
 
-draw_cached_pen_active_dot :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
-    c0 := iso_to_cartesian(pen^.Joint1, state^.IsoScale^)
-    c1 := iso_to_cartesian(pen^.Joint2, state^.IsoScale^)
+// Summary:
+//   Render active-end indicator for cached pen tool.
+draw_cached_pen_active_dot :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
+    c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
+    c1 := iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
-    if pen^.ActiveChild == 1 {
-        active := pen^.Color
-        if pen^.HasActiveColor {
-            active = pen^.ActiveColor
+    if pen^.active_child == 1 {
+        active := pen^.color
+        if pen^.has_active_color {
+            active = pen^.active_color
         }
-        rl.DrawCircleV(c0, pen^.BrushSize, active)
-    } else if pen^.ActiveChild == 2 {
-        active := pen^.Color
-        if pen^.HasActiveColor {
-            active = pen^.ActiveColor
+        rl.DrawCircleV(c0, pen^.brush_size, active)
+    } else if pen^.active_child == 2 {
+        active := pen^.color
+        if pen^.has_active_color {
+            active = pen^.active_color
         }
-        rl.DrawCircleV(c1, pen^.BrushSize, active)
+        rl.DrawCircleV(c1, pen^.brush_size, active)
     }
 }
 
 
+// Summary:
+//   Render compass top arc segment that lies outside the swing angle.
 draw_outside_arc_compass_cached :: proc(
     p0, p1, p2: Vector3,
-    state: ^EuclidGeneralState,
-    brushSize: f32,
-    color: rl.Color,
-) {
+    state: ^Euclid_General_State,
+    brush_size: f32,
+    color: rl.Color) {
     a := p0 - p1
     b := p2 - p1
 
-    aLen := linalg.length(a)
-    bLen := linalg.length(b)
-    if aLen <= 0.00001 || bLen <= 0.00001 {
+    a_len := linalg.length(a)
+    b_len := linalg.length(b)
+    if a_len <= 0.00001 || b_len <= 0.00001 {
         return
     }
 
-    an := a / aLen
-    bn := b / bLen
+    an := a / a_len
+    bn := b / b_len
 
     n := linalg.cross(an, bn)
-    nLen := linalg.length(n)
-    if nLen <= 0.00001 {
+    n_len := linalg.length(n)
+    if n_len <= 0.00001 {
         return
     }
-    n /= nLen
+    n /= n_len
 
-    dotAB := math.clamp(linalg.dot(an, bn), -1, 1)
-    crossAB := linalg.cross(an, bn)
-    thetaShort := math.atan2(linalg.dot(n, crossAB), dotAB)
+    dot_ab := math.clamp(linalg.dot(an, bn), -1, 1)
+    cross_ab := linalg.cross(an, bn)
+    theta_short := math.atan2(linalg.dot(n, cross_ab), dot_ab)
 
     sign := f32(1.0)
-    if thetaShort < 0 {
+    if theta_short < 0 {
         sign = -1.0
     }
-    thetaOut := thetaShort - 2.0 * math.PI * sign
+    theta_out := theta_short - 2.0 * math.PI * sign
 
     u := an
     v := linalg.normalize(linalg.cross(n, u))
 
-    radius := math.min(aLen, bLen) * COMPASS_TOPCIRCLE_RADIUS
+    radius := math.min(a_len, b_len) * COMPASS_TOPCIRCLE_RADIUS
     if radius <= 0 {
         return
     }
 
-    step := thetaOut / f32(COMPASS_TOPCIRCLE_SEGMENTS)
+    step := theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
 
     prev3d := p1 + u * radius
-    prev := iso_to_cartesian(prev3d, state^.IsoScale^)
+    prev := iso_to_cartesian(prev3d, state^.iso_scale^)
 
     for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
         t := step * f32(i)
         dir := u * math.cos(t) + v * math.sin(t)
         curr3d := p1 + dir * radius
-        curr := iso_to_cartesian(curr3d, state^.IsoScale^)
+        curr := iso_to_cartesian(curr3d, state^.iso_scale^)
 
-        draw_stroke3d_segment(state, prev, curr, brushSize, color)
+        draw_stroke3d_segment(state, prev, curr, brush_size, color)
         prev = curr
     }
 }
 
 
-draw_cached_compass :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassDraw) {
-    c0 := iso_to_cartesian(comp^.Joint1, state^.IsoScale^)
-    c1 := iso_to_cartesian(comp^.Pivot, state^.IsoScale^)
-    c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
+// Summary:
+//   Render one cached compass tool draw item.
+draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
+    c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
+    c1 := iso_to_cartesian(comp^.pivot, state^.iso_scale^)
+    c2 := iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
-    draw_stroke3d_segment(state, c0, c1, comp^.BrushSize, comp^.Color)
-    draw_stroke3d_segment(state, c1, c2, comp^.BrushSize, comp^.Color)
+    draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
+    draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
 
     draw_outside_arc_compass_cached(
-        comp^.Joint1,
-        comp^.Pivot,
-        comp^.Joint2,
+        comp^.joint1,
+        comp^.pivot,
+        comp^.joint2,
         state,
-        comp^.BrushSize,
-        comp^.Color,
+        comp^.brush_size,
+        comp^.color,
     )
 }
 
 
-draw_cached_compass_active_dot :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassDraw) {
-    c0 := iso_to_cartesian(comp^.Joint1, state^.IsoScale^)
-    c2 := iso_to_cartesian(comp^.Joint2, state^.IsoScale^)
+// Summary:
+//   Render active-end indicator for cached compass tool.
+draw_cached_compass_active_dot :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
+    c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
+    c2 := iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
-    if comp^.ActiveChild == 1 {
-        active := comp^.Color
-        if comp^.HasActiveColor {
-            active = comp^.ActiveColor
+    if comp^.active_child == 1 {
+        active := comp^.color
+        if comp^.has_active_color {
+            active = comp^.active_color
         }
-        rl.DrawCircleV(c0, comp^.BrushSize, active)
-    } else if comp^.ActiveChild == 3 {
-        active := comp^.Color
-        if comp^.HasActiveColor {
-            active = comp^.ActiveColor
+        rl.DrawCircleV(c0, comp^.brush_size, active)
+    } else if comp^.active_child == 3 {
+        active := comp^.color
+        if comp^.has_active_color {
+            active = comp^.active_color
         }
-        rl.DrawCircleV(c2, comp^.BrushSize, active)
+        rl.DrawCircleV(c2, comp^.brush_size, active)
     }
 }
 
 
-draw_cached_pen_shadow :: proc(state: ^EuclidGeneralState, pen: ^kine.KinePenDraw) {
-    s0 := shadow_to_screen(pen^.Joint1, state)
-    s1 := shadow_to_screen(pen^.Joint2, state)
+// Summary:
+//   Render floor shadow for cached pen tool geometry.
+draw_cached_pen_shadow :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
+    s0 := shadow_to_screen(pen^.joint1, state)
+    s1 := shadow_to_screen(pen^.joint2, state)
 
-    avgHeight := (pen^.Joint1.z + pen^.Joint2.z) * 0.5
-    shadowColor := make_shadow_color(pen^.Color, avgHeight)
-    thickness := math.max(pen^.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
+    avg_height := (pen^.joint1.z + pen^.joint2.z) * 0.5
+    shadow_color := make_shadow_color(pen^.color, avg_height)
+    thickness := math.max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
-    rl.DrawLineEx(s0, s1, thickness, shadowColor)
+    rl.DrawLineEx(s0, s1, thickness, shadow_color)
 }
 
 
+// Summary:
+//   Render floor-shadow arc segment outside the compass swing angle.
 draw_outside_arc_compass_shadow_cached :: proc(
     p0, p1, p2: Vector3,
-    state: ^EuclidGeneralState,
-    brushSize: f32,
-    color: rl.Color,
-) {
-    if brushSize <= 0 {
+    state: ^Euclid_General_State,
+    brush_size: f32,
+    color: rl.Color) {
+    if brush_size <= 0 {
         return
     }
 
     a := p0 - p1
     b := p2 - p1
 
-    aLen := linalg.length(a)
-    bLen := linalg.length(b)
-    if aLen <= 0.00001 || bLen <= 0.00001 {
+    a_len := linalg.length(a)
+    b_len := linalg.length(b)
+    if a_len <= 0.00001 || b_len <= 0.00001 {
         return
     }
 
-    an := a / aLen
-    bn := b / bLen
+    an := a / a_len
+    bn := b / b_len
 
     n := linalg.cross(an, bn)
-    nLen := linalg.length(n)
-    if nLen <= 0.00001 {
+    n_len := linalg.length(n)
+    if n_len <= 0.00001 {
         return
     }
-    n /= nLen
+    n /= n_len
 
-    dotAB := math.clamp(linalg.dot(an, bn), -1, 1)
-    crossAB := linalg.cross(an, bn)
-    thetaShort := math.atan2(linalg.dot(n, crossAB), dotAB)
+    dot_ab := math.clamp(linalg.dot(an, bn), -1, 1)
+    cross_ab := linalg.cross(an, bn)
+    theta_short := math.atan2(linalg.dot(n, cross_ab), dot_ab)
 
     sign := f32(1.0)
-    if thetaShort < 0 {
+    if theta_short < 0 {
         sign = -1.0
     }
-    thetaOut := thetaShort - 2.0 * math.PI * sign
+    theta_out := theta_short - 2.0 * math.PI * sign
 
     u := an
     v := linalg.normalize(linalg.cross(n, u))
 
-    radius := math.min(aLen, bLen) * COMPASS_TOPCIRCLE_RADIUS
+    radius := math.min(a_len, b_len) * COMPASS_TOPCIRCLE_RADIUS
     if radius <= 0 {
         return
     }
 
-    step := thetaOut / f32(COMPASS_TOPCIRCLE_SEGMENTS)
+    step := theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
 
     prev3d := p1 + u * radius
     prev := shadow_to_screen(prev3d, state)
@@ -644,30 +751,32 @@ draw_outside_arc_compass_shadow_cached :: proc(
         curr3d := p1 + dir * radius
         curr := shadow_to_screen(curr3d, state)
 
-        rl.DrawLineEx(prev, curr, brushSize, color)
+        rl.DrawLineEx(prev, curr, brush_size, color)
         prev = curr
     }
 }
 
 
-draw_cached_compass_shadow :: proc(state: ^EuclidGeneralState, comp: ^kine.KineCompassDraw) {
-    s0 := shadow_to_screen(comp^.Joint1, state)
-    s1 := shadow_to_screen(comp^.Pivot, state)
-    s2 := shadow_to_screen(comp^.Joint2, state)
+// Summary:
+//   Render floor shadow for cached compass tool geometry.
+draw_cached_compass_shadow :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
+    s0 := shadow_to_screen(comp^.joint1, state)
+    s1 := shadow_to_screen(comp^.pivot, state)
+    s2 := shadow_to_screen(comp^.joint2, state)
 
-    avgHeight := (comp^.Joint1.z + comp^.Pivot.z + comp^.Joint2.z) / 3.0
-    shadowColor := make_shadow_color(comp^.Color, avgHeight)
-    thickness := math.max(comp^.BrushSize * 0.8, SHADOW_MIN_THICKNESS)
+    avg_height := (comp^.joint1.z + comp^.pivot.z + comp^.joint2.z) / 3.0
+    shadow_color := make_shadow_color(comp^.color, avg_height)
+    thickness := math.max(comp^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
-    rl.DrawLineEx(s0, s1, thickness, shadowColor)
-    rl.DrawLineEx(s1, s2, thickness, shadowColor)
+    rl.DrawLineEx(s0, s1, thickness, shadow_color)
+    rl.DrawLineEx(s1, s2, thickness, shadow_color)
 
     draw_outside_arc_compass_shadow_cached(
-        comp^.Joint1,
-        comp^.Pivot,
-        comp^.Joint2,
+        comp^.joint1,
+        comp^.pivot,
+        comp^.joint2,
         state,
         thickness,
-        shadowColor,
+        shadow_color,
     )
 }

@@ -8,6 +8,11 @@ package kine
 import "core:math"
 import "core:math/linalg"
 
+// Summary:
+//   Rotate a vector around an axis by a given angle in radians.
+//
+// Notes:
+//   - Uses Rodrigues' rotation formula and assumes axis is meaningful for rotation.
 rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
     c := math.cos(angle)
     s := math.sin(angle)
@@ -17,43 +22,75 @@ rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
         axis * linalg.dot(axis, vec) * (1 - c)
 }
 
+// Summary:
+//   Compute the summed error across all active constraints in the point system.
+//
+// Parameters:
+//   - system: Point system containing constraints and points to evaluate.
+//
+// Returns:
+//   - total_error: Accumulated constraint error value.
 get_total_constraint_error :: proc(
-    system: ^KinePointSystem) -> f32 {
+    system: ^Kine_Point_System) -> f32 {
 
-    totalError: f32 = 0
-    for &constraint in system^.Constraints {
-        totalError += get_constraint_error(&constraint, &system^.Points)
+    total_error: f32 = 0
+    for &constraint in system^.constraints {
+        total_error += get_constraint_error(&constraint, &system^.points)
     }
-    return totalError
+    return total_error
 }
 
+// Summary:
+//   Apply each active constraint to the point system in forward order.
+//
+// Parameters:
+//   - system: Point system whose constraints are applied.
+//
+// Returns:
+//   - none.
 apply_all_constraints :: proc(
-    system: ^KinePointSystem) {
+    system: ^Kine_Point_System) {
 
-    for &constraint in system.Constraints {
-        apply_constraint(&constraint, &system^.Points)
+    for &constraint in system.constraints {
+        apply_constraint(&constraint, &system^.points)
     }
 }
 
+// Summary:
+//   Apply each active constraint to the point system in reverse order.
+//
+// Parameters:
+//   - system: Point system whose constraints are applied.
+//
+// Returns:
+//   - none.
 apply_all_constraints_reverse :: proc(
-    system: ^KinePointSystem) {
+    system: ^Kine_Point_System) {
 
-    #reverse for &constraint in system.Constraints {
-        apply_constraint(&constraint, &system^.Points)
+    #reverse for &constraint in system.constraints {
+        apply_constraint(&constraint, &system^.points)
     }
 }
 
+// Summary:
+//   Iteratively apply constraints until total error is at or below the allowed threshold.
+//
+// Parameters:
+//   - system: Point system to solve.
+//   - allow_error: Maximum acceptable total constraint error.
+//
+// Returns:
+//   - none.
 apply_all_constraints_to_error :: proc(
-    system: ^KinePointSystem, allowError : f32) {
+    system: ^Kine_Point_System, allow_error : f32) {
 
     error := get_total_constraint_error(system)
     reverse := false
 
-    for error > allowError {
+    for error > allow_error {
         if reverse {
             apply_all_constraints(system)
-        }
-        else {
+        } else {
             apply_all_constraints_reverse(system)
         }
         reverse = !reverse
@@ -62,208 +99,239 @@ apply_all_constraints_to_error :: proc(
     }
 }
 
+// Summary:
+//   Compute the error contribution of a single constraint against system points.
+//
+// Parameters:
+//   - constraint: Constraint definition to evaluate.
+//   - points: Fixed-capacity point array referenced by the constraint.
+//
+// Returns:
+//   - error: Constraint error value for the current point state.
 get_constraint_error :: proc(
-    constraint : ^KineConstraint, points: ^[MAX_KINEPOINTS]KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, points: ^[MAX_KINEPOINTS]Kine_Shape_Point) -> f32 {
 
-    if !constraint^.DoApply {
+    if !constraint^.do_apply {
         return 0
     }
-    totalError : f32 = 0
-    lenPoints := len(points^)
+    total_error : f32 = 0
+    len_points := len(points^)
 
-    if lenPoints <= constraint^.OnPoint {
+    if len_points <= constraint^.on_point {
         return 0
     }
-    hostPoint := &points^[constraint^.OnPoint]
+    host_point := &points^[constraint^.on_point]
 
-    if constraint^.Traits & .Floor == .Floor {
-        totalError += get_constraint_error_floor(constraint, hostPoint)
+    if constraint^.traits & .Floor == .Floor {
+        total_error += get_constraint_error_floor(constraint, host_point)
     }
-    if constraint^.Traits & .SnapToFloor == .SnapToFloor {
-        totalError += get_constraint_error_snaptofloor(constraint, hostPoint)
+    if constraint^.traits & .SnapToFloor == .SnapToFloor {
+        total_error += get_constraint_error_snaptofloor(constraint, host_point)
     }
-    if constraint^.Traits & .SnapPoint == .SnapPoint {
-        totalError += get_constraint_error_snappoint(constraint, hostPoint)
+    if constraint^.traits & .SnapPoint == .SnapPoint {
+        total_error += get_constraint_error_snappoint(constraint, host_point)
     }
 
-    children : [3]^KineShapePoint = { nil, nil, nil }
+    children : [3]^Kine_Shape_Point = { nil, nil, nil }
 
-    if hostPoint^.ChildPointHead <= 0 || hostPoint^.ChildPointHead > lenPoints {
-        return totalError
+    if host_point^.child_point_head <= 0 || host_point^.child_point_head > len_points {
+        return total_error
     }
-    children[0] = &points^[hostPoint^.ChildPointHead]
-    useChild := constraint^.ChildOffset.? or_else 0
-    for i in 0..<useChild {
-        if children[0]^.NextChildPoint <= 0 || children[0]^.NextChildPoint > lenPoints {
-            return totalError
+    children[0] = &points^[host_point^.child_point_head]
+    use_child := constraint^.child_offset.? or_else 0
+    for _ in 0..<use_child {
+        if children[0]^.next_child_point <= 0 || children[0]^.next_child_point > len_points {
+            return total_error
         }
-        children[0] = &points^[children[0]^.NextChildPoint]
+        children[0] = &points^[children[0]^.next_child_point]
     }
 
-    if children[0]^.NextChildPoint <= 0 || children[0]^.NextChildPoint > lenPoints {
-        return totalError
+    if children[0]^.next_child_point <= 0 || children[0]^.next_child_point > len_points {
+        return total_error
     }
-    children[1] = &points^[children[0]^.NextChildPoint]
+    children[1] = &points^[children[0]^.next_child_point]
 
-    if constraint^.Traits & .Distance == .Distance {
-        addErr := get_constraint_error_distance(constraint, children[0], children[1])
-        totalError += addErr
+    if constraint^.traits & .Distance == .Distance {
+        add_err := get_constraint_error_distance(constraint, children[0], children[1])
+        total_error += add_err
     }
 
-    if children[1]^.NextChildPoint <= 0 || children[1]^.NextChildPoint > lenPoints {
-        return totalError
+    if children[1]^.next_child_point <= 0 || children[1]^.next_child_point > len_points {
+        return total_error
     }
-    children[2] = &points^[children[1]^.NextChildPoint]
+    children[2] = &points^[children[1]^.next_child_point]
 
-    if constraint^.Traits & .MaxAngle == .MaxAngle {
-        totalError += get_constraint_error_maxangle(constraint,
+    if constraint^.traits & .MaxAngle == .MaxAngle {
+        total_error += get_constraint_error_maxangle(constraint,
             children[0], children[1], children[2])
     }
-    if constraint^.Traits & .MinAngle == .MinAngle {
-        totalError += get_constraint_error_minangle(constraint,
+    if constraint^.traits & .MinAngle == .MinAngle {
+        total_error += get_constraint_error_minangle(constraint,
             children[0], children[1], children[2])
     }
-    if constraint^.Traits & .CenterPivot == .CenterPivot {
-        totalError += get_constraint_error_centerpivot(constraint,
+    if constraint^.traits & .CenterPivot == .CenterPivot {
+        total_error += get_constraint_error_centerpivot(constraint,
             children[0], children[1], children[2])
     }
 
-    return totalError
+    return total_error
 }
 
+// Summary:
+//   Apply one constraint mutation pass to the referenced points.
+//
+// Parameters:
+//   - constraint: Constraint definition to apply.
+//   - points: Fixed-capacity point array updated by the constraint.
+//
+// Returns:
+//   - none.
 apply_constraint :: proc(
-    constraint : ^KineConstraint, points: ^[MAX_KINEPOINTS]KineShapePoint) {
+    constraint : ^Kine_Constraint, points: ^[MAX_KINEPOINTS]Kine_Shape_Point) {
 
-    if !constraint^.DoApply {
+    if !constraint^.do_apply {
         return
     }
-    lenPoints := len(points^)
+    len_points := len(points^)
 
-    if lenPoints <= constraint^.OnPoint {
+    if len_points <= constraint^.on_point {
         return
     }
-    hostPoint := &points^[constraint^.OnPoint]
+    host_point := &points^[constraint^.on_point]
 
-    if constraint^.Traits & .Floor == .Floor {
-        apply_constraint_floor(constraint, hostPoint)
+    if constraint^.traits & .Floor == .Floor {
+        apply_constraint_floor(constraint, host_point)
     }
-    if constraint^.Traits & .SnapToFloor == .SnapToFloor {
-        apply_constraint_snaptofloor(constraint, hostPoint)
+    if constraint^.traits & .SnapToFloor == .SnapToFloor {
+        apply_constraint_snaptofloor(constraint, host_point)
     }
-    if constraint^.Traits & .SnapPoint == .SnapPoint {
-        apply_constraint_snappoint(constraint, hostPoint)
+    if constraint^.traits & .SnapPoint == .SnapPoint {
+        apply_constraint_snappoint(constraint, host_point)
     }
 
-    children : [3]^KineShapePoint = { nil, nil, nil }
+    children : [3]^Kine_Shape_Point = { nil, nil, nil }
 
-    if hostPoint^.ChildPointHead <= 0 || hostPoint^.ChildPointHead > lenPoints {
+    if host_point^.child_point_head <= 0 || host_point^.child_point_head > len_points {
         return
     }
-    children[0] = &points^[hostPoint^.ChildPointHead]
-    useChild := constraint^.ChildOffset.? or_else 0
-    for i in 0..<useChild {
-        if children[0]^.NextChildPoint <= 0 || children[0]^.NextChildPoint > lenPoints {
+    children[0] = &points^[host_point^.child_point_head]
+    use_child := constraint^.child_offset.? or_else 0
+    for _ in 0..<use_child {
+        if children[0]^.next_child_point <= 0 || children[0]^.next_child_point > len_points {
             return
         }
-        children[0] = &points^[children[0]^.NextChildPoint]
+        children[0] = &points^[children[0]^.next_child_point]
     }
     
-    if children[0]^.NextChildPoint <= 0 || children[0]^.NextChildPoint > lenPoints {
+    if children[0]^.next_child_point <= 0 || children[0]^.next_child_point > len_points {
         return
     }
-    children[1] = &points^[children[0]^.NextChildPoint]
+    children[1] = &points^[children[0]^.next_child_point]
 
-    if constraint^.Traits & .Distance == .Distance {
+    if constraint^.traits & .Distance == .Distance {
         apply_constraint_distance(constraint, children[0], children[1])
     }
 
-    if children[1]^.NextChildPoint <= 0 || children[1]^.NextChildPoint > lenPoints {
+    if children[1]^.next_child_point <= 0 || children[1]^.next_child_point > len_points {
         return
     }
-    children[2] = &points^[children[1]^.NextChildPoint]
+    children[2] = &points^[children[1]^.next_child_point]
 
-    if constraint^.Traits & .MaxAngle == .MaxAngle {
+    if constraint^.traits & .MaxAngle == .MaxAngle {
         apply_constraint_maxangle(constraint,
             children[0], children[1], children[2])
     }
-    if constraint^.Traits & .MinAngle == .MinAngle {
+    if constraint^.traits & .MinAngle == .MinAngle {
         apply_constraint_minangle(constraint,
             children[0], children[1], children[2])
     }
-    if constraint^.Traits & .CenterPivot == .CenterPivot {
+    if constraint^.traits & .CenterPivot == .CenterPivot {
         apply_constraint_centerpivot(constraint,
             children[0], children[1], children[2])
     }
 }
 
+
+
+
+// Summary:
+//   Compute floor-constraint error for a single point.
 get_constraint_error_floor :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
 
-    position, ok := point^.Position.?
-    if !ok || position.z >= constraint^.Restriction.z {
+    position, ok := point^.position.?
+    if !ok || position.z >= constraint^.restriction.z {
         return 0
     }
 
-    return constraint^.Restriction.z - position.z
+    return constraint^.restriction.z - position.z
 }
 
+// Summary:
+//   Compute snap-to-floor error for a single point with allowance tolerance.
 get_constraint_error_snaptofloor :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
 
-    position, ok := point^.Position.?
-    if !ok || math.abs(position.z - constraint^.Restriction.z) <= constraint^.Allowance {
+    position, ok := point^.position.?
+    if !ok || math.abs(position.z - constraint^.restriction.z) <= constraint^.allowance {
         return 0
     }
 
-    return constraint^.Restriction.z - position.z
+    return constraint^.restriction.z - position.z
 }
 
+// Summary:
+//   Compute snap-point error as distance from point position to restriction target.
 get_constraint_error_snappoint :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
 
-    position, ok := point^.Position.?
+    position, ok := point^.position.?
     if !ok {
         return 0
     }
-    vec := position - constraint^.Restriction
+    vec := position - constraint^.restriction
     len := linalg.length(vec)
     return len
 }
 
+// Summary:
+//   Compute distance-constraint error between two points.
 get_constraint_error_distance :: proc(
-    constraint : ^KineConstraint, point1, point2 : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point1, point2 : ^Kine_Shape_Point) -> f32 {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return 0
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return 0
     }
     vec := position1 - position2
     len := linalg.length(vec)
-    reqLen := linalg.length(constraint^.Restriction)
-    return math.abs(reqLen - len)
+    req_len := linalg.length(constraint^.restriction)
+    return math.abs(req_len - len)
 }
 
+// Summary:
+//   Compute max-angle constraint error for a three-point angle.
 get_constraint_error_maxangle :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return 0
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return 0
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return 0
     }
-    vec1 := position1 - pivotPosition
-    vec2 := position2 - pivotPosition
+    vec1 := position1 - pivot_position
+    vec2 := position2 - pivot_position
 
     dot := linalg.dot(vec1, vec2)
     vec1len := linalg.length(vec1)
@@ -271,31 +339,33 @@ get_constraint_error_maxangle :: proc(
 
     theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
 
-    if theta > constraint^.Restriction[0] {
-        radians := theta - constraint^.Restriction[0]
+    if theta > constraint^.restriction[0] {
+        radians := theta - constraint^.restriction[0]
         return radians * (180.0 / math.PI)
     }
 
     return 0
 }
 
+// Summary:
+//   Compute min-angle constraint error for a three-point angle.
 get_constraint_error_minangle :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return 0
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return 0
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return 0
     }
-    vec1 := position1 - pivotPosition
-    vec2 := position2 - pivotPosition
+    vec1 := position1 - pivot_position
+    vec2 := position2 - pivot_position
 
     dot := linalg.dot(vec1, vec2)
     vec1len := linalg.length(vec1)
@@ -303,120 +373,132 @@ get_constraint_error_minangle :: proc(
 
     theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
 
-    if theta < constraint^.Restriction[0] {
-        radians := constraint^.Restriction[0] - theta
+    if theta < constraint^.restriction[0] {
+        radians := constraint^.restriction[0] - theta
         return radians * (180.0 / math.PI)
     }
 
     return 0
 }
 
+// Summary:
+//   Compute center-pivot error as pivot distance from the segment midpoint.
 get_constraint_error_centerpivot :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) -> f32 {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
     
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return 0
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return 0
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return 0
     }
 
     mid := (position1 + position2) / 2.0
-    moveTo := Vector3{ mid.x, mid.y, pivotPosition.z }
-    len := math.abs(linalg.length(moveTo - pivotPosition))
+    move_to := Vector3{ mid.x, mid.y, pivot_position.z }
+    len := math.abs(linalg.length(move_to - pivot_position))
     
     return len
 }
 
+// Summary:
+//   Apply floor constraint response to keep a point at or above floor height.
 apply_constraint_floor :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
 
-    position, ok := point^.Position.?
-    if !ok || position.z >= constraint^.Restriction.z {
+    position, ok := point^.position.?
+    if !ok || position.z >= constraint^.restriction.z {
         return
     }
 
-    offset := constraint^.Restriction.z - position.z
-    position.z = constraint^.Restriction.z + offset * constraint^.Bounce
-    point^.Position = position
+    offset := constraint^.restriction.z - position.z
+    position.z = constraint^.restriction.z + offset * constraint^.bounce
+    point^.position = position
 }
 
+// Summary:
+//   Apply snap-to-floor constraint by forcing point height to floor level.
 apply_constraint_snaptofloor :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
 
-    position, ok := point^.Position.?
-    if !ok || math.abs(position.z - constraint^.Restriction.z) <= constraint^.Allowance {
+    position, ok := point^.position.?
+    if !ok || math.abs(position.z - constraint^.restriction.z) <= constraint^.allowance {
         return
     }
 
-    position.z = constraint^.Restriction.z
-    point^.Position = position
+    position.z = constraint^.restriction.z
+    point^.position = position
 }
 
+// Summary:
+//   Apply snap-point constraint by setting point position to restriction target.
 apply_constraint_snappoint :: proc(
-    constraint : ^KineConstraint, point : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
 
-    point^.Position = constraint^.Restriction
+    point^.position = constraint^.restriction
 }
 
+// Summary:
+//   Apply distance constraint to two points using depend_on ownership mode.
+//
+// Notes:
+//   - depend_on > 0 moves point1, == 0 moves both, < 0 moves point2.
 apply_constraint_distance :: proc(
-    constraint : ^KineConstraint, point1, point2 : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point1, point2 : ^Kine_Shape_Point) {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return
     }
     vec := position1 - position2
-    len := linalg.length(vec)
-    reqLen := linalg.length(constraint^.Restriction)
+    req_len := linalg.length(constraint^.restriction)
 
-    if constraint^.DependOn > 0 {
+    if constraint^.depend_on > 0 {
         norm := linalg.normalize(vec)
-        point1^.Position = position2 + norm * reqLen
-    }
-    else if constraint^.DependOn == 0 {
+        point1^.position = position2 + norm * req_len
+    } else if constraint^.depend_on == 0 {
         mid := (position1 + position2) / 2.0
         vec = position2 - mid
         norm := linalg.normalize(vec)
-        point2^.Position = mid + norm * (reqLen / 2.0)
+        point2^.position = mid + norm * (req_len / 2.0)
         vec = position1 - mid
         norm = linalg.normalize(vec)
-        point1^.Position = mid + norm * (reqLen / 2.0)
-    }
-    else {
+        point1^.position = mid + norm * (req_len / 2.0)
+    } else {
         vec = position2 - position1
         norm := linalg.normalize(vec)
-        point2^.Position = position1 + norm * reqLen
+        point2^.position = position1 + norm * req_len
     }
 }
 
+// Summary:
+//   Apply max-angle constraint by rotating one or both limbs toward limit.
 apply_constraint_maxangle :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return
     }
-    vec1 := position1 - pivotPosition
-    vec2 := position2 - pivotPosition
+    vec1 := position1 - pivot_position
+    vec2 := position2 - pivot_position
 
     dot := linalg.dot(vec1, vec2)
     vec1len := linalg.length(vec1)
@@ -424,49 +506,49 @@ apply_constraint_maxangle :: proc(
 
     theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
 
-    if theta <= constraint^.Restriction[0] {
+    if theta <= constraint^.restriction[0] {
         return
     }
 
-    overage := theta - constraint^.Restriction[0]
+    overage := theta - constraint^.restriction[0]
     halfoverage := overage / 2.0
 
     rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
 
     new_vec1 := Vector3{0, 0, 0}
     new_vec2 := Vector3{0, 0, 0}
-    if constraint^.DependOn > 0 {
+    if constraint^.depend_on > 0 {
         new_vec1 = rotate_around_axis(vec1, rotaxis, overage)
-    }
-    else if constraint^.DependOn == 0 {
+    } else if constraint^.depend_on == 0 {
         new_vec1 = rotate_around_axis(vec1, rotaxis, halfoverage)
         new_vec2 = rotate_around_axis(vec2, rotaxis, -halfoverage)
-    }
-    else {
+    } else {
         new_vec2 = rotate_around_axis(vec2, rotaxis, -overage)
     }
 
-    point1^.Position = pivotPosition + new_vec1
-    point2^.Position = pivotPosition + new_vec2
+    point1^.position = pivot_position + new_vec1
+    point2^.position = pivot_position + new_vec2
 }
 
+// Summary:
+//   Apply min-angle constraint by rotating one or both limbs outward to limit.
 apply_constraint_minangle :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {
 
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return
     }
-    vec1 := position1 - pivotPosition
-    vec2 := position2 - pivotPosition
+    vec1 := position1 - pivot_position
+    vec2 := position2 - pivot_position
 
     dot := linalg.dot(vec1, vec2)
     vec1len := linalg.length(vec1)
@@ -474,49 +556,49 @@ apply_constraint_minangle :: proc(
 
     theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
 
-    if theta >= constraint^.Restriction[0] {
+    if theta >= constraint^.restriction[0] {
         return
     }
 
-    underage := constraint^.Restriction[0] - theta
+    underage := constraint^.restriction[0] - theta
     halfunderage := underage / 2.0
 
     rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
 
     new_vec1 := Vector3{0, 0, 0}
     new_vec2 := Vector3{0, 0, 0}
-    if constraint^.DependOn > 0 {
+    if constraint^.depend_on > 0 {
         new_vec1 = rotate_around_axis(vec1, rotaxis, -underage)
-    }
-    else if constraint^.DependOn == 0 {
+    } else if constraint^.depend_on == 0 {
         new_vec1 = rotate_around_axis(vec1, rotaxis, -halfunderage)
         new_vec2 = rotate_around_axis(vec2, rotaxis, halfunderage)
-    }
-    else {
+    } else {
         new_vec2 = rotate_around_axis(vec2, rotaxis, underage)
     }
 
-    point1^.Position = pivotPosition + new_vec1
-    point2^.Position = pivotPosition + new_vec2
+    point1^.position = pivot_position + new_vec1
+    point2^.position = pivot_position + new_vec2
 }
 
+// Summary:
+//   Apply center-pivot constraint by moving pivot to midpoint of outer points.
 apply_constraint_centerpivot :: proc(
-    constraint : ^KineConstraint, point1, pivot, point2 : ^KineShapePoint) {
+    constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {
     
-    position1, ok := point1^.Position.?
+    position1, ok := point1^.position.?
     if !ok {
         return
     }
-    position2, ok2 := point2^.Position.?
+    position2, ok2 := point2^.position.?
     if !ok2 {
         return
     }
-    pivotPosition, ok3 := pivot^.Position.?
+    pivot_position, ok3 := pivot^.position.?
     if !ok3 {
         return
     }
 
     mid := (position1 + position2) / 2.0
-    moveTo := Vector3{ mid.x, mid.y, pivotPosition.z }
-    pivot^.Position = moveTo
+    move_to := Vector3{ mid.x, mid.y, pivot_position.z }
+    pivot^.position = move_to
 }

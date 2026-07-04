@@ -4,13 +4,12 @@ package kine
 // This just builds the cache into the existing point system.
 
 // TODO: Currently not caching items that are not drawn, resulting in using a separate
-// PreviousVectors cache that kinda doubles up. The PreviousVectors preceded the DrawCache,
-// but consider more if we should just move it to the DrawCache entirely?
+// previous_vectors cache that kinda doubles up. The previous_vectors preceded the draw_cache,
+// but consider more if we should just move it to the draw_cache entirely?
 
 import "../core"
 import "../particles"
 
-import "core:math"
 import "core:math/linalg"
 
 import rl "vendor:raylib"
@@ -19,117 +18,158 @@ MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
 Vector3 :: core.Vector3
-KineShapePointType :: core.KineShapePointType
-KineShapePoint :: core.KineShapePoint
+Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
+Kine_Shape_Point :: core.Kine_Shape_Point
 
-KineConstraintTrait :: core.KineConstraintTrait
-KineConstraint :: core.KineConstraint
-KinePointSystem :: core.KinePointSystem
+Kine_Constraint_Trait :: core.Kine_Constraint_Trait
+Kine_Constraint :: core.Kine_Constraint
+Kine_Point_System :: core.Kine_Point_System
 
-KineShapeCompass :: core.KineShapeCompass
-KineShapePen :: core.KineShapePen
-KineShapeLine :: core.KineShapeLine
-KineShapeCircle :: core.KineShapeCircle
-KineShapeFilledCircle :: core.KineShapeFilledCircle
-KineShapeTriangle :: core.KineShapeTriangle
-KineShapeSquare :: core.KineShapeSquare
-KineShapePentagon :: core.KineShapePentagon
+Kine_Shape_Compass :: core.Kine_Shape_Compass
+Kine_Shape_Pen :: core.Kine_Shape_Pen
+Kine_Shape_Line :: core.Kine_Shape_Line
+Kine_Shape_Circle :: core.Kine_Shape_Circle
+Kine_Shape_Filled_Circle :: core.Kine_Shape_Filled_Circle
+Kine_Shape_Triangle :: core.Kine_Shape_Triangle
+Kine_Shape_Square :: core.Kine_Shape_Square
+Kine_Shape_Pentagon :: core.Kine_Shape_Pentagon
 
-KineDrawBase :: core.KineDrawBase
-KineLabelDraw :: core.KineLabelDraw
-KinePointDraw :: core.KinePointDraw
-KineLineDraw :: core.KineLineDraw
-KineCircleDraw :: core.KineCircleDraw
-KineFilledCircleDraw :: core.KineFilledCircleDraw
-KineTriangleDraw :: core.KineTriangleDraw
-KineSquareDraw :: core.KineSquareDraw
-KinePentagonDraw :: core.KinePentagonDraw
-KinePenDraw :: core.KinePenDraw
-KineCompassDraw :: core.KineCompassDraw
+Kine_Draw_Base :: core.Kine_Draw_Base
+Kine_Label_Draw :: core.Kine_Label_Draw
+Kine_Point_Draw :: core.Kine_Point_Draw
+Kine_Line_Draw :: core.Kine_Line_Draw
+Kine_Circle_Draw :: core.Kine_Circle_Draw
+Kine_Filled_Circle_Draw :: core.Kine_Filled_Circle_Draw
+Kine_Triangle_Draw :: core.Kine_Triangle_Draw
+Kine_Square_Draw :: core.Kine_Square_Draw
+Kine_Pentagon_Draw :: core.Kine_Pentagon_Draw
+Kine_Pen_Draw :: core.Kine_Pen_Draw
+Kine_Compass_Draw :: core.Kine_Compass_Draw
 
+// Summary:
+//   Snapshot current point positions into previous_vectors for interpolation.
+//
+// Parameters:
+//   - point_system: Point system whose current positions are cached.
+//
+// Returns:
+//   - none.
 kine_update_last_cache_vectors :: proc(
-    pointSystem: ^KinePointSystem) {
+    point_system: ^Kine_Point_System) {
 
     for i in 0..<MAX_KINEPOINTS {
-        pointSystem^.PreviousVectors[i] = pointSystem^.Points[i].Position
+        point_system^.previous_vectors[i] = point_system^.points[i].position
     }
 }
 
+// Summary:
+//   Freeze animation insertion starts at current point/constraint indices.
+//
+// Parameters:
+//   - point_system: Point system to mark with animation start indices.
+//
+// Returns:
+//   - none.
 kine_freeze_system_indices :: proc(
-    pointSystem: ^KinePointSystem) {
+    point_system: ^Kine_Point_System) {
 
-    pointSystem^.AnimPointsStart = pointSystem^.NextPointIndex
-    pointSystem^.AnimConstraintsStart = pointSystem^.NextConstraintIndex
+    point_system^.anim_points_start = point_system^.next_point_index
+    point_system^.anim_constraints_start = point_system^.next_constraint_index
 }
 
+// Summary:
+//   Clear animation-owned points and constraints while preserving baseline tool setup.
+//
+// Parameters:
+//   - point_system: Point system containing animation and baseline data.
+//   - particle_system: Particle system used to emit clear-burst effects.
+//
+// Returns:
+//   - none.
 kine_clear_animation_data :: proc(
-    pointSystem: ^KinePointSystem,
-    particleSystem: ^core.ParticleSystem) {
+    point_system: ^Kine_Point_System,
+    particle_system: ^core.Particle_System) {
 
-    particles.emit_kine_clear_burst(particleSystem, pointSystem)
+    particles.emit_kine_clear_burst(particle_system, point_system)
 
-    for i in pointSystem^.AnimPointsStart..<MAX_KINEPOINTS {
-        pointSystem^.Points[i] = {}
-        pointSystem^.Points[i].DoDraw = false
+    for i in point_system^.anim_points_start..<MAX_KINEPOINTS {
+        point_system^.points[i] = {}
+        point_system^.points[i].do_draw = false
     }
-    for i in pointSystem^.AnimConstraintsStart..<MAX_KINECONSTRAINTS {
-        pointSystem^.Constraints[i] = {}
-        pointSystem^.Constraints[i].DoApply = false
+    for i in point_system^.anim_constraints_start..<MAX_KINECONSTRAINTS {
+        point_system^.constraints[i] = {}
+        point_system^.constraints[i].do_apply = false
     }
 
-    pointSystem^.NextPointIndex = pointSystem^.AnimPointsStart
-    pointSystem^.NextConstraintIndex = pointSystem^.AnimConstraintsStart
+    point_system^.next_point_index = point_system^.anim_points_start
+    point_system^.next_constraint_index = point_system^.anim_constraints_start
 }
 
-
-
-kine_draw_cache_reset :: proc(
-    pointSystem: ^KinePointSystem) {
-
-    pointSystem^.DrawCache.ItemCount = 0
-    pointSystem^.DrawCache.DrawPen = false
-    pointSystem^.DrawCache.DrawCompass = false
-}
-
+// Summary:
+//   Build the draw cache from current point-system state using interpolation alpha.
+//
+// Parameters:
+//   - point_system: Point system source for cached draw items.
+//   - alpha: Interpolation factor in [0, 1] between previous and current vectors.
+//
+// Returns:
+//   - none.
 build_kine_draw_cache :: proc(
-    pointSystem: ^KinePointSystem,
+    point_system: ^Kine_Point_System,
     alpha: f32) {
 
-    kine_draw_cache_reset(pointSystem)
+    kine_draw_cache_reset(point_system)
 
-    for index in 0..<len(pointSystem^.Points) {
-        src := &pointSystem^.Points[index]
-        if !src^.DoDraw {
+    for index in 0..<len(point_system^.points) {
+        src := &point_system^.points[index]
+        if !src^.do_draw {
             continue
         }
 
-        switch src^.Type {
-            case .Label:
-                cache_push_label(pointSystem, index, src, alpha)
-            case .Point:
-                cache_push_point(pointSystem, index, src, alpha)
-            case .Line:
-                cache_push_line(pointSystem, index, src, alpha)
-            case .Circle:
-                cache_push_circle(pointSystem, index, src, alpha)
-            case .FilledCircle:
-                cache_push_filledcircle(pointSystem, index, src, alpha)
-            case .Triangle:
-                cache_push_triangle(pointSystem, index, src, alpha)
-            case .Square:
-                cache_push_square(pointSystem, index, src, alpha)
-            case .Pentagon:
-                cache_push_pentagon(pointSystem, index, src, alpha)
-            case .Pen:
-                cache_push_pen(pointSystem, index, src, alpha)
-            case .Compass:
-                cache_push_compass(pointSystem, index, src, alpha)
+        switch src^.kind {
+        case .Label:
+            cache_push_label(point_system, index, src, alpha)
+        case .Point:
+            cache_push_point(point_system, index, src, alpha)
+        case .Line:
+            cache_push_line(point_system, index, src, alpha)
+        case .Circle:
+            cache_push_circle(point_system, index, src, alpha)
+        case .FilledCircle:
+            cache_push_filledcircle(point_system, index, src, alpha)
+        case .Triangle:
+            cache_push_triangle(point_system, index, src, alpha)
+        case .Square:
+            cache_push_square(point_system, index, src, alpha)
+        case .Pentagon:
+            cache_push_pentagon(point_system, index, src, alpha)
+        case .Pen:
+            cache_push_pen(point_system, index, src, alpha)
+        case .Compass:
+            cache_push_compass(point_system, index, src, alpha)
         }
     }
 }
 
+
+
+// Summary:
+//   Reset draw-cache counters and tool draw flags before cache rebuild.
+kine_draw_cache_reset :: proc(
+    point_system: ^Kine_Point_System) {
+
+    point_system^.draw_cache.item_count = 0
+    point_system^.draw_cache.draw_pen = false
+    point_system^.draw_cache.draw_compass = false
+}
+
+// Summary:
+//   Compute interpolated point position between previous and current vectors.
+//
+// Notes:
+//   - Falls back to current position when previous vector is unavailable.
 lerped_point_position :: proc(
-    pointSystem: ^KinePointSystem,
+    point_system: ^Kine_Point_System,
     index: int,
     alpha: f32,
     out: ^Vector3) -> bool {
@@ -138,353 +178,381 @@ lerped_point_position :: proc(
         return false
     }
 
-    curr := pointSystem^.Points[index]
-    currPos, hasCurr := curr.Position.?
-    if !hasCurr {
+    curr := point_system^.points[index]
+    curr_pos, has_curr := curr.position.?
+    if !has_curr {
         return false
     }
 
-    prev := pointSystem^.PreviousVectors[index].? or_else currPos
-    out^ = linalg.lerp(prev, currPos, alpha)
+    prev := point_system^.previous_vectors[index].? or_else curr_pos
+    out^ = linalg.lerp(prev, curr_pos, alpha)
     return true
 }
 
+// Summary:
+//   Build the common draw-base metadata shared by cached draw item variants.
 make_draw_base :: #force_inline proc(
-    sourceIndex: int,
-    src: ^KineShapePoint) -> KineDrawBase {
+    source_index: int,
+    src: ^Kine_Shape_Point) -> Kine_Draw_Base {
 
-    color := src^.Color.? or_else rl.WHITE
-    activeColor, hasActiveColor := src^.ActiveColor.?
+    color := src^.color.? or_else rl.WHITE
+    active_color, has_active_color := src^.active_color.?
 
-    return KineDrawBase{
-        Type = src^.Type,
-        SourceIndex = sourceIndex,
-        BrushSize = src^.BrushSize,
-        Color = color,
-        ActiveColor = activeColor,
-        HasActiveColor = hasActiveColor,
-        ActiveChild = src^.ActiveChild,
+    return Kine_Draw_Base{
+        kind = src^.kind,
+        source_index = source_index,
+        brush_size = src^.brush_size,
+        color = color,
+        active_color = active_color,
+        has_active_color = has_active_color,
+        active_child = src^.active_child,
     }
 }
 
 
+// Summary:
+//   Push a cached label draw item into the draw-cache item list.
 cache_push_label :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
     p0: Vector3
-    if !lerped_point_position(pointSystem, sourceIndex, alpha, &p0) {
+    if !lerped_point_position(point_system, source_index, alpha, &p0) {
         return
     }
 
-    label, ok := src^.Label.?
+    label, ok := src^.label.?
     if !ok {
         return
     }
 
-    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KineLabelDraw{ make_draw_base(sourceIndex, src), p0, label }
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point := Kine_Label_Draw{ make_draw_base(source_index, src), p0, label }
     slot^ = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached point draw item into the draw-cache item list.
 cache_push_point :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
     p0: Vector3
-    if !lerped_point_position(pointSystem, sourceIndex, alpha, &p0) {
+    if !lerped_point_position(point_system, source_index, alpha, &p0) {
         return
     }
 
-    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KinePointDraw{ make_draw_base(sourceIndex, src), p0 }
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point := Kine_Point_Draw{ make_draw_base(source_index, src), p0 }
     slot^ = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached line draw item into the draw-cache item list.
 cache_push_line :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     point1: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &point1) {
+    if !lerped_point_position(point_system, child0, alpha, &point1) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     point2: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point2) {
+    if !lerped_point_position(point_system, next, alpha, &point2) {
         return
     }
 
-    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KineLineDraw{ make_draw_base(sourceIndex, src), point1, point2 }
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point := Kine_Line_Draw{ make_draw_base(source_index, src), point1, point2 }
     slot^ = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached circle draw item into the draw-cache item list.
+//
+// Notes:
+//   - Honors active_child orientation by swapping start/end when required.
 cache_push_circle :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    center, hasCenter := src^.Position.?
-    if !hasCenter {
+    center, has_center := src^.position.?
+    if !has_center {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     start: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &start) {
+    if !lerped_point_position(point_system, child0, alpha, &start) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     end: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &end) {
+    if !lerped_point_position(point_system, next, alpha, &end) {
         return
     }
 
-    if src^.ActiveChild > 1 {
+    if src^.active_child > 1 {
         start, end = end, start
     }
 
-    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KineCircleDraw{ make_draw_base(sourceIndex, src), center, start, end, src^.Offset }
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point := Kine_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
     slot^ = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached filled-circle draw item into the draw-cache item list.
+//
+// Notes:
+//   - Honors active_child orientation by swapping start/end when required.
 cache_push_filledcircle :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    center, hasCenter := src^.Position.?
-    if !hasCenter {
+    center, has_center := src^.position.?
+    if !has_center {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     start: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &start) {
+    if !lerped_point_position(point_system, child0, alpha, &start) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     end: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &end) {
+    if !lerped_point_position(point_system, next, alpha, &end) {
         return
     }
 
-    if src^.ActiveChild > 1 {
+    if src^.active_child > 1 {
         start, end = end, start
     }
 
-    slot := &pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount]
-    point := KineFilledCircleDraw{ make_draw_base(sourceIndex, src), center, start, end }
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point := Kine_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end }
     slot^ = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached triangle draw item into the draw-cache item list.
 cache_push_triangle :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     point1: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &point1) {
+    if !lerped_point_position(point_system, child0, alpha, &point1) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     point2: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point2) {
+    if !lerped_point_position(point_system, next, alpha, &point2) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point3: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point3) {
+    if !lerped_point_position(point_system, next, alpha, &point3) {
         return
     }
 
-    point := KineTriangleDraw{ make_draw_base(sourceIndex, src), point1, point2, point3 }
-    pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount] = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point := Kine_Triangle_Draw{ make_draw_base(source_index, src), point1, point2, point3 }
+    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached square draw item into the draw-cache item list.
 cache_push_square :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     point1: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &point1) {
+    if !lerped_point_position(point_system, child0, alpha, &point1) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     point2: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point2) {
+    if !lerped_point_position(point_system, next, alpha, &point2) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point3: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point3) {
+    if !lerped_point_position(point_system, next, alpha, &point3) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point4: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point4) {
+    if !lerped_point_position(point_system, next, alpha, &point4) {
         return
     }
 
-    point := KineSquareDraw{ make_draw_base(sourceIndex, src), point1, point2, point3, point4 }
-    pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount] = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point := Kine_Square_Draw{ make_draw_base(source_index, src), point1, point2, point3, point4 }
+    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Push a cached pentagon draw item into the draw-cache item list.
 cache_push_pentagon :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if pointSystem^.DrawCache.ItemCount >= len(pointSystem^.DrawCache.Items) {
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return
     }
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     point1: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &point1) {
+    if !lerped_point_position(point_system, child0, alpha, &point1) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     point2: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point2) {
+    if !lerped_point_position(point_system, next, alpha, &point2) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point3: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point3) {
+    if !lerped_point_position(point_system, next, alpha, &point3) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point4: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point4) {
+    if !lerped_point_position(point_system, next, alpha, &point4) {
         return
     }
 
-    next = pointSystem.Points[next].NextChildPoint
+    next = point_system.points[next].next_child_point
     point5: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &point5) {
+    if !lerped_point_position(point_system, next, alpha, &point5) {
         return
     }
 
-    point := KinePentagonDraw{ make_draw_base(sourceIndex, src), point1, point2, point3, point4, point5 }
-    pointSystem^.DrawCache.Items[pointSystem^.DrawCache.ItemCount] = point
-    pointSystem^.DrawCache.ItemCount += 1
+    point := Kine_Pentagon_Draw{ make_draw_base(source_index, src), point1, point2, point3, point4, point5 }
+    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
+    point_system^.draw_cache.item_count += 1
 }
 
+// Summary:
+//   Update cached pen tool draw data and pen draw-enable flag.
 cache_push_pen :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     j1: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &j1) {
+    if !lerped_point_position(point_system, child0, alpha, &j1) {
         return
     }
 
-    next := pointSystem.Points[child0].NextChildPoint
+    next := point_system.points[child0].next_child_point
     j2: Vector3
-    if !lerped_point_position(pointSystem, next, alpha, &j2) {
+    if !lerped_point_position(point_system, next, alpha, &j2) {
         return
     }
 
-    pointSystem^.DrawCache.Pen.Base = make_draw_base(sourceIndex, src)
-    pointSystem^.DrawCache.Pen.Joint1 = j1
-    pointSystem^.DrawCache.Pen.Joint2 = j2
-    pointSystem^.DrawCache.DrawPen = src^.DoDraw
+    point_system^.draw_cache.pen.base = make_draw_base(source_index, src)
+    point_system^.draw_cache.pen.joint1 = j1
+    point_system^.draw_cache.pen.joint2 = j2
+    point_system^.draw_cache.draw_pen = src^.do_draw
 }
 
+// Summary:
+//   Update cached compass tool draw data and compass draw-enable flag.
 cache_push_compass :: proc(
-    pointSystem: ^KinePointSystem,
-    sourceIndex: int,
-    src: ^KineShapePoint,
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    child0 := src^.ChildPointHead
+    child0 := src^.child_point_head
     p0: Vector3
-    if !lerped_point_position(pointSystem, child0, alpha, &p0) {
+    if !lerped_point_position(point_system, child0, alpha, &p0) {
         return
     }
 
-    child1 := pointSystem.Points[child0].NextChildPoint
+    child1 := point_system.points[child0].next_child_point
     p1: Vector3
-    if !lerped_point_position(pointSystem, child1, alpha, &p1) {
+    if !lerped_point_position(point_system, child1, alpha, &p1) {
         return
     }
 
-    child2 := pointSystem.Points[child1].NextChildPoint
+    child2 := point_system.points[child1].next_child_point
     p2: Vector3
-    if !lerped_point_position(pointSystem, child2, alpha, &p2) {
+    if !lerped_point_position(point_system, child2, alpha, &p2) {
         return
     }
 
-    pointSystem^.DrawCache.Compass.Base = make_draw_base(sourceIndex, src)
-    pointSystem^.DrawCache.Compass.Joint1 = p0
-    pointSystem^.DrawCache.Compass.Pivot = p1
-    pointSystem^.DrawCache.Compass.Joint2 = p2
-    pointSystem^.DrawCache.DrawCompass = src^.DoDraw
+    point_system^.draw_cache.compass.base = make_draw_base(source_index, src)
+    point_system^.draw_cache.compass.joint1 = p0
+    point_system^.draw_cache.compass.pivot = p1
+    point_system^.draw_cache.compass.joint2 = p2
+    point_system^.draw_cache.draw_compass = src^.do_draw
 }

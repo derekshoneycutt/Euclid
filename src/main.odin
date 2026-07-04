@@ -6,6 +6,7 @@ import "view"
 
 import "core:fmt"
 
+// The main entry point for the Euclid application
 main :: proc() {
     fmt.println("Initiating Euclid...")
     defer fmt.println("Euclid ended")

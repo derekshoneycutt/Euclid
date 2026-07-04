@@ -13,10 +13,36 @@ if ($null -eq $CliArgs) {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runAfterBuild = $false
 $doBuild = $true
+$doVet = $false
+
+$showHelp = $false
+$hasInvalidArg = $false
+
+$requestRun = $false
+$requestBuild = $false
+$requestVet = $false
+$requestNoBuild = $false
 
 function Stop-Build([string] $message) {
     Write-Error $message
     exit 1
+}
+
+function Show-Help() {
+        @"
+Usage: .\make.ps1 [options]
+
+Options:
+    --run, -r       Run bin/euclid after all other requests.
+    --build, -b     Build the project.
+    --vet, -v       Build with validation flags.
+    --no-build, -n  Skip any build (overrides --build and --vet).
+    --help, -h      Show this help text.
+
+Notes:
+    - If no options are provided, the default is to build.
+    - Short options can be combined, e.g. -rv or -bnh.
+"@
 }
 
 function Test-RequiredCommand([string] $commandName, [string] $installHint) {
@@ -45,8 +71,7 @@ function New-ImportLibrary(
     [string] $outLibPath,
     [string] $dllName,
     [string] $libExePath,
-    [bool] $stripDataMarkers = $false
-) {
+    [bool] $stripDataMarkers = $false) {
     $needsRebuild = -not (Test-Path $outLibPath)
     if (-not $needsRebuild) {
         $dllTime = (Get-Item $dllPath).LastWriteTimeUtc
@@ -98,30 +123,88 @@ function New-ImportLibrary(
     }
 }
 
-if ($CliArgs.Count -gt 1) {
-    Stop-Build "Usage: .\\make.ps1 [--run|--run-only|--clean]"
-}
-
-if ($CliArgs.Count -eq 1) {
-    switch ($CliArgs[0]) {
-        "--run" {
-            $runAfterBuild = $true
+foreach ($arg in $CliArgs) {
+    switch -Regex ($arg) {
+        '^--run$' {
+            $requestRun = $true
+            continue
         }
-        "--run-only" {
-            $runAfterBuild = $true
-            $doBuild = $false
+        '^--build$' {
+            $requestBuild = $true
+            continue
         }
-        "--clean" {
-            $binPath = Join-Path $scriptDir "bin"
-            if (Test-Path $binPath) {
-                Remove-Item -Recurse -Force $binPath
+        '^--vet$' {
+            $requestVet = $true
+            continue
+        }
+        '^--no-build$' {
+            $requestNoBuild = $true
+            continue
+        }
+        '^--help$' {
+            $showHelp = $true
+            continue
+        }
+        '^-[^-].+$' {
+            $shortFlags = $arg.Substring(1)
+            foreach ($shortFlag in $shortFlags.ToCharArray()) {
+                switch ($shortFlag) {
+                    'r' {
+                        $requestRun = $true
+                    }
+                    'b' {
+                        $requestBuild = $true
+                    }
+                    'v' {
+                        $requestVet = $true
+                    }
+                    'n' {
+                        $requestNoBuild = $true
+                    }
+                    'h' {
+                        $showHelp = $true
+                    }
+                    default {
+                        $hasInvalidArg = $true
+                    }
+                }
             }
-            exit 0
+            continue
         }
         default {
-            Stop-Build "Usage: .\\make.ps1 [--run|--run-only|--clean]"
+            $hasInvalidArg = $true
         }
     }
+}
+
+if ($hasInvalidArg) {
+    $showHelp = $true
+}
+
+if ($showHelp) {
+    if ($hasInvalidArg) {
+        Write-Error "Unsupported parameter provided."
+    }
+    Show-Help
+    if ($hasInvalidArg) {
+        exit 1
+    }
+    exit 0
+}
+
+$runAfterBuild = $requestRun
+
+if ($requestNoBuild) {
+    $doBuild = $false
+    $doVet = $false
+}
+elseif ($requestVet) {
+    $doBuild = $true
+    $doVet = $true
+}
+elseif ($requestBuild) {
+    $doBuild = $true
+    $doVet = $false
 }
 
 Test-RequiredCommand -commandName "julia" -installHint "Please install Julia to continue."
@@ -166,11 +249,29 @@ if ($doBuild) {
     Push-Location (Join-Path $scriptDir "src")
     try {
         Write-Host "Building Odin..."
-        & odin build main.odin -file "-out:../bin/euclid.exe" "-extra-linker-flags:$juliaLinkerFlags"
-        $buildExitCode = $LASTEXITCODE
-        Write-Host "Build exited $buildExitCode"
-        if ($buildExitCode -ne 0) {
-            exit $buildExitCode
+        if ($doVet) {
+            & odin build main.odin -file "-out:../bin/euclid.exe" "-extra-linker-flags:$juliaLinkerFlags" -vet -strict-style -disallow-do -warnings-as-errors
+            $buildExitCode = $LASTEXITCODE
+            Write-Host "Odin build exited $buildExitCode"
+            if ($buildExitCode -ne 0) {
+                exit $buildExitCode
+            }
+
+            Write-Host "Validating Julia..."
+            & julia -e 'Meta.parseall(read("julia/script.jl", String))'
+            $juliaValidationExitCode = $LASTEXITCODE
+            Write-Host "Julia validation exited $juliaValidationExitCode"
+            if ($juliaValidationExitCode -ne 0) {
+                exit $juliaValidationExitCode
+            }
+        }
+        else {
+            & odin build main.odin -file "-out:../bin/euclid.exe" "-extra-linker-flags:$juliaLinkerFlags"
+            $buildExitCode = $LASTEXITCODE
+            Write-Host "Build exited $buildExitCode"
+            if ($buildExitCode -ne 0) {
+                exit $buildExitCode
+            }
         }
     }
     finally {

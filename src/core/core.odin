@@ -23,48 +23,48 @@ TOOL_LENGTH :: 0.35
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
 
-EuclidJuliaAnimationInterface :: struct {
-    GetViewText : ^julialib.jl_value_t,
-    Initiate : ^julialib.jl_value_t, // initiate the animation type
-    Loop : ^julialib.jl_value_t, // ran each dt in the main window loop
-    Clean : ^julialib.jl_value_t, // stop and clear animations
+Euclid_Julia_Animation_Interface :: struct {
+    get_view_text : ^julialib.jl_value_t,
+    initiate : ^julialib.jl_value_t, // initiate the animation type
+    loop : ^julialib.jl_value_t, // ran each dt in the main window loop
+    clean : ^julialib.jl_value_t, // stop and clear animations
 
-    Name : string,
-    IsExpanded : bool,
-    IsSelected : bool,
+    name : string,
+    is_expanded : bool,
+    is_selected : bool,
 
-    FirstChildId : int,
-    ParentId : int,
-    NextSibling : int,
+    first_child_id : int,
+    parent_id : int,
+    next_sibling : int,
 }
 
-EuclidJuliaInterface :: struct {
-    InitScripts : ^julialib.jl_value_t,
-    GlobalLoop : ^julialib.jl_value_t,
-    AssetArchiveModTimeUnixNano: i64,
+Euclid_Julia_Interface :: struct {
+    init_scripts : ^julialib.jl_value_t,
+    global_loop : ^julialib.jl_value_t,
+    asset_archive_mod_time_unix_nano: i64,
 
-    NullAnimation : EuclidJuliaAnimationInterface,
+    null_animation : Euclid_Julia_Animation_Interface,
 
-    CurrentAnimation : ^EuclidJuliaAnimationInterface,
-    CurrentAnimationIndex : int,
-    SelectedAnimationIndex : int,
-    PendingAnimationReset : bool,
-    AnimationResetCooldownRemaining : f32,
+    current_animation : ^Euclid_Julia_Animation_Interface,
+    current_animation_index : int,
+    selected_animation_index : int,
+    pending_animation_reset : bool,
+    animation_reset_cooldown_remaining : f32,
 
-    Animations : [MAX_JULIA_INTERFACES]EuclidJuliaAnimationInterface,
-    NextAnimationIndex : int,
+    animations : [MAX_JULIA_INTERFACES]Euclid_Julia_Animation_Interface,
+    next_animation_index : int,
 }
 
-IsoScale :: struct {
-    Scale : f32,
-    XOffset : f32,
-    YOffset : f32,
+Iso_Scale :: struct {
+    scale : f32,
+    x_offset : f32,
+    y_offset : f32,
 
-    MainLightDir : Vector3,
-    UseDirectionalShadow : bool,
+    main_light_dir : Vector3,
+    use_directional_shadow : bool,
 }
 
-KineShapePointType :: enum {
+Kine_Shape_Point_Type :: enum {
     Label,
     Point,
     Line,
@@ -77,235 +77,235 @@ KineShapePointType :: enum {
     Compass,
 }
 
-KineShapePoint :: struct {
-    Type : KineShapePointType,
+Kine_Shape_Point :: struct {
+    kind : Kine_Shape_Point_Type,
 
-    Position : Maybe(Vector3),
-    Color : Maybe(rl.Color),
-    ActiveColor : Maybe(rl.Color),
-    BrushSize : f32,
-    Offset : f32,
-    Label : Maybe(rune),
+    position : Maybe(Vector3),
+    color : Maybe(rl.Color),
+    active_color : Maybe(rl.Color),
+    brush_size : f32,
+    offset : f32,
+    label : Maybe(rune),
 
-    ActiveChild: int,
-    ChildCount : int,
-    ChildPointHead : int,
-    NextChildPoint : int,
+    active_child: int,
+    child_count : int,
+    child_point_head : int,
+    next_child_point : int,
 
-    DoDraw : bool,
+    do_draw : bool,
 }
 
-KineConstraintTrait :: enum {
+Kine_Constraint_Trait :: enum {
     Distance = 1,
     Floor = (1 << 1),
     SnapToFloor = (1 << 2),
     SnapPoint = (1 << 3),
     MaxAngle = (1 << 4),
     MinAngle = (1 << 5),
-    CenterPivot = (1 << 6)
+    CenterPivot = (1 << 6),
 }
 
-KineConstraint :: struct {
-    Traits : KineConstraintTrait,
+Kine_Constraint :: struct {
+    traits : Kine_Constraint_Trait,
 
-    OnPoint : int,
-    Restriction : Vector3,
-    Bounce : f32,
-    Allowance : f32,
-    DependOn : i32,
-    ChildOffset : Maybe(i32),
+    on_point : int,
+    restriction : Vector3,
+    bounce : f32,
+    allowance : f32,
+    depend_on : i32,
+    child_offset : Maybe(i32),
 
-    DoApply : bool
+    do_apply : bool,
 }
 
-KineShapeCompass :: struct {
-    HostId : int,
-    Joint1Id : int,
-    PivotId : int,
-    Joint2Id : int,
+Kine_Shape_Compass :: struct {
+    host_id : int,
+    joint1_id : int,
+    pivot_id : int,
+    joint2_id : int,
 
-    CenterPivotId : int,
-    Limb1LengthId : int,
-    Limb2LengthId : int,
-    Point1FloorId : int,
-    PivotFloorId : int,
-    Point2FloorId : int,
-    LockPoint1Id : int,
-    LockPoint2Id : int,
+    center_pivot_id : int,
+    limb1_length_id : int,
+    limb2_length_id : int,
+    point1_floor_id : int,
+    pivot_floor_id : int,
+    point2_floor_id : int,
+    lock_point1_id : int,
+    lock_point2_id : int,
 }
 
-KineShapePen :: struct {
-    HostId : int,
-    Joint1Id : int,
-    Joint2Id : int,
+Kine_Shape_Pen :: struct {
+    host_id : int,
+    joint1_id : int,
+    joint2_id : int,
 
-    LengthConstraintId : int,
-    Point1FloorId : int,
-    Point2FloorId : int,
-    LockPoint1Id : int,
-    LockPoint2Id : int,
+    length_constraint_id : int,
+    point1_floor_id : int,
+    point2_floor_id : int,
+    lock_point1_id : int,
+    lock_point2_id : int,
 }
 
-KineShapeLine :: struct {
-    HostId : int,
-    Joint1Id : int,
-    Joint2Id : int,
+Kine_Shape_Line :: struct {
+    host_id : int,
+    joint1_id : int,
+    joint2_id : int,
 }
 
-KineShapeCircle :: struct {
-    HostId : int,
-    StartId : int,
-    EndId : int,
+Kine_Shape_Circle :: struct {
+    host_id : int,
+    start_id : int,
+    end_id : int,
 }
 
-KineShapeFilledCircle :: struct {
-    HostId : int,
-    StartId : int,
-    EndId : int,
+Kine_Shape_Filled_Circle :: struct {
+    host_id : int,
+    start_id : int,
+    end_id : int,
 }
 
-KineShapeTriangle :: struct {
-    HostId : int,
-    Joint1Id : int,
-    Joint2Id : int,
-    Joint3Id : int,
+Kine_Shape_Triangle :: struct {
+    host_id : int,
+    joint1_id : int,
+    joint2_id : int,
+    joint3_id : int,
 }
 
-KineShapeSquare :: struct {
-    HostId : int,
-    Joint1Id : int,
-    Joint2Id : int,
-    Joint3Id : int,
-    Joint4Id : int,
+Kine_Shape_Square :: struct {
+    host_id : int,
+    joint1_id : int,
+    joint2_id : int,
+    joint3_id : int,
+    joint4_id : int,
 }
 
-KineShapePentagon :: struct {
-    HostId : int,
-    Joint1Id : int,
-    Joint2Id : int,
-    Joint3Id : int,
-    Joint4Id : int,
-    Joint5Id : int,
+Kine_Shape_Pentagon :: struct {
+    host_id : int,
+    joint1_id : int,
+    joint2_id : int,
+    joint3_id : int,
+    joint4_id : int,
+    joint5_id : int,
 }
 
-KineDrawBase :: struct {
-    Type: KineShapePointType,
-    SourceIndex: int,
-    BrushSize: f32,
-    Color: rl.Color,
-    ActiveColor: rl.Color,
-    HasActiveColor: bool,
-    ActiveChild: int,
+Kine_Draw_Base :: struct {
+    kind: Kine_Shape_Point_Type,
+    source_index: int,
+    brush_size: f32,
+    color: rl.Color,
+    active_color: rl.Color,
+    has_active_color: bool,
+    active_child: int,
 }
 
-KineLabelDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
-    Label: rune,
+Kine_Label_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
+    label: rune,
 }
 
-KinePointDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
+Kine_Point_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
 }
 
-KineLineDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
-    Point2: Vector3,
+Kine_Line_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
+    point2: Vector3,
 }
 
-KineCircleDraw :: struct {
-    using Base: KineDrawBase,
-    Center: Vector3,
-    Start: Vector3,
-    End: Vector3,
-    Offset: f32,
+Kine_Circle_Draw :: struct {
+    using base: Kine_Draw_Base,
+    center: Vector3,
+    start: Vector3,
+    end: Vector3,
+    offset: f32,
 }
 
-KineFilledCircleDraw :: struct {
-    using Base: KineDrawBase,
-    Center: Vector3,
-    Start: Vector3,
-    End: Vector3,
+Kine_Filled_Circle_Draw :: struct {
+    using base: Kine_Draw_Base,
+    center: Vector3,
+    start: Vector3,
+    end: Vector3,
 }
 
-KineTriangleDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
-    Point2: Vector3,
-    Point3: Vector3,
+Kine_Triangle_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
+    point2: Vector3,
+    point3: Vector3,
 }
 
-KineSquareDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
-    Point2: Vector3,
-    Point3: Vector3,
-    Point4: Vector3,
+Kine_Square_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
+    point2: Vector3,
+    point3: Vector3,
+    point4: Vector3,
 }
 
-KinePentagonDraw :: struct {
-    using Base: KineDrawBase,
-    Point1: Vector3,
-    Point2: Vector3,
-    Point3: Vector3,
-    Point4: Vector3,
-    Point5: Vector3,
+Kine_Pentagon_Draw :: struct {
+    using base: Kine_Draw_Base,
+    point1: Vector3,
+    point2: Vector3,
+    point3: Vector3,
+    point4: Vector3,
+    point5: Vector3,
 }
 
-KinePenDraw :: struct {
-    using Base: KineDrawBase,
-    Joint1: Vector3,
-    Joint2: Vector3,
+Kine_Pen_Draw :: struct {
+    using base: Kine_Draw_Base,
+    joint1: Vector3,
+    joint2: Vector3,
 }
 
-KineCompassDraw :: struct {
-    using Base: KineDrawBase,
-    Joint1: Vector3,
-    Pivot: Vector3,
-    Joint2: Vector3,
+Kine_Compass_Draw :: struct {
+    using base: Kine_Draw_Base,
+    joint1: Vector3,
+    pivot: Vector3,
+    joint2: Vector3,
 }
 
-KineDrawCacheItem :: union {
-    KineLabelDraw,
-    KinePointDraw,
-    KineLineDraw,
-    KineCircleDraw,
-    KineFilledCircleDraw,
-    KineTriangleDraw,
-    KineSquareDraw,
-    KinePentagonDraw
+Kine_Draw_Cache_Item :: union {
+    Kine_Label_Draw,
+    Kine_Point_Draw,
+    Kine_Line_Draw,
+    Kine_Circle_Draw,
+    Kine_Filled_Circle_Draw,
+    Kine_Triangle_Draw,
+    Kine_Square_Draw,
+    Kine_Pentagon_Draw,
 }
 
-KineDrawCache :: struct {
-    Items: [MAX_KINEPOINTS]KineDrawCacheItem,
-    ItemCount: int,
+Kine_Draw_Cache :: struct {
+    items: [MAX_KINEPOINTS]Kine_Draw_Cache_Item,
+    item_count: int,
 
-    Pen: KinePenDraw,
-    DrawPen: bool,
-    Compass: KineCompassDraw,
-    DrawCompass: bool,
+    pen: Kine_Pen_Draw,
+    draw_pen: bool,
+    compass: Kine_Compass_Draw,
+    draw_compass: bool,
 }
 
-KinePointSystem :: struct {
-    DrawCache : KineDrawCache,
+Kine_Point_System :: struct {
+    draw_cache : Kine_Draw_Cache,
 
-    PreviousVectors : [MAX_KINEPOINTS]Maybe(Vector3),
-    Points : [MAX_KINEPOINTS]KineShapePoint,
-    Constraints : [MAX_KINECONSTRAINTS]KineConstraint,
-    NextPointIndex : int,
-    NextConstraintIndex : int,
+    previous_vectors : [MAX_KINEPOINTS]Maybe(Vector3),
+    points : [MAX_KINEPOINTS]Kine_Shape_Point,
+    constraints : [MAX_KINECONSTRAINTS]Kine_Constraint,
+    next_point_index : int,
+    next_constraint_index : int,
 
-    AnimPointsStart : int,
-    AnimConstraintsStart : int,
+    anim_points_start : int,
+    anim_constraints_start : int,
 }
 
 
 
 
 
-ParticleType :: enum u8 {
+Particle_Type :: enum u8 {
     Trail,
     Flicker,
     BurnOut,
@@ -313,61 +313,62 @@ ParticleType :: enum u8 {
 }
 
 Particle :: struct {
-    Type : ParticleType,
+    kind : Particle_Type,
 
-    Position : Vector3,
-    Velocities : Vector3,
+    position : Vector3,
+    velocities : Vector3,
 
-    Age : f32,
-    Life : f32,
-    Size : f32,
-    Color : rl.Color,
-    Alive : bool,
-    LitFrames : i16,
+    age : f32,
+    life : f32,
+    size : f32,
+    color : rl.Color,
+    alive : bool,
+    lit_frames : i16,
 }
 
-ParticleSystem :: struct {
-    LowParticles : [MAX_LOW_PARTICLES]Particle,
-    Particles : [MAX_PARTICLES]Particle,
-    HighParticles : [MAX_PARTICLES]Particle,
-    NextIndex : int,
-    SpawnTimer : f32,
+Particle_System :: struct {
+    low_particles : [MAX_LOW_PARTICLES]Particle,
+    particles : [MAX_PARTICLES]Particle,
+    high_particles : [MAX_PARTICLES]Particle,
+    next_index : int,
+    spawn_timer : f32,
 
-    LastRenderLow : int,
-    LastRenderMid : int,
-    LastRenderHigh : int,
+    last_render_low : int,
+    last_render_mid : int,
+    last_render_high : int,
 
-    UseMaxDustParticles : int,
+    use_max_dust_particles : int,
 }
 
 
-EuclidDrawingSurface :: struct {
-    Zeros : Vector3,
-    RightUp : Vector3,
-    LeftDown : Vector3,
-    RightDown : Vector3,
 
-    Color : rl.Color,
-    EdgeColor : rl.Color,
+Euclid_Drawing_Surface :: struct {
+    zeros : Vector3,
+    right_up : Vector3,
+    left_down : Vector3,
+    right_down : Vector3,
 
-    EdgeSize : f32
+    color : rl.Color,
+    edge_color : rl.Color,
+
+    edge_size : f32,
 }
 
-Stroke3DRenderState :: struct {
-    Shader: rl.Shader,
-    Ready: bool,
-    LocLightDir: i32,
-    LocAmbient: i32,
-    LocDiffuse: i32,
-    LocSpecularStrength: i32,
-    LocSpecularPower: i32,
-    LocP0: i32,
-    LocP1: i32,
-    LocRadius: i32,
-    LocViewportHeight: i32,
+Stroke3D_Render_State :: struct {
+    shader: rl.Shader,
+    ready: bool,
+    loc_light_dir: i32,
+    loc_ambient: i32,
+    loc_diffuse: i32,
+    loc_specular_strength: i32,
+    loc_specular_power: i32,
+    loc_p0: i32,
+    loc_p1: i32,
+    loc_radius: i32,
+    loc_viewport_height: i32,
 }
 
-GifCapturePhase :: enum {
+Gif_Capture_Phase :: enum {
     Idle,
     Armed,
     Recording,
@@ -376,102 +377,100 @@ GifCapturePhase :: enum {
     Error,
 }
 
-
-GifEncodeResult :: struct {
-    Data: []u8,
-    DataSize: int,
+Gif_Encode_Result :: struct {
+    data: []u8,
+    data_size: int,
 }
 
-GifEncodeFrame :: struct {
-    Pixels: []u32,
-    Depth: int,
-    Count: int,
-    RBits: int,
-    GBits: int,
-    BBits: int,
-    IsCooked: bool,
+Gif_Encode_Frame :: struct {
+    pixels: []u32,
+    depth: int,
+    count: int,
+    r_bits: int,
+    g_bits: int,
+    b_bits: int,
+    is_cooked: bool,
 }
 
-GifEncodeBuffer :: struct {
-    Next: ^GifEncodeBuffer,
-    Size: int,
-    Data: []u8,
+Gif_Encode_Buffer :: struct {
+    next: ^Gif_Encode_Buffer,
+    size: int,
+    data: []u8,
 }
 
-GifEncodeState :: struct {
-    PreviousFrame: GifEncodeFrame,
-    CurrentFrame: GifEncodeFrame,
+Gif_Encode_State :: struct {
+    previous_frame: Gif_Encode_Frame,
+    current_frame: Gif_Encode_Frame,
 
-    LzwMem: []i16,
-    TlbMem: []u8,
-    UsedMem: []u8,
+    lzw_mem: []i16,
+    tlb_mem: []u8,
+    used_mem: []u8,
 
-    ListHead: ^GifEncodeBuffer,
-    ListTail: ^GifEncodeBuffer,
+    list_head: ^Gif_Encode_Buffer,
+    list_tail: ^Gif_Encode_Buffer,
 
-    Width: int,
-    Height: int,
-    AlphaThreshold: int,
-    UseBGRA: bool,
+    width: int,
+    height: int,
+    alpha_threshold: int,
+    use_bgra: bool,
 
-    FramesSubmitted: int,
+    frames_submitted: int,
 }
 
-GifCaptureSession :: struct {
-    Encoder: GifEncodeState,
-    Active: bool,
+Gif_Capture_Session :: struct {
+    encoder: Gif_Encode_State,
+    active: bool,
 }
 
-EuclidUIRuntimeState :: struct {
-    TreeScrollY: f32,
-    ViewTextScrollY: f32,
+Euclid_UI_Runtime_State :: struct {
+    tree_scroll_y: f32,
+    view_text_scroll_y: f32,
 
-    TreeScrollDragging: bool,
-    TreeScrollDragOff: f32,
+    tree_scroll_dragging: bool,
+    tree_scroll_drag_off: f32,
 
-    ShowTreeSettings: bool,
-    SettingsSliderDragging: bool,
-    SettingsSliderDragOffsetX: f32,
+    show_tree_settings: bool,
+    settings_slider_dragging: bool,
+    settings_slider_drag_offset_x: f32,
 
-    TextScrollDragging: bool,
-    TextScrollDragOff: f32,
+    text_scroll_dragging: bool,
+    text_scroll_drag_off: f32,
 
-    DisplayFPS : bool,
+    display_fps : bool,
 
-    SaveGifRequested: bool,
-    GifDownsampleFactor: int,
-    GifFrameStep: int,
-    GifCapturePhase: GifCapturePhase,
-    GifCaptureFrameCounter: int,
-    GifCapturedFrames: int,
-    LastGifPath: [260]u8,
-    LastGifPathLen: int,
+    save_gif_requested: bool,
+    gif_downsample_factor: int,
+    gif_frame_step: int,
+    gif_capture_phase: Gif_Capture_Phase,
+    gif_capture_frame_counter: int,
+    gif_captured_frames: int,
+    last_gif_path: [260]u8,
+    last_gif_path_len: int,
 }
 
-EuclidGeneralState :: struct {
-    SavedContext : runtime.Context,
+Euclid_General_State :: struct {
+    saved_context : runtime.Context,
 
-    IsoScale : ^IsoScale,
+    iso_scale : ^Iso_Scale,
 
-    DrawSurface : ^EuclidDrawingSurface,
+    draw_surface : ^Euclid_Drawing_Surface,
 
-    JuliaInterface : ^EuclidJuliaInterface,
-    PointSystem : ^KinePointSystem,
-    ParticleSystem : ^ParticleSystem,
-    Compass : KineShapeCompass,
-    Pen : KineShapePen,
+    julia_interface : ^Euclid_Julia_Interface,
+    point_system : ^Kine_Point_System,
+    particle_system : ^Particle_System,
+    compass : Kine_Shape_Compass,
+    pen : Kine_Shape_Pen,
 
-    Stroke3D: Stroke3DRenderState,
-    UIRuntime: EuclidUIRuntimeState,
-    GifCapture: GifCaptureSession,
-    Font: rl.Font,
-    Icon: Maybe(rl.Image),
+    stroke_3d: Stroke3D_Render_State,
+    ui_runtime: Euclid_UI_Runtime_State,
+    gif_capture: Gif_Capture_Session,
+    font: rl.Font,
 
-    CycleBoundaryGeneration: u64,
-    ConsumedCycleBoundaryGeneration: u64,
+    cycle_boundary_generation: u64,
+    consumed_cycle_boundary_generation: u64,
 
-    CurrentDeltaTime : f32,
-    Accumulator : f32,
+    current_delta_time : f32,
+    accumulator : f32,
 
-    AnimMetadata : [MAX_METAVALUES]f32,
+    anim_metadata : [MAX_METAVALUES]f32,
 }
