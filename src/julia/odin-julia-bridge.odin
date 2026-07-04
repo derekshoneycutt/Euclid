@@ -125,7 +125,6 @@ Bridge_Solve_Result :: struct {
     converged: u8,
 }
 
-// Summary:
 //   Register Julia callbacks that define the null/default animation behavior.
 //
 // Parameters:
@@ -145,7 +144,6 @@ set_null_animations :: proc "c" (
     state^.julia_interface^.null_animation.clean = clean
 }
 
-// Summary:
 //   Register a top-level animation interface entry in the Julia animation registry.
 //
 // Parameters:
@@ -182,7 +180,6 @@ add_root_animation_interface :: proc "c" (
     return newIndex
 }
 
-// Summary:
 //   Register a child animation interface and link it under an existing parent animation.
 //
 // Parameters:
@@ -239,7 +236,6 @@ add_child_animation_interface :: proc "c" (
     return newIndex
 }
 
-// Summary:
 //   Create a new label shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -294,7 +290,6 @@ create_new_label :: proc "c" (
     }
 }
 
-// Summary:
 //   Create a new point shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -348,7 +343,6 @@ create_new_point :: proc "c" (
     }
 }
 
-// Summary:
 //   Create a new line shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -373,7 +367,6 @@ create_new_line :: proc "c" (
     return line
 }
 
-// Summary:
 //   Create a new circle shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -401,7 +394,6 @@ create_new_circle :: proc "c" (
     return circle
 }
 
-// Summary:
 //   Create a new filledcircle shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -429,7 +421,6 @@ create_new_filledcircle :: proc "c" (
     return circle
 }
 
-// Summary:
 //   Create a new triangle shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -454,7 +445,6 @@ create_new_triangle :: proc "c" (
     return line
 }
 
-// Summary:
 //   Create a new square shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -480,7 +470,6 @@ create_new_square :: proc "c" (
     return line
 }
 
-// Summary:
 //   Create a new pentagon shape in the kine system for Julia-driven animation state.
 //
 // Parameters:
@@ -508,7 +497,6 @@ create_new_pentagon :: proc "c" (
     return line
 }
 
-// Summary:
 //   Build a bridge-safe snapshot of a point entry and its optional fields.
 //
 // Parameters:
@@ -607,7 +595,6 @@ get_point_view :: proc "c" (
 }
 
 
-// Summary:
 //   Enable drawing for a point host index when the index is in range.
 //
 // Parameters:
@@ -620,7 +607,6 @@ show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
     }
 }
 
-// Summary:
 //   Update point draw visibility and emit related visual effects where applicable.
 //
 // Parameters:
@@ -635,7 +621,6 @@ hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
     }
 }
 
-// Summary:
 //   Update point draw visibility and emit related visual effects where applicable.
 //
 // Parameters:
@@ -658,7 +643,6 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
     }
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -672,7 +656,6 @@ set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, p
     }
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -686,7 +669,6 @@ set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brus
     }
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -701,7 +683,6 @@ set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, colo
     }
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -716,7 +697,6 @@ set_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: in
     }
 }
 
-// Summary:
 //   Mark that an animation cycle boundary occurred so host-side systems can consume it once.
 //
 // Parameters:
@@ -727,7 +707,6 @@ notify_animation_cycle_boundary :: proc "c" (state: ^core.Euclid_General_State) 
     notify_animation_cycle_boundary_local(state)
 }
 
-// Summary:
 //   Return the bridge ABI version expected by Julia-side integration code.
 //
 // Returns:
@@ -737,7 +716,6 @@ get_bridge_version :: proc "c" () -> i32 {
     return BRIDGE_VERSION
 }
 
-// Summary:
 //   Return bridge feature flags that advertise optional ABI capabilities.
 //
 // Returns:
@@ -747,7 +725,6 @@ get_bridge_feature_flags :: proc "c" () -> i32 {
     return BRIDGE_FEATURE_FLAGS
 }
 
-// Summary:
 //   Return compile-time capacity limits exposed by the bridge ABI.
 //
 // Returns:
@@ -757,7 +734,6 @@ get_point_capacity :: proc "c" () -> i32 {
     return i32(MAX_KINEPOINTS)
 }
 
-// Summary:
 //   Return the next allocation index in the active runtime system for incremental creation.
 //
 // Parameters:
@@ -770,7 +746,6 @@ get_point_next_index :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     return i32(state^.point_system^.next_point_index)
 }
 
-// Summary:
 //   Report whether an index is currently within the valid bridge addressable range.
 //
 // Parameters:
@@ -786,7 +761,6 @@ is_point_index_in_range :: proc "c" (state: ^core.Euclid_General_State, index: i
     return to_u8(is_point_index_in_bounds(int(index)))
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -814,7 +788,6 @@ set_point_draw_enabled :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -842,7 +815,6 @@ set_point_position_status :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -866,7 +838,6 @@ clear_point_position :: proc "c" (state: ^core.Euclid_General_State, index: i32)
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -895,7 +866,6 @@ set_point_color_status :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -919,7 +889,6 @@ clear_point_color :: proc "c" (state: ^core.Euclid_General_State, index: i32) ->
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -948,7 +917,6 @@ set_point_active_color_status :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -972,7 +940,6 @@ clear_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: 
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -1000,7 +967,6 @@ set_point_brush_size :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Mutate point presentation/state fields through the bridge with index validation and status reporting.
 //
 // Parameters:
@@ -1028,7 +994,6 @@ set_point_offset :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Manage and validate parent-child point chain topology used by composite kine shapes.
 //
 // Parameters:
@@ -1099,7 +1064,6 @@ attach_child_point :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Manage and validate parent-child point chain topology used by composite kine shapes.
 //
 // Parameters:
@@ -1168,7 +1132,6 @@ detach_child_point :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Manage and validate parent-child point chain topology used by composite kine shapes.
 //
 // Parameters:
@@ -1213,7 +1176,6 @@ rebuild_child_count :: proc "c" (state: ^core.Euclid_General_State, parentIndex:
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Manage and validate parent-child point chain topology used by composite kine shapes.
 //
 // Parameters:
@@ -1270,7 +1232,6 @@ validate_parent_child_chain :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Return compile-time capacity limits exposed by the bridge ABI.
 //
 // Returns:
@@ -1280,7 +1241,6 @@ get_constraint_capacity :: proc "c" () -> i32 {
     return i32(MAX_KINECONSTRAINTS)
 }
 
-// Summary:
 //   Return the next allocation index in the active runtime system for incremental creation.
 //
 // Parameters:
@@ -1293,7 +1253,6 @@ get_constraint_next_index :: proc "c" (state: ^core.Euclid_General_State) -> i32
     return i32(state^.point_system^.next_constraint_index)
 }
 
-// Summary:
 //   Report whether an index is currently within the valid bridge addressable range.
 //
 // Parameters:
@@ -1312,7 +1271,6 @@ is_constraint_index_in_range :: proc "c" (
     return to_u8(is_constraint_index_in_bounds(int(index)))
 }
 
-// Summary:
 //   Build a bridge-safe snapshot of a constraint entry and its optional child offset field.
 //
 // Parameters:
@@ -1350,7 +1308,6 @@ get_constraint_view :: proc "c" (
     }
 }
 
-// Summary:
 //   Create or mutate constraint records through validated bridge operations.
 //
 // Parameters:
@@ -1412,7 +1369,6 @@ create_constraint :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Create or mutate constraint records through validated bridge operations.
 //
 // Parameters:
@@ -1484,7 +1440,6 @@ update_constraint :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Create or mutate constraint records through validated bridge operations.
 //
 // Parameters:
@@ -1512,7 +1467,6 @@ set_constraint_enabled :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Create or mutate constraint records through validated bridge operations.
 //
 // Parameters:
@@ -1537,7 +1491,6 @@ clear_constraint :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> 
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Expose constraint error measurements from the solver for Julia-side control logic.
 //
 // Parameters:
@@ -1552,7 +1505,6 @@ get_total_constraint_error_bridge :: proc "c" (
     return kine.get_total_constraint_error(state^.point_system)
 }
 
-// Summary:
 //   Expose constraint error measurements from the solver for Julia-side control logic.
 //
 // Parameters:
@@ -1581,7 +1533,6 @@ get_constraint_error_bridge :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Run constraint solver work through the bridge and report convergence/status outcomes.
 //
 // Parameters:
@@ -1609,7 +1560,6 @@ apply_constraint_bridge :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Run constraint solver work through the bridge and report convergence/status outcomes.
 //
 // Parameters:
@@ -1635,7 +1585,6 @@ apply_all_constraints_bridge :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Run constraint solver work through the bridge and report convergence/status outcomes.
 //
 // Parameters:
@@ -1712,7 +1661,6 @@ solve_constraints_to_error :: proc "c" (
     }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1748,7 +1696,6 @@ get_shape_line_view :: proc "c" (
     return core.Kine_Shape_Line{ host, p1, p2 }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1784,7 +1731,6 @@ get_shape_circle_view :: proc "c" (
     return core.Kine_Shape_Circle{ host, start, finish }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1820,7 +1766,6 @@ get_shape_filledcircle_view :: proc "c" (
     return core.Kine_Shape_Filled_Circle{ host, start, finish }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1860,7 +1805,6 @@ get_shape_triangle_view :: proc "c" (
     return core.Kine_Shape_Triangle{ host, p1, p2, p3 }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1904,7 +1848,6 @@ get_shape_square_view :: proc "c" (
     return core.Kine_Shape_Square{ host, p1, p2, p3, p4 }
 }
 
-// Summary:
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
 //
 // Parameters:
@@ -1952,7 +1895,6 @@ get_shape_pentagon_view :: proc "c" (
     return core.Kine_Shape_Pentagon{ host, p1, p2, p3, p4, p5 }
 }
 
-// Summary:
 //   Return the current tool shape handle used by bridge-controlled interactions.
 //
 // Parameters:
@@ -1965,7 +1907,6 @@ get_pen_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Shape_
     return state^.pen
 }
 
-// Summary:
 //   Return the current tool shape handle used by bridge-controlled interactions.
 //
 // Parameters:
@@ -1978,7 +1919,6 @@ get_compass_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Sh
     return state^.compass
 }
 
-// Summary:
 //   Expose and maintain animation-boundary bookkeeping for points, constraints, and graph validity.
 //
 // Parameters:
@@ -1991,7 +1931,6 @@ get_kine_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i3
     return i32(state^.point_system^.anim_points_start)
 }
 
-// Summary:
 //   Expose and maintain animation-boundary bookkeeping for points, constraints, and graph validity.
 //
 // Parameters:
@@ -2004,7 +1943,6 @@ get_kine_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) 
     return i32(state^.point_system^.anim_constraints_start)
 }
 
-// Summary:
 //   Expose and maintain animation-boundary bookkeeping for points, constraints, and graph validity.
 //
 // Parameters:
@@ -2019,7 +1957,6 @@ freeze_kine_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Expose and maintain animation-boundary bookkeeping for points, constraints, and graph validity.
 //
 // Parameters:
@@ -2034,7 +1971,6 @@ clear_kine_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32
     return BRIDGE_STATUS_OK
 }
 
-// Summary:
 //   Return compile-time capacity limits exposed by the bridge ABI.
 //
 // Returns:
@@ -2044,7 +1980,6 @@ get_max_kine_points :: proc "c" () -> i32 {
     return i32(MAX_KINEPOINTS)
 }
 
-// Summary:
 //   Return compile-time capacity limits exposed by the bridge ABI.
 //
 // Returns:
@@ -2054,7 +1989,6 @@ get_max_kine_constraints :: proc "c" () -> i32 {
     return i32(MAX_KINECONSTRAINTS)
 }
 
-// Summary:
 //   Expose and maintain animation-boundary bookkeeping for points, constraints, and graph validity.
 //
 // Parameters:
@@ -2095,7 +2029,6 @@ validate_kine_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
 }
 
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2108,7 +2041,6 @@ show_pen :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2121,7 +2053,6 @@ hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2140,7 +2071,6 @@ set_pen_active :: proc "c" (
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2155,7 +2085,6 @@ clear_pen_active :: proc "c" (
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2176,7 +2105,6 @@ lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2189,7 +2117,6 @@ unlock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2205,7 +2132,6 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2222,7 +2148,6 @@ get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
     return {0, 0, 0}
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2243,7 +2168,6 @@ lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2256,7 +2180,6 @@ unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2272,7 +2195,6 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2289,7 +2211,6 @@ get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
     return {0, 0, 0}
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2302,7 +2223,6 @@ show_compass :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2315,7 +2235,6 @@ hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2334,7 +2253,6 @@ set_compass_active :: proc "c" (
     }
 }
 
-// Summary:
 //   Control pen/compass tool visibility and active marker state for interactive animation steps.
 //
 // Parameters:
@@ -2349,7 +2267,6 @@ clear_compass_active :: proc "c" (
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2382,7 +2299,6 @@ lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2395,7 +2311,6 @@ unlock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2423,7 +2338,6 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2440,7 +2354,6 @@ get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> c
     return {0, 0, 0}
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2473,7 +2386,6 @@ lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2486,7 +2398,6 @@ unlock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2514,7 +2425,6 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     }
 }
 
-// Summary:
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -2531,7 +2441,6 @@ get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> c
     return {0, 0, 0}
 }
 
-// Summary:
 //   Set or read animation metadata slots used for lightweight Julia-to-host state exchange.
 //
 // Parameters:
@@ -2545,7 +2454,6 @@ set_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int, met
     }
 }
 
-// Summary:
 //   Set or read animation metadata slots used for lightweight Julia-to-host state exchange.
 //
 // Parameters:
@@ -2562,7 +2470,6 @@ get_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int) -> 
     return 0
 }
 
-// Summary:
 //   Emit bridge-triggered particle effects using the host particle system at the requested position.
 //
 // Parameters:
@@ -2579,7 +2486,6 @@ emit_trailing_particle :: proc "c" (
         state^.particle_system, state^.current_delta_time, pos.x, pos.y, rlColor)
 }
 
-// Summary:
 //   Emit bridge-triggered particle effects using the host particle system at the requested position.
 //
 // Parameters:

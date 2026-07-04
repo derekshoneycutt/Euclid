@@ -63,7 +63,6 @@ Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
 
-// Summary:
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
 // Notes:
@@ -98,7 +97,6 @@ run_window_loop :: proc() {
 
 
 
-// Summary:
 //   Allocate and initialize persistent runtime state for simulation and rendering.
 //
 // Notes:
@@ -161,7 +159,6 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     return state
 }
 
-// Summary:
 //   Release runtime state allocations and finalize Julia/GIF runtime resources.
 //
 // Notes:
@@ -177,7 +174,6 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     free(state)
 }
 
-// Summary:
 //   Initialize window, shader/font resources, and GUI style settings.
 //
 // Notes:
@@ -245,7 +241,6 @@ initiate_window :: proc(state : ^Euclid_General_State) {
         i32(rl.ColorToInt(UI_TEXT_COLOR)))
 }
 
-// Summary:
 //   Shutdown render resources, unload font/shader, and close the window.
 //
 // Notes:
@@ -256,7 +251,6 @@ close_window :: proc(state : ^Euclid_General_State) {
     rl.CloseWindow()
 }
 
-// Summary:
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     frame_dt := rl.GetFrameTime()
@@ -287,7 +281,6 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     return alpha
 }
 
-// Summary:
 //   Render one full frame including world, particles, UI panels, and capture step.
 draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     rl.ClearBackground(BACKGROUND_COLOR)

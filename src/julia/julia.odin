@@ -17,7 +17,6 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
-// Summary:
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
 //
 // Notes:
@@ -29,7 +28,6 @@ initiate_julia :: proc() {
     _ = include_packaged_script(true)
 }
 
-// Summary:
 //   Shut down the Julia runtime and flush Julia-side teardown hooks.
 //
 // Notes:
@@ -38,7 +36,6 @@ end_julia :: proc() {
     julialib.jl_atexit_hook(0)
 }
 
-// Summary:
 //   Allocate and initialize the host-side Julia interface handle table.
 //
 // Returns:
@@ -62,7 +59,6 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
     return ret
 }
 
-// Summary:
 //   Release owned animation-name strings registered in the Julia interface table.
 //
 // Parameters:
@@ -77,7 +73,6 @@ clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
 // Parameters:
@@ -105,7 +100,6 @@ init_euclid_scripts :: proc(
     }
 }
 
-// Summary:
 //  Perform a single animation frame update for the julia system, including
 //  updating the state, hot-reloading julia code and assets, etc. as required.
 //
@@ -123,7 +117,6 @@ perform_animation_frame :: proc(
     call_current_animation_loop(state, dt)
 }
 
-// Summary:
 //   Fetch UI view text from the active Julia animation callback.
 //
 // Parameters:
@@ -158,7 +151,6 @@ call_current_animation_get_view_text :: proc(
 
 
 
-// Summary:
 //   Update animation lifecycle state, hot-reload assets if changed, and process animation switches/resets.
 //
 // Parameters:
@@ -206,7 +198,6 @@ update_running_animations :: proc(
     }
 }
 
-// Summary:
 //   Execute the Julia global loop callback for one simulation step.
 //
 // Parameters:
@@ -228,7 +219,6 @@ call_global_euclid_loop :: proc(
     }
 }
 
-// Summary:
 //   Execute the currently selected Julia animation loop callback for one simulation step.
 //
 // Parameters:
@@ -255,7 +245,6 @@ call_current_animation_loop :: proc(
     }
 }
 
-// Summary:
 //   Switch to a selected animation, cleaning previous state and initializing the new loop.
 //
 // Notes:
@@ -300,7 +289,6 @@ change_current_animation_loop :: proc(
     state^.julia_interface^.current_animation_index = newIndex
 }
 
-// Summary:
 //   Restart the currently selected animation by running clean then initiate callbacks.
 //
 // Notes:
@@ -335,7 +323,6 @@ reset_current_animation_loop :: proc(
     }
 }
 
-// Summary:
 //   Resolve Julia Main module handle used for bridge function lookup.
 resolve_main_module :: proc() -> ^julialib.jl_module_t {
     main_value := julialib.jl_eval_string("Main")
@@ -345,7 +332,6 @@ resolve_main_module :: proc() -> ^julialib.jl_module_t {
     return (^julialib.jl_module_t)(main_value)
 }
 
-// Summary:
 //   Resolve Julia Base module handle used for exception formatting.
 resolve_base_module :: proc() -> ^julialib.jl_module_t {
     base_value := julialib.jl_eval_string("base")
@@ -355,7 +341,6 @@ resolve_base_module :: proc() -> ^julialib.jl_module_t {
     return (^julialib.jl_module_t)(base_value)
 }
 
-// Summary:
 //   Include the packaged Julia entry script through Main.include and report failures.
 //
 // Notes:
@@ -406,7 +391,6 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     return true
 }
 
-// Summary:
 //   Refresh cached Julia callback handles after script reload.
 refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
     main_module := resolve_main_module()
@@ -418,7 +402,6 @@ refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
 }
 
-// Summary:
 //   Clear animation registry state and reset interface selection fields to defaults.
 reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     clean_julia_interfaces(state)
@@ -432,7 +415,6 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.next_animation_index = 0
 }
 
-// Summary:
 //   Find an animation index by its registered name.
 find_animation_index_by_name :: proc(state: ^core.Euclid_General_State, name: string) -> int {
     if len(name) == 0 {
@@ -448,7 +430,6 @@ find_animation_index_by_name :: proc(state: ^core.Euclid_General_State, name: st
     return -1
 }
 
-// Summary:
 //   Restore the current animation selection after a successful script reload.
 restore_current_animation_after_reload :: proc(state: ^core.Euclid_General_State, animation_name: string) {
     restored_index := find_animation_index_by_name(state, animation_name)
@@ -460,7 +441,6 @@ restore_current_animation_after_reload :: proc(state: ^core.Euclid_General_State
     change_current_animation_loop(state, restored_index)
 }
 
-// Summary:
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
 //
 // Notes:
@@ -504,25 +484,21 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
     restore_current_animation_after_reload(state, current_animation_name)
 }
 
-// Summary:
 //   Return whether a point index is within runtime point capacity bounds.
 is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
     return index >= 0 && index < MAX_KINEPOINTS
 }
 
-// Summary:
 //   Return whether a constraint index is within runtime constraint capacity bounds.
 is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
     return index >= 0 && index < MAX_KINECONSTRAINTS
 }
 
-// Summary:
 //   Validate that a constraint trait bitmask contains only supported trait flags.
 is_valid_constraint_traits_mask :: #force_inline proc(mask: i32) -> bool {
     return mask != 0 && (mask & ~KINE_CONSTRAINT_VALID_MASK) == 0
 }
 
-// Summary:
 //   Convert a boolean value to C-ABI friendly u8 representation.
 to_u8 :: #force_inline proc(v: bool) -> u8 {
     if v {
@@ -531,7 +507,6 @@ to_u8 :: #force_inline proc(v: bool) -> u8 {
     return 0
 }
 
-// Summary:
 //   Build an invalid/sentinel constraint view result for failed lookups.
 constraint_view_invalid :: #force_inline proc() -> Bridge_Constraint_View {
     return Bridge_Constraint_View{
@@ -549,7 +524,6 @@ constraint_view_invalid :: #force_inline proc() -> Bridge_Constraint_View {
     }
 }
 
-// Summary:
 //   Emit floor-contact dust when a point is close to the drawing plane.
 push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.Vector3) {
     if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
@@ -557,7 +531,6 @@ push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.
     }
 }
 
-// Summary:
 //   Emit sampled floor-contact dust along the active compass segment.
 //
 // Notes:
@@ -588,7 +561,6 @@ push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.Euclid_Gener
     }
 }
 
-// Summary:
 //   Print Julia exception type/message details for a named bridge context.
 //
 // Notes:
@@ -629,7 +601,6 @@ print_julia_exception :: proc(contextOfErr: string) {
     fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
 }
 
-// Summary:
 //   Increment cycle-boundary generation counter for one-time consumer notification.
 notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State) {
     if state == nil {
@@ -639,7 +610,6 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
     state^.cycle_boundary_generation += 1
 }
 
-// Summary:
 //   Consume a pending cycle-boundary notification exactly once.
 //
 // Notes:

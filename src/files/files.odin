@@ -16,7 +16,6 @@ ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 
-// Summary:
 //   Resolve a writable directory for GIF output and create it if needed.
 //
 // Parameters:
@@ -73,7 +72,6 @@ resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (s
     return "", false
 }
 
-// Summary:
 //   Ensure assets.pkg is unpacked for the current executable directory.
 //
 // Parameters:
@@ -93,7 +91,6 @@ ensure_packaged_assets_unpacked_root :: proc() {
     _ = ensure_packaged_assets_unpacked(exe_dir)
 }
 
-// Summary:
 //   Force a fresh unpack of assets.pkg from the executable directory.
 //
 // Parameters:
@@ -110,7 +107,6 @@ reload_packaged_assets_root :: proc() -> bool {
     return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
 }
 
-// Summary:
 //   Read the packaged archive modification time as unix nanoseconds.
 //
 // Parameters:
@@ -142,7 +138,6 @@ packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
     return time.time_to_unix_nano(info.modification_time), true
 }
 
-// Summary:
 //   Resolve an absolute path for a packaged asset relative path.
 //
 // Parameters:
@@ -177,7 +172,6 @@ packaged_asset_path :: proc(relative_path: string, allocator := context.allocato
     return path
 }
 
-// Summary:
 //   Remove the unpacked packaged-assets directory from writable storage.
 //
 // Parameters:
@@ -199,7 +193,6 @@ cleanup_packaged_assets_dir :: proc() {
 
 
 
-// Summary:
 //   Ensure a directory path exists, creating parent directories as needed.
 //
 // Notes:
@@ -216,7 +209,6 @@ ensure_directory_exists :: proc(path: string) -> bool {
     return os.make_directory_all(path) == nil
 }
 
-// Summary:
 //   Resolve the writable root directory where assets.pkg contents are unpacked.
 //
 // Notes:
@@ -241,7 +233,6 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
     return unpack_dir, true
 }
 
-// Summary:
 //   Check whether the unpack directory contains required baseline asset entries.
 //
 // Notes:
@@ -268,7 +259,6 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     return true
 }
 
-// Summary:
 //   Return true when every byte in the slice is zero.
 bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
     for b in data {
@@ -279,7 +269,6 @@ bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
     return true
 }
 
-// Summary:
 //   Trim leading and trailing spaces/nulls from a tar header field byte slice.
 trim_tar_field :: #force_inline proc(data: []u8) -> []u8 {
     start := 0
@@ -295,7 +284,6 @@ trim_tar_field :: #force_inline proc(data: []u8) -> []u8 {
     return data[start:stop]
 }
 
-// Summary:
 //   Parse an octal tar header field into an i64 value.
 //
 // Notes:
@@ -319,7 +307,6 @@ parse_tar_octal_i64 :: #force_inline proc(field: []u8, out: ^i64) -> bool {
     return true
 }
 
-// Summary:
 //   Validate that an archive entry path is a safe relative path.
 //
 // Notes:
@@ -343,7 +330,6 @@ is_safe_asset_relative_path :: proc(path: string) -> bool {
     return true
 }
 
-// Summary:
 //   Extract a gzip-decoded tar payload blob into the unpack directory.
 //
 // Notes:
@@ -458,7 +444,6 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
     }
 }
 
-// Summary:
 //   Ensure packaged assets are unpacked for a specific executable directory.
 //
 // Notes:
@@ -467,7 +452,6 @@ ensure_packaged_assets_unpacked :: proc(exe_dir: string) -> bool {
     return ensure_packaged_assets_unpacked_with_force(exe_dir, false)
 }
 
-// Summary:
 //   Unpack assets.pkg for an executable directory with optional forced refresh.
 //
 // Notes:

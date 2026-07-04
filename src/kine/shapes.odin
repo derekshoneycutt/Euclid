@@ -6,7 +6,6 @@ import "core:math"
 
 import rl "vendor:raylib"
 
-// Summary:
 //   Create a drawable label point and append it to the point system.
 //
 // Parameters:
@@ -34,7 +33,6 @@ init_kineshape_label :: proc(
     return &system^.points[point_id], point_id
 }
 
-// Summary:
 //   Create a drawable point and append it to the point system.
 //
 // Parameters:
@@ -60,7 +58,6 @@ init_kineshape_point :: proc(
     return &system^.points[point_id], point_id
 }
 
-// Summary:
 //   Create a line shape host plus two endpoint child points.
 //
 // Parameters:
@@ -96,7 +93,6 @@ init_kineshape_line :: proc(
     return Kine_Shape_Line{ host_id, point1_id, point2_id }
 }
 
-// Summary:
 //   Create a circle shape host with start/end arc child points.
 //
 // Parameters:
@@ -150,7 +146,6 @@ init_kineshape_circle :: proc(
         host_id, start_id, end_id }
 }
 
-// Summary:
 //   Create a filled-circle shape host with start/end arc child points.
 //
 // Parameters:
@@ -204,7 +199,6 @@ init_kineshape_filledcircle :: proc(
         host_id, start_id, end_id }
 }
 
-// Summary:
 //   Create a triangle shape host plus three child points.
 //
 // Parameters:
@@ -243,7 +237,6 @@ init_kineshape_triangle :: proc(
     return Kine_Shape_Triangle{ host_id, point1_id, point2_id, point3_id }
 }
 
-// Summary:
 //   Create a square shape host plus four child points.
 //
 // Parameters:
@@ -287,7 +280,6 @@ init_kineshape_square :: proc(
     return Kine_Shape_Square{ host_id, point1_id, point2_id, point3_id, point4_id }
 }
 
-// Summary:
 //   Create a pentagon shape host plus five child points.
 //
 // Parameters:
@@ -336,7 +328,6 @@ init_kineshape_pentagon :: proc(
     return Kine_Shape_Pentagon{ host_id, point1_id, point2_id, point3_id, point4_id, point5_id }
 }
 
-// Summary:
 //   Create a pen tool shape with floor and lock constraints.
 //
 // Parameters:
@@ -389,7 +380,6 @@ init_kineshape_pen :: proc(
         length_id, length_id + 1, length_id + 2, length_id + 3, length_id + 4 }
 }
 
-// Summary:
 //   Create a compass tool shape with limb, floor, center-pivot, and lock constraints.
 //
 // Parameters:

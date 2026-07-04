@@ -2,7 +2,6 @@ package view
 
 // Yeah, yeah, it's just one method. But it's used by elements and particles so fuck it all
 
-// Summary:
 //   Project an isometric 3D coordinate into 2D screen space.
 //
 // Parameters:

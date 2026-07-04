@@ -8,7 +8,6 @@ package kine
 import "core:math"
 import "core:math/linalg"
 
-// Summary:
 //   Rotate a vector around an axis by a given angle in radians.
 //
 // Notes:
@@ -22,7 +21,6 @@ rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
         axis * linalg.dot(axis, vec) * (1 - c)
 }
 
-// Summary:
 //   Compute the summed error across all active constraints in the point system.
 //
 // Parameters:
@@ -40,7 +38,6 @@ get_total_constraint_error :: proc(
     return total_error
 }
 
-// Summary:
 //   Apply each active constraint to the point system in forward order.
 //
 // Parameters:
@@ -56,7 +53,6 @@ apply_all_constraints :: proc(
     }
 }
 
-// Summary:
 //   Apply each active constraint to the point system in reverse order.
 //
 // Parameters:
@@ -72,7 +68,6 @@ apply_all_constraints_reverse :: proc(
     }
 }
 
-// Summary:
 //   Iteratively apply constraints until total error is at or below the allowed threshold.
 //
 // Parameters:
@@ -99,7 +94,6 @@ apply_all_constraints_to_error :: proc(
     }
 }
 
-// Summary:
 //   Compute the error contribution of a single constraint against system points.
 //
 // Parameters:
@@ -177,7 +171,6 @@ get_constraint_error :: proc(
     return total_error
 }
 
-// Summary:
 //   Apply one constraint mutation pass to the referenced points.
 //
 // Parameters:
@@ -254,7 +247,6 @@ apply_constraint :: proc(
 
 
 
-// Summary:
 //   Compute floor-constraint error for a single point.
 get_constraint_error_floor :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
@@ -267,7 +259,6 @@ get_constraint_error_floor :: proc(
     return constraint^.restriction.z - position.z
 }
 
-// Summary:
 //   Compute snap-to-floor error for a single point with allowance tolerance.
 get_constraint_error_snaptofloor :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
@@ -280,7 +271,6 @@ get_constraint_error_snaptofloor :: proc(
     return constraint^.restriction.z - position.z
 }
 
-// Summary:
 //   Compute snap-point error as distance from point position to restriction target.
 get_constraint_error_snappoint :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) -> f32 {
@@ -294,7 +284,6 @@ get_constraint_error_snappoint :: proc(
     return len
 }
 
-// Summary:
 //   Compute distance-constraint error between two points.
 get_constraint_error_distance :: proc(
     constraint : ^Kine_Constraint, point1, point2 : ^Kine_Shape_Point) -> f32 {
@@ -313,7 +302,6 @@ get_constraint_error_distance :: proc(
     return math.abs(req_len - len)
 }
 
-// Summary:
 //   Compute max-angle constraint error for a three-point angle.
 get_constraint_error_maxangle :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
@@ -347,7 +335,6 @@ get_constraint_error_maxangle :: proc(
     return 0
 }
 
-// Summary:
 //   Compute min-angle constraint error for a three-point angle.
 get_constraint_error_minangle :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
@@ -381,7 +368,6 @@ get_constraint_error_minangle :: proc(
     return 0
 }
 
-// Summary:
 //   Compute center-pivot error as pivot distance from the segment midpoint.
 get_constraint_error_centerpivot :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) -> f32 {
@@ -406,7 +392,6 @@ get_constraint_error_centerpivot :: proc(
     return len
 }
 
-// Summary:
 //   Apply floor constraint response to keep a point at or above floor height.
 apply_constraint_floor :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
@@ -421,7 +406,6 @@ apply_constraint_floor :: proc(
     point^.position = position
 }
 
-// Summary:
 //   Apply snap-to-floor constraint by forcing point height to floor level.
 apply_constraint_snaptofloor :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
@@ -435,7 +419,6 @@ apply_constraint_snaptofloor :: proc(
     point^.position = position
 }
 
-// Summary:
 //   Apply snap-point constraint by setting point position to restriction target.
 apply_constraint_snappoint :: proc(
     constraint : ^Kine_Constraint, point : ^Kine_Shape_Point) {
@@ -443,7 +426,6 @@ apply_constraint_snappoint :: proc(
     point^.position = constraint^.restriction
 }
 
-// Summary:
 //   Apply distance constraint to two points using depend_on ownership mode.
 //
 // Notes:
@@ -480,7 +462,6 @@ apply_constraint_distance :: proc(
     }
 }
 
-// Summary:
 //   Apply max-angle constraint by rotating one or both limbs toward limit.
 apply_constraint_maxangle :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {
@@ -530,7 +511,6 @@ apply_constraint_maxangle :: proc(
     point2^.position = pivot_position + new_vec2
 }
 
-// Summary:
 //   Apply min-angle constraint by rotating one or both limbs outward to limit.
 apply_constraint_minangle :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {
@@ -580,7 +560,6 @@ apply_constraint_minangle :: proc(
     point2^.position = pivot_position + new_vec2
 }
 
-// Summary:
 //   Apply center-pivot constraint by moving pivot to midpoint of outer points.
 apply_constraint_centerpivot :: proc(
     constraint : ^Kine_Constraint, point1, pivot, point2 : ^Kine_Shape_Point) {

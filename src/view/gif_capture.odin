@@ -20,7 +20,6 @@ GIF_CAPTURE_QUALITY :: 12
 
 Gif_Capture_Session :: core.Gif_Capture_Session
 
-// Summary:
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -73,7 +72,6 @@ gif_capture_submit_frame :: proc(
     return true
 }
 
-// Summary:
 //   Advance GIF capture state machine on fixed-step cycle boundaries.
 //
 // Parameters:
@@ -129,7 +127,6 @@ gif_capture_update_fixed_step :: proc(
     }
 }
 
-// Summary:
 //   Abort active GIF capture and release any accumulated encoder output.
 //
 // Parameters:
@@ -154,14 +151,12 @@ gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
 
 
 
-// Summary:
 //   Clear stored UI path text for last saved GIF output.
 clear_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
     ui_runtime.last_gif_path_len = 0
     ui_runtime.last_gif_path[0] = 0
 }
 
-// Summary:
 //   Store saved GIF output path into fixed UI buffer fields.
 set_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, path: string) {
     max_len := len(ui_runtime.last_gif_path) - 1
@@ -173,7 +168,6 @@ set_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, path: strin
     ui_runtime.last_gif_path_len = n
 }
 
-// Summary:
 //   Generate timestamped filename for GIF export output.
 gif_output_filename :: proc() -> string {
     now := time.now()
@@ -195,7 +189,6 @@ gif_output_filename :: proc() -> string {
     )
 }
 
-// Summary:
 //   Resolve writable output path for the next GIF export file.
 gif_output_path :: proc() -> string {
     output_dir, ok := files.resolve_writable_pictures_dir(context.temp_allocator)
@@ -212,13 +205,11 @@ gif_output_path :: proc() -> string {
     return output_path
 }
 
-// Summary:
 //   Convert frame-step interval into GIF delay centiseconds.
 gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
     return max(1, int(f32(frame_step) * FIXED_DT * 100.0 + 0.5))
 }
 
-// Summary:
 //   Write encoded GIF bytes to disk at the provided path.
 gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
     if len(data) == 0 {
@@ -229,7 +220,6 @@ gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
     return write_err == nil
 }
 
-// Summary:
 //   Initialize encoder and counters for a new GIF capture session.
 //
 // Notes:
@@ -251,7 +241,6 @@ gif_capture_begin_session :: proc(
     return true
 }
 
-// Summary:
 //   Finalize encoder output and persist GIF bytes to a file.
 //
 // Notes:
@@ -278,7 +267,6 @@ gif_capture_finalize_session :: proc(
     return true
 }
 
-// Summary:
 //   Consume one pending cycle-boundary generation marker exactly once.
 gif_capture_consume_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> bool {
     if state.consumed_cycle_boundary_generation == state.cycle_boundary_generation {

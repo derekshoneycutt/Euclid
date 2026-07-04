@@ -72,7 +72,6 @@ Gif_Encode_Bitstream_State :: struct {
     end_code: int,
 }
 
-// Summary:
 //   Initialize GIF encoder state for a new output stream.
 //
 // Parameters:
@@ -129,7 +128,6 @@ gif_encode_begin :: proc(state: ^Gif_Encode_State, width, height: int) -> bool {
     return true
 }
 
-// Summary:
 //   Encode and append one frame to an initialized GIF stream.
 //
 // Parameters:
@@ -199,7 +197,6 @@ gif_encode_frame :: proc(
     return true
 }
 
-// Summary:
 //   Finalize the GIF stream and return a contiguous encoded byte buffer.
 //
 // Parameters:
@@ -243,7 +240,6 @@ gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
     }
 }
 
-// Summary:
 //   Release heap memory owned by a GifEncodeResult.
 //
 // Parameters:
@@ -263,7 +259,6 @@ gif_encode_free :: proc(result: ^GifEncodeResult) {
 
 
 
-// Summary:
 //   Compute the number of bits required to represent a positive integer.
 gif_encode_bit_log :: #force_inline proc(i: int) -> int {
     v := i
@@ -279,7 +274,6 @@ gif_encode_bit_log :: #force_inline proc(i: int) -> int {
     return out
 }
 
-// Summary:
 //   Allocate a new linked-list buffer node for encoded GIF data.
 //
 // Notes:
@@ -301,7 +295,6 @@ gif_encode_new_buffer :: proc(size: int) -> (^Gif_Encode_Buffer, bool) {
     return n, true
 }
 
-// Summary:
 //   Free a linked-list buffer node and its byte slice.
 gif_encode_free_buffer :: proc(node: ^Gif_Encode_Buffer) {
     if node == nil {
@@ -313,7 +306,6 @@ gif_encode_free_buffer :: proc(node: ^Gif_Encode_Buffer) {
     free(node)
 }
 
-// Summary:
 //   Append a buffer node to the encoder output list.
 gif_encode_push_buffer :: proc(state: ^Gif_Encode_State, node: ^Gif_Encode_Buffer) {
     if state.list_head == nil {
@@ -326,7 +318,6 @@ gif_encode_push_buffer :: proc(state: ^Gif_Encode_State, node: ^Gif_Encode_Buffe
     state.list_tail = node
 }
 
-// Summary:
 //   Pop and return the head buffer node from the encoder output list.
 gif_encode_pop_head_buffer :: proc(state: ^Gif_Encode_State) -> ^Gif_Encode_Buffer {
     if state.list_head == nil {
@@ -344,7 +335,6 @@ gif_encode_pop_head_buffer :: proc(state: ^Gif_Encode_State) -> ^Gif_Encode_Buff
     return n
 }
 
-// Summary:
 //   Release all encoder-owned allocations and reset state fields.
 //
 // Notes:
@@ -366,7 +356,6 @@ gif_encode_free_state :: proc(state: ^Gif_Encode_State) {
     state^ = {}
 }
 
-// Summary:
 //   Reset LZW table memory and initialize active table metadata.
 gif_encode_lzw_reset :: proc(lzw_mem: []i16, lzw: ^Gif_Lzw_State, table_size: int, stride: int) {
     for i := 0; i < len(lzw_mem); i += 1 {
@@ -376,7 +365,6 @@ gif_encode_lzw_reset :: proc(lzw_mem: []i16, lzw: ^Gif_Lzw_State, table_size: in
     lzw.stride = stride
 }
 
-// Summary:
 //   Write one variable-width code into the LZW bitstream accumulator.
 //
 // Notes:
@@ -403,7 +391,6 @@ gif_encode_write_code_bits :: proc(
     return true
 }
 
-// Summary:
 //   Flush remaining buffered bits into the output stream.
 //
 // Notes:
@@ -429,7 +416,6 @@ gif_encode_flush_code_bits :: proc(
     return true
 }
 
-// Summary:
 //   Write a 16-bit little-endian integer into a byte slice.
 gif_encode_write_u16le :: #force_inline proc(dst: []u8, offset: int, value: int) -> bool {
     if offset < 0 || offset + 1 >= len(dst) {
@@ -440,7 +426,6 @@ gif_encode_write_u16le :: #force_inline proc(dst: []u8, offset: int, value: int)
     return true
 }
 
-// Summary:
 //   Resolve per-channel quantization bit depths for a chosen GIF palette depth.
 gif_encode_depth_bits :: #force_inline proc(depth: int, use_bgra: bool) -> (int, int, int) {
     rdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
@@ -453,7 +438,6 @@ gif_encode_depth_bits :: #force_inline proc(depth: int, use_bgra: bool) -> (int,
     return rdepths[depth], gdepths[depth], bdepths[depth]
 }
 
-// Summary:
 //   Return ordered-dither kernel value for a tile-relative pixel position.
 gif_encode_dither_kernel_value :: #force_inline proc(dx, dy: int) -> int {
     idx := dy * GIF_DITHER_TILE_SIZE + dx
@@ -478,7 +462,6 @@ gif_encode_dither_kernel_value :: #force_inline proc(dx, dy: int) -> int {
     return 0
 }
 
-// Summary:
 //   Clear palette-used flags for the active palette size.
 gif_encode_clear_used_entries :: #force_inline proc(used: []u8, palette_size: int) {
     for i := 0; i < palette_size; i += 1 {
@@ -486,7 +469,6 @@ gif_encode_clear_used_entries :: #force_inline proc(used: []u8, palette_size: in
     }
 }
 
-// Summary:
 //   Dither and quantize raw RGBA/BGRA pixels into palette indices.
 //
 // Notes:
@@ -535,7 +517,6 @@ gif_encode_dither_and_quantize_pixels :: proc(
     }
 }
 
-// Summary:
 //   Mark palette indices observed in the cooked frame pixel buffer.
 gif_encode_mark_used_palette_entries :: #force_inline proc(
     cooked: []u32,
@@ -546,7 +527,6 @@ gif_encode_mark_used_palette_entries :: #force_inline proc(
     }
 }
 
-// Summary:
 //   Count non-transparent palette entries marked as used.
 gif_encode_count_used_palette_entries :: #force_inline proc(used: []u8, palette_size: int) -> int {
     used_count := 0
@@ -556,7 +536,6 @@ gif_encode_count_used_palette_entries :: #force_inline proc(used: []u8, palette_
     return used_count
 }
 
-// Summary:
 //   Choose the next frame quantization depth from quality and prior frame stats.
 gif_encode_next_frame_depth :: #force_inline proc(
     quality_clamped: int,
@@ -570,7 +549,6 @@ gif_encode_next_frame_depth :: #force_inline proc(
     return min(quality_clamped, prev_depth + GIF_FRAME_DEPTH_BIAS / max(1, prev_count))
 }
 
-// Summary:
 //   Write GIF logical screen descriptor and Netscape looping extension.
 gif_encode_write_logical_screen_and_netscape_ext :: proc(
     out: []u8,
@@ -607,7 +585,6 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
     return true
 }
 
-// Summary:
 //   Attempt to cook one frame at a specific quantization depth.
 //
 // Notes:
@@ -668,7 +645,6 @@ gif_encode_try_cook_depth :: proc(
     }
 }
 
-// Summary:
 //   Cook one frame by reducing depth until palette usage fits GIF limits.
 gif_encode_cook_frame :: proc(
     frame: ^GifEncodeFrame,
@@ -709,7 +685,6 @@ gif_encode_cook_frame :: proc(
     }
 }
 
-// Summary:
 //   Initialize LZW output bitstream state and emit initial clear code.
 gif_encode_begin_lzw_bitstream :: proc(
     state: ^Gif_Encode_State,
@@ -749,7 +724,6 @@ gif_encode_begin_lzw_bitstream :: proc(
     return true
 }
 
-// Summary:
 //   Walk cooked frame pixels and emit LZW codes into the bitstream.
 //
 // Notes:
@@ -859,7 +833,6 @@ gif_encode_lzw_walk_pixels :: proc(
     return gif_encode_flush_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum, &bs.bit_count)
 }
 
-// Summary:
 //   Build local color table and lookup mapping for a cooked frame.
 gif_encode_build_palette_table :: proc(
     state: ^Gif_Encode_State,
@@ -918,7 +891,6 @@ gif_encode_build_palette_table :: proc(
     return true
 }
 
-// Summary:
 //   Encode cooked frame pixels into a raw LZW bitstream buffer.
 gif_encode_lzw_to_bitstream :: proc(
     state: ^Gif_Encode_State,
@@ -943,7 +915,6 @@ gif_encode_lzw_to_bitstream :: proc(
     return true
 }
 
-// Summary:
 //   Write GIF graphics control extension for one frame chunk.
 gif_encode_write_graphics_control_extension :: proc(
     state: ^Gif_Encode_State,
@@ -967,7 +938,6 @@ gif_encode_write_graphics_control_extension :: proc(
     return true
 }
 
-// Summary:
 //   Write GIF image descriptor for one frame chunk.
 gif_encode_write_image_descriptor :: proc(
     state: ^Gif_Encode_State,
@@ -986,7 +956,6 @@ gif_encode_write_image_descriptor :: proc(
     return true
 }
 
-// Summary:
 //   Write local color table bytes into the frame output buffer.
 gif_encode_write_local_color_table :: proc(
     out: []u8,
@@ -1001,7 +970,6 @@ gif_encode_write_local_color_table :: proc(
     w^ += table_size * 3
 }
 
-// Summary:
 //   Write LZW image data as GIF sub-blocks into the frame output buffer.
 gif_encode_write_image_data_blocks :: proc(
     out: []u8,
@@ -1026,7 +994,6 @@ gif_encode_write_image_data_blocks :: proc(
     w^ += 1
 }
 
-// Summary:
 //   Assemble one encoded frame chunk from palette and compressed bitstream data.
 gif_encode_build_frame_chunk :: proc(
     state: ^Gif_Encode_State,
@@ -1078,7 +1045,6 @@ gif_encode_build_frame_chunk :: proc(
     return node, true
 }
 
-// Summary:
 //   Compress one cooked frame into a linked-list output buffer node.
 gif_encode_compress_frame :: proc(
     state: ^Gif_Encode_State,

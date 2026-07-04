@@ -46,7 +46,6 @@ Kine_Pentagon_Draw :: core.Kine_Pentagon_Draw
 Kine_Pen_Draw :: core.Kine_Pen_Draw
 Kine_Compass_Draw :: core.Kine_Compass_Draw
 
-// Summary:
 //   Snapshot current point positions into previous_vectors for interpolation.
 //
 // Parameters:
@@ -62,7 +61,6 @@ kine_update_last_cache_vectors :: proc(
     }
 }
 
-// Summary:
 //   Freeze animation insertion starts at current point/constraint indices.
 //
 // Parameters:
@@ -77,7 +75,6 @@ kine_freeze_system_indices :: proc(
     point_system^.anim_constraints_start = point_system^.next_constraint_index
 }
 
-// Summary:
 //   Clear animation-owned points and constraints while preserving baseline tool setup.
 //
 // Parameters:
@@ -105,7 +102,6 @@ kine_clear_animation_data :: proc(
     point_system^.next_constraint_index = point_system^.anim_constraints_start
 }
 
-// Summary:
 //   Build the draw cache from current point-system state using interpolation alpha.
 //
 // Parameters:
@@ -153,7 +149,6 @@ build_kine_draw_cache :: proc(
 
 
 
-// Summary:
 //   Reset draw-cache counters and tool draw flags before cache rebuild.
 kine_draw_cache_reset :: proc(
     point_system: ^Kine_Point_System) {
@@ -163,7 +158,6 @@ kine_draw_cache_reset :: proc(
     point_system^.draw_cache.draw_compass = false
 }
 
-// Summary:
 //   Compute interpolated point position between previous and current vectors.
 //
 // Notes:
@@ -189,7 +183,6 @@ lerped_point_position :: proc(
     return true
 }
 
-// Summary:
 //   Build the common draw-base metadata shared by cached draw item variants.
 make_draw_base :: #force_inline proc(
     source_index: int,
@@ -210,7 +203,6 @@ make_draw_base :: #force_inline proc(
 }
 
 
-// Summary:
 //   Push a cached label draw item into the draw-cache item list.
 cache_push_label :: proc(
     point_system: ^Kine_Point_System,
@@ -238,7 +230,6 @@ cache_push_label :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached point draw item into the draw-cache item list.
 cache_push_point :: proc(
     point_system: ^Kine_Point_System,
@@ -261,7 +252,6 @@ cache_push_point :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached line draw item into the draw-cache item list.
 cache_push_line :: proc(
     point_system: ^Kine_Point_System,
@@ -291,7 +281,6 @@ cache_push_line :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached circle draw item into the draw-cache item list.
 //
 // Notes:
@@ -333,7 +322,6 @@ cache_push_circle :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached filled-circle draw item into the draw-cache item list.
 //
 // Notes:
@@ -375,7 +363,6 @@ cache_push_filledcircle :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached triangle draw item into the draw-cache item list.
 cache_push_triangle :: proc(
     point_system: ^Kine_Point_System,
@@ -410,7 +397,6 @@ cache_push_triangle :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached square draw item into the draw-cache item list.
 cache_push_square :: proc(
     point_system: ^Kine_Point_System,
@@ -451,7 +437,6 @@ cache_push_square :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Push a cached pentagon draw item into the draw-cache item list.
 cache_push_pentagon :: proc(
     point_system: ^Kine_Point_System,
@@ -498,7 +483,6 @@ cache_push_pentagon :: proc(
     point_system^.draw_cache.item_count += 1
 }
 
-// Summary:
 //   Update cached pen tool draw data and pen draw-enable flag.
 cache_push_pen :: proc(
     point_system: ^Kine_Point_System,
@@ -524,7 +508,6 @@ cache_push_pen :: proc(
     point_system^.draw_cache.draw_pen = src^.do_draw
 }
 
-// Summary:
 //   Update cached compass tool draw data and compass draw-enable flag.
 cache_push_compass :: proc(
     point_system: ^Kine_Point_System,

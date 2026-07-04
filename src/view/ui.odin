@@ -63,7 +63,6 @@ Tree_Toolbar_Hit :: struct {
     ToggleSettingsRequested: bool,
 }
 
-// Summary:
 //   Render the right-side tree panel and route toolbar interactions.
 //
 // Parameters:
@@ -105,7 +104,6 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
     draw_tree_list_panel(ji, ui_runtime, list_panel, mouse, &state^.ui_runtime.tree_scroll_y, state.font)
 }
 
-// Summary:
 //   Render wrapped animation view text with scroll handling.
 //
 // Parameters:
@@ -187,14 +185,12 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
 
 
 
-// Summary:
 //   Draw UTF-8 UI text using the shared font and temp C-string conversion.
 ui_text :: #force_inline proc(text: string, x, y: int, color: rl.Color, font: rl.Font) {
     cloned := strings.clone_to_cstring(text, context.temp_allocator)
     rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, TREE_FONT_SIZE, 0, color)
 }
 
-// Summary:
 //   Draw the circular refresh glyph used in the tree toolbar.
 draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     cx := rect.x + rect.width * 0.5
@@ -215,7 +211,6 @@ draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     draw_arc_arrowhead(cx, cy, radius, end2, arrow_size, thickness, color)
 }
 
-// Summary:
 //   Draw an approximated arc segment using connected line segments.
 draw_arc_polyline :: proc(
     cx, cy, radius: f32,
@@ -243,7 +238,6 @@ draw_arc_polyline :: proc(
     }
 }
 
-// Summary:
 //   Draw an arrowhead tangent to an arc at the provided angle.
 draw_arc_arrowhead :: proc(
     cx, cy, radius: f32,
@@ -268,7 +262,6 @@ draw_arc_arrowhead :: proc(
     rl.DrawLineEx(right, tip, thickness, color)
 }
 
-// Summary:
 //   Draw expand/collapse chevron icon for tree nodes.
 draw_tree_disclosure_icon :: proc(rect: rl.Rectangle, expanded: bool, color: rl.Color) {
     cx := rect.x + rect.width * 0.5
@@ -305,7 +298,6 @@ draw_tree_disclosure_icon :: proc(rect: rl.Rectangle, expanded: bool, color: rl.
     rl.DrawLineEx(p1, p2, 1.6, color)
 }
 
-// Summary:
 //   Draw the settings/controls glyph for the toolbar toggle.
 draw_gear_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     left := rect.x + 4
@@ -326,7 +318,6 @@ draw_gear_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     rl.DrawCircleV(rl.Vector2{rect.x + rect.width * 0.46, y3}, knob_r, color)
 }
 
-// Summary:
 //   Draw a toolbar button and return click-hit state.
 draw_toolbar_icon_button :: proc(
     rect: rl.Rectangle,
@@ -353,7 +344,6 @@ draw_toolbar_icon_button :: proc(
     return rl.IsMouseButtonPressed(.LEFT) && hovered
 }
 
-// Summary:
 //   Render toolbar row and report refresh/settings toggle hits.
 draw_tree_toolbar :: proc(
     panel: rl.Rectangle, mouse: rl.Vector2, show_settings: bool) -> Tree_Toolbar_Hit {
@@ -383,7 +373,6 @@ draw_tree_toolbar :: proc(
     return hit
 }
 
-// Summary:
 //   Compute label, track, and hit rectangles for the dust slider.
 build_settings_slider_layout :: proc(panel: rl.Rectangle) -> (f32, rl.Rectangle, rl.Rectangle) {
     slider_label_y := panel.y + SETTINGS_SLIDER_LABEL_TOP_OFFSET
@@ -405,7 +394,6 @@ build_settings_slider_layout :: proc(panel: rl.Rectangle) -> (f32, rl.Rectangle,
     return slider_label_y, slider_track, slider_hit
 }
 
-// Summary:
 //   Convert an integer slider value into normalized [0,1] ratio.
 slider_value_ratio :: proc(value, max_value: int) -> f32 {
     if max_value <= 0 {
@@ -414,7 +402,6 @@ slider_value_ratio :: proc(value, max_value: int) -> f32 {
     return f32(value) / f32(max_value)
 }
 
-// Summary:
 //   Build knob geometry from track bounds and normalized ratio.
 build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
     knob_center_x := slider_track.x + ratio * slider_track.width
@@ -427,7 +414,6 @@ build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Re
     return knob_center_x, knob
 }
 
-// Summary:
 //   Apply wheel/drag input to update max dust particle setting.
 update_use_max_particles_slider :: proc(
     ps: ^core.Particle_System,
@@ -476,7 +462,6 @@ update_use_max_particles_slider :: proc(
     }
 }
 
-// Summary:
 //   Render dust-capacity slider fill, knob, and value text.
 draw_use_max_particles_slider :: proc(
     panel: rl.Rectangle,
@@ -508,7 +493,6 @@ draw_use_max_particles_slider :: proc(
     )
 }
 
-// Summary:
 //   Render particle render-count statistics in settings view.
 draw_settings_particle_stats :: proc(
     panel: rl.Rectangle,
@@ -539,7 +523,6 @@ draw_settings_particle_stats :: proc(
     )
 }
 
-// Summary:
 //   Render and handle the Display FPS toggle control.
 draw_settings_fps_checkbox :: proc(
     panel: rl.Rectangle,
@@ -582,7 +565,6 @@ draw_settings_fps_checkbox :: proc(
     ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR, font)
 }
 
-// Summary:
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(
     panel: rl.Rectangle,
@@ -658,7 +640,6 @@ draw_settings_integer_slider :: proc(
     )
 }
 
-// Summary:
 //   Render and process the Save/Cancel GIF action button.
 draw_settings_save_gif_button :: proc(
     panel: rl.Rectangle,
@@ -708,7 +689,6 @@ draw_settings_save_gif_button :: proc(
     }
 }
 
-// Summary:
 //   Return human-readable status text for GIF capture phase.
 gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> string {
     switch ui_runtime.gif_capture_phase {
@@ -729,7 +709,6 @@ gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> s
     return "Status: Idle"
 }
 
-// Summary:
 //   Render GIF capture status and last output path when available.
 draw_settings_gif_status :: proc(
     panel: rl.Rectangle,
@@ -750,7 +729,6 @@ draw_settings_gif_status :: proc(
     }
 }
 
-// Summary:
 //   Render full settings panel and wire all settings controls.
 draw_settings_view :: proc(
     state: ^core.Euclid_General_State, panel: rl.Rectangle, mouse: rl.Vector2) {
@@ -845,7 +823,6 @@ draw_settings_view :: proc(
     )
 }
 
-// Summary:
 //   Estimate visible character capacity for one wrapped text row.
 chars_per_text_row :: #force_inline proc(width: f32) -> int {
     count := int(width / TEXT_WRAP_ADVANCE)
@@ -855,7 +832,6 @@ chars_per_text_row :: #force_inline proc(width: f32) -> int {
     return count
 }
 
-// Summary:
 //   Compute the next wrapped line span and next-start index.
 next_wrapped_text_span :: proc(
     text: string, start: int, max_chars: int) -> (int, int, int) {
@@ -901,7 +877,6 @@ next_wrapped_text_span :: proc(
     return start, line_end, next_start
 }
 
-// Summary:
 //   Count wrapped line rows needed for given text and width.
 count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
     if len(text) == 0 {
@@ -922,7 +897,6 @@ count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
     return rows
 }
 
-// Summary:
 //   Draw wrapped text rows clipped to the visible panel area.
 draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f32, font: rl.Font) {
     max_chars := chars_per_text_row(panel.width - TEXT_PADDING * 2)
@@ -950,7 +924,6 @@ draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f
     }
 }
 
-// Summary:
 //   Mark one animation selected and clear selection on others.
 set_selected_animation :: proc(ji: ^core.Euclid_Julia_Interface, selected_id: int) {
     if selected_id < 0 || selected_id >= ji.next_animation_index {
@@ -963,7 +936,6 @@ set_selected_animation :: proc(ji: ^core.Euclid_Julia_Interface, selected_id: in
     ji.selected_animation_index = selected_id
 }
 
-// Summary:
 //   Count visible rows for all root trees with expansion state.
 count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> int {
     count := 0
@@ -975,7 +947,6 @@ count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> i
     return count
 }
 
-// Summary:
 //   Merge child tree hit results into a single accumulator.
 merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
     if src.SelectedID >= 0 {
@@ -986,7 +957,6 @@ merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
     }
 }
 
-// Summary:
 //   Clamp scroll offset to [0, max_scroll] range.
 clamp_scroll_position :: proc(scroll_y: ^f32, max_scroll: f32) {
     if scroll_y^ < 0 {
@@ -997,7 +967,6 @@ clamp_scroll_position :: proc(scroll_y: ^f32, max_scroll: f32) {
     }
 }
 
-// Summary:
 //   Apply mouse-wheel scrolling when cursor is over target panel.
 apply_wheel_scroll :: proc(
     mouse: rl.Vector2, panel: rl.Rectangle, row_height: f32,
@@ -1014,7 +983,6 @@ apply_wheel_scroll :: proc(
     }
 }
 
-// Summary:
 //   Build scrollbar track/thumb geometry for current scroll state.
 build_vertical_scrollbar :: proc(
     panel: rl.Rectangle,
@@ -1038,7 +1006,6 @@ build_vertical_scrollbar :: proc(
     return track, thumb, thumb_h, true
 }
 
-// Summary:
 //   Apply selection/expand hits and sync related UI state.
 apply_tree_hit :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1055,7 +1022,6 @@ apply_tree_hit :: proc(
     }
 }
 
-// Summary:
 //   Compute scrollbar thumb height from content-to-panel ratio.
 scrollbar_thumb_height :: #force_inline proc(panel_height: f32, content_h: f32) -> f32 {
     if panel_height <= 0 || content_h <= 0 {
@@ -1066,7 +1032,6 @@ scrollbar_thumb_height :: #force_inline proc(panel_height: f32, content_h: f32) 
     return clamp(thumb_h, 0.0, panel_height)
 }
 
-// Summary:
 //   Compute scrollbar thumb y-position from scroll offset.
 scrollbar_thumb_y :: #force_inline proc(
     panel_y, panel_height, thumb_h, scroll_y, max_scroll: f32) -> f32 {
@@ -1076,7 +1041,6 @@ scrollbar_thumb_y :: #force_inline proc(
     return panel_y + (scroll_y / max_scroll) * (panel_height - thumb_h)
 }
 
-// Summary:
 //   Handle drag lifecycle and update scroll offset from thumb drag.
 handle_scrollbar_drag :: proc(
     mouse: rl.Vector2,
@@ -1113,7 +1077,6 @@ handle_scrollbar_drag :: proc(
     scroll_y^ = clamp(t, 0, 1) * max_scroll
 }
 
-// Summary:
 //   Traverse and draw root nodes, aggregating click hits.
 walk_draw_tree_roots :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1148,7 +1111,6 @@ walk_draw_tree_roots :: proc(
     return hit
 }
 
-// Summary:
 //   Count visible rows recursively with recursion guard limit.
 count_visible_tree_rows_limited :: proc(
     ji: ^core.Euclid_Julia_Interface, id: int, remaining: int) -> int {
@@ -1181,7 +1143,6 @@ count_visible_tree_rows_limited :: proc(
     return count
 }
 
-// Summary:
 //   Advance content cursor for skipped offscreen child branches.
 accumulate_offscreen_child_rows :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1202,7 +1163,6 @@ accumulate_offscreen_child_rows :: proc(
     }
 }
 
-// Summary:
 //   Traverse and draw child node branches with depth tracking.
 walk_draw_child_nodes_limited :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1244,7 +1204,6 @@ walk_draw_child_nodes_limited :: proc(
     return hit
 }
 
-// Summary:
 //   Return first child id only when node is expanded.
 expanded_first_child_id :: #force_inline proc(is_expanded: bool, first_child_id: int) -> int {
     if !is_expanded || first_child_id < 0 {
@@ -1253,7 +1212,6 @@ expanded_first_child_id :: #force_inline proc(is_expanded: bool, first_child_id:
     return first_child_id
 }
 
-// Summary:
 //   Render one tree row and capture selection/toggle interactions.
 draw_tree_node_row :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1297,7 +1255,6 @@ draw_tree_node_row :: proc(
     }
 }
 
-// Summary:
 //   Traverse one tree node branch with clipping-aware row handling.
 walk_draw_tree_node_limited :: proc(
     ji: ^core.Euclid_Julia_Interface,
@@ -1376,7 +1333,6 @@ walk_draw_tree_node_limited :: proc(
     return hit
 }
 
-// Summary:
 //   Build toolbar and list panel rectangles inside tree container.
 build_tree_view_panels :: proc(panel: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
     inner_x := panel.x + 6
@@ -1409,7 +1365,6 @@ build_tree_view_panels :: proc(panel: rl.Rectangle) -> (rl.Rectangle, rl.Rectang
     return toolbar_panel, list_panel
 }
 
-// Summary:
 //   Render tree list body, scrollbars, and visible node rows.
 draw_tree_list_panel :: proc(
     ji: ^core.Euclid_Julia_Interface,

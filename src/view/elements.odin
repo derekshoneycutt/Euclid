@@ -35,7 +35,6 @@ STROKE3D_SPECULAR_STRENGTH :: 0.26
 STROKE3D_SPECULAR_POWER :: 18.0
 
 
-// Summary:
 //   Initialize stroke3d shader handles and uniform locations from packaged assets.
 //
 // Parameters:
@@ -93,7 +92,6 @@ init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
     s^.ready = true
 }
 
-// Summary:
 //   Unload stroke3d shader resources and mark shader state as unavailable.
 //
 // Parameters:
@@ -112,7 +110,6 @@ shutdown_stroke3d_shader :: proc(state: ^Euclid_General_State) {
     s^.ready = false
 }
 
-// Summary:
 //   Render the base isometric drawing plane and its border triangles.
 //
 // Parameters:
@@ -142,7 +139,6 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
         iso_to_cartesian(surface_right_up, state^.iso_scale^), room.color)
 }
 
-// Summary:
 //   Render cached low-layer geometry items (labels, primitives, and polygons).
 //
 // Parameters:
@@ -176,7 +172,6 @@ draw_kine_points_low_cached :: proc(state: ^Euclid_General_State) {
     }
 }
 
-// Summary:
 //   Render cached high-layer tool visuals and active markers with stroke3d mode.
 //
 // Parameters:
@@ -204,7 +199,6 @@ draw_kine_points_high_cached :: proc(state: ^Euclid_General_State) {
     end_stroke3d_mode(state)
 }
 
-// Summary:
 //   Render cached shadow overlays for pen and compass tool geometry.
 //
 // Parameters:
@@ -226,7 +220,6 @@ draw_kine_points_shadows_cached :: proc(state: ^Euclid_General_State) {
 
 
 
-// Summary:
 //   Set a float uniform on the stroke3d shader when location is valid.
 set_stroke3d_uniform_float :: #force_inline proc(state: ^Euclid_General_State, location: i32, value: f32) {
     if location < 0 {
@@ -237,7 +230,6 @@ set_stroke3d_uniform_float :: #force_inline proc(state: ^Euclid_General_State, l
 }
 
 
-// Summary:
 //   Set a vec2 uniform on the stroke3d shader when location is valid.
 set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^Euclid_General_State, location: i32, value: Vector2) {
     if location < 0 {
@@ -248,7 +240,6 @@ set_stroke3d_uniform_vec2 :: #force_inline proc(state: ^Euclid_General_State, lo
 }
 
 
-// Summary:
 //   Compute render-to-screen scale factors for shader-space thickness correction.
 get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
     screen_w := f32(rl.GetScreenWidth())
@@ -270,7 +261,6 @@ get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
 }
 
 
-// Summary:
 //   Update stroke3d segment uniforms for endpoints and stroke radius.
 set_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32) {
     s := &state^.stroke_3d
@@ -285,7 +275,6 @@ set_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1:
 }
 
 
-// Summary:
 //   Draw one segment with stroke3d lighting when available, else standard line draw.
 draw_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
     s := &state^.stroke_3d
@@ -297,7 +286,6 @@ draw_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1
 }
 
 
-// Summary:
 //   Bind stroke3d shader and upload per-frame lighting/render uniforms.
 //
 // Notes:
@@ -327,7 +315,6 @@ begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
 }
 
 
-// Summary:
 //   Flush pending batch and unbind stroke3d shader mode.
 //
 // Notes:
@@ -340,7 +327,6 @@ end_stroke3d_mode :: proc(state: ^Euclid_General_State) {
     rl.EndShaderMode()
 }
 
-// Summary:
 //   Compute positive angular sweep between start and end angles.
 compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     start_n := start_theta
@@ -360,7 +346,6 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
 }
 
 
-// Summary:
 //   Compute shadow alpha attenuation from average object height.
 shadow_alpha_from_height :: proc(avg_height: f32) -> u8 {
     atten := f32(SHADOW_ALPHA_BASE) - avg_height * SHADOW_ALPHA_HEIGHT_SCALE
@@ -368,7 +353,6 @@ shadow_alpha_from_height :: proc(avg_height: f32) -> u8 {
     return u8(atten)
 }
 
-// Summary:
 //   Build a shadow color using computed alpha attenuation.
 make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
     _ = source
@@ -376,7 +360,6 @@ make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
     return rl.Color{0, 0, 0, a}
 }
 
-// Summary:
 //   Project a 3D point onto the floor plane using light direction.
 project_to_floor_shadow :: proc(p: Vector3, scale: Iso_Scale) -> Vector3 {
     if !scale.use_directional_shadow {
@@ -392,7 +375,6 @@ project_to_floor_shadow :: proc(p: Vector3, scale: Iso_Scale) -> Vector3 {
     return p + l * t
 }
 
-// Summary:
 //   Project a floor-shadow point into 2D screen coordinates.
 shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
     p_shadow := project_to_floor_shadow(p, state^.iso_scale^)
@@ -402,7 +384,6 @@ shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
 
 
 
-// Summary:
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw) {
     c := iso_to_cartesian(p^.point1, state^.iso_scale^)
@@ -410,7 +391,6 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw
 }
 
 
-// Summary:
 //   Render one cached point draw item.
 draw_cached_point :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
     c := iso_to_cartesian(p^.point1, state^.iso_scale^)
@@ -418,7 +398,6 @@ draw_cached_point :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw
 }
 
 
-// Summary:
 //   Render one cached line draw item.
 draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
     c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
@@ -427,7 +406,6 @@ draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) 
 }
 
 
-// Summary:
 //   Render one cached circle/arc draw item.
 draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Draw) {
     start := c^.start
@@ -465,7 +443,6 @@ draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Dr
     }
 }
 
-// Summary:
 //   Render one cached filled-circle draw item.
 draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Filled_Circle_Draw) {
     start := c^.start
@@ -506,7 +483,6 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
 }
 
 
-// Summary:
 //   Render one cached triangle draw item.
 draw_cached_triangle :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Triangle_Draw) {
     c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
@@ -516,7 +492,6 @@ draw_cached_triangle :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Triangl
 }
 
 
-// Summary:
 //   Render one cached square draw item.
 draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Draw) {
     c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
@@ -528,7 +503,6 @@ draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Dr
 }
 
 
-// Summary:
 //   Render one cached pentagon draw item.
 draw_cached_pentagon :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Pentagon_Draw) {
     c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
@@ -542,7 +516,6 @@ draw_cached_pentagon :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Pentago
 }
 
 
-// Summary:
 //   Render one cached pen tool draw item.
 draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
     c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
@@ -552,7 +525,6 @@ draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) 
 }
 
 
-// Summary:
 //   Render active-end indicator for cached pen tool.
 draw_cached_pen_active_dot :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
     c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
@@ -574,7 +546,6 @@ draw_cached_pen_active_dot :: proc(state: ^Euclid_General_State, pen: ^kine.Kine
 }
 
 
-// Summary:
 //   Render compass top arc segment that lies outside the swing angle.
 draw_outside_arc_compass_cached :: proc(
     p0, p1, p2: Vector3,
@@ -635,7 +606,6 @@ draw_outside_arc_compass_cached :: proc(
 }
 
 
-// Summary:
 //   Render one cached compass tool draw item.
 draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
     c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
@@ -656,7 +626,6 @@ draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compa
 }
 
 
-// Summary:
 //   Render active-end indicator for cached compass tool.
 draw_cached_compass_active_dot :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
     c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
@@ -678,7 +647,6 @@ draw_cached_compass_active_dot :: proc(state: ^Euclid_General_State, comp: ^kine
 }
 
 
-// Summary:
 //   Render floor shadow for cached pen tool geometry.
 draw_cached_pen_shadow :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
     s0 := shadow_to_screen(pen^.joint1, state)
@@ -692,7 +660,6 @@ draw_cached_pen_shadow :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen
 }
 
 
-// Summary:
 //   Render floor-shadow arc segment outside the compass swing angle.
 draw_outside_arc_compass_shadow_cached :: proc(
     p0, p1, p2: Vector3,
@@ -757,7 +724,6 @@ draw_outside_arc_compass_shadow_cached :: proc(
 }
 
 
-// Summary:
 //   Render floor shadow for cached compass tool geometry.
 draw_cached_compass_shadow :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
     s0 := shadow_to_screen(comp^.joint1, state)

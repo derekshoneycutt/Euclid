@@ -103,7 +103,6 @@ CLEAR_BURST_POINT_COUNT :: 28
 CLEAR_BURST_LINE_SAMPLES :: 75
 CLEAR_BURST_CIRCLE_SAMPLES :: 120
 
-// Summary:
 //   Emit high-layer flicker particles at a 2D origin.
 //
 // Parameters:
@@ -126,7 +125,6 @@ emit_flicker_particles :: proc(ps: ^Particle_System, x, y: f32, color: rl.Color,
     }
 }
 
-// Summary:
 //   Emit trail particles over time and attach burnout/flicker effects.
 //
 // Parameters:
@@ -159,7 +157,6 @@ emit_trail_particles :: proc(ps: ^Particle_System, dt, tip_x, tip_y: f32, tip_co
     }
 }
 
-// Summary:
 //   Push nearby dust particles away from a 2D contact position.
 //
 // Parameters:
@@ -213,7 +210,6 @@ push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
     }
 }
 
-// Summary:
 //   Kick currently alive dust particles to create burst-like disturbance and fade.
 //
 // Parameters:
@@ -241,7 +237,6 @@ kick_existing_dust :: proc(ps: ^Particle_System) {
     }
 }
 
-// Summary:
 //   Emit dust burst particles for a specific drawable kine item.
 //
 // Parameters:
@@ -342,7 +337,6 @@ emit_kine_hide_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System, index
     }
 }
 
-// Summary:
 //   Emit dust bursts across all currently drawable kine items.
 //
 // Parameters:
@@ -442,7 +436,6 @@ emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
     }
 }
 
-// Summary:
 //   Advance particle simulation for dust, trail, burnout, and flicker layers.
 //
 // Parameters:
@@ -472,14 +465,12 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 
-// Summary:
 //   Generate a random float in the inclusive [min_v, max_v] range.
 random_f32_range :: proc(min_v, max_v: f32) -> f32 {
     t := f32(rl.GetRandomValue(0, 10000)) / 10000.0
     return math.lerp(min_v, max_v, t)
 }
 
-// Summary:
 //   Reset particle-system runtime counters and mark all particle slots as dead.
 reset_particles :: proc(ps: ^Particle_System) {
     ps.next_index = 0
@@ -496,7 +487,6 @@ reset_particles :: proc(ps: ^Particle_System) {
     }
 }
 
-// Summary:
 //   Reserve a low-layer slot for dust particles, preferring dead entries.
 //
 // Notes:
@@ -519,7 +509,6 @@ reserve_dead_low_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool
     return &ps.low_particles[index], true
 }
 
-// Summary:
 //   Reserve a high-layer slot using ring-buffer indexing.
 //
 // Notes:
@@ -541,7 +530,6 @@ reserve_dead_high_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, boo
     return nil, false*/
 }
 
-// Summary:
 //   Reserve a mid-layer slot using ring-buffer indexing.
 //
 // Notes:
@@ -563,7 +551,6 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
     return nil, false*/
 }
 
-// Summary:
 //   Spawn one trail particle near the provided tool-tip position.
 spawn_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y: f32, tip_color: rl.Color) -> (Vector3, bool) {
@@ -597,7 +584,6 @@ spawn_particle :: proc(
     return spawn_pos, true
 }
 
-// Summary:
 //   Spawn one high-layer flicker particle at an origin with random drift.
 spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.Color) {
 
@@ -627,7 +613,6 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
 
 }
 
-// Summary:
 //   Spawn one burnout particle near the provided tool-tip position.
 spawn_burnout_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y: f32, tip_color: rl.Color) {
@@ -658,7 +643,6 @@ spawn_burnout_particle :: proc(
 
 }
 
-// Summary:
 //   Advance spawn timer without emitting particles.
 emit_silence :: proc(ps: ^Particle_System, dt: f32) {
     ps.spawn_timer += dt
@@ -668,7 +652,6 @@ emit_silence :: proc(ps: ^Particle_System, dt: f32) {
     }
 }
 
-// Summary:
 //   Clamp a particle's x/y position to dust bounds and apply bounce damping.
 clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
     if p.position.x < DUST_XY_MIN {
@@ -688,7 +671,6 @@ clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
     }
 }
 
-// Summary:
 //   Spawn one low-layer dust particle around an origin with random kick values.
 spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color) {
     p, ok := reserve_dead_low_particle_slot(ps)
@@ -716,7 +698,6 @@ spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color
 
 }
 
-// Summary:
 //   Emit dust samples along a line segment between two points.
 emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: rl.Color) {
     sample_count := max(CLEAR_BURST_LINE_SAMPLES, 2)
@@ -734,7 +715,6 @@ emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: rl.Color) {
     }
 }
 
-// Summary:
 //   Emit dust along each edge of a polygon resolved from kine child-point links.
 //
 // Notes:
@@ -779,7 +759,6 @@ emit_polygon_edge_dust :: proc(
     }
 }
 
-// Summary:
 //   Normalize angle to non-negative range by adding one full turn when needed.
 normalize_theta :: proc(theta: f32) -> f32 {
     t := theta
@@ -789,7 +768,6 @@ normalize_theta :: proc(theta: f32) -> f32 {
     return t
 }
 
-// Summary:
 //   Compute positive sweep delta between start and end angles.
 compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     start_n := normalize_theta(start_theta)
@@ -802,7 +780,6 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     return delta
 }
 
-// Summary:
 //   Emit dust samples along a circular/arc sweep between start and finish points.
 emit_circle_dust :: proc(ps: ^Particle_System, center, start, finish: Vector3, offset: f32, col: rl.Color) {
     start_vec := start - center
@@ -835,7 +812,6 @@ emit_circle_dust :: proc(ps: ^Particle_System, center, start, finish: Vector3, o
     }
 }
 
-// Summary:
 //   Map x/y position into the dust collision grid cell index.
 dust_grid_cell_index :: proc(x, y: f32) -> int {
     cx := clamp(int(x / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
@@ -843,7 +819,6 @@ dust_grid_cell_index :: proc(x, y: f32) -> int {
     return cy * DUST_GRID_DIM + cx
 }
 
-// Summary:
 //   Resolve one dust-particle pair collision with positional and velocity response.
 resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
     dx := b.position.x - a.position.x
@@ -880,7 +855,6 @@ resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
     b.velocities.y += imp * ny
 }
 
-// Summary:
 //   Resolve dust collisions for one cell against configured neighbor cells.
 resolve_dust_collisions_on_grid :: proc(
     ps: ^Particle_System, buckets, counts: ^[]i32,
@@ -911,7 +885,6 @@ resolve_dust_collisions_on_grid :: proc(
     }
 }
 
-// Summary:
 //   Build temporary dust grid buckets and resolve pairwise dust collisions.
 //
 // Notes:
@@ -951,7 +924,6 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
     }
 }
 
-// Summary:
 //   Advance one particle by type-specific behavior and lifetime rules.
 update_particle :: proc(p : ^Particle, dt: f32) {
     if !p.alive {
@@ -978,14 +950,12 @@ update_particle :: proc(p : ^Particle, dt: f32) {
     }
 }
 
-// Summary:
 //   Update trail particle size based on normalized lifetime.
 update_particle_trail :: proc(p : ^Particle) {
     t := math.clamp(f32(p.age / p.life), 0.0, 1.0)
     p.size = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
 }
 
-// Summary:
 //   Update flicker particle position, drift, and intermittent lit-frame state.
 update_particle_flicker :: proc(p : ^Particle) {
     p.position += p.velocities
@@ -1001,14 +971,12 @@ update_particle_flicker :: proc(p : ^Particle) {
     }
 }
 
-// Summary:
 //   Update burnout particle size based on normalized lifetime.
 update_particle_burnout :: proc(p: ^Particle) {
     t := math.clamp(f32(p.age / p.life), 0.0, 1.0)
     p.size = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
 }
 
-// Summary:
 //   Update dust particle physics, floor bounce, bounds clamp, and size fade.
 update_particle_dust :: proc(p: ^Particle) {
     p.velocities.z += DUST_GRAVITY

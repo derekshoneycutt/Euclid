@@ -10,7 +10,6 @@ import rl "vendor:raylib"
 
 MAX_PARTICLES :: core.MAX_PARTICLES
 
-// Summary:
 //   Render alive low-layer particles and update low-layer render counters.
 //
 // Parameters:
@@ -44,7 +43,6 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
     ps.last_render_low = count_rendered
 }
 
-// Summary:
 //   Render alive mid-layer particles and update mid-layer render counters.
 //
 // Parameters:
@@ -78,7 +76,6 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
     ps.last_render_mid = count_rendered
 }
 
-// Summary:
 //   Render alive high-layer particles and update high-layer render counters.
 //
 // Parameters:
@@ -115,7 +112,6 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
 
 
 
-// Summary:
 //   Render one trail particle with lifetime-based alpha fade.
 render_particle_trail :: proc(p : ^Particle, screen: Vector2) {
     t := math.clamp(p^.age / p^.life, 0.0, 1.0)
@@ -127,7 +123,6 @@ render_particle_trail :: proc(p : ^Particle, screen: Vector2) {
     rl.DrawCircleV(screen, p^.size, col)
 }
 
-// Summary:
 //   Render one flicker particle only while its lit window is active.
 render_particle_flicker :: proc(p : ^Particle, screen: Vector2) {
     if p^.lit_frames > 0 {
@@ -135,7 +130,6 @@ render_particle_flicker :: proc(p : ^Particle, screen: Vector2) {
     }
 }
 
-// Summary:
 //   Render one burnout particle with color/alpha burn-down over life.
 render_particle_burnout :: proc(p: ^Particle, screen: Vector2) {
     t := math.clamp(p^.age / p^.life, 0.0, 1.0)
@@ -152,7 +146,6 @@ render_particle_burnout :: proc(p: ^Particle, screen: Vector2) {
     rl.DrawCircleV(screen, p^.size, rl.Color{r, g, b, a})
 }
 
-// Summary:
 //   Render one dust particle with lifetime-based alpha fade.
 render_particle_dust :: proc(p: ^Particle, screen: Vector2) {
     t := math.clamp(p^.age / p^.life, 0.0, 1.0)
