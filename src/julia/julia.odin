@@ -106,6 +106,59 @@ init_euclid_scripts :: proc(
 }
 
 // Summary:
+//  Perform a single animation frame update for the julia system, including
+//  updating the state, hot-reloading julia code and assets, etc. as required.
+//
+// Parameters:
+//   - state: Global runtime state containing Julia interface selection and cooldown state.
+//   - dt: Fixed-step delta used for reset cooldown countdown.
+//
+// Notes:
+//   - Julia exceptions are logged and ignored for this step.
+perform_animation_frame :: proc(
+    state: ^core.Euclid_General_State, dt: f32) {
+
+    update_running_animations(state, dt)
+    call_global_euclid_loop(state, dt)
+    call_current_animation_loop(state, dt)
+}
+
+// Summary:
+//   Fetch UI view text from the active Julia animation callback.
+//
+// Parameters:
+//   - state: Global runtime state forwarded to the animation text callback.
+//
+// Returns:
+//   - Cloned text for immediate UI consumption.
+//   - Empty string when callback is unavailable, returns nil, or throws an exception.
+call_current_animation_get_view_text :: proc(
+    state: ^core.Euclid_General_State) -> string {
+
+    if state^.julia_interface^.current_animation == nil ||
+        state^.julia_interface^.current_animation^.get_view_text == nil {
+        return ""
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+
+    result := julialib.jl_call1(state^.julia_interface^.current_animation^.get_view_text, state_value)
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception("Current animation get view text")
+        return ""
+    }
+    if result == nil {
+        return ""
+    }
+
+    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+}
+
+
+
+
+
+// Summary:
 //   Update animation lifecycle state, hot-reload assets if changed, and process animation switches/resets.
 //
 // Parameters:
@@ -201,41 +254,6 @@ call_current_animation_loop :: proc(
         return
     }
 }
-
-// Summary:
-//   Fetch UI view text from the active Julia animation callback.
-//
-// Parameters:
-//   - state: Global runtime state forwarded to the animation text callback.
-//
-// Returns:
-//   - Cloned text for immediate UI consumption.
-//   - Empty string when callback is unavailable, returns nil, or throws an exception.
-call_current_animation_get_view_text :: proc(
-    state: ^core.Euclid_General_State) -> string {
-
-    if state^.julia_interface^.current_animation == nil ||
-        state^.julia_interface^.current_animation^.get_view_text == nil {
-        return ""
-    }
-
-    state_value := julialib.jl_box_voidpointer(state)
-
-    result := julialib.jl_call1(state^.julia_interface^.current_animation^.get_view_text, state_value)
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Current animation get view text")
-        return ""
-    }
-    if result == nil {
-        return ""
-    }
-
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
-}
-
-
-
-
 
 // Summary:
 //   Switch to a selected animation, cleaning previous state and initializing the new loop.

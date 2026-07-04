@@ -37,7 +37,7 @@ main.odin
   -> create app state + window + render resources
   -> fixed-step update loop:
        - animation selection/reload handling
-       - Julia global loop + selected animation loop
+      - Julia frame orchestration (global loop + selected animation loop)
        - particle update
        - constraint solve
        - draw frame
@@ -62,8 +62,10 @@ If you are new, read in this order:
    - Application startup/shutdown sequence.
 1. `src/view/view.odin`
    - State initialization and the fixed timestep window loop.
+1. `src/julia/julia.odin`
+   - Host-side Julia lifecycle and per-frame orchestration (`perform_animation_frame`).
 1. `src/julia/odin-julia-bridge.odin`
-   - Host-side bridge logic and exported C ABI functions called from Julia.
+   - Exported C ABI bridge operations that Julia scripts call into.
 1. `src/julia/script.jl`
    - Julia-side entrypoint and script/module loading.
 1. `src/julia/odin-julia-bridge.jl`
@@ -90,16 +92,13 @@ Then branch out to module-specific files listed below.
   - Defines Julia interface structs (`EuclidJuliaInterface`, animation interface entries).
   - Sets capacity constants (`MAX_KINEPOINTS`, `MAX_KINECONSTRAINTS`, etc.).
 
-### Window Loop and Simulation Orchestration
+### Window Handling, Rendering, and UI
 
 - `src/view/view.odin`
   - Creates persistent runtime state (surface, particle system, point system, tools).
   - Runs fixed-step simulation (`FIXED_DT`) with a frame accumulator.
-  - Calls Julia global loop and selected animation loop each simulation step.
+  - Calls `julia.perform_animation_frame(...)` each simulation step.
   - Triggers rendering of scene + UI each frame.
-
-### Rendering and UI
-
 - `src/view/elements.odin`
   - Draws surface and shape/tool visuals.
   - Uses shader-backed stroke rendering for pen/compass.
@@ -110,6 +109,13 @@ Then branch out to module-specific files listed below.
   - Isometric projection helpers.
 - `src/view/gif_capture.odin`
   - Captures animation cycles to GIF from view area.
+
+### Assets and Packaging Runtime
+
+- `src/files/files.odin`
+  - Unpacks `assets.pkg` into a writable cache location.
+  - Resolves packaged asset paths (Julia scripts, shaders, textures/fonts).
+  - Supports asset reload checks via archive modification time.
 
 ### Kinematics and Constraints
 
@@ -131,18 +137,19 @@ Then branch out to module-specific files listed below.
   - Implements GIF encoder internals used by capture flow.
   - Handles palette/frame encoding and output buffer construction.
 
-### Assets and Packaging Runtime
-
-- `src/files/files.odin`
-  - Unpacks `assets.pkg` into a writable cache location.
-  - Resolves packaged asset paths (Julia scripts, shaders, textures/fonts).
-  - Supports asset reload checks via archive modification time.
-
 ### Julia FFI Bindings (Low-Level)
 
 - `src/julialib/julialib.odin`
   - Odin declarations for Julia embedding API (`jl_*`).
   - Includes runtime init/eval/call/exception and type declarations.
+
+### Julia Host Runtime and Bridge Exports
+
+- `src/julia/julia.odin`
+  - Owns Julia lifecycle (`initiate_julia`, `end_julia`) and interface handle setup.
+  - Runs per-step Julia orchestration (`perform_animation_frame`) and reload checks.
+- `src/julia/odin-julia-bridge.odin`
+  - Defines exported C ABI operations used by Julia scripts for geometry/tools/constraints/particles.
 
 ---
 
@@ -196,9 +203,8 @@ Pattern for content organization:
 1. Odin queries Julia functions (`init_euclid_scripts`, `global_euclid_loop`).
 1. Julia registration code calls back into exported Odin bridge functions to
   build the animation tree.
-1. During runtime, Odin invokes:
-   - Julia global loop
-   - Julia currently selected animation loop
+1. During runtime, Odin invokes `julia.perform_animation_frame(...)`, which runs
+   reload checks plus Julia global loop and current animation loop.
 1. Julia animation code manipulates Odin state through bridge exports
   (create/mutate points, constraints, tools, particles, metadata).
 

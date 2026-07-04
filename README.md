@@ -11,7 +11,7 @@ animations. Raylib is used for rendering.
     1. [Q: What's the utility?](#q-whats-the-utility)
     1. [Q: Why 2 languages?](#q-why-2-languages)
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
-    1. [Q: What about architecture and coding standards?](#q-what-about-architecture-and-coding-standards)
+    1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
 
 <p align="center">
 <img src="./screen.gif" >
@@ -117,16 +117,16 @@ Notes:
   - Short options can be combined, e.g. -rv or -bnh.
 ```
 
-### Q: What about architecture and coding standards?
+### Q: Where Should I Start If I Want In The Code?
 
-I have added an initial architecture summary and coding standards.
+I have added an initial architecture summary and coding standards that can be your guides.
 
 - [Architecture Summary](ArchitectureSummary.md): describes the several modules, boundaries,
-  etc., and how they fit together
-- [Coding Standards](CodingStandards.md): describes how any new could should be written
+  etc., and how they fit together. Includes important code files to start with.
+- [Coding Standards](CodingStandards.md): describes how any new code should be written
 
 The project was initially quite messy, without a standard and with all the artifacts of
-exploring and learning a new-to-me language as well as not really being a traditional
+exploring and learning a new-to-me language, as well as me not really being a traditional
 animation programmer in any sense of the restriction. I am more an application or backend
 engineer by trade. Additionally, some of the code was initially prototyped for a very
 different purpose. The result is some code not quite being as nice to the code standard.

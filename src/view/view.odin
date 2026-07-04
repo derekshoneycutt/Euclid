@@ -268,9 +268,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     kine.kine_update_last_cache_vectors(state^.point_system)
     step_count := 0
     for state^.accumulator >= FIXED_DT {
-        julia.update_running_animations(state, FIXED_DT)
-        julia.call_global_euclid_loop(state, FIXED_DT)
-        julia.call_current_animation_loop(state, FIXED_DT)
+        julia.perform_animation_frame(state, FIXED_DT)
         particles.update_particles(state^.particle_system, FIXED_DT)
         kine.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
         gif_capture_update_fixed_step(state)
