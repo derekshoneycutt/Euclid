@@ -3,14 +3,13 @@
 ## Table Of Contents
 
 1. [What This Project Is](#what-this-project-is)
-1. [High-Level Runtime Architecture](#high-level-runtime-architecture)
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Odin Side (Host Application)](#odin-side-host-application)
 1. [Julia Side (Scripted Animation Runtime)](#julia-side-scripted-animation-runtime)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
-1. [Memory and Compilation Model](#memory-and-compilation-model)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
+1. [Isometric Projection and Right-Hand Rule](#isometric-projection-and-right-hand-rule)
 1. [Polygon Vertex Order Conventions](#polygon-vertex-order-conventions)
 1. [Practical Contributor Guide](#practical-contributor-guide)
 1. [Key Architecture Takeaways](#key-architecture-takeaways)
@@ -18,40 +17,19 @@
 ## What This Project Is
 
 EuclidApp is a desktop visualization app for geometric constructions and proofs.
+The overall structure includes 2 programming languages, Odin and Julia.
 
-- **Odin** provides the application shell, rendering loop, simulation data model, memory ownership, and bridge exports.
-- **Julia** provides animation/content logic loaded from scripts at runtime.
+- **Odin** code provides the application shell, rendering loop, simulation data model,
+    memory ownership, and bridge exports. It owns long-lived application state
+    (`Euclid_General_State`), rendering, UI, and systems (kine + particles + gif capture).
+- **Julia** code provides animation/content logic loaded from scripts at runtime. It
+    registers an animation tree and drives per-animation behavior by calling exported
+    Odin-Julia Bridge functions.
 
 A useful mental model:
 
 - Odin is the **engine and host process**.
 - Julia is the **animation/content runtime** running inside that host.
-
----
-
-## High-Level Runtime Architecture
-
-```text
-main.odin
-  -> unpack assets.pkg (scripts, shaders, assets)
-  -> initialize Julia runtime
-  -> create app state + window + render resources
-  -> fixed-step update loop:
-       - animation selection/reload handling
-       - Julia frame orchestration (global loop + selected animation loop)
-       - particle update
-       - constraint solve
-       - draw frame
-  -> shutdown window/resources
-  -> shutdown Julia runtime
-```
-
-Core split of concerns:
-
-- **Odin** owns long-lived application state (`Euclid_General_State`), rendering,
-  UI, and systems (kine + particles + gif capture).
-- **Julia** registers an animation tree and drives per-animation behavior by
-  calling exported Odin bridge functions.
 
 ---
 
@@ -81,16 +59,13 @@ Then branch out to module-specific files listed below.
 ### Entry and Lifecycle
 
 - `src/main.odin`
-  - Ensures packaged assets are unpacked.
-  - Initializes and later terminates Julia (`initiate_julia` / `end_julia`).
-  - Starts the main window loop.
+  - Parses command line parameters.
+  - Initiates Julia and the View window.
 
 ### Global State and Core Types
 
 - `src/core/core.odin`
-  - Defines central state: `Euclid_General_State`.
-  - Defines kinematic shape/constraint structs and draw-cache structs.
-  - Defines Julia interface structs (`Euclid_Julia_Interface`, animation interface entries).
+  - Defines all the major structures in the Odin code.
   - Sets capacity constants (`MAX_KINEPOINTS`, `MAX_KINECONSTRAINTS`, etc.).
 
 ### Window Handling, Rendering, and UI
@@ -98,25 +73,20 @@ Then branch out to module-specific files listed below.
 - `src/view/view.odin`
   - Creates persistent runtime state (surface, particle system, point system, tools).
   - Runs fixed-step simulation (`FIXED_DT`) with a frame accumulator.
-  - Calls `julia.perform_animation_frame(...)` each simulation step.
-  - Triggers rendering of scene + UI each frame.
 - `src/view/elements.odin`
   - Draws surface and shape/tool visuals.
   - Uses shader-backed stroke rendering for pen/compass.
 - `src/view/ui.odin`
-  - Tree UI of registered animations.
-  - Settings controls (FPS display, GIF controls, etc.).
+  - Draws the Treeview, Settings, and View Text area of the view.
 - `src/view/isomath.odin`
-  - Isometric projection helpers.
+  - Isometric projection helper(s).
 - `src/view/gif_capture.odin`
   - Captures animation cycles to GIF from view area.
 
 ### Assets and Packaging Runtime
 
 - `src/files/files.odin`
-  - Unpacks `assets.pkg` into a writable cache location.
-  - Resolves packaged asset paths (Julia scripts, shaders, textures/fonts).
-  - Supports asset reload checks via archive modification time.
+  - Unpacks `assets.pkg` into a writable cache location and supports hot reload of Julia.
 
 ### Kinematics and Constraints
 
@@ -136,7 +106,6 @@ Then branch out to module-specific files listed below.
 
 - `src/gif/gif_encode.odin`
   - Implements GIF encoder internals used by capture flow.
-  - Handles palette/frame encoding and output buffer construction.
 
 ### Julia FFI Bindings (Low-Level)
 
@@ -167,7 +136,6 @@ Then branch out to module-specific files listed below.
 
 - `src/julia/odin-julia-bridge.jl`
   - Julia-friendly wrappers over Odin exported bridge calls (`@ccall`).
-  - Defines mirror bridge structs for point/constraint/shape views.
   - Provides helper overloads and color conversion utilities.
 
 ### Shared Julia Utility Modules
@@ -205,7 +173,7 @@ Pattern for content organization:
 1. Julia registration code calls back into exported Odin bridge functions to
   build the animation tree.
 1. During runtime, Odin invokes `julia.perform_animation_frame(...)`, which runs
-   reload checks plus Julia global loop and current animation loop.
+  reload checks plus Julia global loop and current animation loop.
 1. Julia animation code manipulates Odin state through bridge exports
   (create/mutate points, constraints, tools, particles, metadata).
 
@@ -225,32 +193,12 @@ Pattern for content organization:
 
 ---
 
-## Memory and Compilation Model
-
-### Odin
-
-- Built ahead-of-time into the native executable (`bin/euclid` or `bin/euclid.exe`).
-- Primary application state is manually managed and long-lived.
-- Design prefers preallocated/fixed-capacity arrays to avoid uncontrolled growth.
-
-### Julia
-
-- Embedded runtime initialized inside Odin process.
-- Scripts are loaded/included at runtime from packaged assets.
-- Animation logic executes JIT-compiled Julia code with Julia GC-managed allocations.
-
-Practical implication:
-
-- Performance-critical host/render/simulation scaffolding stays in Odin.
-- Flexible animation authoring and content iteration stay in Julia.
-
----
-
 ## Allocation Strategy: Init-First with Explicit Exceptions
 
 The allocation policy is intentionally init-first in Odin:
 
-- Long-lived application structures are created during startup (global state, core systems, tool state, caches).
+- Long-lived application structures are created during startup (global state, core systems,
+    tool state, caches) and used statically throughout the lifetime of the application.
 - Runtime updates prefer mutating preallocated structures instead of growing state each frame.
 
 This keeps ownership clear and limits fragmentation pressure in hot paths.
@@ -326,6 +274,30 @@ Defense:
 
 ---
 
+## Isometric Projection and Right-Hand Rule
+
+The isometric helper in `src/view/isomath.odin` uses a right-handed world-space convention.
+
+What that means in practice:
+
+- Hand-position rule used in this project: hold your **right hand palm up**,
+  curl the last three fingers naturally, and keep your thumb and index finger
+  perpendicular.
+- In that pose, the **thumb points +X** and the **index finger points +Y**.
+- Therefore, by the right-hand rule (`X × Y = Z`), **+Z is up**
+  (height/elevation).
+- Positive rotation follows the right-hand rule around each axis: curl your right-hand
+  fingers in the rotation direction; your thumb points toward the positive axis.
+
+Projection note:
+
+- The projection maps world coordinates into screen coordinates, so signs in the
+  formula account for screen-space Y increasing downward.
+- In effect, increasing `coord.z` renders higher on screen, consistent with
+  treating +Z as world up.
+
+---
+
 ## Polygon Vertex Order Conventions
 
 For filled polygons created from Julia (`create_new_triangle`, `create_new_square`,
@@ -334,8 +306,6 @@ For filled polygons created from Julia (`create_new_triangle`, `create_new_squar
 Renderer note:
 
 - `src/view/elements.odin` draws polygon faces as triangle fans/splits.
-- For squares specifically, `draw_cached_square` is rendered as two triangles:
-  `(p1, p2, p3)` and `(p1, p3, p4)`.
 - If the supplied point order does not follow the polygon perimeter consistently,
   the shape can appear wrong or effectively invisible in practice.
 
@@ -354,28 +324,18 @@ Renderer note:
 
 - Triangle (`create_new_triangle`):
   - Render path: one triangle, `DrawTriangle(p1, p2, p3)`.
-  - Requirement: `(p1, p2, p3)` must project with the expected winding.
+  - Requirement: `(p1, p2, p3)` must project counter-clockwise.
 - Square (`create_new_square`):
   - Render path: two triangles
     `(p1, p2, p3)` and `(p1, p3, p4)`.
-  - Requirement: both triangles must project with the expected winding and
+  - Requirement: both triangles must project counter-clockwise and
     represent a non-self-intersecting quad.
   - Working order used by current scripts: **`A, D, C, B`**.
 - Pentagon (`create_new_pentagon`):
   - Render path: triangle fan from `p1`:
     `(p1, p2, p3)`, `(p1, p3, p4)`, `(p1, p4, p5)`.
-  - Requirement: each fan triangle must project with the expected winding.
+  - Requirement: each fan triangle must project counter-clockwise.
   - Working order used by current scripts: **`A, E, D, C, B`**.
-
-Concrete examples:
-
-- Triangle valid: `A, B, C`
-- Triangle invalid: `A, C, B`
-- Square valid: `A, D, C, B`
-- Square invalid: `A, B, C, D`
-- Square invalid: `A, C, B, D`
-- Pentagon valid: `A, E, D, C, B`
-- Pentagon invalid: `A, B, C, D, E`
 
 Practical check when debugging visibility:
 
