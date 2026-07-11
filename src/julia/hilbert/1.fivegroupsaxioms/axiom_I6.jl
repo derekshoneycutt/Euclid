@@ -108,8 +108,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [labelAlphaId, labelBetaId, labelAId, labelBId,
-         planeHostId,
          pointAId, pointBId,
+         planeHostId,
         ])
 
     set_plane_alpha(state_ptr, planeHostId, 0f0)

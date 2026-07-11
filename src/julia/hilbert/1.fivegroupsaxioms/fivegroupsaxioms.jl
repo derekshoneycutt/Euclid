@@ -14,7 +14,7 @@ include("./axiom_I6.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. §1 The Five Groups of Axioms
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §1 The Elements of Geometry and the Five Groups of Axioms
     
 Let us consider three distinct systems of things. The things composing the first system, we will call points and designate them by the letters A, B, C,. . . ; those of the second, we will call straight lines and designate them by the letters a, b, c,. . . ; and those of the third system, we will call planes and designate them by the Greek letters α, β, γ,. . . The points are called the elements of linear geometry; the points and straight lines, the elements of plane geometry; and the points, lines, and planes, the elements of the geometry of space or the elements of space.
 
@@ -28,7 +28,7 @@ V. Axiom of continuity (Archimedes's axiom)."""
 end
 
 function get_view_text_BookI_connection(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. §2 Group I: Axioms of Connection
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §2 Group I: Axioms of Connection
 
 The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
 
@@ -50,7 +50,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
     book1Id = OdinJuliaBridge.add_child_animation_interface(
         state_ptr, get_view_text_BookI, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
-        "1. §1 The Five Groups of Axioms", rootId)
+        "1. The Five Groups of Axioms, §1", rootId)
         book1Sec2Id = OdinJuliaBridge.add_child_animation_interface(
             state_ptr, get_view_text_BookI_connection, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
