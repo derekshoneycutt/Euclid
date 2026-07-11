@@ -23,6 +23,7 @@ package particles
 import "../core"
 
 import "core:math"
+import "core:mem"
 
 import rl "vendor:raylib"
 
@@ -93,9 +94,11 @@ DUST_COLLISION_RADIUS :: 0.004
 DUST_COLLISION_RESTITUTION :: 0.42
 DUST_COLLISION_POSITION_SLOP :: 0.0001
 
-DUST_GRID_CELL_SIZE :: 0.02
-DUST_GRID_DIM :: 50
-DUST_GRID_BUCKET_CAP :: 16
+DUST_GRID_CELL_SIZE :: core.DUST_GRID_CELL_SIZE
+DUST_GRID_DIM :: core.DUST_GRID_DIM
+DUST_GRID_DIM_SQUARED :: core.DUST_GRID_DIM_SQUARED
+DUST_GRID_BUCKET_CAP :: core.DUST_GRID_BUCKET_CAP
+DUST_GRID_BUCKET_COUNT :: core.DUST_GRID_BUCKET_COUNT
 
 DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
 
@@ -857,10 +860,8 @@ resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
 
 //   Resolve dust collisions for one cell against configured neighbor cells.
 resolve_dust_collisions_on_grid :: proc(
-    ps: ^Particle_System, buckets, counts: ^[]i32,
+    ps: ^Particle_System,
     cy, cx, ca, na: int, radius_sq, min_sep: f32) {
-
-    Stride :: DUST_GRID_BUCKET_CAP
 
     if na == 0 {
         return
@@ -872,14 +873,16 @@ resolve_dust_collisions_on_grid :: proc(
             continue
         }
         cb := ncy * DUST_GRID_DIM + ncx
-        nb := int(counts[cb])
+        nb := int(ps^.dust_counts[cb])
         same_cell := ca == cb
 
         for li in 0..<na {
-            a := &ps.low_particles[buckets[ca * Stride + li]]
+            a := &ps.low_particles[ps^.dust_buckets[ca * DUST_GRID_BUCKET_CAP + li]]
             lj_start := li + 1 if same_cell else 0
             for lj in lj_start..<nb {
-                resolve_dust_pair(a, &ps.low_particles[buckets[cb * Stride + lj]], min_sep, radius_sq)
+                resolve_dust_pair(a,
+                    &ps.low_particles[ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj]],
+                    min_sep, radius_sq)
             }
         }
     }
@@ -894,11 +897,8 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
         return
     }
 
-    GridCells :: DUST_GRID_DIM * DUST_GRID_DIM
-    Stride :: DUST_GRID_BUCKET_CAP
-
-    buckets := make([]i32, GridCells * Stride, context.temp_allocator)
-    counts := make([]i32, GridCells, context.temp_allocator)
+    mem.set(&ps^.dust_buckets[0], 0, size_of(ps^.dust_buckets))
+    mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
 
     for i in 0..<ps^.use_max_dust_particles {
         p := &ps.low_particles[i]
@@ -906,9 +906,9 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
             continue
         }
         c := dust_grid_cell_index(p.position.x, p.position.y)
-        if counts[c] < i32(Stride) {
-            buckets[c * Stride + int(counts[c])] = i32(i)
-            counts[c] += 1
+        if ps^.dust_counts[c] < i32(DUST_GRID_BUCKET_CAP) {
+            ps^.dust_buckets[c * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[c])] = i32(i)
+            ps^.dust_counts[c] += 1
         }
     }
 
@@ -918,8 +918,8 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
     for cy in 0..<DUST_GRID_DIM {
         for cx in 0..<DUST_GRID_DIM {
             ca := cy * DUST_GRID_DIM + cx
-            na := int(counts[ca])
-            resolve_dust_collisions_on_grid(ps, &buckets, &counts, cy, cx, ca, na, radius_sq, min_sep)
+            na := int(ps^.dust_counts[ca])
+            resolve_dust_collisions_on_grid(ps, cy, cx, ca, na, radius_sq, min_sep)
         }
     }
 }

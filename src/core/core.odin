@@ -18,6 +18,12 @@ MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
 MAX_JULIA_INTERFACES :: 512
 
+DUST_GRID_CELL_SIZE :: 0.02
+DUST_GRID_DIM :: 50
+DUST_GRID_DIM_SQUARED :: DUST_GRID_DIM * DUST_GRID_DIM
+DUST_GRID_BUCKET_CAP :: 16
+DUST_GRID_BUCKET_COUNT :: DUST_GRID_DIM_SQUARED * DUST_GRID_BUCKET_CAP
+
 TOOL_LENGTH :: 0.35
 
 Vector2 :: rl.Vector2
@@ -330,6 +336,10 @@ Particle_System :: struct {
     low_particles : [MAX_LOW_PARTICLES]Particle,
     particles : [MAX_PARTICLES]Particle,
     high_particles : [MAX_PARTICLES]Particle,
+
+    dust_buckets : [DUST_GRID_BUCKET_COUNT]i32,
+    dust_counts : [DUST_GRID_DIM_SQUARED]i32,
+
     next_index : int,
     spawn_timer : f32,
 

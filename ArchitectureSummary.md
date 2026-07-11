@@ -37,7 +37,7 @@ main.odin
   -> create app state + window + render resources
   -> fixed-step update loop:
        - animation selection/reload handling
-      - Julia frame orchestration (global loop + selected animation loop)
+       - Julia frame orchestration (global loop + selected animation loop)
        - particle update
        - constraint solve
        - draw frame
@@ -47,7 +47,7 @@ main.odin
 
 Core split of concerns:
 
-- **Odin** owns long-lived application state (`EuclidGeneralState`), rendering,
+- **Odin** owns long-lived application state (`Euclid_General_State`), rendering,
   UI, and systems (kine + particles + gif capture).
 - **Julia** registers an animation tree and drives per-animation behavior by
   calling exported Odin bridge functions.
@@ -87,9 +87,9 @@ Then branch out to module-specific files listed below.
 ### Global State and Core Types
 
 - `src/core/core.odin`
-  - Defines central state: `EuclidGeneralState`.
+  - Defines central state: `Euclid_General_State`.
   - Defines kinematic shape/constraint structs and draw-cache structs.
-  - Defines Julia interface structs (`EuclidJuliaInterface`, animation interface entries).
+  - Defines Julia interface structs (`Euclid_Julia_Interface`, animation interface entries).
   - Sets capacity constants (`MAX_KINEPOINTS`, `MAX_KINECONSTRAINTS`, etc.).
 
 ### Window Handling, Rendering, and UI
@@ -262,14 +262,12 @@ Examples:
 
 - UI text rendering converts strings to temporary C strings during drawing.
 - View text returned from Julia is cloned into temporary host memory before rendering.
-- Dust collision grid buckets/counts are built as temporary arrays during particle update.
 
 Defense:
 
 - These are scratch values whose lifetime is one frame or less.
 - The frame loop performs allocator reset (`free_all(context.temp_allocator)`),
   so this memory is reclaimed deterministically each frame.
-- This avoids polluting long-lived state with transient buffers while keeping frame code straightforward.
 
 ### 2) Event-Driven Runtime Allocations (Not Per-Frame)
 
@@ -305,6 +303,9 @@ Defense:
 ### Practical Rule of Thumb
 
 - If data is persistent across frames, prefer startup allocation or explicit long-lived ownership.
+- If a runtime buffer has a stable maximum size, prefer statically allocated storage owned
+  by the long-lived system that uses it, and reuse that storage across updates instead of
+  rebuilding it from temporary frame memory.
 - If data is transient and frame-local, temp allocator usage is acceptable and expected.
 - If data belongs to scripting/runtime orchestration (Julia, asset reload, GIF
   session work), event-driven allocation is acceptable by design.
