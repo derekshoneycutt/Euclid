@@ -11,6 +11,7 @@
 1. [Memory and Compilation Model](#memory-and-compilation-model)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
+1. [Polygon Vertex Order Conventions](#polygon-vertex-order-conventions)
 1. [Practical Contributor Guide](#practical-contributor-guide)
 1. [Key Architecture Takeaways](#key-architecture-takeaways)
 
@@ -322,6 +323,65 @@ Defense:
   - `assets/**`
   - `manifest.txt`
 - At startup, app unpacks `assets.pkg` to a writable cache directory and resolves runtime paths from there.
+
+---
+
+## Polygon Vertex Order Conventions
+
+For filled polygons created from Julia (`create_new_triangle`, `create_new_square`,
+`create_new_pentagon`), **vertex order matters** for visible faces.
+
+Renderer note:
+
+- `src/view/elements.odin` draws polygon faces as triangle fans/splits.
+- For squares specifically, `draw_cached_square` is rendered as two triangles:
+  `(p1, p2, p3)` and `(p1, p3, p4)`.
+- If the supplied point order does not follow the polygon perimeter consistently,
+  the shape can appear wrong or effectively invisible in practice.
+
+### Required ordering rule (all supported polygons)
+
+- Raylib requirement (rshapes): `DrawTriangle(...)` expects vertices in
+  counter-clockwise order.
+- This renderer builds polygons from explicit triangle calls in
+  `src/view/elements.odin`; there is no automatic polygon triangulation or
+  winding correction.
+- Therefore, for any polygon to be visible/reliable, every generated triangle
+  must follow the expected winding after projection.
+- Never provide crossed or diagonal-jump vertex orderings.
+
+### Shape-specific guidance
+
+- Triangle (`create_new_triangle`):
+  - Render path: one triangle, `DrawTriangle(p1, p2, p3)`.
+  - Requirement: `(p1, p2, p3)` must project with the expected winding.
+- Square (`create_new_square`):
+  - Render path: two triangles
+    `(p1, p2, p3)` and `(p1, p3, p4)`.
+  - Requirement: both triangles must project with the expected winding and
+    represent a non-self-intersecting quad.
+  - Working order used by current scripts: **`A, D, C, B`**.
+- Pentagon (`create_new_pentagon`):
+  - Render path: triangle fan from `p1`:
+    `(p1, p2, p3)`, `(p1, p3, p4)`, `(p1, p4, p5)`.
+  - Requirement: each fan triangle must project with the expected winding.
+  - Working order used by current scripts: **`A, E, D, C, B`**.
+
+Concrete examples:
+
+- Triangle valid: `A, B, C`
+- Triangle invalid: `A, C, B`
+- Square valid: `A, D, C, B`
+- Square invalid: `A, B, C, D`
+- Square invalid: `A, C, B, D`
+- Pentagon valid: `A, E, D, C, B`
+- Pentagon invalid: `A, B, C, D, E`
+
+Practical check when debugging visibility:
+
+1. Expand the polygon into the exact triangle list used by `elements.odin`.
+1. Verify each triangle winding against raylib's `DrawTriangle` expectation.
+1. Only after triangle winding is correct, tune color/alpha/placement.
 
 ---
 

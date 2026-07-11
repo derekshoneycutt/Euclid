@@ -257,7 +257,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer <= FlickerDuration
             for _ in 1:FlickerSamplesPerFrame
                 samplePos = random_square_point(VertexA, VertexB, VertexD)
-                OdinJuliaBridge.emit_flicker_particle(state_ptr, samplePos[1], samplePos[2], FlickerColor)
+                OdinJuliaBridge.emit_flicker_particle(state_ptr, samplePos, FlickerColor)
             end
         end
 

@@ -117,8 +117,8 @@ CLEAR_BURST_CIRCLE_SAMPLES :: 120
 //
 // Returns:
 //   - none.
-emit_flicker_particles :: proc(ps: ^Particle_System, x, y: f32, color: rl.Color, count: int = 1) {
-    origin := Vector3{x, y, 0.0}
+emit_flicker_particles :: proc(ps: ^Particle_System, x, y, z: f32, color: rl.Color, count: int = 1) {
+    origin := Vector3{x, y, z}
     if count <= 0 {
         return
     }
@@ -689,7 +689,6 @@ spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color
     p.position = origin
     p.position.x += random_f32_range(-0.0022, 0.0022)
     p.position.y += random_f32_range(-0.0022, 0.0022)
-    p.position.z = DUST_FLOOR_Z
 
     p.velocities.x = random_f32_range(DUST_VX_MIN, DUST_VX_MAX)
     p.velocities.y = random_f32_range(DUST_VY_MIN, DUST_VY_MAX)

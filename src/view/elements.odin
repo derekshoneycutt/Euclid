@@ -498,6 +498,7 @@ draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Dr
     c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
     c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
     c3 := iso_to_cartesian(l^.point4, state^.iso_scale^)
+
     rl.DrawTriangle(c0, c1, c2, l^.color)
     rl.DrawTriangle(c0, c2, c3, l^.color)
 }

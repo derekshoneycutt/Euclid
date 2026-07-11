@@ -2490,13 +2490,13 @@ emit_trailing_particle :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - pos: 2D position used for particle emission.
+//   - pos: 3D position used for particle emission.
 //   - color: RGBA color payload in bridge format.
 @(export)
 emit_flicker_particle :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector2, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    particles.emit_flicker_particles(state^.particle_system, pos.x, pos.y, rlColor, 10)
+    particles.emit_flicker_particles(state^.particle_system, pos.x, pos.y, pos.z, rlColor, 10)
 }
