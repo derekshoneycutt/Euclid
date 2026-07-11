@@ -18,6 +18,7 @@ requestVet=false
 requestNoBuild=false
 requestAssets=false
 requestNoAssets=false
+runArgs=()
 
 require_command() {
     local commandName="$1"
@@ -40,6 +41,7 @@ Options:
   --vet, -v       Build with validation flags.
   --no-build, -n  Skip any build (overrides --build and --vet).
   --no-assets, -x Skip assets.pkg build (overrides --assets).
+  --              Pass all remaining args directly to bin/euclid (only with --run).
   --help, -h      Show this help text.
 
 Notes:
@@ -49,8 +51,19 @@ Notes:
 EOF
 }
 
-for arg in "$@"; do
+argIndex=0
+argsCount=$#
+while [[ ${argIndex} -lt ${argsCount} ]]; do
+    arg="${@:$((argIndex + 1)):1}"
+
     case "$arg" in
+        --)
+            shiftCount=$((argIndex + 1))
+            if [[ ${shiftCount} -lt $# ]]; then
+                runArgs=("${@:$((shiftCount + 1))}")
+            fi
+            break
+            ;;
         --run)
             requestRun=true
             ;;
@@ -108,6 +121,8 @@ for arg in "$@"; do
             hasInvalidArg=true
             ;;
     esac
+
+    argIndex=$((argIndex + 1))
 done
 
 if [[ "${hasInvalidArg}" == "true" ]]; then
@@ -243,6 +258,6 @@ cd "${scriptDir}"
 
 if [[ "${runAfterBuild}" == "true" ]]; then
     cd "${scriptDir}/bin/"
-    ./euclid
+    ./euclid "${runArgs[@]}"
     cd "${scriptDir}"
 fi

@@ -446,6 +446,7 @@ Euclid_UI_Runtime_State :: struct {
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,
 
+    limit_fps : bool,
     display_fps : bool,
 
     save_gif_requested: bool,
@@ -483,4 +484,10 @@ Euclid_General_State :: struct {
     accumulator : f32,
 
     anim_metadata : [MAX_METAVALUES]f32,
+}
+
+Euclid_Run_Settings :: struct {
+    do_run : bool,
+    do_antialiasing : bool,
+    do_vsync : bool,
 }

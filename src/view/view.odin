@@ -62,6 +62,7 @@ Particle :: core.Particle
 Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
+Euclid_Run_Settings :: core.Euclid_Run_Settings
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -70,15 +71,15 @@ Euclid_General_State :: core.Euclid_General_State
 //   - Resets temp allocator each frame after drawing.
 //
 // Parameters:
-//   - none.
+//   - settings: The settings describing how to operate the window
 //
 // Returns:
 //   - none.
-run_window_loop :: proc() {
+run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
     state := initiate_animations_state()
     defer free_animations_state(state)
 
-    initiate_window(state)
+    initiate_window(state, settings)
     defer close_window(state)
 
     free_all(context.temp_allocator)
@@ -149,6 +150,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.pen = pen
     state^.current_delta_time = FIXED_DT
     state^.accumulator = 0
+    state^.ui_runtime.limit_fps = true
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
@@ -178,11 +180,22 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
 //
 // Notes:
 //   - Should be paired with close_window on shutdown.
-initiate_window :: proc(state : ^Euclid_General_State) {
-    rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
+    if settings.do_antialiasing && settings.do_vsync {
+        rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+    } else if settings.do_antialiasing {
+        rl.SetConfigFlags({.MSAA_4X_HINT})
+    } else if settings.do_vsync {
+        rl.SetConfigFlags({.VSYNC_HINT})
+    }
+
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
 
-    rl.SetTargetFPS(LIMIT_FPS)
+    if state^.ui_runtime.limit_fps {
+        rl.SetTargetFPS(LIMIT_FPS)
+    } else {
+        rl.SetTargetFPS(0)
+    }
 
     icon_file := strings.clone_to_cstring(
         files.packaged_asset_path("compass_icon.png", context.temp_allocator), context.temp_allocator)

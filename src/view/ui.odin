@@ -565,6 +565,53 @@ draw_settings_fps_checkbox :: proc(
     ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR, font)
 }
 
+//   Render and handle the Limit FPS toggle control.
+draw_settings_limit_fps_checkbox :: proc(
+    panel: rl.Rectangle,
+    slider_track: rl.Rectangle,
+    mouse: rl.Vector2,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    font: rl.Font) {
+    row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET + 22
+    box := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y,
+        SETTINGS_CHECKBOX_SIZE,
+        SETTINGS_CHECKBOX_SIZE,
+    }
+
+    label_x := box.x + box.width + SETTINGS_CHECKBOX_LABEL_GAP
+    label := "Limit FPS"
+
+    // Keep hit target larger than the box so this is easy to click.
+    hit := rl.Rectangle{
+        box.x,
+        row_y - 4,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        box.height + 8,
+    }
+
+    if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, hit) {
+        ui_runtime.limit_fps = !ui_runtime.limit_fps
+        if ui_runtime.limit_fps {
+            rl.SetTargetFPS(LIMIT_FPS)
+        } else {
+            rl.SetTargetFPS(0)
+        }
+    }
+
+    rl.DrawRectangleLinesEx(box, 1, UI_BORDER_COLOR)
+    if ui_runtime.limit_fps {
+        p0 := rl.Vector2{box.x + 3, box.y + box.height * 0.55}
+        p1 := rl.Vector2{box.x + 6, box.y + box.height - 3}
+        p2 := rl.Vector2{box.x + box.width - 3, box.y + 3}
+        rl.DrawLineEx(p0, p1, 1.6, UI_TEXT_COLOR)
+        rl.DrawLineEx(p1, p2, 1.6, UI_TEXT_COLOR)
+    }
+
+    ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR, font)
+}
+
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(
     panel: rl.Rectangle,
@@ -781,6 +828,7 @@ draw_settings_view :: proc(
     )
     draw_settings_particle_stats(panel, slider_track, ps, font)
     draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
+    draw_settings_limit_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
 
     gif_section_y := slider_track.y + SETTINGS_GIF_TOP_OFFSET
     ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)

@@ -25,6 +25,7 @@ $requestVet = $false
 $requestNoBuild = $false
 $requestAssets = $false
 $requestNoAssets = $false
+$runArgs = @()
 
 function Stop-Build([string] $message) {
     Write-Error $message
@@ -42,6 +43,7 @@ Options:
   --vet, -v       Build with validation flags.
   --no-build, -n  Skip any build (overrides --build and --vet).
   --no-assets, -x Skip assets.pkg build (overrides --assets).
+  --              Pass all remaining args directly to bin/euclid (only with --run).
   --help, -h      Show this help text.
 
 Notes:
@@ -129,7 +131,16 @@ function New-ImportLibrary(
     }
 }
 
-foreach ($arg in $CliArgs) {
+for ($argIndex = 0; $argIndex -lt $CliArgs.Count; $argIndex++) {
+    $arg = $CliArgs[$argIndex]
+
+    if ($arg -eq "--") {
+        if (($argIndex + 1) -lt $CliArgs.Count) {
+            $runArgs = $CliArgs[($argIndex + 1)..($CliArgs.Count - 1)]
+        }
+        break
+    }
+
     switch -Regex ($arg) {
         '^--run$' {
             $requestRun = $true
@@ -353,7 +364,7 @@ if ($runAfterBuild) {
     $originalPath = $env:PATH
     $env:PATH = "$juliaBinDir;$originalPath"
     try {
-        & $windowsBinary
+        & $windowsBinary @runArgs
     }
     finally {
         $env:PATH = $originalPath
