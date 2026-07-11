@@ -378,6 +378,11 @@ Stroke3D_Render_State :: struct {
     loc_viewport_height: i32,
 }
 
+Dust_Render_State :: struct {
+    texture: rl.Texture2D,
+    ready: bool,
+}
+
 Gif_Capture_Phase :: enum {
     Idle,
     Armed,
@@ -473,6 +478,7 @@ Euclid_General_State :: struct {
     pen : Kine_Shape_Pen,
 
     stroke_3d: Stroke3D_Render_State,
+    dust_render: Dust_Render_State,
     ui_runtime: Euclid_UI_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font: rl.Font,

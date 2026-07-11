@@ -240,6 +240,7 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
 // Notes:
 //   - Intended as the shutdown pair for initiate_window.
 close_window :: proc(state : ^Euclid_General_State) {
+    shutdown_particle_render_resources(state)
     shutdown_stroke3d_shader(state)
     rl.UnloadFont(state^.font)
     rl.CloseWindow()

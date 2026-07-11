@@ -451,7 +451,7 @@ emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
 update_particles :: proc(ps: ^Particle_System, dt: f32) {
     for i in 0..<ps^.use_max_dust_particles {
         lp := &ps.low_particles[i]
-        update_particle(lp, dt)
+        update_particle_dust(lp)
     }
 
     resolve_dust_collisions(ps)
