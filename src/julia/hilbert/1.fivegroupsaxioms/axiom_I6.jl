@@ -36,6 +36,7 @@ const DescendDuration = 1.8f0
 const PointTrailDuration = 2f0
 const MoveToPointBDuration = 2f0
 const EndLiftDuration = 1.8f0
+const StartHoldDuration = 1f0
 
 const MetaPlaneHostId = 1
 const MetaPointAId = 11
@@ -47,12 +48,13 @@ const MetaLabelBId = 24
 const MetaPhase = 101
 const MetaTimer = 102
 
-const PhaseFadeInPlane = 0f0
-const PhaseDescendToA = 1f0
-const PhasePutPointA = 2f0
-const PhaseMoveToPointB = 3f0
-const PhasePutPointB = 4f0
-const PhaseEndLift = 5f0
+const PhaseStartHold = 0f0
+const PhaseFadeInPlane = 1f0
+const PhaseDescendToA = 2f0
+const PhasePutPointA = 3f0
+const PhaseMoveToPointB = 4f0
+const PhasePutPointB = 5f0
+const PhaseEndLift = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -115,7 +117,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     set_plane_alpha(state_ptr, planeHostId, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseFadeInPlane)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseStartHold)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
@@ -180,7 +182,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
     timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
 
-    if phase == PhaseFadeInPlane
+    if phase == PhaseStartHold
+        timer += dt
+        if timer >= StartHoldDuration
+            phase = PhaseFadeInPlane
+            timer = 0f0
+        end
+    elseif phase == PhaseFadeInPlane
         set_plane_alpha(state_ptr, planeHostId, (timer / FadeInDuration) * PlaneMaxAlpha01)
         OdinJuliaBridge.show_point(state_ptr, planeHostId)
 

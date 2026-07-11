@@ -336,9 +336,9 @@ Particle :: struct {
 }
 
 Particle_System :: struct {
-    low_particles : [MAX_LOW_PARTICLES]Particle,
-    particles : [MAX_PARTICLES]Particle,
-    high_particles : [MAX_PARTICLES]Particle,
+    low_particles : #soa[MAX_LOW_PARTICLES]Particle,
+    particles : #soa[MAX_PARTICLES]Particle,
+    high_particles : #soa[MAX_PARTICLES]Particle,
 
     dust_buckets : [DUST_GRID_BUCKET_COUNT]i32,
     dust_counts : [DUST_GRID_DIM_SQUARED]i32,

@@ -32,6 +32,8 @@ Vector3 :: core.Vector3
 Particle :: core.Particle
 Particle_System :: core.Particle_System
 Kine_Point_System :: core.Kine_Point_System
+Kine_Shape_Point :: core.Kine_Shape_Point
+Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
 
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
@@ -103,8 +105,14 @@ DUST_GRID_BUCKET_COUNT :: core.DUST_GRID_BUCKET_COUNT
 DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
 
 CLEAR_BURST_POINT_COUNT :: 28
+CLEAR_BURST_LABEL_COUNT :: 12
 CLEAR_BURST_LINE_SAMPLES :: 75
-CLEAR_BURST_CIRCLE_SAMPLES :: 120
+CLEAR_BURST_CIRCLE_SAMPLES :: 96
+CLEAR_BURST_FILLED_CIRCLE_SAMPLES :: 120
+CLEAR_BURST_EDGE_REPEATS :: 1
+CLEAR_BURST_POLYGON_FILL_DENSITY :: 900.0
+CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES :: 10
+CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 
 //   Emit high-layer flicker particles at a 2D origin.
 //
@@ -170,6 +178,46 @@ emit_trail_particles :: proc(ps: ^Particle_System, dt, tip_x, tip_y, tip_z: f32,
 //
 // Returns:
 //   - none.
+push_dust_away_from_xy_index :: proc(ps: ^Particle_System, i: int, x, y, push_radius_sq: f32) {
+    dx := ps.low_particles[i].position.x - x
+    dy := ps.low_particles[i].position.y - y
+    dist_sq := dx * dx + dy * dy
+    if dist_sq > push_radius_sq {
+        return
+    }
+
+    dist := f32(math.sqrt(f64(dist_sq)))
+    nx, ny: f32
+    if dist > f32(0.00001) {
+        inv_dist := f32(1.0) / dist
+        nx = dx * inv_dist
+        ny = dy * inv_dist
+    } else {
+        theta := random_f32_range(f32(0.0), f32(2.0 * math.PI))
+        nx = f32(math.cos(theta))
+        ny = f32(math.sin(theta))
+    }
+
+    falloff := f32(1.0) - math.clamp(dist / DUST_CONTACT_PUSH_RADIUS, f32(0.0), f32(1.0))
+    push := DUST_CONTACT_PUSH_SPEED * falloff
+
+    ps.low_particles[i].velocities.x += nx * push
+    ps.low_particles[i].velocities.y += ny * push
+
+    ps.low_particles[i].position.x += nx * push
+    ps.low_particles[i].position.y += ny * push
+    clamp_xy_bounds_index(ps, i)
+}
+
+//   Push nearby dust particles away from a 2D contact position.
+//
+// Parameters:
+//   - ps: Particle system containing dust particles.
+//   - x: Contact x position.
+//   - y: Contact y position.
+//
+// Returns:
+//   - none.
 push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
     if ps^.use_max_dust_particles < 1 {
         return
@@ -178,39 +226,36 @@ push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
     push_radius_sq : f32 = DUST_CONTACT_PUSH_RADIUS * DUST_CONTACT_PUSH_RADIUS
 
     for i in 0..<ps^.use_max_dust_particles {
-        p := &ps.low_particles[i]
-        if !p.alive || p.kind != .Dust {
+        if !ps.low_particles[i].alive || ps.low_particles[i].kind != .Dust {
             continue
         }
+        push_dust_away_from_xy_index(ps, i, x, y, push_radius_sq)
+    }
+}
 
-        dx := p.position.x - x
-        dy := p.position.y - y
-        dist_sq := dx * dx + dy * dy
-        if dist_sq > push_radius_sq {
-            continue
-        }
+//   Kick currently alive dust particles to create burst-like disturbance and fade.
+//
+// Parameters:
+//   - ps: Particle system containing dust particles.
+//
+// Returns:
+//   - none.
+kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
+    // Dust only fades when it is kicked by a new clear burst.
+    ps.low_particles[i].age += random_f32_range(DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
 
-        dist := f32(math.sqrt(f64(dist_sq)))
-        nx, ny: f32
-        if dist > f32(0.00001) {
-            inv_dist := f32(1.0) / dist
-            nx = dx * inv_dist
-            ny = dy * inv_dist
-        } else {
-            theta := random_f32_range(f32(0.0), f32(2.0 * math.PI))
-            nx = f32(math.cos(theta))
-            ny = f32(math.sin(theta))
-        }
+    ps.low_particles[i].velocities.x += random_f32_range(
+        -DUST_EXISTING_XY_KICK,
+        DUST_EXISTING_XY_KICK)
+    ps.low_particles[i].velocities.y += random_f32_range(
+        -DUST_EXISTING_XY_KICK,
+        DUST_EXISTING_XY_KICK)
+    ps.low_particles[i].velocities.z += random_f32_range(
+        DUST_EXISTING_UP_KICK_MIN,
+        DUST_EXISTING_UP_KICK_MAX)
 
-        falloff := f32(1.0) - math.clamp(dist / DUST_CONTACT_PUSH_RADIUS, f32(0.0), f32(1.0))
-        push := DUST_CONTACT_PUSH_SPEED * falloff
-
-        p.velocities.x += nx * push
-        p.velocities.y += ny * push
-
-        p.position.x += nx * push
-        p.position.y += ny * push
-        clamp_xy_bounds(p)
+    if ps.low_particles[i].age >= ps.low_particles[i].life {
+        ps.low_particles[i].alive = false
     }
 }
 
@@ -223,21 +268,11 @@ push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
 //   - none.
 kick_existing_dust :: proc(ps: ^Particle_System) {
     for i in 0..<ps^.use_max_dust_particles {
-        p := &ps.low_particles[i]
-        if !p.alive || p.kind != .Dust {
+        if !ps.low_particles[i].alive || ps.low_particles[i].kind != .Dust {
             continue
         }
 
-        // Dust only fades when it is kicked by a new clear burst.
-        p.age += random_f32_range(DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
-
-        p.velocities.x += random_f32_range(-DUST_EXISTING_XY_KICK, DUST_EXISTING_XY_KICK)
-        p.velocities.y += random_f32_range(-DUST_EXISTING_XY_KICK, DUST_EXISTING_XY_KICK)
-        p.velocities.z += random_f32_range(DUST_EXISTING_UP_KICK_MIN, DUST_EXISTING_UP_KICK_MAX)
-
-        if p.age >= p.life {
-            p.alive = false
-        }
+        kick_existing_dust_index(ps, i)
     }
 }
 
@@ -261,9 +296,7 @@ emit_kine_hide_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System, index
         return
     }
 
-    if kp.kind != .Label && kp.kind != .Point && kp.kind != .Line && kp.kind != .Circle &&
-        kp.kind != .FilledCircle && kp.kind != .Triangle && kp.kind != .Square &&
-        kp.kind != .Pentagon {
+    if !is_burst_drawable_kind(kp.kind) {
         return
     }
 
@@ -272,71 +305,7 @@ emit_kine_hide_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System, index
     }
 
     col := kp.color.? or_else rl.WHITE
-    switch kp.kind {
-    case .Label:
-        p, ok := kp.position.?
-        if ok {
-            for _ in 0..<CLEAR_BURST_POINT_COUNT {
-                spawn_dust_particle(ps, p, col)
-            }
-        }
-    case .Point:
-        p, ok := kp.position.?
-        if ok {
-            for _ in 0..<CLEAR_BURST_POINT_COUNT {
-                spawn_dust_particle(ps, p, col)
-            }
-        }
-    case .Line:
-        a_id := kp.child_point_head
-        if a_id < 0 || a_id >= MAX_KINEPOINTS {
-            return
-        }
-
-        b_id := ks.points[a_id].next_child_point
-        if b_id < 0 || b_id >= MAX_KINEPOINTS {
-            return
-        }
-
-        a, a_ok := ks.points[a_id].position.?
-        b, b_ok := ks.points[b_id].position.?
-        if a_ok && b_ok {
-            emit_line_dust(ps, a, b, col)
-        }
-    case .Triangle:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 3, col)
-    case .Square:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
-    case .Pentagon:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-    case .Circle, .FilledCircle:
-        center, center_ok := kp.position.?
-        if !center_ok {
-            return
-        }
-
-        start_id := kp.child_point_head
-        if start_id < 0 || start_id >= MAX_KINEPOINTS {
-            return
-        }
-
-        end_id := ks.points[start_id].next_child_point
-        if end_id < 0 || end_id >= MAX_KINEPOINTS {
-            return
-        }
-
-        start, start_ok := ks.points[start_id].position.?
-        finish, finish_ok := ks.points[end_id].position.?
-        if !start_ok || !finish_ok {
-            return
-        }
-
-        if kp.active_child > 1 {
-            start, finish = finish, start
-        }
-
-        emit_circle_dust(ps, center, start, finish, kp.offset, col)
-    case .Pen, .Compass:
+    if emit_kine_shape_burst(ps, ks, kp, col, true) {
         return
     }
 }
@@ -362,82 +331,150 @@ emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
             continue
         }
 
-        if kp.kind != .Label && kp.kind != .Point && kp.kind != .Line && kp.kind != .Circle &&
-            kp.kind != .FilledCircle && kp.kind != .Triangle && kp.kind != .Square &&
-            kp.kind != .Pentagon {
+        if !is_burst_drawable_kind(kp.kind) {
             continue
         }
 
         col := kp.color.? or_else rl.WHITE
 
-        switch kp.kind {
-        case .Label:
-            p, ok := kp.position.?
-            if ok {
-                for _ in 0..<CLEAR_BURST_POINT_COUNT {
-                    spawn_dust_particle(ps, p, col)
-                }
-            }
-        case .Point:
-            p, ok := kp.position.?
-            if ok {
-                for _ in 0..<CLEAR_BURST_POINT_COUNT {
-                    spawn_dust_particle(ps, p, col)
-                }
-            }
-        case .Line:
-            a_id := kp.child_point_head
-            if a_id < 0 || a_id >= MAX_KINEPOINTS {
-                continue
-            }
-
-            b_id := ks.points[a_id].next_child_point
-            if b_id < 0 || b_id >= MAX_KINEPOINTS {
-                continue
-            }
-
-            a, a_ok := ks.points[a_id].position.?
-            b, b_ok := ks.points[b_id].position.?
-            if a_ok && b_ok {
-                emit_line_dust(ps, a, b, col)
-            }
-        case .Triangle:
-            emit_polygon_edge_dust(ps, ks, kp.child_point_head, 3, col)
-        case .Square:
-            emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
-        case .Pentagon:
-            emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-        case .Circle, .FilledCircle:
-            center, center_ok := kp.position.?
-            if !center_ok {
-                continue
-            }
-
-            start_id := kp.child_point_head
-            if start_id < 0 || start_id >= MAX_KINEPOINTS {
-                continue
-            }
-
-            end_id := ks.points[start_id].next_child_point
-            if end_id < 0 || end_id >= MAX_KINEPOINTS {
-                continue
-            }
-
-            start, start_ok := ks.points[start_id].position.?
-            finish, finish_ok := ks.points[end_id].position.?
-            if !start_ok || !finish_ok {
-                continue
-            }
-
-            if kp.active_child > 1 {
-                start, finish = finish, start
-            }
-
-            emit_circle_dust(ps, center, start, finish, kp.offset, col)
-        case .Pen, .Compass:
+        if emit_kine_shape_burst(ps, ks, kp, col, false) {
             continue
         }
     }
+}
+
+//   Check whether a kine shape kind participates in dust burst emission.
+is_burst_drawable_kind :: #force_inline proc(kind: Kine_Shape_Point_Type) -> bool {
+    return kind == .Label ||
+        kind == .Point ||
+        kind == .Line ||
+        kind == .Circle ||
+        kind == .FilledCircle ||
+        kind == .Triangle ||
+        kind == .Square ||
+        kind == .Pentagon
+}
+
+//   Emit point burst dust for one position.
+emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+    for _ in 0..<CLEAR_BURST_POINT_COUNT {
+        spawn_dust_particle(ps, p, col)
+    }
+}
+
+//   Emit label burst dust for one position.
+emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+    for _ in 0..<CLEAR_BURST_LABEL_COUNT {
+        spawn_dust_particle(ps, p, col)
+    }
+}
+
+//   Emit burst dust for a single kine draw item.
+//
+// Returns:
+//   - true when caller should abort (hide-burst strict mode), else false.
+emit_circle_kind_burst :: proc(
+    ps: ^Particle_System,
+    ks: ^Kine_Point_System,
+    kp: ^Kine_Shape_Point,
+    col: rl.Color,
+    sample_count: int,
+    abort_on_invalid: bool) -> bool {
+
+    center, center_ok := kp.position.?
+    if !center_ok {
+        return abort_on_invalid
+    }
+
+    start_id := kp.child_point_head
+    if start_id < 0 || start_id >= MAX_KINEPOINTS {
+        return abort_on_invalid
+    }
+
+    end_id := ks.points[start_id].next_child_point
+    if end_id < 0 || end_id >= MAX_KINEPOINTS {
+        return abort_on_invalid
+    }
+
+    start, start_ok := ks.points[start_id].position.?
+    finish, finish_ok := ks.points[end_id].position.?
+    if !start_ok || !finish_ok {
+        return abort_on_invalid
+    }
+
+    if kp.active_child > 1 {
+        start, finish = finish, start
+    }
+
+    emit_circle_dust(ps, center, start, finish, kp.offset, col, sample_count)
+    return false
+}
+
+//   Emit burst dust for a single kine draw item.
+//
+// Returns:
+//   - true when caller should abort (hide-burst strict mode), else false.
+emit_kine_shape_burst :: proc(
+    ps: ^Particle_System,
+    ks: ^Kine_Point_System,
+    kp: ^Kine_Shape_Point,
+    col: rl.Color,
+    abort_on_invalid: bool) -> bool {
+
+    switch kp.kind {
+    case .Label:
+        p, ok := kp.position.?
+        if ok {
+            emit_label_burst(ps, p, col)
+        }
+    case .Point:
+        p, ok := kp.position.?
+        if ok {
+            emit_point_burst(ps, p, col)
+        }
+    case .Line:
+        a_id := kp.child_point_head
+        if a_id < 0 || a_id >= MAX_KINEPOINTS {
+            return abort_on_invalid
+        }
+
+        b_id := ks.points[a_id].next_child_point
+        if b_id < 0 || b_id >= MAX_KINEPOINTS {
+            return abort_on_invalid
+        }
+
+        a, a_ok := ks.points[a_id].position.?
+        b, b_ok := ks.points[b_id].position.?
+        if a_ok && b_ok {
+            emit_line_dust(ps, a, b, col)
+        }
+    case .Triangle:
+        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 3, col)
+    case .Square:
+        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
+    case .Pentagon:
+        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
+    case .Circle:
+        return emit_circle_kind_burst(
+            ps,
+            ks,
+            kp,
+            col,
+            CLEAR_BURST_CIRCLE_SAMPLES,
+            abort_on_invalid)
+    case .FilledCircle:
+        return emit_circle_kind_burst(
+            ps,
+            ks,
+            kp,
+            col,
+            CLEAR_BURST_FILLED_CIRCLE_SAMPLES,
+            abort_on_invalid)
+    case .Pen, .Compass:
+        return abort_on_invalid
+    }
+
+    return false
 }
 
 //   Advance particle simulation for dust, trail, burnout, and flicker layers.
@@ -450,17 +487,19 @@ emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
 //   - none.
 update_particles :: proc(ps: ^Particle_System, dt: f32) {
     for i in 0..<ps^.use_max_dust_particles {
-        lp := &ps.low_particles[i]
-        update_particle_dust(lp)
+        update_particle_dust_index(ps, i)
     }
 
     resolve_dust_collisions(ps)
 
+    update_mid_trail_particles_simd(ps, dt)
+    update_mid_burnout_particles_simd(ps, dt)
+    update_high_trail_particles_simd(ps, dt)
+    update_high_burnout_particles_simd(ps, dt)
+
     for i in 0..<MAX_PARTICLES {
-        p := &ps.particles[i]
-        update_particle(p, dt)
-        hp := &ps.high_particles[i]
-        update_particle(hp, dt)
+        update_mid_flicker_particle_index(ps, i, dt)
+        update_high_flicker_particle_index(ps, i, dt)
     }
 }
 
@@ -484,10 +523,10 @@ reset_particles :: proc(ps: ^Particle_System) {
         ps.low_particles[i].age = 0
     }
     for i in 0..<MAX_PARTICLES {
-        ps.particles[i].alive = false
-        ps.particles[i].age = 0
-        ps.high_particles[i].alive = false
-        ps.high_particles[i].age = 0
+        ps.particles.alive[i] = false
+        ps.particles.age[i] = 0
+        ps.high_particles.alive[i] = false
+        ps.high_particles.age[i] = 0
     }
 }
 
@@ -495,39 +534,39 @@ reset_particles :: proc(ps: ^Particle_System) {
 //
 // Notes:
 //   - Falls back to ring overwrite when all dust slots are alive.
-reserve_dead_low_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
+reserve_dead_low_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
     if ps^.use_max_dust_particles < 1 {
-        return nil, false
+        return -1, false
     }
 
     for step in 0..<ps^.use_max_dust_particles {
         index := (ps.next_index + step) % ps^.use_max_dust_particles
         if !ps.low_particles[index].alive {
             ps.next_index = (index + 1) % ps^.use_max_dust_particles
-            return &ps.low_particles[index], true
+            return index, true
         }
     }
 
     index := ps.next_index % ps^.use_max_dust_particles
     ps.next_index = (index + 1) % ps^.use_max_dust_particles
-    return &ps.low_particles[index], true
+    return index, true
 }
 
 //   Reserve a high-layer slot using ring-buffer indexing.
 //
 // Notes:
 //   - Always returns a slot by advancing next_index modulo MAX_PARTICLES.
-reserve_dead_high_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
+reserve_dead_high_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
     index := ps.next_index % MAX_PARTICLES
     ps.next_index = (index + 1) % MAX_PARTICLES
-    return &ps.high_particles[index], true
+    return index, true
 
     // TODO: this is preserved for future evaluation, although it seems unnecessary
     /*for step in 0..<MAX_PARTICLES {
         index := (ps.next_index + step) % MAX_PARTICLES
-        if !ps.high_particles[index].alive {
+        if !ps.high_particles.alive[index] {
             ps.next_index = (index + 1) % MAX_PARTICLES
-            return &ps.high_particles[index], true
+            return index, true
         }
     }
 
@@ -538,17 +577,17 @@ reserve_dead_high_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, boo
 //
 // Notes:
 //   - Always returns a slot by advancing next_index modulo MAX_PARTICLES.
-reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
+reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
     index := ps.next_index % MAX_PARTICLES
     ps.next_index = (index + 1) % MAX_PARTICLES
-    return &ps.particles[index], true
+    return index, true
 
     // TODO: this is preserved for future evaluation, although it seems unnecessary
     /*for step in 0..<MAX_PARTICLES {
         index := (ps.next_index + step) % MAX_PARTICLES
-        if !ps.particles[index].alive {
+        if !ps.particles.alive[index] {
             ps.next_index = (index + 1) % MAX_PARTICLES
-            return &ps.particles[index], true
+            return index, true
         }
     }
 
@@ -559,7 +598,7 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
 spawn_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) -> (Vector3, bool) {
 
-    p, ok := reserve_dead_particle_slot(ps)
+    index, ok := reserve_dead_particle_slot(ps)
     if !ok {
         return Vector3{}, false
     }
@@ -567,31 +606,31 @@ spawn_particle :: proc(
     // Tiny spawn jitter so the trail is less uniform.
     jitter_x := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
     jitter_y := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
-    p.position.x = tip_x + jitter_x
-    p.position.y = tip_y + jitter_y
-    p.position.z = tip_z
+    ps.particles.position[index].x = tip_x + jitter_x
+    ps.particles.position[index].y = tip_y + jitter_y
+    ps.particles.position[index].z = tip_z
 
-    p.age = 0
+    ps.particles.age[index] = 0
 
     life_scale := f32(rl.GetRandomValue(LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
-    p.life = PARTICLE_LIFE * life_scale
+    ps.particles.life[index] = PARTICLE_LIFE * life_scale
 
-    p.size = PARTICLE_SIZE_START
-    p.color = tip_color
-    p.alive = true
+    ps.particles.size[index] = PARTICLE_SIZE_START
+    ps.particles.color[index] = tip_color
+    ps.particles.alive[index] = true
 
-    p.kind = .Trail
-    p.velocities = Vector3{}
-    p.lit_frames = 0
+    ps.particles.kind[index] = .Trail
+    ps.particles.velocities[index] = Vector3{}
+    ps.particles.lit_frames[index] = 0
 
-    spawn_pos := p.position
+    spawn_pos := ps.particles.position[index]
     return spawn_pos, true
 }
 
 //   Spawn one high-layer flicker particle at an origin with random drift.
 spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.Color) {
 
-    p, ok := reserve_dead_high_particle_slot(ps)
+    index, ok := reserve_dead_high_particle_slot(ps)
     if !ok {
         return
     }
@@ -599,21 +638,21 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
     angle := random_f32_range(0.0, 6.2831855)
     radius := random_f32_range(0.0, FLICKER_SPAWN_RADIUS)
 
-    p.position.x = origin.x + f32(math.cos(angle)) * radius
-    p.position.y = origin.y + f32(math.sin(angle)) * radius
-    p.position.z = origin.z
+    ps.high_particles.position[index].x = origin.x + f32(math.cos(angle)) * radius
+    ps.high_particles.position[index].y = origin.y + f32(math.sin(angle)) * radius
+    ps.high_particles.position[index].z = origin.z
 
-    p.velocities.x = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
-    p.velocities.y = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
-    p.velocities.z = random_f32_range(FLICKER_UP_SPEED_MIN, FLICKER_UP_SPEED_MAX)
+    ps.high_particles.velocities[index].x = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
+    ps.high_particles.velocities[index].y = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
+    ps.high_particles.velocities[index].z = random_f32_range(FLICKER_UP_SPEED_MIN, FLICKER_UP_SPEED_MAX)
 
-    p.kind = .Flicker
-    p.color = color
-    p.size = 1.0
-    p.age = 0
-    p.life = random_f32_range(FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
-    p.lit_frames = 0
-    p.alive = true
+    ps.high_particles.kind[index] = .Flicker
+    ps.high_particles.color[index] = color
+    ps.high_particles.size[index] = 1.0
+    ps.high_particles.age[index] = 0
+    ps.high_particles.life[index] = random_f32_range(FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
+    ps.high_particles.lit_frames[index] = 0
+    ps.high_particles.alive[index] = true
 
 }
 
@@ -621,7 +660,7 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
 spawn_burnout_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
 
-    p, ok := reserve_dead_particle_slot(ps)
+    index, ok := reserve_dead_particle_slot(ps)
     if !ok {
         return
     }
@@ -629,21 +668,21 @@ spawn_burnout_particle :: proc(
     jitter_x := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
     jitter_y := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
 
-    p.position.x = tip_x + jitter_x
-    p.position.y = tip_y + jitter_y
-    p.position.z = tip_z
+    ps.particles.position[index].x = tip_x + jitter_x
+    ps.particles.position[index].y = tip_y + jitter_y
+    ps.particles.position[index].z = tip_z
 
-    p.age = 0
+    ps.particles.age[index] = 0
     life_scale := f32(rl.GetRandomValue(LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
-    p.life = BURNOUT_LIFE * life_scale
+    ps.particles.life[index] = BURNOUT_LIFE * life_scale
 
-    p.size = BURNOUT_SIZE_START
-    p.color = tip_color
-    p.alive = true
+    ps.particles.size[index] = BURNOUT_SIZE_START
+    ps.particles.color[index] = tip_color
+    ps.particles.alive[index] = true
 
-    p.kind = .BurnOut
-    p.velocities = Vector3{}
-    p.lit_frames = 0
+    ps.particles.kind[index] = .BurnOut
+    ps.particles.velocities[index] = Vector3{}
+    ps.particles.lit_frames[index] = 0
 
 }
 
@@ -656,48 +695,52 @@ emit_silence :: proc(ps: ^Particle_System, dt: f32) {
     }
 }
 
-//   Clamp a particle's x/y position to dust bounds and apply bounce damping.
-clamp_xy_bounds :: proc "contextless" (p: ^Particle) {
-    if p.position.x < DUST_XY_MIN {
-        p.position.x = DUST_XY_MIN
-        p.velocities.x = -p.velocities.x * 0.45
-    } else if p.position.x > DUST_XY_MAX {
-        p.position.x = DUST_XY_MAX
-        p.velocities.x = -p.velocities.x * 0.45
+//   Clamp one low-layer dust particle's x/y position to dust bounds and apply bounce damping.
+clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
+    if ps.low_particles[i].position.x < DUST_XY_MIN {
+        ps.low_particles[i].position.x = DUST_XY_MIN
+        ps.low_particles[i].velocities.x = -ps.low_particles[i].velocities.x * 0.45
+    } else if ps.low_particles[i].position.x > DUST_XY_MAX {
+        ps.low_particles[i].position.x = DUST_XY_MAX
+        ps.low_particles[i].velocities.x = -ps.low_particles[i].velocities.x * 0.45
     }
 
-    if p.position.y < DUST_XY_MIN {
-        p.position.y = DUST_XY_MIN
-        p.velocities.y = -p.velocities.y * 0.45
-    } else if p.position.y > DUST_XY_MAX {
-        p.position.y = DUST_XY_MAX
-        p.velocities.y = -p.velocities.y * 0.45
+    if ps.low_particles[i].position.y < DUST_XY_MIN {
+        ps.low_particles[i].position.y = DUST_XY_MIN
+        ps.low_particles[i].velocities.y = -ps.low_particles[i].velocities.y * 0.45
+    } else if ps.low_particles[i].position.y > DUST_XY_MAX {
+        ps.low_particles[i].position.y = DUST_XY_MAX
+        ps.low_particles[i].velocities.y = -ps.low_particles[i].velocities.y * 0.45
     }
 }
 
 //   Spawn one low-layer dust particle around an origin with random kick values.
+spawn_dust_particle_index :: proc(ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
+    ps.low_particles[i].kind = .Dust
+    ps.low_particles[i].alive = true
+    ps.low_particles[i].age = 0
+    ps.low_particles[i].life = random_f32_range(DUST_LIFE_MIN, DUST_LIFE_MAX)
+
+    ps.low_particles[i].position = origin
+    ps.low_particles[i].position.x += random_f32_range(-0.0022, 0.0022)
+    ps.low_particles[i].position.y += random_f32_range(-0.0022, 0.0022)
+
+    ps.low_particles[i].velocities.x = random_f32_range(DUST_VX_MIN, DUST_VX_MAX)
+    ps.low_particles[i].velocities.y = random_f32_range(DUST_VY_MIN, DUST_VY_MAX)
+    ps.low_particles[i].velocities.z = random_f32_range(DUST_VZ_MIN, DUST_VZ_MAX)
+
+    ps.low_particles[i].size = random_f32_range(DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
+    ps.low_particles[i].color = col
+    ps.low_particles[i].lit_frames = 0
+}
+
 spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color) {
-    p, ok := reserve_dead_low_particle_slot(ps)
+    index, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
         return
     }
 
-    p.kind = .Dust
-    p.alive = true
-    p.age = 0
-    p.life = random_f32_range(DUST_LIFE_MIN, DUST_LIFE_MAX)
-
-    p.position = origin
-    p.position.x += random_f32_range(-0.0022, 0.0022)
-    p.position.y += random_f32_range(-0.0022, 0.0022)
-
-    p.velocities.x = random_f32_range(DUST_VX_MIN, DUST_VX_MAX)
-    p.velocities.y = random_f32_range(DUST_VY_MIN, DUST_VY_MAX)
-    p.velocities.z = random_f32_range(DUST_VZ_MIN, DUST_VZ_MAX)
-
-    p.size = random_f32_range(DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
-    p.color = col
-    p.lit_frames = 0
+    spawn_dust_particle_index(ps, index, origin, col)
 
 }
 
@@ -712,9 +755,91 @@ emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: rl.Color) {
         sample.y = a.y + (b.y - a.y) * t
         sample.z = a.z + (b.z - a.z) * t
 
-        for _ in 0..<2 {
+        for _ in 0..<CLEAR_BURST_EDGE_REPEATS {
             spawn_dust_particle(ps, sample, col)
         }
+    }
+}
+
+//   Compute unsigned 3D area for one triangle.
+triangle_area_3d :: #force_inline proc(a, b, c: Vector3) -> f32 {
+    ab := b - a
+    ac := c - a
+
+    cross_x := ab.y * ac.z - ab.z * ac.y
+    cross_y := ab.z * ac.x - ab.x * ac.z
+    cross_z := ab.x * ac.y - ab.y * ac.x
+
+    cross_len := f32(math.sqrt(cross_x * cross_x + cross_y * cross_y + cross_z * cross_z))
+    return cross_len * 0.5
+}
+
+//   Sample one random point in a triangle using barycentric folding.
+sample_triangle_point :: proc(a, b, c: Vector3) -> Vector3 {
+    u := random_f32_range(0.0, 1.0)
+    v := random_f32_range(0.0, 1.0)
+
+    if u + v > 1.0 {
+        u = 1.0 - u
+        v = 1.0 - v
+    }
+
+    w := 1.0 - u - v
+    return Vector3{
+        a.x * w + b.x * u + c.x * v,
+        a.y * w + b.y * u + c.y * v,
+        a.z * w + b.z * u + c.z * v,
+    }
+}
+
+//   Emit dust samples inside a polygon with area-scaled density.
+emit_polygon_fill_dust :: proc(
+    ps: ^Particle_System,
+    vertices: ^[12]Vector3,
+    vertex_count: int,
+    col: rl.Color) {
+    if vertex_count < 3 {
+        return
+    }
+
+    tri_count := vertex_count - 2
+    tri_areas: [10]f32
+    total_area: f32
+
+    for i in 0..<tri_count {
+        tri_area := triangle_area_3d(vertices[0], vertices[i + 1], vertices[i + 2])
+        tri_areas[i] = tri_area
+        total_area += tri_area
+    }
+
+    if total_area <= 0 {
+        return
+    }
+
+    fill_count := int(math.round(f64(total_area * CLEAR_BURST_POLYGON_FILL_DENSITY)))
+    fill_count = clamp(
+        fill_count,
+        CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES,
+        CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES)
+
+    for _ in 0..<fill_count {
+        pick := random_f32_range(0.0, total_area)
+        accum: f32
+        tri_index := tri_count - 1
+
+        for i in 0..<tri_count {
+            accum += tri_areas[i]
+            if pick <= accum {
+                tri_index = i
+                break
+            }
+        }
+
+        sample := sample_triangle_point(
+            vertices[0],
+            vertices[tri_index + 1],
+            vertices[tri_index + 2])
+        spawn_dust_particle(ps, sample, col)
     }
 }
 
@@ -753,13 +878,7 @@ emit_polygon_edge_dust :: proc(
         current_id = ks.points[current_id].next_child_point
     }
 
-    for i in 0..<vertex_count {
-        next_i := i + 1
-        if next_i >= vertex_count {
-            next_i = 0
-        }
-        emit_line_dust(ps, vertices[i], vertices[next_i], col)
-    }
+    emit_polygon_fill_dust(ps, &vertices, vertex_count, col)
 }
 
 //   Normalize angle to non-negative range by adding one full turn when needed.
@@ -784,7 +903,12 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
 }
 
 //   Emit dust samples along a circular/arc sweep between start and finish points.
-emit_circle_dust :: proc(ps: ^Particle_System, center, start, finish: Vector3, offset: f32, col: rl.Color) {
+emit_circle_dust :: proc(
+    ps: ^Particle_System,
+    center, start, finish: Vector3,
+    offset: f32,
+    col: rl.Color,
+    sample_count: int) {
     start_vec := start - center
     end_vec := finish - center
 
@@ -798,9 +922,9 @@ emit_circle_dust :: proc(ps: ^Particle_System, center, start, finish: Vector3, o
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
     sweep_delta := compute_sweep_delta(start_theta, end_theta) + offset
 
-    sample_count := max(CLEAR_BURST_CIRCLE_SAMPLES, 2)
-    denom := f32(sample_count - 1)
-    for s in 0..<sample_count {
+    clamped_sample_count := max(sample_count, 2)
+    denom := f32(clamped_sample_count - 1)
+    for s in 0..<clamped_sample_count {
         t := f32(s) / denom
         theta := start_theta + sweep_delta * t
         radius := math.lerp(start_radius, end_radius, t)
@@ -823,9 +947,12 @@ dust_grid_cell_index :: proc(x, y: f32) -> int {
 }
 
 //   Resolve one dust-particle pair collision with positional and velocity response.
-resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
-    dx := b.position.x - a.position.x
-    dy := b.position.y - a.position.y
+resolve_dust_pair :: proc(
+    ps: ^Particle_System,
+    ia, ib: int,
+    min_sep, radius_sq: f32) {
+    dx := ps.low_particles[ib].position.x - ps.low_particles[ia].position.x
+    dy := ps.low_particles[ib].position.y - ps.low_particles[ia].position.y
     dist_sq := dx * dx + dy * dy
     if dist_sq >= radius_sq || dist_sq < 1e-12 {
         return
@@ -837,25 +964,25 @@ resolve_dust_pair :: proc(a, b: ^Particle, min_sep, radius_sq: f32) {
     pen := min_sep - dist
     if pen > DUST_COLLISION_POSITION_SLOP {
         corr := (pen - DUST_COLLISION_POSITION_SLOP) * 0.5
-        a.position.x -= nx * corr
-        a.position.y -= ny * corr
-        b.position.x += nx * corr
-        b.position.y += ny * corr
-        clamp_xy_bounds(a)
-        clamp_xy_bounds(b)
+        ps.low_particles[ia].position.x -= nx * corr
+        ps.low_particles[ia].position.y -= ny * corr
+        ps.low_particles[ib].position.x += nx * corr
+        ps.low_particles[ib].position.y += ny * corr
+        clamp_xy_bounds_index(ps, ia)
+        clamp_xy_bounds_index(ps, ib)
     }
 
-    vn := (b.velocities.x - a.velocities.x) * nx +
-          (b.velocities.y - a.velocities.y) * ny
+    vn := (ps.low_particles[ib].velocities.x - ps.low_particles[ia].velocities.x) * nx +
+          (ps.low_particles[ib].velocities.y - ps.low_particles[ia].velocities.y) * ny
     if vn >= 0 {
         return
     }
 
     imp := -(1.0 + DUST_COLLISION_RESTITUTION) * vn * 0.5
-    a.velocities.x -= imp * nx
-    a.velocities.y -= imp * ny
-    b.velocities.x += imp * nx
-    b.velocities.y += imp * ny
+    ps.low_particles[ia].velocities.x -= imp * nx
+    ps.low_particles[ia].velocities.y -= imp * ny
+    ps.low_particles[ib].velocities.x += imp * nx
+    ps.low_particles[ib].velocities.y += imp * ny
 }
 
 //   Resolve dust collisions for one cell against configured neighbor cells.
@@ -877,12 +1004,11 @@ resolve_dust_collisions_on_grid :: proc(
         same_cell := ca == cb
 
         for li in 0..<na {
-            a := &ps.low_particles[ps^.dust_buckets[ca * DUST_GRID_BUCKET_CAP + li]]
+            ia := int(ps^.dust_buckets[ca * DUST_GRID_BUCKET_CAP + li])
             lj_start := li + 1 if same_cell else 0
             for lj in lj_start..<nb {
-                resolve_dust_pair(a,
-                    &ps.low_particles[ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj]],
-                    min_sep, radius_sq)
+                ib := int(ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj])
+                resolve_dust_pair(ps, ia, ib, min_sep, radius_sq)
             }
         }
     }
@@ -898,11 +1024,10 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
     mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
 
     for i in 0..<ps^.use_max_dust_particles {
-        p := &ps.low_particles[i]
-        if !p.alive || p.kind != .Dust {
+        if !ps.low_particles[i].alive || ps.low_particles[i].kind != .Dust {
             continue
         }
-        c := dust_grid_cell_index(p.position.x, p.position.y)
+        c := dust_grid_cell_index(ps.low_particles[i].position.x, ps.low_particles[i].position.y)
         if ps^.dust_counts[c] < i32(DUST_GRID_BUCKET_CAP) {
             ps^.dust_buckets[c * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[c])] = i32(i)
             ps^.dust_counts[c] += 1
@@ -921,78 +1046,185 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
     }
 }
 
-//   Advance one particle by type-specific behavior and lifetime rules.
-update_particle :: proc(p : ^Particle, dt: f32) {
-    if !p.alive {
+//   Batch update for mid-layer trail particles.
+update_mid_trail_particles_simd :: proc(ps: ^Particle_System, dt: f32) {
+    for i in 0..<MAX_PARTICLES {
+        if !ps.particles.alive[i] || ps.particles.kind[i] != .Trail {
+            continue
+        }
+
+        ps.particles.age[i] += dt
+        if ps.particles.age[i] >= ps.particles.life[i] {
+            ps.particles.alive[i] = false
+            continue
+        }
+
+        t := math.clamp(f32(ps.particles.age[i] / ps.particles.life[i]), 0.0, 1.0)
+        ps.particles.size[i] = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
+    }
+}
+
+//   Batch update for high-layer trail particles.
+update_high_trail_particles_simd :: proc(ps: ^Particle_System, dt: f32) {
+    for i in 0..<MAX_PARTICLES {
+        if !ps.high_particles.alive[i] || ps.high_particles.kind[i] != .Trail {
+            continue
+        }
+
+        ps.high_particles.age[i] += dt
+        if ps.high_particles.age[i] >= ps.high_particles.life[i] {
+            ps.high_particles.alive[i] = false
+            continue
+        }
+
+        t := math.clamp(f32(ps.high_particles.age[i] / ps.high_particles.life[i]), 0.0, 1.0)
+        ps.high_particles.size[i] = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
+    }
+}
+
+//   Batch update for mid-layer burnout particles.
+update_mid_burnout_particles_simd :: proc(ps: ^Particle_System, dt: f32) {
+    for i in 0..<MAX_PARTICLES {
+        if !ps.particles.alive[i] || ps.particles.kind[i] != .BurnOut {
+            continue
+        }
+
+        ps.particles.age[i] += dt
+        if ps.particles.age[i] >= ps.particles.life[i] {
+            ps.particles.alive[i] = false
+            continue
+        }
+
+        t := math.clamp(f32(ps.particles.age[i] / ps.particles.life[i]), 0.0, 1.0)
+        ps.particles.size[i] = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
+    }
+}
+
+//   Batch update for high-layer burnout particles.
+update_high_burnout_particles_simd :: proc(ps: ^Particle_System, dt: f32) {
+    for i in 0..<MAX_PARTICLES {
+        if !ps.high_particles.alive[i] || ps.high_particles.kind[i] != .BurnOut {
+            continue
+        }
+
+        ps.high_particles.age[i] += dt
+        if ps.high_particles.age[i] >= ps.high_particles.life[i] {
+            ps.high_particles.alive[i] = false
+            continue
+        }
+
+        t := math.clamp(f32(ps.high_particles.age[i] / ps.high_particles.life[i]), 0.0, 1.0)
+        ps.high_particles.size[i] = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
+    }
+}
+
+//   Scalar update for one mid-layer flicker particle (preserves RNG order).
+update_mid_flicker_particle_index :: proc(ps: ^Particle_System, i: int, dt: f32) {
+    if !ps.particles.alive[i] || ps.particles.kind[i] != .Flicker {
         return
     }
 
-    if p.kind != .Dust {
-        p.age += dt
-        if p.age >= p.life {
-            p.alive = false
-            return
-        }
+    ps.particles.age[i] += dt
+    if ps.particles.age[i] >= ps.particles.life[i] {
+        ps.particles.alive[i] = false
+        return
     }
 
-    switch p.kind {
-    case .Trail:
-        update_particle_trail(p)
-    case .Flicker:
-        update_particle_flicker(p)
-    case .BurnOut:
-        update_particle_burnout(p)
-    case .Dust:
-        update_particle_dust(p)
+    update_particle_flicker_mid_index(ps, i)
+}
+
+//   Scalar update for one high-layer flicker particle (preserves RNG order).
+update_high_flicker_particle_index :: proc(ps: ^Particle_System, i: int, dt: f32) {
+    if !ps.high_particles.alive[i] || ps.high_particles.kind[i] != .Flicker {
+        return
     }
+
+    ps.high_particles.age[i] += dt
+    if ps.high_particles.age[i] >= ps.high_particles.life[i] {
+        ps.high_particles.alive[i] = false
+        return
+    }
+
+    update_particle_flicker_high_index(ps, i)
 }
 
-//   Update trail particle size based on normalized lifetime.
-update_particle_trail :: proc(p : ^Particle) {
-    t := math.clamp(f32(p.age / p.life), 0.0, 1.0)
-    p.size = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
+//   Update one mid-layer trail particle size based on normalized lifetime.
+update_particle_trail_mid_index :: proc(ps: ^Particle_System, i: int) {
+    t := math.clamp(f32(ps.particles.age[i] / ps.particles.life[i]), 0.0, 1.0)
+    ps.particles.size[i] = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
 }
 
-//   Update flicker particle position, drift, and intermittent lit-frame state.
-update_particle_flicker :: proc(p : ^Particle) {
-    p.position += p.velocities
-    p.velocities.x += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
-    p.velocities.y += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+//   Update one high-layer trail particle size based on normalized lifetime.
+update_particle_trail_high_index :: proc(ps: ^Particle_System, i: int) {
+    t := math.clamp(f32(ps.high_particles.age[i] / ps.high_particles.life[i]), 0.0, 1.0)
+    ps.high_particles.size[i] = math.lerp(f32(PARTICLE_SIZE_START), PARTICLE_SIZE_END, t)
+}
 
-    if p.lit_frames > 0 {
-        p.lit_frames -= 1
+//   Update one mid-layer flicker particle position, drift, and lit-frame state.
+update_particle_flicker_mid_index :: proc(ps: ^Particle_System, i: int) {
+    ps.particles.position[i] += ps.particles.velocities[i]
+    ps.particles.velocities[i].x += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+    ps.particles.velocities[i].y += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+
+    if ps.particles.lit_frames[i] > 0 {
+        ps.particles.lit_frames[i] -= 1
     } else {
         if random_f32_range(0.0, 1.0) < FLICKER_CHANCE_PER_STEP {
-            p.lit_frames = i16(rl.GetRandomValue(FLICKER_LIT_FRAMES_MIN, FLICKER_LIT_FRAMES_MAX))
+            ps.particles.lit_frames[i] = i16(rl.GetRandomValue(FLICKER_LIT_FRAMES_MIN, FLICKER_LIT_FRAMES_MAX))
         }
     }
 }
 
-//   Update burnout particle size based on normalized lifetime.
-update_particle_burnout :: proc(p: ^Particle) {
-    t := math.clamp(f32(p.age / p.life), 0.0, 1.0)
-    p.size = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
+//   Update one high-layer flicker particle position, drift, and lit-frame state.
+update_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int) {
+    ps.high_particles.position[i] += ps.high_particles.velocities[i]
+    ps.high_particles.velocities[i].x += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+    ps.high_particles.velocities[i].y += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+
+    if ps.high_particles.lit_frames[i] > 0 {
+        ps.high_particles.lit_frames[i] -= 1
+    } else {
+        if random_f32_range(0.0, 1.0) < FLICKER_CHANCE_PER_STEP {
+            ps.high_particles.lit_frames[i] = i16(rl.GetRandomValue(FLICKER_LIT_FRAMES_MIN, FLICKER_LIT_FRAMES_MAX))
+        }
+    }
 }
 
-//   Update dust particle physics, floor bounce, bounds clamp, and size fade.
-update_particle_dust :: proc(p: ^Particle) {
-    p.velocities.z += DUST_GRAVITY
+//   Update one mid-layer burnout particle size based on normalized lifetime.
+update_particle_burnout_mid_index :: proc(ps: ^Particle_System, i: int) {
+    t := math.clamp(f32(ps.particles.age[i] / ps.particles.life[i]), 0.0, 1.0)
+    ps.particles.size[i] = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
+}
 
-    p.position += p.velocities
+//   Update one high-layer burnout particle size based on normalized lifetime.
+update_particle_burnout_high_index :: proc(ps: ^Particle_System, i: int) {
+    t := math.clamp(f32(ps.high_particles.age[i] / ps.high_particles.life[i]), 0.0, 1.0)
+    ps.high_particles.size[i] = math.lerp(f32(BURNOUT_SIZE_START), BURNOUT_SIZE_END, t)
+}
 
-    p.velocities.x *= DUST_DRAG_XY
-    p.velocities.y *= DUST_DRAG_XY
-    p.velocities.z *= DUST_DRAG_Z
+//   Update one low-layer dust particle physics, floor bounce, bounds clamp, and size fade.
+update_particle_dust_index :: proc(ps: ^Particle_System, i: int) {
+    if !ps.low_particles[i].alive {
+        return
+    }
 
-    if p.position.z < DUST_FLOOR_Z {
-        p.position.z = DUST_FLOOR_Z
-        if p.velocities.z < 0 {
-            p.velocities.z = -p.velocities.z * DUST_BOUNCE
+    ps.low_particles[i].velocities.z += DUST_GRAVITY
+
+    ps.low_particles[i].position += ps.low_particles[i].velocities
+
+    ps.low_particles[i].velocities.x *= DUST_DRAG_XY
+    ps.low_particles[i].velocities.y *= DUST_DRAG_XY
+    ps.low_particles[i].velocities.z *= DUST_DRAG_Z
+
+    if ps.low_particles[i].position.z < DUST_FLOOR_Z {
+        ps.low_particles[i].position.z = DUST_FLOOR_Z
+        if ps.low_particles[i].velocities.z < 0 {
+            ps.low_particles[i].velocities.z = -ps.low_particles[i].velocities.z * DUST_BOUNCE
         }
     }
 
-    clamp_xy_bounds(p)
+    clamp_xy_bounds_index(ps, i)
 
-    t := math.clamp(f32(p.age / p.life), 0.0, 1.0)
-    p.size = math.lerp(f32(DUST_SIZE_START_MAX), DUST_SIZE_END, t)
+    t := math.clamp(f32(ps.low_particles[i].age / ps.low_particles[i].life), 0.0, 1.0)
+    ps.low_particles[i].size = math.lerp(f32(DUST_SIZE_START_MAX), DUST_SIZE_END, t)
 }

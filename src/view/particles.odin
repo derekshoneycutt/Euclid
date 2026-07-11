@@ -25,28 +25,33 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 
     count_rendered : int = 0
     for i in 0..<ps^.use_max_dust_particles {
-        p := &ps.low_particles[i]
-        if !p^.alive {
+        if !ps.low_particles.alive[i] {
             continue
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian_inline(p^.position, iso_scale)
+        screen := iso_to_cartesian_inline(ps.low_particles.position[i], iso_scale)
 
-        t := math.clamp(p^.age / p^.life, 0.0, 1.0)
+        t := math.clamp(ps.low_particles.age[i] / ps.low_particles.life[i], 0.0, 1.0)
         alpha := 1.0 - t
         a := u8(math.clamp(alpha * 210.0, 0.0, 255.0))
 
-        col := rl.Color{p^.color.r, p^.color.g, p^.color.b, a}
+        dust_color := ps.low_particles.color[i]
 
-        if draw_particle_quad(state, screen, p^.size * 2.0, col) {
+        col := rl.Color{
+            dust_color.r,
+            dust_color.g,
+            dust_color.b,
+            a}
+
+        if draw_particle_quad(state, screen, ps.low_particles.size[i] * 2.0, col) {
             continue
         }
 
-        if p^.size <= 1 {
+        if ps.low_particles.size[i] <= 1 {
             rl.DrawPixelV(screen, col)
         } else {
-            rl.DrawCircleV(screen, p^.size, col)
+            rl.DrawCircleV(screen, ps.low_particles.size[i], col)
         }
     }
     ps.last_render_low = count_rendered
@@ -65,23 +70,22 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
 
     count_rendered : int = 0
     for i in 0..<MAX_PARTICLES {
-        p := &ps.particles[i]
-        if !p^.alive {
+        if !ps.particles.alive[i] {
             continue
         }
         count_rendered += 1
 
         screen := iso_to_cartesian_inline(
-            p^.position,
+            ps.particles.position[i],
             iso_scale)
 
-        switch p.kind {
+        switch ps.particles.kind[i] {
         case .Trail:
-            render_particle_trail(state, p, screen)
+            render_particle_trail_mid_index(state, ps, i, screen)
         case .Flicker:
-            render_particle_flicker(p, screen)
+            render_particle_flicker_mid_index(ps, i, screen)
         case .BurnOut:
-            render_particle_burnout(state, p, screen)
+            render_particle_burnout_mid_index(state, ps, i, screen)
         case .Dust:
             continue
         }
@@ -102,21 +106,20 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
 
     count_rendered : int = 0
     for i in 0..<MAX_PARTICLES {
-        p := &ps.high_particles[i]
-        if !p^.alive {
+        if !ps.high_particles.alive[i] {
             continue
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian_inline(p^.position, iso_scale)
+        screen := iso_to_cartesian_inline(ps.high_particles.position[i], iso_scale)
 
-        switch p.kind {
+        switch ps.high_particles.kind[i] {
         case .Trail:
-            render_particle_trail(state, p, screen)
+            render_particle_trail_high_index(state, ps, i, screen)
         case .Flicker:
-            render_particle_flicker(p, screen)
+            render_particle_flicker_high_index(ps, i, screen)
         case .BurnOut:
-            render_particle_burnout(state, p, screen)
+            render_particle_burnout_high_index(state, ps, i, screen)
         case .Dust:
             continue
         }
@@ -227,41 +230,102 @@ draw_particle_quad :: proc(
 
 
 
-//   Render one trail particle with lifetime-based alpha fade.
-render_particle_trail :: proc(state: ^Euclid_General_State, p : ^Particle, screen: Vector2) {
-    t := math.clamp(p^.age / p^.life, 0.0, 1.0)
+//   Render one mid-layer trail particle with lifetime-based alpha fade.
+render_particle_trail_mid_index :: proc(
+    state: ^Euclid_General_State,
+    ps: ^Particle_System,
+    i: int,
+    screen: Vector2) {
+    t := math.clamp(ps.particles.age[i] / ps.particles.life[i], 0.0, 1.0)
     alpha := (1.0 - t)
     alpha_u8 := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
 
-    col := rl.Color{p^.color.r, p^.color.g, p^.color.b, alpha_u8}
+    particle_color := ps.particles.color[i]
+    col := rl.Color{particle_color.r, particle_color.g, particle_color.b, alpha_u8}
 
-    if !draw_particle_quad(state, screen, p^.size * 2.0, col) {
-        rl.DrawCircleV(screen, p^.size, col)
+    if !draw_particle_quad(state, screen, ps.particles.size[i] * 2.0, col) {
+        rl.DrawCircleV(screen, ps.particles.size[i], col)
     }
 }
 
-//   Render one flicker particle only while its lit window is active.
-render_particle_flicker :: proc(p : ^Particle, screen: Vector2) {
-    if p^.lit_frames > 0 {
+//   Render one high-layer trail particle with lifetime-based alpha fade.
+render_particle_trail_high_index :: proc(
+    state: ^Euclid_General_State,
+    ps: ^Particle_System,
+    i: int,
+    screen: Vector2) {
+    t := math.clamp(ps.high_particles.age[i] / ps.high_particles.life[i], 0.0, 1.0)
+    alpha := (1.0 - t)
+    alpha_u8 := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
+
+    particle_color := ps.high_particles.color[i]
+    col := rl.Color{particle_color.r, particle_color.g, particle_color.b, alpha_u8}
+
+    if !draw_particle_quad(state, screen, ps.high_particles.size[i] * 2.0, col) {
+        rl.DrawCircleV(screen, ps.high_particles.size[i], col)
+    }
+}
+
+//   Render one mid-layer flicker particle only while its lit window is active.
+render_particle_flicker_mid_index :: proc(ps: ^Particle_System, i: int, screen: Vector2) {
+    if ps.particles.lit_frames[i] > 0 {
         rl.DrawPixelV(screen, rl.WHITE)
     }
 }
 
-//   Render one burnout particle with color/alpha burn-down over life.
-render_particle_burnout :: proc(state: ^Euclid_General_State, p: ^Particle, screen: Vector2) {
-    t := math.clamp(p^.age / p^.life, 0.0, 1.0)
+//   Render one high-layer flicker particle only while its lit window is active.
+render_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int, screen: Vector2) {
+    if ps.high_particles.lit_frames[i] > 0 {
+        rl.DrawPixelV(screen, rl.WHITE)
+    }
+}
+
+//   Render one mid-layer burnout particle with color/alpha burn-down over life.
+render_particle_burnout_mid_index :: proc(
+    state: ^Euclid_General_State,
+    ps: ^Particle_System,
+    i: int,
+    screen: Vector2) {
+    t := math.clamp(ps.particles.age[i] / ps.particles.life[i], 0.0, 1.0)
 
     white : f32 = 255.0
 
-    r := u8(math.clamp(math.lerp(white, f32(p^.color.r), t), 0.0, 255.0))
-    g := u8(math.clamp(math.lerp(white, f32(p^.color.g), t), 0.0, 255.0))
-    b := u8(math.clamp(math.lerp(white, f32(p^.color.b), t), 0.0, 255.0))
+    particle_color := ps.particles.color[i]
+
+    r := u8(math.clamp(math.lerp(white, f32(particle_color.r), t), 0.0, 255.0))
+    g := u8(math.clamp(math.lerp(white, f32(particle_color.g), t), 0.0, 255.0))
+    b := u8(math.clamp(math.lerp(white, f32(particle_color.b), t), 0.0, 255.0))
 
     alpha := 1.0 - t
     a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
 
     col := rl.Color{r, g, b, a}
-    if !draw_particle_quad(state, screen, p^.size * 2.0, col) {
-        rl.DrawCircleV(screen, p^.size, col)
+    if !draw_particle_quad(state, screen, ps.particles.size[i] * 2.0, col) {
+        rl.DrawCircleV(screen, ps.particles.size[i], col)
+    }
+}
+
+//   Render one high-layer burnout particle with color/alpha burn-down over life.
+render_particle_burnout_high_index :: proc(
+    state: ^Euclid_General_State,
+    ps: ^Particle_System,
+    i: int,
+    screen: Vector2) {
+    t := math.clamp(ps.high_particles.age[i] / ps.high_particles.life[i], 0.0, 1.0)
+
+    white : f32 = 255.0
+
+    particle_color := ps.high_particles.color[i]
+
+    r := u8(math.clamp(math.lerp(white, f32(particle_color.r), t), 0.0, 255.0))
+    g := u8(math.clamp(math.lerp(white, f32(particle_color.g), t), 0.0, 255.0))
+    b := u8(math.clamp(math.lerp(white, f32(particle_color.b), t), 0.0, 255.0))
+
+    alpha := 1.0 - t
+    a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
+
+    col := rl.Color{r, g, b, a}
+    if !draw_particle_quad(state, screen, ps.high_particles.size[i] * 2.0, col) {
+        rl.DrawCircleV(screen, ps.high_particles.size[i], col)
     }
 }
