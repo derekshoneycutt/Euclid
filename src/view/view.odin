@@ -220,25 +220,6 @@ initiate_window :: proc(state : ^Euclid_General_State) {
         files.packaged_asset_path("font.otf", context.temp_allocator), context.temp_allocator)
     font := rl.LoadFontEx(font_file, font_size, &code_points[0], code_point_count)
     state^.font = font
-
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_NORMAL),
-        i32(rl.ColorToInt(BACKGROUND_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_FOCUSED),
-        i32(rl.ColorToInt(UI_BORDER_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BASE_COLOR_PRESSED),
-        i32(rl.ColorToInt(UI_BORDER_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_NORMAL),
-        i32(rl.ColorToInt(UI_BORDER_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_FOCUSED),
-        i32(rl.ColorToInt(UI_BORDER_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.BORDER_COLOR_PRESSED),
-        i32(rl.ColorToInt(UI_BORDER_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_NORMAL),
-        i32(rl.ColorToInt(UI_TEXT_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_FOCUSED),
-        i32(rl.ColorToInt(UI_TEXT_COLOR)))
-    rl.GuiSetStyle(.SLIDER, i32(rl.GuiControlProperty.TEXT_COLOR_PRESSED),
-        i32(rl.ColorToInt(UI_TEXT_COLOR)))
 }
 
 //   Shutdown render resources, unload font/shader, and close the window.
