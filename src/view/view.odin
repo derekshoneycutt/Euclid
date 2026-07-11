@@ -107,6 +107,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     iso_scale^.scale = ISO_SCALE_VALUE
     iso_scale^.x_offset = ISO_X_OFFSET
     iso_scale^.y_offset = ISO_Y_OFFSET
+    recompute_iso_scale_precompute(iso_scale)
     iso_scale^.main_light_dir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
     iso_scale^.use_directional_shadow = true
 
@@ -248,6 +249,8 @@ close_window :: proc(state : ^Euclid_General_State) {
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
+    recompute_iso_scale_precompute(state^.iso_scale)
+
     frame_dt := rl.GetFrameTime()
     if frame_dt > MAX_FRAME_DT {
         frame_dt = MAX_FRAME_DT

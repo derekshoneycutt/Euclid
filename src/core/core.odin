@@ -66,6 +66,9 @@ Iso_Scale :: struct {
     x_offset : f32,
     y_offset : f32,
 
+    half_scale : f32,
+    quarter_scale : f32,
+
     main_light_dir : Vector3,
     use_directional_shadow : bool,
 }

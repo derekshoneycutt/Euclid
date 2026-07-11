@@ -21,6 +21,8 @@ DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 // Returns:
 //   - none.
 render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
+    iso_scale := state^.iso_scale^
+
     count_rendered : int = 0
     for i in 0..<ps^.use_max_dust_particles {
         p := &ps.low_particles[i]
@@ -29,9 +31,23 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian(p^.position, state^.iso_scale^)
+        screen := iso_to_cartesian_inline(p^.position, iso_scale)
 
-        render_particle_dust(state, p, screen)
+        t := math.clamp(p^.age / p^.life, 0.0, 1.0)
+        alpha := 1.0 - t
+        a := u8(math.clamp(alpha * 210.0, 0.0, 255.0))
+
+        col := rl.Color{p^.color.r, p^.color.g, p^.color.b, a}
+
+        if draw_particle_quad(state, screen, p^.size * 2.0, col) {
+            continue
+        }
+
+        if p^.size <= 1 {
+            rl.DrawPixelV(screen, col)
+        } else {
+            rl.DrawCircleV(screen, p^.size, col)
+        }
     }
     ps.last_render_low = count_rendered
 }
@@ -45,6 +61,8 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 // Returns:
 //   - none.
 render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
+    iso_scale := state^.iso_scale^
+
     count_rendered : int = 0
     for i in 0..<MAX_PARTICLES {
         p := &ps.particles[i]
@@ -53,7 +71,9 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian(p^.position, state^.iso_scale^)
+        screen := iso_to_cartesian_inline(
+            p^.position,
+            iso_scale)
 
         switch p.kind {
         case .Trail:
@@ -63,7 +83,7 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
         case .BurnOut:
             render_particle_burnout(state, p, screen)
         case .Dust:
-            render_particle_dust(state, p, screen)
+            continue
         }
     }
     ps.last_render_mid = count_rendered
@@ -78,6 +98,8 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
+    iso_scale := state^.iso_scale^
+
     count_rendered : int = 0
     for i in 0..<MAX_PARTICLES {
         p := &ps.high_particles[i]
@@ -86,7 +108,7 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian(p^.position, state^.iso_scale^)
+        screen := iso_to_cartesian_inline(p^.position, iso_scale)
 
         switch p.kind {
         case .Trail:
@@ -96,7 +118,7 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
         case .BurnOut:
             render_particle_burnout(state, p, screen)
         case .Dust:
-            render_particle_dust(state, p, screen)
+            continue
         }
     }
     ps.last_render_high = count_rendered
@@ -136,8 +158,7 @@ ensure_dust_texture :: proc(state: ^Euclid_General_State) {
     image := rl.GenImageColor(
         DUST_TEXTURE_SIZE,
         DUST_TEXTURE_SIZE,
-        rl.Color{255, 255, 255, 0},
-    )
+        rl.Color{255, 255, 255, 0})
     defer rl.UnloadImage(image)
 
     center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
@@ -184,8 +205,7 @@ draw_particle_quad :: proc(
     state: ^Euclid_General_State,
     screen: Vector2,
     diameter: f32,
-    col: rl.Color,
-) -> bool {
+    col: rl.Color) -> bool {
     ensure_dust_texture(state)
     if !state^.dust_render.ready {
         return false
@@ -242,23 +262,6 @@ render_particle_burnout :: proc(state: ^Euclid_General_State, p: ^Particle, scre
 
     col := rl.Color{r, g, b, a}
     if !draw_particle_quad(state, screen, p^.size * 2.0, col) {
-        rl.DrawCircleV(screen, p^.size, col)
-    }
-}
-
-//   Render one dust particle with lifetime-based alpha fade.
-render_particle_dust :: proc(state: ^Euclid_General_State, p: ^Particle, screen: Vector2) {
-    t := math.clamp(p^.age / p^.life, 0.0, 1.0)
-    alpha := 1.0 - t
-    a := u8(math.clamp(alpha * 210.0, 0.0, 255.0))
-
-    col := rl.Color{p^.color.r, p^.color.g, p^.color.b, a}
-
-    if draw_particle_quad(state, screen, p^.size * 2.0, col) {
-        return
-    } else if p^.size <= 1 {
-        rl.DrawPixelV(screen, col)
-    } else {
         rl.DrawCircleV(screen, p^.size, col)
     }
 }
