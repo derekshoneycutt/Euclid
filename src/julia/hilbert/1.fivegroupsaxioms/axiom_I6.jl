@@ -107,9 +107,10 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [labelAlphaId, labelBetaId, labelAId, labelBId,
-         pointAId, pointBId,
-         planeHostId,
+        [
+            planeHostId,
+            labelAlphaId, labelBetaId, labelAId, labelBId,
+            pointAId, pointBId,
         ])
 
     set_plane_alpha(state_ptr, planeHostId, 0f0)

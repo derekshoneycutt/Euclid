@@ -2478,12 +2478,12 @@ get_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int) -> 
 //   - color: RGBA color payload in bridge format.
 @(export)
 emit_trailing_particle :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector2, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
-        state^.particle_system, state^.current_delta_time, pos.x, pos.y, rlColor)
+        state^.particle_system, state^.current_delta_time, pos.x, pos.y, pos.z, rlColor)
 }
 
 //   Emit bridge-triggered particle effects using the host particle system at the requested position.

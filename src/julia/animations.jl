@@ -144,6 +144,7 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the rise phase.
+- startz : Start Z height above the drawing plane where the pen begins.
 - topz : Target Z height above the drawing plane.
 - penx : Pen base X position.
 - peny : Pen base Y position.
@@ -159,6 +160,20 @@ function animate_pen_rise(
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz * t
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
+    OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+    OdinJuliaBridge.show_pen(state_ptr)
+end
+function animate_pen_rise(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    startz::Float32, topz::Float32, penx::Float32, peny::Float32)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+    diffz = topz - startz
+    penzoffset = diffz * t
+    penz = startz + penzoffset
     OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
     OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
@@ -356,12 +371,14 @@ function animate_pen_arcmove(
 
     vec = endpos - startpos
     tvec = t * vec
-    tvec[3] = sin(t * periods * π) * height
+    offsetz = abs(clamp(sin(t * periods * π) * height, -1f0, 1f0))
+    tvec[3] = tvec[3] + offsetz
     usePoint = startpos + tvec
-    usePoint[3] = abs(clamp(usePoint[3], -1f0, 1f0))
+    #usePoint[3] = abs(clamp(usePoint[3], -1f0, 1f0))
     place_pen_at_angles(state_ptr, usePoint, π / 2f0, 0f0)
     if usePoint[3] < 0.05 && strikecolor != :none
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint, strikecolor)
+        particlePoint = [usePoint[1], usePoint[2], 0f0]
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, particlePoint, strikecolor)
     end
 end
 

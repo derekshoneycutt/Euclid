@@ -135,17 +135,18 @@ emit_flicker_particles :: proc(ps: ^Particle_System, x, y, z: f32, color: rl.Col
 //   - dt: Simulation delta time in seconds.
 //   - tip_x: Tool-tip x position used as emission origin.
 //   - tip_y: Tool-tip y position used as emission origin.
+//   - tip_z: Tool-tip z position used as emission origin.
 //   - tip_color: Base trail/burnout color.
 //
 // Returns:
 //   - none.
-emit_trail_particles :: proc(ps: ^Particle_System, dt, tip_x, tip_y: f32, tip_color: rl.Color) {
+emit_trail_particles :: proc(ps: ^Particle_System, dt, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
     ps.spawn_timer += dt
 
     for ps.spawn_timer >= SPAWN_INTERVAL {
         ps.spawn_timer -= SPAWN_INTERVAL
 
-        trail_pos, ok := spawn_particle(ps, tip_x, tip_y, tip_color)
+        trail_pos, ok := spawn_particle(ps, tip_x, tip_y, tip_z, tip_color)
         if !ok {
             continue
         }
@@ -155,7 +156,7 @@ emit_trail_particles :: proc(ps: ^Particle_System, dt, tip_x, tip_y: f32, tip_co
         }
 
         for _ in 0..<BURNOUT_PER_TRAIL_SPAWN {
-            spawn_burnout_particle(ps, tip_x, tip_y, tip_color)
+            spawn_burnout_particle(ps, tip_x, tip_y, tip_z, tip_color)
         }
     }
 }
@@ -556,7 +557,7 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (^Particle, bool) {
 
 //   Spawn one trail particle near the provided tool-tip position.
 spawn_particle :: proc(
-    ps: ^Particle_System, tip_x, tip_y: f32, tip_color: rl.Color) -> (Vector3, bool) {
+    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) -> (Vector3, bool) {
 
     p, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -568,7 +569,7 @@ spawn_particle :: proc(
     jitter_y := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
     p.position.x = tip_x + jitter_x
     p.position.y = tip_y + jitter_y
-    p.position.z = 0.0
+    p.position.z = tip_z
 
     p.age = 0
 
@@ -618,7 +619,7 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
 
 //   Spawn one burnout particle near the provided tool-tip position.
 spawn_burnout_particle :: proc(
-    ps: ^Particle_System, tip_x, tip_y: f32, tip_color: rl.Color) {
+    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
 
     p, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -630,7 +631,7 @@ spawn_burnout_particle :: proc(
 
     p.position.x = tip_x + jitter_x
     p.position.y = tip_y + jitter_y
-    p.position.z = 0.0
+    p.position.z = tip_z
 
     p.age = 0
     life_scale := f32(rl.GetRandomValue(LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0

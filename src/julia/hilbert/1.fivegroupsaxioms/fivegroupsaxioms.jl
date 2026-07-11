@@ -11,6 +11,7 @@ include("./axiom_I3.jl")
 include("./axiom_I4.jl")
 include("./axiom_I5.jl")
 include("./axiom_I6.jl")
+include("./axiom_I7.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
@@ -85,6 +86,11 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomI6.initialize,
                 HilbertChapterOneAxiomI6.loop, HilbertChapterOneAxiomI6.clean,
                 "Axiom I,6", book1Sec2Id)
+            book1AxiomI7Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomI7.get_view_text,
+                HilbertChapterOneAxiomI7.initialize,
+                HilbertChapterOneAxiomI7.loop, HilbertChapterOneAxiomI7.clean,
+                "Axiom I,7", book1Sec2Id)
 end
 
 end

@@ -146,7 +146,7 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
     OdinJuliaBridge.lock_pen_joint1(state_ptr, penx1, peny1, penz1)
     OdinJuliaBridge.move_pen_joint2(state_ptr, penx2, peny2, penz2)
     OdinJuliaBridge.set_pen_active(state_ptr, 1, penDrawColor)
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, penx1, peny1, penDrawColor)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, penx1, peny1, penz1, penDrawColor)
 end
 
 function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
@@ -186,7 +186,7 @@ function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, 1, currRotation)
     OdinJuliaBridge.lock_compass_joint2(state_ptr, outPos, sweep = false)
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, outPos[1], outPos[2], CompassDrawColor)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, outPos, CompassDrawColor)
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
