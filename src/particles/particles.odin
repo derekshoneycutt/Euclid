@@ -889,9 +889,6 @@ resolve_dust_collisions_on_grid :: proc(
 }
 
 //   Build temporary dust grid buckets and resolve pairwise dust collisions.
-//
-// Notes:
-//   - Uses temp-allocator buffers each call.
 resolve_dust_collisions :: proc(ps: ^Particle_System) {
     if ps^.use_max_dust_particles < 1 {
         return
