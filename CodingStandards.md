@@ -21,10 +21,9 @@
 
 This document is the source of truth for coding and documentation style expectations.
 
-For architectural boundaries and rationale, use [ArchitectureSummary.md](ArchitectureSummary.md).
-
 1. Use this document for how to write code.
 1. Use [ArchitectureSummary.md](ArchitectureSummary.md) for why boundaries exist.
+1. Use [AnimationStyle.md](AnimationStyle.md) for how animations should visually appear.
 
 ## Purpose
 

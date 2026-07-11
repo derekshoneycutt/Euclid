@@ -597,6 +597,51 @@ function animate_pen_tilt_and_drag(
 end
 
 """
+Animate highlighting a point with tilt-in, cone contact, and tilt-out phases.
+
+--------
+
+Parameters:
+
+- state_ptr : Pointer to the Euclid application state.
+- timer : Elapsed animation time.
+- duration : Total duration for the point draw sequence.
+- penpos : Pen base position vector [x, y, z].
+- pencolor : Point and trail color.
+
+Returns:
+
+- nothing
+"""
+function animate_highlight_point(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    penpos::Vector{Float32}, pencolor)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    if t < TiltToConeDuration
+        animate_pen_tilt(
+            state_ptr, timer, duration * TiltToConeDuration, penpos,
+            PenStraightFloorAngle, PenConeFloorAngle, 0f0)
+    elseif t < GroundTrailEndTime
+        animate_pen_cone(
+            state_ptr, timer - duration * TiltToConeDuration,
+            penpos, PenConeFloorAngle, PenConeSpinSpeed)
+
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, penpos, pencolor)
+
+        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+    else
+        endAzimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
+        animate_pen_tilt(
+            state_ptr, timer - duration * GroundTrailEndTime,
+            duration * (1f0 - GroundTrailEndTime), penpos,
+            PenConeFloorAngle, PenStraightFloorAngle, endAzimuth)
+    end
+end
+
+"""
 Animate drawing a point with tilt-in, cone contact, and tilt-out phases.
 
 --------

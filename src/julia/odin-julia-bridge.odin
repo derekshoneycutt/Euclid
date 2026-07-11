@@ -604,6 +604,12 @@ get_point_view :: proc "c" (
 show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
     if index >= 0 && index < MAX_KINEPOINTS {
         state^.point_system^.points[index].do_draw = true
+
+        pos, haspos := state^.point_system^.points[index].position.?
+        if haspos && state^.point_system^.points[index].kind == .Label && pos.z <= 0.05 {
+            context = state^.saved_context
+            particles.push_dust_away_from_xy(state^.particle_system, pos.x, pos.y)
+        }
     }
 }
 

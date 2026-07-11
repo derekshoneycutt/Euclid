@@ -368,6 +368,8 @@ Practical check when debugging visibility:
 1. Register it via `add_child_animation_interface` in the relevant group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 
+Review [AnimationStyle.md](AnimationStyle.md) for considerations on how to make animations "fit in".
+
 ---
 
 ## Key Architecture Takeaways
