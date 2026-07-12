@@ -23,28 +23,22 @@ animations. Raylib is used for rendering.
 You must have Odin and Julia installed on your system to build from source, and both
 must be available on PATH.
 
-Clone the git repository as per usual practices and run the make script below.
+Clone the git repository as per usual practices and run the make script below. Python3 is
+required, preferrably with a recent version.
 
 ```bash
 git clone https://github.com/derekshoneycutt/EuclidApp.git
+cd EuclidApp
+./make.py
+# To run immediately: ./make.py -r
 ```
 
-### Linux / MacOS
-
-Use `./make.sh` to build. You can also use `./make.sh --run` to immediately run.
-
-### Windows
-
-On Windows, use `./make.ps1` to build or `./make.ps1 --run` to build and immediately run.
-
-#### Windows requires a few more additions before this will work
+### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
-- `gendef` : used in the PowerShell script to bridge the fact that Julia is not built with
+- `gendef` : used in the python script to bridge the fact that Julia is not built with
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
-- `tar` : Shipped with most modern Windows versions since Windows 10. Earlier versions
-  should install it, though compatibility may suffer for earlier Windows altogether.
 
 ## Questions?
 
@@ -83,12 +77,11 @@ that just make it an enjoyable experience!
 
 ### Q: Are there any more options with the make scripts?
 
-The make scripts (both `make.sh` and `make.ps1`) has several helpful parameters if the
-simple stuff above is not enough.
+The make script (both `make.py`) has several helpful parameters if the simple stuff above
+is not enough.
 
 ```text
-Usage: ./make.sh [options]
-    OR ./make.ps1 [options]
+Usage: ./make.py [options]
 
 Options:
   --build, -b     Build the project.
@@ -129,13 +122,7 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-./make.sh -na
-```
-
-OR on Windows
-
-```powershell
-./make.ps1 -na
+./make.py -na
 ```
 
 EuclidApp will automatically notice the updated package file, unpack it, and reload all
