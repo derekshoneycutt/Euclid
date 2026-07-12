@@ -84,18 +84,20 @@ is not enough.
 Usage: ./make.py [options]
 
 Options:
-  --build, -b     Build the project.
-  --assets, -a    Build assets.pkg.
-  --run, -r       Run bin/euclid after all other requests.
-  --vet, -v       Build with validation flags.
-  --no-build, -n  Skip any build (overrides --build and --vet).
-  --no-assets, -x Skip assets.pkg build (overrides --assets).
-  --help, -h      Show this help text.
+    --build, -b         Build the project.
+    --assets, -a        Build assets.pkg.
+    --run, -r           Run bin/euclid after all other requests.
+    --vet, -v           Build with validation flags.
+    --fail-lizard, -f   With --vet, fail if any lizard analysis exits non-zero.
+    --no-build, -n      Skip any build (overrides --build and --vet).
+    --no-assets, -x     Skip assets.pkg build (overrides --assets).
+    --                  Pass all remaining args directly to bin/euclid (only with --run).
+    --help, -h          Show this help text.
 
 Notes:
-  - If no options are provided, the default is --build --assets.
-  - That is, --build and --assets are essentially non-altering flags, included for visibility.
-  - Short options can be combined, e.g. -rva or -bnx.
+    - If no options are provided, the default is --build --assets.
+    - That is, --build and --assets are essentially non-altering flags, included for visibility.
+    - Short options can be combined, e.g. -rva or -bnx.
 ```
 
 ### Q: Where Should I Start If I Want In The Code?

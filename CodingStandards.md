@@ -83,7 +83,29 @@ These limits are mandatory and apply to Odin procedures and Julia functions.
 Odin code MUST compile cleanly with strict checks enabled, and Julia code MUST pass basic
 syntax validations.
 
-These checks are performed with the `--vet` or `-v` parameter passed to `make.sh` or `make.ps1`.
+These checks are performed with the `--vet` or `-v` parameter passed to `make.py`.
+
+The following commands are run with vet for quick static/complexity analysis using lizard.
+If lizard is not available, they will be skipped. Use `--fail-lizard` or `-f` to fail when
+lizard gives negative results.
+
+- Python make script:
+
+```bash
+lizard .
+```
+
+- Odin:
+
+```bash
+find ./src -type f -name '*.odin' -print0 | xargs -0 lizard -l cpp
+```
+
+- Julia:
+
+```bash
+find ./src/julia -type f -name '*.jl' -print0 | xargs -0 lizard
+```
 
 ## Language Boundary Standards (Odin <-> Julia)
 

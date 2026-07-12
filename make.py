@@ -73,14 +73,15 @@ def show_help() -> str:
                 Usage: ./make.py [options]
 
                 Options:
-                    --build, -b     Build the project.
-                    --assets, -a    Build assets.pkg.
-                    --run, -r       Run bin/euclid after all other requests.
-                    --vet, -v       Build with validation flags.
-                    --no-build, -n  Skip any build (overrides --build and --vet).
-                    --no-assets, -x Skip assets.pkg build (overrides --assets).
-                    --              Pass all remaining args directly to bin/euclid (only with --run).
-                    --help, -h      Show this help text.
+                    --build, -b         Build the project.
+                    --assets, -a        Build assets.pkg.
+                    --run, -r           Run bin/euclid after all other requests.
+                    --vet, -v           Build with validation flags.
+                    --fail-lizard, -f   With --vet, fail if any lizard analysis exits non-zero.
+                    --no-build, -n      Skip any build (overrides --build and --vet).
+                    --no-assets, -x     Skip assets.pkg build (overrides --assets).
+                    --                  Pass all remaining args directly to bin/euclid (only with --run).
+                    --help, -h          Show this help text.
 
                 Notes:
                     - If no options are provided, the default is --build --assets.
@@ -103,6 +104,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--build", "-b", action="store_true")
     parser.add_argument("--assets", "-a", action="store_true")
     parser.add_argument("--vet", "-v", action="store_true")
+    parser.add_argument("--fail-lizard", "-f", action="store_true")
     parser.add_argument("--no-build", "-n", action="store_true")
     parser.add_argument("--no-assets", "-x", action="store_true")
     parser.add_argument("--help", "-h", action="store_true")
@@ -420,6 +422,43 @@ def build_odin(do_vet: bool, julia_linker_flags: str) -> None:
             raise RuntimeError("Julia validation failed.")
 
 
+def run_vet_analysis(fail_lizard: bool) -> None:
+    if shutil.which("lizard") is None:
+        print("Warning: lizard is not installed or not on PATH; skipping lizard analysis.")
+        return
+
+    had_findings = False
+
+    print("Running lizard analysis (python)...")
+    python_result = run_command(["lizard", "."], cwd=SCRIPT_DIR)
+    print(f"Lizard python analysis exited {python_result.returncode}")
+    if python_result.returncode != 0:
+        had_findings = True
+        print("Lizard python analysis reported warnings.")
+
+    odin_files = sorted(str(path) for path in SRC_DIR.rglob("*.odin"))
+    if odin_files:
+        print("Running lizard analysis (odin)...")
+        odin_result = run_command(["lizard", "-l", "cpp", *odin_files], cwd=SCRIPT_DIR)
+        print(f"Lizard odin analysis exited {odin_result.returncode}")
+        if odin_result.returncode != 0:
+            had_findings = True
+            print("Lizard odin analysis reported warnings.")
+
+    julia_root = SRC_DIR / "julia"
+    julia_files = sorted(str(path) for path in julia_root.rglob("*.jl"))
+    if julia_files:
+        print("Running lizard analysis (julia)...")
+        julia_result = run_command(["lizard", "-l", "r", *julia_files], cwd=SCRIPT_DIR)
+        print(f"Lizard julia analysis exited {julia_result.returncode}")
+        if julia_result.returncode != 0:
+            had_findings = True
+            print("Lizard julia analysis reported warnings.")
+
+    if fail_lizard and had_findings:
+        raise RuntimeError("Lizard analysis reported warnings and --fail-lizard is enabled.")
+
+
 def build_assets(do_build: bool) -> None:
     print("Building assets package...")
 
@@ -611,6 +650,9 @@ def main() -> int:
 
         if do_build:
             build_odin(do_vet, julia_flags)
+
+        if do_vet:
+            run_vet_analysis(args.fail_lizard)
 
         if do_assets:
             build_assets(do_build)
