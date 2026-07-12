@@ -30,6 +30,195 @@ require_command() {
     fi
 }
 
+json_escape() {
+    local input="$1"
+    input="${input//\\/\\\\}"
+    input="${input//\"/\\\"}"
+    input="${input//$'\n'/ }"
+    input="${input//$'\r'/ }"
+    printf '%s' "$input"
+}
+
+collect_runtime_libs() {
+    local binaryPath="$1"
+    local osName
+    osName="$(uname -s)"
+
+    if [[ "$osName" == "Linux" ]]; then
+        if ! command -v ldd >/dev/null 2>&1; then
+            return
+        fi
+
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            libName="${line%% *}"
+            [[ -z "$libName" || "$libName" == "statically" ]] && continue
+            printf '%s\n' "$libName"
+        done < <(ldd "$binaryPath" 2>/dev/null || true)
+        return
+    fi
+
+    if [[ "$osName" == "Darwin" ]]; then
+        if ! command -v otool >/dev/null 2>&1; then
+            return
+        fi
+
+        while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z "$line" ]] && continue
+            libPath="${line%% *}"
+            [[ -z "$libPath" ]] && continue
+            printf '%s\n' "$libPath"
+        done < <(otool -L "$binaryPath" 2>/dev/null | tail -n +2)
+    fi
+}
+
+collect_julia_packages() {
+    local juliaProjectDir="$1"
+
+    if ! command -v julia >/dev/null 2>&1; then
+        return
+    fi
+
+    julia --project="${juliaProjectDir}" -e '
+        using Pkg
+        deps = collect(values(Pkg.dependencies()))
+        direct = filter(d -> d.is_direct_dep, deps)
+        sort!(direct, by = d -> lowercase(d.name))
+        for d in direct
+            version = isnothing(d.version) ? "stdlib" : string(d.version)
+            println(d.name, "|", version)
+        end
+    ' 2>/dev/null || true
+}
+
+write_runtime_sbom() {
+    local binaryPath="$1"
+    local assetsPath="$2"
+    local outputPath="$3"
+    local juliaProjectDir="$4"
+
+    local timestamp
+    timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+    local serialUuid
+    serialUuid="$(julia -e 'using UUIDs; print(uuid4())' 2>/dev/null || true)"
+    if [[ -z "$serialUuid" ]]; then
+        serialUuid="00000000-0000-0000-0000-000000000000"
+    fi
+
+    mapfile -t runtimeLibs < <(collect_runtime_libs "$binaryPath")
+    mapfile -t juliaPackages < <(collect_julia_packages "$juliaProjectDir")
+
+    declare -A seenLibs=()
+    runtimeLibsUnique=()
+    for lib in "${runtimeLibs[@]}"; do
+        [[ -z "$lib" ]] && continue
+        if [[ -n "${seenLibs[$lib]+x}" ]]; then
+            continue
+        fi
+        seenLibs["$lib"]=1
+        runtimeLibsUnique+=("$lib")
+    done
+
+    declare -A seenJuliaPackages=()
+    juliaPackagesUnique=()
+    for pkgLine in "${juliaPackages[@]}"; do
+        [[ -z "$pkgLine" || "$pkgLine" != *"|"* ]] && continue
+        pkgName="${pkgLine%%|*}"
+        pkgVersion="${pkgLine#*|}"
+        [[ -z "$pkgName" ]] && continue
+        pkgKey="${pkgName}|${pkgVersion}"
+        if [[ -n "${seenJuliaPackages[$pkgKey]+x}" ]]; then
+            continue
+        fi
+        seenJuliaPackages["$pkgKey"]=1
+        juliaPackagesUnique+=("$pkgKey")
+    done
+
+    {
+        printf '{\n'
+        printf '  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",\n'
+        printf '  "bomFormat": "CycloneDX",\n'
+        printf '  "specVersion": "1.6",\n'
+        printf '  "serialNumber": "urn:uuid:%s",\n' "$(json_escape "$serialUuid")"
+        printf '  "version": 1,\n'
+        printf '  "metadata": {\n'
+        printf '    "timestamp": "%s",\n' "$(json_escape "$timestamp")"
+        printf '    "component": {\n'
+        printf '      "type": "application",\n'
+        printf '      "bom-ref": "app:euclid",\n'
+        printf '      "name": "EuclidApp",\n'
+        printf '      "version": "dev"\n'
+        printf '    }\n'
+        printf '  },\n'
+        printf '  "components": [\n'
+        printf '    {\n'
+        printf '      "type": "file",\n'
+        printf '      "bom-ref": "file:bin/euclid",\n'
+        printf '      "name": "bin/euclid",\n'
+        printf '      "version": "dev",\n'
+        printf '      "scope": "required"\n'
+        printf '    },\n'
+        printf '    {\n'
+        printf '      "type": "file",\n'
+        printf '      "bom-ref": "file:bin/assets.pkg",\n'
+        printf '      "name": "bin/assets.pkg",\n'
+        printf '      "version": "dev",\n'
+        printf '      "scope": "required"\n'
+        printf '    }'
+
+        for lib in "${runtimeLibsUnique[@]}"; do
+            printf ',\n'
+            printf '    {\n'
+            printf '      "type": "library",\n'
+            printf '      "bom-ref": "runtime:%s",\n' "$(json_escape "$lib")"
+            printf '      "name": "%s",\n' "$(json_escape "$lib")"
+            printf '      "version": "unknown",\n'
+            printf '      "scope": "required"\n'
+            printf '    }'
+        done
+
+        for pkg in "${juliaPackagesUnique[@]}"; do
+            pkgName="${pkg%%|*}"
+            pkgVersion="${pkg#*|}"
+            printf ',\n'
+            printf '    {\n'
+            printf '      "type": "library",\n'
+            printf '      "bom-ref": "pkg:julia/%s",\n' "$(json_escape "$pkgName")"
+            printf '      "name": "%s",\n' "$(json_escape "$pkgName")"
+            printf '      "version": "%s",\n' "$(json_escape "$pkgVersion")"
+            printf '      "scope": "required"\n'
+            printf '    }'
+        done
+
+        printf '\n  ],\n'
+        printf '  "dependencies": [\n'
+        printf '    {\n'
+        printf '      "ref": "app:euclid",\n'
+        printf '      "dependsOn": [\n'
+        printf '        "file:bin/euclid",\n'
+        printf '        "file:bin/assets.pkg"'
+
+        for lib in "${runtimeLibsUnique[@]}"; do
+            printf ',\n'
+            printf '        "runtime:%s"' "$(json_escape "$lib")"
+        done
+
+        for pkg in "${juliaPackagesUnique[@]}"; do
+            pkgName="${pkg%%|*}"
+            printf ',\n'
+            printf '        "pkg:julia/%s"' "$(json_escape "$pkgName")"
+        done
+
+        printf '\n      ]\n'
+        printf '    }\n'
+        printf '  ]\n'
+        printf '}\n'
+    } > "$outputPath"
+}
+
 show_help() {
     cat <<EOF
 Usage: ./make.sh [options]
@@ -169,6 +358,7 @@ if [[ "${doBuild}" == "true" ]]; then
 fi
 
 if [[ "${doAssets}" == "true" ]]; then
+    require_command "julia" "Please install Julia to continue."
     require_command "tar" "Please install tar to continue."
 fi
 
@@ -226,6 +416,17 @@ fi
 
 if [[ "${doAssets}" == "true" ]]; then
     echo "Building assets package..."
+
+    if julia --project="${scriptDir}/src/julia" -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'; then
+        juliaPackagesExitCode=0
+    else
+        juliaPackagesExitCode=$?
+    fi
+    echo "Julia package init exited ${juliaPackagesExitCode}"
+    if [[ "${juliaPackagesExitCode}" -ne 0 ]]; then
+        exit "${juliaPackagesExitCode}"
+    fi
+
     rm -rf "${assetsStagingDir}"
     mkdir -p "${assetsStagingDir}/julia"
     mkdir -p "${assetsStagingDir}/shaders"
@@ -252,6 +453,12 @@ EOF
         exit "${assetsExitCode}"
     fi
     echo "Wrote ${assetsArchivePath}"
+
+    if [[ "${doBuild}" == "true" ]]; then
+        runtimeSbomPath="${scriptDir}/bin/runtime-closure.generated.cdx.json"
+        write_runtime_sbom "${scriptDir}/bin/euclid" "${assetsArchivePath}" "${runtimeSbomPath}" "${scriptDir}/src/julia"
+        echo "Wrote ${runtimeSbomPath}"
+    fi
 fi
 
 cd "${scriptDir}"

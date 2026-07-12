@@ -46,22 +46,6 @@ On Windows, use `./make.ps1` to build or `./make.ps1 --run` to build and immedia
 - `tar` : Shipped with most modern Windows versions since Windows 10. Earlier versions
   should install it, though compatibility may suffer for earlier Windows altogether.
 
-### Julia Packages
-
-The first run will start up a little bit faster if you pre-install packages in your Julia
-environment. Otherwise, the first run will pull and install these, which may take a minute.
-
-- `Colors`
-- `LinearAlgebra`
-
-For example:
-
-```bash
-julia
-# type `]` to enter Package manager
-(@1.12) pkg> add Colors
-```
-
 ## Questions?
 
 ### Q: Why?

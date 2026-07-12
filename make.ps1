@@ -97,6 +97,178 @@ function Resolve-LibExePath() {
     return $libExePath
 }
 
+function Resolve-DumpbinPath() {
+    $vswherePath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+    if (-not (Test-Path $vswherePath)) {
+        return $null
+    }
+
+    $dumpbinPath = & $vswherePath -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe" | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($dumpbinPath) -or -not (Test-Path $dumpbinPath)) {
+        return $null
+    }
+
+    return $dumpbinPath
+}
+
+function Get-RuntimeDependencies([string] $binaryPath) {
+    $dependencies = New-Object System.Collections.Generic.List[string]
+
+    $dumpbinPath = Resolve-DumpbinPath
+    if ([string]::IsNullOrWhiteSpace($dumpbinPath)) {
+        return $dependencies
+    }
+
+    $dumpOutput = & $dumpbinPath /dependents $binaryPath 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $dependencies
+    }
+
+    $inDependencies = $false
+    foreach ($line in $dumpOutput) {
+        if ($line -match "Image has the following dependencies") {
+            $inDependencies = $true
+            continue
+        }
+
+        if (-not $inDependencies) {
+            continue
+        }
+
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        if ($trimmed -match "^Summary$") {
+            break
+        }
+
+        if (-not $dependencies.Contains($trimmed)) {
+            [void]$dependencies.Add($trimmed)
+        }
+    }
+
+    return $dependencies
+}
+
+function Get-JuliaDirectPackages([string] $projectPath) {
+    $packages = New-Object System.Collections.Generic.List[object]
+
+    $output = & julia --project=$projectPath -e 'using Pkg; deps = collect(values(Pkg.dependencies())); direct = filter(d -> d.is_direct_dep, deps); sort!(direct, by = d -> lowercase(d.name)); for d in direct; version = isnothing(d.version) ? "stdlib" : string(d.version); println(d.name, "|", version); end' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $packages
+    }
+
+    $seen = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($line in $output) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or -not $trimmed.Contains("|")) {
+            continue
+        }
+
+        $parts = $trimmed.Split("|", 2)
+        $name = $parts[0].Trim()
+        $version = $parts[1].Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            continue
+        }
+
+        $key = "$name|$version"
+        if (-not $seen.Add($key)) {
+            continue
+        }
+
+        [void]$packages.Add([ordered]@{
+            name = $name
+            version = $version
+        })
+    }
+
+    return $packages
+}
+
+function Write-RuntimeSbom([string] $binaryPath, [string] $assetsPath, [string] $outputPath, [string] $juliaProjectPath) {
+    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $serialNumber = "urn:uuid:$([guid]::NewGuid().ToString())"
+
+    $runtimeDependencies = Get-RuntimeDependencies -binaryPath $binaryPath
+    $juliaPackages = Get-JuliaDirectPackages -projectPath $juliaProjectPath
+
+    $components = New-Object System.Collections.Generic.List[object]
+    [void]$components.Add([ordered]@{
+        type = "file"
+        "bom-ref" = "file:bin/euclid.exe"
+        name = "bin/euclid.exe"
+        version = "dev"
+        scope = "required"
+    })
+    [void]$components.Add([ordered]@{
+        type = "file"
+        "bom-ref" = "file:bin/assets.pkg"
+        name = "bin/assets.pkg"
+        version = "dev"
+        scope = "required"
+    })
+
+    foreach ($dependency in $runtimeDependencies) {
+        [void]$components.Add([ordered]@{
+            type = "library"
+            "bom-ref" = "runtime:$dependency"
+            name = $dependency
+            version = "unknown"
+            scope = "required"
+        })
+    }
+
+    foreach ($package in $juliaPackages) {
+        [void]$components.Add([ordered]@{
+            type = "library"
+            "bom-ref" = "pkg:julia/$($package.name)"
+            name = $package.name
+            version = $package.version
+            scope = "required"
+        })
+    }
+
+    $dependsOn = New-Object System.Collections.Generic.List[string]
+    [void]$dependsOn.Add("file:bin/euclid.exe")
+    [void]$dependsOn.Add("file:bin/assets.pkg")
+    foreach ($dependency in $runtimeDependencies) {
+        [void]$dependsOn.Add("runtime:$dependency")
+    }
+    foreach ($package in $juliaPackages) {
+        [void]$dependsOn.Add("pkg:julia/$($package.name)")
+    }
+
+    $bom = [ordered]@{
+        '$schema' = "http://cyclonedx.org/schema/bom-1.6.schema.json"
+        bomFormat = "CycloneDX"
+        specVersion = "1.6"
+        serialNumber = $serialNumber
+        version = 1
+        metadata = [ordered]@{
+            timestamp = $timestamp
+            component = [ordered]@{
+                type = "application"
+                "bom-ref" = "app:euclid"
+                name = "EuclidApp"
+                version = "dev"
+            }
+        }
+        components = $components
+        dependencies = @(
+            [ordered]@{
+                ref = "app:euclid"
+                dependsOn = $dependsOn
+            }
+        )
+    }
+
+    $json = $bom | ConvertTo-Json -Depth 12
+    $json | Set-Content -Path $outputPath -Encoding ascii
+}
+
 function New-ImportLibrary(
     [string] $dllPath,
     [string] $defPath,
@@ -278,7 +450,7 @@ if ($requestAssets -and -not $requestBuild -and -not $requestVet -and -not $requ
 }
 
 $juliaBinDir = $null
-if ($doBuild -or $runAfterBuild) {
+if ($doBuild -or $doAssets -or $runAfterBuild) {
     Test-RequiredCommand -commandName "julia" -installHint "Please install Julia to continue."
     $juliaBinDir = (& julia -e "print(Sys.BINDIR)" | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($juliaBinDir)) {
@@ -355,6 +527,14 @@ if ($doBuild) {
 
 if ($doAssets) {
     Write-Host "Building assets package..."
+
+    & julia --project=(Join-Path $scriptDir "src/julia") -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+    $juliaPackagesExitCode = $LASTEXITCODE
+    Write-Host "Julia package init exited $juliaPackagesExitCode"
+    if ($juliaPackagesExitCode -ne 0) {
+        exit $juliaPackagesExitCode
+    }
+
     if (Test-Path $assetsStagingDir) {
         Remove-Item -Recurse -Force $assetsStagingDir
     }
@@ -381,6 +561,12 @@ format=tar.gz
         Stop-Build "Error: Failed to package assets archive."
     }
     Write-Host "Wrote $assetsArchivePath"
+
+    if ($doBuild) {
+        $runtimeSbomPath = Join-Path $scriptDir "bin/runtime-closure.generated.cdx.json"
+        Write-RuntimeSbom -binaryPath (Join-Path $scriptDir "bin/euclid.exe") -assetsPath $assetsArchivePath -outputPath $runtimeSbomPath -juliaProjectPath (Join-Path $scriptDir "src/julia")
+        Write-Host "Wrote $runtimeSbomPath"
+    }
 }
 
 if ($runAfterBuild) {

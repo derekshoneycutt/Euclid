@@ -1,0 +1,129 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:9d8f4fb9-5ee6-4bfd-a9cb-58d22126ed55",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-07-11T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "EuclidApp",
+          "version": "dev",
+          "supplier": {
+            "name": "derekshoneycutt"
+          }
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app:euclid",
+      "name": "EuclidApp",
+      "version": "dev",
+      "description": "Baseline standardized description of EuclidApp cross-platform runtime-closure dependencies."
+    },
+    "properties": [
+      {
+        "name": "euclid.runtime.closure.scope",
+        "value": "cross-platform"
+      },
+      {
+        "name": "euclid.runtime.closure.status",
+        "value": "baseline-manifest"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "file",
+      "bom-ref": "file:bin/euclid",
+      "name": "bin/euclid",
+      "version": "dev",
+      "description": "Primary Odin host executable for Linux build outputs.",
+      "scope": "required"
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:bin/assets.pkg",
+      "name": "bin/assets.pkg",
+      "version": "dev",
+      "description": "Packaged runtime assets (Julia scripts, shaders, static assets).",
+      "scope": "required"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "runtime:julia",
+      "name": "Julia Runtime",
+      "version": "1.12.x",
+      "description": "Embedded Julia runtime required by libjulia linkage.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:libjulia",
+      "name": "libjulia",
+      "version": "1.12.x",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:julia/Colors",
+      "name": "Colors",
+      "version": "0.13.1",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:julia/LinearAlgebra",
+      "name": "LinearAlgebra",
+      "version": "1.12.0",
+      "scope": "required"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "runtime:raylib",
+      "name": "raylib",
+      "version": "unknown",
+      "description": "Rendering runtime used by the Odin host application.",
+      "scope": "required"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app:euclid",
+      "dependsOn": [
+        "file:bin/euclid",
+        "file:bin/assets.pkg",
+        "runtime:julia",
+        "runtime:libjulia",
+        "runtime:raylib",
+        "pkg:julia/Colors",
+        "pkg:julia/LinearAlgebra"
+      ]
+    },
+    {
+      "ref": "runtime:julia",
+      "dependsOn": [
+        "runtime:libjulia",
+        "pkg:julia/LinearAlgebra"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "name": "euclid.runtime.manifest.intent",
+      "value": "Unified runtime closure baseline for Linux/macOS/Windows packaging"
+    },
+    {
+      "name": "euclid.runtime.manifest.note",
+      "value": "This SBOM is a standardized baseline description of cross-platform runtime dependencies and closure intent."
+    },
+    {
+      "name": "euclid.runtime.manifest.ownership",
+      "value": "repository"
+    }
+  ]
+}
