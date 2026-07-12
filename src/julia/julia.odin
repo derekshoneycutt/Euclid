@@ -17,6 +17,9 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
+LABEL_DUST_X_OFFSET :: -0.01
+LABEL_DUST_Y_OFFSET :: -0.03
+
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
 //
 // Notes:
@@ -494,9 +497,9 @@ is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
     return index >= 0 && index < MAX_KINECONSTRAINTS
 }
 
-//   Validate that a constraint trait bitmask contains only supported trait flags.
-is_valid_constraint_traits_mask :: #force_inline proc(mask: i32) -> bool {
-    return mask != 0 && (mask & ~KINE_CONSTRAINT_VALID_MASK) == 0
+//   Validate that a constraint kind integer maps to a supported single kind value.
+is_valid_constraint_kind_value :: #force_inline proc(kind: i32) -> bool {
+    return kind >= KINE_CONSTRAINT_KIND_MIN && kind <= KINE_CONSTRAINT_KIND_MAX
 }
 
 //   Convert a boolean value to C-ABI friendly u8 representation.
@@ -625,4 +628,20 @@ consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> b
 
     state^.consumed_cycle_boundary_generation = state^.cycle_boundary_generation
     return true
+}
+
+
+//   Emit a dust push when a label point becomes visible.
+//
+// Notes:
+//   - Applies a single large push for consistent label-show behavior.
+emit_label_show_dust_push :: #force_inline proc(
+    state: ^core.Euclid_General_State, point: ^core.Kine_Shape_Point) {
+    pos, has_pos := point^.position.?
+    if !has_pos || point^.kind != .Label || pos.z > 0.05 {
+        return
+    }
+
+    particles.push_dust_away_from_xy_large(state^.particle_system,
+        pos.x + LABEL_DUST_X_OFFSET, pos.y + LABEL_DUST_Y_OFFSET)
 }

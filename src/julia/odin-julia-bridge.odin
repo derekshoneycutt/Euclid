@@ -45,7 +45,8 @@ BRIDGE_STATUS_OUT_OF_CAPACITY :: 5
 BRIDGE_STATUS_ILLEGAL_STATE :: 6
 BRIDGE_STATUS_NON_CONVERGED :: 7
 
-KINE_CONSTRAINT_VALID_MASK :: i32((1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6))
+KINE_CONSTRAINT_KIND_MIN :: i32(core.Kine_Constraint_Kind.Distance)
+KINE_CONSTRAINT_KIND_MAX :: i32(core.Kine_Constraint_Kind.CenterPivot)
 
 CONSTRAINT_SPEC_TRAITS :: (1 << 0)
 CONSTRAINT_SPEC_ONPOINT :: (1 << 1)
@@ -603,13 +604,10 @@ get_point_view :: proc "c" (
 @(export)
 show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].do_draw = true
-
-        pos, haspos := state^.point_system^.points[index].position.?
-        if haspos && state^.point_system^.points[index].kind == .Label && pos.z <= 0.05 {
-            context = state^.saved_context
-            particles.push_dust_away_from_xy(state^.particle_system, pos.x, pos.y)
-        }
+        context = state^.saved_context
+        point := &state^.point_system^.points[index]
+        point^.do_draw = true
+        emit_label_show_dust_push(state, point)
     }
 }
 
@@ -790,7 +788,11 @@ set_point_draw_enabled :: proc "c" (
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].do_draw = enabled != 0
+    point := &state^.point_system^.points[pointIndex]
+    point^.do_draw = enabled != 0
+    if point^.do_draw {
+        emit_label_show_dust_push(state, point)
+    }
     return BRIDGE_STATUS_OK
 }
 
@@ -1302,7 +1304,7 @@ get_constraint_view :: proc "c" (
     return Bridge_Constraint_View{
         valid = 1,
         index = index,
-        traits = i32(constraint.traits),
+        traits = i32(constraint.kind),
         on_point = i32(constraint.on_point),
         restriction = constraint.restriction,
         bounce = constraint.bounce,
@@ -1332,7 +1334,7 @@ create_constraint :: proc "c" (
 
     context = state^.saved_context
 
-    if !is_valid_constraint_traits_mask(spec.traits) {
+    if !is_valid_constraint_kind_value(spec.traits) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
@@ -1355,7 +1357,7 @@ create_constraint :: proc "c" (
     }
 
     state^.point_system^.constraints[nextIndex] = core.Kine_Constraint{
-        traits = core.Kine_Constraint_Trait(spec.traits),
+        kind = core.Kine_Constraint_Kind(spec.traits),
         on_point = onPoint,
         restriction = spec.restriction,
         bounce = spec.bounce,
@@ -1402,10 +1404,10 @@ update_constraint :: proc "c" (
     constraint := &state^.point_system^.constraints[constraintIndex]
 
     if specMask & CONSTRAINT_SPEC_TRAITS != 0 {
-        if !is_valid_constraint_traits_mask(spec.traits) {
+        if !is_valid_constraint_kind_value(spec.traits) {
             return BRIDGE_STATUS_INVALID_ARGUMENT
         }
-        constraint^.traits = core.Kine_Constraint_Trait(spec.traits)
+        constraint^.kind = core.Kine_Constraint_Kind(spec.traits)
     }
     if specMask & CONSTRAINT_SPEC_ONPOINT != 0 {
         onPoint := int(spec.on_point)

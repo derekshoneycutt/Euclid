@@ -161,6 +161,8 @@ These standards incorporate the Odin naming and style convention guidance.
 - Alignment MUST use spaces.
 - Standalone closing-brace lines are acceptable.
 - A line containing only `)` MUST NOT appear in parameter lists.
+- In Odin proc headers, a line MUST NOT begin with `)` (for example `) -> T {`
+  or `) {`). The closing `)` MUST stay on the same line as the final parameter.
 - If an Odin proc header would otherwise isolate `)`, `->`, or `{`, reflow the
   surrounding code, extract a helper, or use a single-line form so the delimiter is
   not alone.

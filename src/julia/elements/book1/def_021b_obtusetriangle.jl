@@ -21,7 +21,7 @@ const MarkerStart = [
     0f0,
 ]
 const MarkerStartTheta = Float32(atan(MarkerVec1[2], MarkerVec1[1]))
-const MarkerSweepTheta = Float32(acos(clamp(dot(MarkerVec1, MarkerVec2), -1f0, 1f0)))
+const MarkerSweepTheta = Float32(acos(clamp(MarkerVec1 ⋅ MarkerVec2, -1f0, 1f0)))
 
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0

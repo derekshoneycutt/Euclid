@@ -9,6 +9,7 @@ import "core:math"
 import rl "vendor:raylib"
 
 MAX_PARTICLES :: core.MAX_PARTICLES
+MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 DUST_TEXTURE_SIZE :: 64
 DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 
@@ -23,14 +24,23 @@ DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
     iso_scale := state^.iso_scale^
 
+    screens: [MAX_LOW_PARTICLES]Vector2
+    projected_count := iso_to_cartesian_components_batch_selected(
+        ps.low_particles.pos_x[:ps^.use_max_dust_particles],
+        ps.low_particles.pos_y[:ps^.use_max_dust_particles],
+        ps.low_particles.pos_z[:ps^.use_max_dust_particles],
+        screens[:],
+        iso_scale,
+        state^.ui_runtime.use_simd_batch_projection)
+
     count_rendered : int = 0
-    for i in 0..<ps^.use_max_dust_particles {
+    for i in 0..<projected_count {
         if !ps.low_particles.alive[i] {
             continue
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian_inline(ps.low_particles.position[i], iso_scale)
+        screen := screens[i]
 
         t := math.clamp(ps.low_particles.age[i] / ps.low_particles.life[i], 0.0, 1.0)
         alpha := 1.0 - t
@@ -68,27 +78,24 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
     iso_scale := state^.iso_scale^
 
+    screens: [MAX_PARTICLES]Vector2
+    projected_count := iso_to_cartesian_components_batch_selected(
+        ps.particles.pos_x[:],
+        ps.particles.pos_y[:],
+        ps.particles.pos_z[:],
+        screens[:],
+        iso_scale,
+        state^.ui_runtime.use_simd_batch_projection)
+
     count_rendered : int = 0
-    for i in 0..<MAX_PARTICLES {
+    for i in 0..<projected_count {
         if !ps.particles.alive[i] {
             continue
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian_inline(
-            ps.particles.position[i],
-            iso_scale)
-
-        switch ps.particles.kind[i] {
-        case .Trail:
-            render_particle_trail_mid_index(state, ps, i, screen)
-        case .Flicker:
-            render_particle_flicker_mid_index(ps, i, screen)
-        case .BurnOut:
-            render_particle_burnout_mid_index(state, ps, i, screen)
-        case .Dust:
-            continue
-        }
+        screen := screens[i]
+        render_particle_ember_mid_index(state, ps, i, screen)
     }
     ps.last_render_mid = count_rendered
 }
@@ -104,25 +111,25 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
 render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
     iso_scale := state^.iso_scale^
 
+    screens: [MAX_PARTICLES]Vector2
+    projected_count := iso_to_cartesian_components_batch_selected(
+        ps.high_particles.pos_x[:],
+        ps.high_particles.pos_y[:],
+        ps.high_particles.pos_z[:],
+        screens[:],
+        iso_scale,
+        state^.ui_runtime.use_simd_batch_projection)
+
     count_rendered : int = 0
-    for i in 0..<MAX_PARTICLES {
+    for i in 0..<projected_count {
         if !ps.high_particles.alive[i] {
             continue
         }
         count_rendered += 1
 
-        screen := iso_to_cartesian_inline(ps.high_particles.position[i], iso_scale)
+        screen := screens[i]
 
-        switch ps.high_particles.kind[i] {
-        case .Trail:
-            render_particle_trail_high_index(state, ps, i, screen)
-        case .Flicker:
-            render_particle_flicker_high_index(ps, i, screen)
-        case .BurnOut:
-            render_particle_burnout_high_index(state, ps, i, screen)
-        case .Dust:
-            continue
-        }
+        render_particle_flicker_high_index(ps, i, screen)
     }
     ps.last_render_high = count_rendered
 }
@@ -230,46 +237,25 @@ draw_particle_quad :: proc(
 
 
 
-//   Render one mid-layer trail particle with lifetime-based alpha fade.
-render_particle_trail_mid_index :: proc(
+//   Render one mid-layer ember particle with lifetime-based alpha fade.
+render_particle_ember_mid_index :: proc(
     state: ^Euclid_General_State,
     ps: ^Particle_System,
     i: int,
     screen: Vector2) {
     t := math.clamp(ps.particles.age[i] / ps.particles.life[i], 0.0, 1.0)
-    alpha := (1.0 - t)
-    alpha_u8 := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
-
     particle_color := ps.particles.color[i]
-    col := rl.Color{particle_color.r, particle_color.g, particle_color.b, alpha_u8}
+    white_mix := math.lerp(ps.particles.ember_white_at_birth[i], 0.0, t)
 
+    r := u8(math.clamp(math.lerp(f32(particle_color.r), 255.0, white_mix), 0.0, 255.0))
+    g := u8(math.clamp(math.lerp(f32(particle_color.g), 255.0, white_mix), 0.0, 255.0))
+    b := u8(math.clamp(math.lerp(f32(particle_color.b), 255.0, white_mix), 0.0, 255.0))
+
+    a := u8(math.clamp((1.0 - t) * 255.0, 0.0, 255.0))
+
+    col := rl.Color{r, g, b, a}
     if !draw_particle_quad(state, screen, ps.particles.size[i] * 2.0, col) {
         rl.DrawCircleV(screen, ps.particles.size[i], col)
-    }
-}
-
-//   Render one high-layer trail particle with lifetime-based alpha fade.
-render_particle_trail_high_index :: proc(
-    state: ^Euclid_General_State,
-    ps: ^Particle_System,
-    i: int,
-    screen: Vector2) {
-    t := math.clamp(ps.high_particles.age[i] / ps.high_particles.life[i], 0.0, 1.0)
-    alpha := (1.0 - t)
-    alpha_u8 := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
-
-    particle_color := ps.high_particles.color[i]
-    col := rl.Color{particle_color.r, particle_color.g, particle_color.b, alpha_u8}
-
-    if !draw_particle_quad(state, screen, ps.high_particles.size[i] * 2.0, col) {
-        rl.DrawCircleV(screen, ps.high_particles.size[i], col)
-    }
-}
-
-//   Render one mid-layer flicker particle only while its lit window is active.
-render_particle_flicker_mid_index :: proc(ps: ^Particle_System, i: int, screen: Vector2) {
-    if ps.particles.lit_frames[i] > 0 {
-        rl.DrawPixelV(screen, rl.WHITE)
     }
 }
 
@@ -277,55 +263,5 @@ render_particle_flicker_mid_index :: proc(ps: ^Particle_System, i: int, screen: 
 render_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int, screen: Vector2) {
     if ps.high_particles.lit_frames[i] > 0 {
         rl.DrawPixelV(screen, rl.WHITE)
-    }
-}
-
-//   Render one mid-layer burnout particle with color/alpha burn-down over life.
-render_particle_burnout_mid_index :: proc(
-    state: ^Euclid_General_State,
-    ps: ^Particle_System,
-    i: int,
-    screen: Vector2) {
-    t := math.clamp(ps.particles.age[i] / ps.particles.life[i], 0.0, 1.0)
-
-    white : f32 = 255.0
-
-    particle_color := ps.particles.color[i]
-
-    r := u8(math.clamp(math.lerp(white, f32(particle_color.r), t), 0.0, 255.0))
-    g := u8(math.clamp(math.lerp(white, f32(particle_color.g), t), 0.0, 255.0))
-    b := u8(math.clamp(math.lerp(white, f32(particle_color.b), t), 0.0, 255.0))
-
-    alpha := 1.0 - t
-    a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
-
-    col := rl.Color{r, g, b, a}
-    if !draw_particle_quad(state, screen, ps.particles.size[i] * 2.0, col) {
-        rl.DrawCircleV(screen, ps.particles.size[i], col)
-    }
-}
-
-//   Render one high-layer burnout particle with color/alpha burn-down over life.
-render_particle_burnout_high_index :: proc(
-    state: ^Euclid_General_State,
-    ps: ^Particle_System,
-    i: int,
-    screen: Vector2) {
-    t := math.clamp(ps.high_particles.age[i] / ps.high_particles.life[i], 0.0, 1.0)
-
-    white : f32 = 255.0
-
-    particle_color := ps.high_particles.color[i]
-
-    r := u8(math.clamp(math.lerp(white, f32(particle_color.r), t), 0.0, 255.0))
-    g := u8(math.clamp(math.lerp(white, f32(particle_color.g), t), 0.0, 255.0))
-    b := u8(math.clamp(math.lerp(white, f32(particle_color.b), t), 0.0, 255.0))
-
-    alpha := 1.0 - t
-    a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
-
-    col := rl.Color{r, g, b, a}
-    if !draw_particle_quad(state, screen, ps.high_particles.size[i] * 2.0, col) {
-        rl.DrawCircleV(screen, ps.high_particles.size[i], col)
     }
 }

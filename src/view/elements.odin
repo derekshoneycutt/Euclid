@@ -125,18 +125,30 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
     surface_left_down : Vector3 = room^.left_down + { room.edge_size, -room.edge_size, 0 }
     surface_right_down : Vector3 = room^.right_down + { -room.edge_size, -room.edge_size, 0 }
 
-    rl.DrawTriangle(iso_to_cartesian(room.zeros, state^.iso_scale^),
-        iso_to_cartesian(room.right_up, state^.iso_scale^),
-        iso_to_cartesian(room.left_down, state^.iso_scale^), room.edge_color)
-    rl.DrawTriangle(iso_to_cartesian(room^.right_down, state^.iso_scale^),
-        iso_to_cartesian(room.left_down, state^.iso_scale^),
-        iso_to_cartesian(room.right_up, state^.iso_scale^), room.edge_color)
-    rl.DrawTriangle(iso_to_cartesian(surface_zeros, state^.iso_scale^),
-        iso_to_cartesian(surface_right_up, state^.iso_scale^),
-        iso_to_cartesian(surface_left_down, state^.iso_scale^), room.color)
-    rl.DrawTriangle(iso_to_cartesian(surface_right_down, state^.iso_scale^),
-        iso_to_cartesian(surface_left_down, state^.iso_scale^),
-        iso_to_cartesian(surface_right_up, state^.iso_scale^), room.color)
+    world_points := [8]Vector3{
+        room.zeros,
+        room.right_up,
+        room.left_down,
+        room.right_down,
+        surface_zeros,
+        surface_right_up,
+        surface_left_down,
+        surface_right_down,
+    }
+    xs, ys, zs: [8]f32
+    projected: [8]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        world_points[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        projected[:])
+
+    rl.DrawTriangle(projected[0], projected[1], projected[2], room.edge_color)
+    rl.DrawTriangle(projected[3], projected[2], projected[1], room.edge_color)
+    rl.DrawTriangle(projected[4], projected[5], projected[6], room.color)
+    rl.DrawTriangle(projected[7], projected[6], projected[5], room.color)
 }
 
 //   Render cached low-layer geometry items (labels, primitives, and polygons).
@@ -381,6 +393,42 @@ shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
     return iso_to_cartesian(p_shadow, state^.iso_scale^)
 }
 
+//   Batch-project world points by first decomposing into x/y/z SoA component slices.
+project_iso_points_batch_with_components :: proc(
+    state: ^Euclid_General_State,
+    world_points: []Vector3,
+    xs, ys, zs: []f32,
+    out: []Vector2) -> int {
+    count := len(world_points)
+    if len(xs) < count {
+        count = len(xs)
+    }
+    if len(ys) < count {
+        count = len(ys)
+    }
+    if len(zs) < count {
+        count = len(zs)
+    }
+    if len(out) < count {
+        count = len(out)
+    }
+
+    for i in 0..<count {
+        p := world_points[i]
+        xs[i] = p.x
+        ys[i] = p.y
+        zs[i] = p.z
+    }
+
+    return iso_to_cartesian_components_batch_selected(
+        xs[:count],
+        ys[:count],
+        zs[:count],
+        out[:count],
+        state^.iso_scale^,
+        state^.ui_runtime.use_simd_batch_projection)
+}
+
 
 
 
@@ -422,8 +470,8 @@ draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Dr
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
     sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
 
-    prev_world := start
-    prev_screen := iso_to_cartesian(prev_world, state^.iso_scale^)
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    arc_world[0] = start
     seg_count := f32(CIRCLE_ARC_SEGMENTS)
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
@@ -437,9 +485,21 @@ draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Dr
             center.z,
         }
 
-        curr_screen := iso_to_cartesian(curr_world, state^.iso_scale^)
-        rl.DrawLineEx(prev_screen, curr_screen, c^.brush_size, c^.color)
-        prev_screen = curr_screen
+        arc_world[i] = curr_world
+    }
+
+    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
+    arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        arc_world[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        arc_screen[:])
+
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size, c^.color)
     }
 }
 
@@ -462,7 +522,9 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
 
     points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
     points[0] = isocenter
-    points[1] = iso_to_cartesian(start, state^.iso_scale^)
+
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    arc_world[0] = start
 
     seg_count := f32(CIRCLE_ARC_SEGMENTS)
     for i in 1..=CIRCLE_ARC_SEGMENTS {
@@ -470,13 +532,24 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
         theta := start_theta + sweep_delta * t
         radius := math.lerp(start_radius, end_radius, t)
 
-        curr_world := Vector3{
+        arc_world[i] = Vector3{
             center.x + f32(math.cos(theta)) * radius,
             center.y + f32(math.sin(theta)) * radius,
             center.z,
         }
+    }
 
-        points[i + 1] = iso_to_cartesian(curr_world, state^.iso_scale^)
+    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
+    arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        arc_world[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        arc_screen[:])
+    for i in 0..<len(arc_screen) {
+        points[i + 1] = arc_screen[i]
     }
 
     rl.DrawTriangleFan(&points[0], len(points), c^.color)
@@ -485,35 +558,53 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
 
 //   Render one cached triangle draw item.
 draw_cached_triangle :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Triangle_Draw) {
-    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
-    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
-    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
-    rl.DrawTriangle(c0, c1, c2, l^.color)
+    world_points := [3]Vector3{l^.point1, l^.point2, l^.point3}
+    xs, ys, zs: [3]f32
+    projected: [3]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        world_points[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        projected[:])
+    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
 }
 
 
 //   Render one cached square draw item.
 draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Draw) {
-    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
-    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
-    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
-    c3 := iso_to_cartesian(l^.point4, state^.iso_scale^)
+    world_points := [4]Vector3{l^.point1, l^.point2, l^.point3, l^.point4}
+    xs, ys, zs: [4]f32
+    projected: [4]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        world_points[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        projected[:])
 
-    rl.DrawTriangle(c0, c1, c2, l^.color)
-    rl.DrawTriangle(c0, c2, c3, l^.color)
+    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
+    rl.DrawTriangle(projected[0], projected[2], projected[3], l^.color)
 }
 
 
 //   Render one cached pentagon draw item.
 draw_cached_pentagon :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Pentagon_Draw) {
-    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
-    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
-    c2 := iso_to_cartesian(l^.point3, state^.iso_scale^)
-    c3 := iso_to_cartesian(l^.point4, state^.iso_scale^)
-    c4 := iso_to_cartesian(l^.point5, state^.iso_scale^)
-    rl.DrawTriangle(c0, c1, c2, l^.color)
-    rl.DrawTriangle(c0, c2, c3, l^.color)
-    rl.DrawTriangle(c0, c3, c4, l^.color)
+    world_points := [5]Vector3{l^.point1, l^.point2, l^.point3, l^.point4, l^.point5}
+    xs, ys, zs: [5]f32
+    projected: [5]Vector2
+    _ = project_iso_points_batch_with_components(
+        state,
+        world_points[:],
+        xs[:],
+        ys[:],
+        zs[:],
+        projected[:])
+    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
+    rl.DrawTriangle(projected[0], projected[2], projected[3], l^.color)
+    rl.DrawTriangle(projected[0], projected[3], projected[4], l^.color)
 }
 
 

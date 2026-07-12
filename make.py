@@ -75,6 +75,7 @@ def show_help() -> str:
                 Options:
                     --build, -b         Build the project.
                     --assets, -a        Build assets.pkg.
+                    --clean, -c         Delete generated build artifacts.
                     --run, -r           Run bin/euclid after all other requests.
                     --vet, -v           Build with validation flags.
                     --fail-lizard, -f   With --vet, fail if any lizard analysis exits non-zero.
@@ -103,6 +104,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--run", "-r", action="store_true")
     parser.add_argument("--build", "-b", action="store_true")
     parser.add_argument("--assets", "-a", action="store_true")
+    parser.add_argument("--clean", "-c", action="store_true")
     parser.add_argument("--vet", "-v", action="store_true")
     parser.add_argument("--fail-lizard", "-f", action="store_true")
     parser.add_argument("--no-build", "-n", action="store_true")
@@ -197,63 +199,87 @@ def new_import_library(
         raise RuntimeError(f"Error: Failed to generate import library for {dll_name}")
 
 
+def parse_ldd_runtime_libs(output: str) -> list[str]:
+    libs: list[str] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lib_name = line.split()[0]
+        if lib_name and lib_name != "statically":
+            libs.append(lib_name)
+    return list(dict.fromkeys(libs))
+
+
+def parse_otool_runtime_libs(output: str) -> list[str]:
+    libs: list[str] = []
+    for index, raw_line in enumerate(output.splitlines()):
+        if index == 0:
+            continue
+        line = raw_line.strip()
+        if not line:
+            continue
+        libs.append(line.split()[0])
+    return list(dict.fromkeys(libs))
+
+
+def parse_dumpbin_runtime_libs(output: str) -> list[str]:
+    libs: list[str] = []
+    in_dependencies = False
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if "Image has the following dependencies" in line:
+            in_dependencies = True
+            continue
+        if not in_dependencies:
+            continue
+        if not line:
+            continue
+        if line == "Summary":
+            break
+        libs.append(line)
+    return list(dict.fromkeys(libs))
+
+
+def collect_linux_runtime_libs(binary_path: Path) -> list[str]:
+    if shutil.which("ldd") is None:
+        return []
+
+    result = run_command(["ldd", str(binary_path)], capture_output=True)
+    return parse_ldd_runtime_libs(result.stdout)
+
+
+def collect_macos_runtime_libs(binary_path: Path) -> list[str]:
+    if shutil.which("otool") is None:
+        return []
+
+    result = run_command(["otool", "-L", str(binary_path)], capture_output=True)
+    return parse_otool_runtime_libs(result.stdout)
+
+
+def collect_windows_runtime_libs(binary_path: Path) -> list[str]:
+    dumpbin_path = resolve_msvc_tool_path(
+        "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
+        "Error: Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.",
+    )
+    result = run_command([str(dumpbin_path), "/dependents", str(binary_path)], capture_output=True)
+    if result.returncode != 0:
+        return []
+
+    return parse_dumpbin_runtime_libs(result.stdout)
+
+
 def collect_runtime_libs(binary_path: Path) -> list[str]:
     os_name = platform.system()
 
     if os_name == "Linux":
-        if shutil.which("ldd") is None:
-            return []
-
-        result = run_command(["ldd", str(binary_path)], capture_output=True)
-        libs: list[str] = []
-        for raw_line in result.stdout.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            lib_name = line.split()[0]
-            if lib_name and lib_name != "statically":
-                libs.append(lib_name)
-        return list(dict.fromkeys(libs))
+        return collect_linux_runtime_libs(binary_path)
 
     if os_name == "Darwin":
-        if shutil.which("otool") is None:
-            return []
-
-        result = run_command(["otool", "-L", str(binary_path)], capture_output=True)
-        libs: list[str] = []
-        for index, raw_line in enumerate(result.stdout.splitlines()):
-            if index == 0:
-                continue
-            line = raw_line.strip()
-            if not line:
-                continue
-            libs.append(line.split()[0])
-        return list(dict.fromkeys(libs))
+        return collect_macos_runtime_libs(binary_path)
 
     if os_name == "Windows":
-        dumpbin_path = resolve_msvc_tool_path(
-            "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
-            "Error: Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.",
-        )
-        result = run_command([str(dumpbin_path), "/dependents", str(binary_path)], capture_output=True)
-        if result.returncode != 0:
-            return []
-
-        libs: list[str] = []
-        in_dependencies = False
-        for raw_line in result.stdout.splitlines():
-            line = raw_line.strip()
-            if "Image has the following dependencies" in line:
-                in_dependencies = True
-                continue
-            if not in_dependencies:
-                continue
-            if not line:
-                continue
-            if line == "Summary":
-                break
-            libs.append(line)
-        return list(dict.fromkeys(libs))
+        return collect_windows_runtime_libs(binary_path)
 
     return []
 
@@ -596,20 +622,54 @@ def run_binary(run_args: list[str], julia_bindir: str | None) -> None:
         raise RuntimeError("Run step failed.")
 
 
-def main() -> int:
-    try:
-        args, run_args = parse_args(sys.argv[1:])
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        print(show_help(), end="", file=sys.stderr)
-        return 1
+def clean_build_files() -> None:
+    targets: list[Path] = [
+        app_binary_path(),
+        ASSETS_ARCHIVE_PATH,
+        BIN_DIR / "runtime-closure.generated.cdx.json",
+        BIN_DIR / "libeuclid.so",
+        BIN_DIR / "libeuclid.dll",
+        BIN_DIR / "libeuclid.dylib",
+        BIN_DIR / "build",
+        ASSETS_STAGING_DIR,
+        BIN_DIR / ".julia_import_libs",
+        SCRIPT_DIR / "__pycache__",
+    ]
 
-    if args.help:
-        print(show_help(), end="")
-        return 0
+    removed: list[str] = []
+    for target in targets:
+        if not target.exists():
+            continue
 
-    run_after_build = args.run
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
 
+        removed.append(str(target.relative_to(SCRIPT_DIR)))
+
+    if removed:
+        print("Cleaned build artifacts:")
+        for item in removed:
+            print(f"  - {item}")
+    else:
+        print("No build artifacts found to clean.")
+
+
+def explicit_action_requested(args: argparse.Namespace) -> bool:
+    return any(
+        [
+            args.run,
+            args.build,
+            args.assets,
+            args.vet,
+            args.no_build,
+            args.no_assets,
+        ]
+    )
+
+
+def resolve_build_plan(args: argparse.Namespace) -> tuple[bool, bool, bool]:
     do_build = True
     do_vet = False
     do_assets = True
@@ -632,33 +692,79 @@ def main() -> int:
     if args.assets and not args.build and not args.vet and not args.no_build:
         do_build = False
 
+    return do_build, do_vet, do_assets
+
+
+def ensure_required_commands(do_build: bool, do_assets: bool) -> None:
+    if do_build:
+        require_command("julia", "Please install Julia to continue.")
+        require_command("odin", "Please install Odin to continue.")
+
+    if do_assets:
+        require_command("julia", "Please install Julia to continue.")
+
+    if do_build and is_windows():
+        require_command(
+            "gendef",
+            "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.",
+        )
+
+
+def execute_build_plan(
+    do_build: bool,
+    do_vet: bool,
+    do_assets: bool,
+    fail_lizard: bool,
+    run_after_build: bool,
+    run_args: list[str],
+) -> None:
+    julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
+
+    if do_build:
+        build_odin(do_vet, julia_flags)
+
+    if do_vet:
+        run_vet_analysis(fail_lizard)
+
+    if do_assets:
+        build_assets(do_build)
+
+    if run_after_build:
+        run_binary(run_args, julia_bindir)
+
+
+def main() -> int:
     try:
-        if do_build:
-            require_command("julia", "Please install Julia to continue.")
-            require_command("odin", "Please install Odin to continue.")
+        args, run_args = parse_args(sys.argv[1:])
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        print(show_help(), end="", file=sys.stderr)
+        return 1
 
-        if do_assets:
-            require_command("julia", "Please install Julia to continue.")
+    if args.help:
+        print(show_help(), end="")
+        return 0
 
-        if do_build and is_windows():
-            require_command(
-                "gendef",
-                "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.",
-            )
+    run_after_build = args.run
+    has_explicit_action = explicit_action_requested(args)
 
-        julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
+    if args.clean:
+        clean_build_files()
+        if not has_explicit_action:
+            return 0
 
-        if do_build:
-            build_odin(do_vet, julia_flags)
+    do_build, do_vet, do_assets = resolve_build_plan(args)
 
-        if do_vet:
-            run_vet_analysis(args.fail_lizard)
-
-        if do_assets:
-            build_assets(do_build)
-
-        if run_after_build:
-            run_binary(run_args, julia_bindir)
+    try:
+        ensure_required_commands(do_build, do_assets)
+        execute_build_plan(
+            do_build,
+            do_vet,
+            do_assets,
+            args.fail_lizard,
+            run_after_build,
+            run_args,
+        )
 
         return 0
     except RuntimeError as exc:

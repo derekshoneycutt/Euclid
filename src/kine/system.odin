@@ -21,7 +21,7 @@ Vector3 :: core.Vector3
 Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
 Kine_Shape_Point :: core.Kine_Shape_Point
 
-Kine_Constraint_Trait :: core.Kine_Constraint_Trait
+Kine_Constraint_Kind :: core.Kine_Constraint_Kind
 Kine_Constraint :: core.Kine_Constraint
 Kine_Point_System :: core.Kine_Point_System
 

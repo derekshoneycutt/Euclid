@@ -47,8 +47,8 @@ SETTINGS_STATS_ROW_GAP :: 22
 SETTINGS_TOGGLE_TOP_OFFSET :: 118
 SETTINGS_CHECKBOX_SIZE :: 14
 SETTINGS_CHECKBOX_LABEL_GAP :: 8
-SETTINGS_GIF_TOP_OFFSET :: 168
-SETTINGS_GIF_SLIDER_ROW_GAP :: 38
+SETTINGS_GIF_TOP_OFFSET :: 185
+SETTINGS_GIF_SLIDER_ROW_GAP :: 36
 SETTINGS_GIF_BUTTON_TOP_OFFSET :: 132
 SETTINGS_GIF_BUTTON_HEIGHT :: 24
 SETTINGS_GIF_STATUS_TOP_OFFSET :: 162
@@ -612,6 +612,59 @@ draw_settings_limit_fps_checkbox :: proc(
     ui_text(label, int(label_x), int(row_y - 1), UI_TEXT_COLOR, font)
 }
 
+//   Render and handle the SIMD batch projection toggle control.
+draw_settings_simd_projection_checkbox :: proc(
+    panel: rl.Rectangle,
+    slider_track: rl.Rectangle,
+    mouse: rl.Vector2,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    font: rl.Font) {
+    row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET + 44
+    box := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y,
+        SETTINGS_CHECKBOX_SIZE,
+        SETTINGS_CHECKBOX_SIZE,
+    }
+
+    label_x := box.x + box.width + SETTINGS_CHECKBOX_LABEL_GAP
+    is_available := simd_batch_projection_available()
+    label := "Use SIMD Projection"
+    if !is_available {
+        label = "Use SIMD Projection (Unavailable)"
+    }
+
+    hit := rl.Rectangle{
+        box.x,
+        row_y - 4,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        box.height + 8,
+    }
+
+    if is_available && rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, hit) {
+        ui_runtime.use_simd_batch_projection = !ui_runtime.use_simd_batch_projection
+    }
+
+    border := UI_BORDER_COLOR
+    fg := UI_TEXT_COLOR
+    if !is_available {
+        border = rl.Color{78, 78, 78, 255}
+        fg = rl.Color{110, 110, 110, 255}
+        ui_runtime.use_simd_batch_projection = false
+    }
+
+    rl.DrawRectangleLinesEx(box, 1, border)
+    if ui_runtime.use_simd_batch_projection {
+        p0 := rl.Vector2{box.x + 3, box.y + box.height * 0.55}
+        p1 := rl.Vector2{box.x + 6, box.y + box.height - 3}
+        p2 := rl.Vector2{box.x + box.width - 3, box.y + 3}
+        rl.DrawLineEx(p0, p1, 1.6, fg)
+        rl.DrawLineEx(p1, p2, 1.6, fg)
+    }
+
+    ui_text(label, int(label_x), int(row_y - 1), fg, font)
+}
+
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(
     panel: rl.Rectangle,
@@ -829,6 +882,7 @@ draw_settings_view :: proc(
     draw_settings_particle_stats(panel, slider_track, ps, font)
     draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
+    draw_settings_simd_projection_checkbox(panel, slider_track, mouse, ui_runtime, font)
 
     gif_section_y := slider_track.y + SETTINGS_GIF_TOP_OFFSET
     ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)

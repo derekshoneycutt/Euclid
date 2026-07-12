@@ -9,6 +9,7 @@ import "../julia"
 import "../particles"
 import "../files"
 
+import "core:fmt"
 import "core:math/linalg"
 import "core:strings"
 
@@ -25,6 +26,7 @@ LIMIT_FPS :: 60
 FIXED_DT :: 1.0 / LIMIT_FPS
 MAX_FRAME_DT :: 0.25
 MAX_STEPS_PER_FRAME :: 6
+FPS_AVERAGE_BUCKET_COUNT :: 60
 
 ALLOWED_CONSTRAINT_ERROR :: 0.0001
 
@@ -152,6 +154,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.current_delta_time = FIXED_DT
     state^.accumulator = 0
     state^.ui_runtime.limit_fps = true
+    state^.ui_runtime.use_simd_batch_projection = simd_batch_projection_available()
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
@@ -247,6 +250,54 @@ close_window :: proc(state : ^Euclid_General_State) {
     rl.CloseWindow()
 }
 
+//   Update rolling FPS statistics used for average-FPS overlay display.
+update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
+    if frame_dt <= 0 {
+        return
+    }
+
+    ui_runtime := &state^.ui_runtime
+    remaining := frame_dt
+
+    for remaining > 0 {
+        space := 1.0 - ui_runtime.fps_avg_bucket_elapsed
+        step := remaining
+        if step > space {
+            step = space
+        }
+
+        cursor := ui_runtime.fps_avg_bucket_cursor
+        ui_runtime.fps_avg_bucket_seconds[cursor] += step
+        ui_runtime.fps_avg_rolling_seconds += step
+        ui_runtime.fps_avg_bucket_elapsed += step
+        remaining -= step
+
+        if ui_runtime.fps_avg_bucket_elapsed >= 1.0 {
+            next_cursor := (cursor + 1) % FPS_AVERAGE_BUCKET_COUNT
+
+            ui_runtime.fps_avg_rolling_seconds -= ui_runtime.fps_avg_bucket_seconds[next_cursor]
+            ui_runtime.fps_avg_rolling_frames -= ui_runtime.fps_avg_bucket_frames[next_cursor]
+
+            ui_runtime.fps_avg_bucket_seconds[next_cursor] = 0
+            ui_runtime.fps_avg_bucket_frames[next_cursor] = 0
+
+            ui_runtime.fps_avg_bucket_cursor = next_cursor
+            ui_runtime.fps_avg_bucket_elapsed = 0
+        }
+    }
+
+    cursor := ui_runtime.fps_avg_bucket_cursor
+    ui_runtime.fps_avg_bucket_frames[cursor] += 1
+    ui_runtime.fps_avg_rolling_frames += 1
+
+    if ui_runtime.fps_avg_rolling_seconds > 0 {
+        ui_runtime.fps_avg_live =
+            f32(ui_runtime.fps_avg_rolling_frames) / ui_runtime.fps_avg_rolling_seconds
+    } else {
+        ui_runtime.fps_avg_live = 0
+    }
+}
+
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     recompute_iso_scale_precompute(state^.iso_scale)
@@ -255,6 +306,8 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     if frame_dt > MAX_FRAME_DT {
         frame_dt = MAX_FRAME_DT
     }
+    update_average_fps(state, frame_dt)
+
     state^.accumulator += frame_dt
 
     kine.kine_update_last_cache_vectors(state^.point_system)
@@ -307,5 +360,9 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     if state^.ui_runtime.display_fps {
         rl.DrawFPS(10, 10)
+
+        avg_text := fmt.tprintf("Avg FPS (60s): %.1f", state^.ui_runtime.fps_avg_live)
+        avg_text_c := strings.clone_to_cstring(avg_text, context.temp_allocator)
+        rl.DrawText(avg_text_c, 10, 30, 18, UI_TEXT_COLOR)
     }
 }

@@ -16,6 +16,31 @@ ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 
+//   Join a base directory with GIF_OUTPUT_DIR_NAME and ensure it exists.
+//
+// Parameters:
+//   - base_dir: Candidate writable base directory.
+//   - allocator: Allocator used for path join.
+//
+// Returns:
+//   - output_dir: Joined output directory path when successful, otherwise "".
+//   - ok: true when join succeeded and directory exists/was created.
+resolve_writable_gif_output_dir :: proc(base_dir: string, allocator := context.temp_allocator) -> (string, bool) {
+    if len(base_dir) == 0 {
+        return "", false
+    }
+
+    output_dir, output_err := filepath.join(
+        []string{base_dir, GIF_OUTPUT_DIR_NAME},
+        allocator,
+    )
+    if output_err != nil || !ensure_directory_exists(output_dir) {
+        return "", false
+    }
+
+    return output_dir, true
+}
+
 //   Resolve a writable directory for GIF output and create it if needed.
 //
 // Parameters:
@@ -27,44 +52,32 @@ GIF_OUTPUT_DIR_NAME :: "gifs"
 resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
     pictures_dir, pictures_err := os.user_pictures_dir(allocator)
     if pictures_err == nil && len(pictures_dir) > 0 {
-        output_dir, output_err := filepath.join(
-            []string{pictures_dir, GIF_OUTPUT_DIR_NAME},
-            allocator,
-        )
-        if output_err == nil && ensure_directory_exists(output_dir) {
+        output_dir, ok := resolve_writable_gif_output_dir(pictures_dir, allocator)
+        if ok {
             return output_dir, true
         }
     }
 
     data_dir, data_err := os.user_data_dir(allocator)
     if data_err == nil && len(data_dir) > 0 {
-        output_dir, output_err := filepath.join(
-            []string{data_dir, GIF_OUTPUT_DIR_NAME},
-            allocator,
-        )
-        if output_err == nil && ensure_directory_exists(output_dir) {
+        output_dir, ok := resolve_writable_gif_output_dir(data_dir, allocator)
+        if ok {
             return output_dir, true
         }
     }
 
     cache_dir, cache_err := os.user_cache_dir(allocator)
     if cache_err == nil && len(cache_dir) > 0 {
-        output_dir, output_err := filepath.join(
-            []string{cache_dir, GIF_OUTPUT_DIR_NAME},
-            allocator,
-        )
-        if output_err == nil && ensure_directory_exists(output_dir) {
+        output_dir, ok := resolve_writable_gif_output_dir(cache_dir, allocator)
+        if ok {
             return output_dir, true
         }
     }
 
     temp_dir, temp_err := os.temp_directory(allocator)
     if temp_err == nil && len(temp_dir) > 0 {
-        output_dir, output_err := filepath.join(
-            []string{temp_dir, GIF_OUTPUT_DIR_NAME},
-            allocator,
-        )
-        if output_err == nil && ensure_directory_exists(output_dir) {
+        output_dir, ok := resolve_writable_gif_output_dir(temp_dir, allocator)
+        if ok {
             return output_dir, true
         }
     }
@@ -330,6 +343,101 @@ is_safe_asset_relative_path :: proc(path: string) -> bool {
     return true
 }
 
+//   Parse a tar entry path from a 512-byte tar header block.
+//
+// Notes:
+//   - Combines prefix/name fields when prefix is present.
+parse_tar_entry_path :: #force_inline proc(header: []u8) -> (string, bool) {
+    name := string(trim_tar_field(header[0:100]))
+    prefix := string(trim_tar_field(header[345:500]))
+    if len(prefix) == 0 {
+        return name, true
+    }
+
+    joined, join_err := filepath.join([]string{prefix, name}, context.temp_allocator)
+    if join_err != nil {
+        fmt.eprintln("asset payload invalid: tar path join failed")
+        return "", false
+    }
+
+    return joined, true
+}
+
+//   Write one regular-file tar entry into the unpack directory.
+extract_packaged_asset_file_entry :: proc(unpack_dir, entry_path: string, file_data: []u8) -> bool {
+    if !is_safe_asset_relative_path(entry_path) {
+        fmt.eprintln("asset payload invalid path: ", entry_path)
+        return false
+    }
+
+    out_path, out_err := filepath.join(
+        []string{unpack_dir, entry_path},
+        context.temp_allocator,
+    )
+    if out_err != nil {
+        fmt.eprintln("asset payload path join failed: ", entry_path)
+        return false
+    }
+
+    out_dir, _ := filepath.split(out_path)
+    if len(out_dir) > 0 {
+        if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
+            fmt.eprintln("asset payload mkdir failed: ", out_dir)
+            return false
+        }
+    }
+
+    if os.write_entire_file(out_path, file_data) != nil {
+        fmt.eprintln("asset payload write failed: ", out_path)
+        return false
+    }
+
+    return true
+}
+
+//   Ensure one directory tar entry exists in the unpack directory.
+extract_packaged_asset_dir_entry :: proc(unpack_dir, entry_path: string) -> bool {
+    if !is_safe_asset_relative_path(entry_path) {
+        fmt.eprintln("asset payload invalid dir path: ", entry_path)
+        return false
+    }
+
+    out_dir, out_err := filepath.join(
+        []string{unpack_dir, entry_path},
+        context.temp_allocator,
+    )
+    if out_err != nil {
+        fmt.eprintln("asset payload dir join failed: ", entry_path)
+        return false
+    }
+
+    if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
+        fmt.eprintln("asset payload mkdir failed: ", out_dir)
+        return false
+    }
+
+    return true
+}
+
+//   Dispatch one tar entry based on type flag.
+handle_packaged_asset_tar_entry :: proc(unpack_dir, entry_path: string, file_data: []u8, typeflag: u8) -> bool {
+    switch typeflag {
+    case 0, '0':
+        return extract_packaged_asset_file_entry(unpack_dir, entry_path, file_data)
+
+    case '5':
+        return extract_packaged_asset_dir_entry(unpack_dir, entry_path)
+
+    case 'x', 'g':
+        // Skip pax metadata entries; the following real entry will be handled normally.
+        return true
+
+    case:
+        fmt.eprintln("asset payload invalid: unsupported tar type: ", typeflag)
+        return false
+    }
+}
+
 //   Extract a gzip-decoded tar payload blob into the unpack directory.
 //
 // Notes:
@@ -350,16 +458,9 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
             return true
         }
 
-        name := string(trim_tar_field(header[0:100]))
-        prefix := string(trim_tar_field(header[345:500]))
-        entry_path := name
-        if len(prefix) > 0 {
-            joined, join_err := filepath.join([]string{prefix, name}, context.temp_allocator)
-            if join_err != nil {
-                fmt.eprintln("asset payload invalid: tar path join failed")
-                return false
-            }
-            entry_path = joined
+        entry_path, path_ok := parse_tar_entry_path(header)
+        if !path_ok {
+            return false
         }
 
         entry_size: i64 = 0
@@ -382,61 +483,7 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
             return false
         }
 
-        typeflag := header[156]
-        switch typeflag {
-        case 0, '0':
-            if !is_safe_asset_relative_path(entry_path) {
-                fmt.eprintln("asset payload invalid path: ", entry_path)
-                return false
-            }
-
-            out_path, out_err := filepath.join(
-                []string{unpack_dir, entry_path},
-                context.temp_allocator,
-            )
-            if out_err != nil {
-                fmt.eprintln("asset payload path join failed: ", entry_path)
-                return false
-            }
-
-            out_dir, _ := filepath.split(out_path)
-            if len(out_dir) > 0 {
-                if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
-                    fmt.eprintln("asset payload mkdir failed: ", out_dir)
-                    return false
-                }
-            }
-
-            if os.write_entire_file(out_path, file_data) != nil {
-                fmt.eprintln("asset payload write failed: ", out_path)
-                return false
-            }
-
-        case '5':
-            if !is_safe_asset_relative_path(entry_path) {
-                fmt.eprintln("asset payload invalid dir path: ", entry_path)
-                return false
-            }
-
-            out_dir, out_err := filepath.join(
-                []string{unpack_dir, entry_path},
-                context.temp_allocator,
-            )
-            if out_err != nil {
-                fmt.eprintln("asset payload dir join failed: ", entry_path)
-                return false
-            }
-
-            if !os.is_directory(out_dir) && os.make_directory_all(out_dir) != nil {
-                fmt.eprintln("asset payload mkdir failed: ", out_dir)
-                return false
-            }
-
-        case 'x', 'g':
-            // Skip pax metadata entries; the following real entry will be handled normally.
-
-        case:
-            fmt.eprintln("asset payload invalid: unsupported tar type: ", typeflag)
+        if !handle_packaged_asset_tar_entry(unpack_dir, entry_path, file_data, header[156]) {
             return false
         }
 

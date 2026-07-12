@@ -23,6 +23,7 @@ DUST_GRID_DIM :: 50
 DUST_GRID_DIM_SQUARED :: DUST_GRID_DIM * DUST_GRID_DIM
 DUST_GRID_BUCKET_CAP :: 16
 DUST_GRID_BUCKET_COUNT :: DUST_GRID_DIM_SQUARED * DUST_GRID_BUCKET_CAP
+DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 
 TOOL_LENGTH :: 0.35
 
@@ -104,18 +105,18 @@ Kine_Shape_Point :: struct {
     do_draw : bool,
 }
 
-Kine_Constraint_Trait :: enum {
-    Distance = 1,
-    Floor = (1 << 1),
-    SnapToFloor = (1 << 2),
-    SnapPoint = (1 << 3),
-    MaxAngle = (1 << 4),
-    MinAngle = (1 << 5),
-    CenterPivot = (1 << 6),
+Kine_Constraint_Kind :: enum {
+    Distance,
+    Floor,
+    SnapToFloor,
+    SnapPoint,
+    MaxAngle,
+    MinAngle,
+    CenterPivot,
 }
 
 Kine_Constraint :: struct {
-    traits : Kine_Constraint_Trait,
+    kind : Kine_Constraint_Kind,
 
     on_point : int,
     restriction : Vector3,
@@ -314,22 +315,21 @@ Kine_Point_System :: struct {
 
 
 
-Particle_Type :: enum u8 {
-    Trail,
-    Flicker,
-    BurnOut,
-    Dust,
-}
 
 Particle :: struct {
-    kind : Particle_Type,
-
-    position : Vector3,
-    velocities : Vector3,
+    pos_x : f32,
+    pos_y : f32,
+    pos_z : f32,
+    vel_x : f32,
+    vel_y : f32,
+    vel_z : f32,
 
     age : f32,
     life : f32,
     size : f32,
+    ember_size_start : f32,
+    ember_size_end : f32,
+    ember_white_at_birth : f32,
     color : rl.Color,
     alive : bool,
     lit_frames : i16,
@@ -342,6 +342,10 @@ Particle_System :: struct {
 
     dust_buckets : [DUST_GRID_BUCKET_COUNT]i32,
     dust_counts : [DUST_GRID_DIM_SQUARED]i32,
+    dust_pair_a : [DUST_COLLISION_PAIR_CAP]i32,
+    dust_pair_b : [DUST_COLLISION_PAIR_CAP]i32,
+    dust_pair_count : int,
+    dust_pair_dropped_count : int,
 
     next_index : int,
     spawn_timer : f32,
@@ -456,6 +460,14 @@ Euclid_UI_Runtime_State :: struct {
 
     limit_fps : bool,
     display_fps : bool,
+    use_simd_batch_projection : bool,
+    fps_avg_bucket_seconds : [60]f32,
+    fps_avg_bucket_frames : [60]int,
+    fps_avg_bucket_cursor : int,
+    fps_avg_bucket_elapsed : f32,
+    fps_avg_rolling_seconds : f32,
+    fps_avg_rolling_frames : int,
+    fps_avg_live : f32,
 
     save_gif_requested: bool,
     gif_downsample_factor: int,
