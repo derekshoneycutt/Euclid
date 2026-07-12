@@ -1,6 +1,6 @@
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]] $CliArgs
+    [object[]] $CliArgs
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +9,30 @@ $ErrorActionPreference = "Stop"
 if ($null -eq $CliArgs) {
     $CliArgs = @()
 }
+
+function Convert-ToCliStringArray([object[]] $rawArgs) {
+    $normalized = New-Object System.Collections.Generic.List[string]
+    foreach ($rawArg in $rawArgs) {
+        if ($null -eq $rawArg) {
+            continue
+        }
+
+        if ($rawArg -is [System.Collections.IEnumerable] -and -not ($rawArg -is [string])) {
+            foreach ($nestedArg in $rawArg) {
+                if ($null -ne $nestedArg) {
+                    [void]$normalized.Add([string]$nestedArg)
+                }
+            }
+            continue
+        }
+
+        [void]$normalized.Add([string]$rawArg)
+    }
+
+    return $normalized.ToArray()
+}
+
+$CliArgs = Convert-ToCliStringArray -rawArgs $CliArgs
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runAfterBuild = $false
@@ -170,7 +194,7 @@ for ($argIndex = 0; $argIndex -lt $CliArgs.Count; $argIndex++) {
             $showHelp = $true
             continue
         }
-        '^-[^-].+$' {
+        '^-[^-].*$' {
             $shortFlags = $arg.Substring(1)
             foreach ($shortFlag in $shortFlags.ToCharArray()) {
                 switch ($shortFlag) {
@@ -203,6 +227,10 @@ for ($argIndex = 0; $argIndex -lt $CliArgs.Count; $argIndex++) {
             continue
         }
         default {
+            if ($requestRun) {
+                $runArgs = $CliArgs[$argIndex..($CliArgs.Count - 1)]
+                break
+            }
             $hasInvalidArg = $true
         }
     }
