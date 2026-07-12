@@ -13,6 +13,7 @@ include("./axiom_I5.jl")
 include("./axiom_I6.jl")
 include("./axiom_I7.jl")
 include("./theorem_1.jl")
+include("./theorem_2.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
@@ -97,6 +98,11 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneTheorem1.initialize,
                 HilbertChapterOneTheorem1.loop, HilbertChapterOneTheorem1.clean,
                 "Theorem 1", book1Sec2Id)
+            book1Theorem2Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem2.get_view_text,
+                HilbertChapterOneTheorem2.initialize,
+                HilbertChapterOneTheorem2.loop, HilbertChapterOneTheorem2.clean,
+                "Theorem 2", book1Sec2Id)
 end
 
 end
