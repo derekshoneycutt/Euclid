@@ -29,8 +29,8 @@ required, preferrably with a recent version.
 ```bash
 git clone https://github.com/derekshoneycutt/EuclidApp.git
 cd EuclidApp
-./make.py
-# To run immediately: ./make.py -r
+python /make.py
+# To run immediately: python make.py -r
 ```
 
 ### Windows requires a few more additions before this will work
