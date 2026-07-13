@@ -466,6 +466,7 @@ Euclid_UI_Runtime_State :: struct {
 
     limit_fps : bool,
     display_fps : bool,
+    simulation_paused: bool,
     use_simd_batch_projection : bool,
     fps_avg_bucket_seconds : [60]f32,
     fps_avg_bucket_frames : [60]int,
@@ -481,6 +482,8 @@ Euclid_UI_Runtime_State :: struct {
     gif_capture_phase: Gif_Capture_Phase,
     gif_capture_frame_counter: int,
     gif_captured_frames: int,
+    gif_status_note: [260]u8,
+    gif_status_note_len: int,
     last_gif_path: [260]u8,
     last_gif_path_len: int,
 

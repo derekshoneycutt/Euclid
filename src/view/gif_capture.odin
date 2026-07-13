@@ -20,6 +20,40 @@ GIF_CAPTURE_QUALITY :: 12
 
 Gif_Capture_Session :: core.Gif_Capture_Session
 
+
+//   Clear transient GIF status note displayed in the settings panel.
+clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    ui_runtime.gif_status_note_len = 0
+    ui_runtime.gif_status_note[0] = 0
+}
+
+//   Store a transient GIF status note displayed in the settings panel.
+set_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, note: string) {
+    max_len := len(ui_runtime.gif_status_note) - 1
+    n := min(len(note), max_len)
+
+    for i in 0..<n {
+        ui_runtime.gif_status_note[i] = note[i]
+    }
+
+    ui_runtime.gif_status_note[n] = 0
+    ui_runtime.gif_status_note_len = n
+}
+
+//   Cancel active/pending GIF capture and publish a human-readable reason.
+cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: string) {
+    if state^.gif_capture.active {
+        gif_capture_abort_session(&state^.gif_capture)
+    }
+
+    ui_runtime := &state^.ui_runtime
+    ui_runtime.gif_capture_phase = .Idle
+    ui_runtime.gif_capture_frame_counter = 0
+    ui_runtime.gif_captured_frames = 0
+    clear_last_gif_path(ui_runtime)
+    set_gif_status_note(ui_runtime, note)
+}
+
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -89,6 +123,7 @@ gif_capture_update_fixed_step :: proc(
             ui_runtime.gif_capture_phase = .Idle
             ui_runtime.gif_captured_frames = 0
             ui_runtime.gif_capture_frame_counter = 0
+            clear_gif_status_note(ui_runtime)
             return
         }
 
@@ -99,6 +134,7 @@ gif_capture_update_fixed_step :: proc(
             ui_runtime.gif_captured_frames = 0
             ui_runtime.gif_capture_frame_counter = 0
             clear_last_gif_path(ui_runtime)
+            clear_gif_status_note(ui_runtime)
         }
     }
 
@@ -114,15 +150,19 @@ gif_capture_update_fixed_step :: proc(
     case .Armed:
         if gif_capture_begin_session(state) {
             ui_runtime.gif_capture_phase = .Recording
+            clear_gif_status_note(ui_runtime)
         } else {
             ui_runtime.gif_capture_phase = .Error
+            set_gif_status_note(ui_runtime, "Error: failed to begin GIF capture session.")
         }
     case .Recording:
         ui_runtime.gif_capture_phase = .Finalizing
         if gif_capture_finalize_session(state) {
             ui_runtime.gif_capture_phase = .Saved
+            clear_gif_status_note(ui_runtime)
         } else {
             ui_runtime.gif_capture_phase = .Error
+            set_gif_status_note(ui_runtime, "Error: failed to finalize GIF file.")
         }
     }
 }

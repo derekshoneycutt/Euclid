@@ -61,6 +61,7 @@ Tree_Hit :: struct {
 
 Tree_Toolbar_Hit :: struct {
     RefreshRequested: bool,
+    TogglePauseRequested: bool,
     ToggleSettingsRequested: bool,
 }
 
@@ -88,9 +89,29 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
     mouse := rl.GetMousePosition()
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
-    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse, ui_runtime.show_tree_settings)
+    toolbar_hit := draw_tree_toolbar(
+        toolbar_panel,
+        mouse,
+        ui_runtime.show_tree_settings,
+        ui_runtime.simulation_paused,
+    )
     if toolbar_hit.RefreshRequested {
+        if ui_runtime.simulation_paused &&
+            (ui_runtime.gif_capture_phase == .Armed ||
+            ui_runtime.gif_capture_phase == .Recording ||
+            ui_runtime.gif_capture_phase == .Finalizing) {
+            cancel_gif_capture_with_note(
+                state,
+                "Canceled: refresh during pause interrupts GIF capture.",
+            )
+        }
+
+        ui_runtime.simulation_paused = false
         ji.pending_animation_reset = true
+    }
+
+    if toolbar_hit.TogglePauseRequested {
+        ui_runtime.simulation_paused = !ui_runtime.simulation_paused
     }
 
     if toolbar_hit.ToggleSettingsRequested {
@@ -559,6 +580,35 @@ draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     draw_arc_arrowhead(cx, cy, radius, end2, arrow_size, thickness, color)
 }
 
+//   Draw pause glyph with two vertical bars.
+draw_pause_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
+    bar_w := max(2.0, rect.width * 0.18)
+    gap := max(2.0, rect.width * 0.14)
+    total_w := bar_w * 2 + gap
+    left_x := rect.x + (rect.width - total_w) * 0.5
+    top := rect.y + rect.height * 0.24
+    bottom := rect.y + rect.height * 0.76
+
+    rl.DrawRectangleRec(rl.Rectangle{left_x, top, bar_w, bottom - top}, color)
+    rl.DrawRectangleRec(rl.Rectangle{left_x + bar_w + gap, top, bar_w, bottom - top}, color)
+}
+
+//   Draw play glyph with a right-pointing triangle.
+draw_play_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
+    left := rect.x + rect.width * 0.34
+    right := rect.x + rect.width * 0.72
+    top := rect.y + rect.height * 0.24
+    bottom := rect.y + rect.height * 0.76
+    mid_y := rect.y + rect.height * 0.5
+
+    rl.DrawTriangle(
+        rl.Vector2{left, top},
+        rl.Vector2{left, bottom},
+        rl.Vector2{right, mid_y},
+        color,
+    )
+}
+
 //   Draw an approximated arc segment using connected line segments.
 draw_arc_polyline :: proc(
     cx, cy, radius: f32,
@@ -694,7 +744,10 @@ draw_toolbar_icon_button :: proc(
 
 //   Render toolbar row and report refresh/settings toggle hits.
 draw_tree_toolbar :: proc(
-    panel: rl.Rectangle, mouse: rl.Vector2, show_settings: bool) -> Tree_Toolbar_Hit {
+    panel: rl.Rectangle,
+    mouse: rl.Vector2,
+    show_settings: bool,
+    simulation_paused: bool) -> Tree_Toolbar_Hit {
     hit := Tree_Toolbar_Hit{}
 
     rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
@@ -702,6 +755,13 @@ draw_tree_toolbar :: proc(
 
     refresh_rect := rl.Rectangle{
         panel.x + 4,
+        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
+        TREE_TOOLBAR_BUTTON_SIZE,
+        TREE_TOOLBAR_BUTTON_SIZE,
+    }
+
+    pause_rect := rl.Rectangle{
+        refresh_rect.x + TREE_TOOLBAR_BUTTON_SIZE + 4,
         panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
         TREE_TOOLBAR_BUTTON_SIZE,
         TREE_TOOLBAR_BUTTON_SIZE,
@@ -716,6 +776,14 @@ draw_tree_toolbar :: proc(
 
     hit.RefreshRequested =
         draw_toolbar_icon_button(refresh_rect, mouse, false, draw_refresh_icon)
+
+    pause_icon := draw_pause_icon
+    if simulation_paused {
+        pause_icon = draw_play_icon
+    }
+    hit.TogglePauseRequested =
+        draw_toolbar_icon_button(pause_rect, mouse, simulation_paused, pause_icon)
+
     hit.ToggleSettingsRequested =
         draw_toolbar_icon_button(settings_rect, mouse, show_settings, draw_gear_icon)
     return hit
@@ -1165,12 +1233,23 @@ draw_settings_gif_status :: proc(
     font: rl.Font) {
     ui_text(gif_capture_status_label(ui_runtime), int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
+    if ui_runtime.gif_status_note_len > 0 {
+        note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
+        ui_text(
+            note_text,
+            int(panel.x + SETTINGS_PANEL_INSET),
+            int(row_y + 18),
+            UI_TEXT_COLOR,
+            font,
+        )
+    }
+
     if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
         path_text := string(ui_runtime.last_gif_path[:ui_runtime.last_gif_path_len])
         ui_text(
             fmt.tprintf("Path: %s", path_text),
             int(panel.x + SETTINGS_PANEL_INSET),
-            int(row_y + 18),
+            int(row_y + 36),
             UI_TEXT_COLOR,
             font,
         )

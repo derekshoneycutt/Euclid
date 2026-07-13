@@ -154,10 +154,12 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.current_delta_time = FIXED_DT
     state^.accumulator = 0
     state^.ui_runtime.limit_fps = true
+    state^.ui_runtime.simulation_paused = false
     state^.ui_runtime.use_simd_batch_projection = simd_batch_projection_available()
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
+    clear_gif_status_note(&state^.ui_runtime)
 
 
     julia.init_euclid_scripts(state)
@@ -308,6 +310,12 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     }
     update_average_fps(state, frame_dt)
 
+    if state^.ui_runtime.simulation_paused {
+        state^.accumulator = 0
+        kine.build_kine_draw_cache(state^.point_system, 0)
+        return 0
+    }
+
     state^.accumulator += frame_dt
 
     kine.kine_update_last_cache_vectors(state^.point_system)
@@ -345,10 +353,11 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     draw_kine_points_high_cached(state)
     render_high_particles(state^.particle_system, state)
 
-    if state^.ui_runtime.gif_capture_phase == .Recording {
+    if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
         if !gif_capture_submit_frame(state) {
             gif_capture_abort_session(&state^.gif_capture)
             state^.ui_runtime.gif_capture_phase = .Error
+            set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
         }
     }
 
