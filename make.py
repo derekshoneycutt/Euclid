@@ -475,7 +475,7 @@ def run_vet_analysis(fail_lizard: bool) -> None:
     julia_files = sorted(str(path) for path in julia_root.rglob("*.jl"))
     if julia_files:
         print("Running lizard analysis (julia)...")
-        julia_result = run_command(["lizard", "-l", "r", *julia_files], cwd=SCRIPT_DIR)
+        julia_result = run_command(["lizard", "-l", "ruby", *julia_files], cwd=SCRIPT_DIR)
         print(f"Lizard julia analysis exited {julia_result.returncode}")
         if julia_result.returncode != 0:
             had_findings = True
@@ -716,8 +716,7 @@ def execute_build_plan(
     do_assets: bool,
     fail_lizard: bool,
     run_after_build: bool,
-    run_args: list[str],
-) -> None:
+    run_args: list[str]) -> None:
     julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
 
     if do_build:

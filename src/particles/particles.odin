@@ -374,6 +374,57 @@ emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
     }
 }
 
+//   Advance particle simulation for dust, Ember, and Flicker layers.
+//
+// Parameters:
+//   - ps: Particle system to update.
+//   - dt: Simulation delta time in seconds.
+//
+// Returns:
+//   - none.
+update_particles :: proc(ps: ^Particle_System, dt: f32) {
+    integrate_particle_positions_soa_batch(
+        ps.low_particles.pos_x[:ps^.use_max_dust_particles],
+        ps.low_particles.pos_y[:ps^.use_max_dust_particles],
+        ps.low_particles.pos_z[:ps^.use_max_dust_particles],
+        ps.low_particles.vel_x[:ps^.use_max_dust_particles],
+        ps.low_particles.vel_y[:ps^.use_max_dust_particles],
+        ps.low_particles.vel_z[:ps^.use_max_dust_particles])
+
+    integrate_particle_positions_soa_batch(
+        ps.particles.pos_x[:],
+        ps.particles.pos_y[:],
+        ps.particles.pos_z[:],
+        ps.particles.vel_x[:],
+        ps.particles.vel_y[:],
+        ps.particles.vel_z[:])
+
+    integrate_particle_positions_soa_batch(
+        ps.high_particles.pos_x[:],
+        ps.high_particles.pos_y[:],
+        ps.high_particles.pos_z[:],
+        ps.high_particles.vel_x[:],
+        ps.high_particles.vel_y[:],
+        ps.high_particles.vel_z[:])
+
+    for i in 0..<ps^.use_max_dust_particles {
+        update_particle_dust_index(ps, i)
+    }
+
+    resolve_dust_collisions(ps)
+
+    update_mid_ember_particles(ps, dt)
+
+    for i in 0..<MAX_PARTICLES {
+        update_high_flicker_particle_index(ps, i, dt)
+    }
+}
+
+
+
+
+
+
 //   Check whether a kine shape kind participates in dust burst emission.
 is_burst_drawable_kind :: #force_inline proc(kind: Kine_Shape_Point_Type) -> bool {
     return kind == .Label ||
@@ -550,57 +601,6 @@ emit_kine_shape_burst :: proc(
 
     return false
 }
-
-//   Advance particle simulation for dust, Ember, and Flicker layers.
-//
-// Parameters:
-//   - ps: Particle system to update.
-//   - dt: Simulation delta time in seconds.
-//
-// Returns:
-//   - none.
-update_particles :: proc(ps: ^Particle_System, dt: f32) {
-    integrate_particle_positions_soa_batch(
-        ps.low_particles.pos_x[:ps^.use_max_dust_particles],
-        ps.low_particles.pos_y[:ps^.use_max_dust_particles],
-        ps.low_particles.pos_z[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_x[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_y[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_z[:ps^.use_max_dust_particles])
-
-    integrate_particle_positions_soa_batch(
-        ps.particles.pos_x[:],
-        ps.particles.pos_y[:],
-        ps.particles.pos_z[:],
-        ps.particles.vel_x[:],
-        ps.particles.vel_y[:],
-        ps.particles.vel_z[:])
-
-    integrate_particle_positions_soa_batch(
-        ps.high_particles.pos_x[:],
-        ps.high_particles.pos_y[:],
-        ps.high_particles.pos_z[:],
-        ps.high_particles.vel_x[:],
-        ps.high_particles.vel_y[:],
-        ps.high_particles.vel_z[:])
-
-    for i in 0..<ps^.use_max_dust_particles {
-        update_particle_dust_index(ps, i)
-    }
-
-    resolve_dust_collisions(ps)
-
-    update_mid_ember_particles(ps, dt)
-
-    for i in 0..<MAX_PARTICLES {
-        update_high_flicker_particle_index(ps, i, dt)
-    }
-}
-
-
-
-
-
 
 //   Integrate positions for one SoA particle bucket using velocity.
 //
