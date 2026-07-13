@@ -40,11 +40,6 @@ important for the vet functionality that ensures code meets appropriate standard
 static analysis.
 
 ```julia
-] add JET
-] add CodeComplexity
-
-#OR
-
 using Pkg
 Pkg.add("JET")
 pkg.add("CodeComplexity")
@@ -76,15 +71,15 @@ It's also seriously just *fun*.
 
 Because saying "Odin-Julia Bridge" is *fun*.
 
-This whole thing began using Julia with Makie to draw Euclid's Elements via Jupyter
+This whole thing began using Julia with Makie to draw Euclid's Elements inside Jupyter
 notebooks. Ultimately, it became quite clear that what I was looking for was not a great
 fit to that model, and I froze on it a bit.
 
-I had some thoughts about making a C application for it, but I was not very excited about
-it at any given moment. As I was doing another project exploring 76 different programming
-languages, I encountered Odin and enjoyed working with it. On a whim, I was playing with a
-basic kinematic system in Odin when it occurred to me it would be a great basis for this
-Euclid project.
+I had some thoughts about making a C application for this project, but I was not very
+excited about it at any given moment. As I was doing another project exploring 76 different
+programming languages, I encountered Odin and enjoyed working with it. On a whim, I was
+playing with a basic kinematic system in Odin when it occurred to me it would be a great
+basis for this Euclid project.
 
 Ultimately, having a strong solid application base with manual memory management and
 potential for optimizations at a relatively low level combined with an intentionally fast,
@@ -96,7 +91,7 @@ that just make it an enjoyable experience!
 
 ### Q: Are there any more options with the make scripts?
 
-The make script (both `make.py`) has several helpful parameters if the simple stuff above
+The make script (both `make.jl`) has several helpful parameters if the simple stuff above
 is not enough.
 
 ```text
@@ -107,7 +102,6 @@ Options:
     --assets, -a        Build assets.pkg.
     --run, -r           Run bin/euclid after all other requests.
     --vet, -v           Build with validation flags.
-    --fail-lizard, -f   With --vet, fail if any lizard analysis exits non-zero.
     --no-build, -n      Skip any build (overrides --build and --vet).
     --no-assets, -x     Skip assets.pkg build (overrides --assets).
     --                  Pass all remaining args directly to bin/euclid (only with --run).
@@ -143,7 +137,7 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-./make.py -na
+julia make.jl -na
 ```
 
 EuclidApp will automatically notice the updated package file, unpack it, and reload all
