@@ -374,7 +374,6 @@ function animate_pen_arcmove(
     offsetz = abs(clamp(sin(t * periods * π) * height, -1f0, 1f0))
     tvec[3] = tvec[3] + offsetz
     usePoint = startpos + tvec
-    #usePoint[3] = abs(clamp(usePoint[3], -1f0, 1f0))
     place_pen_at_angles(state_ptr, usePoint, π / 2f0, 0f0)
     if usePoint[3] < 0.05 && strikecolor != :none
         particlePoint = [usePoint[1], usePoint[2], 0f0]
@@ -390,6 +389,20 @@ end
     return (
         p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
         p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps
+    )
+end
+
+@inline function has_collinear_segment_overlap_xy(
+    a1::Vector{Float32}, a2::Vector{Float32},
+    b1::Vector{Float32}, b2::Vector{Float32},
+    o1::Float32, o2::Float32, o3::Float32, o4::Float32,
+    eps::Float32)
+
+    return (
+        (abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
+        (abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)) ||
+        (abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)) ||
+        (abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps))
     )
 end
 
@@ -409,20 +422,7 @@ end
         return true
     end
 
-    if abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)
-        return true
-    end
-    if abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)
-        return true
-    end
-    if abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)
-        return true
-    end
-    if abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps)
-        return true
-    end
-
-    return false
+    return has_collinear_segment_overlap_xy(a1, a2, b1, b2, o1, o2, o3, o4, eps)
 end
 
 @inline function avg_radius_to_xy_center(

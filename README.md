@@ -23,17 +23,36 @@ animations. Raylib is used for rendering.
 You must have Odin and Julia installed on your system to build from source, and both
 must be available on PATH.
 
-Clone the git repository as per usual practices and run the make script below. Python3 is
-required, preferrably with a recent version.
+Clone the git repository as per usual practices and run the make script below.
 
 ```bash
 git clone https://github.com/derekshoneycutt/EuclidApp.git
 cd EuclidApp
-python /make.py
-# To run immediately: python make.py -r
+julia /make.jl
+# To run immediately: julia make.jl -r
 ```
 
-### Windows requires a few more additions before this will work
+### Dependencies at Build Time
+
+There are dependencies in the make julia script, namely JET.jl and CodeComplexity.jl.
+These can both be added via the standard julia package manager. These are especially
+important for the vet functionality that ensures code meets appropriate standards via
+static analysis.
+
+```julia
+] add JET
+] add CodeComplexity
+
+#OR
+
+using Pkg
+Pkg.add("JET")
+pkg.add("CodeComplexity")
+```
+
+You should also have `lizard` installed for the static analysis of Odin code.
+
+#### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
 - `gendef` : used in the python script to bridge the fact that Julia is not built with

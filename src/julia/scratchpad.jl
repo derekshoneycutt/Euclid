@@ -1006,6 +1006,23 @@ function handle_local_command!(state_ptr::Ptr{Cvoid}, text::AbstractString)
     return false
 end
 
+"""Return true when input should be treated as an explicit exit request."""
+is_exit_command(text::AbstractString) = text in ("exit", "quit", "exit()", "quit()")
+
+"""Handle parse-status side effects and return true when evaluation should stop."""
+function handle_parse_status!(session::ScratchpadSession, status, parsed)
+    if status == ParseIncomplete
+        append_output_line!(session, "Input incomplete during execution")
+        return true
+    end
+    if status == ParseError
+        append_output_line!(session, parse_error_message(parsed))
+        return true
+    end
+
+    return false
+end
+
 """Evaluate one queued input line, including local commands, help mode, and safe eval."""
 function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, text::String)
     stripped = strip(text)
@@ -1019,7 +1036,7 @@ function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid
         return
     end
 
-    if stripped == "exit" || stripped == "quit" || stripped == "exit()" || stripped == "quit()"
+    if is_exit_command(stripped)
         intercept_exit_or_quit(state_ptr)
         return
     end
@@ -1032,12 +1049,7 @@ function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid
     end
 
     status, parsed = classify_parse(text)
-    if status == ParseIncomplete
-        append_output_line!(session, "Input incomplete during execution")
-        return
-    end
-    if status == ParseError
-        append_output_line!(session, parse_error_message(parsed))
+    if handle_parse_status!(session, status, parsed)
         return
     end
 
