@@ -22,6 +22,8 @@ CIRCLE_ARC_SEGMENTS :: 96
 COMPASS_TOPCIRCLE_SEGMENTS :: 30
 COMPASS_TOPCIRCLE_VECTORS :: COMPASS_TOPCIRCLE_SEGMENTS + 1
 COMPASS_TOPCIRCLE_RADIUS :: 0.25
+COMPASS_HINGE_CROSS_EPSILON :: 0.0001
+COMPASS_DEPTH_TIE_EPSILON :: 0.0001
 
 SHADOW_MIN_THICKNESS :: 0.5
 SHADOW_ALPHA_BASE :: 90
@@ -295,6 +297,36 @@ draw_stroke3d_segment :: #force_inline proc(state: ^Euclid_General_State, p0, p1
         set_stroke3d_segment(state, p0, p1, thickness)
     }
     rl.DrawLineEx(p0, p1, thickness, color)
+}
+
+
+//   Decide if joint1->pivot should be drawn last to preserve hinge-side layering.
+//
+// Notes:
+//   - Uses projected hinge winding as primary rule.
+//   - Falls back to world-depth ordering near collinear poses.
+compass_draw_joint1_leg_last :: #force_inline proc(comp: ^kine.Kine_Compass_Draw, c0, c1, c2: Vector2) -> bool {
+    v01 := c0 - c1
+    v21 := c2 - c1
+    hinge_cross := v01.x * v21.y - v01.y * v21.x
+
+    if math.abs(hinge_cross) > COMPASS_HINGE_CROSS_EPSILON {
+        return hinge_cross > 0
+    }
+
+    mid1 := (comp^.joint1 + comp^.pivot) * 0.5
+    mid2 := (comp^.joint2 + comp^.pivot) * 0.5
+    depth1 := mid1.x + mid1.y - mid1.z
+    depth2 := mid2.x + mid2.y - mid2.z
+
+    if depth1 > depth2 + COMPASS_DEPTH_TIE_EPSILON {
+        return true
+    }
+    if depth2 > depth1 + COMPASS_DEPTH_TIE_EPSILON {
+        return false
+    }
+
+    return comp^.active_child == 1
 }
 
 
@@ -704,8 +736,14 @@ draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compa
     c1 := iso_to_cartesian(comp^.pivot, state^.iso_scale^)
     c2 := iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
-    draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
-    draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
+    draw_joint1_last := compass_draw_joint1_leg_last(comp, c0, c1, c2)
+    if draw_joint1_last {
+        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
+    } else {
+        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
+    }
 
     draw_outside_arc_compass_cached(
         comp^.joint1,
@@ -826,8 +864,14 @@ draw_cached_compass_shadow :: proc(state: ^Euclid_General_State, comp: ^kine.Kin
     shadow_color := make_shadow_color(comp^.color, avg_height)
     thickness := math.max(comp^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
-    rl.DrawLineEx(s0, s1, thickness, shadow_color)
-    rl.DrawLineEx(s1, s2, thickness, shadow_color)
+    draw_joint1_last := compass_draw_joint1_leg_last(comp, s0, s1, s2)
+    if draw_joint1_last {
+        rl.DrawLineEx(s1, s2, thickness, shadow_color)
+        rl.DrawLineEx(s0, s1, thickness, shadow_color)
+    } else {
+        rl.DrawLineEx(s0, s1, thickness, shadow_color)
+        rl.DrawLineEx(s1, s2, thickness, shadow_color)
+    }
 
     draw_outside_arc_compass_shadow_cached(
         comp^.joint1,
