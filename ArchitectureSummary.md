@@ -263,8 +263,7 @@ Defense:
 
 ## Build and Packaging Model
 
-- `make.sh` (Linux/macOS) and `make.ps1` (Windows) build Odin executable and
-  package runtime assets into `bin/assets.pkg`.
+- `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
 - Packaged assets include:
   - `src/julia/**` scripts
   - `src/view/shaders/**`
