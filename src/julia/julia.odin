@@ -19,6 +19,10 @@ import "core:strings"
 
 LABEL_DUST_X_OFFSET :: -0.01
 LABEL_DUST_Y_OFFSET :: -0.03
+SCRATCHPAD_ANIMATION_NAME :: "Scratchpad"
+SCRATCHPAD_PARSE_ERROR :: i32(0)
+SCRATCHPAD_PARSE_INCOMPLETE :: i32(1)
+SCRATCHPAD_PARSE_COMPLETE :: i32(2)
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
 //
@@ -54,6 +58,18 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
 
     ret.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     ret.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
+    ret.scratchpad_classify_input = julialib.jl_get_function(main_module, "scratchpad_classify_input")
+    ret.scratchpad_queue_input = julialib.jl_get_function(main_module, "scratchpad_queue_input")
+    ret.scratchpad_save_history_to_file = julialib.jl_get_function(
+        main_module,
+        "scratchpad_save_history_to_file",
+    )
+    ret.scratchpad_history_previous = julialib.jl_get_function(main_module, "scratchpad_history_previous")
+    ret.scratchpad_history_next = julialib.jl_get_function(main_module, "scratchpad_history_next")
+    ret.scratchpad_history_reset_cursor = julialib.jl_get_function(
+        main_module,
+        "scratchpad_history_reset_cursor",
+    )
     ret.asset_archive_mod_time_unix_nano = 0
     ret.current_animation_index = -1
     ret.selected_animation_index = -1
@@ -101,6 +117,161 @@ init_euclid_scripts :: proc(
             return
         }
     }
+
+    if state^.julia_interface^.selected_animation_index < 0 {
+        select_default_animation(state)
+    }
+}
+
+//   Classify scratchpad text as parse-error/incomplete/complete.
+//
+// Returns:
+//   - SCRATCHPAD_PARSE_ERROR when input has syntax errors.
+//   - SCRATCHPAD_PARSE_INCOMPLETE when input is a valid prefix.
+//   - SCRATCHPAD_PARSE_COMPLETE when input is complete.
+scratchpad_classify_input :: proc(
+    state: ^core.Euclid_General_State, text: string) -> i32 {
+
+    if state == nil || state^.julia_interface == nil {
+        return SCRATCHPAD_PARSE_ERROR
+    }
+    if state^.julia_interface^.scratchpad_classify_input == nil {
+        return SCRATCHPAD_PARSE_ERROR
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    text_c := strings.clone_to_cstring(text, context.temp_allocator)
+    text_value := julialib.jl_cstr_to_string(text_c)
+    result := julialib.jl_call2(
+        state^.julia_interface^.scratchpad_classify_input,
+        state_value,
+        text_value,
+    )
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_classify_input")
+        return SCRATCHPAD_PARSE_ERROR
+    }
+
+    return i32(julialib.jl_unbox_int32(result))
+}
+
+//   Queue a complete scratchpad input for one-per-frame execution.
+//
+// Returns:
+//   - true when queued successfully.
+//   - false when queueing fails.
+scratchpad_queue_input :: proc(
+    state: ^core.Euclid_General_State, text: string) -> bool {
+
+    if state == nil || state^.julia_interface == nil {
+        return false
+    }
+    if state^.julia_interface^.scratchpad_queue_input == nil {
+        return false
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    text_c := strings.clone_to_cstring(text, context.temp_allocator)
+    text_value := julialib.jl_cstr_to_string(text_c)
+    result := julialib.jl_call2(
+        state^.julia_interface^.scratchpad_queue_input,
+        state_value,
+        text_value,
+    )
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_queue_input")
+        return false
+    }
+
+    return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Save scratchpad history entries to a file path through Julia runtime.
+//
+// Returns:
+//   - true when history is written successfully.
+//   - false when bridge callback is unavailable or writing fails.
+scratchpad_save_history_to_file :: proc(
+    state: ^core.Euclid_General_State, path: string) -> bool {
+
+    if state == nil || state^.julia_interface == nil {
+        return false
+    }
+    if state^.julia_interface^.scratchpad_save_history_to_file == nil {
+        return false
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    path_c := strings.clone_to_cstring(path, context.temp_allocator)
+    path_value := julialib.jl_cstr_to_string(path_c)
+    result := julialib.jl_call2(
+        state^.julia_interface^.scratchpad_save_history_to_file,
+        state_value,
+        path_value,
+    )
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_save_history_to_file")
+        return false
+    }
+
+    return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Move scratchpad history cursor one step backward and return suggested input.
+scratchpad_history_previous :: proc(state: ^core.Euclid_General_State) -> string {
+    if state == nil || state^.julia_interface == nil {
+        return ""
+    }
+    if state^.julia_interface^.scratchpad_history_previous == nil {
+        return ""
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_previous, state_value)
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_history_previous")
+        return ""
+    }
+
+    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+}
+
+//   Move scratchpad history cursor one step forward and return suggested input.
+scratchpad_history_next :: proc(state: ^core.Euclid_General_State) -> string {
+    if state == nil || state^.julia_interface == nil {
+        return ""
+    }
+    if state^.julia_interface^.scratchpad_history_next == nil {
+        return ""
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_next, state_value)
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_history_next")
+        return ""
+    }
+
+    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+}
+
+//   Reset scratchpad history cursor to the position after the most recent entry.
+scratchpad_history_reset_cursor :: proc(state: ^core.Euclid_General_State) -> bool {
+    if state == nil || state^.julia_interface == nil {
+        return false
+    }
+    if state^.julia_interface^.scratchpad_history_reset_cursor == nil {
+        return false
+    }
+
+    state_value := julialib.jl_box_voidpointer(state)
+    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_reset_cursor, state_value)
+    if julialib.jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_history_reset_cursor")
+        return false
+    }
+
+    return julialib.jl_unbox_bool(result) != 0
 }
 
 //  Perform a single animation frame update for the julia system, including
@@ -234,6 +405,10 @@ call_global_euclid_loop :: proc(
 call_current_animation_loop :: proc(
     state: ^core.Euclid_General_State, dt: f32) {
 
+    if state^.julia_interface^.current_animation == nil {
+        return
+    }
+
     if state^.julia_interface^.current_animation.loop == nil {
         return
     }
@@ -267,7 +442,8 @@ change_current_animation_loop :: proc(
     
     state_value := julialib.jl_box_voidpointer(state)
 
-    if state^.julia_interface^.current_animation^.loop != nil {
+    if state^.julia_interface^.current_animation != nil &&
+        state^.julia_interface^.current_animation^.loop != nil {
         julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Cleaning previous animation loop")
@@ -403,6 +579,54 @@ refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
 
     state^.julia_interface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     state^.julia_interface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
+    state^.julia_interface^.scratchpad_classify_input = julialib.jl_get_function(
+        main_module,
+        "scratchpad_classify_input",
+    )
+    state^.julia_interface^.scratchpad_queue_input = julialib.jl_get_function(
+        main_module,
+        "scratchpad_queue_input",
+    )
+    state^.julia_interface^.scratchpad_save_history_to_file = julialib.jl_get_function(
+        main_module,
+        "scratchpad_save_history_to_file",
+    )
+    state^.julia_interface^.scratchpad_history_previous = julialib.jl_get_function(
+        main_module,
+        "scratchpad_history_previous",
+    )
+    state^.julia_interface^.scratchpad_history_next = julialib.jl_get_function(
+        main_module,
+        "scratchpad_history_next",
+    )
+    state^.julia_interface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
+        main_module,
+        "scratchpad_history_reset_cursor",
+    )
+}
+
+//   Select the first non-scratchpad animation as default selection.
+select_default_animation :: proc(state: ^core.Euclid_General_State) {
+    if state == nil || state^.julia_interface == nil {
+        return
+    }
+
+    target_index := -1
+    for i in 0..<state^.julia_interface^.next_animation_index {
+        if state^.julia_interface^.animations[i].name == SCRATCHPAD_ANIMATION_NAME {
+            continue
+        }
+        target_index = i
+        break
+    }
+    if target_index < 0 {
+        return
+    }
+
+    for i in 0..<state^.julia_interface^.next_animation_index {
+        state^.julia_interface^.animations[i].is_selected = (i == target_index)
+    }
+    state^.julia_interface^.selected_animation_index = target_index
 }
 
 //   Clear animation registry state and reset interface selection fields to defaults.
@@ -485,6 +709,11 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
     reset_julia_interface_registry(state)
     init_euclid_scripts(state)
     restore_current_animation_after_reload(state, current_animation_name)
+
+    // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
+    state^.ui_runtime.scratchpad_input_len = 0
+    state^.ui_runtime.scratchpad_input_cursor = 0
+    state^.ui_runtime.scratchpad_follow_output = false
 }
 
 //   Return whether a point index is within runtime point capacity bounds.

@@ -48,6 +48,12 @@ Euclid_Julia_Animation_Interface :: struct {
 Euclid_Julia_Interface :: struct {
     init_scripts : ^julialib.jl_value_t,
     global_loop : ^julialib.jl_value_t,
+    scratchpad_classify_input : ^julialib.jl_value_t,
+    scratchpad_queue_input : ^julialib.jl_value_t,
+    scratchpad_save_history_to_file : ^julialib.jl_value_t,
+    scratchpad_history_previous : ^julialib.jl_value_t,
+    scratchpad_history_next : ^julialib.jl_value_t,
+    scratchpad_history_reset_cursor : ^julialib.jl_value_t,
     asset_archive_mod_time_unix_nano: i64,
 
     null_animation : Euclid_Julia_Animation_Interface,
@@ -477,6 +483,12 @@ Euclid_UI_Runtime_State :: struct {
     gif_captured_frames: int,
     last_gif_path: [260]u8,
     last_gif_path_len: int,
+
+    scratchpad_input: [4096]u8,
+    scratchpad_input_len: int,
+    scratchpad_input_cursor: int,
+    scratchpad_last_output_len: int,
+    scratchpad_follow_output: bool,
 }
 
 Euclid_General_State :: struct {
