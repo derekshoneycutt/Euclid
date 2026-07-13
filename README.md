@@ -50,7 +50,7 @@ You should also have `lizard` installed for the static analysis of Odin code.
 #### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
-- `gendef` : used in the python script to bridge the fact that Julia is not built with
+- `gendef` : used in the script to bridge the fact that Julia is not built with
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
 
@@ -95,7 +95,7 @@ The make script (both `make.jl`) has several helpful parameters if the simple st
 is not enough.
 
 ```text
-Usage: ./make.py [options]
+Usage: ./make.jl [options]
 
 Options:
     --build, -b         Build the project.
