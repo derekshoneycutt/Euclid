@@ -28,7 +28,7 @@ Clone the git repository as per usual practices and run the make script below.
 ```bash
 git clone https://github.com/derekshoneycutt/EuclidApp.git
 cd EuclidApp
-julia /make.jl
+julia make.jl
 # To run immediately: julia make.jl -r
 ```
 
