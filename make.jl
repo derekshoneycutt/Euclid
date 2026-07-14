@@ -857,6 +857,61 @@ function run_code_complexity_analysis()
     println("CodeComplexity violations are warning-only for configured directories.")
 end
 
+"""Parse scc -pw output rows for Julia, Odin, and Total."""
+function parse_scc_primary_rows(output::String)
+    rows = Dict{String,Tuple{Int,Int}}()
+
+    for raw_line in split(output, '\n')
+        line = strip(raw_line)
+        if isempty(line)
+            continue
+        end
+
+        fields = split(line)
+        if length(fields) < 7
+            continue
+        end
+
+        language = fields[1]
+        if !(language in ("Odin", "Julia", "Total"))
+            continue
+        end
+
+        try
+            code = parse(Int, fields[6])
+            complexity = parse(Int, fields[7])
+            rows[language] = (code, complexity)
+        catch
+            continue
+        end
+    end
+
+    return rows
+end
+
+"""Print derived `Complexity/Code` metrics from scc output."""
+function print_scc_complexity_per_file_summary(output::String)
+    rows = parse_scc_primary_rows(output)
+    labels = ["Odin", "Julia", "Total"]
+    printed_any = false
+
+    for label in labels
+        if !haskey(rows, label)
+            continue
+        end
+
+        code, complexity = rows[label]
+        complexity_per_code = code == 0 ? 0.0 : complexity / code
+        rounded = round(complexity_per_code; digits=4)
+        println("scc derived ($label): Complexity/Code = $rounded")
+        printed_any = true
+    end
+
+    if !printed_any
+        println("Warning: Could not parse scc summary rows for Odin/Julia/Total.")
+    end
+end
+
 """Run vet analysis for Julia checks and Odin lizard with optional failure escalation."""
 function run_vet_analysis()
     if Sys.which("lizard") === nothing
@@ -894,6 +949,13 @@ function run_vet_analysis()
         println("scc exited $(scc_result.exit_code)")
         if scc_result.exit_code != 0
             println("Warning: scc analysis failed; continuing with lizard analysis.")
+        else
+            scc_capture = run_command(Cmd(["scc", "-pw"]); cwd=SCRIPT_DIR, capture_output=true)
+            if scc_capture.exit_code == 0
+                print_scc_complexity_per_file_summary(scc_capture.stdout)
+            else
+                println("Warning: failed to capture scc output for derived metrics.")
+            end
         end
     end
 

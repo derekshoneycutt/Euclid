@@ -47,6 +47,8 @@ pkg.add("CodeComplexity")
 
 You should also have `lizard` installed for the static analysis of Odin code.
 
+You should also have `scc` installed for broad code statistics of the codebase.
+
 #### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
