@@ -145,6 +145,7 @@ gif_encode_frame :: proc(
     centiseconds_per_frame: int,
     quality: int,
     pitch_in_bytes: int) -> bool {
+
     if state.list_head == nil || pixel_data == nil {
         return false
     }
@@ -163,23 +164,11 @@ gif_encode_frame :: proc(
     raw := transmute([^]u8)base
 
     next_depth := gif_encode_next_frame_depth(
-        quality_clamped,
-        state.frames_submitted,
-        state.previous_frame.depth,
-        state.previous_frame.count,
-    )
+        quality_clamped, state.frames_submitted, state.previous_frame.depth,
+        state.previous_frame.count)
 
-    gif_encode_cook_frame(
-        &state.current_frame,
-        raw,
-        state.used_mem,
-        state.width,
-        state.height,
-        pitch,
-        state.use_bgra,
-        state.alpha_threshold,
-        next_depth,
-    )
+    gif_encode_cook_frame(&state.current_frame, raw, state.used_mem, state.width,
+        state.height, pitch, state.use_bgra, state.alpha_threshold, next_depth)
 
     node, ok := gif_encode_compress_frame(state, state.current_frame, centiseconds_per_frame)
     if !ok || node == nil {
@@ -357,7 +346,9 @@ gif_encode_free_state :: proc(state: ^Gif_Encode_State) {
 }
 
 //   Reset LZW table memory and initialize active table metadata.
-gif_encode_lzw_reset :: proc(lzw_mem: []i16, lzw: ^Gif_Lzw_State, table_size: int, stride: int) {
+gif_encode_lzw_reset :: proc(
+    lzw_mem: []i16, lzw: ^Gif_Lzw_State, table_size: int, stride: int) {
+
     for i := 0; i < len(lzw_mem); i += 1 {
         lzw_mem[i] = -1
     }
@@ -376,6 +367,7 @@ gif_encode_write_code_bits :: proc(
     bit_count: ^int,
     code: int,
     width: int) -> bool {
+
     bit_accum^ |= (u64(code) << u32(bit_count^))
     bit_count^ += width
 
@@ -400,6 +392,7 @@ gif_encode_flush_code_bits :: proc(
     stream_len: ^int,
     bit_accum: ^u64,
     bit_count: ^int) -> bool {
+
     for bit_count^ > 0 {
         if stream_len^ >= len(stream) {
             return false
@@ -476,19 +469,10 @@ gif_encode_clear_used_entries :: #force_inline proc(used: []u8, palette_size: in
 gif_encode_dither_and_quantize_pixels :: proc(
     cooked: []u32,
     raw_pixels: [^]u8,
-    width: int,
-    height: int,
-    pitch: int,
-    rbits: int,
-    gbits: int,
-    bbits: int,
-    palette_size: int,
-    rmul: int,
-    gmul: int,
-    bmul: int,
-    gmask: int,
-    bmask: int,
+    width, height, pitch, rbits, gbits, bbits, palette_size: int,
+    rmul, gmul, bmul, gmask, bmask: int,
     alpha_threshold: int) {
+
     for y := 0; y < height; y += 1 {
         for x := 0; x < width; x += 1 {
             pixel_idx := y * pitch + x * 4
@@ -528,7 +512,9 @@ gif_encode_mark_used_palette_entries :: #force_inline proc(
 }
 
 //   Count non-transparent palette entries marked as used.
-gif_encode_count_used_palette_entries :: #force_inline proc(used: []u8, palette_size: int) -> int {
+gif_encode_count_used_palette_entries :: #force_inline proc(
+    used: []u8, palette_size: int) -> int {
+
     used_count := 0
     for i := 0; i < palette_size - 1; i += 1 {
         used_count += int(used[i])
@@ -542,6 +528,7 @@ gif_encode_next_frame_depth :: #force_inline proc(
     frames_submitted: int,
     prev_depth: int,
     prev_count: int) -> int {
+
     if frames_submitted <= 0 {
         return quality_clamped
     }
@@ -554,6 +541,7 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
     out: []u8,
     width: int,
     height: int) -> bool {
+
     if len(out) < GIF_HEADER_SIZE {
         return false
     }
@@ -593,12 +581,9 @@ gif_encode_try_cook_depth :: proc(
     frame: ^GifEncodeFrame,
     raw_pixels: [^]u8,
     used: []u8,
-    width: int,
-    height: int,
-    pitch: int,
-    current_depth: int,
-    alpha_threshold: int,
+    width, height, pitch, current_depth, alpha_threshold: int,
     use_bgra: bool) -> Gif_Encode_Cook_Attempt {
+
     rbits, gbits, bbits := gif_encode_depth_bits(current_depth, use_bgra)
 
     palette_size := (1 << u32(rbits + gbits + bbits)) + 1
@@ -615,23 +600,9 @@ gif_encode_try_cook_depth :: proc(
     gmask := ((1 << u32(gbits)) - 1) << u32(rbits)
     bmask := ((1 << u32(bbits)) - 1) << u32(rbits + gbits)
 
-    gif_encode_dither_and_quantize_pixels(
-        frame.pixels,
-        raw_pixels,
-        width,
-        height,
-        pitch,
-        rbits,
-        gbits,
-        bbits,
-        palette_size,
-        rmul,
-        gmul,
-        bmul,
-        gmask,
-        bmask,
-        alpha_threshold,
-    )
+    gif_encode_dither_and_quantize_pixels(frame.pixels, raw_pixels, width, height, pitch,
+        rbits, gbits, bbits, palette_size, rmul, gmul, bmul, gmask, bmask,
+        alpha_threshold)
 
     total_pixels := width * height
     gif_encode_mark_used_palette_entries(frame.pixels, used, total_pixels)
@@ -650,26 +621,15 @@ gif_encode_cook_frame :: proc(
     frame: ^GifEncodeFrame,
     raw_pixels: [^]u8,
     used: []u8,
-    width: int,
-    height: int,
-    pitch: int,
+    width, height, pitch: int,
     use_bgra: bool,
-    alpha_threshold: int,
-    depth: int) {
+    alpha_threshold, depth: int) {
+
     current_depth := depth
 
     for {
-        attempt := gif_encode_try_cook_depth(
-            frame,
-            raw_pixels,
-            used,
-            width,
-            height,
-            pitch,
-            current_depth,
-            alpha_threshold,
-            use_bgra,
-        )
+        attempt := gif_encode_try_cook_depth(frame, raw_pixels, used, width, height,
+            pitch, current_depth, alpha_threshold, use_bgra)
 
         if !(attempt.used_count >= 256 && current_depth > 1) {
             frame.depth = attempt.depth
@@ -690,6 +650,7 @@ gif_encode_begin_lzw_bitstream :: proc(
     state: ^Gif_Encode_State,
     table_size: int,
     bs: ^Gif_Encode_Bitstream_State) -> bool {
+
     bitstream_capacity := state.width * state.height * 2 + 4096
     buf := make([]u8, bitstream_capacity)
     if len(buf) == 0 {
@@ -709,14 +670,9 @@ gif_encode_begin_lzw_bitstream :: proc(
     }
 
     clear_width := gif_encode_bit_log(lzw.length - 1)
-    if !gif_encode_write_code_bits(
-        bs.buffer,
-        &bs.stream_length,
-        &bs.bit_accum,
-        &bs.bit_count,
-        bs.clear_code,
-        clear_width,
-    ) {
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, bs.clear_code, clear_width) {
+
         delete(bs.buffer)
         return false
     }
@@ -734,6 +690,7 @@ gif_encode_lzw_walk_pixels :: proc(
     table_size: int,
     frames_compatible: bool,
     bs: ^Gif_Encode_Bitstream_State) -> bool {
+
     lzw_mem := state.lzw_mem
     lzw := Gif_Lzw_State{}
     gif_encode_lzw_reset(lzw_mem, &lzw, table_size, GIF_LZW_STRIDE)
@@ -772,26 +729,16 @@ gif_encode_lzw_walk_pixels :: proc(
 
         if code < 0 {
             code_bits := gif_encode_bit_log(lzw.length - 1)
-            if !gif_encode_write_code_bits(
-                bs.buffer,
-                &bs.stream_length,
-                &bs.bit_accum,
-                &bs.bit_count,
-                last_code,
-                code_bits,
-            ) {
+            if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+                &bs.bit_count, last_code, code_bits) {
+
                 return false
             }
 
             if lzw.length > (GIF_LZW_TABLE_CAPACITY - 1) {
-                if !gif_encode_write_code_bits(
-                    bs.buffer,
-                    &bs.stream_length,
-                    &bs.bit_accum,
-                    &bs.bit_count,
-                    bs.clear_code,
-                    code_bits,
-                ) {
+                if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length,
+                    &bs.bit_accum, &bs.bit_count, bs.clear_code, code_bits) {
+
                     return false
                 }
                 gif_encode_lzw_reset(lzw_mem, &lzw, table_size, GIF_LZW_STRIDE)
@@ -807,30 +754,19 @@ gif_encode_lzw_walk_pixels :: proc(
     }
 
     last_width := min(12, gif_encode_bit_log(lzw.length - 1))
-    if !gif_encode_write_code_bits(
-        bs.buffer,
-        &bs.stream_length,
-        &bs.bit_accum,
-        &bs.bit_count,
-        last_code,
-        last_width,
-    ) {
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, last_code, last_width) {
         return false
     }
 
     end_width := min(12, gif_encode_bit_log(lzw.length))
-    if !gif_encode_write_code_bits(
-        bs.buffer,
-        &bs.stream_length,
-        &bs.bit_accum,
-        &bs.bit_count,
-        bs.end_code,
-        end_width,
-    ) {
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, bs.end_code, end_width) {
         return false
     }
 
-    return gif_encode_flush_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum, &bs.bit_count)
+    return gif_encode_flush_code_bits(bs.buffer, &bs.stream_length,
+        &bs.bit_accum, &bs.bit_count)
 }
 
 //   Build local color table and lookup mapping for a cooked frame.
@@ -839,6 +775,7 @@ gif_encode_build_palette_table :: proc(
     frame: GifEncodeFrame,
     table: ^[256]Gif_Rgb,
     out: ^Gif_Encode_Palette_Build) -> bool {
+
     total_bits := frame.r_bits + frame.g_bits + frame.b_bits
     tlb_size := (1 << u32(total_bits)) + 1
     if tlb_size <= 0 || tlb_size > len(state.tlb_mem) {
@@ -899,6 +836,7 @@ gif_encode_lzw_to_bitstream :: proc(
     frames_compatible: bool,
     bitstream: ^[]u8,
     stream_len: ^int) -> bool {
+
     writer := Gif_Encode_Bitstream_State{}
     if !gif_encode_begin_lzw_bitstream(state, table_size, &writer) {
         return false
@@ -922,6 +860,7 @@ gif_encode_write_graphics_control_extension :: proc(
     w: ^int,
     has_transparent_pixels: bool,
     centiseconds: int) -> bool {
+
     out[w^ + 0] = GIF_GCE_INTRODUCER
     out[w^ + 1] = GIF_GCE_LABEL
     out[w^ + 2] = GIF_GCE_BLOCK_SIZE
@@ -944,6 +883,7 @@ gif_encode_write_image_descriptor :: proc(
     out: []u8,
     w: ^int,
     table_bits: int) -> bool {
+
     out[w^ + 0] = GIF_IMAGE_SEPARATOR
     if !gif_encode_write_u16le(out, w^ + 1, 0) ||
        !gif_encode_write_u16le(out, w^ + 3, 0) ||
@@ -962,6 +902,7 @@ gif_encode_write_local_color_table :: proc(
     w: ^int,
     table: [256]Gif_Rgb,
     table_size: int) {
+
     for i := 0; i < table_size; i += 1 {
         out[w^ + i * 3 + 0] = table[i].R
         out[w^ + i * 3 + 1] = table[i].G
@@ -977,6 +918,7 @@ gif_encode_write_image_data_blocks :: proc(
     bitstream: []u8,
     stream_len: int,
     table_bits: int) {
+
     out[w^] = u8(table_bits)
     w^ += 1
 
@@ -998,12 +940,11 @@ gif_encode_write_image_data_blocks :: proc(
 gif_encode_build_frame_chunk :: proc(
     state: ^Gif_Encode_State,
     table: [256]Gif_Rgb,
-    table_size: int,
-    table_bits: int,
+    table_size, table_bits: int,
     has_transparent_pixels: bool,
     bitstream: []u8,
-    stream_len: int,
-    centiseconds: int) -> (^Gif_Encode_Buffer, bool) {
+    stream_len, centiseconds: int) -> (^Gif_Encode_Buffer, bool) {
+
     local_table_bytes := table_size * 3
     sub_blocks := (stream_len + 254) / 255
     frame_chunk_size :=
@@ -1022,13 +963,9 @@ gif_encode_build_frame_chunk :: proc(
     out := node.data
     w := 0
 
-    if !gif_encode_write_graphics_control_extension(
-        state,
-        out,
-        &w,
-        has_transparent_pixels,
-        centiseconds,
-    ) {
+    if !gif_encode_write_graphics_control_extension(state, out, &w,
+        has_transparent_pixels, centiseconds) {
+
         gif_encode_free_buffer(node)
         return nil, false
     }
@@ -1050,6 +987,7 @@ gif_encode_compress_frame :: proc(
     state: ^Gif_Encode_State,
     frame: GifEncodeFrame,
     centiseconds: int) -> (^Gif_Encode_Buffer, bool) {
+
     if !frame.is_cooked {
         return nil, false
     }
@@ -1070,28 +1008,14 @@ gif_encode_compress_frame :: proc(
 
     bitstream: []u8 = nil
     stream_len := 0
-    if !gif_encode_lzw_to_bitstream(
-        state,
-        frame,
-        table_size,
-        frames_compatible,
-        &bitstream,
-        &stream_len,
-    ) {
+    if !gif_encode_lzw_to_bitstream(state, frame, table_size, frames_compatible,
+        &bitstream, &stream_len) {
         return nil, false
     }
     defer delete(bitstream)
 
-    node, ok := gif_encode_build_frame_chunk(
-        state,
-        table,
-        table_size,
-        table_bits,
-        palette.has_transparent_pixels,
-        bitstream,
-        stream_len,
-        centiseconds,
-    )
+    node, ok := gif_encode_build_frame_chunk(state, table, table_size, table_bits,
+        palette.has_transparent_pixels, bitstream, stream_len, centiseconds)
     if !ok || node == nil {
         return nil, false
     }

@@ -116,18 +116,25 @@ metadata storage functions used by most static animations.
 
 ### Q: Wait, Save Gif?
 
-Yup, you can save an animation to a gif file! This is available in the settings in the
+Yup, you can save an animation to a gif file! This is available via the camera icon in the
 top right of the window. This requires that an animation notify when it begins and ends,
 meaning the top animation for many sections will not be allowed to be saved. Most other
-animations can be saved to a gif file, directly from your viewpoint. Click Save Gif in the
-settings window, and the request will be logged, pending the start of the next animation.
-When the next animation starts, notifying the animation cycle boundary, the gif is initiated,
-and frames are saved into the gif buffer. When the animation ends, again notfying the
-animation cycle boundary, the gif buffer is then saved to a file.
+animations can be saved to a gif file, directly from your viewpoint. Click the camera icon
+to enter the Gif Export view, and click Save Gif. The request will be logged, pending the
+start of the next animation. When the next animation starts, notifying the animation cycle
+boundary, the gif is initiated, and frames are saved into the gif buffer. When the
+animation ends, again notfying the animation cycle boundary, the gif buffer is then saved
+to a file.
 
 If animation is paused in the middle of a gif save, the paused time is not included in the
 animation. It is all skipped and the gif proceeds as if it was never paused. If the
 animation is reset, the gif is canceled.
+
+I have some thoughts about other potential export formats that could be done from the
+camera tab, but for today, it is just gifs. The current code was ported from several
+pieces of C code walking through saving a gif, and something like ffmpeg could probably
+significantly improve on even that, as well as adding other formats. Such are
+considerations for the future.
 
 ### Q: Any Performance Hacks for Users?
 

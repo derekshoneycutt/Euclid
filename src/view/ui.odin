@@ -62,6 +62,7 @@ Tree_Hit :: struct {
 Tree_Toolbar_Hit :: struct {
     RefreshRequested: bool,
     TogglePauseRequested: bool,
+    ToggleGifRequested: bool,
     ToggleSettingsRequested: bool,
 }
 
@@ -92,6 +93,7 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
     toolbar_hit := draw_tree_toolbar(
         toolbar_panel,
         mouse,
+        ui_runtime.show_tree_gif,
         ui_runtime.show_tree_settings,
         ui_runtime.simulation_paused,
     )
@@ -116,6 +118,17 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
 
     if toolbar_hit.ToggleSettingsRequested {
         ui_runtime.show_tree_settings = !ui_runtime.show_tree_settings
+        if ui_runtime.show_tree_settings {
+            ui_runtime.show_tree_gif = false
+        }
+        ui_runtime.tree_scroll_dragging = false
+    }
+
+    if toolbar_hit.ToggleGifRequested {
+        ui_runtime.show_tree_gif = !ui_runtime.show_tree_gif
+        if ui_runtime.show_tree_gif {
+            ui_runtime.show_tree_settings = false
+        }
         ui_runtime.tree_scroll_dragging = false
     }
 
@@ -123,6 +136,12 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
         draw_settings_view(state, list_panel, mouse)
         return
     }
+
+    if ui_runtime.show_tree_gif {
+        draw_gif_view(state, list_panel, mouse)
+        return
+    }
+
     draw_tree_list_panel(ji, ui_runtime, list_panel, mouse, &state^.ui_runtime.tree_scroll_y, state.font)
 }
 
@@ -716,6 +735,32 @@ draw_gear_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     rl.DrawCircleV(rl.Vector2{rect.x + rect.width * 0.46, y3}, knob_r, color)
 }
 
+//   Draw a simple camera icon for the GIF export toolbar toggle.
+draw_gif_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
+    body := rl.Rectangle{
+        rect.x + 3,
+        rect.y + 6,
+        rect.width - 6,
+        rect.height - 10,
+    }
+    bump := rl.Rectangle{
+        body.x + body.width * 0.15,
+        body.y - 2,
+        body.width * 0.28,
+        2,
+    }
+
+    rl.DrawRectangleLinesEx(body, 1, color)
+    rl.DrawRectangleRec(bump, color)
+
+    lens_center := rl.Vector2{body.x + body.width * 0.5, body.y + body.height * 0.5}
+    lens_r := max(2.0, min(body.width, body.height) * 0.22)
+    rl.DrawCircleLines(i32(lens_center.x), i32(lens_center.y), lens_r, color)
+
+    flash_dot := rl.Vector2{body.x + body.width * 0.78, body.y + body.height * 0.3}
+    rl.DrawCircleV(flash_dot, 1.0, color)
+}
+
 //   Draw a toolbar button and return click-hit state.
 draw_toolbar_icon_button :: proc(
     rect: rl.Rectangle,
@@ -746,6 +791,7 @@ draw_toolbar_icon_button :: proc(
 draw_tree_toolbar :: proc(
     panel: rl.Rectangle,
     mouse: rl.Vector2,
+    show_gif: bool,
     show_settings: bool,
     simulation_paused: bool) -> Tree_Toolbar_Hit {
     hit := Tree_Toolbar_Hit{}
@@ -774,6 +820,13 @@ draw_tree_toolbar :: proc(
         TREE_TOOLBAR_BUTTON_SIZE,
     }
 
+    gif_rect := rl.Rectangle{
+        settings_rect.x - TREE_TOOLBAR_BUTTON_SIZE - 4,
+        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
+        TREE_TOOLBAR_BUTTON_SIZE,
+        TREE_TOOLBAR_BUTTON_SIZE,
+    }
+
     hit.RefreshRequested =
         draw_toolbar_icon_button(refresh_rect, mouse, false, draw_refresh_icon)
 
@@ -783,6 +836,9 @@ draw_tree_toolbar :: proc(
     }
     hit.TogglePauseRequested =
         draw_toolbar_icon_button(pause_rect, mouse, simulation_paused, pause_icon)
+
+    hit.ToggleGifRequested =
+        draw_toolbar_icon_button(gif_rect, mouse, show_gif, draw_gif_icon)
 
     hit.ToggleSettingsRequested =
         draw_toolbar_icon_button(settings_rect, mouse, show_settings, draw_gear_icon)
@@ -1310,8 +1366,23 @@ draw_settings_view :: proc(
     draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
     draw_settings_simd_projection_checkbox(panel, slider_track, mouse, ui_runtime, font)
+}
 
-    gif_section_y := slider_track.y + SETTINGS_GIF_TOP_OFFSET
+//   Render dedicated GIF panel and wire GIF controls.
+draw_gif_view :: proc(
+    state: ^core.Euclid_General_State, panel: rl.Rectangle, mouse: rl.Vector2) {
+
+    if state == nil || state.particle_system == nil {
+        return
+    }
+
+    ui_runtime := &state.ui_runtime
+    font := state.font
+
+    rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
+    rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
+
+    gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
     ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
 
     draw_settings_integer_slider(

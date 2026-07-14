@@ -458,6 +458,7 @@ Euclid_UI_Runtime_State :: struct {
     tree_scroll_drag_off: f32,
 
     show_tree_settings: bool,
+    show_tree_gif: bool,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
 

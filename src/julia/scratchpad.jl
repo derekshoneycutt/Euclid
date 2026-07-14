@@ -70,13 +70,7 @@ const reset_count_ref = Ref(0)
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr,
-        get_view_text,
-        initialize,
-        loop,
-        clean,
-        ScratchpadName,
-    )
+        state_ptr, get_view_text, initialize, loop, clean, ScratchpadName)
 end
 
 """Create an isolated runtime module used as the scratchpad eval scope."""
@@ -153,8 +147,7 @@ function blocked_input_reason(text::AbstractString)
         "download(",
         "rm(",
         "mv(",
-        "cp(",
-    )
+        "cp(")
     for token in blocked_tokens
         if occursin(token, lowered)
             return "blocked token: $(token)"
@@ -219,8 +212,7 @@ function reset_session!(state_ptr::Ptr{Cvoid})
         ScratchpadFrameHook[],
         ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         1,
-        1,
-    )
+        1)
     session_ref[] = session
 
     Core.eval(runtime, :(state_ptr = $state_ptr))
@@ -488,11 +480,11 @@ function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "")
     append_output_line!(session, "Commands")
     append_output_line!(session, "  :help        show this help")
-    append_output_line!(session, "  ?name        show docs for module, function, or variable name")
     append_output_line!(session, "  :clear       clear scrollback output")
     append_output_line!(session, "  :reset       reset scratchpad session")
     append_output_line!(session, "  :hooks       list frame hooks")
     append_output_line!(session, "  :stats       show runtime metrics")
+    append_output_line!(session, "  ?name        show docs for module, function, or variable name")
     append_output_line!(session, "")
     append_output_line!(session, "Common Modules")
     append_output_line!(session, "  OdinJuliaBridge")
@@ -1097,14 +1089,12 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
             append_output_line!(
                 session,
                 "Frame $(frame_hook_label(hook.id, hook.label)) failed: " *
-                format_exception_text(e, catch_backtrace()),
-            )
+                format_exception_text(e, catch_backtrace()))
             if hook.consecutive_failures >= MaxConsecutiveHookFailures
                 hook.enabled = false
                 append_output_line!(
                     session,
-                    "Disabled $(frame_hook_label(hook.id, hook.label)) after $(hook.consecutive_failures) consecutive failures",
-                )
+                    "Disabled $(frame_hook_label(hook.id, hook.label)) after $(hook.consecutive_failures) consecutive failures")
             end
         end
     end
