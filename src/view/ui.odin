@@ -90,22 +90,16 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
     mouse := rl.GetMousePosition()
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
-    toolbar_hit := draw_tree_toolbar(
-        toolbar_panel,
-        mouse,
-        ui_runtime.show_tree_gif,
-        ui_runtime.show_tree_settings,
-        ui_runtime.simulation_paused,
-    )
+    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse,
+        ui_runtime.show_tree_gif, ui_runtime.show_tree_settings, ui_runtime.simulation_paused)
+
     if toolbar_hit.RefreshRequested {
         if ui_runtime.simulation_paused &&
             (ui_runtime.gif_capture_phase == .Armed ||
             ui_runtime.gif_capture_phase == .Recording ||
             ui_runtime.gif_capture_phase == .Finalizing) {
-            cancel_gif_capture_with_note(
-                state,
-                "Canceled: refresh during pause interrupts GIF capture.",
-            )
+            cancel_gif_capture_with_note(state,
+                "Canceled: refresh during pause interrupts GIF capture.")
         }
 
         ui_runtime.simulation_paused = false
@@ -142,7 +136,8 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse, &state^.ui_runtime.tree_scroll_y, state.font)
+    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse,
+        &state^.ui_runtime.tree_scroll_y, state.font)
 }
 
 //   Render wrapped animation view text with scroll handling.
@@ -203,29 +198,24 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
     clamp_scroll_position(&state^.ui_runtime.view_text_scroll_y, max_scroll)
 
     mouse := rl.GetMousePosition()
-    apply_wheel_scroll(mouse, text_panel, TEXT_ROW_HEIGHT, &state^.ui_runtime.view_text_scroll_y, max_scroll)
+    apply_wheel_scroll(mouse, text_panel, TEXT_ROW_HEIGHT,
+        &state^.ui_runtime.view_text_scroll_y, max_scroll)
 
-    rl.BeginScissorMode(i32(text_panel.x), i32(text_panel.y), i32(text_panel.width), i32(text_panel.height))
+    rl.BeginScissorMode(i32(text_panel.x), i32(text_panel.y),
+        i32(text_panel.width), i32(text_panel.height))
     {
-        draw_wrapped_text_content(view_text, text_panel, state^.ui_runtime.view_text_scroll_y, state.font)
+        draw_wrapped_text_content(view_text, text_panel,
+            state^.ui_runtime.view_text_scroll_y, state.font)
     }
     rl.EndScissorMode()
 
-    track, thumb, thumb_h, has_scrollbar :=
-        build_vertical_scrollbar(text_panel, content_h, state^.ui_runtime.view_text_scroll_y, max_scroll)
-    if has_scrollbar {
+    track, thumb, thumb_h, has_scrollbar := build_vertical_scrollbar(text_panel, content_h,
+        state^.ui_runtime.view_text_scroll_y, max_scroll)
 
-        handle_scrollbar_drag(
-            mouse,
-            thumb,
-            text_panel.y,
-            text_panel.height,
-            thumb_h,
-            max_scroll,
-            &state^.ui_runtime.view_text_scroll_y,
-            &ui_runtime.text_scroll_dragging,
-            &ui_runtime.text_scroll_drag_off,
-        )
+    if has_scrollbar {
+        handle_scrollbar_drag(mouse, thumb, text_panel.y, text_panel.height,
+            thumb_h, max_scroll, &state^.ui_runtime.view_text_scroll_y,
+            &ui_runtime.text_scroll_dragging, &ui_runtime.text_scroll_drag_off)
 
         rl.DrawRectangleRec(track, BACKGROUND_COLOR)
         rl.DrawRectangleRec(thumb, UI_BORDER_COLOR)
@@ -358,7 +348,7 @@ consume_scratchpad_printable_input :: proc(
             break
         }
 
-        // Phase 1 keeps input ASCII-only for simple byte-safe buffer edits.
+        // ASCII gate
         if codepoint >= 32 && codepoint < 127 {
             scratchpad_insert_input_byte(ui_runtime, u8(codepoint))
             did_edit_input = true
@@ -404,7 +394,9 @@ handle_scratchpad_cursor_movement :: proc(ui_runtime: ^core.Euclid_UI_Runtime_St
         ui_runtime^.scratchpad_input_cursor -= 1
     }
 
-    if rl.IsKeyPressed(.RIGHT) && ui_runtime^.scratchpad_input_cursor < ui_runtime^.scratchpad_input_len {
+    if rl.IsKeyPressed(.RIGHT) &&
+        ui_runtime^.scratchpad_input_cursor < ui_runtime^.scratchpad_input_len {
+
         ui_runtime^.scratchpad_input_cursor += 1
     }
 
@@ -434,6 +426,7 @@ apply_scratchpad_history_navigation :: proc(
 submit_scratchpad_input_if_ready :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_UI_Runtime_State) {
+
     submit_pressed := rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER)
     if !submit_pressed {
         return
@@ -471,9 +464,11 @@ draw_scratchpad_output_and_prompt :: proc(
     text_panel: rl.Rectangle,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
+
     prompt_band_h: f32 = TEXT_ROW_HEIGHT + TEXT_PADDING
     output_panel := text_panel
     output_panel.height = text_panel.height - prompt_band_h
+
     if output_panel.height < TEXT_ROW_HEIGHT {
         output_panel.height = TEXT_ROW_HEIGHT
     }
@@ -499,7 +494,9 @@ draw_scratchpad_output_and_prompt :: proc(
 
     mouse := rl.GetMousePosition()
     pre_wheel_scroll := state^.ui_runtime.view_text_scroll_y
-    apply_wheel_scroll(mouse, output_panel, TEXT_ROW_HEIGHT, &state^.ui_runtime.view_text_scroll_y, max_scroll)
+    apply_wheel_scroll(mouse, output_panel, TEXT_ROW_HEIGHT,
+        &state^.ui_runtime.view_text_scroll_y, max_scroll)
+
     if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll {
         ui_runtime^.scratchpad_follow_output = true
     }
@@ -512,19 +509,13 @@ draw_scratchpad_output_and_prompt :: proc(
 
     track, thumb, thumb_h, has_scrollbar :=
         build_vertical_scrollbar(output_panel, content_h, state^.ui_runtime.view_text_scroll_y, max_scroll)
+
     if has_scrollbar {
         pre_drag_scroll := state^.ui_runtime.view_text_scroll_y
-        handle_scrollbar_drag(
-            mouse,
-            thumb,
-            output_panel.y,
-            output_panel.height,
-            thumb_h,
-            max_scroll,
-            &state^.ui_runtime.view_text_scroll_y,
-            &ui_runtime.text_scroll_dragging,
-            &ui_runtime.text_scroll_drag_off,
-        )
+        handle_scrollbar_drag(mouse, thumb, output_panel.y, output_panel.height,
+            thumb_h, max_scroll, &state^.ui_runtime.view_text_scroll_y,
+            &ui_runtime.text_scroll_dragging, &ui_runtime.text_scroll_drag_off)
+
         if state^.ui_runtime.view_text_scroll_y != pre_drag_scroll {
             ui_runtime^.scratchpad_follow_output = true
         }
@@ -537,9 +528,7 @@ draw_scratchpad_output_and_prompt :: proc(
     rl.DrawLineEx(
         rl.Vector2{text_panel.x + 1, f32(prompt_y - 2)},
         rl.Vector2{text_panel.x + text_panel.width - 1, f32(prompt_y - 2)},
-        1,
-        UI_BORDER_COLOR,
-    )
+        1, UI_BORDER_COLOR)
 
     scratchpad_clamp_cursor(ui_runtime)
     cursor := ui_runtime^.scratchpad_input_cursor
@@ -547,6 +536,7 @@ draw_scratchpad_output_and_prompt :: proc(
 
     blink_phase := int(rl.GetTime() / SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS)
     cursor_glyph := " "
+
     if blink_phase % 2 == 0 {
         cursor_glyph = "|"
     }
@@ -621,11 +611,8 @@ draw_play_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     mid_y := rect.y + rect.height * 0.5
 
     rl.DrawTriangle(
-        rl.Vector2{left, top},
-        rl.Vector2{left, bottom},
-        rl.Vector2{right, mid_y},
-        color,
-    )
+        rl.Vector2{left, top}, rl.Vector2{left, bottom}, rl.Vector2{right, mid_y},
+        color)
 }
 
 //   Draw an approximated arc segment using connected line segments.
@@ -634,6 +621,7 @@ draw_arc_polyline :: proc(
     start_angle, end_angle: f32,
     thickness: f32,
     color: rl.Color) {
+
     segments := 10
 
     prev_angle := start_angle
@@ -662,6 +650,7 @@ draw_arc_arrowhead :: proc(
     size: f32,
     thickness: f32,
     color: rl.Color) {
+
     tip := rl.Vector2{
         cx + radius * f32(math.cos(f64(angle))),
         cy + radius * f32(math.sin(f64(angle))),
@@ -767,6 +756,7 @@ draw_toolbar_icon_button :: proc(
     mouse: rl.Vector2,
     active: bool,
     draw_icon: proc(rect: rl.Rectangle, color: rl.Color)) -> bool {
+
     hovered := rl.CheckCollisionPointRec(mouse, rect)
     pressed := hovered && rl.IsMouseButtonDown(.LEFT)
 
@@ -794,6 +784,7 @@ draw_tree_toolbar :: proc(
     show_gif: bool,
     show_settings: bool,
     simulation_paused: bool) -> Tree_Toolbar_Hit {
+
     hit := Tree_Toolbar_Hit{}
 
     rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
@@ -896,6 +887,7 @@ update_use_max_particles_slider :: proc(
     slider_hit: rl.Rectangle,
     knob: rl.Rectangle,
     knob_center_x: f32) {
+
     if !rl.IsMouseButtonDown(.LEFT) {
         ui_runtime.settings_slider_dragging = false
     }
@@ -944,25 +936,17 @@ draw_use_max_particles_slider :: proc(
     max_particles: int,
     font: rl.Font) {
     rl.DrawRectangleRec(slider_track, BACKGROUND_COLOR)
-    rl.DrawRectangleRec(
-        rl.Rectangle{
-            slider_track.x,
-            slider_track.y,
-            max(0.0, knob_center_x - slider_track.x),
-            slider_track.height,
-        },
-        UI_BORDER_COLOR,
-    )
+    rl.DrawRectangleRec(rl.Rectangle{
+        slider_track.x,
+        slider_track.y,
+        max(0.0, knob_center_x - slider_track.x),
+        slider_track.height,
+    }, UI_BORDER_COLOR)
     rl.DrawRectangleRec(knob, UI_TEXT_COLOR)
 
     use_max_text := fmt.tprintf("%d / %d", current_value, max_particles)
-    ui_text(
-        use_max_text,
-        int(panel.x + SETTINGS_PANEL_INSET),
-        int(slider_track.y + SETTINGS_VALUE_TOP_OFFSET),
-        UI_TEXT_COLOR,
-        font,
-    )
+    ui_text(use_max_text, int(panel.x + SETTINGS_PANEL_INSET),
+        int(slider_track.y + SETTINGS_VALUE_TOP_OFFSET), UI_TEXT_COLOR, font)
 }
 
 //   Render particle render-count statistics in settings view.
@@ -971,28 +955,16 @@ draw_settings_particle_stats :: proc(
     slider_track: rl.Rectangle,
     ps: ^core.Particle_System,
     font: rl.Font) {
+
     stats_y := slider_track.y + SETTINGS_STATS_TOP_OFFSET
-    ui_text(
-        fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
-        int(panel.x + SETTINGS_PANEL_INSET),
-        int(stats_y),
-        UI_TEXT_COLOR,
-        font,
-    )
-    ui_text(
-        fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
-        int(panel.x + SETTINGS_PANEL_INSET),
-        int(stats_y + SETTINGS_STATS_ROW_GAP),
-        UI_TEXT_COLOR,
-        font,
-    )
-    ui_text(
-        fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
-        int(panel.x + SETTINGS_PANEL_INSET),
-        int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
-        UI_TEXT_COLOR,
-        font,
-    )
+    ui_text(fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
+        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y), UI_TEXT_COLOR, font)
+    ui_text(fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
+        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP),
+        UI_TEXT_COLOR, font)
+    ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
+        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
+        UI_TEXT_COLOR, font)
 }
 
 //   Render and handle the Display FPS toggle control.
@@ -1002,6 +974,7 @@ draw_settings_fps_checkbox :: proc(
     mouse: rl.Vector2,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
+
     row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET
     box := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -1044,6 +1017,7 @@ draw_settings_limit_fps_checkbox :: proc(
     mouse: rl.Vector2,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
+
     row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET + 22
     box := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -1091,6 +1065,7 @@ draw_settings_simd_projection_checkbox :: proc(
     mouse: rl.Vector2,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
+
     row_y := slider_track.y + SETTINGS_TOGGLE_TOP_OFFSET + 44
     box := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -1144,9 +1119,9 @@ draw_settings_integer_slider :: proc(
     mouse: rl.Vector2,
     label: string,
     value: ^int,
-    min_value: int,
-    max_value: int,
+    min_value, max_value: int,
     font: rl.Font) {
+
     ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     track := rl.Rectangle{
@@ -1203,13 +1178,9 @@ draw_settings_integer_slider :: proc(
     )
     rl.DrawRectangleRec(knob, UI_TEXT_COLOR)
 
-    ui_text(
-        fmt.tprintf("%d", clamped),
-        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 18),
-        int(row_y),
-        UI_TEXT_COLOR,
-        font,
-    )
+    ui_text(fmt.tprintf("%d", clamped),
+        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 18), int(row_y),
+        UI_TEXT_COLOR, font)
 }
 
 //   Render and process the Save/Cancel GIF action button.
@@ -1219,6 +1190,7 @@ draw_settings_save_gif_button :: proc(
     mouse: rl.Vector2,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
+
     button := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
         row_y,
@@ -1287,28 +1259,20 @@ draw_settings_gif_status :: proc(
     row_y: f32,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
-    ui_text(gif_capture_status_label(ui_runtime), int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
+
+    ui_text(gif_capture_status_label(ui_runtime),
+        int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     if ui_runtime.gif_status_note_len > 0 {
         note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
-        ui_text(
-            note_text,
-            int(panel.x + SETTINGS_PANEL_INSET),
-            int(row_y + 18),
-            UI_TEXT_COLOR,
-            font,
-        )
+        ui_text(note_text,
+            int(panel.x + SETTINGS_PANEL_INSET), int(row_y + 18), UI_TEXT_COLOR, font)
     }
 
     if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
         path_text := string(ui_runtime.last_gif_path[:ui_runtime.last_gif_path_len])
-        ui_text(
-            fmt.tprintf("Path: %s", path_text),
-            int(panel.x + SETTINGS_PANEL_INSET),
-            int(row_y + 36),
-            UI_TEXT_COLOR,
-            font,
-        )
+        ui_text(fmt.tprintf("Path: %s", path_text),
+            int(panel.x + SETTINGS_PANEL_INSET), int(row_y + 36), UI_TEXT_COLOR, font)
     }
 }
 
@@ -1331,7 +1295,8 @@ draw_settings_view :: proc(
     ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
 
     slider_label_y, slider_track, slider_hit := build_settings_slider_layout(panel)
-    ui_text("Maximum Dust particles", int(panel.x + SETTINGS_PANEL_INSET), int(slider_label_y), UI_TEXT_COLOR, font)
+    ui_text("Maximum Dust particles",
+        int(panel.x + SETTINGS_PANEL_INSET), int(slider_label_y), UI_TEXT_COLOR, font)
 
     max_particles := core.MAX_LOW_PARTICLES
     ps.use_max_dust_particles = clamp(ps.use_max_dust_particles, 0, max_particles)
@@ -1339,29 +1304,14 @@ draw_settings_view :: proc(
     ratio := slider_value_ratio(ps.use_max_dust_particles, max_particles)
     knob_center_x, knob := build_slider_knob(slider_track, ratio)
 
-    update_use_max_particles_slider(
-        ps,
-        ui_runtime,
-        mouse,
-        max_particles,
-        slider_track,
-        slider_hit,
-        knob,
-        knob_center_x,
-    )
+    update_use_max_particles_slider(ps, ui_runtime, mouse, max_particles,
+        slider_track, slider_hit, knob, knob_center_x)
 
     ratio = slider_value_ratio(ps.use_max_dust_particles, max_particles)
     knob_center_x, knob = build_slider_knob(slider_track, ratio)
 
-    draw_use_max_particles_slider(
-        panel,
-        slider_track,
-        knob_center_x,
-        knob,
-        ps.use_max_dust_particles,
-        max_particles,
-        font,
-    )
+    draw_use_max_particles_slider(panel, slider_track, knob_center_x, knob,
+        ps.use_max_dust_particles, max_particles, font)
     draw_settings_particle_stats(panel, slider_track, ps, font)
     draw_settings_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, slider_track, mouse, ui_runtime, font)
@@ -1383,44 +1333,22 @@ draw_gif_view :: proc(
     rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
 
     gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
-    ui_text("GIF Export", int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
+    ui_text("GIF Export",
+        int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
 
-    draw_settings_integer_slider(
-        panel,
-        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP,
-        mouse,
-        "Downsample",
-        &ui_runtime.gif_downsample_factor,
-        1,
-        4,
-        font,
-    )
+    draw_settings_integer_slider(panel,
+        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP, mouse, "Downsample",
+        &ui_runtime.gif_downsample_factor, 1, 4, font)
 
-    draw_settings_integer_slider(
-        panel,
-        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP * 2,
-        mouse,
-        "Frame Step",
-        &ui_runtime.gif_frame_step,
-        1,
-        4,
-        font,
-    )
+    draw_settings_integer_slider(panel,
+        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP * 2, mouse, "Frame Step",
+        &ui_runtime.gif_frame_step, 1, 4, font)
 
-    draw_settings_save_gif_button(
-        panel,
-        gif_section_y + SETTINGS_GIF_BUTTON_TOP_OFFSET,
-        mouse,
-        ui_runtime,
-        font,
-    )
+    draw_settings_save_gif_button(panel,
+        gif_section_y + SETTINGS_GIF_BUTTON_TOP_OFFSET, mouse, ui_runtime, font)
 
-    draw_settings_gif_status(
-        panel,
-        gif_section_y + SETTINGS_GIF_STATUS_TOP_OFFSET,
-        ui_runtime,
-        font,
-    )
+    draw_settings_gif_status(panel,
+        gif_section_y + SETTINGS_GIF_STATUS_TOP_OFFSET, ui_runtime, font)
 }
 
 //   Estimate visible character capacity for one wrapped text row.
@@ -1435,6 +1363,7 @@ chars_per_text_row :: #force_inline proc(width: f32) -> int {
 //   Compute the next wrapped line span and next-start index.
 next_wrapped_text_span :: proc(
     text: string, start: int, max_chars: int) -> (int, int, int) {
+
     if start >= len(text) {
         return start, start, start
     }
@@ -1498,13 +1427,16 @@ count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
 }
 
 //   Draw wrapped text rows clipped to the visible panel area.
-draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f32, font: rl.Font) {
+draw_wrapped_text_content :: proc(
+    text: string, panel: rl.Rectangle, scroll_y: f32, font: rl.Font) {
+
     max_chars := chars_per_text_row(panel.width - TEXT_PADDING * 2)
     start := 0
     row := 0
 
     if len(text) == 0 {
-        ui_text("", int(panel.x + TEXT_PADDING), int(panel.y + TEXT_PADDING), UI_TEXT_COLOR, font)
+        ui_text("", int(panel.x + TEXT_PADDING), int(panel.y + TEXT_PADDING),
+            UI_TEXT_COLOR, font)
         return
     }
 
@@ -1513,7 +1445,8 @@ draw_wrapped_text_content :: proc(text: string, panel: rl.Rectangle, scroll_y: f
         row_y := panel.y + TEXT_PADDING + f32(row) * TEXT_ROW_HEIGHT - scroll_y
 
         if row_y + TEXT_ROW_HEIGHT >= panel.y && row_y <= panel.y + panel.height {
-            ui_text(text[line_start:line_end], int(panel.x + TEXT_PADDING), int(row_y), UI_TEXT_COLOR, font)
+            ui_text(text[line_start:line_end],
+                int(panel.x + TEXT_PADDING), int(row_y), UI_TEXT_COLOR, font)
         }
 
         row += 1
@@ -1589,6 +1522,7 @@ build_vertical_scrollbar :: proc(
     content_h: f32,
     scroll_y: f32,
     max_scroll: f32) -> (rl.Rectangle, rl.Rectangle, f32, bool) {
+
     if max_scroll <= 0 {
         return rl.Rectangle{}, rl.Rectangle{}, 0, false
     }
@@ -1611,6 +1545,7 @@ apply_tree_hit :: proc(
     ji: ^core.Euclid_Julia_Interface,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     hit: Tree_Hit) {
+
     if hit.ToggledID >= 0 && hit.ToggledID < ji.next_animation_index {
         ji.animations[hit.ToggledID].is_expanded = !ji.animations[hit.ToggledID].is_expanded
     }
@@ -1648,13 +1583,12 @@ scrollbar_thumb_y :: #force_inline proc(
 handle_scrollbar_drag :: proc(
     mouse: rl.Vector2,
     thumb: rl.Rectangle,
-    panel_y: f32,
-    panel_height: f32,
-    thumb_h: f32,
-    max_scroll: f32,
+    panel_y, panel_height: f32,
+    thumb_h, max_scroll: f32,
     scroll_y: ^f32,
     dragging: ^bool,
     drag_off: ^f32) {
+
     if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, thumb) {
         dragging^ = true
         drag_off^ = mouse.y - thumb.y
@@ -1689,6 +1623,7 @@ walk_draw_tree_roots :: proc(
     allow_clicks: bool,
     mouse: rl.Vector2,
     font: rl.Font) -> Tree_Hit {
+
     hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
 
     for i in 0..<ji.next_animation_index {
@@ -1696,18 +1631,8 @@ walk_draw_tree_roots :: proc(
             continue
         }
 
-        root_hit := walk_draw_tree_node_limited(
-            ji,
-            i,
-            0,
-            panel,
-            content_y,
-            scroll_y,
-            allow_clicks,
-            mouse,
-            ji.next_animation_index,
-            font,
-        )
+        root_hit := walk_draw_tree_node_limited(ji, i, 0, panel, content_y, scroll_y,
+            allow_clicks, mouse, ji.next_animation_index, font)
         merge_tree_hit(&hit, root_hit)
     }
 
@@ -1717,6 +1642,7 @@ walk_draw_tree_roots :: proc(
 //   Count visible rows recursively with recursion guard limit.
 count_visible_tree_rows_limited :: proc(
     ji: ^core.Euclid_Julia_Interface, id: int, remaining: int) -> int {
+
     if remaining <= 0 {
         return 0
     }
@@ -1752,6 +1678,7 @@ accumulate_offscreen_child_rows :: proc(
     first_child: int,
     content_y: ^f32,
     remaining: int) {
+
     child := first_child
     steps := 0
     for child >= 0 && steps < ji.next_animation_index {
@@ -1769,8 +1696,7 @@ accumulate_offscreen_child_rows :: proc(
 //   Traverse and draw child node branches with depth tracking.
 walk_draw_child_nodes_limited :: proc(
     ji: ^core.Euclid_Julia_Interface,
-    first_child: int,
-    depth: int,
+    first_child, depth: int,
     panel: rl.Rectangle,
     content_y: ^f32,
     scroll_y: f32,
@@ -1778,6 +1704,7 @@ walk_draw_child_nodes_limited :: proc(
     mouse: rl.Vector2,
     remaining: int,
     font: rl.Font) -> Tree_Hit {
+
     hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
 
     child := first_child
@@ -1787,18 +1714,8 @@ walk_draw_child_nodes_limited :: proc(
             break
         }
 
-        child_hit := walk_draw_tree_node_limited(
-            ji,
-            child,
-            depth + 1,
-            panel,
-            content_y,
-            scroll_y,
-            allow_clicks,
-            mouse,
-            remaining - 1,
-            font,
-        )
+        child_hit := walk_draw_tree_node_limited(ji, child, depth + 1, panel, content_y,
+            scroll_y, allow_clicks, mouse, remaining - 1, font)
         merge_tree_hit(&hit, child_hit)
         child = ji.animations[child].next_sibling
         steps += 1
@@ -1808,7 +1725,9 @@ walk_draw_child_nodes_limited :: proc(
 }
 
 //   Return first child id only when node is expanded.
-expanded_first_child_id :: #force_inline proc(is_expanded: bool, first_child_id: int) -> int {
+expanded_first_child_id :: #force_inline proc(
+    is_expanded: bool, first_child_id: int) -> int {
+
     if !is_expanded || first_child_id < 0 {
         return -1
     }
@@ -1825,6 +1744,7 @@ draw_tree_node_row :: proc(
     mouse: rl.Vector2,
     hit: ^Tree_Hit,
     font: rl.Font) {
+
     node := &ji.animations[id]
 
     indent_x := row_rect.x + f32(depth) * TREE_INDENT
@@ -1851,7 +1771,8 @@ draw_tree_node_row :: proc(
         }
     }
 
-    ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y), UI_TEXT_COLOR, font)
+    ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
+        UI_TEXT_COLOR, font)
 
     if click && hovered {
         hit.SelectedID = id
@@ -1870,6 +1791,7 @@ walk_draw_tree_node_limited :: proc(
     mouse: rl.Vector2,
     remaining: int,
     font: rl.Font) -> Tree_Hit {
+
     hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
 
     if remaining <= 0 {
@@ -1898,18 +1820,8 @@ walk_draw_tree_node_limited :: proc(
 
     if row_rect.y + row_rect.height < panel.y {
         if child_first >= 0 {
-            child_hit := walk_draw_child_nodes_limited(
-                ji,
-                child_first,
-                depth,
-                panel,
-                content_y,
-                scroll_y,
-                allow_clicks,
-                mouse,
-                remaining,
-                font,
-            )
+            child_hit := walk_draw_child_nodes_limited(ji, child_first, depth, panel,
+                content_y, scroll_y, allow_clicks, mouse, remaining, font)
             merge_tree_hit(&hit, child_hit)
         }
         return hit
@@ -1918,18 +1830,8 @@ walk_draw_tree_node_limited :: proc(
     draw_tree_node_row(ji, id, depth, row_rect, allow_clicks, mouse, &hit, font)
 
     if child_first >= 0 {
-        child_hit := walk_draw_child_nodes_limited(
-            ji,
-            child_first,
-            depth,
-            panel,
-            content_y,
-            scroll_y,
-            allow_clicks,
-            mouse,
-            remaining,
-            font,
-        )
+        child_hit := walk_draw_child_nodes_limited(ji, child_first, depth, panel,
+            content_y, scroll_y, allow_clicks, mouse, remaining, font)
         merge_tree_hit(&hit, child_hit)
     }
 
@@ -1937,7 +1839,9 @@ walk_draw_tree_node_limited :: proc(
 }
 
 //   Build toolbar and list panel rectangles inside tree container.
-build_tree_view_panels :: proc(panel: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
+build_tree_view_panels :: proc(
+    panel: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
+
     inner_x := panel.x + 6
     inner_y := panel.y + 6
     inner_w := panel.width - 12
@@ -1976,6 +1880,7 @@ draw_tree_list_panel :: proc(
     mouse: rl.Vector2,
     scroll_y: ^f32,
     font: rl.Font) {
+
     rl.DrawRectangleRec(list_panel, UI_COMPONENT_BACKGROUND_COLOR)
     rl.DrawRectangleLinesEx(list_panel, 1, UI_BORDER_COLOR)
 
@@ -2007,23 +1912,16 @@ draw_tree_list_panel :: proc(
         i32(list_panel.width), i32(list_panel.height))
     {
         y_cursor: f32 = 0
-        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^, allow_tree_clicks, mouse, font)
+        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^,
+            allow_tree_clicks, mouse, font)
         apply_tree_hit(ji, ui_runtime, hit)
     }
     rl.EndScissorMode()
 
     if has_scrollbar {
-        handle_scrollbar_drag(
-            mouse,
-            thumb,
-            list_panel.y,
-            list_panel.height,
-            thumb_h,
-            max_scroll,
-            scroll_y,
-            &ui_runtime.tree_scroll_dragging,
-            &ui_runtime.tree_scroll_drag_off,
-        )
+        handle_scrollbar_drag(mouse, thumb, list_panel.y, list_panel.height, thumb_h,
+            max_scroll, scroll_y,
+            &ui_runtime.tree_scroll_dragging, &ui_runtime.tree_scroll_drag_off)
 
         rl.DrawRectangleRec(track, BACKGROUND_COLOR)
         rl.DrawRectangleRec(thumb, UI_BORDER_COLOR)

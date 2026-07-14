@@ -147,7 +147,8 @@ function blocked_input_reason(text::AbstractString)
         "download(",
         "rm(",
         "mv(",
-        "cp(")
+        "cp(",
+    )
     for token in blocked_tokens
         if occursin(token, lowered)
             return "blocked token: $(token)"

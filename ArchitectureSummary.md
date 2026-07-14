@@ -6,6 +6,7 @@
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Odin Side (Host Application)](#odin-side-host-application)
 1. [Julia Side (Scripted Animation Runtime)](#julia-side-scripted-animation-runtime)
+1. [Scratchpad Architecture (Interactive Runtime Surface)](#scratchpad-architecture-interactive-runtime-surface)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
@@ -161,6 +162,78 @@ Pattern for content organization:
 - Group root script registers a root tree node.
 - Child scripts register specific animation entries with `get_view_text`,
   `initialize`, `loop`, `clean` handlers.
+
+---
+
+## Scratchpad Architecture (Interactive Runtime Surface)
+
+The scratchpad is not a normal content animation. It is an embedded interactive
+runtime surface that uses the animation lifecycle and view text channel as a
+REPL-like control plane.
+
+### What Makes It Architecturally Unique
+
+- It is registered as a regular animation node (`"Scratchpad"`) but behaves as
+  an interactive shell instead of deterministic scene content.
+- It bridges keyboard-driven UI editing in Odin with queued/evaluated Julia input.
+- It uses one-command-per-frame dequeue semantics to keep evaluation latency,
+  frame pacing, and failure behavior bounded.
+- It supports optional per-frame user hooks, which effectively allow user-provided
+  Julia callbacks to run on the simulation timeline.
+
+### Host/UI Side Responsibilities (Odin)
+
+- `src/view/ui.odin` gates scratchpad input handling behind tree selection,
+  so keyboard capture only occurs while the Scratchpad node is active.
+- Input lives in fixed-size UI runtime buffers (`scratchpad_input`, cursor,
+  follow-output flags, last-output length) inside `Euclid_UI_Runtime_State`.
+- Enter submission is parse-state aware:
+  - Incomplete parse inserts newline for multiline continuation.
+  - Complete parse enqueues input through Julia bridge calls.
+- Up/Down key history navigation is delegated to Julia, while Odin owns the
+  active editable input buffer and cursor behavior.
+
+### Julia Side Responsibilities
+
+- `src/julia/script.jl` exposes dedicated bridge entrypoints for scratchpad
+  classify/queue/history/save operations.
+- `src/julia/scratchpad.jl` owns session state (`ScratchpadSession`) including:
+  - isolated runtime module,
+  - input queue,
+  - output scrollback,
+  - command history,
+  - frame hooks,
+  - runtime metrics.
+- `initialize` creates a fresh session and seeds help text.
+- `loop` processes at most one queued command per frame, then runs enabled hooks.
+- `get_view_text` returns newline-joined output consumed by Odin text rendering.
+
+### Session Isolation and Lifecycle
+
+- Each session is backed by a fresh runtime module (`EuclidScratchpadSession_*`)
+  to isolate evaluated bindings from previous resets.
+- `:reset` and intercepted `exit()/quit()` explicitly reset session state without
+  terminating the host app.
+- `clean` clears session reference on animation unload/switch.
+
+### Safety and Policy Boundaries
+
+- Scratchpad input is filtered by a blocklist policy before eval (for example,
+  package-management commands and selected process/file/system call tokens).
+- Parse classification runs before queueing/eval and surfaces parse errors into
+  scratchpad output.
+- Eval and hook failures are converted into user-visible output lines instead of
+  panicking host runtime.
+- Hooks auto-disable after repeated consecutive failures to prevent persistent
+  frame-time error spam.
+
+### Throughput and Observability Guarantees
+
+- Queue, history, and output each have explicit retention caps.
+- Queue overflow drops oldest pending entries (bounded-memory behavior).
+- Slow eval and slow hook warnings are emitted from timing thresholds.
+- Runtime counters (enqueue/dequeue, drops, trims, error counts, transitions)
+  are exposed via `:stats` for in-app diagnostics.
 
 ---
 

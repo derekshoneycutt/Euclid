@@ -139,6 +139,10 @@ These standards incorporate the Odin naming and style convention guidance.
 - Indentation MUST use 4 spaces per level.
 - Tabs MUST NOT be used for indentation.
 - Alignment MUST use spaces.
+- Prefer compact wrapped call formatting:
+  - Keep the callee and first argument on the first line when practical.
+  - Continue with grouped arguments on following lines rather than one argument per line.
+  - Reflow to satisfy line-length limits without forcing vertical "staircase" calls.
 - Standalone closing-brace lines are acceptable.
 - A line containing only `)` MUST NOT appear in parameter lists.
 - In Odin proc headers, a line MUST NOT begin with `)` (for example `) -> T {`
@@ -147,6 +151,8 @@ These standards incorporate the Odin naming and style convention guidance.
   surrounding code, extract a helper, or use a single-line form so the delimiter is
   not alone.
 - Opening braces MUST be at end-of-line.
+- For adjacent parameters with the same type, prefer grouped declarations
+  (for example `min_value, max_value: int`).
 - Variable declarations MUST follow idiomatic spacing:
   - val: int
   - val := 5
@@ -183,6 +189,13 @@ These standards incorporate the Julia official style guide.
 ### Formatting and Structure
 
 - Indentation MUST use 4 spaces per level.
+- Prefer compact wrapped call formatting:
+  - Keep the callee and first argument on the first line when practical.
+  - Continue with grouped arguments on following lines rather than one argument per line.
+  - Reflow to satisfy line-length limits without forcing vertical "staircase" calls.
+- In Julia function calls, avoid placing `)` on its own line.
+- Julia exceptions to compact/wrap preference are allowed when readability is better with expanded layout,
+  especially for struct value declarations and tuple-heavy expressions.
 - Prefer functions over top-level script logic.
 - Functions SHOULD accept explicit arguments instead of relying on globals.
 - Non-const global variables are always a code smell. Prefer using the Odin-Julia Bridge
@@ -191,8 +204,11 @@ These standards incorporate the Julia official style guide.
   SHOULD include thorough doc comments with a summary, parameter and return information,
   and possibly any important usage notes. These should be more than simply restating the
   names of functions/parameters.
+- Individual animation definition files MAY keep longer `loop` functions when that matches
+  the animation phase flow, and MAY use lighter documentation when variable/helper names are
+  clear and obvious.
 - Although individual animation scripts do not require as much maintainence consideration
-  as the rest of the code, they should still appear basically clean and readable, with
+  as the rest of the code, they MUST still appear basically clean and readable, with
   appropriate indentation and easily read and determined names.
 
 ### Julia View Text Strings
@@ -217,8 +233,9 @@ This pertains to the "view texts" that are returned to the Odin code for animati
 ### Julia Naming
 
 - Modules and types MUST use CamelCase style consistent with Julia conventions.
-- Functions MUST be lowercase; combine words without underscores when readable.
-- Use underscores only when they significantly improve readability or indicate combined concepts.
+- Functions MUST be lowercase.
+- For project runtime and bridge-facing code, snake_case function names are the default.
+- Lowercase concatenated names MAY be used for idiomatic Julia-style APIs when readability remains high.
 - Mutating functions MUST end with !.
 - Names SHOULD be concise but not cryptic; avoid abbreviations that reduce clarity.
 
@@ -348,6 +365,8 @@ These standards apply to all project markdown files, design notes, and technical
 - Public functions and types SHOULD include docstrings.
 - Docstrings SHOULD describe purpose, key arguments, return behavior, and side effects.
 - Mutating behavior MUST be explicitly called out in docstrings.
+- In runtime/control modules (for example scratchpad and bridge orchestration),
+  non-trivial internal helpers SHOULD also include concise docstrings.
 
 ## Error Handling and Logging
 
