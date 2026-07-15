@@ -58,18 +58,18 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
 
     ret.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     ret.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    ret.scratchpad_classify_input = julialib.jl_get_function(main_module, "scratchpad_classify_input")
-    ret.scratchpad_queue_input = julialib.jl_get_function(main_module, "scratchpad_queue_input")
+    ret.scratchpad_classify_input = julialib.jl_get_function(
+        main_module, "scratchpad_classify_input")
+    ret.scratchpad_queue_input = julialib.jl_get_function(
+        main_module, "scratchpad_queue_input")
     ret.scratchpad_save_history_to_file = julialib.jl_get_function(
-        main_module,
-        "scratchpad_save_history_to_file",
-    )
-    ret.scratchpad_history_previous = julialib.jl_get_function(main_module, "scratchpad_history_previous")
-    ret.scratchpad_history_next = julialib.jl_get_function(main_module, "scratchpad_history_next")
+        main_module, "scratchpad_save_history_to_file")
+    ret.scratchpad_history_previous = julialib.jl_get_function(
+        main_module, "scratchpad_history_previous")
+    ret.scratchpad_history_next = julialib.jl_get_function(
+        main_module, "scratchpad_history_next")
     ret.scratchpad_history_reset_cursor = julialib.jl_get_function(
-        main_module,
-        "scratchpad_history_reset_cursor",
-    )
+        main_module, "scratchpad_history_reset_cursor")
     ret.asset_archive_mod_time_unix_nano = 0
     ret.current_animation_index = -1
     ret.selected_animation_index = -1
@@ -142,11 +142,9 @@ scratchpad_classify_input :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(
-        state^.julia_interface^.scratchpad_classify_input,
-        state_value,
-        text_value,
-    )
+    result := julialib.jl_call2(state^.julia_interface^.scratchpad_classify_input,
+        state_value, text_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_classify_input")
         return SCRATCHPAD_PARSE_ERROR
@@ -173,11 +171,9 @@ scratchpad_queue_input :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(
-        state^.julia_interface^.scratchpad_queue_input,
-        state_value,
-        text_value,
-    )
+    result := julialib.jl_call2(state^.julia_interface^.scratchpad_queue_input,
+        state_value, text_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_queue_input")
         return false
@@ -204,11 +200,9 @@ scratchpad_save_history_to_file :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     path_c := strings.clone_to_cstring(path, context.temp_allocator)
     path_value := julialib.jl_cstr_to_string(path_c)
-    result := julialib.jl_call2(
-        state^.julia_interface^.scratchpad_save_history_to_file,
-        state_value,
-        path_value,
-    )
+    result := julialib.jl_call2(state^.julia_interface^.scratchpad_save_history_to_file,
+        state_value, path_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_save_history_to_file")
         return false
@@ -227,7 +221,9 @@ scratchpad_history_previous :: proc(state: ^core.Euclid_General_State) -> string
     }
 
     state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_previous, state_value)
+    result := julialib.jl_call1(
+        state^.julia_interface^.scratchpad_history_previous, state_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_previous")
         return ""
@@ -247,6 +243,7 @@ scratchpad_history_next :: proc(state: ^core.Euclid_General_State) -> string {
 
     state_value := julialib.jl_box_voidpointer(state)
     result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_next, state_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_next")
         return ""
@@ -265,7 +262,9 @@ scratchpad_history_reset_cursor :: proc(state: ^core.Euclid_General_State) -> bo
     }
 
     state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_reset_cursor, state_value)
+    result := julialib.jl_call1(
+        state^.julia_interface^.scratchpad_history_reset_cursor, state_value)
+
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_reset_cursor")
         return false
@@ -309,7 +308,9 @@ call_current_animation_get_view_text :: proc(
 
     state_value := julialib.jl_box_voidpointer(state)
 
-    result := julialib.jl_call1(state^.julia_interface^.current_animation^.get_view_text, state_value)
+    result := julialib.jl_call1(
+        state^.julia_interface^.current_animation^.get_view_text, state_value)
+
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Current animation get view text")
         return ""
@@ -349,10 +350,7 @@ update_running_animations :: proc(
     if state^.julia_interface^.selected_animation_index !=
         state^.julia_interface^.current_animation_index {
         previous_animation_index := state^.julia_interface^.current_animation_index
-        change_current_animation_loop(
-            state,
-            state^.julia_interface^.selected_animation_index,
-        )
+        change_current_animation_loop(state, state^.julia_interface^.selected_animation_index)
         switched_animation =
             state^.julia_interface^.current_animation_index == state^.julia_interface^.selected_animation_index &&
             state^.julia_interface^.current_animation_index != previous_animation_index
@@ -416,7 +414,9 @@ call_current_animation_loop :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     dt_value := julialib.jl_box_float32(dt)
 
-    julialib.jl_call2(state^.julia_interface^.current_animation^.loop, state_value, dt_value)
+    julialib.jl_call2(state^.julia_interface^.current_animation^.loop,
+        state_value, dt_value)
+
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Current animation loop")
         return
@@ -445,6 +445,7 @@ change_current_animation_loop :: proc(
     if state^.julia_interface^.current_animation != nil &&
         state^.julia_interface^.current_animation^.loop != nil {
         julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
+    
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Cleaning previous animation loop")
             return
@@ -520,38 +521,49 @@ resolve_base_module :: proc() -> ^julialib.jl_module_t {
     return (^julialib.jl_module_t)(base_value)
 }
 
-//   Include the packaged Julia entry script through Main.include and report failures.
-//
-// Notes:
-//   - When exit_on_failure is true, unrecoverable include errors terminate the process.
-include_packaged_script :: proc(exit_on_failure: bool) -> bool {
+//   Return false for include failure and exit the process when configured.
+include_packaged_script_failure :: proc(exit_on_failure: bool) -> bool {
+    if exit_on_failure {
+        runtime.exit(1)
+    }
+
+    return false
+}
+
+//   Resolve the packaged Julia script path needed for Main.include.
+resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
     script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
     if len(script_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia script path.")
         fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
-        if exit_on_failure {
-            runtime.exit(1)
-        }
-        return false
+        return "", include_packaged_script_failure(exit_on_failure)
     }
 
+    return script_path, true
+}
+
+//   Resolve the Main.include function used to load packaged Julia scripts.
+resolve_main_include_function :: proc(exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
     main_module := resolve_main_module()
     if main_module == nil {
         fmt.eprintln("Failed to resolve Julia Main module.")
-        if exit_on_failure {
-            runtime.exit(1)
-        }
-        return false
+        return nil, include_packaged_script_failure(exit_on_failure)
     }
 
     include_fn := julialib.jl_get_function(main_module, "include")
     if include_fn == nil {
         fmt.eprintln("Failed to resolve Julia include function from Main.")
-        if exit_on_failure {
-            runtime.exit(1)
-        }
-        return false
+        return nil, include_packaged_script_failure(exit_on_failure)
     }
+
+    return include_fn, true
+}
+
+//   Call Main.include on the packaged Julia entry script path.
+call_include_packaged_script :: proc(
+    include_fn: ^julialib.jl_value_t,
+    script_path: string,
+    exit_on_failure: bool) -> bool {
 
     script_cstr := strings.clone_to_cstring(script_path, context.temp_allocator)
     script_value := julialib.jl_cstr_to_string(script_cstr)
@@ -561,13 +573,28 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
         fmt.eprintln("Resolved script path: ", script_path)
         fmt.eprintln("Verify assets.pkg/julia/script.jl exists next to the executable.")
         print_julia_exception("initiate_julia include assets.pkg/julia/script.jl")
-        if exit_on_failure {
-            runtime.exit(1)
-        }
-        return false
+        return include_packaged_script_failure(exit_on_failure)
     }
 
     return true
+}
+
+//   Include the packaged Julia entry script through Main.include and report failures.
+//
+// Notes:
+//   - When exit_on_failure is true, unrecoverable include errors terminate the process.
+include_packaged_script :: proc(exit_on_failure: bool) -> bool {
+    script_path, path_ok := resolve_packaged_script_include_path(exit_on_failure)
+    if !path_ok {
+        return false
+    }
+
+    include_fn, include_ok := resolve_main_include_function(exit_on_failure)
+    if !include_ok {
+        return false
+    }
+
+    return call_include_packaged_script(include_fn, script_path, exit_on_failure)
 }
 
 //   Refresh cached Julia callback handles after script reload.
@@ -580,29 +607,17 @@ refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     state^.julia_interface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
     state^.julia_interface^.scratchpad_classify_input = julialib.jl_get_function(
-        main_module,
-        "scratchpad_classify_input",
-    )
+        main_module, "scratchpad_classify_input")
     state^.julia_interface^.scratchpad_queue_input = julialib.jl_get_function(
-        main_module,
-        "scratchpad_queue_input",
-    )
+        main_module, "scratchpad_queue_input")
     state^.julia_interface^.scratchpad_save_history_to_file = julialib.jl_get_function(
-        main_module,
-        "scratchpad_save_history_to_file",
-    )
+        main_module, "scratchpad_save_history_to_file")
     state^.julia_interface^.scratchpad_history_previous = julialib.jl_get_function(
-        main_module,
-        "scratchpad_history_previous",
-    )
+        main_module, "scratchpad_history_previous")
     state^.julia_interface^.scratchpad_history_next = julialib.jl_get_function(
-        main_module,
-        "scratchpad_history_next",
-    )
+        main_module, "scratchpad_history_next")
     state^.julia_interface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
-        main_module,
-        "scratchpad_history_reset_cursor",
-    )
+        main_module, "scratchpad_history_reset_cursor")
 }
 
 //   Select the first non-scratchpad animation as default selection.
@@ -643,7 +658,9 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
 }
 
 //   Find an animation index by its registered name.
-find_animation_index_by_name :: proc(state: ^core.Euclid_General_State, name: string) -> int {
+find_animation_index_by_name :: proc(
+    state: ^core.Euclid_General_State, name: string) -> int {
+
     if len(name) == 0 {
         return -1
     }
@@ -658,7 +675,9 @@ find_animation_index_by_name :: proc(state: ^core.Euclid_General_State, name: st
 }
 
 //   Restore the current animation selection after a successful script reload.
-restore_current_animation_after_reload :: proc(state: ^core.Euclid_General_State, animation_name: string) {
+restore_current_animation_after_reload :: proc(
+    state: ^core.Euclid_General_State, animation_name: string) {
+
     restored_index := find_animation_index_by_name(state, animation_name)
     if restored_index < 0 {
         return
@@ -700,8 +719,7 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
        state^.julia_interface^.current_animation_index < state^.julia_interface^.next_animation_index {
         current_animation_name = strings.clone(
             state^.julia_interface^.animations[state^.julia_interface^.current_animation_index].name,
-            context.temp_allocator,
-        )
+            context.temp_allocator)
     }
 
     state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime

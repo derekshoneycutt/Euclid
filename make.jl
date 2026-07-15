@@ -857,7 +857,7 @@ function run_code_complexity_analysis()
     println("CodeComplexity violations are warning-only for configured directories.")
 end
 
-"""Parse scc -pw output rows for Julia, Odin, and Total."""
+"""Parse scc --by-file -pw aggregate rows for Julia, Odin, and Total."""
 function parse_scc_primary_rows(output::String)
     rows = Dict{String,Tuple{Int,Int}}()
 
@@ -944,13 +944,13 @@ function run_vet_analysis()
     if Sys.which("scc") === nothing
         println("scc not found on PATH; didn't run scc.")
     else
-        println("Running scc statistics (scc -pw)...")
-        scc_result = run_command(Cmd(["scc", "-pw"]); cwd=SCRIPT_DIR)
+        println("Running scc statistics (scc --by-file -pw)...")
+        scc_result = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=SCRIPT_DIR)
         println("scc exited $(scc_result.exit_code)")
         if scc_result.exit_code != 0
             println("Warning: scc analysis failed; continuing with lizard analysis.")
         else
-            scc_capture = run_command(Cmd(["scc", "-pw"]); cwd=SCRIPT_DIR, capture_output=true)
+            scc_capture = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=SCRIPT_DIR, capture_output=true)
             if scc_capture.exit_code == 0
                 print_scc_complexity_per_file_summary(scc_capture.stdout)
             else

@@ -16,6 +16,7 @@ animations. Raylib is used for rendering.
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
     1. [Q: What's This About Hot-Reload?](#q-whats-this-about-hot-reload)
+    1. [Q: What is all this output in the make vet output?](#q-what-is-all-this-output-in-the-make-vet-output)
 
 <p align="center">
 <img src="./screen.gif" >
@@ -241,3 +242,56 @@ EuclidApp will automatically notice the updated package file, unpack it, and rel
 the Julia code, restarting the current animation according to the new code. If the current
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
+
+### Q: What is all this output in the make vet output?
+
+Great question! A lot of this only makes any sense if you are really into the software
+engineering stuff. We perform several checks in the vet mode to try and improve code
+quality and performance.
+
+```bash
+julia make.jl --vet
+```
+
+#### Odin
+
+First, Odin is run with a set of vet flags that enforces style throughout the Odin code,
+treating warnings as errors, etc. Thankfully, we can skip the tabs they require in their
+own repository in the Odin code.
+
+Additionally, we run `lizard` in C++ mode on the Odin code. If functions are especially
+long or complex, this will often catch them, even throwing a warning and stopping the
+build in vet mode.
+
+`scc` also provides additional information (see below).
+
+#### Julia
+
+For Julia, the first thing that happens is that the make script loads the entire Julia
+source into AST to check for any obvious syntax errors. This catches many simple typos
+before it gets any further.
+
+Additionally, we use `CodeComplexity.jl` and `JET.jl` which allows us to perform both
+complexity checks and some static analysis on the code, preventing some pretty obvious
+errors before they are run.
+
+`scc` also provides additional information.
+
+#### scc
+
+[scc](https://github.com/boyter/scc) performs a basic complexity analysis across the entire
+codebase, including COCOMO, cost to develop, etc. No warnings or errors are thrown, and
+this cannot really guarantee code quality. However, it can isolate the hotspots for logic,
+and gives some insight into how the code is structured. The Odin will typically have more
+complexity hotspots in this analysis simply due to being the ultimate arbiter of control
+for the application in many places.
+
+Overall Complexity and Code measures are pulled out for both languages and divided for
+an additional `Complexity/Code` measure for Odin, Julia, and Total values. In general,
+if the Odin code remains moderately high 0.13-0.18 it is considered pretty good, and we
+generally expect the Julia code to remain low-moderate 0.05-0.13. The total thus being a
+moderate 0.09-0.13 would be a great expectation. For meaningful measures to the function
+and file, the `lizard` and `CodeComplexity.jl` outputs are more telling to small-scale
+needed attention than the `scc` outputs. Nonetheless, the `scc` outputs can indicate
+issues with stupid code decisions we should feel bad about. And make us feel like 100x
+developers or something.

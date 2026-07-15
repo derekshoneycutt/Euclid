@@ -31,34 +31,41 @@ main :: proc() {
 }
 
 
+
+//  Parse a single command line argument, updating settings accordingly
+parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) {
+    switch arg {
+    case "--no-vsync":
+        settings.do_vsync = false
+    case "--vsync":
+        settings.do_vsync = true
+    case "--no-antialiasing":
+        settings.do_antialiasing = false
+    case "--antialiasing":
+        settings.do_antialiasing = true
+    case "--help":
+        fmt.println("Usage: ./euclid [options]")
+        fmt.println("")
+        fmt.println("Options:")
+        fmt.println("  --vsync              Enable VSYNC. (default)")
+        fmt.println("  --no-vsync           Disable VSYNC.")
+        fmt.println("  --antialiasing       Enable anti-aliasing. (default)")
+        fmt.println("  --no-antialiasing    Disable anti-aliasing.")
+        fmt.println("  --help               Show this help text.")
+
+        settings.do_run = false
+    case:
+        fmt.println("Unrecognized parameter: ", arg)
+    }
+}
+
 //  Parse the command line parameters, getting settings to run the app according to
 parse_command_line :: proc() -> core.Euclid_Run_Settings {
     settings := core.Euclid_Run_Settings{ true, true, true }
 
     for i in 1..<len(os.args) {
         arg := os.args[i]
-        if arg == "--no-vsync" {
-            settings.do_vsync = false
-        } else if arg == "--vsync" {
-            settings.do_vsync = true
-        } else if arg == "--no-antialiasing" {
-            settings.do_antialiasing = false
-        } else if arg == "--antialiasing" {
-            settings.do_antialiasing = true
-        } else if arg == "--help" {
-            fmt.println("Usage: ./euclid [options]")
-            fmt.println("")
-            fmt.println("Options:")
-            fmt.println("  --vsync              Enable VSYNC. (default)")
-            fmt.println("  --no-vsync           Disable VSYNC.")
-            fmt.println("  --antialiasing       Enable anti-aliasing. (default)")
-            fmt.println("  --no-antialiasing    Disable anti-aliasing.")
-            fmt.println("  --help               Show this help text.")
-
-            settings.do_run = false
-        } else {
-            fmt.println("Unrecognized parameter: ", arg)
-        }
+        parse_command_line_param(arg, &settings)
     }
 
     if settings.do_run {
