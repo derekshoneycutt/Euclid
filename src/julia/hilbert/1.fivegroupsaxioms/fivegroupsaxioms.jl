@@ -12,6 +12,7 @@ include("./axiom_I4.jl")
 include("./axiom_I5.jl")
 include("./axiom_I6.jl")
 include("./axiom_I7.jl")
+include("./axiom_II1.jl")
 include("./theorem_1.jl")
 include("./theorem_2.jl")
 
@@ -41,12 +42,10 @@ Axioms I, 1-2 contain statements concerning points and straight lines only; that
 Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
 end
 
-function get_view_text_BookI_posts(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Postulates"
-end
+function get_view_text_BookI_order(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §3 Group II: Axioms of Order
 
-function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Propositions"
+The axioms of this group define the idea expressed by the word “between,” and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word “between” serves to describe."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -103,6 +102,16 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneTheorem2.initialize,
                 HilbertChapterOneTheorem2.loop, HilbertChapterOneTheorem2.clean,
                 "Theorem 2", book1Sec2Id)
+
+        book1Sec3Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_order, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§3 Group II: Axioms of Order", book1Id)
+            book1AxiomII1Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomII1.get_view_text,
+                HilbertChapterOneAxiomII1.initialize,
+                HilbertChapterOneAxiomII1.loop, HilbertChapterOneAxiomII1.clean,
+                "Axiom II,1", book1Sec3Id)
 end
 
 end
