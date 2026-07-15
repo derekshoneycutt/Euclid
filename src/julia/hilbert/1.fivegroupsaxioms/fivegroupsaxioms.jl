@@ -13,6 +13,11 @@ include("./axiom_I5.jl")
 include("./axiom_I6.jl")
 include("./axiom_I7.jl")
 include("./axiom_II1.jl")
+include("./axiom_II2.jl")
+include("./axiom_II3.jl")
+include("./axiom_II4.jl")
+include("./axiom_II5.jl")
+include("./def_segments.jl")
 include("./theorem_1.jl")
 include("./theorem_2.jl")
 
@@ -45,7 +50,11 @@ end
 function get_view_text_BookI_order(state_ptr::Ptr{Cvoid})
     """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §3 Group II: Axioms of Order
 
-The axioms of this group define the idea expressed by the word “between,” and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word “between” serves to describe."""
+The axioms of this group define the idea expressed by the word "between," and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word "between" serves to describe.
+
+...
+
+Axioms II, 1-4 contain statements concerning the points of a straight line only, and, hence, we will call them the linear axioms of group II. Axiom II, 5 relates to the elements of plane geometry and, consequently, shall be called the plane axiom of group II."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -112,6 +121,32 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomII1.initialize,
                 HilbertChapterOneAxiomII1.loop, HilbertChapterOneAxiomII1.clean,
                 "Axiom II,1", book1Sec3Id)
+            book1AxiomII2Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomII2.get_view_text,
+                HilbertChapterOneAxiomII2.initialize,
+                HilbertChapterOneAxiomII2.loop, HilbertChapterOneAxiomII2.clean,
+                "Axiom II,2", book1Sec3Id)
+            book1AxiomII3Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomII3.get_view_text,
+                HilbertChapterOneAxiomII3.initialize,
+                HilbertChapterOneAxiomII3.loop, HilbertChapterOneAxiomII3.clean,
+                "Axiom II,3", book1Sec3Id)
+            book1AxiomII4Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomII4.get_view_text,
+                HilbertChapterOneAxiomII4.initialize,
+                HilbertChapterOneAxiomII4.loop, HilbertChapterOneAxiomII4.clean,
+                "Axiom II,4", book1Sec3Id)
+            book1DefSegmentsId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefSegments.get_view_text,
+                HilbertChapterOneDefSegments.initialize,
+                HilbertChapterOneDefSegments.loop,
+                HilbertChapterOneDefSegments.clean,
+                "Definition: Segments", book1Sec3Id)
+            book1AxiomII5Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomII5.get_view_text,
+                HilbertChapterOneAxiomII5.initialize,
+                HilbertChapterOneAxiomII5.loop, HilbertChapterOneAxiomII5.clean,
+                "Axiom II,5", book1Sec3Id)
 end
 
 end
