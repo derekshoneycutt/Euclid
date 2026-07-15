@@ -36,6 +36,13 @@ STROKE3D_DIFFUSE :: 1.05
 STROKE3D_SPECULAR_STRENGTH :: 0.26
 STROKE3D_SPECULAR_POWER :: 18.0
 
+LABEL_DECORATION_STROKE_SCALE :: 0.14
+LABEL_DECORATION_WIDTH_SCALE :: 0.72
+LABEL_DECORATION_HEIGHT_SCALE :: 0.5
+LABEL_DECORATION_PRIME_SIZE_SCALE :: 1
+LABEL_DECORATION_PRIME_X_OFFSET_SCALE :: 0.72
+LABEL_DECORATION_PRIME_Y_OFFSET_SCALE :: 0.30
+
 
 //   Initialize stroke3d shader handles and uniform locations from packaged assets.
 //
@@ -468,6 +475,22 @@ project_iso_points_batch_with_components :: proc(
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw) {
     c := iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawTextCodepoint(state^.font, p^.label, c, p^.brush_size, p^.color)
+
+    width := p^.brush_size * LABEL_DECORATION_WIDTH_SCALE
+    height := p^.brush_size * LABEL_DECORATION_HEIGHT_SCALE
+
+    switch p^.decoration_kind {
+    case .None:
+    case .Prime:
+        prime_pos := rl.Vector2{
+            c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
+            c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
+        }
+        prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
+        rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
+    case .Hat:
+    case .Bar:
+    }
 }
 
 

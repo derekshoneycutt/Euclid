@@ -49,6 +49,9 @@ those objects interact.
 - Use `khaki3` and `grey60` the same way you use `steelblue` and
   `palevioletred1`: as part of the shared palette, assigned by relationship and
   composition.
+- For order/between demonstrations that use drag passes, the drag color SHOULD
+  match the center or emphasized point of that statement. Do not use an
+  unrelated shared highlight color when a specific point is the focus.
 
 ## Motion Conventions
 
@@ -59,14 +62,18 @@ those objects interact.
 - Use `animate_pen_tilt_and_drag` for surface or plane highlighting passes.
 - End with pen rise and a short hold when the finished figure should remain on
   screen for a moment.
+- Pen rise SHOULD begin from the final meaningful draw endpoint (or final
+  emphasized point), not from an earlier anchor point.
 
 ## Plane and Surface Treatment
 
-- Surfaces should usually fade or reveal into the scene rather than appear fully
-  visible from the start.
-- If a plane is part of the point of the animation, reveal it after the key
-  point or intersection is established unless the script explicitly needs a
-  different order.
+- The app already provides a persistent drawing surface; do not simulate a full
+  plane by drawing a large fake fill stroke unless the plane stroke itself is
+  the geometric point being demonstrated.
+- If a plane is conceptually important, label it (`α`, `β`, etc.) early and
+  keep the label clearly away from the active construction cluster.
+- Surface/plane drag strokes should be reserved for intentional emphasis passes,
+  not as a default substitute for the existing surface.
 - For square or plane primitives, use the vertex order documented in
   [ArchitectureSummary.md](ArchitectureSummary.md) so the face actually renders.
 
@@ -74,8 +81,15 @@ those objects interact.
 
 - Use `plum1` for point labels by default.
 - Keep labels slightly offset from the point they name.
+- Keep labels clearly separated from both the point marker and nearby lines;
+  avoid placements that visually sit on top of points or strokes.
 - Labels should appear only after the related point has been established, unless
   the animation intentionally needs earlier annotation.
+- For primed names in text/output, prefer ASCII apostrophe (`A'`) unless a
+  specific UI path is confirmed to support Unicode prime consistently.
+- Decorated labels (prime/hat/bar) should read as one symbol with the base
+  letter: the decoration must be visually attached to the letter, not floating
+  as an independent mark.
 
 ## Reset Behavior
 

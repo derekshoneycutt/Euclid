@@ -4,6 +4,8 @@ package kine
 
 import "core:math"
 
+import "../core"
+
 import rl "vendor:raylib"
 
 //   Create a drawable label point and append it to the point system.
@@ -21,13 +23,15 @@ import rl "vendor:raylib"
 init_kineshape_label :: proc(
     system: ^Kine_Point_System,
     label: rune,
+    decoration_kind: core.Kine_Label_Decoration_Kind,
     pos : Vector3,
     color: rl.Color,
     brush_size: f32) -> (^Kine_Shape_Point, int) {
 
     point_id := system^.next_point_index
     system^.points[point_id] =
-        Kine_Shape_Point{ .Label, pos, color, nil, brush_size, 0, label, 0, 0, 0, 0, false }
+        Kine_Shape_Point{ .Label, pos, color, nil, brush_size, 0, label, .None, 0, 0, 0, 0, false }
+    system^.points[point_id].decoration_kind = decoration_kind
     system^.next_point_index += 1
 
     return &system^.points[point_id], point_id
@@ -52,7 +56,7 @@ init_kineshape_point :: proc(
 
     point_id := system^.next_point_index
     system^.points[point_id] =
-        Kine_Shape_Point{ .Point, pos, color, nil, brush_size, 0, nil, 0, 0, 0, 0, false }
+        Kine_Shape_Point{ .Point, pos, color, nil, brush_size, 0, nil, .None, 0, 0, 0, 0, false }
     system^.next_point_index += 1
 
     return &system^.points[point_id], point_id
@@ -75,9 +79,9 @@ init_kineshape_line :: proc(
     color: rl.Color,
     brush_size: f32) -> Kine_Shape_Line {
 
-    host_point := Kine_Shape_Point{ .Line, nil, color, nil, brush_size, 0, nil, 0, 2, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Line, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, point1_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, point2_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -126,9 +130,9 @@ init_kineshape_circle :: proc(
         center_pos.z,
     }
 
-    host_point := Kine_Shape_Point{ .Circle, center_pos, color, nil, brush_size, 0, nil, 1, 2, 0, 0, false }
-    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Circle, center_pos, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
+    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     start_id := host_id + 1
@@ -179,9 +183,9 @@ init_kineshape_filledcircle :: proc(
         center_pos.z,
     }
 
-    host_point := Kine_Shape_Point{ .FilledCircle, center_pos, color, nil, brush_size, 0, nil, 1, 2, 0, 0, false }
-    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false, }
-    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .FilledCircle, center_pos, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
+    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     start_id := host_id + 1
@@ -215,10 +219,10 @@ init_kineshape_triangle :: proc(
     point1, point2, point3: Vector3,
     color: rl.Color) -> Kine_Shape_Triangle {
 
-    host_point := Kine_Shape_Point{ .Triangle, nil, color, nil, 0, 0, nil, 0, 3, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Triangle, nil, color, nil, 0, 0, nil, .None, 0, 3, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -254,11 +258,11 @@ init_kineshape_square :: proc(
     point1, point2, point3, point4: Vector3,
     color: rl.Color) -> Kine_Shape_Square {
 
-    host_point := Kine_Shape_Point{ .Square, nil, color, nil, 0, 0, nil, 0, 4, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Square, nil, color, nil, 0, 0, nil, .None, 0, 4, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -298,12 +302,12 @@ init_kineshape_pentagon :: proc(
     point1, point2, point3, point4, point5: Vector3,
     color: rl.Color) -> Kine_Shape_Pentagon {
 
-    host_point := Kine_Shape_Point{ .Pentagon, nil, color, nil, 0, 0, nil, 0, 5, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point5 := Kine_Shape_Point{ .Point, point5, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Pentagon, nil, color, nil, 0, 0, nil, .None, 0, 5, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point5 := Kine_Shape_Point{ .Point, point5, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -344,9 +348,9 @@ init_kineshape_pen :: proc(
     color: rl.Color,
     brush_size: f32) -> Kine_Shape_Pen {
 
-    host_point := Kine_Shape_Point{ .Pen, nil, color, nil, brush_size, 0, nil, 0, 2, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Pen, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system.next_point_index
     point1_id := host_id + 1
@@ -396,10 +400,10 @@ init_kineshape_compass :: proc(
     color: rl.Color,
     brush_size: f32) -> Kine_Shape_Compass {
 
-    host_point := Kine_Shape_Point{ .Compass, nil, color, nil, brush_size, 0, nil, 0, 3, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    pivot := Kine_Shape_Point{ .Point, Vector3{0.01, 0.01, 0.01}, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, Vector3{0.02, 0.02, 0}, nil, nil, 0, 0, nil, 0, 0, 0, 0, false }
+    host_point := Kine_Shape_Point{ .Compass, nil, color, nil, brush_size, 0, nil, .None, 0, 3, 0, 0, false }
+    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    pivot := Kine_Shape_Point{ .Point, Vector3{0.01, 0.01, 0.01}, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Kine_Shape_Point{ .Point, Vector3{0.02, 0.02, 0}, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system.next_point_index
     point1_id := host_id + 1

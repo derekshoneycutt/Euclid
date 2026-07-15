@@ -45,6 +45,11 @@ BRIDGE_STATUS_OUT_OF_CAPACITY :: 5
 BRIDGE_STATUS_ILLEGAL_STATE :: 6
 BRIDGE_STATUS_NON_CONVERGED :: 7
 
+BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
+BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
+BRIDGE_LABEL_DECORATION_HAT :: i32(core.Kine_Label_Decoration_Kind.Hat)
+BRIDGE_LABEL_DECORATION_BAR :: i32(core.Kine_Label_Decoration_Kind.Bar)
+
 KINE_CONSTRAINT_KIND_MIN :: i32(core.Kine_Constraint_Kind.Distance)
 KINE_CONSTRAINT_KIND_MAX :: i32(core.Kine_Constraint_Kind.CenterPivot)
 
@@ -84,11 +89,25 @@ Bridge_Point_View :: struct {
 
     has_label : bool,
     label : rune,
+    decoration_kind: i32,
 
     active_child: int,
     child_count: int,
     child_point_head: int,
     next_child_point: int,
+}
+
+label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Label_Decoration_Kind {
+    switch kind {
+    case BRIDGE_LABEL_DECORATION_PRIME:
+        return .Prime
+    case BRIDGE_LABEL_DECORATION_HAT:
+        return .Hat
+    case BRIDGE_LABEL_DECORATION_BAR:
+        return .Bar
+    }
+
+    return .None
 }
 
 Bridge_Constraint_View :: struct {
@@ -253,10 +272,36 @@ create_new_label :: proc "c" (
     state: ^core.Euclid_General_State,
     label: rune, pos: core.Vector3, color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
 
+    return create_new_label_decorated(
+        state, label, i32(core.Kine_Label_Decoration_Kind.None), pos, color, brushSize)
+}
+
+//   Create a new label shape in the kine system for Julia-driven animation state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - label: Rune glyph used by label point shapes.
+//   - decoration_kind: Decoration enum encoded as integer (none=0, prime=1, hat=2, bar=3).
+//   - pos: 3D position used for shape/tool placement in world space.
+//   - color: RGBA color payload in bridge format.
+//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//
+// Returns:
+//   - Snapshot struct for the newly created label host with resolved draw/style/child fields.
+@(export)
+create_new_label_decorated :: proc "c" (
+    state: ^core.Euclid_General_State,
+    label: rune,
+    decoration_kind: i32,
+    pos: core.Vector3,
+    color: Bridge_Color,
+    brushSize: f32) -> Bridge_Point_View {
+
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    use_decoration_kind := label_decoration_kind_from_i32(decoration_kind)
     point, index := kine.init_kineshape_label(
-        state^.point_system, label, pos, rlColor, brushSize)
+        state^.point_system, label, use_decoration_kind, pos, rlColor, brushSize)
 
     use_pos, hasPos := point^.position.?
     color, hasColor := point^.color.?
@@ -283,6 +328,7 @@ create_new_label :: proc "c" (
 
         has_label = hasLabel,
         label = use_label,
+        decoration_kind = i32(point^.decoration_kind),
 
         active_child = point^.active_child,
         child_count = point^.child_count,
@@ -336,6 +382,7 @@ create_new_point :: proc "c" (
 
         has_label = hasLabel,
         label = label,
+        decoration_kind = i32(point^.decoration_kind),
 
         active_child = point^.active_child,
         child_count = point^.child_count,
@@ -560,6 +607,7 @@ get_point_view :: proc "c" (
 
             has_label = hasLabel,
             label = label,
+            decoration_kind = i32(point.decoration_kind),
 
             active_child = point.active_child,
             child_count = point.child_count,
@@ -587,6 +635,7 @@ get_point_view :: proc "c" (
 
         has_label = false,
         label = 0,
+        decoration_kind = i32(core.Kine_Label_Decoration_Kind.None),
 
         active_child = 0,
         child_count = 0,

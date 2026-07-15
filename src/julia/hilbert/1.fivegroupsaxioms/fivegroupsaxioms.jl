@@ -20,6 +20,12 @@ include("./axiom_II5.jl")
 include("./def_segments.jl")
 include("./theorem_1.jl")
 include("./theorem_2.jl")
+include("./theorem_3.jl")
+include("./theorem_4.jl")
+include("./theorem_5.jl")
+include("./def_halfrays.jl")
+include("./def_sideofline.jl")
+include("./def_polygon.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
@@ -55,6 +61,12 @@ The axioms of this group define the idea expressed by the word "between," and ma
 ...
 
 Axioms II, 1-4 contain statements concerning the points of a straight line only, and, hence, we will call them the linear axioms of group II. Axiom II, 5 relates to the elements of plane geometry and, consequently, shall be called the plane axiom of group II."""
+end
+
+function get_view_text_BookI_consequences(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §4 Consequences of the Axioms of Connection and Order
+
+By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -147,6 +159,43 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomII5.initialize,
                 HilbertChapterOneAxiomII5.loop, HilbertChapterOneAxiomII5.clean,
                 "Axiom II,5", book1Sec3Id)
+
+        book1Sec4Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_consequences, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§4 Consequences after Group II", book1Id)
+            book1Theorem3Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem3.get_view_text,
+                HilbertChapterOneTheorem3.initialize,
+                HilbertChapterOneTheorem3.loop, HilbertChapterOneTheorem3.clean,
+                "Theorem 3", book1Sec4Id)
+            book1Theorem4Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem4.get_view_text,
+                HilbertChapterOneTheorem4.initialize,
+                HilbertChapterOneTheorem4.loop, HilbertChapterOneTheorem4.clean,
+                "Theorem 4", book1Sec4Id)
+            book1Theorem5Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem5.get_view_text,
+                HilbertChapterOneTheorem5.initialize,
+                HilbertChapterOneTheorem5.loop, HilbertChapterOneTheorem5.clean,
+                "Theorem 5", book1Sec4Id)
+            book1DefHalfRaysId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefHalfRays.get_view_text,
+                HilbertChapterOneDefHalfRays.initialize,
+                HilbertChapterOneDefHalfRays.loop, HilbertChapterOneDefHalfRays.clean,
+                "Definition: Half-rays", book1Sec4Id)
+            book1DefSideOfLineId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefinitionSideOfLine.get_view_text,
+                HilbertChapterOneDefinitionSideOfLine.initialize,
+                HilbertChapterOneDefinitionSideOfLine.loop,
+                HilbertChapterOneDefinitionSideOfLine.clean,
+                "Definition: Side of Line", book1Sec4Id)
+            book1DefPolygonId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefinitionPolygon.get_view_text,
+                HilbertChapterOneDefinitionPolygon.initialize,
+                HilbertChapterOneDefinitionPolygon.loop,
+                HilbertChapterOneDefinitionPolygon.clean,
+                "Definition: Polygon", book1Sec4Id)
 end
 
 end

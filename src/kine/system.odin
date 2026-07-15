@@ -225,7 +225,7 @@ cache_push_label :: proc(
     }
 
     slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
-    point := Kine_Label_Draw{ make_draw_base(source_index, src), p0, label }
+    point := Kine_Label_Draw{ make_draw_base(source_index, src), p0, label, src^.decoration_kind }
     slot^ = point
     point_system^.draw_cache.item_count += 1
 }

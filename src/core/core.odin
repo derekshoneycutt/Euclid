@@ -93,6 +93,13 @@ Kine_Shape_Point_Type :: enum {
     Compass,
 }
 
+Kine_Label_Decoration_Kind :: enum {
+    None,
+    Prime,
+    Hat,
+    Bar,
+}
+
 Kine_Shape_Point :: struct {
     kind : Kine_Shape_Point_Type,
 
@@ -102,6 +109,7 @@ Kine_Shape_Point :: struct {
     brush_size : f32,
     offset : f32,
     label : Maybe(rune),
+    decoration_kind : Kine_Label_Decoration_Kind,
 
     active_child: int,
     child_count : int,
@@ -218,6 +226,7 @@ Kine_Label_Draw :: struct {
     using base: Kine_Draw_Base,
     point1: Vector3,
     label: rune,
+    decoration_kind: Kine_Label_Decoration_Kind,
 }
 
 Kine_Point_Draw :: struct {

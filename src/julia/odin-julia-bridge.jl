@@ -29,12 +29,18 @@ struct BridgePointView
 
     hasLabel::UInt8
     label::UInt32
+    decorationKind::Int32
 
     activeChild::Int64
     childCount::Int64
     childPointHead::Int64
     nextChildPoint::Int64
 end
+
+const LABEL_DECORATION_NONE = Int32(0)
+const LABEL_DECORATION_PRIME = Int32(1)
+const LABEL_DECORATION_HAT = Int32(2)
+const LABEL_DECORATION_BAR = Int32(3)
 
 struct BridgeConstraintView
     valid::UInt8
@@ -350,6 +356,99 @@ function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, pos::Vector{Float32},
     color::AbstractString, brushSize::Float32)
     create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+
+"""
+Construct a new decorated label in the Euclid system to be shown at a point.
+
+Decorations:
+- `LABEL_DECORATION_NONE`
+- `LABEL_DECORATION_PRIME`
+- `LABEL_DECORATION_HAT`
+- `LABEL_DECORATION_BAR`
+"""
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::BridgeColor, brushSize::Float32)
+    pos = (x, y, z)
+    return @ccall create_new_label_decorated(state_ptr::Ptr{Cvoid}, label::UInt32,
+        Int32(decoration_kind)::Int32, pos::NTuple{3, Cfloat},
+        color::BridgeColor, brushSize::Cfloat)::BridgePointView
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::BridgeColor, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, color, brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, pos::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], color, brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, pos::Vector{Float32},
+    color::BridgeColor, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], color, brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::Colorant, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, pos::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, pos::Vector{Float32},
+    color::Colorant, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::Symbol, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, pos::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, pos::Vector{Float32},
+    color::Symbol, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, x::Float32, y::Float32, z::Float32,
+    color::AbstractString, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::UInt32, decoration_kind::Integer, pos::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+end
+function create_new_label_decorated(state_ptr::Ptr{Cvoid},
+    label::Char, decoration_kind::Integer, pos::Vector{Float32},
+    color::AbstractString, brushSize::Float32)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
 end
 
 """
