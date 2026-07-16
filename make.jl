@@ -27,8 +27,6 @@ end
 
 using Dates
 using UUIDs
-using JET
-using CodeComplexity
 
 struct Args
     run::Bool
@@ -64,16 +62,6 @@ const JULIA_TEST_RUNNER = joinpath(SRC_DIR, "julia", "test", "runtests.jl")
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const ODIN_TEST_ROOT = joinpath(SCRIPT_DIR, "tests")
 
-const JET_METHOD_ERROR_WHITELIST_PATTERNS = [
-    r"`iterate\(::Nothing\)`",
-    r"`iterate\(::Nothing, ::Int64\)`",
-    r"`ncodeunits\(::Nothing\)`",
-    r"`parse_hex\(::Nothing\)`",
-    r"`parse_f32\(::Nothing\)`",
-    r"`-\(::Vector\{Float32\}, ::Nothing\)`",
-    r"`\+\(::Nothing, ::Vector\{Float32\}\)`",
-]
-
 
 """Return true when running on Windows."""
 is_windows() = Sys.iswindows()
@@ -86,8 +74,7 @@ function require_command(command_name::String, install_hint::String)
     if Sys.which(command_name) === nothing
         error(
             "Error: $command_name is required but not installed or not on PATH.\n" *
-            install_hint,
-        )
+            install_hint)
     end
 end
 
@@ -182,8 +169,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         :vet => false,
         :no_build => false,
         :no_assets => false,
-        :help => false,
-    )
+        :help => false)
 
     for arg in cli_args
         if arg == "--run" || arg == "-r"
@@ -228,8 +214,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         parsed[:vet],
         parsed[:no_build],
         parsed[:no_assets],
-        parsed[:help],
-    ), run_args
+        parsed[:help]), run_args
 end
 
 """Run Julia and Odin tests that implement the phased testing plan."""
@@ -275,8 +260,7 @@ function run_test_plan()
         error(
             "No tests were discovered. Add Julia tests at " *
             "$(relpath(JULIA_TEST_RUNNER, SCRIPT_DIR)) and/or Odin tests under " *
-            "$(relpath(ODIN_TEST_ROOT, SCRIPT_DIR))/."
-        )
+            "$(relpath(ODIN_TEST_ROOT, SCRIPT_DIR))/.")
     end
 
     println("Test plan completed successfully.")
@@ -311,8 +295,7 @@ function resolve_msvc_tool_path(find_glob::String, error_message::String)
             "-find",
             find_glob,
         ]),
-        capture_output=true,
-    )
+        capture_output=true)
 
     candidate = split(chomp(result.stdout), '\n')
     if result.exit_code != 0 || isempty(filter(!isempty, candidate))
@@ -371,8 +354,7 @@ function new_import_library(
             "/name:$dll_name",
             "/out:$out_lib_path",
         ]),
-        cwd=dirname(def_path),
-    )
+        cwd=dirname(def_path))
     if lib_result.exit_code != 0 || !isfile(out_lib_path)
         error("Error: Failed to generate import library for $dll_name")
     end
@@ -427,8 +409,7 @@ end
 function collect_windows_runtime_libs(binary_path::String)
     dumpbin_path = resolve_msvc_tool_path(
         "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
-        "Error: Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.",
-    )
+        "Error: Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.")
     result = run_command(Cmd([dumpbin_path, "/dependents", binary_path]); capture_output=true)
     if result.exit_code != 0
         return String[]
@@ -465,8 +446,7 @@ function collect_julia_packages(julia_project_dir::String)
     snippet = "using Pkg; deps = collect(values(Pkg.dependencies())); direct = filter(d -> d.is_direct_dep, deps); sort!(direct, by = d -> lowercase(d.name)); for d in direct; version = isnothing(d.version) ? \"stdlib\" : string(d.version); println(d.name, \"|\", version); end"
     result = run_command(
         Cmd([JULIA_EXE, "--project=" * julia_project_dir, "-e", snippet]),
-        capture_output=true,
-    )
+        capture_output=true)
     if result.exit_code != 0
         return JuliaPackageDep[]
     end
@@ -698,342 +678,15 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
     end
 end
 
-"""Parse every Julia source file in src/julia and fail on syntax errors."""
-function validate_all_julia_files()
-    julia_root = joinpath(SRC_DIR, "julia")
-    julia_files = sort([path for path in collect_paths(julia_root) if endswith(path, ".jl")])
-
-    if isempty(julia_files)
-        println("Warning: no Julia files found for syntax validation.")
-        return
-    end
-
-    for file_path in julia_files
-        try
-            Meta.parseall(read(file_path, String))
-        catch err
-            rel = relpath(file_path, SCRIPT_DIR)
-            details = sprint(showerror, err)
-            error("Julia syntax validation failed for $rel: $details")
-        end
-    end
-
-    println("Julia syntax validation passed for $(length(julia_files)) files.")
-end
-
-"""Run JET static analysis over Julia source files in src/julia."""
-function jet_report_location(report)::String
-    project_root = normpath(SCRIPT_DIR)
-
-    for frame in report.vst
-        frame_file = String(frame.file)
-        normalized = normpath(frame_file)
-
-        if startswith(normalized, project_root)
-            return relpath(normalized, SCRIPT_DIR) * ":" * string(frame.line)
-        end
-
-        if startswith(frame_file, "src/")
-            return frame_file * ":" * string(frame.line)
-        end
-    end
-
-    return "unknown"
-end
-
-"""Return a single-line, truncated message for a JET report."""
-function jet_report_message(report; max_len::Int=180)::String
-    message = sprint(show, report)
-    message = replace(message, '\n' => ' ')
-    message = replace(message, r"\s+" => " ")
-    message = strip(message)
-
-    if length(message) <= max_len
-        return message
-    end
-
-    return message[1:max_len-3] * "..."
-end
-
-"""Return true when a JET report is considered known-noise and safe to ignore."""
-function is_whitelisted_jet_report(report_type::String, message::String)
-    if report_type == "UndefVarErrorReport" && occursin("Base.active_repl", message)
-        return true
-    end
-
-    if report_type == "MethodErrorReport"
-        for pattern in JET_METHOD_ERROR_WHITELIST_PATTERNS
-            if occursin(pattern, message)
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
-function run_jet_analysis()
-    julia_root::String = joinpath(SRC_DIR, "julia")
-    julia_files = String[joinpath(julia_root, "script.jl")]
-    if !isfile(julia_files[1])
-        error("JET target file not found: $(julia_files[1])")
-    end
-
-    failed = false
-    max_reports_per_file = 8
-
-    for path in julia_files
-        println("JET analyzing " * relpath(path, julia_root))
-        result = JET.report_file(path)
-        reports = JET.get_reports(result)
-
-        actionable = Tuple{String,String,String}[]
-        whitelisted_count = 0
-        for report in reports
-            report_type = string(nameof(typeof(report)))
-            location = jet_report_location(report)
-            message = jet_report_message(report)
-            if is_whitelisted_jet_report(report_type, message)
-                whitelisted_count += 1
-            else
-                push!(actionable, (report_type, location, message))
-            end
-        end
-
-        if !isempty(reports)
-            display_path = relpath(path, SCRIPT_DIR)
-            println("JET findings in $display_path: $(length(reports))")
-
-            if whitelisted_count > 0
-                println("  - whitelisted: $whitelisted_count")
-            end
-
-            if isempty(actionable)
-                println("  - actionable: 0")
-                continue
-            end
-
-            failed = true
-            println("  - actionable: $(length(actionable))")
-
-            show_count = min(length(actionable), max_reports_per_file)
-            for i in 1:show_count
-                report_type, location, message = actionable[i]
-                println("  - [$report_type] $location | $message")
-            end
-
-            if length(actionable) > max_reports_per_file
-                remaining = length(actionable) - max_reports_per_file
-                println("  - ... and $remaining more report(s)")
-            end
-        end
-    end
-
-    if failed
-        error("JET analysis reported issues.")
-    end
-end
-
-"""Return true when a path is configured as warning-only for complexity checks."""
-function is_warning_only_complexity_path(path::String, warning_roots::Vector{String})
-    candidate = normpath(path)
-    for warning_root in warning_roots
-        if startswith(candidate, warning_root)
-            return true
-        end
-    end
-    return false
-end
-
-"""Run CodeComplexity analysis over Julia source files and fail on threshold violations."""
-function run_code_complexity_analysis()
-    julia_root = joinpath(SRC_DIR, "julia")
-
-    max_complexity = 10
-    warning_roots = [
-        normpath(joinpath(julia_root, "elements")),
-        normpath(joinpath(julia_root, "hilbert")),
-        normpath(joinpath(julia_root, "proclus")),
-    ]
-
-    metric = CodeComplexity.CyclomaticComplexity()
-    violations = CodeComplexity.measure_directory(
-        metric,
-        julia_root;
-        recursive=true,
-        max_value=max_complexity)
-
-    if isempty(violations)
-        println("CodeComplexity passed (cyclomatic <= $max_complexity for all functions).")
-        return
-    end
-
-    println("CodeComplexity violations found: $(length(violations))")
-    blocking_found = false
-    warning_count = 0
-    warning_loop_count = 0
-
-    for file_measure in violations
-        warning_only = is_warning_only_complexity_path(file_measure.path, warning_roots)
-        if warning_only
-            warning_count += length(file_measure.functions)
-            non_loop_functions = [fn for fn in file_measure.functions if fn.name != "loop"]
-            warning_loop_count += length(file_measure.functions) - length(non_loop_functions)
-
-            if isempty(non_loop_functions)
-                continue
-            end
-
-            println("  [warning-only] " * file_measure.path)
-            for fn in non_loop_functions
-                println(
-                    "    - " * fn.name *
-                    " (cyclomatic=" * string(fn.value) *
-                    ", line=" * string(fn.line) * ")")
-            end
-        else
-            blocking_found = true
-            println("  [blocking] " * file_measure.path)
-            for fn in file_measure.functions
-                println(
-                    "    - " * fn.name *
-                    " (cyclomatic=" * string(fn.value) *
-                    ", line=" * string(fn.line) * ")")
-            end
-        end
-    end
-
-    if warning_count > 0
-        println("CodeComplexity warning-only violations: $warning_count")
-    end
-
-    if warning_loop_count > 0
-        println("CodeComplexity warning-only: $warning_loop_count loop functions flagged")
-    end
-
-    if blocking_found
-        error("CodeComplexity analysis reported issues.")
-    end
-
-    println("CodeComplexity violations are warning-only for configured directories.")
-end
-
-"""Parse scc --by-file -pw aggregate rows for Julia, Odin, and Total."""
-function parse_scc_primary_rows(output::String)
-    rows = Dict{String,Tuple{Int,Int}}()
-
-    for raw_line in split(output, '\n')
-        line = strip(raw_line)
-        if isempty(line)
-            continue
-        end
-
-        fields = split(line)
-        if length(fields) < 7
-            continue
-        end
-
-        language = fields[1]
-        if !(language in ("Odin", "Julia", "Total"))
-            continue
-        end
-
-        try
-            code = parse(Int, fields[6])
-            complexity = parse(Int, fields[7])
-            rows[language] = (code, complexity)
-        catch
-            continue
-        end
-    end
-
-    return rows
-end
-
-"""Print derived `Complexity/Code` metrics from scc output."""
-function print_scc_complexity_per_file_summary(output::String)
-    rows = parse_scc_primary_rows(output)
-    labels = ["Odin", "Julia", "Total"]
-    printed_any = false
-
-    for label in labels
-        if !haskey(rows, label)
-            continue
-        end
-
-        code, complexity = rows[label]
-        complexity_per_code = code == 0 ? 0.0 : complexity / code
-        rounded = round(complexity_per_code; digits=4)
-        println("scc derived ($label): Complexity/Code = $rounded")
-        printed_any = true
-    end
-
-    if !printed_any
-        println("Warning: Could not parse scc summary rows for Odin/Julia/Total.")
-    end
-end
-
-"""Run vet analysis for Julia checks and Odin lizard with optional failure escalation."""
+"""Include and run externalized vet analysis from make-vet.jl."""
 function run_vet_analysis()
-    if Sys.which("lizard") === nothing
-        println("Warning: lizard is not installed or not on PATH; skipping lizard analysis.")
-        return
+    vet_script_path = joinpath(SCRIPT_DIR, "make-vet.jl")
+    if !isfile(vet_script_path)
+        error("Vet script missing at $(relpath(vet_script_path, SCRIPT_DIR)).")
     end
 
-    had_findings = false
-
-    println("Running Julia syntax validation...")
-    validate_all_julia_files()
-
-    println("Running CodeComplexity analysis...")
-    run_code_complexity_analysis()
-
-    println("Running JET static analysis...")
-    run_jet_analysis()
-
-    odin_files = sort([path for path in collect_paths(SRC_DIR) if endswith(path, ".odin")])
-    if !isempty(odin_files)
-        println("Running lizard analysis (odin)...")
-        odin_result = run_command(Cmd(vcat(["lizard", "-l", "cpp"], odin_files)); cwd=SCRIPT_DIR)
-        println("Lizard odin analysis exited $(odin_result.exit_code)")
-        if odin_result.exit_code != 0
-            had_findings = true
-            println("Lizard odin analysis reported warnings.")
-        end
-    end
-
-    if Sys.which("scc") === nothing
-        println("scc not found on PATH; didn't run scc.")
-    else
-        println("Running scc statistics (scc --by-file -pw)...")
-        scc_result = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=SCRIPT_DIR)
-        println("scc exited $(scc_result.exit_code)")
-        if scc_result.exit_code != 0
-            println("Warning: scc analysis failed; continuing with lizard analysis.")
-        else
-            scc_capture = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=SCRIPT_DIR, capture_output=true)
-            if scc_capture.exit_code == 0
-                print_scc_complexity_per_file_summary(scc_capture.stdout)
-            else
-                println("Warning: failed to capture scc output for derived metrics.")
-            end
-        end
-    end
-
-    if had_findings
-        error("Lizard analysis reported warnings and --fail-lizard is enabled.")
-    end
-end
-
-"""Collect all file paths recursively beneath a root directory."""
-function collect_paths(root::String)
-    paths = String[]
-    for (dirpath, _, filenames) in walkdir(root)
-        for filename in filenames
-            push!(paths, joinpath(dirpath, filename))
-        end
-    end
-    return paths
+    include(vet_script_path)
+    @invokelatest run_vet_analysis(SCRIPT_DIR, SRC_DIR)
 end
 
 """Copy all files under a source directory into a destination directory tree."""
@@ -1295,8 +948,7 @@ function ensure_required_commands(do_build::Bool, do_assets::Bool)
     if do_build && is_windows()
         require_command(
             "gendef",
-            "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.",
-        )
+            "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.")
     end
 
     if isfile(JULIA_TEST_RUNNER)
