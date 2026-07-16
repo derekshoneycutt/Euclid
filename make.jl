@@ -860,6 +860,7 @@ function clean_build_files()
         app_binary_path(),
         ASSETS_ARCHIVE_PATH,
         joinpath(BIN_DIR, "runtime-closure.generated.cdx.json"),
+        joinpath(BIN_DIR, "vet-report.md"),
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),

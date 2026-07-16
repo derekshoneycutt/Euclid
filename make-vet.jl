@@ -41,6 +41,121 @@ struct VetRunResult
     has_blocking_failures::Bool
 end
 
+"""Return true when a section should surface detailed payload in markdown."""
+function section_has_payload(section::VetSectionResult)
+    return !isempty(strip(section.stdout)) || !isempty(strip(section.stderr))
+end
+
+"""Return overall report status based on section outcomes."""
+function compute_overall_status(run_result::VetRunResult)
+    if any(section -> section.status == "Fail", run_result.sections)
+        return "Fail"
+    end
+
+    if any(section -> section.status == "Warn", run_result.sections)
+        return "Warn"
+    end
+
+    if any(section -> section.status == "Pass", run_result.sections)
+        return "Pass"
+    end
+
+    if any(section -> section.status == "Missing", run_result.sections)
+        return "Missing"
+    end
+
+    return "Skipped"
+end
+
+"""Convert values to markdown-safe inline text."""
+function markdown_inline(value)
+    text = string(value)
+    text = replace(text, '\n' => ' ')
+    return replace(text, "|" => "\\|")
+end
+
+"""Append section metrics as markdown list items."""
+function write_section_metrics(io::IO, metrics::Dict{String,Any})
+    if isempty(metrics)
+        write(io, "\n### Metrics\n\n- none\n")
+        return
+    end
+
+    write(io, "\n### Metrics\n\n")
+    for key in sort(collect(keys(metrics)))
+        value = metrics[key]
+        write(io, "- ", markdown_inline(key), ": ", markdown_inline(value), "\n")
+    end
+end
+
+"""Append captured stdout and stderr blocks to a section in markdown."""
+function write_section_payload(io::IO, section::VetSectionResult)
+    stdout_text = strip(section.stdout)
+    stderr_text = strip(section.stderr)
+
+    if !isempty(stdout_text)
+        write(io, "\n### Captured Stdout\n\n```text\n")
+        write(io, stdout_text)
+        write(io, "\n```\n")
+    end
+
+    if !isempty(stderr_text)
+        write(io, "\n### Captured Stderr\n\n```text\n")
+        write(io, stderr_text)
+        write(io, "\n```\n")
+    end
+end
+
+"""Write a markdown report to disk for all captured vet sections."""
+function write_vet_report(run_result::VetRunResult, report_path::String, script_dir::String)
+    mkpath(dirname(report_path))
+
+    overall_status = compute_overall_status(run_result)
+    command = join([PROGRAM_FILE; ARGS], " ")
+
+    open(report_path, "w") do io
+        write(io, "# Vet Report\n\n")
+        write(io, "## Summary\n\n")
+        write(io, "- Timestamp: ", run_result.started_at, "\n")
+        write(io, "- Command: `", markdown_inline(command), "`\n")
+        write(io, "- Report Path: `", relpath(report_path, script_dir), "`\n")
+        write(io, "- Overall Status: ", overall_status, "\n")
+
+        write(io, "\n## Section Status\n\n")
+        write(io, "| Section | Status | Summary |\n")
+        write(io, "| --- | --- | --- |\n")
+        for section in run_result.sections
+            write(
+                io,
+                "| ", markdown_inline(section.key),
+                " | ", markdown_inline(section.status),
+                " | ", markdown_inline(section.summary),
+                " |\n")
+        end
+
+        for section in run_result.sections
+            write(io, "\n## ", markdown_inline(section.key), "\n\n")
+            write(io, "- Status: ", markdown_inline(section.status), "\n")
+            write(io, "- Summary: ", markdown_inline(section.summary), "\n")
+            write(io, "- Command Status: ", markdown_inline(section.command_status), "\n")
+
+            if section.command_exit_code !== nothing
+                write(io, "- Command Exit Code: ", string(section.command_exit_code), "\n")
+            end
+
+            write(io, "- Blocking: ", section.blocking ? "yes" : "no", "\n")
+            write(io, "- Warning: ", section.warning ? "yes" : "no", "\n")
+            write(io, "- Skipped: ", section.skipped ? "yes" : "no", "\n")
+            write(io, "- Missing: ", section.missing ? "yes" : "no", "\n")
+
+            write_section_metrics(io, section.metrics)
+            if section_has_payload(section)
+                write_section_payload(io, section)
+            end
+        end
+    end
+end
+
 """
 Run a command and return its exit code and optional captured output.
 
@@ -472,11 +587,13 @@ function build_internal_section_result(
 end
 
 """Print concise section summaries, with details only for warnings or failures."""
-function emit_console_summary(run_result::VetRunResult)
+function emit_console_summary(run_result::VetRunResult, report_path::String)
     println("Vet summary:")
     for section in run_result.sections
         println("  [" * section.status * "] " * section.key * " - " * section.summary)
     end
+
+    println("Detailed vet report: " * report_path)
 
     for section in run_result.sections
         if section.status in ("Fail", "Warn")
@@ -766,6 +883,7 @@ end
 """Run complete vet analysis for Julia checks and Odin lizard."""
 function run_vet_analysis(script_dir::String, src_dir::String)
     sections = VetSectionResult[]
+    report_path = joinpath(script_dir, "bin", "vet-report.md")
 
     println("Running Julia syntax validation...")
     push!(sections, run_julia_syntax_section(src_dir, script_dir))
@@ -785,7 +903,8 @@ function run_vet_analysis(script_dir::String, src_dir::String)
     has_blocking_failures = any(section -> section.blocking, sections)
     run_result = VetRunResult(string(Dates.now(Dates.UTC)), sections, has_blocking_failures)
 
-    emit_console_summary(run_result)
+    write_vet_report(run_result, report_path, script_dir)
+    emit_console_summary(run_result, relpath(report_path, script_dir))
 
     if has_blocking_failures
         error("Vet analysis reported blocking issues.")
