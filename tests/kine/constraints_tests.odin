@@ -16,8 +16,7 @@ expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
 expect_vec3_close :: proc(
     t: ^testing.T,
     actual, expected: app_kine.Vector3,
-    msg: string,
-) {
+    msg: string) {
     testing.expectf(t, math.abs(actual.x - expected.x) <= TEST_EPSILON,
         "%s (x) | expected=%v got=%v", msg, expected.x, actual.x)
     testing.expectf(t, math.abs(actual.y - expected.y) <= TEST_EPSILON,

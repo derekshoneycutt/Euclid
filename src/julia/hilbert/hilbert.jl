@@ -19,9 +19,4 @@ function init_euclid_scripts_hilbert(state_ptr::Ptr{Cvoid})
         "Hilbert's Foundations of Geometry")
 
     HilbertChapterOne.init_euclid_scripts(state_ptr, rootId)
-        #=book1ProclusIsoscelesId = OdinJuliaBridge.add_child_animation_interface(
-            state_ptr, ElementsOneProclusIsosceles.get_view_text,
-            ElementsOneProclusIsosceles.initialize,
-            ElementsOneProclusIsosceles.loop, ElementsOneProclusIsosceles.clean,
-            "Isosceles Triangle", rootId)=#
 end

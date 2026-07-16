@@ -17,6 +17,7 @@ include("./axiom_II2.jl")
 include("./axiom_II3.jl")
 include("./axiom_II4.jl")
 include("./axiom_II5.jl")
+include("./axiom_III1.jl")
 include("./def_segments.jl")
 include("./theorem_1.jl")
 include("./theorem_2.jl")
@@ -25,6 +26,7 @@ include("./theorem_4.jl")
 include("./theorem_5.jl")
 include("./theorem_6.jl")
 include("./theorem_7.jl")
+include("./theorem_8.jl")
 include("./def_halfrays.jl")
 include("./def_sideofline.jl")
 include("./def_polygon.jl")
@@ -69,6 +71,16 @@ function get_view_text_BookI_consequences(state_ptr::Ptr{Cvoid})
     """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §4 Consequences of the Axioms of Connection and Order
 
 By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
+end
+
+function get_view_text_BookI_parallels(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group III: Axiom of Parallels (Euclid's Axiom)
+
+The introduction of this axiom simplifies greatly the fundamental principles of geometry and facilitates in no small degree its development.
+
+...
+
+The axiom of parallels is a plane axiom."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -210,6 +222,23 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneTheorem7.loop,
                 HilbertChapterOneTheorem7.clean,
                 "Theorem 7", book1Sec4Id)
+
+        book1Sec5Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_parallels, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§5 Group III: Axiom of Parallels", book1Id)
+            book1AxiomIII1Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIII1.get_view_text,
+                HilbertChapterOneAxiomIII1.initialize,
+                HilbertChapterOneAxiomIII1.loop,
+                HilbertChapterOneAxiomIII1.clean,
+                "Axiom III", book1Sec5Id)
+            book1Theorem8Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem8.get_view_text,
+                HilbertChapterOneTheorem8.initialize,
+                HilbertChapterOneTheorem8.loop,
+                HilbertChapterOneTheorem8.clean,
+                "Theorem 8", book1Sec5Id)
 end
 
 end
