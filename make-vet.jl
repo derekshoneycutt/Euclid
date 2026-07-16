@@ -492,8 +492,8 @@ function extract_julia_function_metadata(src_dir::String, script_dir::String)
 
     sample_limit = min(5, length(metadata))
     println("Julia parser metadata collected for $(length(metadata)) functions.")
-    for i in 1:sample_limit
-        item = metadata[i]
+    for index in 1:sample_limit
+        item = metadata[index]
         println(
             "  - " * item.name *
             " | params=" * string(item.param_count) *
@@ -505,8 +505,8 @@ function extract_julia_function_metadata(src_dir::String, script_dir::String)
     if !isempty(parse_errors)
         show_count = min(5, length(parse_errors))
         println("Parser metadata parse failures: $(length(parse_errors))")
-        for i in 1:show_count
-            issue = parse_errors[i]
+        for index in 1:show_count
+            issue = parse_errors[index]
             println("  - " * issue.file * " | " * issue.details)
         end
         if length(parse_errors) > show_count
@@ -596,9 +596,10 @@ function build_julia_complexity_rows(
 
         if haskey(per_name_index, key) && !isempty(per_name_index[key])
             candidates = per_name_index[key]
-            best_idx = 1
-            best_distance = abs(candidates[1][1] - item.start_line)
-            for i in 2:length(candidates)
+            first_candidate_idx = firstindex(candidates)
+            best_idx = first_candidate_idx
+            best_distance = abs(candidates[first_candidate_idx][1] - item.start_line)
+            for i in Iterators.drop(eachindex(candidates), 1)
                 distance = abs(candidates[i][1] - item.start_line)
                 if distance < best_distance
                     best_distance = distance
@@ -719,7 +720,7 @@ end
 
 """Run JET static analysis and fail on actionable reports."""
 function run_jet_analysis(src_dir::String, script_dir::String)
-    julia_root = joinpath(src_dir, "julia")
+    julia_root::String = joinpath(src_dir, "julia")
     julia_files = String[joinpath(julia_root, "script.jl")]
     if !isfile(julia_files[1])
         error("JET target file not found: $(julia_files[1])")
@@ -731,7 +732,7 @@ function run_jet_analysis(src_dir::String, script_dir::String)
     whitelisted_count_total = 0
     max_reports_per_file = 8
 
-    for path in julia_files
+    for path::String in julia_files
         println("JET analyzing " * relpath(path, julia_root))
         result = JET.report_file(path)
         reports = JET.get_reports(result)
@@ -770,8 +771,9 @@ function run_jet_analysis(src_dir::String, script_dir::String)
             println("  - actionable: $(length(actionable))")
 
             show_count = min(length(actionable), max_reports_per_file)
-            for i in 1:show_count
-                report_type, location, message = actionable[i]
+            for index in 1:show_count
+                report_entry = actionable[index]
+                report_type, location, message = report_entry
                 println("  - [$report_type] $location | $message")
             end
 
