@@ -89,10 +89,6 @@ code input. `2+2` will show `4` in the output directly above, for example. In fa
 using Julia's `REPL` package directly, even scope issues should follow similar Julia REPL
 standards for those already familiar.
 
-The `state_ptr` variable is always available from the Scratchpad. This is the first
-parameter that is sent to all OdinJuliaBridge functions, and it holds a value of type
-`Ptr{Nothing}`, pointing back to the Odin state structure in memory.
-
 `:help` will show most of the important information for how to use the Scratchpad in
 practice. Importantly, starting a line with `?` will attempt to do a focused documentation
 query.
@@ -114,6 +110,23 @@ of helpers in `:help`. If you bracket the beginning and end of an animation with
 Gif feature to save a gif of your one-off animations. You will be responsible for managing
 the state machine of such animations. You can use REPL variables or the OdinJuliaBridge
 metadata storage functions used by most static animations.
+
+#### Some details about using the Scratchpad
+
+The `state_ptr` variable is always available from the Scratchpad. This is the first
+parameter that is sent to all OdinJuliaBridge functions, and it holds a value of type
+`Ptr{Nothing}`, pointing back to the Odin state structure in memory.
+
+Coordinate reminders:
+
+- Use normalized surface coordinates: `x, y ∈ [0.0, 1.0]`.
+- Treat `z = 0.0` as the draw surface; positive `z` is up (pen lift/travel).
+- Follow a right-hand orientation for 3D thinking: on screen, +X trends up-right and +Y
+  trends up-left on the surface; set your right thumb to +X and index to +Y, and your
+  middle finger gives +Z (up/elevation). See
+  [Right hand rule](https://en.wikipedia.org/wiki/Right-hand_rule)
+  with the knowledge that we are always x pointed up-right, y pointed up-left in our
+  projections for this project.
 
 ### Q: Wait, Save Gif?
 

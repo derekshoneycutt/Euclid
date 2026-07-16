@@ -65,6 +65,59 @@ those objects interact.
 - Pen rise SHOULD begin from the final meaningful draw endpoint (or final
   emphasized point), not from an earlier anchor point.
 
+## Coordinate Space and Z Conventions
+
+- The drawing surface is normalized in x/y: use `x` and `y` in `[0.0, 1.0]` for
+  ordinary on-surface animation work.
+- Treat `z = 0.0` as the drawing surface contact plane for points, lines,
+  circles, and other on-surface primitives.
+- Positive `z` is "up" (off the surface) and is the standard direction for pen
+  and compass lift/travel motion.
+- Pen/compass descent phases should end at `z = 0.0`; rise phases should target
+  a positive top height (commonly around `1.4` in existing scripts).
+- Plane primitives should follow an intentional `z` profile:
+  - Flat/on-surface plane demonstrations should keep plane vertices at `z = 0.0`.
+  - Perspective/emphasis plane demonstrations may use positive `z` offsets for
+    elevated vertices.
+  - Avoid negative `z` for standard plane demonstrations unless a script has a
+    specific, documented reason.
+
+## Draw Order and Layering Constraints
+
+The renderer is layered in a fixed order and animation scripts should be staged
+with that order in mind.
+
+Current frame order is:
+
+1. Drawing surface.
+1. Low cached geometry (labels/points/lines/circles/polygons).
+1. Low particles.
+1. Tool shadows (pen/compass).
+1. Mid particles.
+1. High cached tools (active tool dots + pen/compass strokes).
+1. High particles.
+
+Important implications:
+
+- For low cached geometry, visual stacking follows definition/cache insertion
+  order in practice. If two items overlap, "defined later draws later" is the
+  default mental model.
+- Pen/compass visuals are not depth-sorted against all geometry; they are drawn
+  in a dedicated high layer near the end of the world pass.
+- Particles are split across low/mid/high layers, so particle choice controls
+  whether effects appear behind geometry, around tool shadows, or above tools.
+
+Tool crossing guidance for 3D plane barriers:
+
+- When a tool crosses a conceptual plane barrier, prefer short fade-out/fade-in
+  transitions on the two sides of the crossing instead of trying to force a
+  perfect geometric occlusion illusion.
+- Prefer showing plane boundaries/structure with line-like representations
+  (edges/dividers/traces) when possible, rather than relying only on a filled
+  plane to communicate crossing depth.
+- Keep these transitions brief and intentional so the viewer reads them as
+  deliberate geometric staging, not a rendering artifact.
+
 ## Plane and Surface Treatment
 
 - The app already provides a persistent drawing surface; do not simulate a full
