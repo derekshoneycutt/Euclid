@@ -23,6 +23,8 @@ include("./theorem_2.jl")
 include("./theorem_3.jl")
 include("./theorem_4.jl")
 include("./theorem_5.jl")
+include("./theorem_6.jl")
+include("./theorem_7.jl")
 include("./def_halfrays.jl")
 include("./def_sideofline.jl")
 include("./def_polygon.jl")
@@ -196,6 +198,18 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneDefinitionPolygon.loop,
                 HilbertChapterOneDefinitionPolygon.clean,
                 "Definition: Polygon", book1Sec4Id)
+            book1Theorem6Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem6.get_view_text,
+                HilbertChapterOneTheorem6.initialize,
+                HilbertChapterOneTheorem6.loop,
+                HilbertChapterOneTheorem6.clean,
+                "Theorem 6", book1Sec4Id)
+            book1Theorem7Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem7.get_view_text,
+                HilbertChapterOneTheorem7.initialize,
+                HilbertChapterOneTheorem7.loop,
+                HilbertChapterOneTheorem7.clean,
+                "Theorem 7", book1Sec4Id)
 end
 
 end

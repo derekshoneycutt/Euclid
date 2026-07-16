@@ -199,6 +199,7 @@ Options:
     --build, -b         Build the project.
     --assets, -a        Build assets.pkg.
     --run, -r           Run bin/euclid after all other requests.
+    --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
     --no-build, -n      Skip any build (overrides --build and --vet).
     --no-assets, -x     Skip assets.pkg build (overrides --assets).
@@ -250,8 +251,11 @@ engineering stuff. We perform several checks in the vet mode to try and improve 
 quality and performance.
 
 ```bash
-julia make.jl --vet
+julia make.jl -v
 ```
+
+NOTE: Use the combined vet+test run, `julia make.jl -vt`, as the verification baseline.
+Running only `-v` or only `-t` is not sufficient for acceptance.
 
 #### Odin
 

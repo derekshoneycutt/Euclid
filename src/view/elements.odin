@@ -489,7 +489,9 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw
         prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
         rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
     case .Hat:
+        //TODO: Do this
     case .Bar:
+        //TODO: Do this
     }
 }
 

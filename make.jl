@@ -10,6 +10,7 @@ Options:
     --assets, -a        Build assets.pkg.
     --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
+    --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
     --no-build, -n      Skip any build (overrides --build and --vet).
     --no-assets, -x     Skip assets.pkg build (overrides --assets).
@@ -34,6 +35,7 @@ struct Args
     build::Bool
     assets::Bool
     clean::Bool
+    test::Bool
     vet::Bool
     no_build::Bool
     no_assets::Bool
@@ -58,6 +60,9 @@ const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
 const JULIA_EXE = Base.julia_cmd().exec[1]
+const JULIA_TEST_RUNNER = joinpath(SRC_DIR, "julia", "test", "runtests.jl")
+const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
+const ODIN_TEST_ROOT = joinpath(SCRIPT_DIR, "tests")
 
 const JET_METHOD_ERROR_WHITELIST_PATTERNS = [
     r"`iterate\(::Nothing\)`",
@@ -138,6 +143,8 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
         args[:assets] = true
     elseif flag == 'c'
         args[:clean] = true
+    elseif flag == 't'
+        args[:test] = true
     elseif flag == 'v'
         args[:vet] = true
     elseif flag == 'n'
@@ -171,6 +178,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         :build => false,
         :assets => false,
         :clean => false,
+        :test => false,
         :vet => false,
         :no_build => false,
         :no_assets => false,
@@ -186,6 +194,8 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
             parsed[:assets] = true
         elseif arg == "--clean" || arg == "-c"
             parsed[:clean] = true
+        elseif arg == "--test" || arg == "-t"
+            parsed[:test] = true
         elseif arg == "--vet" || arg == "-v"
             parsed[:vet] = true
         elseif arg == "--no-build" || arg == "-n"
@@ -214,11 +224,62 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         parsed[:build],
         parsed[:assets],
         parsed[:clean],
+        parsed[:test],
         parsed[:vet],
         parsed[:no_build],
         parsed[:no_assets],
         parsed[:help],
     ), run_args
+end
+
+"""Run Julia and Odin tests that implement the phased testing plan."""
+function run_test_plan()
+    println("Running test plan...")
+
+    ran_any = false
+
+    if isfile(JULIA_TEST_RUNNER)
+        println("Running Julia tests...")
+        julia_result = run_command(Cmd([
+            JULIA_EXE,
+            "--project=" * JULIA_TEST_PROJECT,
+            JULIA_TEST_RUNNER,
+        ]))
+        println("Julia tests exited $(julia_result.exit_code)")
+        if julia_result.exit_code != 0
+            error("Julia tests failed.")
+        end
+        ran_any = true
+    else
+        println("Skipping Julia tests: missing $(relpath(JULIA_TEST_RUNNER, SCRIPT_DIR))")
+    end
+
+    if isdir(ODIN_TEST_ROOT)
+        println("Running Odin tests...")
+        odin_result = run_command(Cmd([
+            "odin",
+            "test",
+            ODIN_TEST_ROOT,
+            "-all-packages",
+        ]); cwd=SCRIPT_DIR)
+        println("Odin tests exited $(odin_result.exit_code)")
+        if odin_result.exit_code != 0
+            error("Odin tests failed.")
+        end
+        ran_any = true
+    else
+        println("Skipping Odin tests: missing $(relpath(ODIN_TEST_ROOT, SCRIPT_DIR))/")
+    end
+
+    if !ran_any
+        error(
+            "No tests were discovered. Add Julia tests at " *
+            "$(relpath(JULIA_TEST_RUNNER, SCRIPT_DIR)) and/or Odin tests under " *
+            "$(relpath(ODIN_TEST_ROOT, SCRIPT_DIR))/."
+        )
+    end
+
+    println("Test plan completed successfully.")
 end
 
 """Resolve the full path to `vswhere.exe` on Windows."""
@@ -1181,7 +1242,8 @@ function clean_build_files()
 end
 
 """Return true when any build/run action flag was explicitly requested."""
-explicit_action_requested(args::Args) = args.run || args.build || args.assets || args.vet || args.no_build || args.no_assets
+explicit_action_requested(args::Args) =
+    args.run || args.build || args.assets || args.vet || args.test || args.no_build || args.no_assets
 
 """Resolve effective build, vet, and asset steps from CLI argument combinations."""
 function resolve_build_plan(args::Args)
@@ -1210,6 +1272,11 @@ function resolve_build_plan(args::Args)
         do_build = false
     end
 
+    if args.test && !args.build && !args.vet && !args.no_build && !args.assets && !args.no_assets
+        do_build = false
+        do_assets = false
+    end
+
     return do_build, do_vet, do_assets
 end
 
@@ -1231,6 +1298,14 @@ function ensure_required_commands(do_build::Bool, do_assets::Bool)
             "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.",
         )
     end
+
+    if isfile(JULIA_TEST_RUNNER)
+        require_command("julia", "Please install Julia to run Julia tests.")
+    end
+
+    if isdir(ODIN_TEST_ROOT)
+        require_command("odin", "Please install Odin to run Odin tests.")
+    end
 end
 
 """Execute the finalized build plan, vet checks, assets build, and optional run step."""
@@ -1238,6 +1313,7 @@ function execute_build_plan(
     do_build::Bool,
     do_vet::Bool,
     do_assets::Bool,
+    run_tests::Bool,
     run_after_build::Bool,
     run_args::Vector{String})
     julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
@@ -1252,6 +1328,10 @@ function execute_build_plan(
 
     if do_assets
         build_assets(do_build)
+    end
+
+    if run_tests
+        run_test_plan()
     end
 
     if run_after_build
@@ -1275,6 +1355,7 @@ function main()
     end
 
     run_after_build = args.run
+    run_tests = args.test
     has_explicit_action = explicit_action_requested(args)
 
     if args.clean
@@ -1292,6 +1373,7 @@ function main()
             do_build,
             do_vet,
             do_assets,
+            run_tests,
             run_after_build,
             run_args)
         return 0

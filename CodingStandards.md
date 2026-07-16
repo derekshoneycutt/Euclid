@@ -83,9 +83,15 @@ These limits are mandatory and apply to Odin procedures and Julia functions.
 Odin code MUST compile cleanly with strict checks enabled, and Julia code MUST pass basic
 syntax validations.
 
-These checks are performed with the `--vet` or `-v` parameter passed to `make.jl`.
-Additionally, static analysis via `lizard`, `JET.jl` and `CodeComplexity.jl` are performed
-with the vet parameters, providing additional code protection.
+Verification MUST be run with the combined vet+test command:
+
+- `julia make.jl -vt`
+
+Using `julia make.jl -v` alone is insufficient.
+Using `julia make.jl -t` alone is insufficient.
+
+Static analysis via `lizard`, `JET.jl` and `CodeComplexity.jl` is performed by vet mode,
+and behavioral validation is performed by the test suite. Both are required for completion.
 
 ## Language Boundary Standards (Odin <-> Julia)
 

@@ -134,7 +134,7 @@ end
 """Return a safety-policy block reason for input text, or `nothing` when allowed."""
 function blocked_input_reason(text::AbstractString)
     lowered = lowercase(strip(String(text)))
-    if startswith(lowered, "using pkg") || startswith(lowered, "import pkg")
+    if occursin(r"^(using|import)\s+pkg\b", lowered)
         return "package management is disabled in scratchpad"
     end
 

@@ -80,9 +80,19 @@ those objects interact.
 ## Point Labels
 
 - Use `plum1` for point labels by default.
-- Keep labels slightly offset from the point they name.
+- Keep labels offset enough that a visible gap remains between the label glyphs
+  and the point marker; “barely offset” is a failure, not a preference.
 - Keep labels clearly separated from both the point marker and nearby lines;
   avoid placements that visually sit on top of points or strokes.
+- When placing a label, check the actual rendered composition, not just the raw
+  coordinate offset. A small diagonal offset can still overlap once projected
+  and rasterized.
+- If a label is even partially touching the point marker in the rendered frame,
+  move it farther. Do not accept point-label contact as good enough.
+- The current renderer draws labels from the glyph origin at the supplied point;
+  it does not center the glyph on that anchor. Treat this as a hard renderer
+  fact and compensate with larger offsets than intuition suggests, especially
+  for labels placed above a point.
 - Labels should appear only after the related point has been established, unless
   the animation intentionally needs earlier annotation.
 - For primed names in text/output, prefer ASCII apostrophe (`A'`) unless a
