@@ -667,7 +667,7 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
         append!(cmd_parts, ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     end
 
-    build_result = run_command(Cmd(cmd_parts); cwd=SRC_DIR)
+    build_result = run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
     if do_vet
         println("Odin build exited $(build_result.exit_code)")
     else
@@ -676,17 +676,23 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
     if build_result.exit_code != 0
         error("Build failed.")
     end
+
+    if do_vet
+        return build_result
+    end
+
+    return nothing
 end
 
 """Include and run externalized vet analysis from make-vet.jl."""
-function run_vet_analysis()
+function run_vet_analysis(odin_build_result=nothing)
     vet_script_path = joinpath(SCRIPT_DIR, "make-vet.jl")
     if !isfile(vet_script_path)
         error("Vet script missing at $(relpath(vet_script_path, SCRIPT_DIR)).")
     end
 
     include(vet_script_path)
-    @invokelatest run_vet_analysis(SCRIPT_DIR, SRC_DIR)
+    @invokelatest run_vet_analysis(SCRIPT_DIR, SRC_DIR, odin_build_result)
 end
 
 """Copy all files under a source directory into a destination directory tree."""
@@ -970,13 +976,14 @@ function execute_build_plan(
     run_after_build::Bool,
     run_args::Vector{String})
     julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
+    odin_build_result = nothing
 
     if do_build
-        build_odin(do_vet, julia_flags)
+        odin_build_result = build_odin(do_vet, julia_flags)
     end
 
     if do_vet
-        run_vet_analysis()
+        run_vet_analysis(odin_build_result)
     end
 
     if do_assets

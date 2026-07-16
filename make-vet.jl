@@ -3,6 +3,7 @@
 using Dates
 using JET
 using CodeComplexity
+using JuliaSyntax
 
 const JET_METHOD_ERROR_WHITELIST_PATTERNS = [
     r"`iterate\(::Nothing\)`",
@@ -39,6 +40,32 @@ struct VetRunResult
     started_at::String
     sections::Vector{VetSectionResult}
     has_blocking_failures::Bool
+end
+
+struct JuliaFunctionMetadata
+    name::String
+    file::String
+    start_line::Int
+    end_line::Int
+    nloc::Int
+    param_count::Int
+    signature_preview::String
+end
+
+struct JuliaComplexityRow
+    severity::String
+    status::String
+    nloc::Int
+    ccn::Int
+    param_count::Int
+    function_name::String
+    file::String
+    line::Int
+end
+
+struct ParserFileError
+    file::String
+    details::String
 end
 
 """Return true when a section should surface detailed payload in markdown."""
@@ -246,7 +273,7 @@ function validate_all_julia_files(src_dir::String, script_dir::String)
 
     for file_path in julia_files
         try
-            Meta.parseall(read(file_path, String))
+            JuliaSyntax.parseall(Expr, read(file_path, String))
         catch err
             rel = relpath(file_path, script_dir)
             details = sprint(showerror, err)
@@ -256,8 +283,387 @@ function validate_all_julia_files(src_dir::String, script_dir::String)
 
     println("Julia syntax validation passed for $(length(julia_files)) files.")
     return Dict{String,Any}(
-        "files" => length(julia_files),
-    )
+        "files" => length(julia_files))
+end
+
+"""Return first callable expression in a signature, unwrapping where clauses."""
+function unwrap_signature_callable(signature)
+    if signature isa Expr && signature.head == :where && !isempty(signature.args)
+        return unwrap_signature_callable(signature.args[1])
+    end
+    return signature
+end
+
+"""Return a readable function name from a callable expression."""
+function callable_name(callable)
+    if callable isa Symbol
+        return string(callable)
+    end
+
+    if callable isa Expr
+        if callable.head == :curly && !isempty(callable.args)
+            return callable_name(callable.args[1])
+        end
+
+        if callable.head == :. && length(callable.args) == 2
+            return callable_name(callable.args[2])
+        end
+
+        return string(callable)
+    end
+
+    return string(callable)
+end
+
+"""Return function name and parameter count for a parsed signature expression."""
+function extract_signature_details(signature)
+    callable = unwrap_signature_callable(signature)
+
+    if callable isa Symbol
+        return string(callable), 0
+    end
+
+    if callable isa Expr && callable.head == :call && !isempty(callable.args)
+        name = callable_name(callable.args[1])
+        param_count = 0
+        for arg in callable.args[2:end]
+            if arg isa Expr && arg.head == :parameters
+                param_count += length(arg.args)
+            else
+                param_count += 1
+            end
+        end
+        return name, param_count
+    end
+
+    return string(callable), 0
+end
+
+"""Count non-empty source lines in a function text block."""
+function count_nonempty_lines(text::String)
+    lines = split(text, '\n')
+    return count(line -> !isempty(strip(line)), lines)
+end
+
+"""Truncate signature preview text for report readability."""
+function short_signature_preview(signature; max_len::Int=160)
+    preview = replace(string(signature), '\n' => ' ')
+    preview = replace(preview, r"\s+" => " ")
+    preview = strip(preview)
+    if length(preview) <= max_len
+        return preview
+    end
+    return preview[1:max_len-3] * "..."
+end
+
+"""Return the first expression from a parsed toplevel function text block."""
+function first_parsed_expr(parsed)
+    if parsed isa Expr && parsed.head == :toplevel
+        for arg in parsed.args
+            if arg isa Expr
+                return arg
+            end
+        end
+    end
+
+    return parsed
+end
+
+"""Return true when expression is a short-form function assignment."""
+function is_short_function_assignment(expr::Expr)
+    if expr.head != :(=) || length(expr.args) != 2
+        return false
+    end
+
+    lhs = expr.args[1]
+    lhs = unwrap_signature_callable(lhs)
+    return lhs isa Expr && lhs.head == :call
+end
+
+"""Extract function metadata from a JuliaSyntax function node."""
+function metadata_from_function_node(node, rel_file::String)
+    function_text = String(JuliaSyntax.sourcetext(node))
+    parsed = JuliaSyntax.parseall(Expr, function_text)
+    function_expr = first_parsed_expr(parsed)
+
+    signature = function_expr
+    if function_expr isa Expr && function_expr.head == :function && !isempty(function_expr.args)
+        signature = function_expr.args[1]
+    elseif function_expr isa Expr && is_short_function_assignment(function_expr)
+        signature = function_expr.args[1]
+    end
+
+    name, param_count = extract_signature_details(signature)
+    start_line = Int(first(JuliaSyntax.source_location(node)))
+    line_span_count = max(1, length(split(function_text, '\n')))
+    end_line = start_line + line_span_count - 1
+    nloc = max(1, count_nonempty_lines(function_text))
+
+    return JuliaFunctionMetadata(
+        name,
+        rel_file,
+        start_line,
+        end_line,
+        nloc,
+        param_count,
+        short_signature_preview(signature))
+end
+
+"""Collect all JuliaSyntax function nodes from a syntax tree."""
+function collect_juliasyntax_function_nodes!(node, out)
+    if JuliaSyntax.kind(node) == JuliaSyntax.K"function"
+        push!(out, node)
+    end
+
+    children = JuliaSyntax.children(node)
+    if children === nothing
+        return
+    end
+
+    for child in children
+        collect_juliasyntax_function_nodes!(child, out)
+    end
+end
+
+"""Compute representative parser quality metrics for selected Julia files."""
+function representative_parser_quality(metadata::Vector{JuliaFunctionMetadata})
+    representative_files = Set([
+        "src/julia/script.jl",
+        "src/julia/scratchpad.jl",
+        "src/julia/elements/book1/def_021b_obtusetriangle.jl",
+    ])
+
+    files_found = Set{String}()
+    covered = 0
+    valid_spans = 0
+    for item in metadata
+        if !(item.file in representative_files)
+            continue
+        end
+        covered += 1
+        push!(files_found, item.file)
+        if item.end_line >= item.start_line
+            valid_spans += 1
+        end
+    end
+
+    return Dict{String,Any}(
+        "representative_files_target" => length(representative_files),
+        "representative_files_found" => length(files_found),
+        "representative_functions" => covered,
+        "representative_valid_spans" => valid_spans,
+        "parser_choice" => "JuliaSyntax SyntaxNode traversal",
+        "parser_rationale" => "Uses JuliaSyntax function nodes for line spans and signatures.")
+end
+
+"""Collect parser-backed metadata and representative quality data for Julia files."""
+function collect_julia_metadata_bundle(src_dir::String, script_dir::String)
+    julia_root = joinpath(src_dir, "julia")
+    julia_files = sort([path for path in collect_paths(julia_root) if endswith(path, ".jl")])
+    metadata = JuliaFunctionMetadata[]
+    parse_errors = ParserFileError[]
+
+    for file_path in julia_files
+        rel_file = relpath(file_path, script_dir)
+        source = read(file_path, String)
+
+        try
+            syntax_tree = JuliaSyntax.parseall(JuliaSyntax.SyntaxNode, source)
+            function_nodes = Any[]
+            collect_juliasyntax_function_nodes!(syntax_tree, function_nodes)
+
+            for node in function_nodes
+                push!(metadata, metadata_from_function_node(node, rel_file))
+            end
+        catch err
+            push!(parse_errors, ParserFileError(rel_file, sprint(showerror, err)))
+            println("Warning: parser metadata skipped " * rel_file)
+        end
+    end
+
+    sort!(metadata, by=item -> (item.file, item.start_line, item.name))
+    quality = representative_parser_quality(metadata)
+    return metadata, quality, length(julia_files), parse_errors
+end
+
+"""Extract parser-backed metadata for Julia functions under src/julia."""
+function extract_julia_function_metadata(src_dir::String, script_dir::String)
+    metadata, quality, file_count, parse_errors = collect_julia_metadata_bundle(src_dir, script_dir)
+
+    sample_limit = min(5, length(metadata))
+    println("Julia parser metadata collected for $(length(metadata)) functions.")
+    for i in 1:sample_limit
+        item = metadata[i]
+        println(
+            "  - " * item.name *
+            " | params=" * string(item.param_count) *
+            " | lines=" * string(item.start_line) * "-" * string(item.end_line) *
+            " | " * item.file *
+            " | " * item.signature_preview)
+    end
+
+    if !isempty(parse_errors)
+        show_count = min(5, length(parse_errors))
+        println("Parser metadata parse failures: $(length(parse_errors))")
+        for i in 1:show_count
+            issue = parse_errors[i]
+            println("  - " * issue.file * " | " * issue.details)
+        end
+        if length(parse_errors) > show_count
+            println("  - ... and $(length(parse_errors) - show_count) more parse failure(s)")
+        end
+    end
+
+    return Dict{String,Any}(
+        "files" => file_count,
+        "functions" => length(metadata),
+        "parse_failure_count" => length(parse_errors),
+        "quality_representative_files_target" => quality["representative_files_target"],
+        "quality_representative_files_found" => quality["representative_files_found"],
+        "quality_representative_functions" => quality["representative_functions"],
+        "quality_representative_valid_spans" => quality["representative_valid_spans"],
+        "parser_choice" => quality["parser_choice"],
+        "parser_rationale" => quality["parser_rationale"])
+end
+
+"""Map severity to a sortable rank where higher urgency sorts first."""
+function severity_rank(severity::String)
+    if severity == "BLOCK"
+        return 0
+    end
+
+    if severity == "WARN"
+        return 1
+    end
+
+    return 2
+end
+
+"""Render lizard-style Julia complexity table lines for report/console capture."""
+function render_julia_complexity_table(rows::Vector{JuliaComplexityRow})
+    lines = String[]
+    push!(lines, "Julia complexity table:")
+    push!(lines, "SEV  STATUS  NLOC  CCN  PARAM  FUNCTION  FILE:LINE")
+
+    for row in rows
+        file_line = row.file * ":" * string(row.line)
+        push!(
+            lines,
+            rpad(row.severity, 5) * " " *
+            rpad(row.status, 6) * " " *
+            lpad(string(row.nloc), 5) * " " *
+            lpad(string(row.ccn), 4) * " " *
+            lpad(string(row.param_count), 6) * "  " *
+            row.function_name * "  " *
+            file_line)
+    end
+
+    return join(lines, '\n')
+end
+
+"""Join parser metadata and complexity values to full-coverage table rows."""
+function build_julia_complexity_rows(
+    metadata::Vector{JuliaFunctionMetadata},
+    all_measures,
+    max_complexity::Int,
+    warning_roots::Vector{String},
+    script_dir::String)
+    per_name_index = Dict{Tuple{String,String},Vector{Tuple{Int,Int}}}()
+    complexity_function_count = 0
+
+    for file_measure in all_measures
+        rel_file = relpath(normpath(file_measure.path), script_dir)
+        for fn in file_measure.functions
+            key = (rel_file, fn.name)
+            if !haskey(per_name_index, key)
+                per_name_index[key] = Tuple{Int,Int}[]
+            end
+            push!(per_name_index[key], (fn.line, Int(round(fn.value))))
+            complexity_function_count += 1
+        end
+    end
+
+    rows = JuliaComplexityRow[]
+    blocking_count = 0
+    warning_only_count = 0
+    passed_count = 0
+    unmatched_count = 0
+
+    for item in metadata
+        key = (item.file, item.name)
+        ccn = 0
+        matched = false
+
+        if haskey(per_name_index, key) && !isempty(per_name_index[key])
+            candidates = per_name_index[key]
+            best_idx = 1
+            best_distance = abs(candidates[1][1] - item.start_line)
+            for i in 2:length(candidates)
+                distance = abs(candidates[i][1] - item.start_line)
+                if distance < best_distance
+                    best_distance = distance
+                    best_idx = i
+                end
+            end
+
+            ccn = candidates[best_idx][2]
+            deleteat!(candidates, best_idx)
+            per_name_index[key] = candidates
+            matched = true
+        end
+
+        if !matched
+            unmatched_count += 1
+        end
+
+        absolute_path = normpath(joinpath(script_dir, item.file))
+        warning_only_path = is_warning_only_complexity_path(absolute_path, warning_roots)
+        is_violation = ccn > max_complexity
+
+        severity = "INFO"
+        status = "PASS"
+        if is_violation && warning_only_path
+            severity = "WARN"
+            status = "WARN"
+            warning_only_count += 1
+        elseif is_violation
+            severity = "BLOCK"
+            status = "FAIL"
+            blocking_count += 1
+        else
+            passed_count += 1
+        end
+
+        push!(
+            rows,
+            JuliaComplexityRow(
+                severity,
+                status,
+                item.nloc,
+                ccn,
+                item.param_count,
+                item.name,
+                item.file,
+                item.start_line))
+    end
+
+    sort!(rows, by=row -> (
+        severity_rank(row.severity),
+        -row.ccn,
+        -row.nloc,
+        row.function_name,
+        row.file,
+        row.line))
+
+    metrics = Dict{String,Any}(
+        "total_functions" => length(rows),
+        "blocking_count" => blocking_count,
+        "warning_only_count" => warning_only_count,
+        "pass_count" => passed_count,
+        "unmatched_complexity_rows" => unmatched_count,
+        "complexity_function_count" => complexity_function_count)
+
+    return rows, metrics
 end
 
 """Run JET static analysis over Julia source files in src/julia."""
@@ -395,7 +801,7 @@ function is_warning_only_complexity_path(path::String, warning_roots::Vector{Str
 end
 
 """Run CodeComplexity analysis over Julia source files and fail on blocking violations."""
-function run_code_complexity_analysis(src_dir::String)
+function run_code_complexity_analysis(src_dir::String, script_dir::String)
     julia_root = joinpath(src_dir, "julia")
 
     max_complexity = 10
@@ -405,59 +811,27 @@ function run_code_complexity_analysis(src_dir::String)
         normpath(joinpath(julia_root, "proclus")),
     ]
 
+    metadata, _, _, parse_errors = collect_julia_metadata_bundle(src_dir, script_dir)
     metric = CodeComplexity.CyclomaticComplexity()
-    violations = CodeComplexity.measure_directory(metric, julia_root;
-        recursive=true,
-        max_value=max_complexity)
+    all_measures = CodeComplexity.measure_directory(metric, julia_root; recursive=true)
 
-    if isempty(violations)
-        println("CodeComplexity passed (cyclomatic <= $max_complexity for all functions).")
-        return Dict{String,Any}(
-            "max_complexity" => max_complexity,
-            "violation_files" => 0,
-            "warning_count" => 0,
-            "warning_loop_count" => 0,
-            "blocking_found" => false)
-    end
+    rows, row_metrics = build_julia_complexity_rows(
+        metadata,
+        all_measures,
+        max_complexity,
+        warning_roots,
+        script_dir)
 
-    println("CodeComplexity violations found: $(length(violations))")
-    blocking_found = false
-    warning_count = 0
-    warning_loop_count = 0
+    println(render_julia_complexity_table(rows))
 
-    for file_measure in violations
-        warning_only = is_warning_only_complexity_path(file_measure.path, warning_roots)
-        if warning_only
-            warning_count += length(file_measure.functions)
-            non_loop_functions = [fn for fn in file_measure.functions if fn.name != "loop"]
-            warning_loop_count += length(file_measure.functions) - length(non_loop_functions)
+    blocking_count = get(row_metrics, "blocking_count", 0)
+    warning_count = get(row_metrics, "warning_only_count", 0)
+    blocking_found = blocking_count > 0
+    warning_loop_count = count(row -> row.status == "WARN" && row.function_name == "loop", rows)
 
-            if isempty(non_loop_functions)
-                continue
-            end
-
-            println("  [warning-only] " * file_measure.path)
-            for fn in non_loop_functions
-                println(
-                    "    - " * fn.name *
-                    " (cyclomatic=" * string(fn.value) *
-                    ", line=" * string(fn.line) * ")")
-            end
-        else
-            blocking_found = true
-            println("  [blocking] " * file_measure.path)
-            for fn in file_measure.functions
-                println(
-                    "    - " * fn.name *
-                    " (cyclomatic=" * string(fn.value) *
-                    ", line=" * string(fn.line) * ")")
-            end
-        end
-    end
-
-    if warning_count > 0
-        println("CodeComplexity warning-only violations: $warning_count")
-    end
+    println("CodeComplexity full coverage rows: $(length(rows))")
+    println("CodeComplexity blocking violations: $blocking_count")
+    println("CodeComplexity warning-only violations: $warning_count")
 
     if warning_loop_count > 0
         println("CodeComplexity warning-only: $warning_loop_count loop functions flagged")
@@ -469,39 +843,61 @@ function run_code_complexity_analysis(src_dir::String)
 
     return Dict{String,Any}(
         "max_complexity" => max_complexity,
-        "violation_files" => length(violations),
+        "violation_files" => count(row -> row.status in ("FAIL", "WARN"), rows),
         "warning_count" => warning_count,
         "warning_loop_count" => warning_loop_count,
-        "blocking_found" => blocking_found)
+        "blocking_found" => blocking_found,
+        "total_functions" => get(row_metrics, "total_functions", length(rows)),
+        "pass_count" => get(row_metrics, "pass_count", 0),
+        "parse_failure_count" => length(parse_errors),
+        "blocking_count" => blocking_count,
+        "unmatched_complexity_rows" => get(row_metrics, "unmatched_complexity_rows", 0),
+        "complexity_function_count" => get(row_metrics, "complexity_function_count", 0))
 end
 
-"""Parse scc --by-file -pw aggregate rows for Julia, Odin, and Total."""
+"""Parse aggregate scc CSV rows for Julia, Odin, and computed Total."""
 function parse_scc_primary_rows(output::String)
     rows = Dict{String,Tuple{Int,Int}}()
+    total_code = 0
+    total_complexity = 0
+    row_pattern = r"^([^,]+),([0-9]+),([0-9]+),([0-9]+),([0-9]+),([0-9]+),"
 
-    for raw_line in split(output, '\n')
+    for (index, raw_line) in enumerate(split(output, "\n"))
+        if index == 1
+            continue
+        end
+
         line = strip(raw_line)
         if isempty(line)
             continue
         end
 
-        fields = split(line)
-        if length(fields) < 7
+        match_result = match(row_pattern, line)
+        if match_result === nothing
             continue
         end
 
-        language = fields[1]
-        if !(language in ("Odin", "Julia", "Total"))
+        captures = match_result.captures
+        language = strip(captures[1])
+        code_value = tryparse(Int, captures[3])
+        complexity_value = tryparse(Int, captures[6])
+
+        if code_value === nothing || complexity_value === nothing
             continue
         end
 
-        try
-            code = parse(Int, fields[6])
-            complexity = parse(Int, fields[7])
+        code = code_value
+        complexity = complexity_value
+        total_code += code
+        total_complexity += complexity
+
+        if language in ("Odin", "Julia")
             rows[language] = (code, complexity)
-        catch
-            continue
         end
+    end
+
+    if total_code > 0 || total_complexity > 0
+        rows["Total"] = (total_code, total_complexity)
     end
 
     return rows
@@ -512,6 +908,7 @@ function print_scc_complexity_per_file_summary(output::String)
     rows = parse_scc_primary_rows(output)
     labels = ["Odin", "Julia", "Total"]
     printed_any = false
+    derived = Dict{String,Float64}()
 
     for label in labels
         if !haskey(rows, label)
@@ -522,6 +919,7 @@ function print_scc_complexity_per_file_summary(output::String)
         complexity_per_code = code == 0 ? 0.0 : complexity / code
         rounded = round(complexity_per_code; digits=4)
         println("scc derived ($label): Complexity/Code = $rounded")
+        derived[label] = rounded
         printed_any = true
     end
 
@@ -530,7 +928,10 @@ function print_scc_complexity_per_file_summary(output::String)
     end
 
     return Dict{String,Any}(
-        "parsed_rows" => length(rows))
+        "parsed_rows" => length(rows),
+        "complexity_per_code_odin" => get(derived, "Odin", 0.0),
+        "complexity_per_code_julia" => get(derived, "Julia", 0.0),
+        "complexity_per_code_total" => get(derived, "Total", 0.0))
 end
 
 """Limit detail payload for focused console output on failures and warnings."""
@@ -597,6 +998,13 @@ function emit_console_summary(run_result::VetRunResult, report_path::String)
 
     for section in run_result.sections
         if section.status in ("Fail", "Warn")
+            if section.key == "julia-codecomplexity" && section.status == "Warn"
+                println("")
+                println("Details for " * section.key * ":")
+                println("  Warning-only complexity details are report-only. See " * report_path)
+                continue
+            end
+
             println("")
             println("Details for " * section.key * ":")
 
@@ -612,6 +1020,85 @@ function emit_console_summary(run_result::VetRunResult, report_path::String)
             end
         end
     end
+end
+
+"""Return true when external object has command-result-like fields."""
+function is_command_result_like(value)
+    return hasproperty(value, :exit_code) && hasproperty(value, :stdout) && hasproperty(value, :stderr)
+end
+
+"""Build an odin-build-vet section from captured build output in make.jl."""
+function run_odin_build_vet_section(odin_build_result)
+    if odin_build_result === nothing
+        return VetSectionResult(
+            "odin-build-vet",
+            "Skipped",
+            "Odin vet build output was not captured.",
+            "skipped",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}(),
+            false,
+            false,
+            true,
+            false)
+    end
+
+    if !is_command_result_like(odin_build_result)
+        return VetSectionResult(
+            "odin-build-vet",
+            "Warn",
+            "Odin vet build capture had an unexpected shape.",
+            "unexpected-result",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}("result_type" => string(typeof(odin_build_result))),
+            false,
+            true,
+            false,
+            false)
+    end
+
+    exit_code = getproperty(odin_build_result, :exit_code)
+    stdout_text = String(getproperty(odin_build_result, :stdout))
+    stderr_text = String(getproperty(odin_build_result, :stderr))
+
+    metrics = Dict{String,Any}(
+        "exit_code" => exit_code,
+        "stdout_bytes" => ncodeunits(stdout_text),
+        "stderr_bytes" => ncodeunits(stderr_text))
+
+    if exit_code != 0
+        return VetSectionResult(
+            "odin-build-vet",
+            "Fail",
+            "Odin vet build failed.",
+            "exit-nonzero",
+            exit_code,
+            stdout_text,
+            stderr_text,
+            metrics,
+            true,
+            false,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        "odin-build-vet",
+        "Pass",
+        "Odin vet build passed.",
+        "ok",
+        exit_code,
+        stdout_text,
+        stderr_text,
+        metrics,
+        false,
+        false,
+        false,
+        false)
 end
 
 """Run the Julia syntax validation section and return structured section output."""
@@ -631,10 +1118,60 @@ function run_julia_syntax_section(src_dir::String, script_dir::String)
         caught_error)
 end
 
-"""Run the Julia CodeComplexity section and return structured section output."""
-function run_codecomplexity_section(src_dir::String)
+"""Run the parser-backed Julia metadata section and return structured output."""
+function run_julia_parser_metadata_section(src_dir::String, script_dir::String)
     value, stdout_text, stderr_text, caught_error = run_captured() do
-        run_code_complexity_analysis(src_dir)
+        extract_julia_function_metadata(src_dir, script_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+    if caught_error !== nothing
+        return build_internal_section_result(
+            "julia-parser-metadata",
+            "Julia parser metadata extraction passed.",
+            "Julia parser metadata extraction failed.",
+            metrics,
+            stdout_text,
+            stderr_text,
+            caught_error)
+    end
+
+    parse_failure_count = get(metrics, "parse_failure_count", 0)
+    if parse_failure_count > 0
+        return VetSectionResult(
+            "julia-parser-metadata",
+            "Warn",
+            "Julia parser metadata extraction completed with partial parse failures.",
+            "ok",
+            nothing,
+            stdout_text,
+            stderr_text,
+            metrics,
+            false,
+            true,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        "julia-parser-metadata",
+        "Pass",
+        "Julia parser metadata extraction passed.",
+        "ok",
+        nothing,
+        stdout_text,
+        stderr_text,
+        metrics,
+        false,
+        false,
+        false,
+        false)
+end
+
+"""Run the Julia CodeComplexity section and return structured section output."""
+function run_codecomplexity_section(src_dir::String, script_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        run_code_complexity_analysis(src_dir, script_dir)
     end
 
     metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
@@ -860,10 +1397,20 @@ function run_repo_scc_section(script_dir::String)
             false)
     end
 
-    summary_metrics = print_scc_complexity_per_file_summary(result.stdout)
+    summary_capture = run_command(Cmd(["scc", "-f", "csv"]); cwd=script_dir, capture_output=true)
+    summary_metrics = Dict{String,Any}()
+    if summary_capture.exit_code == 0
+        summary_metrics = print_scc_complexity_per_file_summary(summary_capture.stdout)
+    else
+        println("Warning: failed to collect scc CSV summary for derived metrics.")
+    end
+
     metrics = Dict{String,Any}(
         "exit_code" => result.exit_code,
-        "parsed_rows" => get(summary_metrics, "parsed_rows", 0))
+        "parsed_rows" => get(summary_metrics, "parsed_rows", 0),
+        "complexity_per_code_odin" => get(summary_metrics, "complexity_per_code_odin", 0.0),
+        "complexity_per_code_julia" => get(summary_metrics, "complexity_per_code_julia", 0.0),
+        "complexity_per_code_total" => get(summary_metrics, "complexity_per_code_total", 0.0))
 
     return VetSectionResult(
         "repo-scc",
@@ -881,15 +1428,21 @@ function run_repo_scc_section(script_dir::String)
 end
 
 """Run complete vet analysis for Julia checks and Odin lizard."""
-function run_vet_analysis(script_dir::String, src_dir::String)
+function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result=nothing)
     sections = VetSectionResult[]
     report_path = joinpath(script_dir, "bin", "vet-report.md")
+
+    println("Recording Odin vet build output...")
+    push!(sections, run_odin_build_vet_section(odin_build_result))
 
     println("Running Julia syntax validation...")
     push!(sections, run_julia_syntax_section(src_dir, script_dir))
 
+    println("Running Julia parser metadata extraction...")
+    push!(sections, run_julia_parser_metadata_section(src_dir, script_dir))
+
     println("Running CodeComplexity analysis...")
-    push!(sections, run_codecomplexity_section(src_dir))
+    push!(sections, run_codecomplexity_section(src_dir, script_dir))
 
     println("Running JET static analysis...")
     push!(sections, run_jet_section(src_dir, script_dir))
@@ -903,7 +1456,13 @@ function run_vet_analysis(script_dir::String, src_dir::String)
     has_blocking_failures = any(section -> section.blocking, sections)
     run_result = VetRunResult(string(Dates.now(Dates.UTC)), sections, has_blocking_failures)
 
-    write_vet_report(run_result, report_path, script_dir)
+    try
+        write_vet_report(run_result, report_path, script_dir)
+    catch err
+        details = sprint(showerror, err)
+        error("Failed to write vet report at $(relpath(report_path, script_dir)): $details")
+    end
+
     emit_console_summary(run_result, relpath(report_path, script_dir))
 
     if has_blocking_failures
@@ -918,7 +1477,7 @@ function main()
     script_dir = abspath(@__DIR__)
     src_dir = joinpath(script_dir, "src")
 
-    run_vet_analysis(script_dir, src_dir)
+    run_vet_analysis(script_dir, src_dir, nothing)
     return 0
 end
 

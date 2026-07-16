@@ -36,24 +36,7 @@ julia make.jl
 # To run immediately: julia make.jl -r
 ```
 
-### Dependencies at Build Time
-
-There are dependencies in the make julia script, namely JET.jl and CodeComplexity.jl.
-These can both be added via the standard julia package manager. These are especially
-important for the vet functionality that ensures code meets appropriate standards via
-static analysis.
-
-```julia
-using Pkg
-Pkg.add("JET")
-pkg.add("CodeComplexity")
-```
-
-You should also have `lizard` installed for the static analysis of Odin code.
-
-You should also have `scc` installed for broad code statistics of the codebase.
-
-#### Windows requires a few more additions before this will work
+### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
 - `gendef` : used in the script to bridge the fact that Julia is not built with
@@ -263,12 +246,43 @@ Great question! A lot of this only makes any sense if you are really into the so
 engineering stuff. We perform several checks in the vet mode to try and improve code
 quality and performance.
 
+**FIRST**: There are dependencies in the make script for the vet mode,
+namely JET.jl, JuliaSyntax.jl, and CodeComplexity.jl. These can be added via the standard
+julia package manager.
+
+```julia
+using Pkg
+Pkg.add("JET")
+Pkg.add("JuliaSyntax")
+pkg.add("CodeComplexity")
+```
+
+You should also have `lizard` installed for the static analysis of Odin code.
+
+You should also have `scc` installed for broad code statistics of the codebase.
+
 ```bash
 julia make.jl -v
 ```
 
 NOTE: Use the combined vet+test run, `julia make.jl -vt`, as the verification baseline.
 Running only `-v` or only `-t` is not sufficient for acceptance.
+
+#### Report Output
+
+Vet mode writes a full report to `bin/vet-report.md` on every run. Console output stays
+summary-first and points to that report for full detail.
+
+Report section statuses use these meanings:
+
+- `Pass`: check completed without findings requiring warning/fail status.
+- `Warn`: check completed with warning-only findings or partial analysis gaps.
+- `Fail`: blocking findings were detected.
+- `Skipped`: check was intentionally not run for the current context.
+- `Missing`: required external tool was not available.
+
+The report includes sections for Odin analysis, Julia syntax, Julia parser metadata, Julia
+CodeComplexity, Julia JET, Odin lizard, and repository scc.
 
 #### Odin
 
