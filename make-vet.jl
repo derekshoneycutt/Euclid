@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+using Dates
 using JET
 using CodeComplexity
 
@@ -17,6 +18,27 @@ struct CommandResult
     exit_code::Int
     stdout::String
     stderr::String
+end
+
+struct VetSectionResult
+    key::String
+    status::String
+    summary::String
+    command_status::String
+    command_exit_code::Union{Nothing,Int}
+    stdout::String
+    stderr::String
+    metrics::Dict{String,Any}
+    blocking::Bool
+    warning::Bool
+    skipped::Bool
+    missing::Bool
+end
+
+struct VetRunResult
+    started_at::String
+    sections::Vector{VetSectionResult}
+    has_blocking_failures::Bool
 end
 
 """
@@ -61,6 +83,31 @@ function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, c
     return CommandResult(exit_code, "", "")
 end
 
+"""Capture stdout/stderr while running a function and return output plus result or error."""
+function run_captured(f::Function)
+    stdout_pipe = Pipe()
+    stderr_pipe = Pipe()
+    value = nothing
+    caught_error = nothing
+
+    redirect_stdio(stdout=stdout_pipe, stderr=stderr_pipe) do
+        try
+            value = f()
+        catch err
+            caught_error = err
+            showerror(stderr, err)
+            println(stderr)
+        end
+    end
+
+    close(stdout_pipe.in)
+    close(stderr_pipe.in)
+
+    stdout_text = read(stdout_pipe, String)
+    stderr_text = read(stderr_pipe, String)
+    return value, stdout_text, stderr_text, caught_error
+end
+
 """Collect all file paths recursively beneath a root directory."""
 function collect_paths(root::String)
     paths = String[]
@@ -93,6 +140,9 @@ function validate_all_julia_files(src_dir::String, script_dir::String)
     end
 
     println("Julia syntax validation passed for $(length(julia_files)) files.")
+    return Dict{String,Any}(
+        "files" => length(julia_files),
+    )
 end
 
 """Run JET static analysis over Julia source files in src/julia."""
@@ -155,6 +205,9 @@ function run_jet_analysis(src_dir::String, script_dir::String)
     end
 
     failed = false
+    report_count = 0
+    actionable_count = 0
+    whitelisted_count_total = 0
     max_reports_per_file = 8
 
     for path in julia_files
@@ -174,6 +227,10 @@ function run_jet_analysis(src_dir::String, script_dir::String)
                 push!(actionable, (report_type, location, message))
             end
         end
+
+        report_count += length(reports)
+        actionable_count += length(actionable)
+        whitelisted_count_total += whitelisted_count
 
         if !isempty(reports)
             display_path = relpath(path, script_dir)
@@ -204,9 +261,11 @@ function run_jet_analysis(src_dir::String, script_dir::String)
         end
     end
 
-    if failed
-        error("JET analysis reported issues.")
-    end
+    return Dict{String,Any}(
+        "reports" => report_count,
+        "actionable" => actionable_count,
+        "whitelisted" => whitelisted_count_total,
+        "failed" => failed)
 end
 
 """Return true when a path is configured as warning-only for complexity checks."""
@@ -238,7 +297,12 @@ function run_code_complexity_analysis(src_dir::String)
 
     if isempty(violations)
         println("CodeComplexity passed (cyclomatic <= $max_complexity for all functions).")
-        return
+        return Dict{String,Any}(
+            "max_complexity" => max_complexity,
+            "violation_files" => 0,
+            "warning_count" => 0,
+            "warning_loop_count" => 0,
+            "blocking_found" => false)
     end
 
     println("CodeComplexity violations found: $(length(violations))")
@@ -284,11 +348,16 @@ function run_code_complexity_analysis(src_dir::String)
         println("CodeComplexity warning-only: $warning_loop_count loop functions flagged")
     end
 
-    if blocking_found
-        error("CodeComplexity analysis reported issues.")
+    if !blocking_found
+        println("CodeComplexity violations are warning-only for configured directories.")
     end
 
-    println("CodeComplexity violations are warning-only for configured directories.")
+    return Dict{String,Any}(
+        "max_complexity" => max_complexity,
+        "violation_files" => length(violations),
+        "warning_count" => warning_count,
+        "warning_loop_count" => warning_loop_count,
+        "blocking_found" => blocking_found)
 end
 
 """Parse scc --by-file -pw aggregate rows for Julia, Odin, and Total."""
@@ -344,61 +413,385 @@ function print_scc_complexity_per_file_summary(output::String)
     if !printed_any
         println("Warning: Could not parse scc summary rows for Odin/Julia/Total.")
     end
+
+    return Dict{String,Any}(
+        "parsed_rows" => length(rows))
+end
+
+"""Limit detail payload for focused console output on failures and warnings."""
+function truncate_console_details(text::AbstractString; max_lines::Int=24)
+    lines = split(String(text), '\n')
+    if length(lines) <= max_lines
+        return text
+    end
+
+    kept = lines[1:max_lines]
+    remaining = length(lines) - max_lines
+    push!(kept, "... ($remaining more line(s) in captured output)")
+    return join(kept, '\n')
+end
+
+"""Create a VetSectionResult from a captured Julia analysis section."""
+function build_internal_section_result(
+    key::String,
+    ok_summary::String,
+    fail_summary::String,
+    metrics::Dict{String,Any},
+    stdout_text::String,
+    stderr_text::String,
+    caught_error)
+    if caught_error !== nothing
+        return VetSectionResult(
+            key,
+            "Fail",
+            fail_summary,
+            "internal-error",
+            nothing,
+            stdout_text,
+            stderr_text,
+            metrics,
+            true,
+            false,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        key,
+        "Pass",
+        ok_summary,
+        "ok",
+        nothing,
+        stdout_text,
+        stderr_text,
+        metrics,
+        false,
+        false,
+        false,
+        false)
+end
+
+"""Print concise section summaries, with details only for warnings or failures."""
+function emit_console_summary(run_result::VetRunResult)
+    println("Vet summary:")
+    for section in run_result.sections
+        println("  [" * section.status * "] " * section.key * " - " * section.summary)
+    end
+
+    for section in run_result.sections
+        if section.status in ("Fail", "Warn")
+            println("")
+            println("Details for " * section.key * ":")
+
+            details = strip(section.stderr)
+            if isempty(details)
+                details = strip(section.stdout)
+            end
+
+            if isempty(details)
+                println("  (no captured details)")
+            else
+                println(truncate_console_details(details))
+            end
+        end
+    end
+end
+
+"""Run the Julia syntax validation section and return structured section output."""
+function run_julia_syntax_section(src_dir::String, script_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        validate_all_julia_files(src_dir, script_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+    return build_internal_section_result(
+        "julia-syntax",
+        "Julia syntax validation passed.",
+        "Julia syntax validation failed.",
+        metrics,
+        stdout_text,
+        stderr_text,
+        caught_error)
+end
+
+"""Run the Julia CodeComplexity section and return structured section output."""
+function run_codecomplexity_section(src_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        run_code_complexity_analysis(src_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+
+    if caught_error !== nothing
+        return build_internal_section_result(
+            "julia-codecomplexity",
+            "CodeComplexity passed.",
+            "CodeComplexity analysis failed to execute.",
+            metrics,
+            stdout_text,
+            stderr_text,
+            caught_error)
+    end
+
+    blocking_found = get(metrics, "blocking_found", false)
+    warning_count = get(metrics, "warning_count", 0)
+
+    if blocking_found
+        return VetSectionResult(
+            "julia-codecomplexity",
+            "Fail",
+            "CodeComplexity reported blocking violations.",
+            "ok",
+            nothing,
+            stdout_text,
+            stderr_text,
+            metrics,
+            true,
+            false,
+            false,
+            false)
+    end
+
+    if warning_count > 0
+        return VetSectionResult(
+            "julia-codecomplexity",
+            "Warn",
+            "CodeComplexity produced warning-only violations.",
+            "ok",
+            nothing,
+            stdout_text,
+            stderr_text,
+            metrics,
+            false,
+            true,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        "julia-codecomplexity",
+        "Pass",
+        "CodeComplexity passed.",
+        "ok",
+        nothing,
+        stdout_text,
+        stderr_text,
+        metrics,
+        false,
+        false,
+        false,
+        false)
+end
+
+"""Run the Julia JET section and return structured section output."""
+function run_jet_section(src_dir::String, script_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        run_jet_analysis(src_dir, script_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+    if caught_error !== nothing
+        return build_internal_section_result(
+            "julia-jet",
+            "JET analysis passed.",
+            "JET analysis failed to execute.",
+            metrics,
+            stdout_text,
+            stderr_text,
+            caught_error)
+    end
+
+    failed = get(metrics, "failed", false)
+    if failed
+        return VetSectionResult(
+            "julia-jet",
+            "Fail",
+            "JET analysis reported actionable issues.",
+            "ok",
+            nothing,
+            stdout_text,
+            stderr_text,
+            metrics,
+            true,
+            false,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        "julia-jet",
+        "Pass",
+        "JET analysis passed.",
+        "ok",
+        nothing,
+        stdout_text,
+        stderr_text,
+        metrics,
+        false,
+        false,
+        false,
+        false)
+end
+
+"""Run Odin lizard once with capture and return structured section output."""
+function run_odin_lizard_section(src_dir::String, script_dir::String)
+    if Sys.which("lizard") === nothing
+        return VetSectionResult(
+            "odin-lizard",
+            "Missing",
+            "lizard not installed; skipping Odin lizard analysis.",
+            "missing",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}(),
+            false,
+            false,
+            true,
+            true)
+    end
+
+    odin_files = sort([path for path in collect_paths(src_dir) if endswith(path, ".odin")])
+    if isempty(odin_files)
+        return VetSectionResult(
+            "odin-lizard",
+            "Skipped",
+            "No Odin files discovered; skipping lizard analysis.",
+            "skipped",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}("files" => 0),
+            false,
+            false,
+            true,
+            false)
+    end
+
+    result = run_command(
+        Cmd(vcat(["lizard", "-l", "cpp"], odin_files));
+        cwd=script_dir,
+        capture_output=true)
+
+    metrics = Dict{String,Any}(
+        "files" => length(odin_files),
+        "exit_code" => result.exit_code)
+
+    if result.exit_code != 0
+        return VetSectionResult(
+            "odin-lizard",
+            "Fail",
+            "Lizard odin analysis reported warnings.",
+            "exit-nonzero",
+            result.exit_code,
+            result.stdout,
+            result.stderr,
+            metrics,
+            true,
+            false,
+            false,
+            false)
+    end
+
+    return VetSectionResult(
+        "odin-lizard",
+        "Pass",
+        "Lizard odin analysis passed.",
+        "ok",
+        result.exit_code,
+        result.stdout,
+        result.stderr,
+        metrics,
+        false,
+        false,
+        false,
+        false)
+end
+
+"""Run scc once with capture and return structured section output."""
+function run_repo_scc_section(script_dir::String)
+    if Sys.which("scc") === nothing
+        return VetSectionResult(
+            "repo-scc",
+            "Missing",
+            "scc not found on PATH; skipping scc analysis.",
+            "missing",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}(),
+            false,
+            false,
+            true,
+            true)
+    end
+
+    result = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=script_dir, capture_output=true)
+    if result.exit_code != 0
+        return VetSectionResult(
+            "repo-scc",
+            "Warn",
+            "scc analysis failed.",
+            "exit-nonzero",
+            result.exit_code,
+            result.stdout,
+            result.stderr,
+            Dict{String,Any}("exit_code" => result.exit_code),
+            false,
+            true,
+            false,
+            false)
+    end
+
+    summary_metrics = print_scc_complexity_per_file_summary(result.stdout)
+    metrics = Dict{String,Any}(
+        "exit_code" => result.exit_code,
+        "parsed_rows" => get(summary_metrics, "parsed_rows", 0))
+
+    return VetSectionResult(
+        "repo-scc",
+        "Pass",
+        "scc analysis completed.",
+        "ok",
+        result.exit_code,
+        result.stdout,
+        result.stderr,
+        metrics,
+        false,
+        false,
+        false,
+        false)
 end
 
 """Run complete vet analysis for Julia checks and Odin lizard."""
 function run_vet_analysis(script_dir::String, src_dir::String)
-    if Sys.which("lizard") === nothing
-        println("Warning: lizard is not installed or not on PATH; skipping lizard analysis.")
-        return
-    end
-
-    had_findings = false
+    sections = VetSectionResult[]
 
     println("Running Julia syntax validation...")
-    validate_all_julia_files(src_dir, script_dir)
+    push!(sections, run_julia_syntax_section(src_dir, script_dir))
 
     println("Running CodeComplexity analysis...")
-    run_code_complexity_analysis(src_dir)
+    push!(sections, run_codecomplexity_section(src_dir))
 
     println("Running JET static analysis...")
-    run_jet_analysis(src_dir, script_dir)
+    push!(sections, run_jet_section(src_dir, script_dir))
 
-    odin_files = sort([path for path in collect_paths(src_dir) if endswith(path, ".odin")])
-    if !isempty(odin_files)
-        println("Running lizard analysis (odin)...")
-        odin_result = run_command(Cmd(vcat(["lizard", "-l", "cpp"], odin_files)); cwd=script_dir)
-        println("Lizard odin analysis exited $(odin_result.exit_code)")
-        if odin_result.exit_code != 0
-            had_findings = true
-            println("Lizard odin analysis reported warnings.")
-        end
+    println("Running lizard analysis (odin)...")
+    push!(sections, run_odin_lizard_section(src_dir, script_dir))
+
+    println("Running scc statistics (scc --by-file -pw)...")
+    push!(sections, run_repo_scc_section(script_dir))
+
+    has_blocking_failures = any(section -> section.blocking, sections)
+    run_result = VetRunResult(string(Dates.now(Dates.UTC)), sections, has_blocking_failures)
+
+    emit_console_summary(run_result)
+
+    if has_blocking_failures
+        error("Vet analysis reported blocking issues.")
     end
 
-    if Sys.which("scc") === nothing
-        println("scc not found on PATH; did not run scc.")
-    else
-        println("Running scc statistics (scc --by-file -pw)...")
-        scc_result = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=script_dir)
-        println("scc exited $(scc_result.exit_code)")
-        if scc_result.exit_code != 0
-            println("Warning: scc analysis failed; continuing with lizard analysis.")
-        else
-            scc_capture = run_command(
-                Cmd(["scc", "--by-file", "-pw"]);
-                cwd=script_dir,
-                capture_output=true)
-            if scc_capture.exit_code == 0
-                print_scc_complexity_per_file_summary(scc_capture.stdout)
-            else
-                println("Warning: failed to capture scc output for derived metrics.")
-            end
-        end
-    end
-
-    if had_findings
-        error("Lizard analysis reported warnings.")
-    end
+    return run_result
 end
 
 """Standalone entrypoint that runs vet using this script's repository paths."""
