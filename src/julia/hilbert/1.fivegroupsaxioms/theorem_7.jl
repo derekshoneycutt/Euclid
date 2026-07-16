@@ -179,12 +179,27 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
+
+    pointA = OdinJuliaBridge.create_new_point(
+        state_ptr, PointA, PointAColor, 0f0)
     pointB = OdinJuliaBridge.create_new_point(
         state_ptr, PointB, PointBColor, 0f0)
-    segmentAB = OdinJuliaBridge.create_new_line(
-        state_ptr, PointB, PointB, SegmentABColor, 0f0)
+    pointAPrime = OdinJuliaBridge.create_new_point(
+        state_ptr, PointAPrime, PointAPrimeColor, 0f0)
+    labelA = OdinJuliaBridge.create_new_label(
+        state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
     labelB = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
+    labelAPrime = OdinJuliaBridge.create_new_label_decorated(
+        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+        APrimeLabelPoint, LabelColor, 16f0)
+
+    dividerLine = OdinJuliaBridge.create_new_line(
+        state_ptr, LineStart, LineStart, DividerLineColor, 0f0)
+    segmentAB = OdinJuliaBridge.create_new_line(
+        state_ptr, PointB, PointB, SegmentABColor, 0f0)
+    segmentAAPrime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointA, PointA, SegmentAAPrimeColor, 0f0)
 
     planeAlpha = OdinJuliaBridge.create_new_square(
         state_ptr,
@@ -193,21 +208,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         PlaneTopRight,
         PlaneTopLeft,
         PlaneColor)
-    dividerLine = OdinJuliaBridge.create_new_line(
-        state_ptr, LineStart, LineStart, DividerLineColor, 0f0)
-    pointA = OdinJuliaBridge.create_new_point(
-        state_ptr, PointA, PointAColor, 0f0)
-    pointAPrime = OdinJuliaBridge.create_new_point(
-        state_ptr, PointAPrime, PointAPrimeColor, 0f0)
-    segmentAAPrime = OdinJuliaBridge.create_new_line(
-        state_ptr, PointA, PointA, SegmentAAPrimeColor, 0f0)
     alphaLabel = OdinJuliaBridge.create_new_label(
         state_ptr, 'α', AlphaLabelPoint, LabelColor, 16f0)
-    labelA = OdinJuliaBridge.create_new_label(
-        state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
-    labelAPrime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
-        APrimeLabelPoint, LabelColor, 16f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, Float32(planeAlpha.hostId))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerHostId, Float32(dividerLine.hostId))
@@ -314,8 +316,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         OdinJuliaBridge.show_point(state_ptr, planeHostId)
         OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
 
-        fade = (1f0 - (timer / ArcMoveDuration)) * PlaneMaxAlpha01
-        set_plane_alpha(state_ptr, planeHostId, fade)
         OdinJuliaBridge.show_point(state_ptr, dividerHostId)
 
         EuclidAnimations.animate_pen_arcmove(
@@ -324,7 +324,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ArcMoveDuration
-            set_plane_alpha(state_ptr, planeHostId, 0f0)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, labelAId)
@@ -344,12 +343,15 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseMoveToPointB
         OdinJuliaBridge.show_point(state_ptr, dividerHostId)
 
+        fade = (1f0 - (timer / ArcMoveDuration)) * PlaneMaxAlpha01
+        set_plane_alpha(state_ptr, planeHostId, fade)
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointB, 0.25f0, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration
+            set_plane_alpha(state_ptr, planeHostId, 0f0)
             phase = PhasePutPointB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, labelBId)

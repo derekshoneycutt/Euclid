@@ -104,6 +104,7 @@ Kine_Shape_Point :: struct {
     kind : Kine_Shape_Point_Type,
 
     position : Maybe(Vector3),
+    previous_position : Maybe(Vector3),
     color : Maybe(rl.Color),
     active_color : Maybe(rl.Color),
     brush_size : f32,
@@ -316,7 +317,6 @@ Kine_Draw_Cache :: struct {
 Kine_Point_System :: struct {
     draw_cache : Kine_Draw_Cache,
 
-    previous_vectors : [MAX_KINEPOINTS]Maybe(Vector3),
     points : [MAX_KINEPOINTS]Kine_Shape_Point,
     constraints : [MAX_KINECONSTRAINTS]Kine_Constraint,
     next_point_index : int,

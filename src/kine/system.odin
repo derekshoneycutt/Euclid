@@ -3,10 +3,6 @@ package kine
 // The major system calls for the shape system are for creating the immediate draw cache.
 // This just builds the cache into the existing point system.
 
-// TODO: Currently not caching items that are not drawn, resulting in using a separate
-// previous_vectors cache that kinda doubles up. The previous_vectors preceded the draw_cache,
-// but consider more if we should just move it to the draw_cache entirely?
-
 import "../core"
 import "../particles"
 
@@ -45,8 +41,9 @@ Kine_Square_Draw :: core.Kine_Square_Draw
 Kine_Pentagon_Draw :: core.Kine_Pentagon_Draw
 Kine_Pen_Draw :: core.Kine_Pen_Draw
 Kine_Compass_Draw :: core.Kine_Compass_Draw
+Kine_Draw_Cache_Item :: core.Kine_Draw_Cache_Item
 
-//   Snapshot current point positions into previous_vectors for interpolation.
+//   Snapshot current point positions into per-point previous_position for interpolation.
 //
 // Parameters:
 //   - point_system: Point system whose current positions are cached.
@@ -56,8 +53,8 @@ Kine_Compass_Draw :: core.Kine_Compass_Draw
 kine_update_last_cache_vectors :: proc(
     point_system: ^Kine_Point_System) {
 
-    for i in 0..<MAX_KINEPOINTS {
-        point_system^.previous_vectors[i] = point_system^.points[i].position
+    for i in 0..<point_system^.next_point_index {
+        point_system^.points[i].previous_position = point_system^.points[i].position
     }
 }
 
@@ -116,7 +113,7 @@ build_kine_draw_cache :: proc(
 
     kine_draw_cache_reset(point_system)
 
-    for index in 0..<len(point_system^.points) {
+    for index in 0..<point_system^.next_point_index {
         src := &point_system^.points[index]
         if !src^.do_draw {
             continue
@@ -165,22 +162,66 @@ kine_draw_cache_reset :: proc(
 lerped_point_position :: proc(
     point_system: ^Kine_Point_System,
     index: int,
-    alpha: f32,
-    out: ^Vector3) -> bool {
+    alpha: f32) -> (Vector3, bool) {
 
     if index < 0 || index >= MAX_KINEPOINTS {
-        return false
+        return {}, false
     }
 
     curr := point_system^.points[index]
     curr_pos, has_curr := curr.position.?
     if !has_curr {
+        return {}, false
+    }
+
+    prev := curr.previous_position.? or_else curr_pos
+    return linalg.lerp(prev, curr_pos, alpha), true
+}
+
+//   Interpolate a contiguous child-point chain into out in child-link order.
+//
+// Notes:
+//   - src.child_point_head is used as the first child index.
+lerped_child_positions :: proc(
+    point_system: ^Kine_Point_System,
+    src: ^Kine_Shape_Point,
+    alpha: f32,
+    out: []Vector3) -> bool {
+
+    if len(out) <= 0 {
         return false
     }
 
-    prev := point_system^.previous_vectors[index].? or_else curr_pos
-    out^ = linalg.lerp(prev, curr_pos, alpha)
+    child_index := src^.child_point_head
+    for i in 0..<len(out) {
+        point, ok := lerped_point_position(point_system, child_index, alpha)
+        if !ok {
+            return false
+        }
+        out[i] = point
+
+        if i + 1 < len(out) {
+            if child_index < 0 || child_index >= MAX_KINEPOINTS {
+                return false
+            }
+            child_index = point_system^.points[child_index].next_child_point
+        }
+    }
+
     return true
+}
+
+//   Reserve and return the next draw-cache item slot.
+draw_cache_next_item_slot :: #force_inline proc(
+    point_system: ^Kine_Point_System) -> (^Kine_Draw_Cache_Item, bool) {
+
+    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+        return nil, false
+    }
+
+    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    point_system^.draw_cache.item_count += 1
+    return slot, true
 }
 
 //   Build the common draw-base metadata shared by cached draw item variants.
@@ -210,12 +251,8 @@ cache_push_label :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
-        return
-    }
-
-    p0: Vector3
-    if !lerped_point_position(point_system, source_index, alpha, &p0) {
+    p0, has_position := lerped_point_position(point_system, source_index, alpha)
+    if !has_position {
         return
     }
 
@@ -224,10 +261,13 @@ cache_push_label :: proc(
         return
     }
 
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        return
+    }
+
     point := Kine_Label_Draw{ make_draw_base(source_index, src), p0, label, src^.decoration_kind }
     slot^ = point
-    point_system^.draw_cache.item_count += 1
 }
 
 //   Push a cached point draw item into the draw-cache item list.
@@ -237,19 +277,18 @@ cache_push_point :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    p0, ok := lerped_point_position(point_system, source_index, alpha)
+    if !ok {
         return
     }
 
-    p0: Vector3
-    if !lerped_point_position(point_system, source_index, alpha, &p0) {
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
         return
     }
 
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
     point := Kine_Point_Draw{ make_draw_base(source_index, src), p0 }
     slot^ = point
-    point_system^.draw_cache.item_count += 1
 }
 
 //   Push a cached line draw item into the draw-cache item list.
@@ -259,26 +298,18 @@ cache_push_line :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    child_points: [2]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    point1: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &point1) {
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
         return
     }
 
-    next := point_system.points[child0].next_child_point
-    point2: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point2) {
-        return
-    }
-
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
-    point := Kine_Line_Draw{ make_draw_base(source_index, src), point1, point2 }
+    point := Kine_Line_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
     slot^ = point
-    point_system^.draw_cache.item_count += 1
 }
 
 //   Push a cached circle draw item into the draw-cache item list.
@@ -291,35 +322,30 @@ cache_push_circle :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    center, ok := lerped_point_position(point_system, source_index, alpha)
+    if !ok {
         return
     }
 
-    center, has_center := src^.position.?
-    if !has_center {
+    child_points: [2]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    start: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &start) {
-        return
-    }
-
-    next := point_system.points[child0].next_child_point
-    end: Vector3
-    if !lerped_point_position(point_system, next, alpha, &end) {
-        return
-    }
+    start := child_points[0]
+    end := child_points[1]
 
     if src^.active_child > 1 {
         start, end = end, start
     }
 
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        return
+    }
+
     point := Kine_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
     slot^ = point
-    point_system^.draw_cache.item_count += 1
 }
 
 //   Push a cached filled-circle draw item into the draw-cache item list.
@@ -332,35 +358,30 @@ cache_push_filledcircle :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    center, ok := lerped_point_position(point_system, source_index, alpha)
+    if !ok {
         return
     }
 
-    center, has_center := src^.position.?
-    if !has_center {
+    child_points: [2]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    start: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &start) {
-        return
-    }
-
-    next := point_system.points[child0].next_child_point
-    end: Vector3
-    if !lerped_point_position(point_system, next, alpha, &end) {
-        return
-    }
+    start := child_points[0]
+    end := child_points[1]
 
     if src^.active_child > 1 {
         start, end = end, start
     }
 
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        return
+    }
+
     point := Kine_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end }
     slot^ = point
-    point_system^.draw_cache.item_count += 1
 }
 
 //   Push a cached triangle draw item into the draw-cache item list.
@@ -370,31 +391,23 @@ cache_push_triangle :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    child_points: [3]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    point1: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &point1) {
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
         return
     }
 
-    next := point_system.points[child0].next_child_point
-    point2: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point2) {
-        return
+    point := Kine_Triangle_Draw{
+        make_draw_base(source_index, src),
+        child_points[0],
+        child_points[1],
+        child_points[2],
     }
-
-    next = point_system.points[next].next_child_point
-    point3: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point3) {
-        return
-    }
-
-    point := Kine_Triangle_Draw{ make_draw_base(source_index, src), point1, point2, point3 }
-    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
-    point_system^.draw_cache.item_count += 1
+    slot^ = point
 }
 
 //   Push a cached square draw item into the draw-cache item list.
@@ -404,37 +417,24 @@ cache_push_square :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    child_points: [4]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    point1: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &point1) {
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
         return
     }
 
-    next := point_system.points[child0].next_child_point
-    point2: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point2) {
-        return
+    point := Kine_Square_Draw{
+        make_draw_base(source_index, src),
+        child_points[0],
+        child_points[1],
+        child_points[2],
+        child_points[3],
     }
-
-    next = point_system.points[next].next_child_point
-    point3: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point3) {
-        return
-    }
-
-    next = point_system.points[next].next_child_point
-    point4: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point4) {
-        return
-    }
-
-    point := Kine_Square_Draw{ make_draw_base(source_index, src), point1, point2, point3, point4 }
-    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
-    point_system^.draw_cache.item_count += 1
+    slot^ = point
 }
 
 //   Push a cached pentagon draw item into the draw-cache item list.
@@ -444,43 +444,25 @@ cache_push_pentagon :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    child_points: [5]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
-    child0 := src^.child_point_head
-    point1: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &point1) {
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
         return
     }
 
-    next := point_system.points[child0].next_child_point
-    point2: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point2) {
-        return
+    point := Kine_Pentagon_Draw{
+        make_draw_base(source_index, src),
+        child_points[0],
+        child_points[1],
+        child_points[2],
+        child_points[3],
+        child_points[4],
     }
-
-    next = point_system.points[next].next_child_point
-    point3: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point3) {
-        return
-    }
-
-    next = point_system.points[next].next_child_point
-    point4: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point4) {
-        return
-    }
-
-    next = point_system.points[next].next_child_point
-    point5: Vector3
-    if !lerped_point_position(point_system, next, alpha, &point5) {
-        return
-    }
-
-    point := Kine_Pentagon_Draw{ make_draw_base(source_index, src), point1, point2, point3, point4, point5 }
-    point_system^.draw_cache.items[point_system^.draw_cache.item_count] = point
-    point_system^.draw_cache.item_count += 1
+    slot^ = point
 }
 
 //   Update cached pen tool draw data and pen draw-enable flag.
@@ -490,21 +472,14 @@ cache_push_pen :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    child0 := src^.child_point_head
-    j1: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &j1) {
-        return
-    }
-
-    next := point_system.points[child0].next_child_point
-    j2: Vector3
-    if !lerped_point_position(point_system, next, alpha, &j2) {
+    child_points: [2]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
     point_system^.draw_cache.pen.base = make_draw_base(source_index, src)
-    point_system^.draw_cache.pen.joint1 = j1
-    point_system^.draw_cache.pen.joint2 = j2
+    point_system^.draw_cache.pen.joint1 = child_points[0]
+    point_system^.draw_cache.pen.joint2 = child_points[1]
     point_system^.draw_cache.draw_pen = src^.do_draw
 }
 
@@ -515,27 +490,14 @@ cache_push_compass :: proc(
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    child0 := src^.child_point_head
-    p0: Vector3
-    if !lerped_point_position(point_system, child0, alpha, &p0) {
-        return
-    }
-
-    child1 := point_system.points[child0].next_child_point
-    p1: Vector3
-    if !lerped_point_position(point_system, child1, alpha, &p1) {
-        return
-    }
-
-    child2 := point_system.points[child1].next_child_point
-    p2: Vector3
-    if !lerped_point_position(point_system, child2, alpha, &p2) {
+    child_points: [3]Vector3
+    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
         return
     }
 
     point_system^.draw_cache.compass.base = make_draw_base(source_index, src)
-    point_system^.draw_cache.compass.joint1 = p0
-    point_system^.draw_cache.compass.pivot = p1
-    point_system^.draw_cache.compass.joint2 = p2
+    point_system^.draw_cache.compass.joint1 = child_points[0]
+    point_system^.draw_cache.compass.pivot = child_points[1]
+    point_system^.draw_cache.compass.joint2 = child_points[2]
     point_system^.draw_cache.draw_compass = src^.do_draw
 }
