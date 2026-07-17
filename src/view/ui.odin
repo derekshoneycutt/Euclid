@@ -185,7 +185,7 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
     handle_scratchpad_keyboard_input(state)
 
     if is_scratchpad_selected(state) {
-        draw_scratchpad_output_and_prompt(state, text_panel, ui_runtime, state.font)
+        draw_scratchpad_output_and_prompt(state, text_panel, ui_runtime, state.scratchpad_font)
         return
     }
 

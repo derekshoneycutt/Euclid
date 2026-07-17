@@ -10,6 +10,9 @@ if !isdefined(Main, :EuclidAnimations)
 end
 
 include("../scratchpad.jl")
+if !isdefined(Main, :EuclidRepl)
+    include("../euclidrepl.jl")
+end
 
 using .Scratchpad
 using Test
@@ -120,4 +123,17 @@ end
     @test session.metrics.queue_dropped == 2
     @test session.metrics.queue_enqueued == total
     @test session.metrics.queue_high_water == Scratchpad.MaxQueueLines
+end
+
+@testset "module help doc fallback" begin
+    runtime = Module(:ScratchpadHelpRuntime)
+    Core.eval(runtime, :(const EuclidRepl = Main.EuclidRepl))
+
+    binding = Base.Docs.Binding(runtime, :EuclidRepl)
+    doc_entry = Scratchpad.resolve_module_doc_entry(binding, Main.EuclidRepl)
+
+    @test doc_entry !== nothing
+    rendered = Scratchpad.render_help_docs(doc_entry)
+    @test rendered !== nothing
+    @test occursin("REPL-first geometry helpers", rendered)
 end

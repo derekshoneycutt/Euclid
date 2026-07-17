@@ -7,7 +7,9 @@ using LinearAlgebra
 export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_compass_rise,
     animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
     animate_compass_arcmove,
-    animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle
+    animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
+    animate_repl_draw_point, animate_repl_draw_line,
+    animate_repl_draw_circle, animate_repl_draw_filledcircle
 
 const PenLength = 0.14f0
 
@@ -29,6 +31,10 @@ const GroundLineDuration = 0.7f0
 const GroundLineEndTime = TiltToLineDuration + GroundLineDuration
 
 const MarkerRadialTrailSamples = 8f0
+
+const ReplToolTravelTopZ = 1.4f0
+const ReplDescendShare = 0.2f0
+const ReplDrawShare = 0.6f0
 
 
 function place_pen_at_angles(
@@ -927,6 +933,228 @@ function animate_draw_filledcircle(
     OdinJuliaBridge.show_point(state_ptr, markerHostId)
 
     emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
+end
+
+"""Animate a REPL point draw with explicit pen descend, draw, and rise phases."""
+function animate_repl_draw_point(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    penpos::Vector{Float32}, penbrush::Float32, pencolor,
+    pointId::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    descend_duration = duration * ReplDescendShare
+    draw_duration = duration * ReplDrawShare
+    draw_start = descend_duration
+    draw_end = draw_start + draw_duration
+
+    if t < ReplDescendShare
+        animate_pen_descend(
+            state_ptr,
+            timer,
+            descend_duration,
+            ReplToolTravelTopZ,
+            penpos[1],
+            penpos[2])
+        return
+    end
+
+    if t < (ReplDescendShare + ReplDrawShare)
+        animate_draw_point(
+            state_ptr,
+            timer - draw_start,
+            draw_duration,
+            penpos,
+            penbrush,
+            pencolor,
+            pointId)
+        return
+    end
+
+    animate_pen_rise(
+        state_ptr,
+        timer - draw_end,
+        duration - draw_end,
+        ReplToolTravelTopZ,
+        penpos[1],
+        penpos[2])
+end
+
+"""Animate a REPL line draw with explicit pen descend, draw, and rise phases."""
+function animate_repl_draw_line(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    startpos::Vector{Float32}, endpos::Vector{Float32},
+    penbrush::Float32, pencolor,
+    lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    descend_duration = duration * ReplDescendShare
+    draw_duration = duration * ReplDrawShare
+    draw_start = descend_duration
+    draw_end = draw_start + draw_duration
+
+    if t < ReplDescendShare
+        animate_pen_descend(
+            state_ptr,
+            timer,
+            descend_duration,
+            ReplToolTravelTopZ,
+            startpos[1],
+            startpos[2])
+        return
+    end
+
+    if t < (ReplDescendShare + ReplDrawShare)
+        animate_draw_line(
+            state_ptr,
+            timer - draw_start,
+            draw_duration,
+            startpos,
+            endpos,
+            penbrush,
+            pencolor,
+            lineHostId,
+            lineJoint1Id,
+            lineJoint2Id)
+        return
+    end
+
+    animate_pen_rise(
+        state_ptr,
+        timer - draw_end,
+        duration - draw_end,
+        ReplToolTravelTopZ,
+        endpos[1],
+        endpos[2])
+end
+
+"""Animate a REPL circle draw with explicit compass descend, draw, and rise phases."""
+function animate_repl_draw_circle(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
+    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    descend_duration = duration * ReplDescendShare
+    draw_duration = duration * ReplDrawShare
+    draw_start = descend_duration
+    draw_end = draw_start + draw_duration
+
+    if t < ReplDescendShare
+        animate_compass_descend(
+            state_ptr,
+            timer,
+            descend_duration,
+            ReplToolTravelTopZ,
+            jointPoint[1],
+            jointPoint[2],
+            startPoint[1],
+            startPoint[2])
+        return
+    end
+
+    if t < (ReplDescendShare + ReplDrawShare)
+        animate_draw_circle(
+            state_ptr,
+            timer - draw_start,
+            draw_duration,
+            jointPoint,
+            startPoint,
+            angleTheta,
+            radius,
+            brush,
+            color,
+            markerHostId,
+            markerStartId,
+            markerEndId)
+        return
+    end
+
+    final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta
+    endPoint = Float32[
+        jointPoint[1] + radius * Float32(cos(final_theta)),
+        jointPoint[2] + radius * Float32(sin(final_theta)),
+        jointPoint[3],
+    ]
+
+    animate_compass_rise(
+        state_ptr,
+        timer - draw_end,
+        duration - draw_end,
+        ReplToolTravelTopZ,
+        jointPoint[1],
+        jointPoint[2],
+        endPoint[1],
+        endPoint[2])
+end
+
+"""Animate a REPL filled-circle draw with explicit compass descend, draw, and rise phases."""
+function animate_repl_draw_filledcircle(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
+    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    descend_duration = duration * ReplDescendShare
+    draw_duration = duration * ReplDrawShare
+    draw_start = descend_duration
+    draw_end = draw_start + draw_duration
+
+    if t < ReplDescendShare
+        animate_compass_descend(
+            state_ptr,
+            timer,
+            descend_duration,
+            ReplToolTravelTopZ,
+            jointPoint[1],
+            jointPoint[2],
+            startPoint[1],
+            startPoint[2])
+        return
+    end
+
+    if t < (ReplDescendShare + ReplDrawShare)
+        animate_draw_filledcircle(
+            state_ptr,
+            timer - draw_start,
+            draw_duration,
+            jointPoint,
+            startPoint,
+            angleTheta,
+            radius,
+            brush,
+            color,
+            markerHostId,
+            markerStartId,
+            markerEndId)
+        return
+    end
+
+    final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta
+    endPoint = Float32[
+        jointPoint[1] + radius * Float32(cos(final_theta)),
+        jointPoint[2] + radius * Float32(sin(final_theta)),
+        jointPoint[3],
+    ]
+
+    animate_compass_rise(
+        state_ptr,
+        timer - draw_end,
+        duration - draw_end,
+        ReplToolTravelTopZ,
+        jointPoint[1],
+        jointPoint[2],
+        endPoint[1],
+        endPoint[2])
 end
 
 end

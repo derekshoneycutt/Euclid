@@ -81,6 +81,7 @@ function create_runtime_module(session_id::Int)
     Core.eval(runtime, :(const OdinJuliaBridge = Main.OdinJuliaBridge))
     Core.eval(runtime, :(const EuclidGeometry = Main.EuclidGeometry))
     Core.eval(runtime, :(const EuclidAnimations = Main.EuclidAnimations))
+    Core.eval(runtime, :(const EuclidRepl = Main.EuclidRepl))
     Core.eval(runtime, :(const Scratchpad = Main.Scratchpad))
 
     # Expose helpers directly in session scope so users can register/remove hooks from input.
@@ -199,6 +200,10 @@ end
 
 """Create and install a fresh scratchpad session, runtime module, and counters."""
 function reset_session!(state_ptr::Ptr{Cvoid})
+    if isdefined(Main, :EuclidRepl) && isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
+        Main.EuclidRepl.reset_scratchpad_session!()
+    end
+
     session_id = next_session_id_ref[]
     next_session_id_ref[] = session_id + 1
     reset_count_ref[] += 1
@@ -308,6 +313,17 @@ function register_frame_hook(state_ptr::Ptr{Cvoid}, fn; label="")
     return hook_id
 end
 
+"""Register a frame hook without appending user-facing output lines."""
+function register_frame_hook_silent(state_ptr::Ptr{Cvoid}, fn; label="")
+    session = ensure_session!(state_ptr)
+
+    hook_id = session.next_hook_id
+    session.next_hook_id += 1
+    push!(session.hooks, ScratchpadFrameHook(hook_id, fn, String(label), true, 0, 0))
+
+    return hook_id
+end
+
 """
 Remove a previously registered frame hook by id.
 
@@ -332,6 +348,26 @@ function remove_frame_hook(state_ptr::Ptr{Cvoid}, hook_id)
     end
 
     append_output_line!(session, "remove_frame_hook: hook id=$(id) not found")
+    return false
+end
+
+"""Remove a frame hook by id without appending user-facing output lines."""
+function remove_frame_hook_silent(state_ptr::Ptr{Cvoid}, hook_id)
+    session = ensure_session!(state_ptr)
+    id = try
+        Int(hook_id)
+    catch
+        return false
+    end
+
+    for i in eachindex(session.hooks)
+        hook = session.hooks[i]
+        if hook.id == id
+            deleteat!(session.hooks, i)
+            return true
+        end
+    end
+
     return false
 end
 
@@ -491,6 +527,7 @@ function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "  OdinJuliaBridge")
     append_output_line!(session, "  EuclidGeometry")
     append_output_line!(session, "  EuclidAnimations")
+    append_output_line!(session, "  EuclidRepl")
     append_output_line!(session, "")
     append_output_line!(session, "Common Helper Methods")
     append_output_line!(session, "  register_frame_hook(fn; label=\"\")")
@@ -783,8 +820,43 @@ function list_module_function_names(module_value::Module)
     return function_names
 end
 
-"""Append module help output including available function names and lookup hint."""
-function append_module_help!(session::ScratchpadSession, query::AbstractString, module_value::Module)
+"""Resolve module docs for a help binding, falling back to canonical module binding."""
+function resolve_module_doc_entry(binding::Base.Docs.Binding, module_value::Module)
+    doc_meta = Base.Docs.meta(binding.mod)
+    if haskey(doc_meta, binding)
+        return doc_meta[binding]
+    end
+
+    canonical_binding = Base.Docs.Binding(parentmodule(module_value), nameof(module_value))
+    canonical_meta = Base.Docs.meta(canonical_binding.mod)
+    if haskey(canonical_meta, canonical_binding)
+        return canonical_meta[canonical_binding]
+    end
+
+    module_binding = Base.Docs.Binding(module_value, nameof(module_value))
+    module_meta = Base.Docs.meta(module_value)
+    if haskey(module_meta, module_binding)
+        return module_meta[module_binding]
+    end
+
+    return nothing
+end
+
+"""Append module docs plus available function names and lookup hint."""
+function append_module_help!(
+    session::ScratchpadSession,
+    query::AbstractString,
+    module_value::Module,
+    binding::Base.Docs.Binding)
+    doc_entry = resolve_module_doc_entry(binding, module_value)
+    if doc_entry !== nothing
+        rendered = render_help_docs(doc_entry)
+        if rendered !== nothing && !isempty(rendered)
+            append_output_block!(session, rendered)
+            append_output_line!(session, "")
+        end
+    end
+
     function_names = list_module_function_names(module_value)
     append_output_line!(session, "Functions in $(query)")
     if isempty(function_names)
@@ -953,7 +1025,7 @@ function handle_help_query!(session::ScratchpadSession, text::AbstractString)
 
     resolved_value = getfield(binding.mod, binding.var)
     if resolved_value isa Module
-        append_module_help!(session, query, resolved_value)
+        append_module_help!(session, query, resolved_value, binding)
         return true
     end
 
@@ -1122,6 +1194,10 @@ end
 function clean(state_ptr::Ptr{Cvoid})
     clean_count_ref[] += 1
     session_ref[] = nothing
+
+    if isdefined(Main, :EuclidRepl) && isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
+        Main.EuclidRepl.reset_scratchpad_session!()
+    end
 end
 
 """Per-frame scratchpad driver: dequeue/evaluate input and run frame hooks."""

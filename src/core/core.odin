@@ -522,6 +522,7 @@ Euclid_General_State :: struct {
     ui_runtime: Euclid_UI_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font: rl.Font,
+    scratchpad_font: rl.Font,
 
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,

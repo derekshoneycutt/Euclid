@@ -9,6 +9,10 @@ using Test
         include("scratchpad_tests.jl")
     end
 
+    @testset "Phase 3 - EuclidRepl" begin
+        include("euclidrepl_tests.jl")
+    end
+
     @testset "Phase 5 - Bridge Helpers" begin
         include("bridge_helpers_tests.jl")
     end

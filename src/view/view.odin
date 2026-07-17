@@ -239,6 +239,12 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
         files.packaged_asset_path("font.otf", context.temp_allocator), context.temp_allocator)
     font := rl.LoadFontEx(font_file, font_size, &code_points[0], code_point_count)
     state^.font = font
+
+    scratchpad_font_file := strings.clone_to_cstring(
+        files.packaged_asset_path("font_mono.otf", context.temp_allocator), context.temp_allocator)
+    scratchpad_font := rl.LoadFontEx(
+        scratchpad_font_file, font_size, &code_points[0], code_point_count)
+    state^.scratchpad_font = scratchpad_font
 }
 
 //   Shutdown render resources, unload font/shader, and close the window.
@@ -248,6 +254,7 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
 close_window :: proc(state : ^Euclid_General_State) {
     shutdown_particle_render_resources(state)
     shutdown_stroke3d_shader(state)
+    rl.UnloadFont(state^.scratchpad_font)
     rl.UnloadFont(state^.font)
     rl.CloseWindow()
 }

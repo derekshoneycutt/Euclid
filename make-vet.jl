@@ -232,6 +232,9 @@ function run_captured(f::Function)
     value = nothing
     caught_error = nothing
 
+    stdout_task = @async read(stdout_pipe, String)
+    stderr_task = @async read(stderr_pipe, String)
+
     redirect_stdio(stdout=stdout_pipe, stderr=stderr_pipe) do
         try
             value = f()
@@ -245,8 +248,8 @@ function run_captured(f::Function)
     close(stdout_pipe.in)
     close(stderr_pipe.in)
 
-    stdout_text = read(stdout_pipe, String)
-    stderr_text = read(stderr_pipe, String)
+    stdout_text = fetch(stdout_task)
+    stderr_text = fetch(stderr_task)
     return value, stdout_text, stderr_text, caught_error
 end
 

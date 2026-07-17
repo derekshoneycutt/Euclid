@@ -5,6 +5,7 @@ include("./odin-julia-bridge.jl")
 include("./geometry.jl")
 include("./animations.jl")
 include("./scratchpad.jl")
+include("./euclidrepl.jl")
 
 include("./nullanimation.jl")
 
