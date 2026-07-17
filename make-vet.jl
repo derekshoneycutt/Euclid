@@ -1106,6 +1106,95 @@ function run_odin_build_vet_section(odin_build_result)
         false)
 end
 
+"""Export Odin compiler dependency metadata and return structured section output."""
+function run_odin_dependencies_section(src_dir::String, script_dir::String)
+    if Sys.which("odin") === nothing
+        return VetSectionResult(
+            "odin-dependencies",
+            "Missing",
+            "odin not found on PATH; skipping dependency export.",
+            "missing",
+            nothing,
+            "",
+            "",
+            Dict{String,Any}(),
+            false,
+            false,
+            true,
+            true)
+    end
+
+    export_dir = mktempdir()
+    export_file = joinpath(export_dir, "odin-dependencies.json")
+    asm_out_file = joinpath(export_dir, "odin-dependencies-probe.s")
+
+    try
+        result = run_command(
+            Cmd([
+                "odin",
+                "build",
+                "main.odin",
+                "-file",
+                "-build-mode:asm",
+                "-out:$asm_out_file",
+                "-export-dependencies:json",
+                "-export-dependencies-file:$export_file",
+            ]);
+            cwd=src_dir,
+            capture_output=true)
+
+        metrics = Dict{String,Any}(
+            "exit_code" => result.exit_code,
+            "export_path" => relpath(export_file, script_dir),
+            "exported" => isfile(export_file))
+
+        dependency_json = ""
+        if isfile(export_file)
+            dependency_json = read(export_file, String)
+            metrics["dependency_json_bytes"] = ncodeunits(dependency_json)
+        end
+
+        stdout_text = join(filter(!isempty, [
+            result.stdout,
+            dependency_json,
+        ]), "\n")
+
+        if result.exit_code != 0
+            return VetSectionResult(
+                "odin-dependencies",
+                "Warn",
+                "Odin dependency export failed.",
+                "exit-nonzero",
+                result.exit_code,
+                stdout_text,
+                result.stderr,
+                metrics,
+                false,
+                true,
+                false,
+                false)
+        end
+
+        return VetSectionResult(
+            "odin-dependencies",
+            "Pass",
+            "Odin dependency export completed.",
+            "ok",
+            result.exit_code,
+            stdout_text,
+            result.stderr,
+            metrics,
+            false,
+            false,
+            false,
+            false)
+    finally
+        if ispath(export_dir)
+            rm(export_dir; force=true, recursive=true)
+        end
+    end
+end
+
 """Run the Julia syntax validation section and return structured section output."""
 function run_julia_syntax_section(src_dir::String, script_dir::String)
     value, stdout_text, stderr_text, caught_error = run_captured() do
@@ -1439,6 +1528,9 @@ function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result
 
     println("Recording Odin vet build output...")
     push!(sections, run_odin_build_vet_section(odin_build_result))
+
+    println("Exporting Odin compiler dependencies...")
+    push!(sections, run_odin_dependencies_section(src_dir, script_dir))
 
     println("Running Julia syntax validation...")
     push!(sections, run_julia_syntax_section(src_dir, script_dir))

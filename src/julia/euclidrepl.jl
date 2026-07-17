@@ -9,8 +9,7 @@ Key behavior:
 - new draws preempt active draw and finalize interrupted shape visibility,
 - drawn geometry persists until scratchpad session reset/restart.
 
-Use `?EuclidRepl.point!`, `?EuclidRepl.line!`, and `?EuclidRepl.circle!`
-for API details.
+Use `?point!`, `?line!`, and `?circle!` for API details.
 """
 module EuclidRepl
 
