@@ -76,6 +76,16 @@ standards for those already familiar.
 practice. Importantly, starting a line with `?` will attempt to do a focused documentation
 query.
 
+A quick cheatsheet for drawing the standard Euclidean matters:
+
+- `point!([x, y, z])` e.g. `point!([0.5f0, 0.5f0, 0f0])` : Animates drawing a single point.
+- `line!([x1, y1, z1], [x2, y2, z2])` e.g. `line!([0.1f0, 0.1f0, 0f0], [0.1f0, 0.9f0, 0f0])`
+  : Animates drawing a line from [x1, y1, z1] to [x2, y2, z2].
+- `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)` : Animates drawing a
+  circle centered at [x, y, z], with a radius of r.
+
+For additional help:
+
 - Following `?` with a variable name that contains a value of some struct type, a list of
   properties of that struct type will be listed.
 - Following `?` with a module name (e.g. `?OdinJuliaBridge`) will attempt to list all
@@ -86,19 +96,11 @@ query.
 Not so secretly, this can be a helpful way to navigate the OdinJuliaBridge most of all,
 even if not using the Scratchpad for any other purpose. Kind of like man pages.
 
-This is meant for prototype drawing, as opposed to dedicated animations. However, fast
-one-off animations are possible via the frame loop hooks that are included. See the list
-of helpers in `:help`. If you bracket the beginning and end of an animation with
-`OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)`, you can even use the Save
-Gif feature to save a gif of your one-off animations. You will be responsible for managing
-the state machine of such animations. You can use REPL variables or the OdinJuliaBridge
-metadata storage functions used by most static animations.
-
 #### Some details about using the Scratchpad
 
-The `state_ptr` variable is always available from the Scratchpad. This is the first
-parameter that is sent to all OdinJuliaBridge functions, and it holds a value of type
-`Ptr{Nothing}`, pointing back to the Odin state structure in memory.
+The `state_ptr` variable is *always* available from the Scratchpad. This is the first
+parameter that is sent to all `OdinJuliaBridge` functions, and it holds a value of type
+`Ptr{Cvoid}`, pointing back to the Odin state structure in memory.
 
 Coordinate reminders:
 
@@ -110,6 +112,14 @@ Coordinate reminders:
   [Right hand rule](https://en.wikipedia.org/wiki/Right-hand_rule)
   with the knowledge that we are always x pointed up-right, y pointed up-left in our
   projections for this project.
+
+This is meant for prototype drawing, as opposed to dedicated animations. However, fast
+one-off animations are possible via the frame loop hooks that are included. See the list
+of helpers in `:help`. If you bracket the beginning and end of an animation with
+`OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)`, you can even use the Save
+Gif feature to save a gif of your one-off animations. You will be responsible for managing
+the state machine of such animations. You can use REPL variables or the OdinJuliaBridge
+metadata storage functions used by most static animations.
 
 ### Q: Wait, Save Gif?
 
