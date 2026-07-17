@@ -36,9 +36,9 @@ Kine_Point_Draw :: core.Kine_Point_Draw
 Kine_Line_Draw :: core.Kine_Line_Draw
 Kine_Circle_Draw :: core.Kine_Circle_Draw
 Kine_Filled_Circle_Draw :: core.Kine_Filled_Circle_Draw
-Kine_Triangle_Draw :: core.Kine_Triangle_Draw
-Kine_Square_Draw :: core.Kine_Square_Draw
-Kine_Pentagon_Draw :: core.Kine_Pentagon_Draw
+Kine_Polygon_Draw :: core.Kine_Polygon_Draw
+Kine_Polygon_Ring_Node :: core.Kine_Polygon_Ring_Node
+Kine_Polygon_Triangle :: core.Kine_Polygon_Triangle
 Kine_Pen_Draw :: core.Kine_Pen_Draw
 Kine_Compass_Draw :: core.Kine_Compass_Draw
 Kine_Draw_Cache_Item :: core.Kine_Draw_Cache_Item
@@ -131,11 +131,11 @@ build_kine_draw_cache :: proc(
         case .FilledCircle:
             cache_push_filledcircle(point_system, index, src, alpha)
         case .Triangle:
-            cache_push_triangle(point_system, index, src, alpha)
+            cache_push_polygon(point_system, index, src, alpha)
         case .Square:
-            cache_push_square(point_system, index, src, alpha)
+            cache_push_polygon(point_system, index, src, alpha)
         case .Pentagon:
-            cache_push_pentagon(point_system, index, src, alpha)
+            cache_push_polygon(point_system, index, src, alpha)
         case .Pen:
             cache_push_pen(point_system, index, src, alpha)
         case .Compass:
@@ -151,6 +151,8 @@ kine_draw_cache_reset :: proc(
     point_system: ^Kine_Point_System) {
 
     point_system^.draw_cache.item_count = 0
+    point_system^.draw_cache.polygon_vertex_count = 0
+    point_system^.draw_cache.polygon_triangle_count = 0
     point_system^.draw_cache.draw_pen = false
     point_system^.draw_cache.draw_compass = false
 }
@@ -224,6 +226,42 @@ draw_cache_next_item_slot :: #force_inline proc(
     return slot, true
 }
 
+//   Reserve a contiguous polygon vertex range in the draw-cache pool.
+draw_cache_reserve_polygon_vertices :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    count: int) -> (int, bool) {
+
+    if count <= 0 {
+        return 0, false
+    }
+
+    next := point_system^.draw_cache.polygon_vertex_count
+    if next + count > len(point_system^.draw_cache.polygon_vertices) {
+        return 0, false
+    }
+
+    point_system^.draw_cache.polygon_vertex_count = next + count
+    return next, true
+}
+
+//   Reserve a contiguous polygon triangle range in the draw-cache pool.
+draw_cache_reserve_polygon_triangles :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    count: int) -> (int, bool) {
+
+    if count <= 0 {
+        return 0, false
+    }
+
+    next := point_system^.draw_cache.polygon_triangle_count
+    if next + count > len(point_system^.draw_cache.polygon_triangles) {
+        return 0, false
+    }
+
+    point_system^.draw_cache.polygon_triangle_count = next + count
+    return next, true
+}
+
 //   Build the common draw-base metadata shared by cached draw item variants.
 make_draw_base :: #force_inline proc(
     source_index: int,
@@ -241,6 +279,331 @@ make_draw_base :: #force_inline proc(
         has_active_color = has_active_color,
         active_child = src^.active_child,
     }
+}
+
+//   Compute signed polygon area on the XY plane.
+polygon_signed_area_xy :: #force_inline proc(vertices: []Vector3) -> f32 {
+    if len(vertices) < 3 {
+        return 0
+    }
+
+    area: f32 = 0
+    for i in 0..<len(vertices) {
+        j := i + 1
+        if j >= len(vertices) {
+            j = 0
+        }
+        area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y
+    }
+
+    return area * 0.5
+}
+
+//   Compute signed XY cross product of edges AB and AC.
+cross2_xy :: #force_inline proc(a, b, c: Vector3) -> f32 {
+    abx := b.x - a.x
+    aby := b.y - a.y
+    acx := c.x - a.x
+    acy := c.y - a.y
+    return abx * acy - aby * acx
+}
+
+//   Test whether p lies inside or on the boundary of triangle ABC in XY.
+point_in_triangle_xy :: #force_inline proc(p, a, b, c: Vector3) -> bool {
+    d1 := cross2_xy(a, b, p)
+    d2 := cross2_xy(b, c, p)
+    d3 := cross2_xy(c, a, p)
+
+    has_neg := d1 < 0 || d2 < 0 || d3 < 0
+    has_pos := d1 > 0 || d2 > 0 || d3 > 0
+    return !(has_neg && has_pos)
+}
+
+//   Append one triangle into the cached polygon triangle index pool.
+emit_polygon_triangle :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int,
+    a, b, c: int) {
+
+    write_index := triangle_start + triangle_count^
+    point_system^.draw_cache.polygon_triangles[write_index] = Kine_Polygon_Triangle{
+        base_vertex + a,
+        base_vertex + b,
+        base_vertex + c,
+    }
+    triangle_count^ += 1
+}
+
+//   Initialize an active doubly-linked ring over count polygon vertices.
+init_polygon_ring_nodes :: #force_inline proc(
+    ring: []Kine_Polygon_Ring_Node,
+    count: int) {
+
+    for i in 0..<count {
+        prev := i - 1
+        if prev < 0 {
+            prev = count - 1
+        }
+
+        next := i + 1
+        if next >= count {
+            next = 0
+        }
+
+        ring[i] = Kine_Polygon_Ring_Node{ prev, next, true }
+    }
+}
+
+//   Return true when node is a valid ear candidate under current winding.
+is_polygon_ear_node :: #force_inline proc(
+    ring: []Kine_Polygon_Ring_Node,
+    vertices: []Vector3,
+    node, prev, next: int,
+    want_ccw: bool) -> bool {
+
+    a := vertices[prev]
+    b := vertices[node]
+    c := vertices[next]
+
+    cross := cross2_xy(a, b, c)
+    if want_ccw {
+        if cross <= 0 {
+            return false
+        }
+    } else {
+        if cross >= 0 {
+            return false
+        }
+    }
+
+    scan := ring[next].next
+    for scan != prev {
+        if ring[scan].active && point_in_triangle_xy(vertices[scan], a, b, c) {
+            return false
+        }
+        scan = ring[scan].next
+    }
+
+    return true
+}
+
+//   Emit the final triangle from the remaining active 3-node ring.
+emit_polygon_last_ring_triangle :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    ring: []Kine_Polygon_Ring_Node,
+    count: int,
+    node: int,
+    want_ccw: bool,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int) {
+
+    first := node
+    if !ring[first].active {
+        for i in 0..<count {
+            if ring[i].active {
+                first = i
+                break
+            }
+        }
+    }
+
+    second := ring[first].next
+    third := ring[second].next
+    if want_ccw {
+        emit_polygon_triangle(
+            point_system,
+            triangle_start,
+            triangle_count,
+            base_vertex,
+            first,
+            second,
+            third)
+    } else {
+        emit_polygon_triangle(
+            point_system,
+            triangle_start,
+            triangle_count,
+            base_vertex,
+            third,
+            second,
+            first)
+    }
+}
+
+//   Emit fallback fan triangulation for degenerate/non-ear-clippable polygons.
+emit_polygon_fallback_fan :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    count: int,
+    want_ccw: bool,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int) {
+
+    for i in 1..<count - 1 {
+        if want_ccw {
+            emit_polygon_triangle(
+                point_system,
+                triangle_start,
+                triangle_count,
+                base_vertex,
+                0,
+                i,
+                i + 1)
+        } else {
+            emit_polygon_triangle(
+                point_system,
+                triangle_start,
+                triangle_count,
+                base_vertex,
+                0,
+                i + 1,
+                i)
+        }
+    }
+}
+
+//   Run the main ear-removal loop and return remaining active ring node count.
+triangulate_polygon_ear_loop :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    ring: []Kine_Polygon_Ring_Node,
+    vertices: []Vector3,
+    count: int,
+    want_ccw: bool,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int) -> int {
+
+    remaining := count
+    node := 0
+    guard := count * count
+
+    for remaining > 3 && guard > 0 {
+        guard -= 1
+
+        if !ring[node].active {
+            node = ring[node].next
+            continue
+        }
+
+        prev := ring[node].prev
+        next := ring[node].next
+        if !is_polygon_ear_node(ring, vertices, node, prev, next, want_ccw) {
+            node = next
+            continue
+        }
+
+        if want_ccw {
+            emit_polygon_triangle(point_system, triangle_start, triangle_count, base_vertex, prev, node, next)
+        } else {
+            emit_polygon_triangle(point_system, triangle_start, triangle_count, base_vertex, next, node, prev)
+        }
+
+        ring[prev].next = next
+        ring[next].prev = prev
+        ring[node].active = false
+        remaining -= 1
+        node = next
+    }
+
+    return remaining
+}
+
+//   Triangulate a polygon into cached triangle indices using ear clipping.
+triangulate_polygon_ear_clip :: proc(
+    point_system: ^Kine_Point_System,
+    base_vertex: int,
+    vertices: []Vector3,
+    triangle_start: int) -> int {
+
+    count := len(vertices)
+    if count < 3 {
+        return 0
+    }
+
+    ring := point_system^.draw_cache.polygon_ring_nodes[:count]
+    init_polygon_ring_nodes(ring, count)
+
+    area := polygon_signed_area_xy(vertices)
+    want_ccw := area >= 0
+    triangle_count := 0
+    remaining := triangulate_polygon_ear_loop(
+        point_system,
+        ring,
+        vertices,
+        count,
+        want_ccw,
+        triangle_start,
+        &triangle_count,
+        base_vertex)
+
+    if remaining == 3 {
+        emit_polygon_last_ring_triangle(
+            point_system,
+            ring,
+            count,
+            0,
+            want_ccw,
+            triangle_start,
+            &triangle_count,
+            base_vertex)
+        return triangle_count
+    }
+
+    emit_polygon_fallback_fan(
+        point_system,
+        count,
+        want_ccw,
+        triangle_start,
+        &triangle_count,
+        base_vertex)
+
+    return triangle_count
+}
+
+//   Reserve vertex and triangle cache ranges for one polygon draw item.
+reserve_polygon_cache_ranges :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    vertex_count: int) -> (int, int, int, bool) {
+
+    first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices(
+        point_system,
+        vertex_count)
+    if !has_vertex_space {
+        return 0, 0, 0, false
+    }
+
+    max_triangle_count := vertex_count - 2
+    first_triangle, has_triangle_space := draw_cache_reserve_polygon_triangles(
+        point_system,
+        max_triangle_count)
+    if !has_triangle_space {
+        point_system^.draw_cache.polygon_vertex_count -= vertex_count
+        return 0, 0, 0, false
+    }
+
+    return first_vertex, first_triangle, max_triangle_count, true
+}
+
+//   Roll back previously reserved polygon cache ranges.
+rollback_polygon_cache_ranges :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    vertex_count: int,
+    reserved_triangle_count: int) {
+
+    point_system^.draw_cache.polygon_vertex_count -= vertex_count
+    point_system^.draw_cache.polygon_triangle_count -= reserved_triangle_count
+}
+
+//   Shrink reserved triangle range to the actual emitted triangle count.
+finalize_polygon_triangle_reservation :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    first_triangle: int,
+    triangle_count: int) {
+
+    point_system^.draw_cache.polygon_triangle_count = first_triangle + triangle_count
 }
 
 
@@ -384,83 +747,51 @@ cache_push_filledcircle :: proc(
     slot^ = point
 }
 
-//   Push a cached triangle draw item into the draw-cache item list.
-cache_push_triangle :: proc(
+//   Push a cached polygon draw item into the draw-cache item list.
+cache_push_polygon :: proc(
     point_system: ^Kine_Point_System,
     source_index: int,
     src: ^Kine_Shape_Point,
     alpha: f32) {
 
-    child_points: [3]Vector3
-    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
+    vertex_count := src^.child_count
+    if vertex_count < 3 {
         return
     }
+
+    first_vertex, first_triangle, max_triangle_count, ok := reserve_polygon_cache_ranges(
+        point_system,
+        vertex_count)
+    if !ok {
+        return
+    }
+
+    vertices := point_system^.draw_cache.polygon_vertices[first_vertex:first_vertex + vertex_count]
+    if !lerped_child_positions(point_system, src, alpha, vertices) {
+        rollback_polygon_cache_ranges(point_system, vertex_count, max_triangle_count)
+        return
+    }
+
+    triangle_count := triangulate_polygon_ear_clip(
+        point_system,
+        first_vertex,
+        vertices,
+        first_triangle)
+
+    finalize_polygon_triangle_reservation(point_system, first_triangle, triangle_count)
 
     slot, has_slot := draw_cache_next_item_slot(point_system)
     if !has_slot {
+        rollback_polygon_cache_ranges(point_system, vertex_count, triangle_count)
         return
     }
 
-    point := Kine_Triangle_Draw{
+    point := Kine_Polygon_Draw{
         make_draw_base(source_index, src),
-        child_points[0],
-        child_points[1],
-        child_points[2],
-    }
-    slot^ = point
-}
-
-//   Push a cached square draw item into the draw-cache item list.
-cache_push_square :: proc(
-    point_system: ^Kine_Point_System,
-    source_index: int,
-    src: ^Kine_Shape_Point,
-    alpha: f32) {
-
-    child_points: [4]Vector3
-    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
-        return
-    }
-
-    slot, has_slot := draw_cache_next_item_slot(point_system)
-    if !has_slot {
-        return
-    }
-
-    point := Kine_Square_Draw{
-        make_draw_base(source_index, src),
-        child_points[0],
-        child_points[1],
-        child_points[2],
-        child_points[3],
-    }
-    slot^ = point
-}
-
-//   Push a cached pentagon draw item into the draw-cache item list.
-cache_push_pentagon :: proc(
-    point_system: ^Kine_Point_System,
-    source_index: int,
-    src: ^Kine_Shape_Point,
-    alpha: f32) {
-
-    child_points: [5]Vector3
-    if !lerped_child_positions(point_system, src, alpha, child_points[:]) {
-        return
-    }
-
-    slot, has_slot := draw_cache_next_item_slot(point_system)
-    if !has_slot {
-        return
-    }
-
-    point := Kine_Pentagon_Draw{
-        make_draw_base(source_index, src),
-        child_points[0],
-        child_points[1],
-        child_points[2],
-        child_points[3],
-        child_points[4],
+        first_vertex,
+        vertex_count,
+        first_triangle,
+        triangle_count,
     }
     slot^ = point
 }

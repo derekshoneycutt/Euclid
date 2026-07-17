@@ -181,12 +181,8 @@ draw_kine_points_low_cached :: proc(state: ^Euclid_General_State) {
             draw_cached_circle(state, &item_typed)
         case core.Kine_Filled_Circle_Draw:
             draw_cached_filledcircle(state, &item_typed)
-        case core.Kine_Triangle_Draw:
-            draw_cached_triangle(state, &item_typed)
-        case core.Kine_Square_Draw:
-            draw_cached_square(state, &item_typed)
-        case core.Kine_Pentagon_Draw:
-            draw_cached_pentagon(state, &item_typed)
+        case core.Kine_Polygon_Draw:
+            draw_cached_polygon(state, &item_typed)
         case:
             continue
         }
@@ -613,55 +609,65 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
 }
 
 
-//   Render one cached triangle draw item.
-draw_cached_triangle :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Triangle_Draw) {
-    world_points := [3]Vector3{l^.point1, l^.point2, l^.point3}
-    xs, ys, zs: [3]f32
-    projected: [3]Vector2
+//   Batch-project cached polygon vertices into screen space.
+project_cached_polygon_vertices :: #force_inline proc(
+    state: ^Euclid_General_State,
+    poly: ^kine.Kine_Polygon_Draw,
+    projected: []Vector2) -> bool {
+
+    cache := &state^.point_system^.draw_cache
+    vertices := cache^.polygon_vertices[poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
+    xs, ys, zs: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
+
     _ = project_iso_points_batch_with_components(
         state,
-        world_points[:],
+        vertices,
         xs[:],
         ys[:],
         zs[:],
-        projected[:])
-    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
+        projected)
+
+    return true
 }
 
+//   Draw all cached triangles for a polygon using projected vertex positions.
+draw_cached_polygon_triangles :: #force_inline proc(
+    cache: ^core.Kine_Draw_Cache,
+    poly: ^kine.Kine_Polygon_Draw,
+    projected: []Vector2) {
 
-//   Render one cached square draw item.
-draw_cached_square :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Square_Draw) {
-    world_points := [4]Vector3{l^.point1, l^.point2, l^.point3, l^.point4}
-    xs, ys, zs: [4]f32
-    projected: [4]Vector2
-    _ = project_iso_points_batch_with_components(
-        state,
-        world_points[:],
-        xs[:],
-        ys[:],
-        zs[:],
-        projected[:])
+    triangles := cache^.polygon_triangles[poly^.first_triangle:poly^.first_triangle + poly^.triangle_count]
+    for tri in triangles {
+        i0 := tri.a - poly^.first_vertex
+        i1 := tri.b - poly^.first_vertex
+        i2 := tri.c - poly^.first_vertex
+        if i0 < 0 || i0 >= poly^.vertex_count {
+            continue
+        }
+        if i1 < 0 || i1 >= poly^.vertex_count {
+            continue
+        }
+        if i2 < 0 || i2 >= poly^.vertex_count {
+            continue
+        }
 
-    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
-    rl.DrawTriangle(projected[0], projected[2], projected[3], l^.color)
+        rl.DrawTriangle(projected[i0], projected[i1], projected[i2], poly^.color)
+    }
 }
 
+//   Render one cached polygon draw item.
+draw_cached_polygon :: proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polygon_Draw) {
+    if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
+        return
+    }
 
-//   Render one cached pentagon draw item.
-draw_cached_pentagon :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Pentagon_Draw) {
-    world_points := [5]Vector3{l^.point1, l^.point2, l^.point3, l^.point4, l^.point5}
-    xs, ys, zs: [5]f32
-    projected: [5]Vector2
-    _ = project_iso_points_batch_with_components(
-        state,
-        world_points[:],
-        xs[:],
-        ys[:],
-        zs[:],
-        projected[:])
-    rl.DrawTriangle(projected[0], projected[1], projected[2], l^.color)
-    rl.DrawTriangle(projected[0], projected[2], projected[3], l^.color)
-    rl.DrawTriangle(projected[0], projected[3], projected[4], l^.color)
+    projected: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    if !project_cached_polygon_vertices(state, poly, projected[:]) {
+        return
+    }
+
+    cache := &state^.point_system^.draw_cache
+    draw_cached_polygon_triangles(cache, poly, projected[:])
 }
 
 

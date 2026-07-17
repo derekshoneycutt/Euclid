@@ -17,6 +17,8 @@ MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
 MAX_KINECONSTRAINTS :: 256
 MAX_JULIA_INTERFACES :: 512
+MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_KINEPOINTS
+MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_KINEPOINTS
 
 DUST_GRID_CELL_SIZE :: 0.02
 DUST_GRID_DIM :: 50
@@ -256,28 +258,24 @@ Kine_Filled_Circle_Draw :: struct {
     end: Vector3,
 }
 
-Kine_Triangle_Draw :: struct {
-    using base: Kine_Draw_Base,
-    point1: Vector3,
-    point2: Vector3,
-    point3: Vector3,
+Kine_Polygon_Ring_Node :: struct {
+    prev: int,
+    next: int,
+    active: bool,
 }
 
-Kine_Square_Draw :: struct {
-    using base: Kine_Draw_Base,
-    point1: Vector3,
-    point2: Vector3,
-    point3: Vector3,
-    point4: Vector3,
+Kine_Polygon_Triangle :: struct {
+    a: int,
+    b: int,
+    c: int,
 }
 
-Kine_Pentagon_Draw :: struct {
+Kine_Polygon_Draw :: struct {
     using base: Kine_Draw_Base,
-    point1: Vector3,
-    point2: Vector3,
-    point3: Vector3,
-    point4: Vector3,
-    point5: Vector3,
+    first_vertex: int,
+    vertex_count: int,
+    first_triangle: int,
+    triangle_count: int,
 }
 
 Kine_Pen_Draw :: struct {
@@ -299,14 +297,18 @@ Kine_Draw_Cache_Item :: union {
     Kine_Line_Draw,
     Kine_Circle_Draw,
     Kine_Filled_Circle_Draw,
-    Kine_Triangle_Draw,
-    Kine_Square_Draw,
-    Kine_Pentagon_Draw,
+    Kine_Polygon_Draw,
 }
 
 Kine_Draw_Cache :: struct {
     items: [MAX_KINEPOINTS]Kine_Draw_Cache_Item,
     item_count: int,
+
+    polygon_vertices: [MAX_DRAW_CACHE_POLYGON_VERTICES]Vector3,
+    polygon_vertex_count: int,
+    polygon_triangles: [MAX_DRAW_CACHE_POLYGON_TRIANGLES]Kine_Polygon_Triangle,
+    polygon_triangle_count: int,
+    polygon_ring_nodes: [MAX_DRAW_CACHE_POLYGON_VERTICES]Kine_Polygon_Ring_Node,
 
     pen: Kine_Pen_Draw,
     draw_pen: bool,

@@ -1002,19 +1002,19 @@ function resolve_helper_doc_alias(query::AbstractString)
     if helper_name == "point!"
         return (
             binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("point!")),
-            signature = "point!(pos; color=:steelblue, brush=5f0, duration=0.7f0)",
+            signature = "point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)",
         )
     end
     if helper_name == "line!"
         return (
             binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("line!")),
-            signature = "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=0.9f0)",
+            signature = "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)",
         )
     end
     if helper_name == "circle!"
         return (
             binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("circle!")),
-            signature = "circle!(center, radius; color=:steelblue, brush=5f0, duration=1.2f0)",
+            signature = "circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)",
         )
     end
     return nothing
