@@ -3,7 +3,7 @@ package view_tests
 import "core:math"
 import "core:testing"
 
-import app_view "../../src/view"
+import app_view "../../src/view/core"
 
 TEST_EPSILON :: f32(1e-4)
 

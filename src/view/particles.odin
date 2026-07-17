@@ -3,6 +3,7 @@ package view
 // Just drawing whatever particles are currently alive. Pretty simple, tbh
 
 import "../core"
+import view_core "core"
 
 import "core:math"
 
@@ -25,7 +26,7 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
     iso_scale := state^.iso_scale^
 
     screens: [MAX_LOW_PARTICLES]Vector2
-    projected_count := iso_to_cartesian_components_batch_selected(
+    projected_count := view_core.iso_to_cartesian_components_batch_selected(
         ps.low_particles.pos_x[:ps^.use_max_dust_particles],
         ps.low_particles.pos_y[:ps^.use_max_dust_particles],
         ps.low_particles.pos_z[:ps^.use_max_dust_particles],
@@ -79,7 +80,7 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
     iso_scale := state^.iso_scale^
 
     screens: [MAX_PARTICLES]Vector2
-    projected_count := iso_to_cartesian_components_batch_selected(
+    projected_count := view_core.iso_to_cartesian_components_batch_selected(
         ps.particles.pos_x[:],
         ps.particles.pos_y[:],
         ps.particles.pos_z[:],
@@ -112,7 +113,7 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
     iso_scale := state^.iso_scale^
 
     screens: [MAX_PARTICLES]Vector2
-    projected_count := iso_to_cartesian_components_batch_selected(
+    projected_count := view_core.iso_to_cartesian_components_batch_selected(
         ps.high_particles.pos_x[:],
         ps.high_particles.pos_y[:],
         ps.high_particles.pos_z[:],

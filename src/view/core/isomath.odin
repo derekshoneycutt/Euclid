@@ -1,4 +1,4 @@
-package view
+package view_core
 
 // The isometric projection code is here. We perform precomputations and the projection here.
 

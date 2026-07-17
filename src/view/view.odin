@@ -3,6 +3,8 @@ package view
 // Here is where we initialize the application state and load up the window, running
 // the loop for the lifetime of this instance.
 
+import view_core "core"
+import "ui"
 import "../core"
 import "../kine"
 import "../julia"
@@ -18,41 +20,6 @@ import rl "vendor:raylib"
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
 
-ISO_SCALE_VALUE :: 800
-ISO_X_OFFSET :: 450
-ISO_Y_OFFSET :: 450
-
-LIMIT_FPS :: 60
-FIXED_DT :: 1.0 / LIMIT_FPS
-MAX_FRAME_DT :: 0.25
-MAX_STEPS_PER_FRAME :: 6
-FPS_AVERAGE_BUCKET_COUNT :: 60
-
-ALLOWED_CONSTRAINT_ERROR :: 0.0001
-
-WINDOW_HEIGHT :: 720
-WINDOW_WIDTH :: 1280
-
-VIEW_HEIGHT :: 500
-BOTTOM_BAR_HEIGHT :: WINDOW_HEIGHT - VIEW_HEIGHT
-VIEW_WIDTH :: 900
-RIGHT_BAR_WIDTH :: WINDOW_WIDTH - VIEW_WIDTH
-
-WINDOW_TITLE :: "Euclid's Elements"
-
-BACKGROUND_COLOR :: rl.Color{36, 5, 16, 255}
-TOOL_COLOR :: rl.Color{96, 72, 82, 255}
-
-UI_BACK_COLOR :: rl.Color{66, 35, 46, 255}
-UI_BORDER_COLOR :: rl.Color{86, 55, 66, 255}
-UI_TEXT_COLOR :: rl.Color{175, 150, 150, 255}
-
-UI_COMPONENT_BACKGROUND_COLOR :: rl.Color{25, 25, 25, 255}
-
-SURFACE_COLOR :: rl.Color{25, 25, 25, 255}
-SURFACE_EDGE_SIZE :: 0.05
-SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
-
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Iso_Scale :: core.Iso_Scale
@@ -65,6 +32,42 @@ Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
 Euclid_Run_Settings :: core.Euclid_Run_Settings
+
+ISO_SCALE_VALUE :: view_core.ISO_SCALE_VALUE
+ISO_X_OFFSET :: view_core.ISO_X_OFFSET
+ISO_Y_OFFSET :: view_core.ISO_Y_OFFSET
+
+LIMIT_FPS :: view_core.LIMIT_FPS
+FIXED_DT :: view_core.FIXED_DT
+MAX_FRAME_DT :: view_core.MAX_FRAME_DT
+MAX_STEPS_PER_FRAME :: view_core.MAX_STEPS_PER_FRAME
+FPS_AVERAGE_BUCKET_COUNT :: view_core.FPS_AVERAGE_BUCKET_COUNT
+
+ALLOWED_CONSTRAINT_ERROR :: view_core.ALLOWED_CONSTRAINT_ERROR
+
+WINDOW_HEIGHT :: view_core.WINDOW_HEIGHT
+WINDOW_WIDTH :: view_core.WINDOW_WIDTH
+
+VIEW_HEIGHT :: view_core.VIEW_HEIGHT
+BOTTOM_BAR_HEIGHT :: view_core.BOTTOM_BAR_HEIGHT
+VIEW_WIDTH :: view_core.VIEW_WIDTH
+RIGHT_BAR_WIDTH :: view_core.RIGHT_BAR_WIDTH
+
+WINDOW_TITLE :: view_core.WINDOW_TITLE
+
+BACKGROUND_COLOR :: view_core.BACKGROUND_COLOR
+TOOL_COLOR :: view_core.TOOL_COLOR
+
+UI_BACK_COLOR :: view_core.UI_BACK_COLOR
+UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
+UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
+
+UI_COMPONENT_BACKGROUND_COLOR :: view_core.UI_COMPONENT_BACKGROUND_COLOR
+
+SURFACE_COLOR :: view_core.SURFACE_COLOR
+SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
+SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
+
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -109,7 +112,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     iso_scale^.scale = ISO_SCALE_VALUE
     iso_scale^.x_offset = ISO_X_OFFSET
     iso_scale^.y_offset = ISO_Y_OFFSET
-    recompute_iso_scale_precompute(iso_scale)
+    view_core.recompute_iso_scale_precompute(iso_scale)
     iso_scale^.main_light_dir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
     iso_scale^.use_directional_shadow = true
 
@@ -155,11 +158,11 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.accumulator = 0
     state^.ui_runtime.limit_fps = true
     state^.ui_runtime.simulation_paused = false
-    state^.ui_runtime.use_simd_batch_projection = simd_batch_projection_available()
+    state^.ui_runtime.use_simd_batch_projection = view_core.simd_batch_projection_available()
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
-    clear_gif_status_note(&state^.ui_runtime)
+    view_core.clear_gif_status_note(&state^.ui_runtime)
 
 
     julia.init_euclid_scripts(state)
@@ -172,7 +175,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
 // Notes:
 //   - Must be paired with initiate_animations_state to release owned allocations.
 free_animations_state :: proc(state : ^Euclid_General_State) {
-    gif_capture_abort_session(&state^.gif_capture)
+    view_core.gif_capture_abort_session(&state^.gif_capture)
     julia.clean_julia_interfaces(state)
     free(state^.julia_interface)
     free(state^.particle_system)
@@ -311,7 +314,7 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
-    recompute_iso_scale_precompute(state^.iso_scale)
+    view_core.recompute_iso_scale_precompute(state^.iso_scale)
 
     frame_dt := rl.GetFrameTime()
     if frame_dt > MAX_FRAME_DT {
@@ -333,7 +336,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
         julia.perform_animation_frame(state, FIXED_DT)
         particles.update_particles(state^.particle_system, FIXED_DT)
         kine.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
-        gif_capture_update_fixed_step(state)
+        view_core.gif_capture_update_fixed_step(state)
 
         state^.accumulator -= FIXED_DT
         step_count += 1
@@ -363,18 +366,14 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     render_high_particles(state^.particle_system, state)
 
     if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
-        if !gif_capture_submit_frame(state) {
-            gif_capture_abort_session(&state^.gif_capture)
+        if !view_core.gif_capture_submit_frame(state) {
+            view_core.gif_capture_abort_session(&state^.gif_capture)
             state^.ui_runtime.gif_capture_phase = .Error
-            set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
+            view_core.set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
         }
     }
 
-    rl.DrawRectangleRec(rl.Rectangle{0, VIEW_HEIGHT, VIEW_WIDTH, BOTTOM_BAR_HEIGHT}, UI_BACK_COLOR)
-    draw_view_text_panel(state)
-
-    rl.DrawRectangleRec(rl.Rectangle{VIEW_WIDTH, 0, RIGHT_BAR_WIDTH, WINDOW_HEIGHT}, UI_BACK_COLOR)
-    draw_tree_view(state)
+    ui.draw_ui_panels(state)
 
     if state^.ui_runtime.display_fps {
         rl.DrawFPS(10, 10)

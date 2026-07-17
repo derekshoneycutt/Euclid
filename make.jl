@@ -667,7 +667,11 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
         append!(cmd_parts, ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     end
 
-    build_result = run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
+    build_result = if do_vet
+        run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
+    else
+        run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=false)
+    end
     if do_vet
         println("Odin build exited $(build_result.exit_code)")
     else
