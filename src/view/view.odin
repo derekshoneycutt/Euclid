@@ -188,11 +188,13 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
 //   - Should be paired with close_window on shutdown.
 initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
     if settings.do_antialiasing && settings.do_vsync {
-        rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT})
+        rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI})
     } else if settings.do_antialiasing {
-        rl.SetConfigFlags({.MSAA_4X_HINT})
+        rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI})
     } else if settings.do_vsync {
-        rl.SetConfigFlags({.VSYNC_HINT})
+        rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI})
+    } else {
+        rl.SetConfigFlags({.WINDOW_HIGHDPI})
     }
 
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
