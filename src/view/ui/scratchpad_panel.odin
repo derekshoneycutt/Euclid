@@ -296,8 +296,7 @@ draw_scratchpad_output_and_prompt :: proc(
             TEXT_ROW_HEIGHT,
             UI_TEXT_COLOR,
             TEXT_WRAP_ADVANCE,
-            TREE_FONT_SIZE,
-        )
+            TREE_FONT_SIZE)
     }
     rl.EndScissorMode()
 
@@ -307,8 +306,7 @@ draw_scratchpad_output_and_prompt :: proc(
         state^.ui_runtime.view_text_scroll_y,
         max_scroll,
         SCROLLBAR_WIDTH,
-        SCROLLBAR_THUMB_MIN_HEIGHT,
-    )
+        SCROLLBAR_THUMB_MIN_HEIGHT)
 
     if has_scrollbar {
         pre_drag_scroll := state^.ui_runtime.view_text_scroll_y

@@ -344,8 +344,7 @@ draw_settings_integer_slider :: proc(
             max(0.0, knob_center_x - track.x),
             track.height,
         },
-        UI_BORDER_COLOR,
-    )
+        UI_BORDER_COLOR)
     rl.DrawRectangleRec(knob, UI_TEXT_COLOR)
 
     ui_text(fmt.tprintf("%d", clamped),

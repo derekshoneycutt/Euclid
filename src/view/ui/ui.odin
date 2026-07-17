@@ -4,6 +4,7 @@ package ui
 
 import view_core "../core"
 import "../../core"
+import "core:fmt"
 
 import rl "vendor:raylib"
 
@@ -86,9 +87,28 @@ SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 
 //   Render all UI panels in baseline layout.
 draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
-    rl.DrawRectangleRec(rl.Rectangle{0, VIEW_HEIGHT, VIEW_WIDTH, BOTTOM_BAR_HEIGHT}, UI_BACK_COLOR)
-    draw_view_text_panel(state)
+    regions := compute_ui_regions(state^.ui_runtime.current_layout_mode)
+    if !validate_ui_regions(regions) {
+        fmt.println("[ui] Warning: invalid regions; using baseline fallback")
+        regions = compute_ui_regions(.Baseline)
+    }
+    state^.ui_runtime.ui_regions = regions
 
-    rl.DrawRectangleRec(rl.Rectangle{VIEW_WIDTH, 0, RIGHT_BAR_WIDTH, WINDOW_HEIGHT}, UI_BACK_COLOR)
-    draw_tree_view(state)
+    bottom_bar := rl.Rectangle{
+        regions.world_rect.x,
+        regions.world_rect.y + regions.world_rect.height,
+        regions.world_rect.width,
+        WINDOW_HEIGHT - regions.world_rect.height,
+    }
+    rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
+    draw_view_text_panel(state, regions.text_rect)
+
+    right_bar := rl.Rectangle{
+        regions.world_rect.x + regions.world_rect.width,
+        0,
+        WINDOW_WIDTH - regions.world_rect.width,
+        WINDOW_HEIGHT,
+    }
+    rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
+    draw_tree_view(state, regions.tree_rect)
 }

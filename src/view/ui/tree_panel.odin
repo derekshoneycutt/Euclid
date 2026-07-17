@@ -18,16 +18,9 @@ Tree_Toolbar_Hit :: struct {
 }
 
 //   Render the right-side tree panel and route toolbar interactions.
-draw_tree_view :: proc(state: ^core.Euclid_General_State) {
+draw_tree_view :: proc(state: ^core.Euclid_General_State, panel: rl.Rectangle) {
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
-
-    panel := rl.Rectangle{
-        VIEW_WIDTH + TREE_PANEL_PADDING,
-        TREE_PANEL_PADDING,
-        RIGHT_BAR_WIDTH - TREE_PANEL_PADDING * 2,
-        WINDOW_HEIGHT - TREE_PANEL_PADDING * 2,
-    }
 
     rl.DrawRectangleRec(panel, BACKGROUND_COLOR)
     rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
@@ -508,8 +501,7 @@ draw_tree_list_panel :: proc(
         TREE_ROW_HEIGHT,
         scroll_y,
         max_scroll,
-        WHEEL_SCROLL_MULTIPLIER,
-    )
+        WHEEL_SCROLL_MULTIPLIER)
 
     track := rl.Rectangle{}
     thumb_h: f32 = 0
@@ -523,8 +515,7 @@ draw_tree_list_panel :: proc(
         scroll_y^,
         max_scroll,
         SCROLLBAR_WIDTH,
-        SCROLLBAR_THUMB_MIN_HEIGHT,
-    )
+        SCROLLBAR_THUMB_MIN_HEIGHT)
     if has_scrollbar {
         if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, thumb) {
             allow_tree_clicks = false
@@ -552,8 +543,7 @@ draw_tree_list_panel :: proc(
             scroll_y,
             &ui_runtime.tree_scroll_dragging,
             &ui_runtime.tree_scroll_drag_off,
-            SCROLLBAR_DRAG_EPSILON,
-        )
+            SCROLLBAR_DRAG_EPSILON)
 
         rl.DrawRectangleRec(track, BACKGROUND_COLOR)
         rl.DrawRectangleRec(thumb, UI_BORDER_COLOR)

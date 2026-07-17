@@ -6,19 +6,12 @@ import "../../julia"
 import rl "vendor:raylib"
 
 //   Render wrapped animation view text with scroll handling.
-draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
+draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectangle) {
     if state == nil || state.julia_interface == nil {
         return
     }
 
     ui_runtime := &state.ui_runtime
-
-    panel := rl.Rectangle{
-        TREE_PANEL_PADDING,
-        VIEW_HEIGHT + TREE_PANEL_PADDING,
-        VIEW_WIDTH - TREE_PANEL_PADDING * 2,
-        BOTTOM_BAR_HEIGHT - TREE_PANEL_PADDING * 2,
-    }
 
     rl.DrawRectangleRec(panel, BACKGROUND_COLOR)
     rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
@@ -72,8 +65,7 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
             TEXT_ROW_HEIGHT,
             UI_TEXT_COLOR,
             TEXT_WRAP_ADVANCE,
-            TREE_FONT_SIZE,
-        )
+            TREE_FONT_SIZE)
     }
     rl.EndScissorMode()
 
@@ -83,8 +75,7 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State) {
         state^.ui_runtime.view_text_scroll_y,
         max_scroll,
         SCROLLBAR_WIDTH,
-        SCROLLBAR_THUMB_MIN_HEIGHT,
-    )
+        SCROLLBAR_THUMB_MIN_HEIGHT)
 
     if has_scrollbar {
         handle_scrollbar_drag(mouse, thumb, text_panel.y, text_panel.height,

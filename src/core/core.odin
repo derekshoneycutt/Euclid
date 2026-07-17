@@ -461,6 +461,19 @@ Gif_Capture_Session :: struct {
     active: bool,
 }
 
+Ui_Layout_Mode :: enum {
+    Baseline,
+}
+
+Ui_Regions :: struct {
+    world_rect: rl.Rectangle,
+    tree_rect: rl.Rectangle,
+    text_rect: rl.Rectangle,
+    settings_rect: rl.Rectangle,
+    gif_rect: rl.Rectangle,
+    scratchpad_rect: rl.Rectangle,
+}
+
 Euclid_UI_Runtime_State :: struct {
     tree_scroll_y: f32,
     view_text_scroll_y: f32,
@@ -504,6 +517,9 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input_cursor: int,
     scratchpad_last_output_len: int,
     scratchpad_follow_output: bool,
+
+    current_layout_mode: Ui_Layout_Mode,
+    ui_regions: Ui_Regions,
 }
 
 Euclid_General_State :: struct {
