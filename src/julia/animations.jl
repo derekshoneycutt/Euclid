@@ -1,3 +1,11 @@
+"""
+Reusable animation-motion helpers for EuclidApp scripts.
+
+`EuclidAnimations` provides shared pen/compass motion primitives and higher-level
+draw helpers that orchestrate bridge calls through `OdinJuliaBridge`. Animation
+modules should consume this API to keep motion pacing and tool behavior consistent
+across Euclid content and scratchpad workflows.
+"""
 module EuclidAnimations
 
 using ..OdinJuliaBridge
@@ -6,9 +14,9 @@ using LinearAlgebra
 
 export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_compass_rise,
     animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
-    animate_compass_arcmove,
+    animate_compass_arcmove, animate_highlight_point, animate_extend_line,
     animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
-    animate_repl_draw_point, animate_repl_draw_line,
+    animate_draw_circle, animate_repl_draw_point, animate_repl_draw_line,
     animate_repl_draw_circle, animate_repl_draw_filledcircle
 
 const PenLength = 0.14f0

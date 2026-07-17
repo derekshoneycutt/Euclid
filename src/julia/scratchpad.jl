@@ -796,10 +796,10 @@ function render_help_signatures(binding::Base.Docs.Binding)
     return join(signatures, "\n")
 end
 
-"""List unique sorted public-ish function names defined by a module."""
+"""List unique sorted public/exported function names defined by a module."""
 function list_module_function_names(module_value::Module)
     function_names = String[]
-    for sym in names(module_value; all=true, imported=false)
+    for sym in names(module_value; all=false, imported=false)
         sym_text = String(sym)
         if startswith(sym_text, "#")
             continue

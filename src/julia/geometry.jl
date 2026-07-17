@@ -1,8 +1,16 @@
+"""
+Shared geometric intersection helpers used by Euclid animation scripts.
+
+`EuclidGeometry` provides stable utility functions for common XY/3D
+intersection calculations so content modules can reuse one canonical
+implementation instead of duplicating geometry math.
+"""
 module EuclidGeometry
 
 using LinearAlgebra
 
-export line_intersection_3d, circle_line_intersections_xy, circle_circle_intersections_xy
+export circle_circle_intersections_xy, circle_line_intersections_xy,
+    line_intersection_3d
 
 @inline function xy_components(v::Vector{Float32})
     if length(v) < 2
