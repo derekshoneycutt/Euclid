@@ -815,9 +815,9 @@ function resolve_julia_linker_flags(do_build::Bool)
     import_lib_dir::String = joinpath(BIN_DIR, ".julia_import_libs")
     mkpath(import_lib_dir)
 
-    lib_exe_path = resolve_msvc_tool_path(
+    lib_exe_path = String(resolve_msvc_tool_path(
         "VC/Tools/MSVC/**/bin/Hostx64/x64/lib.exe",
-        "Error: Could not locate MSVC lib.exe. Install the C++ Build Tools workload.")
+        "Error: Could not locate MSVC lib.exe. Install the C++ Build Tools workload."))
 
     new_import_library(
         libjulia_dll,
@@ -943,12 +943,10 @@ end
 """Verify required external tooling exists for the selected build steps."""
 function ensure_required_commands(do_build::Bool, do_assets::Bool)
     if do_build
-        require_command("julia", "Please install Julia to continue.")
         require_command("odin", "Please install Odin to continue.")
     end
 
     if do_assets
-        require_command("julia", "Please install Julia to continue.")
         require_command("tar", "Please install tar to continue.")
     end
 
@@ -956,10 +954,6 @@ function ensure_required_commands(do_build::Bool, do_assets::Bool)
         require_command(
             "gendef",
             "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.")
-    end
-
-    if isfile(JULIA_TEST_RUNNER)
-        require_command("julia", "Please install Julia to run Julia tests.")
     end
 
     if isdir(ODIN_TEST_ROOT)
