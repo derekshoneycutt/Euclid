@@ -454,7 +454,7 @@ function line!(state_ptr::Ptr{Cvoid}, start_pos::Vector{Float32}, end_pos::Vecto
     line_shape = OdinJuliaBridge.create_new_line(
         state_ptr,
         start_pos3,
-        end_pos3,
+        start_pos3,
         color,
         brush_value)
 

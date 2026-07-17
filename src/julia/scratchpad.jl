@@ -92,6 +92,11 @@ function create_runtime_module(session_id::Int)
         list_frame_hooks() = Scratchpad.list_frame_hooks(state_ptr)
         save_history(path) = Scratchpad.save_history_to_file(state_ptr, path)
 
+        # Convenience wrappers for common EuclidRepl draw APIs.
+        point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
+        line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
+        circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
+
         # Intercept interactive exit/quit and reset only scratchpad session state.
         exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
         quit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
@@ -535,6 +540,9 @@ function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "  clear_frame_hooks()")
     append_output_line!(session, "  list_frame_hooks()")
     append_output_line!(session, "  save_history(path)")
+    append_output_line!(session, "  point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)")
+    append_output_line!(session, "  line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)")
+    append_output_line!(session, "  circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)")
 end
 
 """Render a result value using text/plain when possible for REPL-style display."""
@@ -989,6 +997,24 @@ function resolve_helper_doc_alias(query::AbstractString)
         return (
             binding = Base.Docs.Binding(Scratchpad, :save_history_to_file),
             signature = "save_history(path)",
+        )
+    end
+    if helper_name == "point!"
+        return (
+            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("point!")),
+            signature = "point!(pos; color=:steelblue, brush=5f0, duration=0.7f0)",
+        )
+    end
+    if helper_name == "line!"
+        return (
+            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("line!")),
+            signature = "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=0.9f0)",
+        )
+    end
+    if helper_name == "circle!"
+        return (
+            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("circle!")),
+            signature = "circle!(center, radius; color=:steelblue, brush=5f0, duration=1.2f0)",
         )
     end
     return nothing
