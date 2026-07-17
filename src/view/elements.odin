@@ -8,6 +8,7 @@ package view
 import "../kine"
 import "../core"
 import "../files"
+import view_core "core"
 
 import "core:fmt"
 import "core:math"
@@ -425,7 +426,7 @@ project_to_floor_shadow :: proc(p: Vector3, scale: Iso_Scale) -> Vector3 {
 //   Project a floor-shadow point into 2D screen coordinates.
 shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
     p_shadow := project_to_floor_shadow(p, state^.iso_scale^)
-    return iso_to_cartesian(p_shadow, state^.iso_scale^)
+    return view_core.iso_to_cartesian(p_shadow, state^.iso_scale^)
 }
 
 //   Batch-project world points by first decomposing into x/y/z SoA component slices.
@@ -455,7 +456,7 @@ project_iso_points_batch_with_components :: proc(
         zs[i] = p.z
     }
 
-    return iso_to_cartesian_components_batch_selected(
+    return view_core.iso_to_cartesian_components_batch_selected(
         xs[:count],
         ys[:count],
         zs[:count],
@@ -469,7 +470,7 @@ project_iso_points_batch_with_components :: proc(
 
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw) {
-    c := iso_to_cartesian(p^.point1, state^.iso_scale^)
+    c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawTextCodepoint(state^.font, p^.label, c, p^.brush_size, p^.color)
 
     width := p^.brush_size * LABEL_DECORATION_WIDTH_SCALE
@@ -494,15 +495,15 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw
 
 //   Render one cached point draw item.
 draw_cached_point :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
-    c := iso_to_cartesian(p^.point1, state^.iso_scale^)
+    c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawCircleV(c, p^.brush_size, p^.color)
 }
 
 
 //   Render one cached line draw item.
 draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
-    c0 := iso_to_cartesian(l^.point1, state^.iso_scale^)
-    c1 := iso_to_cartesian(l^.point2, state^.iso_scale^)
+    c0 := view_core.iso_to_cartesian(l^.point1, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(l^.point2, state^.iso_scale^)
     rl.DrawLineEx(c0, c1, l^.brush_size, l^.color)
 }
 
@@ -561,7 +562,7 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
     start := c^.start
     finish := c^.end
     center := c^.center
-    isocenter := iso_to_cartesian(center, state^.iso_scale^)
+    isocenter := view_core.iso_to_cartesian(center, state^.iso_scale^)
 
     start_vec := start - center
     end_vec := finish - center
@@ -673,8 +674,8 @@ draw_cached_polygon :: proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polyg
 
 //   Render one cached pen tool draw item.
 draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
-    c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
-    c1 := iso_to_cartesian(pen^.joint2, state^.iso_scale^)
+    c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
     draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
@@ -682,8 +683,8 @@ draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) 
 
 //   Render active-end indicator for cached pen tool.
 draw_cached_pen_active_dot :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
-    c0 := iso_to_cartesian(pen^.joint1, state^.iso_scale^)
-    c1 := iso_to_cartesian(pen^.joint2, state^.iso_scale^)
+    c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
     if pen^.active_child == 1 {
         active := pen^.color
@@ -747,13 +748,13 @@ draw_outside_arc_compass_cached :: proc(
     step := theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
 
     prev3d := p1 + u * radius
-    prev := iso_to_cartesian(prev3d, state^.iso_scale^)
+    prev := view_core.iso_to_cartesian(prev3d, state^.iso_scale^)
 
     for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
         t := step * f32(i)
         dir := u * math.cos(t) + v * math.sin(t)
         curr3d := p1 + dir * radius
-        curr := iso_to_cartesian(curr3d, state^.iso_scale^)
+        curr := view_core.iso_to_cartesian(curr3d, state^.iso_scale^)
 
         draw_stroke3d_segment(state, prev, curr, brush_size, color)
         prev = curr
@@ -763,9 +764,9 @@ draw_outside_arc_compass_cached :: proc(
 
 //   Render one cached compass tool draw item.
 draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
-    c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
-    c1 := iso_to_cartesian(comp^.pivot, state^.iso_scale^)
-    c2 := iso_to_cartesian(comp^.joint2, state^.iso_scale^)
+    c0 := view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(comp^.pivot, state^.iso_scale^)
+    c2 := view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
     draw_joint1_last := compass_draw_joint1_leg_last(comp, c0, c1, c2)
     if draw_joint1_last {
@@ -789,8 +790,8 @@ draw_cached_compass :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compa
 
 //   Render active-end indicator for cached compass tool.
 draw_cached_compass_active_dot :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
-    c0 := iso_to_cartesian(comp^.joint1, state^.iso_scale^)
-    c2 := iso_to_cartesian(comp^.joint2, state^.iso_scale^)
+    c0 := view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^)
+    c2 := view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
     if comp^.active_child == 1 {
         active := comp^.color
