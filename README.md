@@ -2,8 +2,12 @@
 
 This is a basic project to create an application that animates Euclid's Elements.
 
-This is done in Odin for the primary application, with bindings to Julia to drive the
-animations. Raylib is used for rendering.
+This is primarily a Julia-focused application, utilizing the interactive nature of the
+langauge for animations and a REPL-like Scratchpad. Featuring the
+[JuliaMono](https://juliamono.netlify.app/) font.
+
+The core application is coded in Odin, with Raylib used for rendering.
+
 
 1. [Building from Source](#building-from-source)
 1. [Questions?](#questions)

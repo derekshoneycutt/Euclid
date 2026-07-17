@@ -236,12 +236,12 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
     code_point_count := i32(len(code_points))
     font_size: i32 = 32
     font_file := strings.clone_to_cstring(
-        files.packaged_asset_path("font.otf", context.temp_allocator), context.temp_allocator)
+        files.packaged_asset_path("font.ttf", context.temp_allocator), context.temp_allocator)
     font := rl.LoadFontEx(font_file, font_size, &code_points[0], code_point_count)
     state^.font = font
 
     scratchpad_font_file := strings.clone_to_cstring(
-        files.packaged_asset_path("font_mono.otf", context.temp_allocator), context.temp_allocator)
+        files.packaged_asset_path("font_mono.ttf", context.temp_allocator), context.temp_allocator)
     scratchpad_font := rl.LoadFontEx(
         scratchpad_font_file, font_size, &code_points[0], code_point_count)
     state^.scratchpad_font = scratchpad_font
