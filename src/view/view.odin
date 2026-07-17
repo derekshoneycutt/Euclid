@@ -376,10 +376,14 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     ui.draw_ui_panels(state)
 
     if state^.ui_runtime.display_fps {
-        rl.DrawFPS(10, 10)
+        mono_font := state^.scratchpad_font
+
+        fps_text := fmt.tprintf("FPS: %d", rl.GetFPS())
+        fps_text_c := strings.clone_to_cstring(fps_text, context.temp_allocator)
+        rl.DrawTextEx(mono_font, fps_text_c, rl.Vector2{10, 10}, 18, 0, UI_TEXT_COLOR)
 
         avg_text := fmt.tprintf("Avg FPS (60s): %.1f", state^.ui_runtime.fps_avg_live)
         avg_text_c := strings.clone_to_cstring(avg_text, context.temp_allocator)
-        rl.DrawText(avg_text_c, 10, 30, 18, UI_TEXT_COLOR)
+        rl.DrawTextEx(mono_font, avg_text_c, rl.Vector2{10, 30}, 18, 0, UI_TEXT_COLOR)
     }
 }
