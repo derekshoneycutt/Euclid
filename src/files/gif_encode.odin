@@ -1,4 +1,4 @@
-package gif
+package files
 
 // This just encodes gif files. We use the standard allocator in the current context, freeing
 // when aborted or ended.

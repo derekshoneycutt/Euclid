@@ -246,7 +246,8 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
             payload.color,
             payload.host_id,
             payload.start_id,
-            payload.end_id)
+            payload.end_id,
+            payload.full_sweep)
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
@@ -260,7 +261,8 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
             payload.color,
             payload.host_id,
             payload.start_id,
-            payload.end_id)
+            payload.end_id,
+            payload.full_sweep)
     end
 end
 

@@ -4,4 +4,3 @@ package tests
 @require import "files"
 @require import "view"
 @require import "particles"
-@require import "gif"

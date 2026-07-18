@@ -1045,7 +1045,8 @@ function animate_repl_draw_circle(
     timer::Float32, duration::Float32,
     jointPoint::Vector{Float32}, startPoint::Vector{Float32},
     angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer)
+    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
+    fullSweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1084,6 +1085,12 @@ function animate_repl_draw_circle(
         return
     end
 
+    if fullSweep
+        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, angleTheta)
+    else
+        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
+    end
+
     final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta
     endPoint = Float32[
         jointPoint[1] + radius * Float32(cos(final_theta)),
@@ -1108,7 +1115,8 @@ function animate_repl_draw_filledcircle(
     timer::Float32, duration::Float32,
     jointPoint::Vector{Float32}, startPoint::Vector{Float32},
     angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer)
+    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
+    fullSweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1145,6 +1153,12 @@ function animate_repl_draw_filledcircle(
             markerStartId,
             markerEndId)
         return
+    end
+
+    if fullSweep
+        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, angleTheta)
+    else
+        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
     end
 
     final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta

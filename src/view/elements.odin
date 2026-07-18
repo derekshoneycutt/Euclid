@@ -572,7 +572,7 @@ draw_cached_filledcircle :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Fil
 
     start_theta := f32(math.atan2(start_vec.y, start_vec.x))
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta)
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
 
     points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
     points[0] = isocenter

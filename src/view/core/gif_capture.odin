@@ -7,7 +7,6 @@ package view_core
 
 import "../../core"
 import "../../files"
-import "../../gif"
 
 import "core:fmt"
 import "core:os"
@@ -92,7 +91,7 @@ gif_capture_submit_frame :: proc(
 
     pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !gif.gif_encode_frame(
+    if !files.gif_encode_frame(
         &state^.gif_capture.encoder,
         image.data,
         centiseconds,
@@ -179,9 +178,9 @@ gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
         return
     }
 
-    result := gif.gif_encode_end(&session.encoder)
+    result := files.gif_encode_end(&session.encoder)
     if len(result.data) > 0 {
-        gif.gif_encode_free(&result)
+        files.gif_encode_free(&result)
     }
     session.active = false
 }
@@ -271,7 +270,7 @@ gif_capture_begin_session :: proc(
     out_w := max(1, VIEW_WIDTH / downsample)
     out_h := max(1, VIEW_HEIGHT / downsample)
 
-    if !gif.gif_encode_begin(&state^.gif_capture.encoder, out_w, out_h) {
+    if !files.gif_encode_begin(&state^.gif_capture.encoder, out_w, out_h) {
         return false
     }
 
@@ -291,12 +290,12 @@ gif_capture_finalize_session :: proc(
         return false
     }
 
-    result := gif.gif_encode_end(&state^.gif_capture.encoder)
+    result := files.gif_encode_end(&state^.gif_capture.encoder)
     state^.gif_capture.active = false
     if len(result.data) == 0 {
         return false
     }
-    defer gif.gif_encode_free(&result)
+    defer files.gif_encode_free(&result)
 
     path := gif_output_path()
     if !gif_write_bytes_to_file(path, result.data) {

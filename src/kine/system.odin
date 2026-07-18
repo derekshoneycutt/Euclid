@@ -743,7 +743,7 @@ cache_push_filledcircle :: proc(
         return
     }
 
-    point := Kine_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end }
+    point := Kine_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
     slot^ = point
 }
 

@@ -4,8 +4,8 @@
 
 1. [What This Project Is](#what-this-project-is)
 1. [Where To Start Reading](#where-to-start-reading)
-1. [Odin Side (Host Application)](#odin-side-host-application)
-1. [Julia Side (Scripted Animation Runtime)](#julia-side-scripted-animation-runtime)
+1. [Host Modules (Odin)](#host-modules-odin)
+1. [Runtime Modules (Julia)](#runtime-modules-julia)
 1. [Scratchpad Architecture (Interactive Runtime Surface)](#scratchpad-architecture-interactive-runtime-surface)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
@@ -38,130 +38,164 @@ A useful mental model:
 
 If you are new, read in this order:
 
-1. `src/main.odin`
-   - Application startup/shutdown sequence.
-1. `src/view/view.odin`
-   - State initialization and the fixed timestep window loop.
-1. `src/julia/julia.odin`
-   - Host-side Julia lifecycle and per-frame orchestration (`perform_animation_frame`).
-1. `src/julia/odin-julia-bridge.odin`
-   - Exported C ABI bridge operations that Julia scripts call into.
-1. `src/julia/script.jl`
-   - Julia-side entrypoint and script/module loading.
-1. `src/julia/odin-julia-bridge.jl`
-   - Julia wrapper API over bridge exports.
-
-Then branch out to module-specific files listed below.
+1. Host lifecycle path:
+   - `src/main.odin`
+   - `src/view/view.odin`
+1. Host/runtime boundary:
+   - `src/julia/julia.odin`
+   - `src/julia/odin-julia-bridge.odin`
+   - `src/julia/odin-julia-bridge.jl`
+1. Julia runtime entry:
+   - `src/julia/script.jl`
+1. Then continue by module using the maps below, touching only each module's
+   highlighted files first.
 
 ---
 
-## Odin Side (Host Application)
-
-### Entry and Lifecycle
+## Host Modules (Odin)
 
 - `src/main.odin`
-  - Parses command line parameters.
-  - Initiates Julia and the View window.
+  - Process entry, argument parsing, startup/shutdown sequencing.
 
-### Global State and Core Types
+### Core Definitions Module
+
+Purpose: canonical data shapes and global capacity limits.
+
+Important files:
 
 - `src/core/core.odin`
-  - Defines all the major structures in the Odin code.
-  - Sets capacity constants (`MAX_KINEPOINTS`, `MAX_KINECONSTRAINTS`, etc.).
+  - Defines major runtime structures (including `Euclid_General_State`).
+  - Declares system capacity constants.
 
-### Window Handling, Rendering, and UI
+### Rendering and UI Module
+
+Purpose: world rendering, projection, tool/shape visuals, runtime UI panels.
+
+Important files:
 
 - `src/view/view.odin`
-  - Creates persistent runtime state (surface, particle system, point system, tools).
-  - Runs fixed-step simulation (`FIXED_DT`) with a frame accumulator.
+  - Runtime state wiring and fixed-step update loop (`FIXED_DT`).
 - `src/view/elements.odin`
-  - Draws surface and shape/tool visuals.
-  - Uses shader-backed stroke rendering for pen/compass.
-- `src/view/ui.odin`
-  - Draws the Treeview, Settings, and View Text area of the view.
-- `src/view/isomath.odin`
-  - Isometric projection helper(s).
-- `src/view/gif_capture.odin`
-  - Captures animation cycles to GIF from view area.
+  - World geometry drawing and tool visual rendering.
+- `src/view/core/view_core.odin`
+  - Shared view render/update helpers used by top-level view code.
+- `src/view/core/isomath.odin`
+  - Isometric projection math and coordinate transforms.
+- `src/view/ui/ui.odin`
+  - Tree/settings/text panels and interaction routing.
 
-### Assets and Packaging Runtime
+### Geometry Kernel Module
 
-- `src/files/files.odin`
-  - Unpacks `assets.pkg` into a writable cache location and supports hot reload of Julia.
+Purpose: geometric primitives, constraints, and system-level evolution.
 
-### Kinematics and Constraints
+Important files:
 
 - `src/kine/shapes.odin`
-  - Shape/tool constructors and default structural setup.
+  - Shape/tool constructors and default geometric setup.
 - `src/kine/constraints.odin`
-  - Constraint definitions, error metrics, and iterative solving.
+  - Constraint definitions, error functions, and iterative solving.
 - `src/kine/system.odin`
-  - Animation boundary freezing/clearing and draw-cache generation/interpolation.
+  - Frame integration rules, cache/update boundary behavior.
 
-### Particles
+### Bridge and Embedding Module
 
-- `src/particles/particles.odin`
-  - Multi-layer particle system used for trails/flicker/burnout/dust effects.
+Purpose: host-side Julia lifecycle and strict Odin<->Julia API boundary.
 
-### GIF Encoding
-
-- `src/gif/gif_encode.odin`
-  - Implements GIF encoder internals used by capture flow.
-
-### Julia FFI Bindings (Low-Level)
-
-- `src/julialib/julialib.odin`
-  - Odin declarations for Julia embedding API (`jl_*`).
-  - Includes runtime init/eval/call/exception and type declarations.
-
-### Julia Host Runtime and Bridge Exports
+Important files:
 
 - `src/julia/julia.odin`
-  - Owns Julia lifecycle (`initiate_julia`, `end_julia`) and interface handle setup.
-  - Runs per-step Julia orchestration (`perform_animation_frame`) and reload checks.
+  - Julia runtime initialization/shutdown and per-frame orchestration.
 - `src/julia/odin-julia-bridge.odin`
-  - Defines exported C ABI operations used by Julia scripts for geometry/tools/constraints/particles.
+  - Exported bridge ABI used by Julia scripts.
+- `src/julialib/julialib.odin`
+  - Low-level Julia embedding declarations (`jl_*`) mirrored from `julia.h`.
+
+### Assets and IO Module
+
+Purpose: packaged asset extraction/reload and generated media output.
+
+Important files:
+
+- `src/files/files.odin`
+  - Runtime asset package extraction and path resolution.
+- `src/files/gif_encode.odin`
+  - GIF encoding internals and output buffer production.
+
+### Particles Module
+
+Purpose: particle simulation and layered visual effects.
+
+Important files:
+
+- `src/particles/particles.odin`
+  - Multi-layer particle systems for flicker/trails/dust.
 
 ---
 
-## Julia Side (Scripted Animation Runtime)
+## Runtime Modules (Julia)
 
-### Julia Entry and Registration
+### Runtime Bootstrap Module
+
+Purpose: script loading, animation registry setup, global frame dispatch.
+
+Important files:
 
 - `src/julia/script.jl`
-  - Loads bridge wrapper + shared modules + content groups.
-  - Exposes `init_euclid_scripts` and `global_euclid_loop` expected by Odin.
-  - Registers root nodes and child animation interfaces.
+  - Loads shared modules/content groups.
+  - Exposes `init_euclid_scripts` and `global_euclid_loop` for Odin.
 
-### Julia Bridge Wrapper API
+### Bridge Wrapper Module
+
+Purpose: Julia-side ergonomic API over bridge exports.
+
+Important files:
 
 - `src/julia/odin-julia-bridge.jl`
-  - Julia-friendly wrappers over Odin exported bridge calls (`@ccall`).
-  - Provides helper overloads and color conversion utilities.
+  - `@ccall` wrappers plus helper conversion/utility routines.
 
-### Shared Julia Utility Modules
+### Shared Animation Utility Module
+
+Purpose: reusable helpers that keep content scripts concise and consistent.
+
+Important files:
 
 - `src/julia/animations.jl`
-  - Reusable animation helper routines for pen/compass movement and drawing behavior.
+  - Pen/compass movement and drawing choreography helpers.
 - `src/julia/geometry.jl`
-  - Geometric helper computations (line intersections, circle intersections).
+  - Reusable geometric computations.
 - `src/julia/nullanimation.jl`
-  - Default no-op animation behavior used for category/root nodes.
+  - Default no-op behavior used for non-leaf/root nodes.
 
-### Content Groups
+### Interactive Runtime Module
 
-- `src/julia/elements/`
-  - Euclid Elements hierarchy and scripts (Book I definitions/postulates/propositions).
-- `src/julia/proclus/`
-  - Proclus commentary animations.
-- `src/julia/hilbert/`
-  - Hilbert foundations content and axiom-driven animations.
+Purpose: REPL-like runtime surfaces and command/session orchestration.
 
-Pattern for content organization:
+Important files:
 
-- Group root script registers a root tree node.
-- Child scripts register specific animation entries with `get_view_text`,
-  `initialize`, `loop`, `clean` handlers.
+- `src/julia/scratchpad.jl`
+  - Scratchpad session lifecycle, command queueing, and per-frame evaluation.
+- `src/julia/euclidrepl.jl`
+  - REPL parsing/evaluation helpers used by interactive runtime flows. Mostly to draw shapes
+    immediately, with relative ease.
+
+### Content Modules
+
+Purpose: domain content organized into chapter/family groups.
+
+Important files:
+
+- `src/julia/elements/elements.jl`
+  - Euclid Elements group root and registration path.
+- `src/julia/proclus/proclus.jl`
+  - Proclus group root and registration path.
+- `src/julia/hilbert/hilbert.jl`
+  - Hilbert group root and registration path.
+
+Each content module typically follows this contract:
+
+- Root module registers tree/category nodes.
+- Leaf files provide `get_view_text`, `initialize`, `loop`, `clean`.
+- Bridge calls mutate host state; local logic determines pedagogical flow.
 
 ---
 
@@ -183,7 +217,7 @@ REPL-like control plane.
 
 ### Host/UI Side Responsibilities (Odin)
 
-- `src/view/ui.odin` gates scratchpad input handling behind tree selection,
+- The `view/ui` module gates scratchpad input handling behind tree selection,
   so keyboard capture only occurs while the Scratchpad node is active.
 - Input lives in fixed-size UI runtime buffers (`scratchpad_input`, cursor,
   follow-output flags, last-output length) inside `Euclid_UI_Runtime_State`.
@@ -348,7 +382,8 @@ Defense:
 
 ## Isometric Projection and Right-Hand Rule
 
-The isometric helper in `src/view/isomath.odin` uses a right-handed world-space convention.
+The isometric helper in `src/view/core/isomath.odin` uses a right-handed
+world-space convention.
 
 What that means in practice:
 
@@ -372,48 +407,53 @@ Projection note:
 
 ## Polygon Vertex Order Conventions
 
-For filled polygons created from Julia (`create_new_triangle`, `create_new_square`,
-`create_new_pentagon`), **vertex order matters** for visible faces.
+For filled polygons created from Julia (`create_new_triangle`,
+`create_new_square`, `create_new_pentagon`, and future polygon constructors),
+**vertex order still matters**, but the renderer now uses general polygon
+triangulation instead of shape-specific hardcoded triangle layouts.
 
 Renderer note:
 
-- `src/view/elements.odin` draws polygon faces as triangle fans/splits.
-- If the supplied point order does not follow the polygon perimeter consistently,
-  the shape can appear wrong or effectively invisible in practice.
+- `src/kine/system.odin` triangulates polygon vertex rings with an
+  ear-clipping pipeline (`triangulate_polygon_ear_clip`).
+- `src/view/elements.odin` renders the emitted triangle list from the draw cache.
+- If the supplied vertex order does not follow the polygon perimeter
+  consistently, triangulation can fail or produce visually incorrect faces.
 
 ### Required ordering rule (all supported polygons)
 
-- Raylib requirement (rshapes): `DrawTriangle(...)` expects vertices in
-  counter-clockwise order.
-- This renderer builds polygons from explicit triangle calls in
-  `src/view/elements.odin`; there is no automatic polygon triangulation or
-  winding correction.
-- Therefore, for any polygon to be visible/reliable, every generated triangle
-  must follow the expected winding after projection.
-- Never provide crossed or diagonal-jump vertex orderings.
+- Supply polygon vertices in perimeter order (clockwise or counter-clockwise,
+  but consistent around the boundary).
+- Never provide crossed/zig-zag/diagonal-jump orderings.
+- Triangulation winding is inferred from XY signed area in
+  `triangulate_polygon_ear_clip` and triangles are emitted to match that
+  winding.
+- Ear clipping is the primary path; if a valid ear sequence cannot be resolved
+  (for degenerate/non-simple cases), the implementation falls back to a
+  winding-aware fan (`emit_polygon_fallback_fan`).
 
-### Shape-specific guidance
+### Practical implications by shape
 
 - Triangle (`create_new_triangle`):
-  - Render path: one triangle, `DrawTriangle(p1, p2, p3)`.
-  - Requirement: `(p1, p2, p3)` must project counter-clockwise.
+  - Triangulates to one cached triangle.
+  - Still provide perimeter order; avoid collinear/degenerate input.
 - Square (`create_new_square`):
-  - Render path: two triangles
-    `(p1, p2, p3)` and `(p1, p3, p4)`.
-  - Requirement: both triangles must project counter-clockwise and
-    represent a non-self-intersecting quad.
-  - Working order used by current scripts: **`A, D, C, B`**.
+  - Triangulates to two cached triangles selected by ear clipping.
+  - No single hardcoded split order should be treated as universal.
 - Pentagon (`create_new_pentagon`):
-  - Render path: triangle fan from `p1`:
-    `(p1, p2, p3)`, `(p1, p3, p4)`, `(p1, p4, p5)`.
-  - Requirement: each fan triangle must project counter-clockwise.
-  - Working order used by current scripts: **`A, E, D, C, B`**.
+  - Triangulates to three cached triangles selected by ear clipping.
+  - Keep vertices on the perimeter in consistent rotational order.
+
+The same ordering rules apply to any polygon with `n >= 3`.
 
 Practical check when debugging visibility:
 
-1. Expand the polygon into the exact triangle list used by `elements.odin`.
-1. Verify each triangle winding against raylib's `DrawTriangle` expectation.
-1. Only after triangle winding is correct, tune color/alpha/placement.
+1. Verify the input vertex ring is non-self-intersecting and perimeter-ordered.
+1. Inspect cached triangle output generated by
+   `triangulate_polygon_ear_clip` in `src/kine/system.odin`.
+1. If fallback fan triangulation was used, treat the polygon input as likely
+   degenerate/non-simple and adjust vertices.
+1. Only after triangulation is valid, tune color/alpha/placement.
 
 ---
 
@@ -421,17 +461,25 @@ Practical check when debugging visibility:
 
 ### If You Need To
 
-- **Change render loop / timing / frame orchestration**:
-  - Start in `src/view/view.odin`.
-- **Change shape/constraint behavior**:
-  - Use `src/kine/constraints.odin`, `src/kine/shapes.odin`, `src/kine/system.odin`.
-- **Add a new bridge capability for Julia scripts**:
-  - Add Odin export in `src/julia/odin-julia-bridge.odin`.
-  - Add matching Julia wrapper in `src/julia/odin-julia-bridge.jl`.
-- **Add a new animation/scripted chapter item**:
-  - Create Julia script file in the appropriate content folder and register it in that group's initializer.
-- **Adjust UI behavior and animation tree interactions**:
-  - Use `src/view/ui.odin`.
+Choose the owning module first, then touch that module's highlighted files.
+
+- **Lifecycle/timing issues**:
+  - Application Lifecycle Module (`src/main.odin`, `src/view/view.odin`).
+- **Rendering/UI behavior**:
+  - Rendering and UI Module (`src/view/elements.odin`, `src/view/ui/ui.odin`,
+    `src/view/core/view_core.odin`).
+- **Geometry/constraints behavior**:
+  - Geometry Kernel Module (`src/kine/shapes.odin`,
+    `src/kine/constraints.odin`, `src/kine/system.odin`).
+- **Julia feature surface / bridge contract**:
+  - Bridge and Embedding Module + Bridge Wrapper Module
+    (`src/julia/odin-julia-bridge.odin`, `src/julia/odin-julia-bridge.jl`).
+- **New lesson/content animation**:
+  - Content Modules (`src/julia/elements/**`, `src/julia/proclus/**`,
+    `src/julia/hilbert/**`).
+- **Modify the Scratchpad/REPL surface**:
+  - Scratchpad and UI modules (`src/julia/sratchpad.jl`, `src/julia/euclidrepl.jl`,
+    `src/view/ui/scratchpad_panel.odin`)
 
 ### Typical New Animation Workflow
 
@@ -440,7 +488,8 @@ Practical check when debugging visibility:
 1. Register it via `add_child_animation_interface` in the relevant group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 
-Review [AnimationStyle.md](AnimationStyle.md) for considerations on how to make animations "fit in".
+Review [AnimationsStyle.md](AnimationsStyle.md) for considerations on how to
+make animations "fit in".
 
 ---
 

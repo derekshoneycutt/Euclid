@@ -256,6 +256,7 @@ Kine_Filled_Circle_Draw :: struct {
     center: Vector3,
     start: Vector3,
     end: Vector3,
+    offset: f32,
 }
 
 Kine_Polygon_Ring_Node :: struct {
