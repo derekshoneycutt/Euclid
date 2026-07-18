@@ -31,11 +31,16 @@ TOOL_LENGTH :: 0.35
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
 
-/*
+/*****
     This first section are julia structures taken from julia.h.
 
-
+    We include them here to follow import conventions with core lying below everything
+    else. This avoid having to have a separate julialib and julia library, which is just
+    annoyingly redundant for this project.
 */
+
+
+
 
 JL_IMAGE_SEARCH :: enum c.int {
     JL_IMAGE_CWD = 0,
@@ -209,9 +214,13 @@ jl_weakref_t :: struct {}
 JL_STREAM :: struct {}
 ios_t :: struct {}
 
-/*
+/****
     The remaining structures are unique to the Euclid application
+
+
+    Starting with the Julia Animation tree structures
 */
+
 
 Euclid_Julia_Animation_Interface :: struct {
     get_view_text : ^jl_value_t,
@@ -251,17 +260,20 @@ Euclid_Julia_Interface :: struct {
     next_animation_index : int,
 }
 
-Iso_Scale :: struct {
-    scale : f32,
-    x_offset : f32,
-    y_offset : f32,
 
-    half_scale : f32,
-    quarter_scale : f32,
+/****
+    The Shape system, used to draw the tools and the various points/lines/shapes/polygons
 
-    main_light_dir : Vector3,
-    use_directional_shadow : bool,
-}
+    Point and Constraint are the primitive types; the others are shorthands for representing
+    them between function calls, outside of the array of points/constraints
+
+    The draw cache are computed through a lerp for preparation before draw
+*/
+
+
+
+
+
 
 Kine_Shape_Point_Type :: enum {
     Label,
@@ -511,6 +523,12 @@ Kine_Point_System :: struct {
 }
 
 
+/****
+    The particle system is basically a 3-layered SoA system, each layer having its own type
+    of particles.
+*/
+
+
 
 
 
@@ -556,18 +574,23 @@ Particle_System :: struct {
     use_max_dust_particles : int,
 }
 
+/****
+    The UI state information controls scaling and view-based primitives, including UI control
+*/
 
 
-Euclid_Drawing_Surface :: struct {
-    zeros : Vector3,
-    right_up : Vector3,
-    left_down : Vector3,
-    right_down : Vector3,
 
-    color : rl.Color,
-    edge_color : rl.Color,
 
-    edge_size : f32,
+Iso_Scale :: struct {
+    scale : f32,
+    x_offset : f32,
+    y_offset : f32,
+
+    half_scale : f32,
+    quarter_scale : f32,
+
+    main_light_dir : Vector3,
+    use_directional_shadow : bool,
 }
 
 Stroke3D_Render_State :: struct {
@@ -703,6 +726,29 @@ Euclid_UI_Runtime_State :: struct {
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
 }
+
+
+// TODO: I keep thinking of getting rid of the drawing surface structure... it's old and
+//  seems ridiculous to me a lot of the time
+
+Euclid_Drawing_Surface :: struct {
+    zeros : Vector3,
+    right_up : Vector3,
+    left_down : Vector3,
+    right_down : Vector3,
+
+    color : rl.Color,
+    edge_color : rl.Color,
+
+    edge_size : f32,
+}
+
+
+/****
+    General state of the application is the host of all primary memory for Odin and the application
+*/
+
+
 
 Euclid_General_State :: struct {
     saved_context : runtime.Context,
