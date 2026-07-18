@@ -6,7 +6,6 @@ package julia
 // needed to initiate the Julia system and load the script files from Odin. The Bridge
 // provides all methods that reach into Julia, and the types that are sent back and forth.
 
-import "../julialib"
 import "../core"
 import "../files"
 import "../particles"
@@ -30,7 +29,7 @@ SCRATCHPAD_PARSE_COMPLETE :: i32(2)
 //   - Intended to be called once during application startup before Julia bridge calls.
 //   - Exits immediately if packaged script include fails.
 initiate_julia :: proc() {
-    julialib.jl_init()
+    jl_init()
 
     _ = include_packaged_script(true)
 }
@@ -40,7 +39,7 @@ initiate_julia :: proc() {
 // Notes:
 //   - Should be paired with initiate_julia at application shutdown.
 end_julia :: proc() {
-    julialib.jl_atexit_hook(0)
+    jl_atexit_hook(0)
 }
 
 //   Allocate and initialize the host-side Julia interface handle table.
@@ -56,19 +55,19 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
         return ret
     }
 
-    ret.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
-    ret.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    ret.scratchpad_classify_input = julialib.jl_get_function(
+    ret.init_scripts = jl_get_function(main_module, "init_euclid_scripts")
+    ret.global_loop = jl_get_function(main_module, "global_euclid_loop")
+    ret.scratchpad_classify_input = jl_get_function(
         main_module, "scratchpad_classify_input")
-    ret.scratchpad_queue_input = julialib.jl_get_function(
+    ret.scratchpad_queue_input = jl_get_function(
         main_module, "scratchpad_queue_input")
-    ret.scratchpad_save_history_to_file = julialib.jl_get_function(
+    ret.scratchpad_save_history_to_file = jl_get_function(
         main_module, "scratchpad_save_history_to_file")
-    ret.scratchpad_history_previous = julialib.jl_get_function(
+    ret.scratchpad_history_previous = jl_get_function(
         main_module, "scratchpad_history_previous")
-    ret.scratchpad_history_next = julialib.jl_get_function(
+    ret.scratchpad_history_next = jl_get_function(
         main_module, "scratchpad_history_next")
-    ret.scratchpad_history_reset_cursor = julialib.jl_get_function(
+    ret.scratchpad_history_reset_cursor = jl_get_function(
         main_module, "scratchpad_history_reset_cursor")
     ret.asset_archive_mod_time_unix_nano = 0
     ret.current_animation_index = -1
@@ -102,17 +101,17 @@ clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
 init_euclid_scripts :: proc(
     state: ^core.Euclid_General_State) {
 
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
 
-    julialib.jl_call1(state^.julia_interface^.init_scripts, state_value)
-    if julialib.jl_exception_occurred() != nil {
+    jl_call1(state^.julia_interface^.init_scripts, state_value)
+    if jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
         return
     }
 
     if state^.julia_interface^.null_animation.initiate != nil {
-        julialib.jl_call1(state^.julia_interface^.null_animation.initiate, state_value)
-        if julialib.jl_exception_occurred() != nil {
+        jl_call1(state^.julia_interface^.null_animation.initiate, state_value)
+        if jl_exception_occurred() != nil {
             print_julia_exception("init_euclid_scripts")
             return
         }
@@ -139,18 +138,18 @@ scratchpad_classify_input :: proc(
         return SCRATCHPAD_PARSE_ERROR
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
-    text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_classify_input,
+    text_value := jl_cstr_to_string(text_c)
+    result := jl_call2(state^.julia_interface^.scratchpad_classify_input,
         state_value, text_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_classify_input")
         return SCRATCHPAD_PARSE_ERROR
     }
 
-    return i32(julialib.jl_unbox_int32(result))
+    return i32(jl_unbox_int32(result))
 }
 
 //   Queue a complete scratchpad input for one-per-frame execution.
@@ -168,18 +167,18 @@ scratchpad_queue_input :: proc(
         return false
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
-    text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_queue_input,
+    text_value := jl_cstr_to_string(text_c)
+    result := jl_call2(state^.julia_interface^.scratchpad_queue_input,
         state_value, text_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_queue_input")
         return false
     }
 
-    return julialib.jl_unbox_bool(result) != 0
+    return jl_unbox_bool(result) != 0
 }
 
 //   Save scratchpad history entries to a file path through Julia runtime.
@@ -197,18 +196,18 @@ scratchpad_save_history_to_file :: proc(
         return false
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
     path_c := strings.clone_to_cstring(path, context.temp_allocator)
-    path_value := julialib.jl_cstr_to_string(path_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_save_history_to_file,
+    path_value := jl_cstr_to_string(path_c)
+    result := jl_call2(state^.julia_interface^.scratchpad_save_history_to_file,
         state_value, path_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_save_history_to_file")
         return false
     }
 
-    return julialib.jl_unbox_bool(result) != 0
+    return jl_unbox_bool(result) != 0
 }
 
 //   Move scratchpad history cursor one step backward and return suggested input.
@@ -220,16 +219,16 @@ scratchpad_history_previous :: proc(state: ^core.Euclid_General_State) -> string
         return ""
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(
+    state_value := jl_box_voidpointer(state)
+    result := jl_call1(
         state^.julia_interface^.scratchpad_history_previous, state_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_previous")
         return ""
     }
 
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
 }
 
 //   Move scratchpad history cursor one step forward and return suggested input.
@@ -241,15 +240,15 @@ scratchpad_history_next :: proc(state: ^core.Euclid_General_State) -> string {
         return ""
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_next, state_value)
+    state_value := jl_box_voidpointer(state)
+    result := jl_call1(state^.julia_interface^.scratchpad_history_next, state_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_next")
         return ""
     }
 
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
 }
 
 //   Reset scratchpad history cursor to the position after the most recent entry.
@@ -261,16 +260,16 @@ scratchpad_history_reset_cursor :: proc(state: ^core.Euclid_General_State) -> bo
         return false
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(
+    state_value := jl_box_voidpointer(state)
+    result := jl_call1(
         state^.julia_interface^.scratchpad_history_reset_cursor, state_value)
 
-    if julialib.jl_exception_occurred() != nil || result == nil {
+    if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_reset_cursor")
         return false
     }
 
-    return julialib.jl_unbox_bool(result) != 0
+    return jl_unbox_bool(result) != 0
 }
 
 //  Perform a single animation frame update for the julia system, including
@@ -306,12 +305,12 @@ call_current_animation_get_view_text :: proc(
         return ""
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
 
-    result := julialib.jl_call1(
+    result := jl_call1(
         state^.julia_interface^.current_animation^.get_view_text, state_value)
 
-    if julialib.jl_exception_occurred() != nil {
+    if jl_exception_occurred() != nil {
         print_julia_exception("Current animation get view text")
         return ""
     }
@@ -319,7 +318,7 @@ call_current_animation_get_view_text :: proc(
         return ""
     }
 
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
 }
 
 
@@ -381,11 +380,11 @@ update_running_animations :: proc(
 call_global_euclid_loop :: proc(
     state: ^core.Euclid_General_State, dt: f32) {
 
-    state_value := julialib.jl_box_voidpointer(state)
-    dt_value := julialib.jl_box_float32(dt)
+    state_value := jl_box_voidpointer(state)
+    dt_value := jl_box_float32(dt)
 
-    julialib.jl_call2(state^.julia_interface^.global_loop, state_value, dt_value)
-    if julialib.jl_exception_occurred() != nil {
+    jl_call2(state^.julia_interface^.global_loop, state_value, dt_value)
+    if jl_exception_occurred() != nil {
         print_julia_exception("global_euclid_loop")
         return
     }
@@ -411,13 +410,13 @@ call_current_animation_loop :: proc(
         return
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-    dt_value := julialib.jl_box_float32(dt)
+    state_value := jl_box_voidpointer(state)
+    dt_value := jl_box_float32(dt)
 
-    julialib.jl_call2(state^.julia_interface^.current_animation^.loop,
+    jl_call2(state^.julia_interface^.current_animation^.loop,
         state_value, dt_value)
 
-    if julialib.jl_exception_occurred() != nil {
+    if jl_exception_occurred() != nil {
         print_julia_exception("Current animation loop")
         return
     }
@@ -440,13 +439,13 @@ change_current_animation_loop :: proc(
         animation = &state^.julia_interface^.null_animation
     }
     
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
 
     if state^.julia_interface^.current_animation != nil &&
         state^.julia_interface^.current_animation^.loop != nil {
-        julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
+        jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
     
-        if julialib.jl_exception_occurred() != nil {
+        if jl_exception_occurred() != nil {
             print_julia_exception("Cleaning previous animation loop")
             return
         }
@@ -459,8 +458,8 @@ change_current_animation_loop :: proc(
         state^.anim_metadata[i] = 0.0
     }
 
-   julialib.jl_call1(animation^.initiate, state_value)
-    if julialib.jl_exception_occurred() != nil {
+   jl_call1(animation^.initiate, state_value)
+    if jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
         return
     }
@@ -481,10 +480,10 @@ reset_current_animation_loop :: proc(
         return
     }
     
-    state_value := julialib.jl_box_voidpointer(state)
+    state_value := jl_box_voidpointer(state)
 
-   julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
-    if julialib.jl_exception_occurred() != nil {
+   jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
+    if jl_exception_occurred() != nil {
         print_julia_exception("Cleaning previous animation loop")
         return
     }
@@ -496,29 +495,29 @@ reset_current_animation_loop :: proc(
         state^.anim_metadata[i] = 0.0
     }
     
-   julialib.jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
-    if julialib.jl_exception_occurred() != nil {
+   jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
+    if jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
         return
     }
 }
 
 //   Resolve Julia Main module handle used for bridge function lookup.
-resolve_main_module :: proc() -> ^julialib.jl_module_t {
-    main_value := julialib.jl_eval_string("Main")
-    if main_value == nil || julialib.jl_exception_occurred() != nil {
+resolve_main_module :: proc() -> ^jl_module_t {
+    main_value := jl_eval_string("Main")
+    if main_value == nil || jl_exception_occurred() != nil {
         return nil
     }
-    return (^julialib.jl_module_t)(main_value)
+    return (^jl_module_t)(main_value)
 }
 
 //   Resolve Julia Base module handle used for exception formatting.
-resolve_base_module :: proc() -> ^julialib.jl_module_t {
-    base_value := julialib.jl_eval_string("base")
-    if base_value == nil || julialib.jl_exception_occurred() != nil {
+resolve_base_module :: proc() -> ^jl_module_t {
+    base_value := jl_eval_string("base")
+    if base_value == nil || jl_exception_occurred() != nil {
         return nil
     }
-    return (^julialib.jl_module_t)(base_value)
+    return (^jl_module_t)(base_value)
 }
 
 //   Return false for include failure and exit the process when configured.
@@ -543,14 +542,14 @@ resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, 
 }
 
 //   Resolve the Main.include function used to load packaged Julia scripts.
-resolve_main_include_function :: proc(exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
+resolve_main_include_function :: proc(exit_on_failure: bool) -> (^jl_value_t, bool) {
     main_module := resolve_main_module()
     if main_module == nil {
         fmt.eprintln("Failed to resolve Julia Main module.")
         return nil, include_packaged_script_failure(exit_on_failure)
     }
 
-    include_fn := julialib.jl_get_function(main_module, "include")
+    include_fn := jl_get_function(main_module, "include")
     if include_fn == nil {
         fmt.eprintln("Failed to resolve Julia include function from Main.")
         return nil, include_packaged_script_failure(exit_on_failure)
@@ -561,14 +560,14 @@ resolve_main_include_function :: proc(exit_on_failure: bool) -> (^julialib.jl_va
 
 //   Call Main.include on the packaged Julia entry script path.
 call_include_packaged_script :: proc(
-    include_fn: ^julialib.jl_value_t,
+    include_fn: ^jl_value_t,
     script_path: string,
     exit_on_failure: bool) -> bool {
 
     script_cstr := strings.clone_to_cstring(script_path, context.temp_allocator)
-    script_value := julialib.jl_cstr_to_string(script_cstr)
-    include_result := julialib.jl_call1(include_fn, script_value)
-    if julialib.jl_exception_occurred() != nil || include_result == nil {
+    script_value := jl_cstr_to_string(script_cstr)
+    include_result := jl_call1(include_fn, script_value)
+    if jl_exception_occurred() != nil || include_result == nil {
         fmt.eprintln("Failed to initialize Julia scripts via Main.include(path).")
         fmt.eprintln("Resolved script path: ", script_path)
         fmt.eprintln("Verify assets.pkg/julia/script.jl exists next to the executable.")
@@ -604,19 +603,19 @@ refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    state^.julia_interface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
-    state^.julia_interface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    state^.julia_interface^.scratchpad_classify_input = julialib.jl_get_function(
+    state^.julia_interface^.init_scripts = jl_get_function(main_module, "init_euclid_scripts")
+    state^.julia_interface^.global_loop = jl_get_function(main_module, "global_euclid_loop")
+    state^.julia_interface^.scratchpad_classify_input = jl_get_function(
         main_module, "scratchpad_classify_input")
-    state^.julia_interface^.scratchpad_queue_input = julialib.jl_get_function(
+    state^.julia_interface^.scratchpad_queue_input = jl_get_function(
         main_module, "scratchpad_queue_input")
-    state^.julia_interface^.scratchpad_save_history_to_file = julialib.jl_get_function(
+    state^.julia_interface^.scratchpad_save_history_to_file = jl_get_function(
         main_module, "scratchpad_save_history_to_file")
-    state^.julia_interface^.scratchpad_history_previous = julialib.jl_get_function(
+    state^.julia_interface^.scratchpad_history_previous = jl_get_function(
         main_module, "scratchpad_history_previous")
-    state^.julia_interface^.scratchpad_history_next = julialib.jl_get_function(
+    state^.julia_interface^.scratchpad_history_next = jl_get_function(
         main_module, "scratchpad_history_next")
-    state^.julia_interface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
+    state^.julia_interface^.scratchpad_history_reset_cursor = jl_get_function(
         main_module, "scratchpad_history_reset_cursor")
 }
 
@@ -816,14 +815,14 @@ push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.Euclid_Gener
 // Notes:
 //   - Falls back to type-only output when Base sprint/showerror cannot be resolved.
 print_julia_exception :: proc(contextOfErr: string) {
-    ex_raw := julialib.jl_exception_occurred()
+    ex_raw := jl_exception_occurred()
     if ex_raw == nil {
         return
     }
 
-    ex := (^julialib.jl_value_t)(ex_raw)
+    ex := (^jl_value_t)(ex_raw)
 
-    ex_type := cstring(julialib.jl_typeof_str(ex_raw))
+    ex_type := cstring(jl_typeof_str(ex_raw))
 
     base_module := resolve_base_module()
     if base_module == nil {
@@ -831,23 +830,23 @@ print_julia_exception :: proc(contextOfErr: string) {
         return
     }
 
-    sprint_fn := julialib.jl_get_function(base_module, "sprint")
-    showerror_fn := julialib.jl_get_function(base_module, "showerror")
+    sprint_fn := jl_get_function(base_module, "sprint")
+    showerror_fn := jl_get_function(base_module, "showerror")
 
     if sprint_fn == nil || showerror_fn == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
     }
 
-    args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
-    msg_val := julialib.jl_call(sprint_fn, &args[0], 2)
+    args: [2]^jl_value_t = {(^jl_value_t)(showerror_fn), ex}
+    msg_val := jl_call(sprint_fn, &args[0], 2)
 
-    if julialib.jl_exception_occurred() != nil || msg_val == nil {
+    if jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
     }
 
-    msg := julialib.jl_string_ptr(msg_val)
+    msg := jl_string_ptr(msg_val)
     fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
 }
 

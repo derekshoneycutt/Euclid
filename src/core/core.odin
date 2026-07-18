@@ -5,9 +5,8 @@ package core
 // stick to that memory, except for a few UI helpers using temp_allocator, Julia's GC, and GIFs.
 // This creates some hard caps on e.g. the particle system, but it also prevents wildness.
 
-import "../julialib"
-
 import "base:runtime"
+import "core:c"
 
 import rl "vendor:raylib"
 
@@ -32,11 +31,193 @@ TOOL_LENGTH :: 0.35
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
 
+/*
+    This first section are julia structures taken from julia.h.
+
+
+*/
+
+JL_IMAGE_SEARCH :: enum c.int {
+    JL_IMAGE_CWD = 0,
+    JL_IMAGE_JULIA_HOME = 1,
+    JL_IMAGE_IN_MEMORY = 2,
+}
+
+jl_image_kind_t :: enum c.int {
+    JL_IMAGE_KIND_NONE = 0,
+    JL_IMAGE_KIND_JI = 1,
+    JL_IMAGE_KIND_SO = 2,
+}
+
+jl_gc_collection_t :: enum c.int {
+    JL_GC_AUTO = 0,
+    JL_GC_FULL = 1,
+    JL_GC_INCREMENTAL = 2,
+}
+
+jl_nullable_float64_t :: struct {
+    hasvalue: u8,
+    value: f64,
+}
+
+jl_nullable_float32_t :: struct {
+    hasvalue: u8,
+    value: f32,
+}
+
+jl_options_t :: struct {
+    quiet: c.int8_t,
+    banner: c.int8_t,
+    julia_bindir: cstring,
+    julia_bin: cstring,
+    cmds: ^cstring,
+    image_file: cstring,
+    cpu_target: cstring,
+    nthreadpools: c.int8_t,
+    nthreads: c.int16_t,
+    nmarkthreads: c.int16_t,
+    nsweepthreads: c.int8_t,
+    nthreads_per_pool: ^c.int16_t,
+    nprocs: c.int32_t,
+    machine_file: cstring,
+    project: cstring,
+    program_file: cstring,
+    isinteractive: c.int8_t,
+    color: c.int8_t,
+    historyfile: c.int8_t,
+    startupfile: c.int8_t,
+    compile_enabled: c.int8_t,
+    code_coverage: c.int8_t,
+    malloc_log: c.int8_t,
+    tracked_path: cstring,
+    opt_level: c.int8_t,
+    opt_level_min: c.int8_t,
+    debug_level: c.int8_t,
+    check_bounds: c.int8_t,
+    depwarn: c.int8_t,
+    warn_overwrite: c.int8_t,
+    can_inline: c.int8_t,
+    polly: c.int8_t,
+    trace_compile: cstring,
+    trace_dispatch: cstring,
+    fast_math: c.int8_t,
+    worker: c.int8_t,
+    cookie: cstring,
+    handle_signals: c.int8_t,
+    use_experimental_features: c.int8_t,
+    use_sysimage_native_code: c.int8_t,
+    use_compiled_modules: c.int8_t,
+    use_pkgimages: c.int8_t,
+    bindto: cstring,
+    outputbc: cstring,
+    outputunoptbc: cstring,
+    outputo: cstring,
+    outputasm: cstring,
+    outputji: cstring,
+    output_code_coverage: cstring,
+    incremental: c.int8_t,
+    image_file_specified: c.int8_t,
+    warn_scope: c.int8_t,
+    image_codegen: c.int8_t,
+    rr_detach: c.int8_t,
+    strip_metadata: c.int8_t,
+    strip_ir: c.int8_t,
+    permalloc_pkgimg: c.int8_t,
+    heap_size_hint: u64,
+    hard_heap_limit: u64,
+    heap_target_increment: u64,
+    trace_compile_timing: c.int8_t,
+    trim: c.int8_t,
+    trace_eval: c.int8_t,
+    task_metrics: c.int8_t,
+    timeout_for_safepoint_straggler_s: c.int16_t,
+    gc_sweep_always_full: c.int8_t,
+    compress_sysimage: c.int8_t,
+    alert_on_critical_error: c.int8_t,
+    target_sanitize_memory: c.int8_t,
+    target_sanitize_thread: c.int8_t,
+    target_sanitize_address: c.int8_t,
+}
+
+jl_image_buf_t :: struct {
+    kind: jl_image_kind_t,
+    pointers: rawptr,
+    data: cstring,
+    size: c.size_t,
+    base: u64,
+    checksum: u32,
+}
+
+jl_cgparams_t :: struct {
+    track_allocations: c.int,
+    code_coverage: c.int,
+    prefer_specsig: c.int,
+
+    gnu_pubnames: c.int,
+    debug_info_kind: c.int,
+    debug_info_level: c.int,
+    safepoint_on_entry: c.int,
+    gcstack_arg: c.int,
+
+    use_jlplt: c.int,
+    force_emit_all: c.int,
+
+    sanitize_memory: c.int,
+    sanitize_thread: c.int,
+    sanitize_address: c.int,
+
+    unique_names: c.int,
+}
+
+jl_emission_params_t :: struct {
+    emit_metadata: c.int,
+}
+
+jl_gcframe_t :: struct {}
+jl_tls_states_t :: struct {}
+jl_value_t :: struct {}
+jl_sym_t :: struct {}
+jl_svec_t :: struct {}
+jl_genericmemory_t :: struct {
+    length: c.size_t,
+    ptr: rawptr,
+}
+jl_genericmemoryref_t :: struct {
+    ptr_or_offset: rawptr,
+    mem: ^jl_genericmemory_t,
+}
+jl_array_t :: struct {
+    ref: jl_genericmemoryref_t,
+    dimsize: [1]c.size_t,
+}
+jl_datatype_t :: struct {}
+jl_typename_t :: struct {}
+jl_tupletype_t :: struct {}
+jl_tvar_t :: struct {}
+jl_unionall_t :: struct {}
+jl_binding_t :: struct {}
+jl_binding_partition_t :: struct {}
+jl_globalref_t :: struct {}
+jl_method_t :: struct {}
+jl_method_instance_t :: struct {}
+jl_code_info_t :: struct {}
+jl_code_instance_t :: struct {}
+jl_debuginfo_t :: struct {}
+jl_module_t :: struct {}
+jl_task_t :: struct {}
+jl_weakref_t :: struct {}
+JL_STREAM :: struct {}
+ios_t :: struct {}
+
+/*
+    The remaining structures are unique to the Euclid application
+*/
+
 Euclid_Julia_Animation_Interface :: struct {
-    get_view_text : ^julialib.jl_value_t,
-    initiate : ^julialib.jl_value_t, // initiate the animation type
-    loop : ^julialib.jl_value_t, // ran each dt in the main window loop
-    clean : ^julialib.jl_value_t, // stop and clear animations
+    get_view_text : ^jl_value_t,
+    initiate : ^jl_value_t, // initiate the animation type
+    loop : ^jl_value_t, // ran each dt in the main window loop
+    clean : ^jl_value_t, // stop and clear animations
 
     name : string,
     is_expanded : bool,
@@ -48,14 +229,14 @@ Euclid_Julia_Animation_Interface :: struct {
 }
 
 Euclid_Julia_Interface :: struct {
-    init_scripts : ^julialib.jl_value_t,
-    global_loop : ^julialib.jl_value_t,
-    scratchpad_classify_input : ^julialib.jl_value_t,
-    scratchpad_queue_input : ^julialib.jl_value_t,
-    scratchpad_save_history_to_file : ^julialib.jl_value_t,
-    scratchpad_history_previous : ^julialib.jl_value_t,
-    scratchpad_history_next : ^julialib.jl_value_t,
-    scratchpad_history_reset_cursor : ^julialib.jl_value_t,
+    init_scripts : ^jl_value_t,
+    global_loop : ^jl_value_t,
+    scratchpad_classify_input : ^jl_value_t,
+    scratchpad_queue_input : ^jl_value_t,
+    scratchpad_save_history_to_file : ^jl_value_t,
+    scratchpad_history_previous : ^jl_value_t,
+    scratchpad_history_next : ^jl_value_t,
+    scratchpad_history_reset_cursor : ^jl_value_t,
     asset_archive_mod_time_unix_nano: i64,
 
     null_animation : Euclid_Julia_Animation_Interface,

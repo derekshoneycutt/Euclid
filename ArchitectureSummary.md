@@ -64,7 +64,7 @@ Purpose: canonical data shapes and global capacity limits.
 Important files:
 
 - `src/core/core.odin`
-  - Defines major runtime structures (including `Euclid_General_State`).
+  - Defines major runtime structures (including Julia structures and `Euclid_General_State`).
   - Declares system capacity constants.
 
 ### Rendering and UI Module
@@ -107,7 +107,7 @@ Important files:
   - Julia runtime initialization/shutdown and per-frame orchestration.
 - `src/julia/odin-julia-bridge.odin`
   - Exported bridge ABI used by Julia scripts.
-- `src/julialib/julialib.odin`
+- `src/julia/julialib.odin`
   - Low-level Julia embedding declarations (`jl_*`) mirrored from `julia.h`.
 
 ### Assets and IO Module
