@@ -54,6 +54,7 @@ Core Content:
     - [ ] SAS (I.4)
     - [ ] SSS (I.8)
     - [ ] AAS (I.26)
+- [ ] Categories -- Nice to have --
 
 General features:
 
@@ -65,6 +66,11 @@ General features:
   - [X] Circle
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
+  - [ ] Arrows
+    - [ ] Normal
+    - [ ] Monomorph (hooked)
+    - [ ] Epimorph (double arrow)
+    - [ ] Curved forms -- Nice to have --
   - [X] Label
   - [X] Pen
   - [X] Compass
@@ -92,6 +98,7 @@ General features:
   - [ ] Basic clipboard support
   - [ ] Latex to unicode input tab completion support
 - [ ] Drawing Sounds
+- [ ] Alternative tree for pedagological view vs book view -- Nice to have --
 
 Final tasks:
 
@@ -120,11 +127,13 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $R/Z$ (coil going up, animating on each full circle)
   - Theorems
 - More primitives (gnomons, strings--small connectors)
+- Category theory
 - Improved Scratchpad console-like REPL
 - Improved Scratchpad highlight and clipboard support
-- Highlight drawn shape from clicking/hovering/idk label in view text area if possible
+- Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - Declarative animations support
+- Animation slider
 - Transformations
   - Scaling
   - Shearing
@@ -148,6 +157,8 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Theorems
 - Complex numbers support handling
 - More primitives (ellipses/conic sections, spirals)
+- Scaled Cartesian coordinate system
+- Interactive mode animations w/ per-animation settings
 
 ### v4
 
@@ -155,7 +166,6 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Definitions
   - Propositions (16)
 - Intro rings
-- Scaled Cartesian coordinate system
 - Scaled polynomial section drawing
 
 ### v5
