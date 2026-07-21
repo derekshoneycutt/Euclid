@@ -9,7 +9,9 @@ include("./axiom_I1.jl")
 include("./axiom_I2.jl")
 include("./axiom_I3.jl")
 include("./axiom_I4.jl")
+include("./axiom_IV5.jl")
 include("./axiom_I5.jl")
+include("./axiom_IV6.jl")
 include("./axiom_I6.jl")
 include("./axiom_I7.jl")
 include("./axiom_II1.jl")
@@ -18,6 +20,12 @@ include("./axiom_II3.jl")
 include("./axiom_II4.jl")
 include("./axiom_II5.jl")
 include("./axiom_III1.jl")
+include("./axiom_IV1.jl")
+include("./axiom_IV2.jl")
+include("./axiom_IV3.jl")
+include("./axiom_IV4.jl")
+include("./def_angle.jl")
+include("./def_triangle_angle.jl")
 include("./def_segments.jl")
 include("./theorem_1.jl")
 include("./theorem_2.jl")
@@ -81,6 +89,18 @@ The introduction of this axiom simplifies greatly the fundamental principles of 
 ...
 
 The axiom of parallels is a plane axiom."""
+end
+
+function get_view_text_BookI_congruence(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group IV: Axioms of Congruence
+
+The axioms of this group define the idea of congruence or displacement.
+
+Segments stand in a certain relation to one another which is described by the word "congruent."
+
+...
+
+Axioms IV, 1-3 contain statements concerning the congruence of segments of a straight line only. They may, therefore, be called the linear axioms of group IV. Axioms IV, 4, 5 contain statements relating to the congruence of angles. Axiom IV, 6 gives the connection between the congruence of segments and the congruence of angles. Axioms IV, 4-6 contain statements regarding the elements of plane geometry and may be called the plane axioms of group IV."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -239,6 +259,59 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneTheorem8.loop,
                 HilbertChapterOneTheorem8.clean,
                 "Theorem 8", book1Sec5Id)
+
+        book1Sec6Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_congruence, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§6 Group IV: Axioms of Congruence", book1Id)
+            book1AxiomIV1Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV1.get_view_text,
+                HilbertChapterOneAxiomIV1.initialize,
+                HilbertChapterOneAxiomIV1.loop,
+                HilbertChapterOneAxiomIV1.clean,
+                "Axiom IV,1", book1Sec6Id)
+            book1AxiomIV2Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV2.get_view_text,
+                HilbertChapterOneAxiomIV2.initialize,
+                HilbertChapterOneAxiomIV2.loop,
+                HilbertChapterOneAxiomIV2.clean,
+                "Axiom IV,2", book1Sec6Id)
+            book1AxiomIV3Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV3.get_view_text,
+                HilbertChapterOneAxiomIV3.initialize,
+                HilbertChapterOneAxiomIV3.loop,
+                HilbertChapterOneAxiomIV3.clean,
+                "Axiom IV,3", book1Sec6Id)
+            book1DefAngleId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefAngle.get_view_text,
+                HilbertChapterOneDefAngle.initialize,
+                HilbertChapterOneDefAngle.loop,
+                HilbertChapterOneDefAngle.clean,
+                "Definition: Angle", book1Sec6Id)
+            book1AxiomIV4Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV4.get_view_text,
+                HilbertChapterOneAxiomIV4.initialize,
+                HilbertChapterOneAxiomIV4.loop,
+                HilbertChapterOneAxiomIV4.clean,
+                "Axiom IV,4", book1Sec6Id)
+            book1AxiomIV5Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV5.get_view_text,
+                HilbertChapterOneAxiomIV5.initialize,
+                HilbertChapterOneAxiomIV5.loop,
+                HilbertChapterOneAxiomIV5.clean,
+                "Axiom IV,5", book1Sec6Id)
+            book1DefTriangleAngleId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefTriangleAngle.get_view_text,
+                HilbertChapterOneDefTriangleAngle.initialize,
+                HilbertChapterOneDefTriangleAngle.loop,
+                HilbertChapterOneDefTriangleAngle.clean,
+                "Definition: Triangle Angle", book1Sec6Id)
+            book1AxiomIV6Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomIV6.get_view_text,
+                HilbertChapterOneAxiomIV6.initialize,
+                HilbertChapterOneAxiomIV6.loop,
+                HilbertChapterOneAxiomIV6.clean,
+                "Axiom IV,6", book1Sec6Id)
 end
 
 end

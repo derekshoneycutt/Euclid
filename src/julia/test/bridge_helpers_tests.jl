@@ -30,8 +30,9 @@ end
 @testset "bridge constants" begin
     @test OdinJuliaBridge.LABEL_DECORATION_NONE == Int32(0)
     @test OdinJuliaBridge.LABEL_DECORATION_PRIME == Int32(1)
-    @test OdinJuliaBridge.LABEL_DECORATION_HAT == Int32(2)
-    @test OdinJuliaBridge.LABEL_DECORATION_BAR == Int32(3)
+    @test OdinJuliaBridge.LABEL_DECORATION_DOUBLEPRIME == Int32(2)
+    @test OdinJuliaBridge.LABEL_DECORATION_HAT == Int32(3)
+    @test OdinJuliaBridge.LABEL_DECORATION_BAR == Int32(4)
 
     @test OdinJuliaBridge.BRIDGE_STATUS_OK == Int32(0)
     @test OdinJuliaBridge.BRIDGE_STATUS_NON_CONVERGED == Int32(7)

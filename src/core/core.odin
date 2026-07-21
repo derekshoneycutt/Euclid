@@ -291,6 +291,7 @@ Kine_Shape_Point_Type :: enum {
 Kine_Label_Decoration_Kind :: enum {
     None,
     Prime,
+    DoublePrime,
     Hat,
     Bar,
 }

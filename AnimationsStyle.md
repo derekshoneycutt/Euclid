@@ -31,6 +31,7 @@ documented reason to deviate:
 - `khaki3`
 - `grey60`
 - `plum1`: the standard color for point labels.
+- `lightgreen` : the standard color for congruence relationship highlighting.
 
 These four colors are the shared working palette. They are reused across lines,
 circles, planes, and points based on the number of objects on screen and how

@@ -16,7 +16,8 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_c
     animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
     animate_compass_arcmove, animate_highlight_point, animate_extend_line,
     animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
-    animate_draw_circle, animate_repl_draw_point, animate_repl_draw_line,
+    animate_draw_circle, animate_compass_fill_arc_highlight,
+    animate_repl_draw_point, animate_repl_draw_line,
     animate_repl_draw_circle, animate_repl_draw_filledcircle
 
 const PenLength = 0.14f0
@@ -939,6 +940,49 @@ function animate_draw_filledcircle(
     OdinJuliaBridge.set_point_position(state_ptr, markerStartId, startPoint)
     OdinJuliaBridge.set_point_position(state_ptr, markerEndId, endPoint)
     OdinJuliaBridge.show_point(state_ptr, markerHostId)
+
+    emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
+end
+
+"""
+Animate a compass-only filled arc highlight sweep without mutating marker geometry.
+
+--------
+
+Parameters:
+
+- state_ptr : Pointer to the Euclid application state.
+- timer : Elapsed animation time.
+- duration : Total duration for the highlight sweep.
+- jointPoint : Compass pivot position vector [x, y, z].
+- startPoint : Sweep start point vector [x, y, z].
+- angleTheta : Sweep angle in radians.
+- radius : Sweep radius.
+- color : Trail and compass-active color.
+
+Returns:
+
+- nothing
+"""
+function animate_compass_fill_arc_highlight(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
+    angleTheta::Float32, radius::Float32, color)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    theta = startTheta + angleTheta * t
+
+    endPoint = [
+        jointPoint[1] + radius * Float32(cos(theta)),
+        jointPoint[2] + radius * Float32(sin(theta)),
+        0f0]
+
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint; sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint; sweep = false)
+    OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
+    OdinJuliaBridge.show_compass(state_ptr)
 
     emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
 end

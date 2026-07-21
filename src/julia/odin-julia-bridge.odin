@@ -48,6 +48,7 @@ BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
 BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
 BRIDGE_LABEL_DECORATION_HAT :: i32(core.Kine_Label_Decoration_Kind.Hat)
 BRIDGE_LABEL_DECORATION_BAR :: i32(core.Kine_Label_Decoration_Kind.Bar)
+BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Kine_Label_Decoration_Kind.DoublePrime)
 
 KINE_CONSTRAINT_KIND_MIN :: i32(core.Kine_Constraint_Kind.Distance)
 KINE_CONSTRAINT_KIND_MAX :: i32(core.Kine_Constraint_Kind.CenterPivot)
@@ -104,6 +105,8 @@ label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Lab
         return .Hat
     case BRIDGE_LABEL_DECORATION_BAR:
         return .Bar
+    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
+        return .DoublePrime
     }
 
     return .None
