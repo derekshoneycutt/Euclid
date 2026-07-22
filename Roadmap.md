@@ -26,15 +26,15 @@ Core Content:
     - [ ] 21-30
     - [ ] 31-40
     - [ ] 41-48
-- [ ] Hilbert, Chapter 1
+- [X] Hilbert, Chapter 1
   - [X] Section 1
   - [X] Section 2
   - [X] Section 3
   - [X] Section 4
   - [X] Section 5
   - [X] Section 6
-  - [ ] Section 7
-  - [ ] Section 8
+  - [X] Section 7
+  - [X] Section 8
 - [ ] Algebraic groups
   - [ ] Definitions
     - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
@@ -55,6 +55,8 @@ Core Content:
     - [ ] SSS (I.8)
     - [ ] AAS (I.26)
 - [ ] Categories -- Nice to have --
+- [ ] Tarksi's Axioms -- Nice to have --
+- [ ] Birkhoff's Axioms? -- *maybe* --
 
 General features:
 
@@ -117,7 +119,10 @@ After v1 is complete, the following is suggestions to evaluate next.
 
 - Euclid Elements, Book 2 "the algebra book"
   - Definitions
-  - Propositions (14)
+  - Propositions
+    - 1-5
+    - 6-10
+    - 11-14
 - Group theory
   - Klein 4 Group
   - Frieze groups
@@ -125,13 +130,17 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
   - $R/Z$ (coil going up, animating on each full circle)
+  - Free group $F_2$ from figure-8 (walking a cayley tree)
+  - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
   - Theorems
 - More primitives (gnomons, strings--small connectors)
+- Limited lifetime line/arc segments--disintegrate after drawing
 - Category theory
 - Improved Scratchpad console-like REPL
 - Improved Scratchpad highlight and clipboard support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
+- REPL-focused exercise suggestions
 - Declarative animations support
 - Animation slider
 - Transformations

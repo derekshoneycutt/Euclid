@@ -14,6 +14,7 @@ The core application is coded in Odin, with Raylib used for rendering.
 1. [Questions?](#questions)
     1. [Q: Why?](#q-why)
     1. [Q: What's the utility?](#q-whats-the-utility)
+    1. [Q: What about AI?](#q-what-about-ai)
     1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
     1. [Q: Any Performance Hacks for Users?](#q-any-performance-hacks-for-users)
@@ -60,6 +61,35 @@ educational and works out the brain a bit. You should try such things sometimes.
 Well, it is educational!
 
 It's also seriously just *fun*.
+
+### Q: What about AI?
+
+First, my general policy on it is this: I will not accept code in this project that cannot
+be thoroughly explained and followed up on by a human coder. I do read and work on every
+line of code in this project myself, regardless of where that code has come from--be it
+the old depths of stack overflow, my brain, someone else's brain, some AI tool or another,
+or some other tool. If I ever get contributors, I expect the same level of care for the
+craft in their own contributions.
+
+This is not going to be as strong as some would wish. For a project being released into the
+public domain, I just do not have the energy for a stronger stance in this project. The
+concerns are ethical and especially political. In that realm, this project is inherently
+hostile to copyright by its own licensing. The remaining concerns largely boil down to the sustainability. I feel absolutely no need to give AI any benefit of the doubt that it is
+actually sustainable enough to be worth its relatively low quality output. Otherwise,
+these concerns are difficult to address with a simple public domain geometry software
+project. A public domain project is really not the place for many of these ethical and
+political discussions. I will not be fighting that in this project. This will not be a
+project that is concerned with any stronger stance than demanding a human take full
+responsibility.
+
+I do see this as an educational project. I am certainly expanding my understanding of
+geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
+code sucks, and even AI will gladly point it out the second someone points a code review
+agent at it. Sometimes I see AI's suggested code and want to find the closest, highest
+bridge to save my eyes via a nice long fall. My recommendation for the vibecoders is to go
+try and program an OS with a basic text file editor to run in a VM using nothing but ASM,
+and no AI. Something difficult that you will get some taste from. Then whatever, man. Just
+read the code and fix the stupid shit.
 
 ### Q: What is the "Scratchpad"?
 

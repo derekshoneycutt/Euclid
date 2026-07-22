@@ -292,6 +292,7 @@ Kine_Label_Decoration_Kind :: enum {
     None,
     Prime,
     DoublePrime,
+    TriplePrime,
     Hat,
     Bar,
 }

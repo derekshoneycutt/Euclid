@@ -35,9 +35,28 @@ include("./theorem_5.jl")
 include("./theorem_6.jl")
 include("./theorem_7.jl")
 include("./theorem_8.jl")
+include("./theorem_9.jl")
 include("./def_halfrays.jl")
 include("./def_sideofline.jl")
 include("./def_polygon.jl")
+include("./def_congruent_angles.jl")
+include("./def_supplementary_angles.jl")
+include("./def_congruent_triangles.jl")
+include("./theorem_10.jl")
+include("./theorem_11.jl")
+include("./theorem_12.jl")
+include("./theorem_13.jl")
+include("./theorem_14.jl")
+include("./theorem_15.jl")
+include("./theorem_16.jl")
+include("./def_figure.jl")
+include("./theorem_17.jl")
+include("./theorem_18.jl")
+include("./theorem_19.jl")
+include("./theorem_20.jl")
+include("./def_circle.jl")
+include("./axiom_V.jl")
+include("./axiom_completeness.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
@@ -101,6 +120,28 @@ Segments stand in a certain relation to one another which is described by the wo
 ...
 
 Axioms IV, 1-3 contain statements concerning the congruence of segments of a straight line only. They may, therefore, be called the linear axioms of group IV. Axioms IV, 4, 5 contain statements relating to the congruence of angles. Axiom IV, 6 gives the connection between the congruence of segments and the congruence of angles. Axioms IV, 4-6 contain statements regarding the elements of plane geometry and may be called the plane axioms of group IV."""
+end
+
+function get_view_text_BookI_consequences_congruence(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §7 Consequences of the Axioms of Congruence
+
+Suppose the segment AB is congruent to the segment A'B'. Since, according to axiom IV, 1, the segment AB is congruent to itself, it follows from axiom IV, 2 that A'B' is congruent to AB; that is to say, if AB ≡ A'B', then A'B' ≡ AB. We say, then, that the two segments are congruent to one another.
+
+Let A, B, C, D, ..., K, L and A', B', C', D', ..., K', L' be two series of points on the straight lines a and a', respectively, so that all the corresponding segments AB and A'B', AC and A'C', BC and B'C', ..., KL and K'L' are respectively congruent. Then the two series of points are said to be congruent to one another. A and A', B and B', ..., L and L' are called corresponding points of the two congruent series of points.
+
+From the linear axioms IV, 1-3, we can easily deduce several theorems."""
+end
+
+function get_view_text_BookI_continuity(state_ptr::Ptr{Cvoid})
+    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §8 Group V. Axiom of Continuity. (Archimedean Axiom.)
+
+This axiom makes possible the introduction into geometry of the idea of continuity. In order to state this axiom, we must first establish a convention concerning the equality of two segments. For this purpose, we can either base our idea of equality upon the axioms relating to the congruence of segments and define as "equal" the correspondingly congruent segments, or, upon the basis of groups I and II, we may determine how, by suitable constructions (see Chap. V, Section 24), a segment is to be laid off from a point of a given straight line so that a new, definite segment is obtained "equal" to it. In conformity with such a convention, the axiom of Archimedes may be stated as follows.
+
+The axiom of Archimedes is a linear axiom.
+
+...
+
+Remark. To the preceding five groups of axioms, we may add the axiom of completeness, which, although not of a purely geometrical nature, merits particular attention from a theoretical point of view."""
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
@@ -312,6 +353,130 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 HilbertChapterOneAxiomIV6.loop,
                 HilbertChapterOneAxiomIV6.clean,
                 "Axiom IV,6", book1Sec6Id)
+
+        book1Sec7Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_consequences_congruence,
+            NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§7 Consequences after Group IV", book1Id)
+            book1Theorem9Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem9.get_view_text,
+                HilbertChapterOneTheorem9.initialize,
+                HilbertChapterOneTheorem9.loop,
+                HilbertChapterOneTheorem9.clean,
+                "Theorem 9", book1Sec7Id)
+            book1DefCongruentAnglesId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefCongruentAngles.get_view_text,
+                HilbertChapterOneDefCongruentAngles.initialize,
+                HilbertChapterOneDefCongruentAngles.loop,
+                HilbertChapterOneDefCongruentAngles.clean,
+                "Definition: Congruent Angles", book1Sec7Id)
+            book1DefSupplementaryAnglesId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefSupplementaryAngles.get_view_text,
+                HilbertChapterOneDefSupplementaryAngles.initialize,
+                HilbertChapterOneDefSupplementaryAngles.loop,
+                HilbertChapterOneDefSupplementaryAngles.clean,
+                "Definition: Supplementary Angles", book1Sec7Id)
+            book1DefCongruentTrianglesId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefCongruentTriangles.get_view_text,
+                HilbertChapterOneDefCongruentTriangles.initialize,
+                HilbertChapterOneDefCongruentTriangles.loop,
+                HilbertChapterOneDefCongruentTriangles.clean,
+                "Definition: Congruent Triangles", book1Sec7Id)
+            book1Theorem10Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem10.get_view_text,
+                HilbertChapterOneTheorem10.initialize,
+                HilbertChapterOneTheorem10.loop,
+                HilbertChapterOneTheorem10.clean,
+                "Theorem 10", book1Sec7Id)
+            book1Theorem11Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem11.get_view_text,
+                HilbertChapterOneTheorem11.initialize,
+                HilbertChapterOneTheorem11.loop,
+                HilbertChapterOneTheorem11.clean,
+                "Theorem 11", book1Sec7Id)
+            book1Theorem12Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem12.get_view_text,
+                HilbertChapterOneTheorem12.initialize,
+                HilbertChapterOneTheorem12.loop,
+                HilbertChapterOneTheorem12.clean,
+                "Theorem 12", book1Sec7Id)
+            book1Theorem13Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem13.get_view_text,
+                HilbertChapterOneTheorem13.initialize,
+                HilbertChapterOneTheorem13.loop,
+                HilbertChapterOneTheorem13.clean,
+                "Theorem 13", book1Sec7Id)
+            book1Theorem14Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem14.get_view_text,
+                HilbertChapterOneTheorem14.initialize,
+                HilbertChapterOneTheorem14.loop,
+                HilbertChapterOneTheorem14.clean,
+                "Theorem 14", book1Sec7Id)
+            book1Theorem15Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem15.get_view_text,
+                HilbertChapterOneTheorem15.initialize,
+                HilbertChapterOneTheorem15.loop,
+                HilbertChapterOneTheorem15.clean,
+                "Theorem 15", book1Sec7Id)
+            book1Theorem16Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem16.get_view_text,
+                HilbertChapterOneTheorem16.initialize,
+                HilbertChapterOneTheorem16.loop,
+                HilbertChapterOneTheorem16.clean,
+                "Theorem 16", book1Sec7Id)
+            book1DefinitionFigureId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefinitionFigure.get_view_text,
+                HilbertChapterOneDefinitionFigure.initialize,
+                HilbertChapterOneDefinitionFigure.loop,
+                HilbertChapterOneDefinitionFigure.clean,
+                "Definition: Figure", book1Sec7Id)
+            book1Theorem17Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem17.get_view_text,
+                HilbertChapterOneTheorem17.initialize,
+                HilbertChapterOneTheorem17.loop,
+                HilbertChapterOneTheorem17.clean,
+                "Theorem 17", book1Sec7Id)
+            book1Theorem18Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem18.get_view_text,
+                HilbertChapterOneTheorem18.initialize,
+                HilbertChapterOneTheorem18.loop,
+                HilbertChapterOneTheorem18.clean,
+                "Theorem 18", book1Sec7Id)
+            book1Theorem19Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem19.get_view_text,
+                HilbertChapterOneTheorem19.initialize,
+                HilbertChapterOneTheorem19.loop,
+                HilbertChapterOneTheorem19.clean,
+                "Theorem 19", book1Sec7Id)
+            book1Theorem20Id = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneTheorem20.get_view_text,
+                HilbertChapterOneTheorem20.initialize,
+                HilbertChapterOneTheorem20.loop,
+                HilbertChapterOneTheorem20.clean,
+                "Theorem 20", book1Sec7Id)
+            book1DefinitionCircleId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneDefinitionCircle.get_view_text,
+                HilbertChapterOneDefinitionCircle.initialize,
+                HilbertChapterOneDefinitionCircle.loop,
+                HilbertChapterOneDefinitionCircle.clean,
+                "Definition: Circle", book1Sec7Id)
+
+        book1Sec8Id = OdinJuliaBridge.add_child_animation_interface(
+            state_ptr, get_view_text_BookI_continuity, NullAnimation.initialize,
+            NullAnimation.loop, NullAnimation.clean,
+            "§8 Group V: Axiom of Continuity", book1Id)
+            book1AxiomVId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomV.get_view_text,
+                HilbertChapterOneAxiomV.initialize,
+                HilbertChapterOneAxiomV.loop, HilbertChapterOneAxiomV.clean,
+                "Axiom V", book1Sec8Id)
+            book1AxiomCompletenessId = OdinJuliaBridge.add_child_animation_interface(
+                state_ptr, HilbertChapterOneAxiomCompleteness.get_view_text,
+                HilbertChapterOneAxiomCompleteness.initialize,
+                HilbertChapterOneAxiomCompleteness.loop,
+                HilbertChapterOneAxiomCompleteness.clean,
+                "Axiom of Completeness", book1Sec8Id)
 end
 
 end

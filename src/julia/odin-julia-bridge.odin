@@ -46,9 +46,10 @@ BRIDGE_STATUS_NON_CONVERGED :: 7
 
 BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
 BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
+BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Kine_Label_Decoration_Kind.DoublePrime)
+BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Kine_Label_Decoration_Kind.TriplePrime)
 BRIDGE_LABEL_DECORATION_HAT :: i32(core.Kine_Label_Decoration_Kind.Hat)
 BRIDGE_LABEL_DECORATION_BAR :: i32(core.Kine_Label_Decoration_Kind.Bar)
-BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Kine_Label_Decoration_Kind.DoublePrime)
 
 KINE_CONSTRAINT_KIND_MIN :: i32(core.Kine_Constraint_Kind.Distance)
 KINE_CONSTRAINT_KIND_MAX :: i32(core.Kine_Constraint_Kind.CenterPivot)
@@ -101,12 +102,14 @@ label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Lab
     switch kind {
     case BRIDGE_LABEL_DECORATION_PRIME:
         return .Prime
+    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
+        return .DoublePrime
+    case BRIDGE_LABEL_DECORATION_TRIPLEPRIME:
+        return .TriplePrime
     case BRIDGE_LABEL_DECORATION_HAT:
         return .Hat
     case BRIDGE_LABEL_DECORATION_BAR:
         return .Bar
-    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
-        return .DoublePrime
     }
 
     return .None
@@ -283,7 +286,8 @@ create_new_label :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - label: Rune glyph used by label point shapes.
-//   - decoration_kind: Decoration enum encoded as integer (none=0, prime=1, hat=2, bar=3).
+//   - decoration_kind: Decoration enum encoded as integer.
+//     none=0, prime=1, doubleprime=2, tripleprime=3, hat=4, bar=5.
 //   - pos: 3D position used for shape/tool placement in world space.
 //   - color: RGBA color payload in bridge format.
 //   - brushSize: Stroke thickness for rendered point/shape geometry.

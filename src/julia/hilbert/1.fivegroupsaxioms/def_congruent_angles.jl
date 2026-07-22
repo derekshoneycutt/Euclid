@@ -1,4 +1,4 @@
-module HilbertChapterOneAxiomIV4
+module HilbertChapterOneDefCongruentAngles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
@@ -122,26 +122,17 @@ const PhaseHighlight1Back = 15f0
 const PhaseCompassArcToMarker2 = 16f0
 const PhaseHighlight2Forward = 17f0
 const PhaseHighlight2Back = 18f0
-const PhaseCompassLiftEnd = 19f0
-const PhaseFinalHold = 20f0
+const PhaseCompassArcBackToMarker1 = 19f0
+const PhaseHighlight1EncoreForward = 20f0
+const PhaseHighlight1EncoreBack = 21f0
+const PhaseCompassLiftEnd = 22f0
+const PhaseFinalHold = 23f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,4
+    """David Hilbert - Foundations of Geometry - Definition: Congruent Angles
 
-IV, 4. Let an angle (h, k) be given in the plane α and let a straight line a' be given in a plane α'. Suppose also that, in the plane α, a definite side of the straight line a' be assigned. Denote by h' a half-ray of the straight line a' emanating from a point O' of this line. Then in the plane α' there is one and only one half-ray k' such that the angle (h, k), or (k, h), is congruent to the angle (h', k') and that at the same time all interior points of the angle (h', k') lie upon the given side of a'. We express this relation by means of the notation
-
-∠(h, k) ≡ ∠(h', k')
-
-Every angle is congruent to itself; that is,
-
-∠(h, k) ≡ ∠(h, k)
-
-or
-
-∠(h, k) ≡ ∠(k, h)
-
-We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
+Let the angle (h, k) be congruent to the angle (h', k'). Since, according to axiom IV, 4, the angle (h, k) is congruent to itself, it follows from axiom IV, 5 that the angle (h', k') is congruent to the angle (h, k). We say, then, that the angles (h, k) and (h', k') are congruent to one another."""
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
@@ -150,9 +141,11 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     rayKHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKHostId))
     rayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint2Id))
     rayHPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeHostId))
-    rayHPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
+    rayHPrimeJoint2Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
     rayKPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeHostId))
-    rayKPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
+    rayKPrimeJoint2Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
 
     marker1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1HostId))
     marker1EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1EndId))
@@ -275,11 +268,15 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     rayKJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint1Id))
     rayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint2Id))
     rayHPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeHostId))
-    rayHPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint1Id))
-    rayHPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
+    rayHPrimeJoint1Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint1Id))
+    rayHPrimeJoint2Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
     rayKPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeHostId))
-    rayKPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint1Id))
-    rayKPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
+    rayKPrimeJoint1Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint1Id))
+    rayKPrimeJoint2Id = Integer(
+        OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
 
     marker1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1HostId))
     marker1StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1StartId))
@@ -521,13 +518,47 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= CompassSweepDuration
+            phase = PhaseCompassArcBackToMarker1
+            timer = 0f0
+        end
+    elseif phase == PhaseCompassArcBackToMarker1
+        EuclidAnimations.animate_compass_arcmove(
+            state_ptr, timer, ArcMoveDuration,
+            VertexOPrime, VertexO,
+            Marker2Start, Marker1Start,
+            0.22f0, 1, :none)
+
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseHighlight1EncoreForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlight1EncoreForward
+        EuclidAnimations.animate_compass_fill_arc_highlight(
+            state_ptr, timer, CompassSweepDuration,
+            VertexO, Marker1Start,
+            AngleTheta, MarkerRadius, HighlightColor)
+
+        timer += dt
+        if timer >= CompassSweepDuration
+            phase = PhaseHighlight1EncoreBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlight1EncoreBack
+        EuclidAnimations.animate_compass_fill_arc_highlight(
+            state_ptr, timer, CompassSweepDuration,
+            VertexO, Marker1End,
+            -AngleTheta, MarkerRadius, HighlightColor)
+
+        timer += dt
+        if timer >= CompassSweepDuration
             phase = PhaseCompassLiftEnd
             timer = 0f0
         end
     elseif phase == PhaseCompassLiftEnd
         EuclidAnimations.animate_compass_rise(
             state_ptr, timer, CompassLiftDuration, CompassTopZ,
-            VertexOPrime[1], VertexOPrime[2], Marker2Start[1], Marker2Start[2])
+            VertexO[1], VertexO[2], Marker1Start[1], Marker1Start[2])
 
         timer += dt
         if timer >= CompassLiftDuration

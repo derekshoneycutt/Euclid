@@ -32,6 +32,7 @@ documented reason to deviate:
 - `grey60`
 - `plum1`: the standard color for point labels.
 - `lightgreen` : the standard color for congruence relationship highlighting.
+- `firebrick` : the standard color for when something absurd is being drawn.
 
 These four colors are the shared working palette. They are reused across lines,
 circles, planes, and points based on the number of objects on screen and how
@@ -65,6 +66,8 @@ those objects interact.
   screen for a moment.
 - Pen rise SHOULD begin from the final meaningful draw endpoint (or final
   emphasized point), not from an earlier anchor point.
+- Prefer a double pass, once in each direction when using a dragging motion to highlight
+  some shape or space. For example, when highlighting congruence between two lines or angles.
 
 ## Coordinate Space and Z Conventions
 
