@@ -89,7 +89,8 @@ General features:
 - [X] GIF Saving
 - [X] Initial Settings panel
 - [X] Initial basic SIMD and performance tweaks
-- [ ] Improved hybrid immediate mode, block-based view text rendering
+- [X] Improved hybrid immediate mode, block-based view text rendering
+- [ ] Continued view text support for colors, shape fill, etc.
 - [ ] Standard group-focused transformation animations for complex shapes
   - [ ] Translation
   - [ ] Rotation
@@ -100,8 +101,9 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [ ] Basic group transformation animation hooks
   - [ ] Basic clipboard support
-  - [ ] Latex to unicode input tab completion support
+  - [ ] LaTeX-ish to unicode input tab completion support
 - [ ] Drawing Sounds
+- [ ] LaTeX render support -- Nice to have --
 - [ ] Alternative tree for pedagological view vs book view -- Nice to have --
 
 Final tasks:

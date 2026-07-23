@@ -31,9 +31,10 @@ FLOOR_CONTACT_Z_EPSILON :: 0.015
 COMPASS_LINE_DUST_SAMPLES :: 24
 
 BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY :: (1 << 1)
+BRIDGE_FEATURE_DYNVIEW_STREAM :: (1 << 2)
 
 BRIDGE_VERSION :: 1
-BRIDGE_FEATURE_FLAGS :: 1 | BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY
+BRIDGE_FEATURE_FLAGS :: 1 | BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY | BRIDGE_FEATURE_DYNVIEW_STREAM
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -43,6 +44,18 @@ BRIDGE_STATUS_INVALID_CONSTRAINT :: 4
 BRIDGE_STATUS_OUT_OF_CAPACITY :: 5
 BRIDGE_STATUS_ILLEGAL_STATE :: 6
 BRIDGE_STATUS_NON_CONVERGED :: 7
+
+BRIDGE_DYNVIEW_BLOCK_INPUT :: 1
+BRIDGE_DYNVIEW_BLOCK_OUTPUT :: 2
+
+BRIDGE_DYNVIEW_STYLE_DEFAULT :: 0
+BRIDGE_DYNVIEW_STYLE_PROMPT :: 1
+BRIDGE_DYNVIEW_STYLE_OUTPUT :: 2
+BRIDGE_DYNVIEW_STYLE_ERROR :: 3
+BRIDGE_DYNVIEW_STYLE_BOLD :: 10
+BRIDGE_DYNVIEW_STYLE_ITALIC :: 11
+BRIDGE_DYNVIEW_STYLE_CENTER :: 12
+BRIDGE_DYNVIEW_STYLE_INLINE_ATOM :: 20
 
 BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
 BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
@@ -140,6 +153,52 @@ Bridge_Constraint_Spec :: struct {
     has_child_offset: u8,
     child_offset: i32,
     do_apply: u8,
+}
+
+dynview_fail :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, code: i32) -> i32 {
+    runtime^.command_buffer.has_stream_error = true
+    if runtime^.compile_cache.last_error_code == 0 {
+        runtime^.compile_cache.last_error_code = code
+    }
+    runtime^.compile_cache.is_valid = false
+    return code
+}
+
+dynview_push_command :: #force_inline proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    command: core.Ui_Dynview_Command) -> i32 {
+
+    buffer := &runtime^.command_buffer
+    if buffer^.command_count >= len(buffer^.commands) {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    buffer^.commands[buffer^.command_count] = command
+    buffer^.command_count += 1
+    runtime^.compile_cache.is_valid = false
+    return BRIDGE_STATUS_OK
+}
+
+dynview_append_text_payload :: #force_inline proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    text: string,
+    offset_out, count_out: ^int) -> i32 {
+
+    buffer := &runtime^.command_buffer
+    text_len := len(text)
+    if buffer^.text_bytes_len + text_len > len(buffer^.text_bytes) {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    start := buffer^.text_bytes_len
+    for i in 0..<text_len {
+        buffer^.text_bytes[start + i] = text[i]
+    }
+
+    buffer^.text_bytes_len += text_len
+    offset_out^ = start
+    count_out^ = text_len
+    return BRIDGE_STATUS_OK
 }
 
 Bridge_Solve_Result :: struct {
@@ -782,6 +841,305 @@ get_bridge_version :: proc "c" () -> i32 {
 @(export)
 get_bridge_feature_flags :: proc "c" () -> i32 {
     return BRIDGE_FEATURE_FLAGS
+}
+
+//   Reset dynview command stream for the current frame before emitting block commands.
+@(export)
+dynview_reset_stream :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    runtime^.command_buffer.command_count = 0
+    runtime^.command_buffer.text_bytes_len = 0
+    runtime^.command_buffer.has_stream_error = false
+    runtime^.command_buffer.stream_open_block = false
+    runtime^.command_buffer.stream_open_block_id = -1
+    runtime^.command_buffer.revision += 1
+    runtime^.compile_cache.last_error_code = BRIDGE_STATUS_OK
+    runtime^.compile_cache.is_valid = false
+    return BRIDGE_STATUS_OK
+}
+
+//   Start a new dynview block and enforce the non-nested ordering contract.
+@(export)
+dynview_begin_block :: proc "c" (
+    state: ^core.Euclid_General_State, block_kind, block_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    status := dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .BeginBlock,
+        block_id = block_id,
+        style_id = block_kind,
+    })
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    buffer^.stream_open_block = true
+    buffer^.stream_open_block_id = block_id
+    return BRIDGE_STATUS_OK
+}
+
+//   Append one visible text run to the current dynview block.
+@(export)
+dynview_text_run :: proc "c" (
+    state: ^core.Euclid_General_State, text: cstring, style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    offset := 0
+    count := 0
+    status := dynview_append_text_payload(runtime, string(text), &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .TextRun,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        text_offset = offset,
+        text_len = count,
+    })
+}
+
+//   Append one non-rendering copyable payload segment to the current dynview block.
+@(export)
+dynview_copyable_text_run :: proc "c" (
+    state: ^core.Euclid_General_State,
+    text, copy_text: cstring,
+    style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    _ = text
+    copy_text_value := ""
+    if copy_text != nil {
+        copy_text_value = string(copy_text)
+    }
+
+    offset := 0
+    count := 0
+    status := dynview_append_text_payload(runtime, copy_text_value, &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .CopyableTextRun,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        copy_text_offset = offset,
+        copy_text_len = count,
+    })
+}
+
+//   Append one inline line atom to the current dynview block.
+@(export)
+dynview_inline_line :: proc "c" (
+    state: ^core.Euclid_General_State,
+    length, thickness: f32,
+    style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if length <= 0 || thickness <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineLine,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = length,
+        inline_atom_stroke = thickness,
+    })
+}
+
+//   Append one inline box atom to the current dynview block.
+@(export)
+dynview_inline_box :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height, stroke: f32,
+    style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if width <= 0 || height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineBox,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_atom_stroke = stroke,
+        inline_box_height = height,
+    })
+}
+
+//   Append one inline circle atom to the current dynview block.
+@(export)
+dynview_inline_circle :: proc "c" (
+    state: ^core.Euclid_General_State,
+    radius, stroke: f32,
+    style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if radius <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineCircle,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = radius,
+        inline_atom_stroke = stroke,
+    })
+}
+
+//   Insert an explicit line break in the current dynview block.
+@(export)
+dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .LineBreak,
+        block_id = buffer^.stream_open_block_id,
+    })
+}
+
+//   End the current dynview block and validate open/close pairing.
+@(export)
+dynview_end_block :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    status := dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .EndBlock,
+        block_id = buffer^.stream_open_block_id,
+    })
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    buffer^.stream_open_block = false
+    buffer^.stream_open_block_id = -1
+    return BRIDGE_STATUS_OK
 }
 
 //   Return compile-time capacity limits exposed by the bridge ABI.

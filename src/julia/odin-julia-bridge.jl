@@ -15,6 +15,11 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     BridgeShapeSquare, BridgeShapePentagon, BridgeShapePen, BridgeShapeCompass,
     LABEL_DECORATION_NONE, LABEL_DECORATION_PRIME, LABEL_DECORATION_DOUBLEPRIME,
     LABEL_DECORATION_TRIPLEPRIME, LABEL_DECORATION_HAT, LABEL_DECORATION_BAR,
+    BRIDGE_DYNVIEW_BLOCK_INPUT, BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+    BRIDGE_DYNVIEW_STYLE_DEFAULT, BRIDGE_DYNVIEW_STYLE_PROMPT,
+    BRIDGE_DYNVIEW_STYLE_OUTPUT, BRIDGE_DYNVIEW_STYLE_ERROR,
+    BRIDGE_DYNVIEW_STYLE_BOLD, BRIDGE_DYNVIEW_STYLE_ITALIC,
+    BRIDGE_DYNVIEW_STYLE_CENTER, BRIDGE_DYNVIEW_STYLE_INLINE_ATOM,
     BRIDGE_STATUS_OK, BRIDGE_STATUS_INVALID_INDEX, BRIDGE_STATUS_INVALID_ARGUMENT,
     BRIDGE_STATUS_INVALID_GRAPH, BRIDGE_STATUS_INVALID_CONSTRAINT,
     BRIDGE_STATUS_OUT_OF_CAPACITY, BRIDGE_STATUS_ILLEGAL_STATE, BRIDGE_STATUS_NON_CONVERGED,
@@ -26,7 +31,14 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     create_new_point, create_new_line, create_new_circle, create_new_filledcircle,
     create_new_triangle, create_new_square, create_new_pentagon, get_point, show_point,
     hide_point, hide_point_batch, set_point_position, set_point_brush, set_point_color,
-    set_point_active_color, notify_animation_cycle_boundary, get_bridge_version,
+    set_point_active_color, notify_animation_cycle_boundary,
+    dynview_reset_stream, dynview_begin_block, dynview_text_run,
+    dynview_copyable_text_run,
+    dynview_inline_line,
+    dynview_inline_box,
+    dynview_inline_circle,
+    dynview_line_break, dynview_end_block,
+    get_bridge_version,
     get_bridge_feature_flags, get_point_capacity, get_point_next_index,
     is_point_index_in_range, set_point_draw_enabled, set_point_position_status,
     clear_point_position, set_point_color_status, clear_point_color,
@@ -206,6 +218,17 @@ const BRIDGE_STATUS_INVALID_CONSTRAINT = Int32(4)
 const BRIDGE_STATUS_OUT_OF_CAPACITY = Int32(5)
 const BRIDGE_STATUS_ILLEGAL_STATE = Int32(6)
 const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
+
+const BRIDGE_DYNVIEW_BLOCK_INPUT = Int32(1)
+const BRIDGE_DYNVIEW_BLOCK_OUTPUT = Int32(2)
+const BRIDGE_DYNVIEW_STYLE_DEFAULT = Int32(0)
+const BRIDGE_DYNVIEW_STYLE_PROMPT = Int32(1)
+const BRIDGE_DYNVIEW_STYLE_OUTPUT = Int32(2)
+const BRIDGE_DYNVIEW_STYLE_ERROR = Int32(3)
+const BRIDGE_DYNVIEW_STYLE_BOLD = Int32(10)
+const BRIDGE_DYNVIEW_STYLE_ITALIC = Int32(11)
+const BRIDGE_DYNVIEW_STYLE_CENTER = Int32(12)
+const BRIDGE_DYNVIEW_STYLE_INLINE_ATOM = Int32(20)
 
 const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
 const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
@@ -1291,6 +1314,134 @@ Parameters:
 """
 function notify_animation_cycle_boundary(state_ptr::Ptr{Cvoid})
     @ccall notify_animation_cycle_boundary(state_ptr::Ptr{Cvoid})::Cvoid
+end
+
+"""
+Reset the host dynview stream for the current state/frame.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_reset_stream(state_ptr::Ptr{Cvoid})
+    @ccall dynview_reset_stream(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+Begin a host dynview block for subsequent content commands.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_begin_block(state_ptr::Ptr{Cvoid}, block_kind::Integer, block_id::Integer)
+    @ccall dynview_begin_block(
+        state_ptr::Ptr{Cvoid},
+        Int32(block_kind)::Int32,
+        Int32(block_id)::Int32)::Int32
+end
+
+"""
+Emit a visible text run inside the currently open host dynview block.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_text_run(state_ptr::Ptr{Cvoid}, text::AbstractString, style_id::Integer)
+    @ccall dynview_text_run(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit a non-rendering copy payload segment for the currently open host dynview block.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_copyable_text_run(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    copy_text::AbstractString,
+    style_id::Integer)
+
+    @ccall dynview_copyable_text_run(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+        copy_text::Cstring,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one inline line atom inside the currently open host dynview block.
+
+Length is expressed in wrap-column units; thickness is in host pixel units.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_line(
+    state_ptr::Ptr{Cvoid},
+    length::Real,
+    thickness::Real,
+    style_id::Integer)
+
+    @ccall dynview_inline_line(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(length)::Cfloat,
+        Cfloat(thickness)::Cfloat,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one inline box atom inside the currently open host dynview block.
+
+Width and height are expressed in wrap-column units; stroke is host pixel thickness.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_box(
+    state_ptr::Ptr{Cvoid},
+    width::Real,
+    height::Real,
+    stroke::Real,
+    style_id::Integer)
+
+    @ccall dynview_inline_box(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(width)::Cfloat,
+        Cfloat(height)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one inline circle atom inside the currently open host dynview block.
+
+Radius is expressed in wrap-column units; stroke is host pixel thickness.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_circle(
+    state_ptr::Ptr{Cvoid},
+    radius::Real,
+    stroke::Real,
+    style_id::Integer)
+
+    @ccall dynview_inline_circle(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(radius)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one line-break command inside the currently open host dynview block.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_line_break(state_ptr::Ptr{Cvoid})
+    @ccall dynview_line_break(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""
+End the currently open host dynview block.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_end_block(state_ptr::Ptr{Cvoid})
+    @ccall dynview_end_block(state_ptr::Ptr{Cvoid})::Int32
 end
 
 """

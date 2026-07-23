@@ -4,6 +4,7 @@ import "../../core"
 import "../../julia"
 
 import "core:fmt"
+import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -242,6 +243,54 @@ submit_scratchpad_input_if_ready :: proc(
     }
 }
 
+//   Draw per-block copy icons and return whether one was clicked.
+draw_scratchpad_dynview_copy_icons :: proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    panel: rl.Rectangle,
+    mouse: rl.Vector2) -> bool {
+
+    if runtime == nil {
+        return false
+    }
+
+    cache := &runtime^.compile_cache
+    if cache^.copy_hit_target_count <= 0 {
+        return false
+    }
+
+    clicked_index := -1
+    for i in 0..<cache^.copy_hit_target_count {
+        target := cache^.copy_hit_targets[i]
+        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
+        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
+        if !hovered_block && !hovered_icon {
+            continue
+        }
+
+        icon_color := UI_TEXT_COLOR
+        if hovered_icon {
+            icon_color = UI_BORDER_COLOR
+        }
+
+        draw_copy_icon(target.rect, icon_color)
+        if hovered_icon && rl.IsMouseButtonPressed(.LEFT) {
+            clicked_index = i
+        }
+    }
+
+    if clicked_index < 0 {
+        return false
+    }
+
+    payload := dynview_copy_target_payload(runtime, clicked_index)
+    if len(payload) <= 0 {
+        return false
+    }
+
+    rl.SetClipboardText(strings.clone_to_cstring(payload, context.temp_allocator))
+    return true
+}
+
 //   Draw scratchpad output in a scrollable region with a fixed prompt row.
 draw_scratchpad_output_and_prompt :: proc(
     state: ^core.Euclid_General_State,
@@ -257,9 +306,20 @@ draw_scratchpad_output_and_prompt :: proc(
         output_panel.height = TEXT_ROW_HEIGHT
     }
 
-    output_text := julia.call_current_animation_get_view_text(state)
-    max_chars := chars_per_text_row(output_panel.width - TEXT_PADDING * 2, TEXT_WRAP_ADVANCE)
-    total_rows := count_wrapped_text_rows(output_text, max_chars)
+    output_text_legacy := julia.call_current_animation_get_view_text(state)
+    output_text := dynview_compiled_scratchpad_text_or_fallback(
+        ui_runtime,
+        output_panel,
+        TREE_FONT_SIZE,
+        TEXT_WRAP_ADVANCE,
+        DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+        output_text_legacy)
+    total_rows := dynview_scratchpad_styled_rows_or_fallback(
+        ui_runtime,
+        output_panel,
+        TEXT_PADDING,
+        TEXT_WRAP_ADVANCE,
+        output_text_legacy)
     content_h := TEXT_PADDING * 2 + f32(total_rows) * TEXT_ROW_HEIGHT
     max_scroll := max(0.0, content_h - output_panel.height)
 
@@ -285,18 +345,30 @@ draw_scratchpad_output_and_prompt :: proc(
         ui_runtime^.scratchpad_follow_output = true
     }
 
+    dynview_refresh_scratchpad_copy_targets(
+        ui_runtime,
+        output_panel,
+        state^.ui_runtime.view_text_scroll_y,
+        TEXT_PADDING,
+        TEXT_ROW_HEIGHT,
+        DYNVIEW_COPY_ICON_SIZE,
+        DYNVIEW_COPY_ICON_X_PAD)
+
     rl.BeginScissorMode(i32(output_panel.x), i32(output_panel.y), i32(output_panel.width), i32(output_panel.height))
     {
-        draw_wrapped_text_content(
-            output_text,
+        dynview_draw_scratchpad_styled_or_fallback(
+            ui_runtime,
+            output_text_legacy,
             output_panel,
             state^.ui_runtime.view_text_scroll_y,
             font,
             TEXT_PADDING,
             TEXT_ROW_HEIGHT,
-            UI_TEXT_COLOR,
             TEXT_WRAP_ADVANCE,
-            TREE_FONT_SIZE)
+            TREE_FONT_SIZE,
+            UI_TEXT_COLOR)
+
+        _ = draw_scratchpad_dynview_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse)
     }
     rl.EndScissorMode()
 

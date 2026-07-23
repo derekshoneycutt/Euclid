@@ -28,6 +28,9 @@ DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 
 TOOL_LENGTH :: 0.35
 
+UI_DYNVIEW_MAX_COMMANDS :: 1024
+UI_DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
+
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
 
@@ -681,6 +684,95 @@ Ui_Regions :: struct {
     scratchpad_rect: rl.Rectangle,
 }
 
+Ui_Dynview_Command_Kind :: enum {
+    BeginBlock,
+    EndBlock,
+    TextRun,
+    CopyableTextRun,
+    LineBreak,
+    Divider,
+    InlineLine,
+    InlineBox,
+    InlineCircle,
+}
+
+Ui_Dynview_Command :: struct {
+    kind: Ui_Dynview_Command_Kind,
+    block_id: i32,
+    style_id: i32,
+    text_offset: int,
+    text_len: int,
+    copy_text_offset: int,
+    copy_text_len: int,
+    inline_atom_dimension: f32,
+    inline_atom_stroke: f32,
+    inline_box_height: f32,
+}
+
+Ui_Dynview_Copy_Block :: struct {
+    block_id: i32,
+    block_kind: i32,
+    row_start: int,
+    row_end: int,
+    payload_offset: int,
+    payload_len: int,
+}
+
+Ui_Dynview_Copy_Hit_Target :: struct {
+    block_id: i32,
+    payload_offset: int,
+    payload_len: int,
+    rect: rl.Rectangle,
+    hover_rect: rl.Rectangle,
+}
+
+Ui_Dynview_Command_Buffer :: struct {
+    revision: u64,
+    command_count: int,
+    text_bytes_len: int,
+    has_stream_error: bool,
+    stream_open_block: bool,
+    stream_open_block_id: i32,
+
+    commands: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Command,
+    text_bytes: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
+}
+
+Ui_Dynview_Compile_Cache :: struct {
+    compiled_revision: u64,
+    compiled_command_count: int,
+    compiled_text_bytes_len: int,
+    compiled_plain_text_len: int,
+    compiled_copy_payload_len: int,
+    copy_block_count: int,
+    copy_hit_target_count: int,
+    is_valid: bool,
+
+    last_content_hash: u64,
+    last_content_len: int,
+    last_panel_width: f32,
+    last_panel_height: f32,
+    last_font_size: f32,
+    last_wrap_advance: f32,
+    last_style_revision: u64,
+
+    last_invalidation_mask: u32,
+    last_error_code: i32,
+
+    compiled_plain_text: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
+    compiled_copy_payload: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
+    copy_blocks: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Block,
+    copy_hit_targets: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Hit_Target,
+}
+
+Ui_Dynview_Runtime :: struct {
+    enabled: bool,
+    pending_invalidation_mask: u32,
+
+    command_buffer: Ui_Dynview_Command_Buffer,
+    compile_cache: Ui_Dynview_Compile_Cache,
+}
+
 Euclid_UI_Runtime_State :: struct {
     tree_scroll_y: f32,
     view_text_scroll_y: f32,
@@ -724,6 +816,8 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input_cursor: int,
     scratchpad_last_output_len: int,
     scratchpad_follow_output: bool,
+
+    dynview_runtime: Ui_Dynview_Runtime,
 
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
@@ -770,7 +864,6 @@ Euclid_General_State :: struct {
     ui_runtime: Euclid_UI_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font: rl.Font,
-    scratchpad_font: rl.Font,
 
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,

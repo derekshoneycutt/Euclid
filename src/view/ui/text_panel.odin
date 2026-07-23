@@ -37,14 +37,26 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
     handle_scratchpad_keyboard_input(state)
 
     if is_scratchpad_selected(state) {
-        draw_scratchpad_output_and_prompt(state, text_panel, ui_runtime, state.scratchpad_font)
+        draw_scratchpad_output_and_prompt(state, text_panel, ui_runtime, state.font)
         return
     }
 
+    dynview_reset_command_buffer(&ui_runtime^.dynview_runtime)
     view_text := julia.call_current_animation_get_view_text(state)
+    _ = dynview_compiled_scratchpad_text_or_fallback(
+        ui_runtime,
+        text_panel,
+        TREE_FONT_SIZE,
+        TEXT_WRAP_ADVANCE,
+        DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+        view_text)
 
-    max_chars := chars_per_text_row(text_panel.width - TEXT_PADDING * 2, TEXT_WRAP_ADVANCE)
-    total_rows := count_wrapped_text_rows(view_text, max_chars)
+    total_rows := dynview_scratchpad_styled_rows_or_fallback(
+        ui_runtime,
+        text_panel,
+        TEXT_PADDING,
+        TEXT_WRAP_ADVANCE,
+        view_text)
     content_h := TEXT_PADDING * 2 + f32(total_rows) * TEXT_ROW_HEIGHT
     max_scroll := max(0.0, content_h - text_panel.height)
     clamp_scroll_position(&state^.ui_runtime.view_text_scroll_y, max_scroll)
@@ -56,16 +68,17 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
     rl.BeginScissorMode(i32(text_panel.x), i32(text_panel.y),
         i32(text_panel.width), i32(text_panel.height))
     {
-        draw_wrapped_text_content(
+        dynview_draw_scratchpad_styled_or_fallback(
+            ui_runtime,
             view_text,
             text_panel,
             state^.ui_runtime.view_text_scroll_y,
             state.font,
             TEXT_PADDING,
             TEXT_ROW_HEIGHT,
-            UI_TEXT_COLOR,
             TEXT_WRAP_ADVANCE,
-            TREE_FONT_SIZE)
+            TREE_FONT_SIZE,
+            UI_TEXT_COLOR)
     }
     rl.EndScissorMode()
 

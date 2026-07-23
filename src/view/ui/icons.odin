@@ -184,3 +184,23 @@ draw_gif_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     flash_dot := rl.Vector2{body.x + body.width * 0.78, body.y + body.height * 0.3}
     rl.DrawCircleV(flash_dot, 1.0, color)
 }
+
+//   Draw a simple two-sheet copy glyph used for scratchpad block copy actions.
+draw_copy_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
+    back := rl.Rectangle{
+        rect.x + rect.width * 0.32,
+        rect.y + rect.height * 0.18,
+        rect.width * 0.5,
+        rect.height * 0.62,
+    }
+
+    front := rl.Rectangle{
+        rect.x + rect.width * 0.16,
+        rect.y + rect.height * 0.3,
+        rect.width * 0.5,
+        rect.height * 0.62,
+    }
+
+    rl.DrawRectangleLinesEx(back, 1, color)
+    rl.DrawRectangleLinesEx(front, 1, color)
+}

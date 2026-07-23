@@ -56,6 +56,9 @@ const MaxQueueLines = 64
 const SlowEvalWarnNs = Int(150_000_000)
 const SlowHookWarnNs = Int(80_000_000)
 const MaxConsecutiveHookFailures = 3
+const DynviewStyleInput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_PROMPT
+const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
+const DynviewStyleError = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ERROR
 
 const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
 const next_session_id_ref = Ref(1)
@@ -592,6 +595,81 @@ function append_output_block!(session::ScratchpadSession, text::AbstractString)
     for line in split(String(text), '\n'; keepempty=true)
         append_output_line!(session, line)
     end
+end
+
+"""Return true when a line is part of prompt-style input echo output."""
+is_input_echo_line(line::AbstractString) = startswith(line, "> ") || startswith(line, "| ")
+
+"""Return true when a host bridge status code represents success."""
+is_bridge_status_ok(code::Integer) = Int32(code) == OdinJuliaBridge.BRIDGE_STATUS_OK
+
+"""Map one output line into block/style ids for dynview emission."""
+function dynview_ids_for_line(line::AbstractString)
+    if is_input_echo_line(line)
+        return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT, DynviewStyleInput
+    end
+
+    if startswith(line, "Error:") || startswith(line, "help error:") || startswith(line, "Blocked ")
+        return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleError
+    end
+
+    return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleOutput
+end
+
+"""Switch dynview block when needed, preserving strict begin/end ordering."""
+function dynview_switch_block!(state_ptr::Ptr{Cvoid}, open_block::Bool, current_kind::Int32, next_kind::Int32, block_id::Int32)
+    if open_block && next_kind == current_kind
+        return true, open_block, current_kind, block_id
+    end
+
+    if open_block && !is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
+        return false, open_block, current_kind, block_id
+    end
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_begin_block(state_ptr, next_kind, block_id))
+        return false, open_block, current_kind, block_id
+    end
+
+    return true, true, next_kind, block_id + Int32(1)
+end
+
+"""Emit one line and optional line-break into the active dynview block."""
+function dynview_emit_line!(state_ptr::Ptr{Cvoid}, line::AbstractString, style_id::Int32, add_line_break::Bool)
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, line, style_id))
+        return false
+    end
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, "", line, style_id))
+        return false
+    end
+    if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
+        return false
+    end
+    return true
+end
+
+"""Emit current scratchpad output as a dynview command stream for host-side rendering."""
+function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadSession)
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) || isempty(session.output)
+        return isempty(session.output)
+    end
+
+    block_id = Int32(1)
+    current_kind = Int32(0)
+    open_block = false
+    last_line_index = lastindex(session.output)
+    for i in eachindex(session.output)
+        block_kind, style_id = dynview_ids_for_line(session.output[i])
+        ok, open_block, current_kind, block_id = dynview_switch_block!(
+            state_ptr,
+            open_block,
+            current_kind,
+            block_kind,
+            block_id)
+        if !ok || !dynview_emit_line!(state_ptr, session.output[i], style_id, i != last_line_index)
+            return false
+        end
+    end
+
+    return !open_block || is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
 end
 
 """Validate one dotted help-query segment as an identifier-like token."""
@@ -1202,6 +1280,7 @@ end
 """Return current scratchpad output as newline-delimited text for the UI panel."""
 function get_view_text(state_ptr::Ptr{Cvoid})
     session = ensure_session!(state_ptr)
+    _ = emit_dynview_output_stream!(state_ptr, session)
     if isempty(session.output)
         return ""
     end

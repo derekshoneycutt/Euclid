@@ -159,6 +159,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.ui_runtime.limit_fps = true
     state^.ui_runtime.simulation_paused = false
     state^.ui_runtime.use_simd_batch_projection = view_core.simd_batch_projection_available()
+    ui.dynview_set_enabled(&state^.ui_runtime, ui.DYNVIEW_ENABLED_DEFAULT)
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
@@ -286,12 +287,6 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
         files.packaged_asset_path("font.ttf", context.temp_allocator), context.temp_allocator)
     font := rl.LoadFontEx(font_file, font_size, &code_points[0], code_point_count)
     state^.font = font
-
-    scratchpad_font_file := strings.clone_to_cstring(
-        files.packaged_asset_path("font_mono.ttf", context.temp_allocator), context.temp_allocator)
-    scratchpad_font := rl.LoadFontEx(
-        scratchpad_font_file, font_size, &code_points[0], code_point_count)
-    state^.scratchpad_font = scratchpad_font
 }
 
 //   Shutdown render resources, unload font/shader, and close the window.
@@ -301,7 +296,6 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
 close_window :: proc(state : ^Euclid_General_State) {
     shutdown_particle_render_resources(state)
     shutdown_stroke3d_shader(state)
-    rl.UnloadFont(state^.scratchpad_font)
     rl.UnloadFont(state^.font)
     rl.CloseWindow()
 }
@@ -418,7 +412,7 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     ui.draw_ui_panels(state)
 
     if state^.ui_runtime.display_fps {
-        mono_font := state^.scratchpad_font
+        mono_font := state^.font
 
         fps_text := fmt.tprintf("FPS: %d", rl.GetFPS())
         fps_text_c := strings.clone_to_cstring(fps_text, context.temp_allocator)

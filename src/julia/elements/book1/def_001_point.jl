@@ -24,11 +24,65 @@ const PhaseDescend = 0f0
 const PhaseDraw = 1f0
 const PhaseRise = 2f0
 
+const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
+const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
+const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 
-function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Point
+const DefinitionViewText = """Euclid Elements - Book I - Definition: Point
 
 A point is that which has no part."""
+
+
+function get_view_text(state_ptr::Ptr{Cvoid})
+    fallback = DefinitionViewText
+
+    if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_text_run(
+        state_ptr,
+        "Euclid Elements - Book I - Definition: Point",
+        DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_text_run(state_ptr, "", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_text_run(
+        state_ptr,
+        "A point",
+        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    #= TODO This doesn't really work that great yet, but concept is beginnning
+    # The shapes are experimental features, and lots more features needed to make them
+    # worth anything. More to think on and get going. But the idea begins!
+    if OdinJuliaBridge.dynview_inline_circle(
+        state_ptr,
+        1, 1, DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+    =#
+
+    if OdinJuliaBridge.dynview_text_run(
+        state_ptr,
+        " is that which has no part.",
+        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    return fallback
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

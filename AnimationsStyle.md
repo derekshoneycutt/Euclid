@@ -166,6 +166,96 @@ Tool crossing guidance for 3D plane barriers:
   is meant to be read by the viewer.
 - Avoid abrupt resets immediately after the last visible motion.
 
+## View Text Structure (Dynview + Fallback)
+
+Animation text is now authored with a dual-path contract:
+
+- `get_view_text(state_ptr)` SHOULD always return a plain fallback string.
+- If the script wants styled/inline content, it MAY also emit a dynview stream
+  through `OdinJuliaBridge` calls.
+- The host prefers dynview output only when the emitted stream is valid; if
+  stream emission fails or no valid stream is available, the returned string is
+  rendered as fallback.
+
+Practical guidance for animation scripts:
+
+- Keep fallback text complete and readable on its own.
+- Treat dynview as an enhancement layer, not as the only source of truth.
+- For dynview emission, use strict ordering: reset stream, begin block, emit
+  content, end block.
+- On any bridge status failure while emitting dynview content, stop emission
+  and rely on the fallback string.
+
+### Dynview API Quick Reference
+
+All APIs below are in `OdinJuliaBridge`.
+
+Required stream lifecycle calls:
+
+- `dynview_reset_stream(state_ptr)`
+- `dynview_begin_block(state_ptr, block_kind, block_id)`
+- one or more content calls
+- `dynview_end_block(state_ptr)`
+
+Common content calls:
+
+- `dynview_text_run(state_ptr, text, style_id)`
+- `dynview_line_break(state_ptr)`
+- `dynview_copyable_text_run(state_ptr, visible_text, copy_text, style_id)`
+  for explicit copy payloads
+- `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`
+- `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`
+- `dynview_inline_circle(state_ptr, radius_cols, stroke_px, style_id)`
+
+Block/style constants used most often:
+
+- `BRIDGE_DYNVIEW_BLOCK_OUTPUT`
+- `BRIDGE_DYNVIEW_BLOCK_INPUT`
+- `BRIDGE_DYNVIEW_STYLE_OUTPUT`
+- `BRIDGE_DYNVIEW_STYLE_PROMPT`
+- `BRIDGE_DYNVIEW_STYLE_ERROR`
+- `BRIDGE_DYNVIEW_STYLE_BOLD`
+- `BRIDGE_DYNVIEW_STYLE_INLINE_ATOM`
+
+Status handling:
+
+- Every API above returns a `BRIDGE_STATUS_*` integer.
+- `BRIDGE_STATUS_OK` means success.
+- Any non-OK status should abort dynview emission for this frame and fall back
+  to the plain returned string.
+
+Minimal emission pattern:
+
+```julia
+fallback = "...full plain text..."
+
+if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+    return fallback
+end
+if OdinJuliaBridge.dynview_begin_block(
+    state_ptr,
+    OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+    Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
+    return fallback
+end
+
+if OdinJuliaBridge.dynview_text_run(
+    state_ptr,
+    "Some line",
+    OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT) != OdinJuliaBridge.BRIDGE_STATUS_OK
+    return fallback
+end
+
+if OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+    return fallback
+end
+
+return fallback
+```
+
+This keeps old/simple animations working with plain text while allowing newer
+definitions/theorems to opt into richer host-side layout and inline atoms.
+
 ## Practical Review Check
 
 Before adding a new animation, ask:
