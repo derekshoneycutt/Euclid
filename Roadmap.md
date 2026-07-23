@@ -14,18 +14,26 @@ Core Content:
   - [X] Postulates
   - [X] Common Notions
   - [ ] Propositions
-    - [ ] 1-10
+    - [X] 1
+    - [ ] 2-10
     - [ ] 11-20
     - [ ] 21-30
     - [ ] 31-40
     - [ ] 41-48
-- [ ] Proclus commentaries
-  - [ ] Propositions
-    - [ ] 1-10
-    - [ ] 11-20
-    - [ ] 21-30
-    - [ ] 31-40
-    - [ ] 41-48
+- [ ] Commentaries and Alternatives
+  - [ ] Proclus commentaries
+    - [X] Isosceles Triangle
+    - [X] Scalene Triangle
+    - [ ] Prop 2: C is on AB
+    - [ ] Prop 2: Figure 1 (point A, line BC rising above; equilateral ABD drawn below BC, circle drawn on BC, BC=AB=AD=BD, finished)
+    - [ ] Prop 2: Figure 2 (Same start fig1 but AB < BC)
+    - [ ] Prop 2: Figure 3 (Same start fig1 but AB > BC)
+    - [ ] More? (TBD)
+  - [ ] Pythagorean Alternatives
+    - [ ] Schopenhauer's (basically a single square and 2 rotated squares based on the internal crosses in the square: <|X|>)
+    - [ ] Bhaskara II's proof
+    - [ ] Xuan Tu
+    - [ ] Others? -- TBD --
 - [X] Hilbert, Chapter 1
   - [X] Section 1
   - [X] Section 2
@@ -50,13 +58,12 @@ Core Content:
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
     - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane -- polygons translating/rotating/reflecting around another point)
-  - [ ] Theorems/Demonstrations
-    - [ ] SAS (I.4)
-    - [ ] SSS (I.8)
-    - [ ] AAS (I.26)
-- [ ] Categories -- Nice to have --
-- [ ] Tarksi's Axioms -- Nice to have --
-- [ ] Birkhoff's Axioms? -- *maybe* --
+  - [ ] Demonstrations
+    - [ ] 1-10
+    - [ ] 11-20
+    - [ ] 21-30
+    - [ ] 31-40
+    - [ ] 41-48
 
 General features:
 
@@ -68,11 +75,6 @@ General features:
   - [X] Circle
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
-  - [ ] Arrows
-    - [ ] Normal
-    - [ ] Monomorph (hooked)
-    - [ ] Epimorph (double arrow)
-    - [ ] Curved forms -- Nice to have --
   - [X] Label
   - [X] Pen
   - [X] Compass
@@ -133,9 +135,11 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Free group $F_2$ from figure-8 (walking a cayley tree)
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
   - Theorems
-- More primitives (gnomons, strings--small connectors)
+- Category theory?
+- Tarski's Axioms?
+- Birkhoff's Axioms?
+- More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
-- Category theory
 - Improved Scratchpad console-like REPL
 - Improved Scratchpad highlight and clipboard support
 - Highlight drawn shape from clicking label in view text area
@@ -184,3 +188,19 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Propositions (25)
 - Hilbert chap 3 (Theory of Proportion, Pascal's theorem)
 - Fields
+
+## References
+
+Schopenhauer uses a diagram like this, very roughly. It includes a square with the diagonals
+crossing. The top triangle made by this diagonal is shaded. On either side right/left,
+additional triangles the same size as the inner ones extend outward, creating diagonal squares
+with the triangles mirrored inside the initial square.
+
+```text
+  /\----/\
+ / |\##/| \
+/  | \/ |  \
+\  | /\ |  /
+ \ |/  \| /
+  \/____\/
+```
