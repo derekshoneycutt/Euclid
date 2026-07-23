@@ -30,6 +30,8 @@ TOOL_LENGTH :: 0.35
 
 UI_DYNVIEW_MAX_COMMANDS :: 1024
 UI_DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
+UI_DYNVIEW_MAX_LAYOUT_LINES :: 4096
+UI_DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
 
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
@@ -726,6 +728,43 @@ Ui_Dynview_Copy_Hit_Target :: struct {
     hover_rect: rl.Rectangle,
 }
 
+Ui_Dynview_Layout_Item_Kind :: enum {
+    TextRun,
+    InlineLine,
+    InlineBox,
+    InlineCircle,
+}
+
+Ui_Dynview_Layout_Item :: struct {
+    kind: Ui_Dynview_Layout_Item_Kind,
+    block_id: i32,
+    style_id: i32,
+    line_index: int,
+    col_start: int,
+    col_span: int,
+    text_offset: int,
+    text_len: int,
+    inline_atom_dimension: f32,
+    inline_atom_stroke: f32,
+    inline_box_height: f32,
+    x_offset: f32,
+    y_offset: f32,
+    draw_width: f32,
+    draw_height: f32,
+    ascent: f32,
+    descent: f32,
+}
+
+Ui_Dynview_Layout_Line :: struct {
+    item_start: int,
+    item_count: int,
+    y_offset: f32,
+    line_height: f32,
+    baseline: f32,
+    max_ascent: f32,
+    max_descent: f32,
+}
+
 Ui_Dynview_Command_Buffer :: struct {
     revision: u64,
     command_count: int,
@@ -746,7 +785,13 @@ Ui_Dynview_Compile_Cache :: struct {
     compiled_copy_payload_len: int,
     copy_block_count: int,
     copy_hit_target_count: int,
+    layout_line_count: int,
+    layout_item_count: int,
+    layout_is_valid: bool,
     is_valid: bool,
+
+    layout_total_height: f32,
+    layout_average_line_height: f32,
 
     last_content_hash: u64,
     last_content_len: int,
@@ -763,6 +808,8 @@ Ui_Dynview_Compile_Cache :: struct {
     compiled_copy_payload: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
     copy_blocks: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Block,
     copy_hit_targets: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Hit_Target,
+    layout_lines: [UI_DYNVIEW_MAX_LAYOUT_LINES]Ui_Dynview_Layout_Line,
+    layout_items: [UI_DYNVIEW_MAX_LAYOUT_ITEMS]Ui_Dynview_Layout_Item,
 }
 
 Ui_Dynview_Runtime :: struct {

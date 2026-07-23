@@ -45,15 +45,15 @@ Core Content:
   - [X] Section 8
 - [ ] Algebraic groups
   - [ ] Definitions
+    - [ ] $\Z_2$ (irregular polygon reflecting about a line; special case of $C_n$)
     - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [ ] Closure
       - [ ] Associativity
       - [ ] Identity
       - [ ] Inverse
       - [ ] Commutative/Abelian
-    - [ ] $Z_2$ (irregular polygon reflecting about a line; special case of $C_m$)
     - [ ] $D_n$ (dihedrals, symmetry of shape with $n$ sides ; non-commutative)
-    - [ ] $(R^2, +)$ (translation group -- moving shapes)
+    - [ ] $(\R^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
     - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
@@ -90,8 +90,17 @@ General features:
 - [X] Initial Settings panel
 - [X] Initial basic SIMD and performance tweaks
 - [X] Improved hybrid immediate mode, block-based view text rendering
-- [ ] View text more advanced layout engine
+- [X] View text more advanced layout engine
 - [ ] Continued view text support for colors, shape fill, etc.
+- [ ] Basic LaTeX type rendering support
+  - [ ] LaTeX to unicode base
+  - [ ] Superscript
+  - [ ] Subscript
+  - [ ] Fractions
+  - [ ] Dynamic sized brackets
+  - [ ] Matrices
+  - [ ] Sums, Products, Integrals
+- [ ] Improved UI layout system
 - [ ] Standard group-focused transformation animations for complex shapes
   - [ ] Translation
   - [ ] Rotation
@@ -102,9 +111,8 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [ ] Basic group transformation animation hooks
   - [ ] Basic clipboard support
-  - [ ] LaTeX-ish to unicode input tab completion support
+  - [ ] LaTeX to unicode input tab completion support
 - [ ] Drawing Sounds
-- [ ] *very basic* LaTeX render support -- Nice to have --
 - [ ] Alternative tree for pedagological view vs book view -- Nice to have --
 
 Final tasks:
@@ -134,7 +142,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $Sim(2)$ (same as $E(2)$ but with scaling as well)
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
-  - $R/Z$ (coil going up, animating on each full circle)
+  - $\R/\Z$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
   - Theorems
@@ -144,6 +152,7 @@ After v1 is complete, the following is suggestions to evaluate next.
 - More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Improved Scratchpad console-like REPL
+- More Scratchpad tab completions
 - Improved Scratchpad highlight and clipboard support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
@@ -164,8 +173,8 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Propositions (37)
 - More group theory
   - $U(1)$ (show points on a polygon all at different distance from center, spinning individually around individual circles, one at a time, dynamically)
-  - $C^x$ (literally drawing a spiral)
-  - $Z^2$ (pen dragging, drawing out a grid of points regularly spaced)
+  - $\Complex^x$ (literally drawing a spiral)
+  - $\Z^2$ (pen dragging, drawing out a grid of points regularly spaced)
   - $T$ (pac-man wrap around the surface, drawing line at an irrational angle like sqrt(2) and will cover it all)
   - Wallpaper groups (repeating drawings)
   - $PSL(2, R)$ (Polygon can be transformed by never crosses below a boundary)

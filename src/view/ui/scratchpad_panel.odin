@@ -244,6 +244,33 @@ submit_scratchpad_input_if_ready :: proc(
 }
 
 //   Draw per-block copy icons and return whether one was clicked.
+draw_scratchpad_dynview_hover_backgrounds :: proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    mouse: rl.Vector2) {
+
+    if runtime == nil {
+        return
+    }
+
+    cache := &runtime^.compile_cache
+    if cache^.copy_hit_target_count <= 0 {
+        return
+    }
+
+    hover_bg := rl.Color{UI_BORDER_COLOR.r, UI_BORDER_COLOR.g, UI_BORDER_COLOR.b, 28}
+    for i in 0..<cache^.copy_hit_target_count {
+        target := cache^.copy_hit_targets[i]
+        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
+        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
+        if !hovered_block && !hovered_icon {
+            continue
+        }
+
+        rl.DrawRectangleRec(target.hover_rect, hover_bg)
+    }
+}
+
+//   Draw per-block copy icons and return whether one was clicked.
 draw_scratchpad_dynview_copy_icons :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     panel: rl.Rectangle,
@@ -314,14 +341,15 @@ draw_scratchpad_output_and_prompt :: proc(
         TEXT_WRAP_ADVANCE,
         DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         output_text_legacy)
-    total_rows := dynview_scratchpad_styled_rows_or_fallback(
+    content_h := dynview_scratchpad_content_height_or_fallback(
         ui_runtime,
         output_panel,
         TEXT_PADDING,
         TEXT_WRAP_ADVANCE,
+        TEXT_ROW_HEIGHT,
         output_text_legacy)
-    content_h := TEXT_PADDING * 2 + f32(total_rows) * TEXT_ROW_HEIGHT
     max_scroll := max(0.0, content_h - output_panel.height)
+    scroll_step := dynview_scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
 
     output_len := len(output_text)
     if output_len != ui_runtime^.scratchpad_last_output_len {
@@ -338,7 +366,7 @@ draw_scratchpad_output_and_prompt :: proc(
 
     mouse := rl.GetMousePosition()
     pre_wheel_scroll := state^.ui_runtime.view_text_scroll_y
-    apply_wheel_scroll(mouse, output_panel, TEXT_ROW_HEIGHT,
+    apply_wheel_scroll(mouse, output_panel, scroll_step,
         &state^.ui_runtime.view_text_scroll_y, max_scroll, WHEEL_SCROLL_MULTIPLIER)
 
     if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll {
@@ -356,6 +384,8 @@ draw_scratchpad_output_and_prompt :: proc(
 
     rl.BeginScissorMode(i32(output_panel.x), i32(output_panel.y), i32(output_panel.width), i32(output_panel.height))
     {
+        draw_scratchpad_dynview_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
+
         dynview_draw_scratchpad_styled_or_fallback(
             ui_runtime,
             output_text_legacy,

@@ -201,7 +201,7 @@ Common content calls:
 
 - `dynview_text_run(state_ptr, text, style_id)`
 - `dynview_line_break(state_ptr)`
-- `dynview_copyable_text_run(state_ptr, visible_text, copy_text, style_id)`
+- `dynview_copyable_text_run(state_ptr, copy_text)`
   for explicit copy payloads
 - `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`
 - `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`

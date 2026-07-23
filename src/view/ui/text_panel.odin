@@ -51,18 +51,19 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
         DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         view_text)
 
-    total_rows := dynview_scratchpad_styled_rows_or_fallback(
+    content_h := dynview_scratchpad_content_height_or_fallback(
         ui_runtime,
         text_panel,
         TEXT_PADDING,
         TEXT_WRAP_ADVANCE,
+        TEXT_ROW_HEIGHT,
         view_text)
-    content_h := TEXT_PADDING * 2 + f32(total_rows) * TEXT_ROW_HEIGHT
     max_scroll := max(0.0, content_h - text_panel.height)
+    scroll_step := dynview_scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
     clamp_scroll_position(&state^.ui_runtime.view_text_scroll_y, max_scroll)
 
     mouse := rl.GetMousePosition()
-    apply_wheel_scroll(mouse, text_panel, TEXT_ROW_HEIGHT,
+    apply_wheel_scroll(mouse, text_panel, scroll_step,
         &state^.ui_runtime.view_text_scroll_y, max_scroll, WHEEL_SCROLL_MULTIPLIER)
 
     dynview_refresh_scratchpad_copy_targets(

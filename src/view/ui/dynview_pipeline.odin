@@ -28,11 +28,21 @@ DYNVIEW_STATUS_INVALID_ARGUMENT :: i32(2)
 DYNVIEW_STATUS_OUT_OF_CAPACITY :: i32(5)
 DYNVIEW_STATUS_ILLEGAL_STATE :: i32(6)
 
+Dynview_Text_Alignment :: enum {
+    Left,
+    Center,
+}
+
 Dynview_Text_Style :: struct {
     color: rl.Color,
-    centered: bool,
+    alignment: Dynview_Text_Alignment,
     bold: bool,
     italic: bool,
+    indent_cols: int,
+    paragraph_spacing_before: f32,
+    paragraph_spacing_after: f32,
+    line_height_multiplier: f32,
+    force_line_start: bool,
     wrap_scale: f32,
 }
 
@@ -208,7 +218,7 @@ dynview_flow_consume_text_run :: proc(
 
                 line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
                     f32(flow^.col) * dynview_effective_advance(style, draw_ctx^.wrap_advance)
-                if style.centered && flow^.col == 0 {
+                if style.alignment == .Center && flow^.col == 0 {
                     line_w := f32(line_len) * dynview_effective_advance(style, draw_ctx^.wrap_advance)
                     line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
                 }
@@ -390,46 +400,56 @@ dynview_style_by_id :: #force_inline proc(style_id: i32) -> Dynview_Text_Style {
     case DYNVIEW_STYLE_PROMPT:
         return Dynview_Text_Style{
             color = rl.Color{186, 198, 228, 255},
+            indent_cols = 1,
             wrap_scale = 1.02,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_OUTPUT:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_ERROR:
         return Dynview_Text_Style{
             color = rl.Color{220, 95, 95, 255},
             wrap_scale = 1.03,
+            line_height_multiplier = 1.02,
         }
     case DYNVIEW_STYLE_BOLD:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             bold = true,
             wrap_scale = 1.12,
+            line_height_multiplier = 1.05,
         }
     case DYNVIEW_STYLE_ITALIC:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             italic = true,
             wrap_scale = 1.07,
+            line_height_multiplier = 1.02,
         }
     case DYNVIEW_STYLE_CENTER:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
-            centered = true,
+            alignment = .Center,
+            force_line_start = true,
             wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_INLINE_ATOM:
         return Dynview_Text_Style{
             color = rl.Color{170, 190, 218, 255},
             wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     }
 
     return Dynview_Text_Style{
         color = UI_TEXT_COLOR,
         wrap_scale = 1.0,
+        line_height_multiplier = 1.0,
     }
 }
 
@@ -466,79 +486,32 @@ dynview_text_for_command :: #force_inline proc(
     return string(buffer^.text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
 }
 
-//   Build style-aware row spans for copy-enabled blocks using current panel metrics.
-dynview_update_copy_block_row_spans :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    panel_width, text_padding, wrap_advance: f32) {
+//   Return the first/last layout line indices that contain visible items for block_id.
+dynview_layout_item_line_span_for_block :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    block_id: i32) -> (int, int, bool) {
 
-    if runtime == nil {
-        return
-    }
+    first_line := -1
+    last_line := -1
+    for i in 0..<cache^.layout_item_count {
+        item := cache^.layout_items[i]
+        if item.block_id != block_id {
+            continue
+        }
 
-    cache := &runtime^.compile_cache
-    buffer := &runtime^.command_buffer
-    if cache^.copy_block_count <= 0 {
-        return
-    }
-
-    flow := Dynview_Flow_State{}
-    draw_ctx := Dynview_Draw_Context{
-        panel = {0, 0, panel_width, 0},
-        text_padding = text_padding,
-        text_row_height = 1,
-        wrap_advance = wrap_advance,
-    }
-    active_copy_index := -1
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
-        switch cmd.kind {
-        case .BeginBlock:
-            active_copy_index = -1
-            for j in 0..<cache^.copy_block_count {
-                if cache^.copy_blocks[j].block_id == cmd.block_id {
-                    active_copy_index = j
-                    cache^.copy_blocks[j].row_start = flow.row
-                    cache^.copy_blocks[j].row_end = flow.row
-                    break
-                }
-            }
-        case .TextRun:
-            text := dynview_text_for_command(buffer, cmd)
-            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
-
-            if active_copy_index >= 0 {
-                cache^.copy_blocks[active_copy_index].row_end = flow.row
-            }
-        case .InlineLine:
-            dynview_flow_consume_inline_line(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
-            if active_copy_index >= 0 {
-                cache^.copy_blocks[active_copy_index].row_end = flow.row
-            }
-        case .InlineBox:
-            dynview_flow_consume_inline_box(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
-            if active_copy_index >= 0 {
-                cache^.copy_blocks[active_copy_index].row_end = flow.row
-            }
-        case .InlineCircle:
-            dynview_flow_consume_inline_circle(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
-            if active_copy_index >= 0 {
-                cache^.copy_blocks[active_copy_index].row_end = flow.row
-            }
-        case .LineBreak, .Divider:
-            if active_copy_index >= 0 {
-                // Keep span bound to the last content row; do not include the newly advanced row.
-                if cache^.copy_blocks[active_copy_index].row_end < flow.row {
-                    cache^.copy_blocks[active_copy_index].row_end = flow.row
-                }
-            }
-            flow.row += 1
-            flow.col = 0
-        case .EndBlock:
-            active_copy_index = -1
-        case .CopyableTextRun:
-            // Copy payload does not affect visible row placement directly.
+        if first_line < 0 || item.line_index < first_line {
+            first_line = item.line_index
+        }
+        if item.line_index > last_line {
+            last_line = item.line_index
         }
     }
+
+    if first_line < 0 || last_line < first_line {
+        return 0, 0, false
+    }
+
+    return first_line, last_line, true
 }
 
 //   Draw one styled wrapped text line run with bounded visual traits.
@@ -550,7 +523,7 @@ dynview_draw_styled_line :: #force_inline proc(
     style: Dynview_Text_Style) {
 
     line_x := panel.x + text_padding
-    if style.centered {
+    if style.alignment == .Center {
         line_w := f32(len(text)) * wrap_advance * max(0.5, style.wrap_scale)
         line_x = panel.x + (panel.width - line_w) * 0.5
     }
@@ -1092,20 +1065,32 @@ dynview_rebuild_copy_hit_targets :: proc(
         return
     }
 
+    _ = row_height
+
     cache := &runtime^.compile_cache
     cache^.copy_hit_target_count = 0
-    if !cache^.is_valid {
+    if !cache^.is_valid || !cache^.layout_is_valid {
         return
     }
 
-    dynview_update_copy_block_row_spans(runtime, panel.width, text_padding, cache^.last_wrap_advance)
-
     panel_top := panel.y
     panel_bottom := panel.y + panel.height
+    last_hover_bottom := panel_top
     for i in 0..<cache^.copy_block_count {
         block := cache^.copy_blocks[i]
-        row_top := panel.y + text_padding + f32(block.row_start) * row_height - scroll_y
-        row_bottom := panel.y + text_padding + f32(block.row_end + 1) * row_height - scroll_y
+        row_start, row_end, has_visible_items := dynview_layout_item_line_span_for_block(cache, block.block_id)
+        if !has_visible_items {
+            continue
+        }
+        if row_end >= cache^.layout_line_count {
+            continue
+        }
+
+        start_line := cache^.layout_lines[row_start]
+        end_line := cache^.layout_lines[row_end]
+        row_top := panel.y + text_padding + start_line.y_offset - scroll_y
+        row_bottom := panel.y + text_padding + end_line.y_offset +
+            end_line.line_height - scroll_y
         if row_bottom < panel_top || row_top > panel_bottom {
             continue
         }
@@ -1115,6 +1100,7 @@ dynview_rebuild_copy_hit_targets :: proc(
 
         visible_top := max(row_top, panel_top)
         visible_bottom := min(row_bottom, panel_bottom)
+        visible_top = max(visible_top, last_hover_bottom)
         hover_rect := rl.Rectangle{
             panel.x + text_padding,
             visible_top,
@@ -1135,6 +1121,7 @@ dynview_rebuild_copy_hit_targets :: proc(
             hover_rect = hover_rect,
         }
         cache^.copy_hit_target_count += 1
+        last_hover_bottom = hover_rect.y + hover_rect.height
     }
 }
 
@@ -1185,6 +1172,15 @@ dynview_compile_if_needed :: proc(runtime: ^core.Ui_Dynview_Runtime) {
     if status != DYNVIEW_STATUS_OK {
         dynview_mark_stream_error(runtime, status)
         cache^.copy_hit_target_count = 0
+        cache^.layout_is_valid = false
+        return
+    }
+
+    layout_status := dynview_rebuild_layout_cache(runtime)
+    if layout_status != DYNVIEW_STATUS_OK {
+        dynview_mark_stream_error(runtime, layout_status)
+        cache^.copy_hit_target_count = 0
+        cache^.layout_is_valid = false
         return
     }
 
@@ -1264,7 +1260,12 @@ dynview_scratchpad_styled_rows_or_fallback :: proc(
             chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
     }
 
-    return dynview_count_styled_rows(runtime, panel.width, text_padding, wrap_advance)
+    if !runtime^.compile_cache.layout_is_valid {
+        return count_wrapped_text_rows(fallback_text,
+            chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
+    }
+
+    return max(1, runtime^.compile_cache.layout_line_count)
 }
 
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
@@ -1293,15 +1294,15 @@ dynview_draw_scratchpad_styled_or_fallback :: proc(
     runtime := &ui_runtime^.dynview_runtime
     if runtime^.enabled && runtime^.compile_cache.is_valid &&
         !runtime^.command_buffer.has_stream_error && runtime^.command_buffer.command_count > 0 {
-        dynview_draw_styled_content(runtime,
-            panel,
-            scroll_y,
-            text_padding,
-            text_row_height,
-            wrap_advance,
-            font_size,
-            font)
-        return
+        if runtime^.compile_cache.layout_is_valid {
+            dynview_draw_cached_layout(runtime,
+                panel,
+                scroll_y,
+                text_padding,
+                font_size,
+                font)
+            return
+        }
     }
 
     draw_wrapped_text_content(fallback_text,
