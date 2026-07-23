@@ -637,7 +637,7 @@ function dynview_emit_line!(state_ptr::Ptr{Cvoid}, line::AbstractString, style_i
     if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, line, style_id))
         return false
     end
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, "", line, style_id))
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, line))
         return false
     end
     if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))

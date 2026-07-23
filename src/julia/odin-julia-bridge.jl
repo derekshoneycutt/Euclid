@@ -1356,15 +1356,11 @@ Returns a BRIDGE_STATUS_* code.
 """
 function dynview_copyable_text_run(
     state_ptr::Ptr{Cvoid},
-    text::AbstractString,
-    copy_text::AbstractString,
-    style_id::Integer)
+    copy_text::AbstractString)
 
     @ccall dynview_copyable_text_run(
         state_ptr::Ptr{Cvoid},
-        text::Cstring,
-        copy_text::Cstring,
-        Int32(style_id)::Int32)::Int32
+        copy_text::Cstring)::Int32
 end
 
 """

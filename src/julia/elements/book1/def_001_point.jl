@@ -41,6 +41,12 @@ function get_view_text(state_ptr::Ptr{Cvoid})
         return fallback
     end
 
+    if OdinJuliaBridge.dynview_copyable_text_run(
+        state_ptr,
+        DefinitionViewText) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
     if OdinJuliaBridge.dynview_text_run(
         state_ptr,
         "Euclid Elements - Book I - Definition: Point",

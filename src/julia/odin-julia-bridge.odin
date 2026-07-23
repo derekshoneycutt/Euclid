@@ -941,8 +941,7 @@ dynview_text_run :: proc "c" (
 @(export)
 dynview_copyable_text_run :: proc "c" (
     state: ^core.Euclid_General_State,
-    text, copy_text: cstring,
-    style_id: i32) -> i32 {
+    copy_text: cstring) -> i32 {
 
     if state == nil {
         return BRIDGE_STATUS_INVALID_ARGUMENT
@@ -959,7 +958,6 @@ dynview_copyable_text_run :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
     }
 
-    _ = text
     copy_text_value := ""
     if copy_text != nil {
         copy_text_value = string(copy_text)
@@ -975,7 +973,6 @@ dynview_copyable_text_run :: proc "c" (
     return dynview_push_command(runtime, core.Ui_Dynview_Command{
         kind = .CopyableTextRun,
         block_id = buffer^.stream_open_block_id,
-        style_id = style_id,
         copy_text_offset = offset,
         copy_text_len = count,
     })

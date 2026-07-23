@@ -90,6 +90,7 @@ General features:
 - [X] Initial Settings panel
 - [X] Initial basic SIMD and performance tweaks
 - [X] Improved hybrid immediate mode, block-based view text rendering
+- [ ] View text more advanced layout engine
 - [ ] Continued view text support for colors, shape fill, etc.
 - [ ] Standard group-focused transformation animations for complex shapes
   - [ ] Translation
@@ -103,7 +104,7 @@ General features:
   - [ ] Basic clipboard support
   - [ ] LaTeX-ish to unicode input tab completion support
 - [ ] Drawing Sounds
-- [ ] LaTeX render support -- Nice to have --
+- [ ] *very basic* LaTeX render support -- Nice to have --
 - [ ] Alternative tree for pedagological view vs book view -- Nice to have --
 
 Final tasks:

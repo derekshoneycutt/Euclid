@@ -65,6 +65,15 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
     apply_wheel_scroll(mouse, text_panel, TEXT_ROW_HEIGHT,
         &state^.ui_runtime.view_text_scroll_y, max_scroll, WHEEL_SCROLL_MULTIPLIER)
 
+    dynview_refresh_scratchpad_copy_targets(
+        ui_runtime,
+        text_panel,
+        state^.ui_runtime.view_text_scroll_y,
+        TEXT_PADDING,
+        TEXT_ROW_HEIGHT,
+        DYNVIEW_COPY_ICON_SIZE,
+        DYNVIEW_COPY_ICON_X_PAD)
+
     rl.BeginScissorMode(i32(text_panel.x), i32(text_panel.y),
         i32(text_panel.width), i32(text_panel.height))
     {
@@ -79,6 +88,8 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
             TEXT_WRAP_ADVANCE,
             TREE_FONT_SIZE,
             UI_TEXT_COLOR)
+
+            _ = draw_scratchpad_dynview_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse)
     }
     rl.EndScissorMode()
 
