@@ -32,9 +32,13 @@ COMPASS_LINE_DUST_SAMPLES :: 24
 
 BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY :: (1 << 1)
 BRIDGE_FEATURE_DYNVIEW_STREAM :: (1 << 2)
+BRIDGE_FEATURE_ANIMATION_STABLE_ID :: (1 << 3)
 
 BRIDGE_VERSION :: 1
-BRIDGE_FEATURE_FLAGS :: 1 | BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY | BRIDGE_FEATURE_DYNVIEW_STREAM
+BRIDGE_FEATURE_FLAGS :: 1 |
+    BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
+    BRIDGE_FEATURE_DYNVIEW_STREAM |
+    BRIDGE_FEATURE_ANIMATION_STABLE_ID
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -111,23 +115,6 @@ Bridge_Point_View :: struct {
     next_child_point: int,
 }
 
-label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Label_Decoration_Kind {
-    switch kind {
-    case BRIDGE_LABEL_DECORATION_PRIME:
-        return .Prime
-    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
-        return .DoublePrime
-    case BRIDGE_LABEL_DECORATION_TRIPLEPRIME:
-        return .TriplePrime
-    case BRIDGE_LABEL_DECORATION_HAT:
-        return .Hat
-    case BRIDGE_LABEL_DECORATION_BAR:
-        return .Bar
-    }
-
-    return .None
-}
-
 Bridge_Constraint_View :: struct {
     valid: u8,
     index: i32,
@@ -153,52 +140,6 @@ Bridge_Constraint_Spec :: struct {
     has_child_offset: u8,
     child_offset: i32,
     do_apply: u8,
-}
-
-dynview_fail :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, code: i32) -> i32 {
-    runtime^.command_buffer.has_stream_error = true
-    if runtime^.compile_cache.last_error_code == 0 {
-        runtime^.compile_cache.last_error_code = code
-    }
-    runtime^.compile_cache.is_valid = false
-    return code
-}
-
-dynview_push_command :: #force_inline proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    command: core.Ui_Dynview_Command) -> i32 {
-
-    buffer := &runtime^.command_buffer
-    if buffer^.command_count >= len(buffer^.commands) {
-        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
-    }
-
-    buffer^.commands[buffer^.command_count] = command
-    buffer^.command_count += 1
-    runtime^.compile_cache.is_valid = false
-    return BRIDGE_STATUS_OK
-}
-
-dynview_append_text_payload :: #force_inline proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    text: string,
-    offset_out, count_out: ^int) -> i32 {
-
-    buffer := &runtime^.command_buffer
-    text_len := len(text)
-    if buffer^.text_bytes_len + text_len > len(buffer^.text_bytes) {
-        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
-    }
-
-    start := buffer^.text_bytes_len
-    for i in 0..<text_len {
-        buffer^.text_bytes[start + i] = text[i]
-    }
-
-    buffer^.text_bytes_len += text_len
-    offset_out^ = start
-    count_out^ = text_len
-    return BRIDGE_STATUS_OK
 }
 
 Bridge_Solve_Result :: struct {
@@ -237,6 +178,7 @@ set_null_animations :: proc "c" (
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
 //   - name: Null-terminated animation label string from Julia.
+//   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //
 // Returns:
 //   - Index of the inserted animation interface entry.
@@ -244,9 +186,18 @@ set_null_animations :: proc "c" (
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
     getViewText, init, loop, clean : ^jl_value_t,
-    name : cstring) -> int {
+    name, stable_id : cstring) -> int {
 
     context = state^.saved_context
+
+    parsed_stable_id, ok := parse_animation_stable_id(stable_id, name)
+    if !ok {
+        return -1
+    }
+    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, -1) {
+        return -1
+    }
+
     newIndex := state^.julia_interface^.next_animation_index
     state^.julia_interface^.next_animation_index += 1
 
@@ -257,6 +208,7 @@ add_root_animation_interface :: proc "c" (
     animation^.loop = loop
     animation^.clean = clean
     animation^.name = strings.clone(string(name))
+    animation^.stable_id = parsed_stable_id
     animation^.first_child_id = -1
     animation^.parent_id = -1
     animation^.next_sibling = -1
@@ -273,6 +225,7 @@ add_root_animation_interface :: proc "c" (
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
 //   - name: Null-terminated animation label string from Julia.
+//   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //   - parentId: Parent animation index that receives the new child animation entry.
 //
 // Returns:
@@ -282,7 +235,7 @@ add_root_animation_interface :: proc "c" (
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
     getViewText, init, loop, clean : ^jl_value_t,
-    name : cstring,
+    name, stable_id : cstring,
     parentId : int) -> int {
 
     if parentId < 0 || parentId >= state^.julia_interface^.next_animation_index {
@@ -290,6 +243,15 @@ add_child_animation_interface :: proc "c" (
     }
 
     context = state^.saved_context
+
+    parsed_stable_id, ok := parse_animation_stable_id(stable_id, name)
+    if !ok {
+        return -1
+    }
+    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, parentId) {
+        return -1
+    }
+
     newIndex := state^.julia_interface^.next_animation_index
     state^.julia_interface^.next_animation_index += 1
 
@@ -313,6 +275,7 @@ add_child_animation_interface :: proc "c" (
     animation^.loop = loop
     animation^.clean = clean
     animation^.name = strings.clone(string(name))
+    animation^.stable_id = parsed_stable_id
     animation^.first_child_id = -1
     animation^.parent_id = parentId
     animation^.next_sibling = -1

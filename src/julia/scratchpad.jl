@@ -73,7 +73,8 @@ const reset_count_ref = Ref(0)
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr, get_view_text, initialize, loop, clean, ScratchpadName)
+    state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
+    OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 
 """Create an isolated runtime module used as the scratchpad eval scope."""

@@ -89,6 +89,7 @@ General features:
 - [X] GIF Saving
 - [X] Initial Settings panel
 - [X] Initial basic SIMD and performance tweaks
+- [X] UUID animation handles
 - [X] Improved hybrid immediate mode, block-based view text rendering
 - [X] View text more advanced layout engine
 - [ ] Continued view text support for colors, shape fill, etc.
@@ -157,6 +158,7 @@ After v1 is complete, the following is suggestions to evaluate next.
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions
+- Persisting Scratchpads (runtime-only, as children in the trees of Scratchpad that can be navigated away from and returned to with persisted internal state; exit cleans REPL state and removes from tree)
 - Declarative animations support
 - Animation slider
 - Transformations

@@ -16,7 +16,9 @@ function init_euclid_scripts_hilbert(state_ptr::Ptr{Cvoid})
     rootId = OdinJuliaBridge.add_root_animation_interface(
         state_ptr, get_view_text_root_hilbert, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
-        "Hilbert's Foundations of Geometry")
+        "Hilbert's Foundations of Geometry",
+        OdinJuliaBridge.animation_stable_id_from_key(
+            "root:Hilbert's Foundations of Geometry"))
 
     HilbertChapterOne.init_euclid_scripts(state_ptr, rootId)
 end

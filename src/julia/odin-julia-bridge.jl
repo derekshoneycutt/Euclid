@@ -9,6 +9,7 @@ controlling tools, managing constraints, and emitting particles.
 module OdinJuliaBridge
 
 using Colors
+using UUIDs
 
 export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec, BridgeSolveResult,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle, BridgeShapeTriangle,
@@ -239,6 +240,17 @@ const CONSTRAINT_SPEC_DEPENDON = Int32(1 << 5)
 const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
 const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
 
+const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
+
+"""
+Derive a deterministic animation stable ID string from a semantic key.
+
+This helper uses UUID v5 with a fixed project namespace so the same key always
+produces the same identity across reloads.
+"""
+animation_stable_id_from_key(key::AbstractString) =
+    string(uuid5(ANIMATION_STABLE_ID_NAMESPACE, String(key)))
+
 """
 Construct a new BridgeColor from standard Julia color types
 
@@ -294,17 +306,17 @@ Parameters:
 - `loop` : A function that should be called when the animation is processing a frame of the loop
 - `clean` : A function that should be called when the animation is being cleaned and ended
 - `name` : The name of the animation to show in the tree
+- `stable_id` : Canonical UUID string used as stable animation identity
 
 Returns the index of the new root animation
 """
 function add_root_animation_interface(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, stable_id::String)
 
     @ccall add_root_animation_interface(
         state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
-        name::Cstring)::Int64
+        name::Cstring, stable_id::Cstring)::Int64
 end
-
 
 """
 Add a new child animation for the application
@@ -319,16 +331,18 @@ Parameters:
 - `loop` : A function that should be called when the animation is processing a frame of the loop
 - `clean` : A function that should be called when the animation is being cleaned and ended
 - `name` : The name of the animation to show in the tree
+- `stable_id` : Canonical UUID string used as stable animation identity
 - `parentId` : The index of the parent animation to place the child under in the tree
 
 Returns the index of the new child animation
 """
 function add_child_animation_interface(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, parentId::Integer)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String,
+    stable_id::String, parentId::Integer)
 
     @ccall add_child_animation_interface(
         state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
-        name::Cstring, parentId::Int64)::Int64
+        name::Cstring, stable_id::Cstring, parentId::Int64)::Int64
 end
 
 """

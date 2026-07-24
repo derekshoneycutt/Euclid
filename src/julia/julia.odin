@@ -12,6 +12,7 @@ import "../particles"
 import "../kine"
 
 import "base:runtime"
+import "core:encoding/uuid"
 import "core:fmt"
 import "core:math"
 import "core:strings"
@@ -656,16 +657,13 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.next_animation_index = 0
 }
 
-//   Find an animation index by its registered name.
-find_animation_index_by_name :: proc(
-    state: ^core.Euclid_General_State, name: string) -> int {
-
-    if len(name) == 0 {
-        return -1
-    }
+//   Find an animation index by its registered stable UUID identity.
+find_animation_index_by_stable_id :: proc(
+    state: ^core.Euclid_General_State, stable_id: uuid.Identifier) -> int {
 
     for i in 0..<state^.julia_interface^.next_animation_index {
-        if state^.julia_interface^.animations[i].name == name {
+        animation := state^.julia_interface^.animations[i]
+        if animation.stable_id == stable_id {
             return i
         }
     }
@@ -675,15 +673,17 @@ find_animation_index_by_name :: proc(
 
 //   Restore the current animation selection after a successful script reload.
 restore_current_animation_after_reload :: proc(
-    state: ^core.Euclid_General_State, animation_name: string) {
+    state: ^core.Euclid_General_State,
+    animation_stable_id: uuid.Identifier) {
 
-    restored_index := find_animation_index_by_name(state, animation_name)
-    if restored_index < 0 {
+    restored_index := find_animation_index_by_stable_id(state, animation_stable_id)
+    if restored_index >= 0 {
+        state^.julia_interface^.selected_animation_index = restored_index
+        change_current_animation_loop(state, restored_index)
         return
     }
 
-    state^.julia_interface^.selected_animation_index = restored_index
-    change_current_animation_loop(state, restored_index)
+    fmt.eprintln("Julia asset reload: unable to restore animation for requested stable_id")
 }
 
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
@@ -713,19 +713,21 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    current_animation_name := ""
+    current_animation_stable_id: uuid.Identifier
     if state^.julia_interface^.current_animation_index >= 0 &&
        state^.julia_interface^.current_animation_index < state^.julia_interface^.next_animation_index {
-        current_animation_name = strings.clone(
-            state^.julia_interface^.animations[state^.julia_interface^.current_animation_index].name,
-            context.temp_allocator)
+        active_animation := state^.julia_interface^.animations[
+            state^.julia_interface^.current_animation_index]
+        current_animation_stable_id = active_animation.stable_id
     }
 
     state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
     refresh_julia_interface_handles(state)
     reset_julia_interface_registry(state)
     init_euclid_scripts(state)
-    restore_current_animation_after_reload(state, current_animation_name)
+    restore_current_animation_after_reload(
+        state,
+        current_animation_stable_id)
 
     // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
     state^.ui_runtime.scratchpad_input_len = 0
@@ -891,3 +893,175 @@ emit_label_show_dust_push :: #force_inline proc(
     particles.push_dust_away_from_xy_large(state^.particle_system,
         pos.x + LABEL_DUST_X_OFFSET, pos.y + LABEL_DUST_Y_OFFSET)
 }
+
+//   Parse a bridge-provided animation stable UUID string into typed identity.
+//
+// Parameters:
+//   - stable_id: Null-terminated UUID text from Julia bridge registration call.
+//   - name: Animation display name used only for diagnostics.
+//
+// Returns:
+//   - Parsed UUID identifier when successful.
+//   - false when input is nil or malformed.
+parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier, bool) {
+    if stable_id == nil {
+        fmt.eprintln("add animation interface failed: nil stable_id for ", string(name))
+        return {}, false
+    }
+
+    stable_id_text := string(stable_id)
+    id, read_error := uuid.read(stable_id_text)
+    if read_error != .None {
+        fmt.eprintln(
+            "add animation interface failed: invalid stable_id '",
+            stable_id_text,
+            "' for ",
+            string(name))
+        return {}, false
+    }
+
+    return id, true
+}
+
+//   Find an already registered animation by stable UUID identity.
+//
+// Returns:
+//   - Animation index when found.
+//   - -1 when no matching UUID exists in the current registry.
+find_registered_animation_by_stable_id :: proc(
+    state: ^core.Euclid_General_State, stable_id: uuid.Identifier) -> int {
+
+    for i in 0..<state^.julia_interface^.next_animation_index {
+        if state^.julia_interface^.animations[i].stable_id == stable_id {
+            return i
+        }
+    }
+
+    return -1
+}
+
+//   Reject duplicate stable UUID registration before insertion.
+//
+// Parameters:
+//   - name: New animation display name being registered.
+//   - stable_id_text: Original UUID text used for diagnostics.
+//   - stable_id: Parsed UUID identity candidate.
+//   - parent_id: Parent animation index for child registrations, or -1 for root.
+//
+// Returns:
+//   - true when duplicate is detected and caller should abort registration.
+reject_duplicate_stable_id :: proc(
+    state: ^core.Euclid_General_State,
+    name, stable_id_text: cstring,
+    stable_id: uuid.Identifier,
+    parent_id: int) -> bool {
+
+    existing_index := find_registered_animation_by_stable_id(state, stable_id)
+    if existing_index < 0 {
+        return false
+    }
+
+    existing_name := state^.julia_interface^.animations[existing_index].name
+    fmt.eprintln(
+        "add animation interface failed: duplicate stable_id '",
+        string(stable_id_text),
+        "' for ",
+        string(name),
+        " conflicts with existing animation index ",
+        existing_index,
+        " name '",
+        existing_name,
+        "' parent_id=",
+        parent_id)
+    return true
+}
+
+//   Convert bridge decoration integer values to label decoration enum values.
+//
+// Parameters:
+//   - kind: Bridge decoration constant encoded as i32.
+//
+// Returns:
+//   - Matching label decoration enum value, or .None for unsupported values.
+label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Label_Decoration_Kind {
+    switch kind {
+    case BRIDGE_LABEL_DECORATION_PRIME:
+        return .Prime
+    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
+        return .DoublePrime
+    case BRIDGE_LABEL_DECORATION_TRIPLEPRIME:
+        return .TriplePrime
+    case BRIDGE_LABEL_DECORATION_HAT:
+        return .Hat
+    case BRIDGE_LABEL_DECORATION_BAR:
+        return .Bar
+    }
+
+    return .None
+}
+
+//   Mark dynview stream state as failed and lock compile cache into invalid state.
+//
+// Notes:
+//   - Preserves the first encountered error code for diagnostic stability.
+dynview_fail :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, code: i32) -> i32 {
+    runtime^.command_buffer.has_stream_error = true
+    if runtime^.compile_cache.last_error_code == 0 {
+        runtime^.compile_cache.last_error_code = code
+    }
+    runtime^.compile_cache.is_valid = false
+    return code
+}
+
+//   Append one dynview command to the command buffer.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when command is enqueued.
+//   - BRIDGE_STATUS_OUT_OF_CAPACITY when command buffer is full.
+dynview_push_command :: #force_inline proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    command: core.Ui_Dynview_Command) -> i32 {
+
+    buffer := &runtime^.command_buffer
+    if buffer^.command_count >= len(buffer^.commands) {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    buffer^.commands[buffer^.command_count] = command
+    buffer^.command_count += 1
+    runtime^.compile_cache.is_valid = false
+    return BRIDGE_STATUS_OK
+}
+
+//   Append text bytes into dynview payload storage and return payload span.
+//
+// Parameters:
+//   - text: Text payload to append to the shared dynview byte buffer.
+//   - offset_out: Receives start offset of appended bytes.
+//   - count_out: Receives appended byte count.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when payload is appended.
+//   - BRIDGE_STATUS_OUT_OF_CAPACITY when byte buffer has insufficient space.
+dynview_append_text_payload :: #force_inline proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    text: string,
+    offset_out, count_out: ^int) -> i32 {
+
+    buffer := &runtime^.command_buffer
+    text_len := len(text)
+    if buffer^.text_bytes_len + text_len > len(buffer^.text_bytes) {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    start := buffer^.text_bytes_len
+    for i in 0..<text_len {
+        buffer^.text_bytes[start + i] = text[i]
+    }
+
+    buffer^.text_bytes_len += text_len
+    offset_out^ = start
+    count_out^ = text_len
+    return BRIDGE_STATUS_OK
+}
+

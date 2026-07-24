@@ -7,6 +7,7 @@ package core
 
 import "base:runtime"
 import "core:c"
+import "core:encoding/uuid"
 
 import rl "vendor:raylib"
 
@@ -234,6 +235,7 @@ Euclid_Julia_Animation_Interface :: struct {
     clean : ^jl_value_t, // stop and clear animations
 
     name : string,
+    stable_id : uuid.Identifier,
     is_expanded : bool,
     is_selected : bool,
 

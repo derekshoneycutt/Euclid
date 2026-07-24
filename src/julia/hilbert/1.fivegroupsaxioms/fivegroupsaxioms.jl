@@ -144,334 +144,347 @@ The axiom of Archimedes is a linear axiom.
 Remark. To the preceding five groups of axioms, we may add the axiom of completeness, which, although not of a purely geometrical nature, merits particular attention from a theoretical point of view."""
 end
 
+function stable_child_id(parent_id::Integer, name::AbstractString)
+    OdinJuliaBridge.animation_stable_id_from_key(
+        "child:" * string(parent_id) * ":" * String(name))
+end
+
+function register_child_animation(
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::AbstractString, parent_id::Integer)
+
+    OdinJuliaBridge.add_child_animation_interface(
+        state_ptr, getViewText, init, loop, clean, String(name),
+        stable_child_id(parent_id, name), parent_id)
+end
+
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
-    book1Id = OdinJuliaBridge.add_child_animation_interface(
+    book1Id = register_child_animation(
         state_ptr, get_view_text_BookI, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
         "1. The Five Groups of Axioms, §1", rootId)
-        book1Sec2Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec2Id = register_child_animation(
             state_ptr, get_view_text_BookI_connection, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§2 Group I: Axioms of Connection", book1Id)
-            book1AxiomI1Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI1Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI1.get_view_text,
                 HilbertChapterOneAxiomI1.initialize,
                 HilbertChapterOneAxiomI1.loop, HilbertChapterOneAxiomI1.clean,
                 "Axiom I,1", book1Sec2Id)
-            book1AxiomI2Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI2Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI2.get_view_text,
                 HilbertChapterOneAxiomI2.initialize,
                 HilbertChapterOneAxiomI2.loop, HilbertChapterOneAxiomI2.clean,
                 "Axiom I,2", book1Sec2Id)
-            book1AxiomI3Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI3Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI3.get_view_text,
                 HilbertChapterOneAxiomI3.initialize,
                 HilbertChapterOneAxiomI3.loop, HilbertChapterOneAxiomI3.clean,
                 "Axiom I,3", book1Sec2Id)
-            book1AxiomI4Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI4Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI4.get_view_text,
                 HilbertChapterOneAxiomI4.initialize,
                 HilbertChapterOneAxiomI4.loop, HilbertChapterOneAxiomI4.clean,
                 "Axiom I,4", book1Sec2Id)
-            book1AxiomI5Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI5Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI5.get_view_text,
                 HilbertChapterOneAxiomI5.initialize,
                 HilbertChapterOneAxiomI5.loop, HilbertChapterOneAxiomI5.clean,
                 "Axiom I,5", book1Sec2Id)
-            book1AxiomI6Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI6Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI6.get_view_text,
                 HilbertChapterOneAxiomI6.initialize,
                 HilbertChapterOneAxiomI6.loop, HilbertChapterOneAxiomI6.clean,
                 "Axiom I,6", book1Sec2Id)
-            book1AxiomI7Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomI7Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomI7.get_view_text,
                 HilbertChapterOneAxiomI7.initialize,
                 HilbertChapterOneAxiomI7.loop, HilbertChapterOneAxiomI7.clean,
                 "Axiom I,7", book1Sec2Id)
-            book1Theorem1Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem1Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem1.get_view_text,
                 HilbertChapterOneTheorem1.initialize,
                 HilbertChapterOneTheorem1.loop, HilbertChapterOneTheorem1.clean,
                 "Theorem 1", book1Sec2Id)
-            book1Theorem2Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem2Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem2.get_view_text,
                 HilbertChapterOneTheorem2.initialize,
                 HilbertChapterOneTheorem2.loop, HilbertChapterOneTheorem2.clean,
                 "Theorem 2", book1Sec2Id)
 
-        book1Sec3Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec3Id = register_child_animation(
             state_ptr, get_view_text_BookI_order, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§3 Group II: Axioms of Order", book1Id)
-            book1AxiomII1Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomII1Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomII1.get_view_text,
                 HilbertChapterOneAxiomII1.initialize,
                 HilbertChapterOneAxiomII1.loop, HilbertChapterOneAxiomII1.clean,
                 "Axiom II,1", book1Sec3Id)
-            book1AxiomII2Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomII2Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomII2.get_view_text,
                 HilbertChapterOneAxiomII2.initialize,
                 HilbertChapterOneAxiomII2.loop, HilbertChapterOneAxiomII2.clean,
                 "Axiom II,2", book1Sec3Id)
-            book1AxiomII3Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomII3Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomII3.get_view_text,
                 HilbertChapterOneAxiomII3.initialize,
                 HilbertChapterOneAxiomII3.loop, HilbertChapterOneAxiomII3.clean,
                 "Axiom II,3", book1Sec3Id)
-            book1AxiomII4Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomII4Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomII4.get_view_text,
                 HilbertChapterOneAxiomII4.initialize,
                 HilbertChapterOneAxiomII4.loop, HilbertChapterOneAxiomII4.clean,
                 "Axiom II,4", book1Sec3Id)
-            book1DefSegmentsId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefSegmentsId = register_child_animation(
                 state_ptr, HilbertChapterOneDefSegments.get_view_text,
                 HilbertChapterOneDefSegments.initialize,
                 HilbertChapterOneDefSegments.loop,
                 HilbertChapterOneDefSegments.clean,
                 "Definition: Segments", book1Sec3Id)
-            book1AxiomII5Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomII5Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomII5.get_view_text,
                 HilbertChapterOneAxiomII5.initialize,
                 HilbertChapterOneAxiomII5.loop, HilbertChapterOneAxiomII5.clean,
                 "Axiom II,5", book1Sec3Id)
 
-        book1Sec4Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec4Id = register_child_animation(
             state_ptr, get_view_text_BookI_consequences, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§4 Consequences after Group II", book1Id)
-            book1Theorem3Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem3Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem3.get_view_text,
                 HilbertChapterOneTheorem3.initialize,
                 HilbertChapterOneTheorem3.loop, HilbertChapterOneTheorem3.clean,
                 "Theorem 3", book1Sec4Id)
-            book1Theorem4Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem4Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem4.get_view_text,
                 HilbertChapterOneTheorem4.initialize,
                 HilbertChapterOneTheorem4.loop, HilbertChapterOneTheorem4.clean,
                 "Theorem 4", book1Sec4Id)
-            book1Theorem5Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem5Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem5.get_view_text,
                 HilbertChapterOneTheorem5.initialize,
                 HilbertChapterOneTheorem5.loop, HilbertChapterOneTheorem5.clean,
                 "Theorem 5", book1Sec4Id)
-            book1DefHalfRaysId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefHalfRaysId = register_child_animation(
                 state_ptr, HilbertChapterOneDefHalfRays.get_view_text,
                 HilbertChapterOneDefHalfRays.initialize,
                 HilbertChapterOneDefHalfRays.loop, HilbertChapterOneDefHalfRays.clean,
                 "Definition: Half-rays", book1Sec4Id)
-            book1DefSideOfLineId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefSideOfLineId = register_child_animation(
                 state_ptr, HilbertChapterOneDefinitionSideOfLine.get_view_text,
                 HilbertChapterOneDefinitionSideOfLine.initialize,
                 HilbertChapterOneDefinitionSideOfLine.loop,
                 HilbertChapterOneDefinitionSideOfLine.clean,
                 "Definition: Side of Line", book1Sec4Id)
-            book1DefPolygonId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefPolygonId = register_child_animation(
                 state_ptr, HilbertChapterOneDefinitionPolygon.get_view_text,
                 HilbertChapterOneDefinitionPolygon.initialize,
                 HilbertChapterOneDefinitionPolygon.loop,
                 HilbertChapterOneDefinitionPolygon.clean,
                 "Definition: Polygon", book1Sec4Id)
-            book1Theorem6Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem6Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem6.get_view_text,
                 HilbertChapterOneTheorem6.initialize,
                 HilbertChapterOneTheorem6.loop,
                 HilbertChapterOneTheorem6.clean,
                 "Theorem 6", book1Sec4Id)
-            book1Theorem7Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem7Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem7.get_view_text,
                 HilbertChapterOneTheorem7.initialize,
                 HilbertChapterOneTheorem7.loop,
                 HilbertChapterOneTheorem7.clean,
                 "Theorem 7", book1Sec4Id)
 
-        book1Sec5Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec5Id = register_child_animation(
             state_ptr, get_view_text_BookI_parallels, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§5 Group III: Axiom of Parallels", book1Id)
-            book1AxiomIII1Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIII1Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIII1.get_view_text,
                 HilbertChapterOneAxiomIII1.initialize,
                 HilbertChapterOneAxiomIII1.loop,
                 HilbertChapterOneAxiomIII1.clean,
                 "Axiom III", book1Sec5Id)
-            book1Theorem8Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem8Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem8.get_view_text,
                 HilbertChapterOneTheorem8.initialize,
                 HilbertChapterOneTheorem8.loop,
                 HilbertChapterOneTheorem8.clean,
                 "Theorem 8", book1Sec5Id)
 
-        book1Sec6Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec6Id = register_child_animation(
             state_ptr, get_view_text_BookI_congruence, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§6 Group IV: Axioms of Congruence", book1Id)
-            book1AxiomIV1Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV1Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV1.get_view_text,
                 HilbertChapterOneAxiomIV1.initialize,
                 HilbertChapterOneAxiomIV1.loop,
                 HilbertChapterOneAxiomIV1.clean,
                 "Axiom IV,1", book1Sec6Id)
-            book1AxiomIV2Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV2Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV2.get_view_text,
                 HilbertChapterOneAxiomIV2.initialize,
                 HilbertChapterOneAxiomIV2.loop,
                 HilbertChapterOneAxiomIV2.clean,
                 "Axiom IV,2", book1Sec6Id)
-            book1AxiomIV3Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV3Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV3.get_view_text,
                 HilbertChapterOneAxiomIV3.initialize,
                 HilbertChapterOneAxiomIV3.loop,
                 HilbertChapterOneAxiomIV3.clean,
                 "Axiom IV,3", book1Sec6Id)
-            book1DefAngleId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefAngleId = register_child_animation(
                 state_ptr, HilbertChapterOneDefAngle.get_view_text,
                 HilbertChapterOneDefAngle.initialize,
                 HilbertChapterOneDefAngle.loop,
                 HilbertChapterOneDefAngle.clean,
                 "Definition: Angle", book1Sec6Id)
-            book1AxiomIV4Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV4Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV4.get_view_text,
                 HilbertChapterOneAxiomIV4.initialize,
                 HilbertChapterOneAxiomIV4.loop,
                 HilbertChapterOneAxiomIV4.clean,
                 "Axiom IV,4", book1Sec6Id)
-            book1AxiomIV5Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV5Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV5.get_view_text,
                 HilbertChapterOneAxiomIV5.initialize,
                 HilbertChapterOneAxiomIV5.loop,
                 HilbertChapterOneAxiomIV5.clean,
                 "Axiom IV,5", book1Sec6Id)
-            book1DefTriangleAngleId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefTriangleAngleId = register_child_animation(
                 state_ptr, HilbertChapterOneDefTriangleAngle.get_view_text,
                 HilbertChapterOneDefTriangleAngle.initialize,
                 HilbertChapterOneDefTriangleAngle.loop,
                 HilbertChapterOneDefTriangleAngle.clean,
                 "Definition: Triangle Angle", book1Sec6Id)
-            book1AxiomIV6Id = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomIV6Id = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomIV6.get_view_text,
                 HilbertChapterOneAxiomIV6.initialize,
                 HilbertChapterOneAxiomIV6.loop,
                 HilbertChapterOneAxiomIV6.clean,
                 "Axiom IV,6", book1Sec6Id)
 
-        book1Sec7Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec7Id = register_child_animation(
             state_ptr, get_view_text_BookI_consequences_congruence,
             NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§7 Consequences after Group IV", book1Id)
-            book1Theorem9Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem9Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem9.get_view_text,
                 HilbertChapterOneTheorem9.initialize,
                 HilbertChapterOneTheorem9.loop,
                 HilbertChapterOneTheorem9.clean,
                 "Theorem 9", book1Sec7Id)
-            book1DefCongruentAnglesId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefCongruentAnglesId = register_child_animation(
                 state_ptr, HilbertChapterOneDefCongruentAngles.get_view_text,
                 HilbertChapterOneDefCongruentAngles.initialize,
                 HilbertChapterOneDefCongruentAngles.loop,
                 HilbertChapterOneDefCongruentAngles.clean,
                 "Definition: Congruent Angles", book1Sec7Id)
-            book1DefSupplementaryAnglesId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefSupplementaryAnglesId = register_child_animation(
                 state_ptr, HilbertChapterOneDefSupplementaryAngles.get_view_text,
                 HilbertChapterOneDefSupplementaryAngles.initialize,
                 HilbertChapterOneDefSupplementaryAngles.loop,
                 HilbertChapterOneDefSupplementaryAngles.clean,
                 "Definition: Supplementary Angles", book1Sec7Id)
-            book1DefCongruentTrianglesId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefCongruentTrianglesId = register_child_animation(
                 state_ptr, HilbertChapterOneDefCongruentTriangles.get_view_text,
                 HilbertChapterOneDefCongruentTriangles.initialize,
                 HilbertChapterOneDefCongruentTriangles.loop,
                 HilbertChapterOneDefCongruentTriangles.clean,
                 "Definition: Congruent Triangles", book1Sec7Id)
-            book1Theorem10Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem10Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem10.get_view_text,
                 HilbertChapterOneTheorem10.initialize,
                 HilbertChapterOneTheorem10.loop,
                 HilbertChapterOneTheorem10.clean,
                 "Theorem 10", book1Sec7Id)
-            book1Theorem11Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem11Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem11.get_view_text,
                 HilbertChapterOneTheorem11.initialize,
                 HilbertChapterOneTheorem11.loop,
                 HilbertChapterOneTheorem11.clean,
                 "Theorem 11", book1Sec7Id)
-            book1Theorem12Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem12Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem12.get_view_text,
                 HilbertChapterOneTheorem12.initialize,
                 HilbertChapterOneTheorem12.loop,
                 HilbertChapterOneTheorem12.clean,
                 "Theorem 12", book1Sec7Id)
-            book1Theorem13Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem13Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem13.get_view_text,
                 HilbertChapterOneTheorem13.initialize,
                 HilbertChapterOneTheorem13.loop,
                 HilbertChapterOneTheorem13.clean,
                 "Theorem 13", book1Sec7Id)
-            book1Theorem14Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem14Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem14.get_view_text,
                 HilbertChapterOneTheorem14.initialize,
                 HilbertChapterOneTheorem14.loop,
                 HilbertChapterOneTheorem14.clean,
                 "Theorem 14", book1Sec7Id)
-            book1Theorem15Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem15Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem15.get_view_text,
                 HilbertChapterOneTheorem15.initialize,
                 HilbertChapterOneTheorem15.loop,
                 HilbertChapterOneTheorem15.clean,
                 "Theorem 15", book1Sec7Id)
-            book1Theorem16Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem16Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem16.get_view_text,
                 HilbertChapterOneTheorem16.initialize,
                 HilbertChapterOneTheorem16.loop,
                 HilbertChapterOneTheorem16.clean,
                 "Theorem 16", book1Sec7Id)
-            book1DefinitionFigureId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefinitionFigureId = register_child_animation(
                 state_ptr, HilbertChapterOneDefinitionFigure.get_view_text,
                 HilbertChapterOneDefinitionFigure.initialize,
                 HilbertChapterOneDefinitionFigure.loop,
                 HilbertChapterOneDefinitionFigure.clean,
                 "Definition: Figure", book1Sec7Id)
-            book1Theorem17Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem17Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem17.get_view_text,
                 HilbertChapterOneTheorem17.initialize,
                 HilbertChapterOneTheorem17.loop,
                 HilbertChapterOneTheorem17.clean,
                 "Theorem 17", book1Sec7Id)
-            book1Theorem18Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem18Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem18.get_view_text,
                 HilbertChapterOneTheorem18.initialize,
                 HilbertChapterOneTheorem18.loop,
                 HilbertChapterOneTheorem18.clean,
                 "Theorem 18", book1Sec7Id)
-            book1Theorem19Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem19Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem19.get_view_text,
                 HilbertChapterOneTheorem19.initialize,
                 HilbertChapterOneTheorem19.loop,
                 HilbertChapterOneTheorem19.clean,
                 "Theorem 19", book1Sec7Id)
-            book1Theorem20Id = OdinJuliaBridge.add_child_animation_interface(
+            book1Theorem20Id = register_child_animation(
                 state_ptr, HilbertChapterOneTheorem20.get_view_text,
                 HilbertChapterOneTheorem20.initialize,
                 HilbertChapterOneTheorem20.loop,
                 HilbertChapterOneTheorem20.clean,
                 "Theorem 20", book1Sec7Id)
-            book1DefinitionCircleId = OdinJuliaBridge.add_child_animation_interface(
+            book1DefinitionCircleId = register_child_animation(
                 state_ptr, HilbertChapterOneDefinitionCircle.get_view_text,
                 HilbertChapterOneDefinitionCircle.initialize,
                 HilbertChapterOneDefinitionCircle.loop,
                 HilbertChapterOneDefinitionCircle.clean,
                 "Definition: Circle", book1Sec7Id)
 
-        book1Sec8Id = OdinJuliaBridge.add_child_animation_interface(
+        book1Sec8Id = register_child_animation(
             state_ptr, get_view_text_BookI_continuity, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§8 Group V: Axiom of Continuity", book1Id)
-            book1AxiomVId = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomVId = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomV.get_view_text,
                 HilbertChapterOneAxiomV.initialize,
                 HilbertChapterOneAxiomV.loop, HilbertChapterOneAxiomV.clean,
                 "Axiom V", book1Sec8Id)
-            book1AxiomCompletenessId = OdinJuliaBridge.add_child_animation_interface(
+            book1AxiomCompletenessId = register_child_animation(
                 state_ptr, HilbertChapterOneAxiomCompleteness.get_view_text,
                 HilbertChapterOneAxiomCompleteness.initialize,
                 HilbertChapterOneAxiomCompleteness.loop,
