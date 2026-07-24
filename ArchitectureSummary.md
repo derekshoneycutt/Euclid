@@ -4,14 +4,13 @@
 
 1. [What This Project Is](#what-this-project-is)
 1. [Where To Start Reading](#where-to-start-reading)
-1. [Host Modules (Odin)](#host-modules-odin)
-1. [Runtime Modules (Julia)](#runtime-modules-julia)
+1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Scratchpad Architecture (Interactive Runtime Surface)](#scratchpad-architecture-interactive-runtime-surface)
+1. [Dynview Text Engine (Hybrid-Immediate Rendering)](#dynview-text-engine-hybrid-immediate-rendering)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
 1. [Isometric Projection and Right-Hand Rule](#isometric-projection-and-right-hand-rule)
-1. [Polygon Vertex Order Conventions](#polygon-vertex-order-conventions)
 1. [Practical Contributor Guide](#practical-contributor-guide)
 1. [Key Architecture Takeaways](#key-architecture-takeaways)
 
@@ -52,331 +51,177 @@ If you are new, read in this order:
 
 ---
 
-## Host Modules (Odin)
+## Module Map (Odin + Julia)
 
-- `src/main.odin`
-  - Process entry, argument parsing, startup/shutdown sequencing.
+| Section | Module | Purpose | Key files |
+| --- | --- | --- | --- |
+| **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
+| **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
+| **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
+| **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/kine/shapes.odin`, `src/kine/constraints.odin`, `src/kine/system.odin` |
+| **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/julia/julia.odin`, `src/julia/odin-julia-bridge.odin`, `src/julia/julialib.odin` |
+| **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
+| **Odin** | Particles | Multi-layer particle systems and visual effects. | `src/particles/particles.odin` |
+| **---** | **--- Julia Modules ---** | **---** | **---** |
+| **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
+| **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
+| **Julia** | Shared Animation Utilities | Reusable animation and geometry helper routines. | `src/julia/animations.jl`, `src/julia/geometry.jl`, `src/julia/nullanimation.jl` |
+| **Julia** | Interactive Runtime | Scratchpad/REPL session lifecycle, queueing, and evaluation flow. | `src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl` |
+| **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
 
-### Core Definitions Module
+Content-module contract:
 
-Purpose: canonical data shapes and global capacity limits.
-
-Important files:
-
-- `src/core/core.odin`
-  - Defines major runtime structures (including Julia structures and `Euclid_General_State`).
-  - Declares system capacity constants.
-
-### Rendering and UI Module
-
-Purpose: world rendering, projection, tool/shape visuals, runtime UI panels.
-
-Important files:
-
-- `src/view/view.odin`
-  - Runtime state wiring and fixed-step update loop (`FIXED_DT`).
-- `src/view/elements.odin`
-  - World geometry drawing and tool visual rendering.
-- `src/view/core/view_core.odin`
-  - Shared view render/update helpers used by top-level view code.
-- `src/view/core/isomath.odin`
-  - Isometric projection math and coordinate transforms.
-- `src/view/ui/ui.odin`
-  - Tree/settings/text panels and interaction routing.
-
-### Geometry Kernel Module
-
-Purpose: geometric primitives, constraints, and system-level evolution.
-
-Important files:
-
-- `src/kine/shapes.odin`
-  - Shape/tool constructors and default geometric setup.
-- `src/kine/constraints.odin`
-  - Constraint definitions, error functions, and iterative solving.
-- `src/kine/system.odin`
-  - Frame integration rules, cache/update boundary behavior.
-
-### Bridge and Embedding Module
-
-Purpose: host-side Julia lifecycle and strict Odin<->Julia API boundary.
-
-Important files:
-
-- `src/julia/julia.odin`
-  - Julia runtime initialization/shutdown and per-frame orchestration.
-- `src/julia/odin-julia-bridge.odin`
-  - Exported bridge ABI used by Julia scripts.
-- `src/julia/julialib.odin`
-  - Low-level Julia embedding declarations (`jl_*`) mirrored from `julia.h`.
-
-### Assets and IO Module
-
-Purpose: packaged asset extraction/reload and generated media output.
-
-Important files:
-
-- `src/files/files.odin`
-  - Runtime asset package extraction and path resolution.
-- `src/files/gif_encode.odin`
-  - GIF encoding internals and output buffer production.
-
-### Particles Module
-
-Purpose: particle simulation and layered visual effects.
-
-Important files:
-
-- `src/particles/particles.odin`
-  - Multi-layer particle systems for flicker/trails/dust.
-
----
-
-## Runtime Modules (Julia)
-
-### Runtime Bootstrap Module
-
-Purpose: script loading, animation registry setup, global frame dispatch.
-
-Important files:
-
-- `src/julia/script.jl`
-  - Loads shared modules/content groups.
-  - Exposes `init_euclid_scripts` and `global_euclid_loop` for Odin.
-
-### Bridge Wrapper Module
-
-Purpose: Julia-side ergonomic API over bridge exports.
-
-Important files:
-
-- `src/julia/odin-julia-bridge.jl`
-  - `@ccall` wrappers plus helper conversion/utility routines.
-
-### Shared Animation Utility Module
-
-Purpose: reusable helpers that keep content scripts concise and consistent.
-
-Important files:
-
-- `src/julia/animations.jl`
-  - Pen/compass movement and drawing choreography helpers.
-- `src/julia/geometry.jl`
-  - Reusable geometric computations.
-- `src/julia/nullanimation.jl`
-  - Default no-op behavior used for non-leaf/root nodes.
-
-### Interactive Runtime Module
-
-Purpose: REPL-like runtime surfaces and command/session orchestration.
-
-Important files:
-
-- `src/julia/scratchpad.jl`
-  - Scratchpad session lifecycle, command queueing, and per-frame evaluation.
-- `src/julia/euclidrepl.jl`
-  - REPL parsing/evaluation helpers used by interactive runtime flows. Mostly to draw shapes
-    immediately, with relative ease.
-
-### Content Modules
-
-Purpose: domain content organized into chapter/family groups.
-
-Important files:
-
-- `src/julia/elements/elements.jl`
-  - Euclid Elements group root and registration path.
-- `src/julia/proclus/proclus.jl`
-  - Proclus group root and registration path.
-- `src/julia/hilbert/hilbert.jl`
-  - Hilbert group root and registration path.
-
-Each content module typically follows this contract:
-
-- Root module registers tree/category nodes.
+- Root modules register tree/category nodes.
 - Leaf files provide `get_view_text`, `initialize`, `loop`, `clean`.
-- Bridge calls mutate host state; local logic determines pedagogical flow.
+- Bridge calls mutate host state while Julia controls pedagogical flow.
 
 ---
 
 ## Scratchpad Architecture (Interactive Runtime Surface)
 
-The scratchpad is not a normal content animation. It is an embedded interactive
-runtime surface that uses the animation lifecycle and view text channel as a
-REPL-like control plane.
+Scratchpad is an interactive runtime surface, not a normal deterministic
+animation. It is mounted in the animation tree as `"Scratchpad"`, but behaves
+like an embedded REPL control plane.
 
-### What Makes It Architecturally Unique
+### Core Architecture
 
-- It is registered as a regular animation node (`"Scratchpad"`) but behaves as
-  an interactive shell instead of deterministic scene content.
-- It bridges keyboard-driven UI editing in Odin with queued/evaluated Julia input.
-- It uses one-command-per-frame dequeue semantics to keep evaluation latency,
-  frame pacing, and failure behavior bounded.
-- It supports optional per-frame user hooks, which effectively allow user-provided
-  Julia callbacks to run on the simulation timeline.
+- Odin owns UI input capture, text panel interaction, and buffer/cursor state.
+- Julia owns command parsing/evaluation, command history, and output stream
+  generation.
+- Communication crosses the bridge through explicit scratchpad entrypoints.
 
-### Host/UI Side Responsibilities (Odin)
+### Frame Model And Lifecycle
 
-- The `view/ui` module gates scratchpad input handling behind tree selection,
-  so keyboard capture only occurs while the Scratchpad node is active.
-- Input lives in fixed-size UI runtime buffers (`scratchpad_input`, cursor,
-  follow-output flags, last-output length) inside `Euclid_UI_Runtime_State`.
-- Enter submission is parse-state aware:
-  - Incomplete parse inserts newline for multiline continuation.
-  - Complete parse enqueues input through Julia bridge calls.
-- Up/Down key history navigation is delegated to Julia, while Odin owns the
-  active editable input buffer and cursor behavior.
+- Input is only captured when the Scratchpad node is the active selection.
+- Enter submission is parse-aware:
+  - incomplete parse appends newline
+  - complete parse enqueues command
+- Julia processes at most one queued command per frame, then runs optional
+  per-frame hooks.
+- Sessions are isolated via fresh runtime modules and support explicit
+  reset/clean transitions without terminating the host.
 
-### Julia Side Responsibilities
+### Safety, Reliability, And Limits
 
-- `src/julia/script.jl` exposes dedicated bridge entrypoints for scratchpad
-  classify/queue/history/save operations.
-- `src/julia/scratchpad.jl` owns session state (`ScratchpadSession`) including:
-  - isolated runtime module,
-  - input queue,
-  - output scrollback,
-  - command history,
-  - frame hooks,
-  - runtime metrics.
-- `initialize` creates a fresh session and seeds help text.
-- `loop` processes at most one queued command per frame, then runs enabled hooks.
-- `get_view_text` returns newline-joined output consumed by Odin text rendering.
+- Input is policy-filtered before eval.
+- Parse/eval/hook failures are surfaced as user-visible output, not host
+  crashes.
+- Repeated failing hooks auto-disable to prevent recurring frame-time spam.
+- Queue/history/output are bounded with retention caps and overflow behavior.
+- Runtime diagnostics are exposed through `:stats` counters.
 
-### Session Isolation and Lifecycle
+Primary files:
 
-- Each session is backed by a fresh runtime module (`EuclidScratchpadSession_*`)
-  to isolate evaluated bindings from previous resets.
-- `:reset` and intercepted `exit()/quit()` explicitly reset session state without
-  terminating the host app.
-- `clean` clears session reference on animation unload/switch.
+- `src/view/ui/scratchpad_panel.odin`
+- `src/julia/scratchpad.jl`
+- `src/julia/euclidrepl.jl`
+- `src/julia/script.jl`
 
-### Safety and Policy Boundaries
+---
 
-- Scratchpad input is filtered by a blocklist policy before eval (for example,
-  package-management commands and selected process/file/system call tokens).
-- Parse classification runs before queueing/eval and surfaces parse errors into
-  scratchpad output.
-- Eval and hook failures are converted into user-visible output lines instead of
-  panicking host runtime.
-- Hooks auto-disable after repeated consecutive failures to prevent persistent
-  frame-time error spam.
+## Dynview Text Engine (Hybrid-Immediate Rendering)
 
-### Throughput and Observability Guarantees
+Dynview is hybrid in a specific sense:
 
-- Queue, history, and output each have explicit retention caps.
-- Queue overflow drops oldest pending entries (bounded-memory behavior).
-- Slow eval and slow hook warnings are emitted from timing thresholds.
-- Runtime counters (enqueue/dequeue, drops, trims, error counts, transitions)
-  are exposed via `:stats` for in-app diagnostics.
+- Julia authors text in an immediate-style way each frame.
+- Odin evaluates and renders that text through retained dynview caches.
+- Input can be plain fallback text or structured stream content.
+
+Runtime path:
+
+1. Julia always returns fallback text from `get_view_text`.
+1. Julia may also emit a dynview stream via bridge calls.
+1. Odin validates stream data, updates retained cache state, and performs
+  layout/render from the cache for the frame.
+1. On stream failure, Odin renders fallback text.
+
+### Architectural Contract
+
+- Odin owns stream storage, parsing, layout, interaction, and final rendering.
+- Julia owns per-frame text intent and optional dynview emission.
+- Bridge failures in dynview are non-fatal and never remove text output.
+
+### Primary Files
+
+- `src/view/ui/dynview_pipeline.odin`
+- `src/view/ui/dynview_layout_cache.odin`
+- `src/view/ui/text_panel.odin`
+- `src/view/ui/scratchpad_panel.odin`
+- `src/julia/odin-julia-bridge.jl`
+- `src/julia/odin-julia-bridge.odin`
+- `src/julia/script.jl`
 
 ---
 
 ## Odin-Julia Bridge: How the Boundary Works
 
-### Control Flow
+### Basic Flow
 
-1. Odin initializes Julia and includes `julia/script.jl` from packaged assets.
-1. Odin queries Julia functions (`init_euclid_scripts`, `global_euclid_loop`).
-1. Julia registration code calls back into exported Odin bridge functions to
-  build the animation tree.
-1. During runtime, Odin invokes `julia.perform_animation_frame(...)`, which runs
-  reload checks plus Julia global loop and current animation loop.
-1. Julia animation code manipulates Odin state through bridge exports
-  (create/mutate points, constraints, tools, particles, metadata).
+```mermaid
+sequenceDiagram
+  participant O as Odin Host
+  participant B as Bridge API
+  participant J as Julia Runtime
 
-### Ownership Model
+  O->>J: include("julia/script.jl")
+  O->>J: resolve init_euclid_scripts/global_euclid_loop
+  J->>B: register animation tree
+  B->>O: mutate host registry/state
 
-- Odin owns all core app state and fixed-capacity data structures.
-- Julia receives a state pointer and issues operations through exported API calls.
-- Bridge functions may restore Odin runtime context
-  (`context = state^.SavedContext`) before allocation-sensitive operations.
+  loop Per frame
+    O->>J: perform_animation_frame(state_ptr)
+    J->>J: run global loop + current animation
+    J->>B: create/mutate points, constraints, tools, particles
+    B->>O: apply state mutations
+  end
 
-### Hot Reload Behavior
+  alt Asset package changed
+    O->>J: reload script.jl
+    O->>O: refresh handles + rebuild registry
+    O->>O: restore current animation by name
+  else No change
+    O->>J: continue normal frame loop
+  end
+```
 
-- Odin checks packaged asset archive mtime at runtime.
-- On change, it re-extracts assets, re-includes `script.jl`, refreshes function
-  handles, rebuilds animation registry, and attempts to restore the current
-  animation by name.
+### Ownership And Rules
+
+- Odin owns application state, memory, rendering, and final frame orchestration.
+- Julia owns animation/content logic and drives changes only through bridge APIs.
+- Bridge failures should be surfaced clearly; no silent state corruption paths.
+- Some bridge entrypoints restore Odin runtime context
+  (`context = state^.SavedContext`) before allocation-sensitive work.
 
 ---
 
 ## Allocation Strategy: Init-First with Explicit Exceptions
 
-The allocation policy is intentionally init-first in Odin:
+This policy is strict by design.
 
-- Long-lived application structures are created during startup (global state, core systems,
-    tool state, caches) and used statically throughout the lifetime of the application.
-- Runtime updates prefer mutating preallocated structures instead of growing state each frame.
+### Non-Negotiable Rules
 
-This keeps ownership clear and limits fragmentation pressure in hot paths.
+- Default rule: no growing host allocations in steady per-frame paths.
+- Long-lived host state must be allocated at startup and reused.
+- When a maximum size is known, preallocate and mutate in place.
+- New per-frame heap growth requires explicit justification in review.
 
-That said, there are explicit and justified exceptions outside startup.
+### Allowed Exceptions
 
-### 1) Frame-Scoped Scratch Allocations (Temp Allocator)
+1. Frame-scoped scratch memory from the temp allocator.
+   - Example: temporary UI/text conversion buffers.
+   - Requirement: reclaimed by frame reset (`free_all(context.temp_allocator)`).
+1. Event-driven allocations outside steady frame loops.
+   - Example: asset reload, registry rebuild, GIF capture session buffers.
+   - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
+1. Julia runtime GC-managed allocations.
+   - Julia owns script/runtime objects.
+   - Odin owns host state and must stay deterministic on the host side.
 
-Examples:
+### Not Allowed Without Explicit Approval
 
-- UI text rendering converts strings to temporary C strings during drawing.
-- View text returned from Julia is cloned into temporary host memory before rendering.
-
-Defense:
-
-- These are scratch values whose lifetime is one frame or less.
-- The frame loop performs allocator reset (`free_all(context.temp_allocator)`),
-  so this memory is reclaimed deterministically each frame.
-
-### 2) Event-Driven Runtime Allocations (Not Per-Frame)
-
-Examples:
-
-- Asset reload/path resolution builds temporary path strings and metadata during startup/reload checks.
-- Julia animation registry stores cloned animation names when scripts register interfaces.
-- GIF capture allocates encoder working buffers and final output buffer only for active capture sessions.
-
-Defense:
-
-- These allocations are tied to user actions or lifecycle events, not continuous simulation ticks.
-- They happen infrequently relative to frame updates.
-- They represent data that is either naturally persistent (registry names) or
-  naturally session-scoped (GIF encoding buffers).
-
-### 3) Julia Runtime and GC-Managed Allocations
-
-Examples:
-
-- Julia script loading/JIT compilation.
-- Julia-side objects and values produced by animation logic.
-- Host-to-Julia call boxing/unboxing and return handling.
-
-Defense:
-
-- This is an intentional language-boundary tradeoff: Odin provides deterministic
-  host ownership, while Julia provides dynamic, productive animation scripting
-  with GC.
-- The boundary keeps responsibilities explicit: Odin owns host state/layout;
-  Julia owns its runtime-managed objects.
-
-### Practical Rule of Thumb
-
-- If data is persistent across frames, prefer startup allocation or explicit long-lived ownership.
-- If a runtime buffer has a stable maximum size, prefer statically allocated storage owned
-  by the long-lived system that uses it, and reuse that storage across updates instead of
-  rebuilding it from temporary frame memory.
-- If data is transient and frame-local, temp allocator usage is acceptable and expected.
-- If data belongs to scripting/runtime orchestration (Julia, asset reload, GIF
-  session work), event-driven allocation is acceptable by design.
-
----
-
-## Build and Packaging Model
-
-- `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
-- Packaged assets include:
-  - `src/julia/**` scripts
-  - `src/view/shaders/**`
-  - `assets/**`
-  - `manifest.txt`
-- At startup, app unpacks `assets.pkg` to a writable cache directory and resolves runtime paths from there.
+- Growing slices/arrays every frame in hot UI, view, or simulation loops.
+- Rebuilding stable-capacity runtime buffers from scratch each frame.
+- Hiding ownership so it is unclear who allocates, mutates, and frees.
 
 ---
 
@@ -405,55 +250,15 @@ Projection note:
 
 ---
 
-## Polygon Vertex Order Conventions
+## Build and Packaging Model
 
-For filled polygons created from Julia (`create_new_triangle`,
-`create_new_square`, `create_new_pentagon`, and future polygon constructors),
-**vertex order still matters**, but the renderer now uses general polygon
-triangulation instead of shape-specific hardcoded triangle layouts.
-
-Renderer note:
-
-- `src/kine/system.odin` triangulates polygon vertex rings with an
-  ear-clipping pipeline (`triangulate_polygon_ear_clip`).
-- `src/view/elements.odin` renders the emitted triangle list from the draw cache.
-- If the supplied vertex order does not follow the polygon perimeter
-  consistently, triangulation can fail or produce visually incorrect faces.
-
-### Required ordering rule (all supported polygons)
-
-- Supply polygon vertices in perimeter order (clockwise or counter-clockwise,
-  but consistent around the boundary).
-- Never provide crossed/zig-zag/diagonal-jump orderings.
-- Triangulation winding is inferred from XY signed area in
-  `triangulate_polygon_ear_clip` and triangles are emitted to match that
-  winding.
-- Ear clipping is the primary path; if a valid ear sequence cannot be resolved
-  (for degenerate/non-simple cases), the implementation falls back to a
-  winding-aware fan (`emit_polygon_fallback_fan`).
-
-### Practical implications by shape
-
-- Triangle (`create_new_triangle`):
-  - Triangulates to one cached triangle.
-  - Still provide perimeter order; avoid collinear/degenerate input.
-- Square (`create_new_square`):
-  - Triangulates to two cached triangles selected by ear clipping.
-  - No single hardcoded split order should be treated as universal.
-- Pentagon (`create_new_pentagon`):
-  - Triangulates to three cached triangles selected by ear clipping.
-  - Keep vertices on the perimeter in consistent rotational order.
-
-The same ordering rules apply to any polygon with `n >= 3`.
-
-Practical check when debugging visibility:
-
-1. Verify the input vertex ring is non-self-intersecting and perimeter-ordered.
-1. Inspect cached triangle output generated by
-   `triangulate_polygon_ear_clip` in `src/kine/system.odin`.
-1. If fallback fan triangulation was used, treat the polygon input as likely
-   degenerate/non-simple and adjust vertices.
-1. Only after triangulation is valid, tune color/alpha/placement.
+- `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
+- Packaged assets include:
+  - `src/julia/**` scripts
+  - `src/view/shaders/**`
+  - `assets/**`
+  - `manifest.txt`
+- At startup, app unpacks `assets.pkg` to a writable cache directory and resolves runtime paths from there.
 
 ---
 

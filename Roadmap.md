@@ -46,13 +46,14 @@ Core Content:
 - [ ] Algebraic groups
   - [ ] Definitions
     - [ ] $\Z_2$ (irregular polygon reflecting about a line; special case of $C_n$)
-    - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [ ] Closure
-      - [ ] Associativity
       - [ ] Identity
       - [ ] Inverse
-      - [ ] Commutative/Abelian
+    - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
+      - [ ] Associativity
+      - [ ] Commutative (Abelian)
     - [ ] $D_n$ (dihedrals, symmetry of shape with $n$ sides ; non-commutative)
+      - [ ] Non-Abelian
     - [ ] $(\R^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
