@@ -816,6 +816,18 @@ Ui_Dynview_Runtime :: struct {
     enabled: bool,
     pending_invalidation_mask: u32,
 
+    copy_icon_hover_active: bool,
+    copy_icon_hover_block_id: i32,
+    copy_icon_hover_t: f32,
+
+    copy_icon_press_active: bool,
+    copy_icon_press_block_id: i32,
+    copy_icon_press_t: f32,
+
+    copy_icon_linger_active: bool,
+    copy_icon_linger_block_id: i32,
+    copy_icon_linger_remaining: f32,
+
     command_buffer: Ui_Dynview_Command_Buffer,
     compile_cache: Ui_Dynview_Compile_Cache,
 }

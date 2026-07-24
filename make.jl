@@ -97,8 +97,8 @@ function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, c
                     run(pipeline(command; stdout=stdout_buffer, stderr=stderr_buffer))
                 end
             end
-        catch
-            exit_code = 1
+        catch error_object
+            exit_code = failed_process_exit_code(error_object)
         end
 
         return CommandResult(exit_code, String(take!(stdout_buffer)), String(take!(stderr_buffer)))
@@ -113,11 +113,36 @@ function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, c
                 run(command)
             end
         end
-    catch
-        exit_code = 1
+    catch error_object
+        exit_code = failed_process_exit_code(error_object)
     end
 
     return CommandResult(exit_code, "", "")
+end
+
+"""Best-effort exit code extraction for process and pipeline failures."""
+function failed_process_exit_code(error_object)
+    if !(error_object isa Base.ProcessFailedException)
+        return 1
+    end
+
+    failed = error_object.procs
+    if isempty(failed)
+        return 1
+    end
+
+    return failed[1].exitcode
+end
+
+"""Print captured command output blocks in a consistent, scan-friendly format."""
+function print_captured_output(label::String, output::String)
+    normalized = chomp(output)
+    if isempty(normalized)
+        return
+    end
+
+    println(label)
+    println(normalized)
 end
 
 """Set a single short option flag in the parsed CLI argument dictionary."""
@@ -678,6 +703,14 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
         println("Build exited $(build_result.exit_code)")
     end
     if build_result.exit_code != 0
+        if do_vet
+            println("Odin build failed with captured output:")
+            print_captured_output("stdout:", build_result.stdout)
+            print_captured_output("stderr:", build_result.stderr)
+            if isempty(chomp(build_result.stdout)) && isempty(chomp(build_result.stderr))
+                println("(No captured output from Odin process.)")
+            end
+        end
         error("Build failed.")
     end
 

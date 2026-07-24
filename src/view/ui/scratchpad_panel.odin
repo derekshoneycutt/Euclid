@@ -4,7 +4,6 @@ import "../../core"
 import "../../julia"
 
 import "core:fmt"
-import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -243,80 +242,6 @@ submit_scratchpad_input_if_ready :: proc(
     }
 }
 
-//   Draw per-block copy icons and return whether one was clicked.
-draw_scratchpad_dynview_hover_backgrounds :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    mouse: rl.Vector2) {
-
-    if runtime == nil {
-        return
-    }
-
-    cache := &runtime^.compile_cache
-    if cache^.copy_hit_target_count <= 0 {
-        return
-    }
-
-    hover_bg := rl.Color{UI_BORDER_COLOR.r, UI_BORDER_COLOR.g, UI_BORDER_COLOR.b, 28}
-    for i in 0..<cache^.copy_hit_target_count {
-        target := cache^.copy_hit_targets[i]
-        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
-        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
-        if !hovered_block && !hovered_icon {
-            continue
-        }
-
-        rl.DrawRectangleRec(target.hover_rect, hover_bg)
-    }
-}
-
-//   Draw per-block copy icons and return whether one was clicked.
-draw_scratchpad_dynview_copy_icons :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    panel: rl.Rectangle,
-    mouse: rl.Vector2) -> bool {
-
-    if runtime == nil {
-        return false
-    }
-
-    cache := &runtime^.compile_cache
-    if cache^.copy_hit_target_count <= 0 {
-        return false
-    }
-
-    clicked_index := -1
-    for i in 0..<cache^.copy_hit_target_count {
-        target := cache^.copy_hit_targets[i]
-        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
-        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
-        if !hovered_block && !hovered_icon {
-            continue
-        }
-
-        icon_color := UI_TEXT_COLOR
-        if hovered_icon {
-            icon_color = UI_BORDER_COLOR
-        }
-
-        draw_copy_icon(target.rect, icon_color)
-        if hovered_icon && rl.IsMouseButtonPressed(.LEFT) {
-            clicked_index = i
-        }
-    }
-
-    if clicked_index < 0 {
-        return false
-    }
-
-    payload := dynview_copy_target_payload(runtime, clicked_index)
-    if len(payload) <= 0 {
-        return false
-    }
-
-    rl.SetClipboardText(strings.clone_to_cstring(payload, context.temp_allocator))
-    return true
-}
 
 //   Draw scratchpad output in a scrollable region with a fixed prompt row.
 draw_scratchpad_output_and_prompt :: proc(
@@ -384,7 +309,7 @@ draw_scratchpad_output_and_prompt :: proc(
 
     rl.BeginScissorMode(i32(output_panel.x), i32(output_panel.y), i32(output_panel.width), i32(output_panel.height))
     {
-        draw_scratchpad_dynview_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
+        draw_dynview_copy_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
 
         dynview_draw_scratchpad_styled_or_fallback(
             ui_runtime,
@@ -398,7 +323,7 @@ draw_scratchpad_output_and_prompt :: proc(
             TREE_FONT_SIZE,
             UI_TEXT_COLOR)
 
-        _ = draw_scratchpad_dynview_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse)
+        _ = draw_dynview_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse)
     }
     rl.EndScissorMode()
 

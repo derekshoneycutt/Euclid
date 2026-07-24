@@ -90,7 +90,7 @@ draw_view_text_panel :: proc(state: ^core.Euclid_General_State, panel: rl.Rectan
             TREE_FONT_SIZE,
             UI_TEXT_COLOR)
 
-            _ = draw_scratchpad_dynview_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse)
+            _ = draw_dynview_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse)
     }
     rl.EndScissorMode()
 
