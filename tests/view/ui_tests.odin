@@ -141,3 +141,12 @@ input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
     testing.expect_value(t, string(buffer[:text_len]), "γ")
     testing.expect_value(t, caret, len("γ"))
 }
+
+@(test)
+scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
+    start, ending, replacement, ok := app_ui.scratchpad_parse_completion_payload("2\n5\npoint!")
+    testing.expect(t, ok)
+    testing.expect_value(t, start, 2)
+    testing.expect_value(t, ending, 5)
+    testing.expect_value(t, replacement, "point!")
+}

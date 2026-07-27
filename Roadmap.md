@@ -105,10 +105,10 @@ General features:
 - [ ] Scratchpad REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
+  - [X] Basic input tab completion support, including unicode characters & function names
   - [X] Initial primitive drawing animation hooks
   - [ ] Basic group transformation animation hooks
   - [ ] Basic clipboard support
-  - [ ] LaTeX to unicode input tab completion support
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 
@@ -146,7 +146,6 @@ After v1 is complete, the following is suggestions to evaluate next.
 - More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Improved Scratchpad console-like REPL
-- More Scratchpad tab completions
 - Improved Scratchpad highlight and clipboard support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods

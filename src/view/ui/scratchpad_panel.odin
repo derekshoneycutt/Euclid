@@ -28,37 +28,66 @@ scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> stri
     return string(ui_runtime^.scratchpad_input[:ui_runtime^.scratchpad_input_len])
 }
 
-//   Return whether a byte belongs to an ASCII letter accepted in phase-1 backslash tokens.
-scratchpad_backslash_token_letter :: #force_inline proc(b: u8) -> bool {
-    return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
-}
-
-//   Locate the current backslash token ending at the scratchpad caret.
-scratchpad_backslash_token_bounds :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> (int, int, bool) {
-    if ui_runtime == nil || ui_runtime^.scratchpad_input_len <= 0 || ui_runtime^.scratchpad_input_cursor <= 0 {
-        return 0, 0, false
+//   Parse a non-negative integer from ASCII digits.
+scratchpad_parse_non_negative_int :: proc(text: string) -> (int, bool) {
+    if len(text) <= 0 {
+        return 0, false
     }
 
-    token_end := clamp(ui_runtime^.scratchpad_input_cursor, 0, ui_runtime^.scratchpad_input_len)
-    token_start := token_end
-    for token_start > 0 {
-        b := ui_runtime^.scratchpad_input[token_start - 1]
-        if b == '\\' || scratchpad_backslash_token_letter(b) {
-            token_start -= 1
+    value := 0
+    for i in 0..<len(text) {
+        b := text[i]
+        if b < '0' || b > '9' {
+            return 0, false
+        }
+        value = value * 10 + int(b - '0')
+    }
+    return value, true
+}
+
+//   Decode a generic completion payload encoded as `start\nend\nreplacement`.
+scratchpad_parse_completion_payload :: proc(payload: string) -> (int, int, string, bool) {
+    if len(payload) <= 0 {
+        return 0, 0, "", false
+    }
+
+    first_newline := -1
+    second_newline := -1
+    for i in 0..<len(payload) {
+        if payload[i] != '\n' {
             continue
         }
-        break
+        if first_newline < 0 {
+            first_newline = i
+        } else {
+            second_newline = i
+            break
+        }
     }
 
-    if token_start >= token_end || ui_runtime^.scratchpad_input[token_start] != '\\' {
-        return 0, 0, false
+    if first_newline < 0 || second_newline < 0 || second_newline <= first_newline + 1 {
+        return 0, 0, "", false
     }
 
-    return token_start, token_end, true
+    start_text := payload[:first_newline]
+    end_text := payload[first_newline + 1:second_newline]
+    replace_start, ok := scratchpad_parse_non_negative_int(start_text)
+    if !ok {
+        return 0, 0, "", false
+    }
+
+    replace_end := 0
+    replace_end, ok = scratchpad_parse_non_negative_int(end_text)
+    if !ok {
+        return 0, 0, "", false
+    }
+
+    replacement := payload[second_newline + 1:]
+    return replace_start, replace_end, replacement, true
 }
 
-//   Apply one phase-1 backslash completion request to the scratchpad input buffer.
-apply_scratchpad_backslash_completion :: proc(
+//   Apply one generic scratchpad completion request to the input buffer.
+apply_scratchpad_completion :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     tab_pressed: bool) -> bool {
@@ -67,14 +96,21 @@ apply_scratchpad_backslash_completion :: proc(
         return false
     }
 
-    token_start, token_end, ok := scratchpad_backslash_token_bounds(ui_runtime)
+    input_text := scratchpad_input_text(ui_runtime)
+    if len(input_text) <= 0 {
+        return false
+    }
+
+    payload := julia.scratchpad_complete_input(
+        state,
+        input_text,
+        ui_runtime^.scratchpad_input_cursor)
+    replace_start, replace_end, replacement, ok := scratchpad_parse_completion_payload(payload)
     if !ok {
         return false
     }
 
-    token := string(ui_runtime^.scratchpad_input[token_start:token_end])
-    replacement := julia.scratchpad_complete_backslash(state, token)
-    if len(replacement) == 0 {
+    if replace_start > ui_runtime^.scratchpad_input_len || replace_end > ui_runtime^.scratchpad_input_len {
         return false
     }
 
@@ -82,8 +118,8 @@ apply_scratchpad_backslash_completion :: proc(
         ui_runtime^.scratchpad_input[:],
         &ui_runtime^.scratchpad_input_len,
         &ui_runtime^.scratchpad_input_cursor,
-        token_start,
-        token_end,
+        replace_start,
+        replace_end,
         replacement)
 }
 
@@ -310,7 +346,7 @@ draw_scratchpad_output_and_prompt :: proc(
         input_result.history_previous && !input_result.moved_up,
         input_result.history_next && !input_result.moved_down)
 
-    completion_applied := apply_scratchpad_backslash_completion(
+    completion_applied := apply_scratchpad_completion(
         state,
         ui_runtime,
         input_result.tab_pressed)

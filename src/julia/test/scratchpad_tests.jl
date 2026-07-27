@@ -17,14 +17,17 @@ end
 using .Scratchpad
 using Test
 
+const TEST_SESSION_ID_REF = Ref(1)
+
 function new_metrics()
     return Scratchpad.ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 end
 
-function new_session(; id::Int=1)
+function new_session(; id::Int=TEST_SESSION_ID_REF[])
+    TEST_SESSION_ID_REF[] = id + 1
     return Scratchpad.ScratchpadSession(
         id,
-        Module(Symbol(:ScratchpadTestRuntime, id)),
+        Scratchpad.create_runtime_module(id),
         String[],
         String[],
         String[],
@@ -91,6 +94,15 @@ end
         @test Scratchpad.complete_backslash(TEST_STATE_PTR, "\\alpha") == "α"
         @test Scratchpad.complete_backslash(TEST_STATE_PTR, "\\al") == ""
         @test Scratchpad.complete_backslash(TEST_STATE_PTR, "alpha") == ""
+    end
+end
+
+@testset "complete_input" begin
+    with_test_session() do session
+        @test Scratchpad.complete_input(TEST_STATE_PTR, "\\alpha", 6) == "0\n6\nα"
+        @test Scratchpad.completion_replacement_text("test_val", 1:8, ["test_value"]) == "test_value"
+        @test Scratchpad.completion_replacement_text("alph", 1:4, ["alpha_one", "alpha_two"]) == "alpha_"
+        @test Scratchpad.completion_replacement_text("alpha_", 1:6, ["alpha_one", "alpha_two"]) === nothing
     end
 end
 

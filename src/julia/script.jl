@@ -35,6 +35,10 @@ function scratchpad_complete_backslash(state_ptr::Ptr{Cvoid}, token::AbstractStr
     Scratchpad.complete_backslash(state_ptr, String(token))
 end
 
+function scratchpad_complete_input(state_ptr::Ptr{Cvoid}, text::AbstractString, caret_byte)
+    Scratchpad.complete_input(state_ptr, String(text), Int(caret_byte))
+end
+
 function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString)
     Scratchpad.queue_input(state_ptr, String(text))
 end

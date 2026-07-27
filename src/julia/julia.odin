@@ -62,6 +62,8 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
         main_module, "scratchpad_classify_input")
     ret.scratchpad_complete_backslash = jl_get_function(
         main_module, "scratchpad_complete_backslash")
+    ret.scratchpad_complete_input = jl_get_function(
+        main_module, "scratchpad_complete_input")
     ret.scratchpad_queue_input = jl_get_function(
         main_module, "scratchpad_queue_input")
     ret.scratchpad_save_history_to_file = jl_get_function(
@@ -178,6 +180,38 @@ scratchpad_complete_backslash :: proc(
 
     if jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_complete_backslash")
+        return ""
+    }
+
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
+}
+
+//   Resolve one generic scratchpad completion request from full input text and caret byte offset.
+//
+// Returns:
+//   - Encoded completion payload when Julia resolves an applicable replacement.
+//   - Empty string when no completion should be applied.
+scratchpad_complete_input :: proc(
+    state: ^core.Euclid_General_State,
+    text: string,
+    caret_byte: int) -> string {
+
+    if state == nil || state^.julia_interface == nil {
+        return ""
+    }
+    if state^.julia_interface^.scratchpad_complete_input == nil {
+        return ""
+    }
+
+    state_value := jl_box_voidpointer(state)
+    text_c := strings.clone_to_cstring(text, context.temp_allocator)
+    text_value := jl_cstr_to_string(text_c)
+    caret_value := jl_box_int64(i64(caret_byte))
+    args: [3]^core.jl_value_t = {state_value, text_value, caret_value}
+    result := jl_call(state^.julia_interface^.scratchpad_complete_input, &args[0], 3)
+
+    if jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_complete_input")
         return ""
     }
 
