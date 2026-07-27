@@ -22,6 +22,8 @@ DYNVIEW_COPY_ICON_X_PAD :: 6
 TREE_TOOLBAR_HEIGHT :: 28
 TREE_TOOLBAR_BUTTON_SIZE :: 20
 TREE_TOOLBAR_GAP :: 6
+TREE_TOOLBAR_EDGE_PAD :: 4
+TREE_TOOLBAR_BUTTON_GAP :: 4
 SETTINGS_TRACK_HEIGHT :: 8
 SETTINGS_KNOB_WIDTH :: 10
 WHEEL_SCROLL_MULTIPLIER :: 2
@@ -44,11 +46,21 @@ SETTINGS_STATS_ROW_GAP :: 22
 SETTINGS_TOGGLE_TOP_OFFSET :: 118
 SETTINGS_CHECKBOX_SIZE :: 14
 SETTINGS_CHECKBOX_LABEL_GAP :: 8
+SETTINGS_CHECKBOX_HIT_PAD_Y :: 4
+SETTINGS_CHECKBOX_TEXT_OFFSET_Y :: 1
+SETTINGS_TOGGLE_ROW_GAP :: 22
 SETTINGS_GIF_TOP_OFFSET :: 185
 SETTINGS_GIF_SLIDER_ROW_GAP :: 36
 SETTINGS_GIF_BUTTON_TOP_OFFSET :: 132
 SETTINGS_GIF_BUTTON_HEIGHT :: 24
 SETTINGS_GIF_STATUS_TOP_OFFSET :: 162
+SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE :: SETTINGS_GIF_SLIDER_ROW_GAP
+SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE ::
+    SETTINGS_GIF_BUTTON_TOP_OFFSET - SETTINGS_GIF_SLIDER_ROW_GAP * 2
+SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE ::
+    SETTINGS_GIF_STATUS_TOP_OFFSET - SETTINGS_GIF_BUTTON_TOP_OFFSET
+SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET :: 18
+SETTINGS_GIF_STATUS_PATH_ROW_OFFSET :: 36
 SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS :: 0.53
 
 ISO_SCALE_VALUE :: view_core.ISO_SCALE_VALUE
@@ -86,6 +98,29 @@ SURFACE_COLOR :: view_core.SURFACE_COLOR
 SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
 SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 
+Mouse_Input_State :: struct {
+    position: rl.Vector2,
+    delta: rl.Vector2,
+    wheel_delta: f32,
+    left_pressed: bool,
+    left_down: bool,
+    left_released: bool,
+    timestamp_seconds: f64,
+}
+
+//   Capture one canonical mouse input snapshot for this UI frame.
+capture_mouse_input_state :: proc() -> Mouse_Input_State {
+    return Mouse_Input_State{
+        position = rl.GetMousePosition(),
+        delta = rl.GetMouseDelta(),
+        wheel_delta = rl.GetMouseWheelMove(),
+        left_pressed = rl.IsMouseButtonPressed(.LEFT),
+        left_down = rl.IsMouseButtonDown(.LEFT),
+        left_released = rl.IsMouseButtonReleased(.LEFT),
+        timestamp_seconds = rl.GetTime(),
+    }
+}
+
 
 //   Render all UI panels in baseline layout.
 draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
@@ -95,6 +130,7 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         regions = compute_ui_regions(.Baseline)
     }
     state^.ui_runtime.ui_regions = regions
+    mouse_input := capture_mouse_input_state()
 
     bottom_bar := rl.Rectangle{
         regions.world_rect.x,
@@ -103,7 +139,7 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         WINDOW_HEIGHT - regions.world_rect.height,
     }
     rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect)
+    draw_view_text_panel(state, regions.text_rect, mouse_input)
 
     right_bar := rl.Rectangle{
         regions.world_rect.x + regions.world_rect.width,
@@ -112,5 +148,5 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         WINDOW_HEIGHT,
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_tree_view(state, regions.tree_rect)
+    draw_tree_view(state, regions.tree_rect, mouse_input)
 }

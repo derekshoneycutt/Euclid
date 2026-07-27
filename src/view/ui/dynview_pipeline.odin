@@ -5,28 +5,28 @@ import "core:math"
 
 import rl "vendor:raylib"
 
-DYNVIEW_INVALIDATE_CONTENT :: u32(1 << 0)
-DYNVIEW_INVALIDATE_PANEL :: u32(1 << 1)
-DYNVIEW_INVALIDATE_FONT :: u32(1 << 2)
-DYNVIEW_INVALIDATE_STYLE :: u32(1 << 3)
+DYNVIEW_INVALIDATE_CONTENT :: (1 << 0)
+DYNVIEW_INVALIDATE_PANEL :: (1 << 1)
+DYNVIEW_INVALIDATE_FONT :: (1 << 2)
+DYNVIEW_INVALIDATE_STYLE :: (1 << 3)
 
-DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: u64(2)
+DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 2
 
-DYNVIEW_STYLE_DEFAULT :: i32(0)
-DYNVIEW_STYLE_PROMPT :: i32(1)
-DYNVIEW_STYLE_OUTPUT :: i32(2)
-DYNVIEW_STYLE_ERROR :: i32(3)
-DYNVIEW_STYLE_BOLD :: i32(10)
-DYNVIEW_STYLE_ITALIC :: i32(11)
-DYNVIEW_STYLE_CENTER :: i32(12)
-DYNVIEW_STYLE_INLINE_ATOM :: i32(20)
+DYNVIEW_STYLE_DEFAULT :: 0
+DYNVIEW_STYLE_PROMPT :: 1
+DYNVIEW_STYLE_OUTPUT :: 2
+DYNVIEW_STYLE_ERROR :: 3
+DYNVIEW_STYLE_BOLD :: 10
+DYNVIEW_STYLE_ITALIC :: 11
+DYNVIEW_STYLE_CENTER :: 12
+DYNVIEW_STYLE_INLINE_ATOM :: 20
 
 DYNVIEW_ENABLED_DEFAULT :: true
 
-DYNVIEW_STATUS_OK :: i32(0)
-DYNVIEW_STATUS_INVALID_ARGUMENT :: i32(2)
-DYNVIEW_STATUS_OUT_OF_CAPACITY :: i32(5)
-DYNVIEW_STATUS_ILLEGAL_STATE :: i32(6)
+DYNVIEW_STATUS_OK :: 0
+DYNVIEW_STATUS_INVALID_ARGUMENT :: 2
+DYNVIEW_STATUS_OUT_OF_CAPACITY :: 5
+DYNVIEW_STATUS_ILLEGAL_STATE :: 6
 
 Dynview_Text_Alignment :: enum {
     Left,
@@ -1316,27 +1316,3 @@ dynview_draw_scratchpad_styled_or_fallback :: proc(
         font_size)
 }
 
-//   Phase 1 dynview tick: reset stream, track invalidation keys, and compile metadata.
-dynview_tick_phase1 :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    source_text: string,
-    panel: rl.Rectangle,
-    font_size, wrap_advance: f32,
-    style_revision: u64) {
-
-    if ui_runtime == nil {
-        return
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
-    if !runtime^.enabled {
-        return
-    }
-
-    dynview_reset_command_buffer(runtime)
-    dynview_track_content(runtime, source_text)
-    dynview_track_panel(runtime, panel)
-    dynview_track_font(runtime, font_size, wrap_advance)
-    dynview_track_style(runtime, style_revision)
-    dynview_compile_if_needed(runtime)
-}

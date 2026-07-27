@@ -10,25 +10,19 @@ Tree_Hit :: struct {
     ToggledID:  int,
 }
 
-Tree_Toolbar_Hit :: struct {
-    RefreshRequested: bool,
-    TogglePauseRequested: bool,
-    ToggleGifRequested: bool,
-    ToggleSettingsRequested: bool,
-}
-
 //   Render the right-side tree panel and route toolbar interactions.
-draw_tree_view :: proc(state: ^core.Euclid_General_State, panel: rl.Rectangle) {
+draw_tree_view :: proc(
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State) {
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
 
-    rl.DrawRectangleRec(panel, BACKGROUND_COLOR)
-    rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
+    _ = draw_container(panel, .Dark_Red)
 
-    mouse := rl.GetMousePosition()
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
-    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse,
+    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input,
         ui_runtime.show_tree_gif, ui_runtime.show_tree_settings, ui_runtime.simulation_paused)
 
     if toolbar_hit.RefreshRequested {
@@ -65,103 +59,17 @@ draw_tree_view :: proc(state: ^core.Euclid_General_State, panel: rl.Rectangle) {
     }
 
     if ui_runtime.show_tree_settings {
-        draw_settings_view(state, list_panel, mouse)
+        draw_settings_view(state, list_panel, mouse_input)
         return
     }
 
     if ui_runtime.show_tree_gif {
-        draw_gif_view(state, list_panel, mouse)
+        draw_gif_view(state, list_panel, mouse_input)
         return
     }
 
-    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse,
+    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse_input,
         &state^.ui_runtime.tree_scroll_y, state.font)
-}
-
-//   Draw a toolbar button and return click-hit state.
-draw_toolbar_icon_button :: proc(
-    rect: rl.Rectangle,
-    mouse: rl.Vector2,
-    active: bool,
-    draw_icon: proc(rect: rl.Rectangle, color: rl.Color)) -> bool {
-
-    hovered := rl.CheckCollisionPointRec(mouse, rect)
-    pressed := hovered && rl.IsMouseButtonDown(.LEFT)
-
-    icon_rect := rect
-    icon_color := UI_TEXT_COLOR
-
-    if active || pressed {
-        rl.DrawRectangleRec(rect, UI_BORDER_COLOR)
-        icon_color = BACKGROUND_COLOR
-    }
-
-    if pressed {
-        icon_rect.x += 0.5
-        icon_rect.y += 0.5
-    }
-
-    draw_icon(icon_rect, icon_color)
-    return rl.IsMouseButtonPressed(.LEFT) && hovered
-}
-
-//   Render toolbar row and report refresh/settings toggle hits.
-draw_tree_toolbar :: proc(
-    panel: rl.Rectangle,
-    mouse: rl.Vector2,
-    show_gif: bool,
-    show_settings: bool,
-    simulation_paused: bool) -> Tree_Toolbar_Hit {
-
-    hit := Tree_Toolbar_Hit{}
-
-    rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
-    rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
-
-    refresh_rect := rl.Rectangle{
-        panel.x + 4,
-        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
-        TREE_TOOLBAR_BUTTON_SIZE,
-        TREE_TOOLBAR_BUTTON_SIZE,
-    }
-
-    pause_rect := rl.Rectangle{
-        refresh_rect.x + TREE_TOOLBAR_BUTTON_SIZE + 4,
-        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
-        TREE_TOOLBAR_BUTTON_SIZE,
-        TREE_TOOLBAR_BUTTON_SIZE,
-    }
-
-    settings_rect := rl.Rectangle{
-        panel.x + panel.width - TREE_TOOLBAR_BUTTON_SIZE - 4,
-        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
-        TREE_TOOLBAR_BUTTON_SIZE,
-        TREE_TOOLBAR_BUTTON_SIZE,
-    }
-
-    gif_rect := rl.Rectangle{
-        settings_rect.x - TREE_TOOLBAR_BUTTON_SIZE - 4,
-        panel.y + (panel.height - TREE_TOOLBAR_BUTTON_SIZE) * 0.5,
-        TREE_TOOLBAR_BUTTON_SIZE,
-        TREE_TOOLBAR_BUTTON_SIZE,
-    }
-
-    hit.RefreshRequested =
-        draw_toolbar_icon_button(refresh_rect, mouse, false, draw_refresh_icon)
-
-    pause_icon := draw_pause_icon
-    if simulation_paused {
-        pause_icon = draw_play_icon
-    }
-    hit.TogglePauseRequested =
-        draw_toolbar_icon_button(pause_rect, mouse, simulation_paused, pause_icon)
-
-    hit.ToggleGifRequested =
-        draw_toolbar_icon_button(gif_rect, mouse, show_gif, draw_gif_icon)
-
-    hit.ToggleSettingsRequested =
-        draw_toolbar_icon_button(settings_rect, mouse, show_settings, draw_gear_icon)
-    return hit
 }
 
 //   Mark one animation selected and clear selection on others.
@@ -220,11 +128,14 @@ apply_tree_hit :: proc(
 //   Traverse and draw root nodes, aggregating click hits.
 walk_draw_tree_roots :: proc(
     ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
     panel: rl.Rectangle,
     content_y: ^f32,
     scroll_y: f32,
     allow_clicks: bool,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
     font: rl.Font) -> Tree_Hit {
 
     hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
@@ -234,8 +145,9 @@ walk_draw_tree_roots :: proc(
             continue
         }
 
-        root_hit := walk_draw_tree_node_limited(ji, i, 0, panel, content_y, scroll_y,
-            allow_clicks, mouse, ji.next_animation_index, font)
+        root_hit := walk_draw_tree_node_limited(ji, ui_runtime, i, 0, panel, content_y, scroll_y,
+            allow_clicks, mouse_input, scroll_offset, interaction_space_rect,
+            ji.next_animation_index, font)
         merge_tree_hit(&hit, root_hit)
     }
 
@@ -299,12 +211,15 @@ accumulate_offscreen_child_rows :: proc(
 //   Traverse and draw child node branches with depth tracking.
 walk_draw_child_nodes_limited :: proc(
     ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
     first_child, depth: int,
     panel: rl.Rectangle,
     content_y: ^f32,
     scroll_y: f32,
     allow_clicks: bool,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
     remaining: int,
     font: rl.Font) -> Tree_Hit {
 
@@ -317,8 +232,9 @@ walk_draw_child_nodes_limited :: proc(
             break
         }
 
-        child_hit := walk_draw_tree_node_limited(ji, child, depth + 1, panel, content_y,
-            scroll_y, allow_clicks, mouse, remaining - 1, font)
+        child_hit := walk_draw_tree_node_limited(ji, ui_runtime, child, depth + 1, panel,
+            content_y, scroll_y, allow_clicks, mouse_input, scroll_offset,
+            interaction_space_rect, remaining - 1, font)
         merge_tree_hit(&hit, child_hit)
         child = ji.animations[child].next_sibling
         steps += 1
@@ -340,11 +256,14 @@ expanded_first_child_id :: #force_inline proc(
 //   Render one tree row and capture selection/toggle interactions.
 draw_tree_node_row :: proc(
     ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
     id: int,
     depth: int,
     row_rect: rl.Rectangle,
     allow_clicks: bool,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
     hit: ^Tree_Hit,
     font: rl.Font) {
 
@@ -359,17 +278,29 @@ draw_tree_node_row :: proc(
     }
     label_x := int(indent_x + TREE_ROW_LABEL_OFFSET_X)
 
-    click := allow_clicks && rl.IsMouseButtonPressed(.LEFT)
-    hovered := rl.CheckCollisionPointRec(mouse, row_rect)
-
-    if node.is_selected {
-        rl.DrawRectangleRec(row_rect, UI_BORDER_COLOR)
-    }
+    list_item_result := draw_list_item(List_Item_Params{
+        id = id,
+        rect = row_rect,
+        can_expand_pos_y = false,
+        selected = node.is_selected,
+        mouse = mouse_input,
+        scroll_offset = scroll_offset,
+        interaction_space_rect = interaction_space_rect,
+        interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
+    }, &ui_runtime.tree_list_item_press_active, &ui_runtime.tree_list_item_press_id)
 
     if node.first_child_id >= 0 {
-        draw_tree_disclosure_icon(icon_rect, node.is_expanded, UI_TEXT_COLOR)
-
-        if click && rl.CheckCollisionPointRec(mouse, icon_rect) {
+        expander_result := draw_tree_expander(Tree_Expander_Params{
+            rect = icon_rect,
+            expanded = node.is_expanded,
+            mouse = mouse_input,
+            scroll_offset = scroll_offset,
+            interaction_space_rect = interaction_space_rect,
+            interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
+            toggle_triggered = list_item_result.clicked,
+            color = UI_TEXT_COLOR,
+        })
+        if expander_result.clicked {
             hit.ToggledID = id
         }
     }
@@ -377,7 +308,7 @@ draw_tree_node_row :: proc(
     ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
         UI_TEXT_COLOR, font)
 
-    if click && hovered {
+    if list_item_result.clicked {
         hit.SelectedID = id
     }
 }
@@ -385,13 +316,16 @@ draw_tree_node_row :: proc(
 //   Traverse one tree node branch with clipping-aware row handling.
 walk_draw_tree_node_limited :: proc(
     ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
     id: int,
     depth: int,
     panel: rl.Rectangle,
     content_y: ^f32,
     scroll_y: f32,
     allow_clicks: bool,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
     remaining: int,
     font: rl.Font) -> Tree_Hit {
 
@@ -423,18 +357,21 @@ walk_draw_tree_node_limited :: proc(
 
     if row_rect.y + row_rect.height < panel.y {
         if child_first >= 0 {
-            child_hit := walk_draw_child_nodes_limited(ji, child_first, depth, panel,
-                content_y, scroll_y, allow_clicks, mouse, remaining, font)
+            child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
+                panel, content_y, scroll_y, allow_clicks, mouse_input,
+                scroll_offset, interaction_space_rect, remaining, font)
             merge_tree_hit(&hit, child_hit)
         }
         return hit
     }
 
-    draw_tree_node_row(ji, id, depth, row_rect, allow_clicks, mouse, &hit, font)
+    draw_tree_node_row(ji, ui_runtime, id, depth, row_rect, allow_clicks,
+        mouse_input, scroll_offset, interaction_space_rect, &hit, font)
 
     if child_first >= 0 {
-        child_hit := walk_draw_child_nodes_limited(ji, child_first, depth, panel,
-            content_y, scroll_y, allow_clicks, mouse, remaining, font)
+        child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
+            panel, content_y, scroll_y, allow_clicks, mouse_input,
+            scroll_offset, interaction_space_rect, remaining, font)
         merge_tree_hit(&hit, child_hit)
     }
 
@@ -480,12 +417,11 @@ draw_tree_list_panel :: proc(
     ji: ^core.Euclid_Julia_Interface,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     list_panel: rl.Rectangle,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
     scroll_y: ^f32,
     font: rl.Font) {
 
-    rl.DrawRectangleRec(list_panel, UI_COMPONENT_BACKGROUND_COLOR)
-    rl.DrawRectangleLinesEx(list_panel, 1, UI_BORDER_COLOR)
+    _ = draw_container(list_panel, .Grey)
 
     total_rows := count_visible_tree_rows_all_roots(ji)
     if total_rows <= 0 {
@@ -493,59 +429,46 @@ draw_tree_list_panel :: proc(
     }
 
     content_h := f32(total_rows) * TREE_ROW_HEIGHT
-    max_scroll := max(0.0, content_h - list_panel.height)
-
-    apply_wheel_scroll(
-        mouse,
+    tree_scroll_state := Scroll_Container_State{
+        is_dragging_thumb = ui_runtime.tree_scroll_dragging,
+        drag_offset_y = ui_runtime.tree_scroll_drag_off,
+    }
+    tree_scroll_begin := scroll_container_begin(
+        1003,
         list_panel,
-        TREE_ROW_HEIGHT,
-        scroll_y,
-        max_scroll,
-        WHEEL_SCROLL_MULTIPLIER)
-
-    track := rl.Rectangle{}
-    thumb_h: f32 = 0
-    thumb := rl.Rectangle{}
-    has_scrollbar := false
+        scroll_y^,
+        content_h,
+        mouse_input,
+        rl.Vector2{},
+        list_panel,
+        TREE_ROW_HEIGHT * WHEEL_SCROLL_MULTIPLIER,
+        tree_scroll_state)
+    view_panel := tree_scroll_begin.view_rect
+    scroll_y^ = tree_scroll_begin.scroll_y_out
 
     allow_tree_clicks := true
-    track, thumb, thumb_h, has_scrollbar = build_vertical_scrollbar(
-        list_panel,
+    if tree_scroll_begin.scroll_ref.is_hovered_thumb && mouse_input.left_pressed {
+        allow_tree_clicks = false
+    }
+
+    y_cursor: f32 = 0
+    hit := walk_draw_tree_roots(ji, ui_runtime, view_panel, &y_cursor, scroll_y^,
+        allow_tree_clicks, mouse_input, rl.Vector2{}, view_panel, font)
+    apply_tree_hit(ji, ui_runtime, hit)
+
+    if ui_runtime.tree_list_item_press_active && mouse_input.left_released {
+        ui_runtime.tree_list_item_press_active = false
+        ui_runtime.tree_list_item_press_id = -1
+    }
+
+    tree_scroll_end := scroll_container_end(
+        tree_scroll_begin.scroll_ref,
         content_h,
         scroll_y^,
-        max_scroll,
-        SCROLLBAR_WIDTH,
-        SCROLLBAR_THUMB_MIN_HEIGHT)
-    if has_scrollbar {
-        if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, thumb) {
-            allow_tree_clicks = false
-        }
-    }
-
-    rl.BeginScissorMode(i32(list_panel.x), i32(list_panel.y),
-        i32(list_panel.width), i32(list_panel.height))
-    {
-        y_cursor: f32 = 0
-        hit := walk_draw_tree_roots(ji, list_panel, &y_cursor, scroll_y^,
-            allow_tree_clicks, mouse, font)
-        apply_tree_hit(ji, ui_runtime, hit)
-    }
-    rl.EndScissorMode()
-
-    if has_scrollbar {
-        handle_scrollbar_drag(
-            mouse,
-            thumb,
-            list_panel.y,
-            list_panel.height,
-            thumb_h,
-            max_scroll,
-            scroll_y,
-            &ui_runtime.tree_scroll_dragging,
-            &ui_runtime.tree_scroll_drag_off,
-            SCROLLBAR_DRAG_EPSILON)
-
-        rl.DrawRectangleRec(track, BACKGROUND_COLOR)
-        rl.DrawRectangleRec(thumb, UI_BORDER_COLOR)
-    }
+        mouse_input,
+        rl.Vector2{},
+        view_panel)
+    scroll_y^ = tree_scroll_end.scroll_y_out
+    ui_runtime.tree_scroll_dragging = tree_scroll_end.state_out.is_dragging_thumb
+    ui_runtime.tree_scroll_drag_off = tree_scroll_end.state_out.drag_offset_y
 }

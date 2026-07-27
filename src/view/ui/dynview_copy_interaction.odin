@@ -6,12 +6,12 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
-COPY_ICON_HOVER_SCALE_ADD :: f32(0.08)
-COPY_ICON_PRESS_SCALE_SUB :: f32(0.16)
-COPY_ICON_HOVER_SPEED :: f32(14.0)
-COPY_ICON_PRESS_RISE_SPEED :: f32(32.0)
-COPY_ICON_PRESS_FALL_SPEED :: f32(24.0)
-COPY_ICON_CLICK_LINGER_SECONDS :: f32(0.1)
+COPY_ICON_HOVER_SCALE_ADD :: 0.08
+COPY_ICON_PRESS_SCALE_SUB :: 0.16
+COPY_ICON_HOVER_SPEED :: 14.0
+COPY_ICON_PRESS_RISE_SPEED :: 32.0
+COPY_ICON_PRESS_FALL_SPEED :: 24.0
+COPY_ICON_CLICK_LINGER_SECONDS :: 0.1
 
 copy_icon_clamp01 :: #force_inline proc(v: f32) -> f32 {
     return max(0.0, min(1.0, v))
@@ -20,32 +20,6 @@ copy_icon_clamp01 :: #force_inline proc(v: f32) -> f32 {
 copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32 {
     t := copy_icon_clamp01(speed * dt)
     return current + (target - current) * t
-}
-
-copy_icon_scaled_rect :: #force_inline proc(rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
-    use_scale := max(0.4, scale)
-    cx := rect.x + rect.width * 0.5
-    cy := rect.y + rect.height * 0.5
-    width := rect.width * use_scale
-    height := rect.height * use_scale
-
-    return rl.Rectangle{
-        cx - width * 0.5,
-        cy - height * 0.5,
-        width,
-        height,
-    }
-}
-
-copy_icon_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Color {
-    t := copy_icon_clamp01(amount)
-    factor := 1.0 - (0.45 * t)
-    return rl.Color{
-        u8(f32(color.r) * factor),
-        u8(f32(color.g) * factor),
-        u8(f32(color.b) * factor),
-        color.a,
-    }
 }
 
 //   Draw soft hover backgrounds for copy-enabled dynview blocks.
@@ -118,9 +92,10 @@ copy_icon_update_hover_state :: proc(
 copy_icon_begin_press_if_hovered :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     cache: ^core.Ui_Dynview_Compile_Cache,
-    hovered_index: int) {
+    hovered_index: int,
+    mouse_input: Mouse_Input_State) {
 
-    if !rl.IsMouseButtonPressed(.LEFT) || hovered_index < 0 {
+    if !mouse_input.left_pressed || hovered_index < 0 {
         return
     }
 
@@ -132,8 +107,12 @@ copy_icon_begin_press_if_hovered :: proc(
 }
 
 //   Advance press-release lifecycle, including short dark linger after release.
-copy_icon_update_press_and_linger :: proc(runtime: ^core.Ui_Dynview_Runtime, dt: f32) {
-    if runtime^.copy_icon_press_active && !rl.IsMouseButtonDown(.LEFT) {
+copy_icon_update_press_and_linger :: proc(
+    runtime: ^core.Ui_Dynview_Runtime,
+    mouse_input: Mouse_Input_State,
+    dt: f32) {
+
+    if runtime^.copy_icon_press_active && !mouse_input.left_down {
         runtime^.copy_icon_press_active = false
         runtime^.copy_icon_linger_active = true
         runtime^.copy_icon_linger_block_id = runtime^.copy_icon_press_block_id
@@ -194,7 +173,9 @@ copy_icon_linger_t :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, is_l
 copy_icon_draw_target :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     target: core.Ui_Dynview_Copy_Hit_Target,
-    mouse: rl.Vector2) -> bool {
+    mouse_input: Mouse_Input_State) -> bool {
+
+    mouse := mouse_input.position
 
     hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
     hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
@@ -220,29 +201,34 @@ copy_icon_draw_target :: proc(
     }
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
-    scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * hover_t - COPY_ICON_PRESS_SCALE_SUB * press_visual
-    draw_rect := copy_icon_scaled_rect(target.rect, scale)
 
-    icon_color := UI_TEXT_COLOR
-    if press_visual > 0 {
-        icon_color = copy_icon_darken(icon_color, press_visual)
-    }
-
-    draw_copy_icon(draw_rect, icon_color)
-    return hovered_icon && rl.IsMouseButtonPressed(.LEFT)
+    button_result := draw_icon_button_with_visual_state(Icon_Button_Params{
+        id = int(target.block_id),
+        rect = target.rect,
+        icon_id = .Copy,
+        toggle = false,
+        mouse = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = target.rect,
+        interaction_enabled = true,
+        inset_scale = 1.0,
+    }, hover_t, press_visual, false)
+    return button_result.clicked
 }
 
 //   Resolve per-frame copy-icon hover/press ownership and animation transitions.
 copy_icon_update_runtime_state :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     cache: ^core.Ui_Dynview_Compile_Cache,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
     dt: f32) {
+
+    mouse := mouse_input.position
 
     hovered_index := copy_icon_find_hovered_index(cache, mouse)
     copy_icon_update_hover_state(runtime, cache, hovered_index)
-    copy_icon_begin_press_if_hovered(runtime, cache, hovered_index)
-    copy_icon_update_press_and_linger(runtime, dt)
+    copy_icon_begin_press_if_hovered(runtime, cache, hovered_index, mouse_input)
+    copy_icon_update_press_and_linger(runtime, mouse_input, dt)
     copy_icon_update_transition_values(runtime, dt)
 }
 
@@ -250,7 +236,7 @@ copy_icon_update_runtime_state :: proc(
 draw_dynview_copy_icons :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     panel: rl.Rectangle,
-    mouse: rl.Vector2) -> bool {
+    mouse_input: Mouse_Input_State) -> bool {
 
     if runtime == nil {
         return false
@@ -265,11 +251,11 @@ draw_dynview_copy_icons :: proc(
     }
 
     dt := min(0.05, max(0.0, rl.GetFrameTime()))
-    copy_icon_update_runtime_state(runtime, cache, mouse, dt)
+    copy_icon_update_runtime_state(runtime, cache, mouse_input, dt)
 
     clicked_index := -1
     for i in 0..<cache^.copy_hit_target_count {
-        if copy_icon_draw_target(runtime, cache^.copy_hit_targets[i], mouse) {
+        if copy_icon_draw_target(runtime, cache^.copy_hit_targets[i], mouse_input) {
             clicked_index = i
         }
     }

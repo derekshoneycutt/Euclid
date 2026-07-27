@@ -1,0 +1,171 @@
+package ui
+
+import "core:strings"
+
+import rl "vendor:raylib"
+
+Checkbox_Params :: struct {
+    id: int,
+    rect: rl.Rectangle,
+    checked: bool,
+    enabled: bool,
+    mouse: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    interaction_enabled: bool,
+    label: string,
+    font: rl.Font,
+    label_font_size: f32,
+    label_offset_x: f32,
+    label_offset_y: f32,
+}
+
+Checkbox_Result :: struct {
+    box_drawn_rect: rl.Rectangle,
+    label_drawn_rect: rl.Rectangle,
+    toggled: bool,
+    checked_out: bool,
+    hovered: bool,
+    pressed: bool,
+}
+
+checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
+    ax2 := a.x + a.width
+    ay2 := a.y + a.height
+    bx2 := b.x + b.width
+    by2 := b.y + b.height
+
+    min_x := min(a.x, b.x)
+    min_y := min(a.y, b.y)
+    max_x := max(ax2, bx2)
+    max_y := max(ay2, by2)
+    return rl.Rectangle{min_x, min_y, max(0.0, max_x - min_x), max(0.0, max_y - min_y)}
+}
+
+//   Clamp a rectangle so width and height are never negative.
+checkbox_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
+    clamped := rect
+    if clamped.width < 0 {
+        clamped.width = 0
+    }
+    if clamped.height < 0 {
+        clamped.height = 0
+    }
+    return clamped
+}
+
+//   Convert screen-space mouse position into local interaction space.
+checkbox_local_mouse :: #force_inline proc(
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2) -> rl.Vector2 {
+
+    return rl.Vector2{
+        mouse_input.position.x - scroll_offset.x,
+        mouse_input.position.y - scroll_offset.y,
+    }
+}
+
+//   Build square checkbox box centered inside caller-provided rect.
+checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
+    drawn_rect := checkbox_clamp_rect(rect)
+    side := min(drawn_rect.width, drawn_rect.height)
+
+    center_x := drawn_rect.x + drawn_rect.width * 0.5
+    center_y := drawn_rect.y + drawn_rect.height * 0.5
+    return rl.Rectangle{
+        center_x - side * 0.5,
+        center_y - side * 0.5,
+        side,
+        side,
+    }
+}
+
+//   Draw one checkbox and resolve release-confirmed toggle interaction.
+draw_checkbox :: proc(
+    params: Checkbox_Params,
+    press_active: ^bool,
+    press_id: ^int) -> Checkbox_Result {
+
+    drawn_rect := checkbox_clamp_rect(params.rect)
+    box_rect := checkbox_box_drawn_rect(drawn_rect)
+    local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
+
+    label_rect := rl.Rectangle{}
+    hit_rect := drawn_rect
+    label_color := UI_TEXT_COLOR
+    if !params.enabled {
+        label_color = rl.Color{110, 110, 110, 255}
+    }
+    if len(params.label) > 0 {
+        label_x := box_rect.x + box_rect.width + params.label_offset_x
+        label_y := box_rect.y + params.label_offset_y
+        label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
+        measured := rl.MeasureTextEx(params.font, label_cstr, params.label_font_size, 0)
+        label_rect = rl.Rectangle{label_x, label_y, max(0.0, measured.x), max(0.0, measured.y)}
+        hit_rect = checkbox_union_rect(hit_rect, label_rect)
+    }
+
+    hovered_item := rl.CheckCollisionPointRec(local_mouse, hit_rect)
+    hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
+    hovered := hovered_item && hovered_space
+
+    owns_press := press_active^ && press_id^ == params.id
+    can_interact := params.enabled && params.interaction_enabled
+    if can_interact && !owns_press && params.mouse.left_pressed && hovered {
+        press_active^ = true
+        press_id^ = params.id
+        owns_press = true
+    }
+
+    toggled := false
+    checked_out := params.checked
+    if owns_press && params.mouse.left_released {
+        toggled = can_interact && hovered_item
+        if toggled {
+            checked_out = !params.checked
+        }
+        press_active^ = false
+        press_id^ = -1
+        owns_press = false
+    }
+
+    pressed := owns_press && params.mouse.left_down
+
+    border := UI_BORDER_COLOR
+    mark := UI_TEXT_COLOR
+    if !params.enabled {
+        border = rl.Color{78, 78, 78, 255}
+        mark = rl.Color{110, 110, 110, 255}
+    }
+
+    rl.DrawRectangleLinesEx(box_rect, 1, border)
+    if checked_out {
+        p0 := rl.Vector2{box_rect.x + 3, box_rect.y + box_rect.height * 0.55}
+        p1 := rl.Vector2{box_rect.x + 6, box_rect.y + box_rect.height - 3}
+        p2 := rl.Vector2{box_rect.x + box_rect.width - 3, box_rect.y + 3}
+        rl.DrawLineEx(p0, p1, 1.6, mark)
+        rl.DrawLineEx(p1, p2, 1.6, mark)
+    }
+
+    if pressed {
+        rl.DrawRectangleLinesEx(box_rect, 2, border)
+    }
+
+    if len(params.label) > 0 {
+        ui_text(params.label,
+            int(label_rect.x),
+            int(label_rect.y),
+            label_color,
+            params.font,
+            params.label_font_size)
+    }
+
+    return Checkbox_Result{
+        box_drawn_rect = box_rect,
+        label_drawn_rect = label_rect,
+        toggled = toggled,
+        checked_out = checked_out,
+        hovered = hovered,
+        pressed = pressed,
+    }
+}

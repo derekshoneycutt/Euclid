@@ -52,25 +52,25 @@ build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Re
 update_use_max_particles_slider :: proc(
     ps: ^core.Particle_System,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
     max_particles: int,
     slider_track: rl.Rectangle,
     slider_hit: rl.Rectangle,
     knob: rl.Rectangle,
     knob_center_x: f32) {
 
-    if !rl.IsMouseButtonDown(.LEFT) {
+    if !mouse_input.left_down {
         ui_runtime.settings_slider_dragging = false
     }
 
-    if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, knob) {
+    if mouse_input.left_pressed && rl.CheckCollisionPointRec(mouse_input.position, knob) {
         ui_runtime.settings_slider_dragging = true
-        ui_runtime.settings_slider_drag_offset_x = mouse.x - knob_center_x
+        ui_runtime.settings_slider_drag_offset_x = mouse_input.position.x - knob_center_x
     }
 
-    slider_hovered := rl.CheckCollisionPointRec(mouse, slider_hit)
+    slider_hovered := rl.CheckCollisionPointRec(mouse_input.position, slider_hit)
     if slider_hovered {
-        wheel := rl.GetMouseWheelMove()
+        wheel := mouse_input.wheel_delta
         if wheel != 0 {
             step := max(1, max_particles / 64)
             delta := int(math.round(f64(wheel * f32(step))))
@@ -88,9 +88,9 @@ update_use_max_particles_slider :: proc(
     }
 
     if slider_track.width > 0 && ui_runtime.settings_slider_dragging &&
-        rl.IsMouseButtonDown(.LEFT) {
+        mouse_input.left_down {
 
-        knob_target_x := mouse.x - ui_runtime.settings_slider_drag_offset_x
+        knob_target_x := mouse_input.position.x - ui_runtime.settings_slider_drag_offset_x
         t_drag := clamp((knob_target_x - slider_track.x) / slider_track.width, 0, 1)
         next_value := int(t_drag * f32(max_particles) + 0.5)
         ps.use_max_dust_particles = clamp(next_value, 0, max_particles)
@@ -124,7 +124,7 @@ draw_use_max_particles_slider :: proc(
 draw_settings_integer_slider :: proc(
     panel: rl.Rectangle,
     row_y: f32,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
     label: string,
     value: ^int,
     min_value, max_value: int,
@@ -151,8 +151,8 @@ draw_settings_integer_slider :: proc(
     ratio := f32(clamped - min_value) / f32(denom)
     knob_center_x, knob := build_slider_knob(track, ratio)
 
-    if rl.CheckCollisionPointRec(mouse, hit) {
-        wheel := rl.GetMouseWheelMove()
+    if rl.CheckCollisionPointRec(mouse_input.position, hit) {
+        wheel := mouse_input.wheel_delta
         if wheel != 0 {
             delta := 1
             if wheel < 0 {
@@ -162,9 +162,9 @@ draw_settings_integer_slider :: proc(
         }
     }
 
-    if rl.IsMouseButtonDown(.LEFT) && rl.CheckCollisionPointRec(mouse, hit) {
+    if mouse_input.left_down && rl.CheckCollisionPointRec(mouse_input.position, hit) {
         if track.width > 0 {
-            t := clamp((mouse.x - track.x) / track.width, 0, 1)
+            t := clamp((mouse_input.position.x - track.x) / track.width, 0, 1)
             clamped = clamp(min_value + int(t * f32(denom) + 0.5), min_value, max_value)
         }
     }

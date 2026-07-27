@@ -59,12 +59,7 @@ Core Content:
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
     - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane -- polygons translating/rotating/reflecting around another point)
-  - [ ] Demonstrations
-    - [ ] 1-10
-    - [ ] 11-20
-    - [ ] 21-30
-    - [ ] 31-40
-    - [ ] 41-48
+  - [ ] Demonstrations ? Idk maybe. keep going back and forth lololololol
 
 General features:
 
@@ -102,7 +97,7 @@ General features:
   - [ ] Dynamic sized brackets
   - [ ] Matrices
   - [ ] Sums, Products, Integrals
-- [ ] Improved UI layout system
+- [X] Improved UI layout system
 - [ ] Standard group-focused transformation animations for complex shapes
   - [ ] Translation
   - [ ] Rotation
@@ -115,7 +110,7 @@ General features:
   - [ ] Basic clipboard support
   - [ ] LaTeX to unicode input tab completion support
 - [ ] Drawing Sounds
-- [ ] Alternative tree for pedagological view vs book view -- Nice to have --
+- [ ] Alternative tree for connected view vs book view -- Nice to have --
 
 Final tasks:
 
@@ -147,10 +142,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $\R/\Z$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
-  - Theorems
 - Category theory?
-- Tarski's Axioms?
-- Birkhoff's Axioms?
 - More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Improved Scratchpad console-like REPL
@@ -181,8 +173,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $T$ (pac-man wrap around the surface, drawing line at an irrational angle like sqrt(2) and will cover it all)
   - Wallpaper groups (repeating drawings)
   - $PSL(2, R)$ (Polygon can be transformed by never crosses below a boundary)
-  - $PGL(2, C)$ (animated advanced transformation; changes center and radius because transformation preserves circles)
-  - Theorems
+  - $PGL(2, C)$ (animated advanced transformation; changes center and radius because transformation preserves circles
 - Complex numbers support handling
 - More primitives (ellipses/conic sections, spirals)
 - Scaled Cartesian coordinate system

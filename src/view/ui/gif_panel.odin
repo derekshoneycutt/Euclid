@@ -10,7 +10,7 @@ import rl "vendor:raylib"
 draw_settings_save_gif_button :: proc(
     panel: rl.Rectangle,
     row_y: f32,
-    mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
 
@@ -24,34 +24,27 @@ draw_settings_save_gif_button :: proc(
     is_armed := ui_runtime.gif_capture_phase == .Armed
     disabled := ui_runtime.gif_capture_phase == .Recording ||
         ui_runtime.gif_capture_phase == .Finalizing
-    hovered := rl.CheckCollisionPointRec(mouse, button)
-    pressed := hovered && rl.IsMouseButtonDown(.LEFT)
 
-    bg := BACKGROUND_COLOR
-    fg := UI_TEXT_COLOR
-    border := UI_BORDER_COLOR
-
-    if disabled {
-        bg = rl.Color{48, 48, 48, 255}
-        fg = rl.Color{110, 110, 110, 255}
-        border = rl.Color{78, 78, 78, 255}
-    } else if pressed {
-        bg = UI_BORDER_COLOR
-        fg = BACKGROUND_COLOR
-        border = UI_BORDER_COLOR
-    } else if hovered {
-        bg = UI_COMPONENT_BACKGROUND_COLOR
-    }
-
-    rl.DrawRectangleRec(button, bg)
-    rl.DrawRectangleLinesEx(button, 1, border)
     button_text := "Save Gif"
     if is_armed {
         button_text = "Cancel Gif"
     }
-    ui_text(button_text, int(button.x + 8), int(button.y + 3), fg, font)
 
-    if !disabled && rl.IsMouseButtonPressed(.LEFT) && hovered {
+    button_result := draw_text_button(Text_Button_Params{
+        id = 3001,
+        rect = button,
+        label = button_text,
+        enabled = !disabled,
+        mouse = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = panel,
+        interaction_enabled = true,
+        font = font,
+        has_font_color_override = false,
+        font_color_override = rl.Color{},
+    }, &ui_runtime.text_button_press_active, &ui_runtime.text_button_press_id)
+
+    if button_result.clicked {
         ui_runtime.save_gif_requested = true
     }
 }
@@ -89,19 +82,27 @@ draw_settings_gif_status :: proc(
     if ui_runtime.gif_status_note_len > 0 {
         note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
         ui_text(note_text,
-            int(panel.x + SETTINGS_PANEL_INSET), int(row_y + 18), UI_TEXT_COLOR, font)
+            int(panel.x + SETTINGS_PANEL_INSET),
+            int(row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET),
+            UI_TEXT_COLOR,
+            font)
     }
 
     if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
         path_text := string(ui_runtime.last_gif_path[:ui_runtime.last_gif_path_len])
         ui_text(fmt.tprintf("Path: %s", path_text),
-            int(panel.x + SETTINGS_PANEL_INSET), int(row_y + 36), UI_TEXT_COLOR, font)
+            int(panel.x + SETTINGS_PANEL_INSET),
+            int(row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET),
+            UI_TEXT_COLOR,
+            font)
     }
 }
 
 //   Render dedicated GIF panel and wire GIF controls.
 draw_gif_view :: proc(
-    state: ^core.Euclid_General_State, panel: rl.Rectangle, mouse: rl.Vector2) {
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State) {
 
     if state == nil || state.particle_system == nil {
         return
@@ -110,24 +111,84 @@ draw_gif_view :: proc(
     ui_runtime := &state.ui_runtime
     font := state.font
 
-    rl.DrawRectangleRec(panel, UI_COMPONENT_BACKGROUND_COLOR)
-    rl.DrawRectangleLinesEx(panel, 1, UI_BORDER_COLOR)
+    _ = draw_container(panel, .Grey)
 
     gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
     ui_text("GIF Export",
         int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
 
+    stack_rect := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        gif_section_y,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET,
+    }
+
+    stack_cursor := stack_panel_cursor_zero()
+    stack_cursor.offset = SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE
+
+    downsample_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE,
+        cursor_in = stack_cursor,
+    })
+    stack_cursor = downsample_row.cursor_out
+
+    frame_step_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE,
+        cursor_in = stack_cursor,
+    })
+    stack_cursor = frame_step_row.cursor_out
+
+    save_button_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE,
+        cursor_in = stack_cursor,
+    })
+    stack_cursor = save_button_row.cursor_out
+
+    status_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = 0,
+        cursor_in = stack_cursor,
+    })
+
     draw_settings_integer_slider(panel,
-        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP, mouse, "Downsample",
+        downsample_row.segment_rect.y, mouse_input, "Downsample",
         &ui_runtime.gif_downsample_factor, 1, 4, font)
 
     draw_settings_integer_slider(panel,
-        gif_section_y + SETTINGS_GIF_SLIDER_ROW_GAP * 2, mouse, "Frame Step",
+        frame_step_row.segment_rect.y, mouse_input, "Frame Step",
         &ui_runtime.gif_frame_step, 1, 4, font)
 
     draw_settings_save_gif_button(panel,
-        gif_section_y + SETTINGS_GIF_BUTTON_TOP_OFFSET, mouse, ui_runtime, font)
+        save_button_row.segment_rect.y, mouse_input, ui_runtime, font)
 
     draw_settings_gif_status(panel,
-        gif_section_y + SETTINGS_GIF_STATUS_TOP_OFFSET, ui_runtime, font)
+        status_row.segment_rect.y, ui_runtime, font)
 }

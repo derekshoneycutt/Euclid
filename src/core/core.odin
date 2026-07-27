@@ -840,11 +840,19 @@ Euclid_UI_Runtime_State :: struct {
 
     tree_scroll_dragging: bool,
     tree_scroll_drag_off: f32,
+    tree_list_item_press_active: bool,
+    tree_list_item_press_id: int,
 
     show_tree_settings: bool,
     show_tree_gif: bool,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
+    text_button_press_active: bool,
+    text_button_press_id: int,
+    checkbox_press_active: bool,
+    checkbox_press_id: int,
+    input_box_press_active: bool,
+    input_box_press_id: int,
 
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,
@@ -875,6 +883,7 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input: [4096]u8,
     scratchpad_input_len: int,
     scratchpad_input_cursor: int,
+    scratchpad_input_viewport_col_start: int,
     scratchpad_last_output_len: int,
     scratchpad_follow_output: bool,
 

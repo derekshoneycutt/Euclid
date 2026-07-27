@@ -105,15 +105,20 @@ draw_arc_arrowhead :: proc(
 
 //   Draw expand/collapse chevron icon for tree nodes.
 draw_tree_disclosure_icon :: proc(rect: rl.Rectangle, expanded: bool, color: rl.Color) {
+    if rect.width <= 0 || rect.height <= 0 {
+        return
+    }
+
     cx := rect.x + rect.width * 0.5
     cy := rect.y + rect.height * 0.5
+    size := min(rect.width, rect.height)
 
-    left_top_x: f32 = -4.0
-    left_top_y: f32 = -4.0
-    left_bottom_x: f32 = -4.0
-    left_bottom_y: f32 = 4.0
-    tip_x: f32 = 2.0
-    tip_y: f32 = 0.0
+    left_top_x := -0.25 * size
+    left_top_y := -0.25 * size
+    left_bottom_x := -0.25 * size
+    left_bottom_y := 0.25 * size
+    tip_x := 0.125 * size
+    tip_y: f32 = 0
 
     if expanded {
         lt_x := -left_top_y
@@ -135,8 +140,9 @@ draw_tree_disclosure_icon :: proc(rect: rl.Rectangle, expanded: bool, color: rl.
     p1 := rl.Vector2{cx + tip_x, cy + tip_y}
     p2 := rl.Vector2{cx + left_bottom_x, cy + left_bottom_y}
 
-    rl.DrawLineEx(p0, p1, 1.6, color)
-    rl.DrawLineEx(p1, p2, 1.6, color)
+    thickness := max(1.2, 0.10 * size)
+    rl.DrawLineEx(p0, p1, thickness, color)
+    rl.DrawLineEx(p1, p2, thickness, color)
 }
 
 //   Draw the settings/controls glyph for the toolbar toggle.
