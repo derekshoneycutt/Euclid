@@ -28,6 +28,65 @@ scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> stri
     return string(ui_runtime^.scratchpad_input[:ui_runtime^.scratchpad_input_len])
 }
 
+//   Return whether a byte belongs to an ASCII letter accepted in phase-1 backslash tokens.
+scratchpad_backslash_token_letter :: #force_inline proc(b: u8) -> bool {
+    return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+//   Locate the current backslash token ending at the scratchpad caret.
+scratchpad_backslash_token_bounds :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> (int, int, bool) {
+    if ui_runtime == nil || ui_runtime^.scratchpad_input_len <= 0 || ui_runtime^.scratchpad_input_cursor <= 0 {
+        return 0, 0, false
+    }
+
+    token_end := clamp(ui_runtime^.scratchpad_input_cursor, 0, ui_runtime^.scratchpad_input_len)
+    token_start := token_end
+    for token_start > 0 {
+        b := ui_runtime^.scratchpad_input[token_start - 1]
+        if b == '\\' || scratchpad_backslash_token_letter(b) {
+            token_start -= 1
+            continue
+        }
+        break
+    }
+
+    if token_start >= token_end || ui_runtime^.scratchpad_input[token_start] != '\\' {
+        return 0, 0, false
+    }
+
+    return token_start, token_end, true
+}
+
+//   Apply one phase-1 backslash completion request to the scratchpad input buffer.
+apply_scratchpad_backslash_completion :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    tab_pressed: bool) -> bool {
+
+    if !tab_pressed || state == nil || ui_runtime == nil {
+        return false
+    }
+
+    token_start, token_end, ok := scratchpad_backslash_token_bounds(ui_runtime)
+    if !ok {
+        return false
+    }
+
+    token := string(ui_runtime^.scratchpad_input[token_start:token_end])
+    replacement := julia.scratchpad_complete_backslash(state, token)
+    if len(replacement) == 0 {
+        return false
+    }
+
+    return input_box_replace_byte_range(
+        ui_runtime^.scratchpad_input[:],
+        &ui_runtime^.scratchpad_input_len,
+        &ui_runtime^.scratchpad_input_cursor,
+        token_start,
+        token_end,
+        replacement)
+}
+
 //   Apply scratchpad history up/down navigation to the current input buffer.
 //   This should only run when input-box vertical caret movement was not handled.
 apply_scratchpad_history_navigation :: proc(
@@ -251,7 +310,12 @@ draw_scratchpad_output_and_prompt :: proc(
         input_result.history_previous && !input_result.moved_up,
         input_result.history_next && !input_result.moved_down)
 
-    if input_result.changed {
+    completion_applied := apply_scratchpad_backslash_completion(
+        state,
+        ui_runtime,
+        input_result.tab_pressed)
+
+    if input_result.changed || completion_applied {
         _ = julia.scratchpad_history_reset_cursor(state)
     }
 

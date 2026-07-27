@@ -9,7 +9,8 @@ INPUT_BOX_MAX_TEXT_EVENTS :: 64
 
 Input_Box_Events :: struct {
     text_event_count: int,
-    text_events: [INPUT_BOX_MAX_TEXT_EVENTS]u8,
+    text_events: [INPUT_BOX_MAX_TEXT_EVENTS]rune,
+    tab: bool,
     up: bool,
     down: bool,
     left: bool,
@@ -51,6 +52,7 @@ Input_Box_Result :: struct {
     moved_down: bool,
     history_previous: bool,
     history_next: bool,
+    tab_pressed: bool,
     submit_pressed: bool,
     hovered: bool,
     pressed: bool,
@@ -109,6 +111,110 @@ input_box_clamp_cursor :: #force_inline proc(cursor, text_len: int) -> int {
     return clamp(cursor, 0, max(0, text_len))
 }
 
+//   Return whether the byte is a UTF-8 continuation byte.
+input_box_is_utf8_trailing_byte :: #force_inline proc(b: u8) -> bool {
+    return (b & 0xC0) == 0x80
+}
+
+//   Step backward to the previous UTF-8 codepoint boundary.
+input_box_prev_codepoint_start :: #force_inline proc(
+    buffer: []u8,
+    lower_bound, cursor: int) -> int {
+
+    if buffer == nil || cursor <= lower_bound {
+        return lower_bound
+    }
+
+    start := cursor - 1
+    for start > lower_bound && input_box_is_utf8_trailing_byte(buffer[start]) {
+        start -= 1
+    }
+    return start
+}
+
+//   Step forward to the next UTF-8 codepoint boundary.
+input_box_next_codepoint_start :: #force_inline proc(
+    buffer: []u8,
+    upper_bound, cursor: int) -> int {
+
+    if buffer == nil || cursor >= upper_bound {
+        return upper_bound
+    }
+
+    next := cursor + 1
+    for next < upper_bound && input_box_is_utf8_trailing_byte(buffer[next]) {
+        next += 1
+    }
+    return next
+}
+
+//   Count UTF-8 codepoints in the byte range [start, end).
+input_box_count_codepoints :: #force_inline proc(
+    buffer: []u8,
+    start, end: int) -> int {
+
+    if buffer == nil || end <= start {
+        return 0
+    }
+
+    count := 0
+    for i := max(0, start); i < end; i += 1 {
+        if !input_box_is_utf8_trailing_byte(buffer[i]) {
+            count += 1
+        }
+    }
+    return count
+}
+
+//   Convert a line-local codepoint column into a byte offset within that line.
+input_box_byte_offset_for_codepoint_col :: #force_inline proc(
+    buffer: []u8,
+    line_start, line_end, codepoint_col: int) -> int {
+
+    if buffer == nil || line_end <= line_start {
+        return line_start
+    }
+
+    clamped_col := max(0, codepoint_col)
+    offset := line_start
+    advanced := 0
+    for offset < line_end && advanced < clamped_col {
+        offset = input_box_next_codepoint_start(buffer, line_end, offset)
+        advanced += 1
+    }
+    return offset
+}
+
+//   Encode one rune into UTF-8 bytes and return the encoded length.
+input_box_encode_rune_utf8 :: #force_inline proc(codepoint: rune, out: ^[4]u8) -> int {
+    cp := u32(codepoint)
+    if cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) {
+        return 0
+    }
+
+    if cp <= 0x7F {
+        out[0] = u8(cp)
+        return 1
+    }
+    if cp <= 0x7FF {
+        out[0] = u8(0xC0 | (cp >> 6))
+        out[1] = u8(0x80 | (cp & 0x3F))
+        return 2
+    }
+    if cp <= 0xFFFF {
+        out[0] = u8(0xE0 | (cp >> 12))
+        out[1] = u8(0x80 | ((cp >> 6) & 0x3F))
+        out[2] = u8(0x80 | (cp & 0x3F))
+        return 3
+    }
+
+    out[0] = u8(0xF0 | (cp >> 18))
+    out[1] = u8(0x80 | ((cp >> 12) & 0x3F))
+    out[2] = u8(0x80 | ((cp >> 6) & 0x3F))
+    out[3] = u8(0x80 | (cp & 0x3F))
+    return 4
+}
+
 //   Compute visible column count for current draw width and character advance.
 input_box_visible_cols :: #force_inline proc(width, advance: f32) -> int {
     safe_advance := max(1.0, advance)
@@ -117,6 +223,90 @@ input_box_visible_cols :: #force_inline proc(width, advance: f32) -> int {
         return 1
     }
     return cols
+}
+
+//   Return whether this input box currently owns the shared press state.
+input_box_owns_press :: #force_inline proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int) -> bool {
+
+    return press_owner^.active &&
+        press_owner^.kind == .Input_Box &&
+        press_owner^.id == id
+}
+
+//   Capture shared press ownership for the input box on initial click.
+input_box_try_capture_press :: proc(
+    params: Input_Box_Params,
+    press_owner: ^core.Ui_Press_Owner_State,
+    hovered: bool,
+    can_interact: bool,
+    owns_press: ^bool) {
+
+    if !can_interact || press_owner^.active || !params.mouse.left_pressed || !hovered {
+        return
+    }
+
+    press_owner^.active = true
+    press_owner^.kind = .Input_Box
+    press_owner^.id = params.id
+    owns_press^ = true
+}
+
+//   Release shared press ownership for the input box when the click ends.
+input_box_release_press :: proc(
+    params: Input_Box_Params,
+    press_owner: ^core.Ui_Press_Owner_State,
+    owns_press: ^bool) {
+
+    if !owns_press^ || !params.mouse.left_released {
+        return
+    }
+
+    press_owner^.active = false
+    press_owner^.kind = .None
+    press_owner^.id = -1
+    owns_press^ = false
+}
+
+//   Measure prompt width and derive the editable content rect and visible columns.
+input_box_content_layout :: proc(
+    params: Input_Box_Params,
+    drawn_rect: rl.Rectangle) -> (rl.Rectangle, int) {
+
+    prefix_width: f32 = 0
+    if len(params.prompt_prefix) > 0 {
+        prefix_cstr := strings.clone_to_cstring(params.prompt_prefix, context.temp_allocator)
+        prefix_width = max(0.0, rl.MeasureTextEx(params.font, prefix_cstr, params.font_size, 0).x)
+    }
+
+    content_x := drawn_rect.x + prefix_width
+    content_width := max(0.0, drawn_rect.width - prefix_width)
+    text_rect := rl.Rectangle{content_x, drawn_rect.y, content_width, drawn_rect.height}
+    return text_rect, input_box_visible_cols(content_width, params.char_advance)
+}
+
+//   Move the caret to the clicked codepoint position on the current line.
+input_box_apply_mouse_caret_click :: proc(
+    params: Input_Box_Params,
+    hovered: bool,
+    local_mouse: rl.Vector2,
+    text_rect: rl.Rectangle,
+    viewport: int,
+    line_start, line_end: int,
+    caret: ^int) {
+
+    if !params.enabled || !params.has_focus || !params.mouse.left_pressed || !hovered {
+        return
+    }
+
+    clicked_col := input_box_clicked_col(text_rect, local_mouse, params.char_advance, viewport)
+    clicked_caret := input_box_byte_offset_for_codepoint_col(
+        params.text_buffer,
+        line_start,
+        line_end,
+        clicked_col)
+    caret^ = clamp(clicked_caret, line_start, line_end)
 }
 
 //   Insert one byte at caret position when buffer capacity allows.
@@ -138,6 +328,30 @@ input_box_insert_byte :: proc(buffer: []u8, text_len, caret: ^int, b: u8) {
     caret^ += 1
 }
 
+//   Insert one UTF-8 codepoint at caret position when buffer capacity allows.
+//   Side effects: mutates text_len and caret.
+input_box_insert_rune :: proc(buffer: []u8, text_len, caret: ^int, codepoint: rune) {
+    if buffer == nil || text_len == nil || caret == nil || caret^ < 0 {
+        return
+    }
+
+    encoded: [4]u8
+    encoded_len := input_box_encode_rune_utf8(codepoint, &encoded)
+    if encoded_len <= 0 || text_len^ + encoded_len > len(buffer) {
+        return
+    }
+
+    for i := text_len^; i > caret^; i -= 1 {
+        buffer[i + encoded_len - 1] = buffer[i - 1]
+    }
+    for i in 0..<encoded_len {
+        buffer[caret^ + i] = encoded[i]
+    }
+
+    text_len^ += encoded_len
+    caret^ += encoded_len
+}
+
 //   Insert one byte at caller-provided caret after clamping text and caret bounds.
 //   Side effects: mutates text_len and caret.
 input_box_insert_at_caret :: proc(buffer: []u8, text_len, caret: ^int, b: u8) {
@@ -151,33 +365,36 @@ input_box_insert_at_caret :: proc(buffer: []u8, text_len, caret: ^int, b: u8) {
     input_box_insert_byte(buffer, text_len, caret, b)
 }
 
-//   Remove one byte to the left of caret.
+//   Remove one UTF-8 codepoint to the left of caret.
 //   Side effects: mutates text_len and caret.
-input_box_backspace_byte :: proc(buffer: []u8, text_len, caret: ^int) {
+input_box_backspace_codepoint :: proc(buffer: []u8, text_len, caret: ^int) {
     if buffer == nil || caret^ <= 0 || text_len^ <= 0 {
         return
     }
 
-    remove_at := caret^ - 1
-    for i := remove_at; i < text_len^ - 1; i += 1 {
-        buffer[i] = buffer[i + 1]
+    remove_at := input_box_prev_codepoint_start(buffer, 0, caret^)
+    remove_len := caret^ - remove_at
+    for i := remove_at; i < text_len^ - remove_len; i += 1 {
+        buffer[i] = buffer[i + remove_len]
     }
 
-    text_len^ -= 1
-    caret^ -= 1
+    text_len^ -= remove_len
+    caret^ = remove_at
 }
 
-//   Remove one byte at caret position.
+//   Remove one UTF-8 codepoint at caret position.
 //   Side effects: mutates text_len.
-input_box_delete_byte :: proc(buffer: []u8, text_len, caret: ^int) {
+input_box_delete_codepoint :: proc(buffer: []u8, text_len, caret: ^int) {
     if buffer == nil || caret^ < 0 || caret^ >= text_len^ {
         return
     }
 
-    for i := caret^; i < text_len^ - 1; i += 1 {
-        buffer[i] = buffer[i + 1]
+    remove_end := input_box_next_codepoint_start(buffer, text_len^, caret^)
+    remove_len := remove_end - caret^
+    for i := caret^; i < text_len^ - remove_len; i += 1 {
+        buffer[i] = buffer[i + remove_len]
     }
-    text_len^ -= 1
+    text_len^ -= remove_len
 }
 
 //   Replace text buffer contents and move caret to end of copied text.
@@ -201,8 +418,52 @@ input_box_replace_text :: proc(buffer: []u8, text_len, caret: ^int, text: string
     caret^ = copy_len
 }
 
+//   Replace the byte range [start, end) with replacement text and move caret to replacement end.
+//   Side effects: mutates text_len and caret.
+input_box_replace_byte_range :: proc(
+    buffer: []u8,
+    text_len, caret: ^int,
+    start, end: int,
+    replacement: string) -> bool {
+
+    if buffer == nil || text_len == nil || caret == nil {
+        return false
+    }
+
+    clamped_len := input_box_clamp_text_len(text_len^, len(buffer))
+    replace_start := clamp(start, 0, clamped_len)
+    replace_end := clamp(end, replace_start, clamped_len)
+    replaced_len := replace_end - replace_start
+    replacement_len := len(replacement)
+    next_text_len := clamped_len - replaced_len + replacement_len
+    if next_text_len > len(buffer) {
+        return false
+    }
+
+    tail_start := replace_end
+    tail_len := clamped_len - tail_start
+    if replacement_len > replaced_len {
+        shift := replacement_len - replaced_len
+        for i := tail_len; i > 0; i -= 1 {
+            buffer[tail_start + shift + i - 1] = buffer[tail_start + i - 1]
+        }
+    } else if replacement_len < replaced_len {
+        for i in 0..<tail_len {
+            buffer[replace_start + replacement_len + i] = buffer[tail_start + i]
+        }
+    }
+
+    for i in 0..<replacement_len {
+        buffer[replace_start + i] = replacement[i]
+    }
+
+    text_len^ = next_text_len
+    caret^ = replace_start + replacement_len
+    return true
+}
+
 //   Capture one frame of keyboard text/edit events for Input_Box processing.
-capture_input_box_events_ascii :: proc() -> Input_Box_Events {
+capture_input_box_events :: proc() -> Input_Box_Events {
     input_events := Input_Box_Events{}
     for {
         codepoint := rl.GetCharPressed()
@@ -210,15 +471,16 @@ capture_input_box_events_ascii :: proc() -> Input_Box_Events {
             break
         }
 
-        if codepoint >= 32 && codepoint < 127 &&
+        if codepoint >= 32 &&
             input_events.text_event_count < INPUT_BOX_MAX_TEXT_EVENTS {
 
             index := input_events.text_event_count
-            input_events.text_events[index] = u8(codepoint)
+            input_events.text_events[index] = rune(codepoint)
             input_events.text_event_count += 1
         }
     }
 
+    input_events.tab = rl.IsKeyPressed(.TAB)
     input_events.left = rl.IsKeyPressed(.LEFT)
     input_events.right = rl.IsKeyPressed(.RIGHT)
     input_events.up = rl.IsKeyPressed(.UP)
@@ -271,10 +533,10 @@ input_box_apply_keyboard_events :: proc(
     }
 
     if events.left {
-        caret^ -= 1
+        caret^ = input_box_prev_codepoint_start(params.text_buffer, 0, caret^)
     }
     if events.right {
-        caret^ += 1
+        caret^ = input_box_next_codepoint_start(params.text_buffer, text_len^, caret^)
     }
     if events.home {
         caret^ = 0
@@ -286,17 +548,17 @@ input_box_apply_keyboard_events :: proc(
     caret^ = input_box_clamp_cursor(caret^, text_len^)
 
     if events.backspace {
-        input_box_backspace_byte(params.text_buffer, text_len, caret)
+        input_box_backspace_codepoint(params.text_buffer, text_len, caret)
     }
     if events.delete {
-        input_box_delete_byte(params.text_buffer, text_len, caret)
+        input_box_delete_codepoint(params.text_buffer, text_len, caret)
     }
 
     caret^ = input_box_clamp_cursor(caret^, text_len^)
     for i in 0..<events.text_event_count {
-        b := events.text_events[i]
-        if b >= 32 {
-            input_box_insert_byte(params.text_buffer, text_len, caret, b)
+        codepoint := events.text_events[i]
+        if codepoint >= rune(32) {
+            input_box_insert_rune(params.text_buffer, text_len, caret, codepoint)
         }
     }
 
@@ -356,15 +618,20 @@ input_box_move_caret_up :: proc(buffer: []u8, text_len: int, caret: ^int) -> boo
         return false
     }
 
-    col := max(0, clamped_caret - line_start)
+    col := input_box_count_codepoints(buffer, line_start, clamped_caret)
     prev_line_end := line_start - 1
     prev_line_start := prev_line_end
     for prev_line_start > 0 && buffer[prev_line_start - 1] != '\n' {
         prev_line_start -= 1
     }
 
-    prev_line_len := max(0, prev_line_end - prev_line_start)
-    caret^ = prev_line_start + min(col, prev_line_len)
+    prev_line_len := input_box_count_codepoints(buffer, prev_line_start, prev_line_end)
+    target_col := min(col, prev_line_len)
+    caret^ = input_box_byte_offset_for_codepoint_col(
+        buffer,
+        prev_line_start,
+        prev_line_end,
+        target_col)
     return true
 }
 
@@ -381,15 +648,20 @@ input_box_move_caret_down :: proc(buffer: []u8, text_len: int, caret: ^int) -> b
         return false
     }
 
-    col := max(0, clamped_caret - line_start)
+    col := input_box_count_codepoints(buffer, line_start, clamped_caret)
     next_line_start := line_end + 1
     next_line_end := next_line_start
     for next_line_end < text_len && buffer[next_line_end] != '\n' {
         next_line_end += 1
     }
 
-    next_line_len := max(0, next_line_end - next_line_start)
-    caret^ = next_line_start + min(col, next_line_len)
+    next_line_len := input_box_count_codepoints(buffer, next_line_start, next_line_end)
+    target_col := min(col, next_line_len)
+    caret^ = input_box_byte_offset_for_codepoint_col(
+        buffer,
+        next_line_start,
+        next_line_end,
+        target_col)
     return true
 }
 
@@ -399,9 +671,10 @@ handle_input_box :: proc(
     params: Input_Box_Params,
     press_owner: ^core.Ui_Press_Owner_State) -> Input_Box_Result {
 
-    events := capture_input_box_events_ascii()
+    events := capture_input_box_events()
     history_previous := events.up
     history_next := events.down
+    tab_pressed := events.tab
     submit_pressed := rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER)
 
     drawn_rect := clamp_non_negative_rect(params.rect)
@@ -411,46 +684,26 @@ handle_input_box :: proc(
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     hovered := hovered_item && hovered_space
 
-    owns_press := press_owner^.active &&
-        press_owner^.kind == .Input_Box &&
-        press_owner^.id == params.id
+    owns_press := input_box_owns_press(press_owner, params.id)
     can_interact := params.enabled && params.interaction_enabled
-    if can_interact && !press_owner^.active && params.mouse.left_pressed && hovered {
-        press_owner^.active = true
-        press_owner^.kind = .Input_Box
-        press_owner^.id = params.id
-        owns_press = true
-    }
-
-    if owns_press && params.mouse.left_released {
-        press_owner^.active = false
-        press_owner^.kind = .None
-        press_owner^.id = -1
-        owns_press = false
-    }
+    input_box_try_capture_press(params, press_owner, hovered, can_interact, &owns_press)
+    input_box_release_press(params, press_owner, &owns_press)
 
     text_len := input_box_clamp_text_len(params.text_len_in, len(params.text_buffer))
     caret := input_box_clamp_cursor(params.caret_col_in, text_len)
     viewport := max(0, params.viewport_col_start_in)
 
-    prefix_width: f32 = 0
-    if len(params.prompt_prefix) > 0 {
-        prefix_cstr := strings.clone_to_cstring(params.prompt_prefix, context.temp_allocator)
-        prefix_width = max(0.0, rl.MeasureTextEx(params.font, prefix_cstr, params.font_size, 0).x)
-    }
-
-    content_x := drawn_rect.x + prefix_width
-    content_width := max(0.0, drawn_rect.width - prefix_width)
-    visible_cols := input_box_visible_cols(content_width, params.char_advance)
-
-    text_rect := rl.Rectangle{content_x, drawn_rect.y, content_width, drawn_rect.height}
+    text_rect, visible_cols := input_box_content_layout(params, drawn_rect)
     line_start, line_end := input_box_current_line_bounds(params.text_buffer, text_len, caret)
-
-    if params.enabled && params.has_focus && params.mouse.left_pressed && hovered {
-        clicked_col := input_box_clicked_col(text_rect, local_mouse, params.char_advance, viewport)
-        clicked_caret := line_start + clicked_col
-        caret = clamp(clicked_caret, line_start, line_end)
-    }
+    input_box_apply_mouse_caret_click(
+        params,
+        hovered,
+        local_mouse,
+        text_rect,
+        viewport,
+        line_start,
+        line_end,
+        &caret)
 
     text_len_before := text_len
     moved_up := false
@@ -466,20 +719,11 @@ handle_input_box :: proc(
         &moved_down)
     line_start, line_end = input_box_current_line_bounds(params.text_buffer, text_len, caret)
 
-    line_len := max(0, line_end - line_start)
-    caret_col_in_line := max(0, caret - line_start)
+    line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
+    caret_col_in_line := input_box_count_codepoints(params.text_buffer, line_start, caret)
 
     viewport = min(viewport, line_len)
     input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &viewport)
-
-    visible_start := clamp(viewport, 0, line_len)
-    visible_end := clamp(visible_start + visible_cols, visible_start, line_len)
-    visible_text := ""
-    if visible_end > visible_start {
-        text_start := line_start + visible_start
-        text_end := line_start + visible_end
-        visible_text = string(params.text_buffer[text_start:text_end])
-    }
 
     return Input_Box_Result{
         drawn_rect = drawn_rect,
@@ -491,6 +735,7 @@ handle_input_box :: proc(
         moved_down = moved_down,
         history_previous = history_previous,
         history_next = history_next,
+        tab_pressed = tab_pressed,
         submit_pressed = submit_pressed,
         hovered = hovered,
         pressed = owns_press && params.mouse.left_down,
@@ -515,8 +760,8 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
     content_width := max(0.0, drawn_rect.width - prefix_width)
     visible_cols := input_box_visible_cols(content_width, params.char_advance)
 
-    line_len := max(0, line_end - line_start)
-    caret_col_in_line := max(0, caret - line_start)
+    line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
+    caret_col_in_line := input_box_count_codepoints(params.text_buffer, line_start, caret)
     viewport := max(0, min(params.viewport_col_start, line_len))
     input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &viewport)
 
@@ -524,8 +769,16 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
     visible_end := clamp(visible_start + visible_cols, visible_start, line_len)
     visible_text := ""
     if visible_end > visible_start {
-        text_start := line_start + visible_start
-        text_end := line_start + visible_end
+        text_start := input_box_byte_offset_for_codepoint_col(
+            params.text_buffer,
+            line_start,
+            line_end,
+            visible_start)
+        text_end := input_box_byte_offset_for_codepoint_col(
+            params.text_buffer,
+            line_start,
+            line_end,
+            visible_end)
         visible_text = string(params.text_buffer[text_start:text_end])
     }
 

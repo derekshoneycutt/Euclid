@@ -31,6 +31,10 @@ function scratchpad_classify_input(state_ptr::Ptr{Cvoid}, text::AbstractString)
     Scratchpad.classify_input(state_ptr, String(text))
 end
 
+function scratchpad_complete_backslash(state_ptr::Ptr{Cvoid}, token::AbstractString)
+    Scratchpad.complete_backslash(state_ptr, String(token))
+end
+
 function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString)
     Scratchpad.queue_input(state_ptr, String(text))
 end

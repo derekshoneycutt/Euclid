@@ -60,6 +60,8 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
     ret.global_loop = jl_get_function(main_module, "global_euclid_loop")
     ret.scratchpad_classify_input = jl_get_function(
         main_module, "scratchpad_classify_input")
+    ret.scratchpad_complete_backslash = jl_get_function(
+        main_module, "scratchpad_complete_backslash")
     ret.scratchpad_queue_input = jl_get_function(
         main_module, "scratchpad_queue_input")
     ret.scratchpad_save_history_to_file = jl_get_function(
@@ -151,6 +153,35 @@ scratchpad_classify_input :: proc(
     }
 
     return i32(jl_unbox_int32(result))
+}
+
+//   Resolve one phase-1 scratchpad backslash token to a Unicode replacement.
+//
+// Returns:
+//   - Replacement text when Julia REPL backslash completion resolves a single match.
+//   - Empty string when no completion should be applied.
+scratchpad_complete_backslash :: proc(
+    state: ^core.Euclid_General_State, token: string) -> string {
+
+    if state == nil || state^.julia_interface == nil {
+        return ""
+    }
+    if state^.julia_interface^.scratchpad_complete_backslash == nil {
+        return ""
+    }
+
+    state_value := jl_box_voidpointer(state)
+    token_c := strings.clone_to_cstring(token, context.temp_allocator)
+    token_value := jl_cstr_to_string(token_c)
+    result := jl_call2(state^.julia_interface^.scratchpad_complete_backslash,
+        state_value, token_value)
+
+    if jl_exception_occurred() != nil || result == nil {
+        print_julia_exception("scratchpad_complete_backslash")
+        return ""
+    }
+
+    return strings.clone(string(jl_string_ptr(result)), context.temp_allocator)
 }
 
 //   Queue a complete scratchpad input for one-per-frame execution.

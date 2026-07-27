@@ -248,6 +248,7 @@ Euclid_Julia_Interface :: struct {
     init_scripts : ^jl_value_t,
     global_loop : ^jl_value_t,
     scratchpad_classify_input : ^jl_value_t,
+    scratchpad_complete_backslash : ^jl_value_t,
     scratchpad_queue_input : ^jl_value_t,
     scratchpad_save_history_to_file : ^jl_value_t,
     scratchpad_history_previous : ^jl_value_t,

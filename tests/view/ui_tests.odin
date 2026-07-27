@@ -112,3 +112,32 @@ build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
     testing.expect(t, list.width >= 0)
     testing.expect(t, list.height >= 0)
 }
+
+@(test)
+input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
+    buffer: [32]u8
+    text_len := 0
+    caret := 0
+
+    app_ui.input_box_replace_text(buffer[:], &text_len, &caret, "αβ")
+    testing.expect_value(t, text_len, len("αβ"))
+    testing.expect_value(t, caret, len("αβ"))
+
+    prev_start := app_ui.input_box_prev_codepoint_start(buffer[:], 0, caret)
+    testing.expect_value(t, prev_start, len("α"))
+
+    app_ui.input_box_backspace_codepoint(buffer[:], &text_len, &caret)
+    testing.expect_value(t, string(buffer[:text_len]), "α")
+    testing.expect_value(t, caret, len("α"))
+
+    replaced := app_ui.input_box_replace_byte_range(
+        buffer[:],
+        &text_len,
+        &caret,
+        0,
+        text_len,
+        "γ")
+    testing.expect(t, replaced)
+    testing.expect_value(t, string(buffer[:text_len]), "γ")
+    testing.expect_value(t, caret, len("γ"))
+}

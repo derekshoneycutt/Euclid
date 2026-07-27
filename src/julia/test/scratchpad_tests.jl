@@ -86,6 +86,14 @@ end
     end
 end
 
+@testset "complete_backslash" begin
+    with_test_session() do _
+        @test Scratchpad.complete_backslash(TEST_STATE_PTR, "\\alpha") == "α"
+        @test Scratchpad.complete_backslash(TEST_STATE_PTR, "\\al") == ""
+        @test Scratchpad.complete_backslash(TEST_STATE_PTR, "alpha") == ""
+    end
+end
+
 @testset "history navigation" begin
     with_test_session() do session
         @test Scratchpad.history_previous(TEST_STATE_PTR) == ""

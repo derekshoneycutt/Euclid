@@ -4,7 +4,7 @@ using ..OdinJuliaBridge
 using REPL
 
 export init_euclid_scripts_scratchpad, get_view_text, initialize, clean, loop,
-    classify_input, queue_input, register_frame_hook, remove_frame_hook,
+    classify_input, complete_backslash, queue_input, register_frame_hook, remove_frame_hook,
     clear_frame_hooks, list_frame_hooks, save_history_to_file,
     history_previous, history_next, history_reset_cursor
 
@@ -295,6 +295,35 @@ function classify_input(state_ptr::Ptr{Cvoid}, text::String)
     end
 
     return status
+end
+
+"""Resolve a single unambiguous backslash completion, or return `""` when none applies."""
+function complete_backslash(state_ptr::Ptr{Cvoid}, token::String)
+    session = ensure_session!(state_ptr)
+
+    if isempty(token) || first(token) != '\\'
+        return ""
+    end
+
+    completions, completion_range, success = REPL.REPLCompletions.completions(
+        token,
+        lastindex(token),
+        session.runtime)
+    if !success || length(completions) != 1
+        return ""
+    end
+
+    if first(completion_range) != firstindex(token) ||
+        last(completion_range) != lastindex(token)
+        return ""
+    end
+
+    completion = first(completions)
+    if !(completion isa REPL.REPLCompletions.BslashCompletion)
+        return ""
+    end
+
+    return String(getproperty(completion, :completion))
 end
 
 """Format a frame hook identifier/label pair for user-facing log messages."""
