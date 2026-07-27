@@ -10,6 +10,8 @@ INPUT_BOX_MAX_TEXT_EVENTS :: 64
 Input_Box_Events :: struct {
     text_event_count: int,
     text_events: [INPUT_BOX_MAX_TEXT_EVENTS]rune,
+    paste_requested: bool,
+    paste_text: string,
     tab: bool,
     up: bool,
     down: bool,
@@ -53,6 +55,7 @@ Input_Box_Result :: struct {
     history_previous: bool,
     history_next: bool,
     tab_pressed: bool,
+    paste_applied: bool,
     submit_pressed: bool,
     hovered: bool,
     pressed: bool,
@@ -213,6 +216,71 @@ input_box_encode_rune_utf8 :: #force_inline proc(codepoint: rune, out: ^[4]u8) -
     out[2] = u8(0x80 | ((cp >> 6) & 0x3F))
     out[3] = u8(0x80 | (cp & 0x3F))
     return 4
+}
+
+//   Decode one UTF-8 sequence length from text at byte offset.
+input_box_utf8_sequence_len :: #force_inline proc(text: string, at: int) -> int {
+    if at < 0 || at >= len(text) {
+        return 0
+    }
+
+    first := text[at]
+    if (first & 0x80) == 0 {
+        return 1
+    }
+
+    if (first & 0xE0) == 0xC0 {
+        if at + 1 >= len(text) {
+            return 0
+        }
+        if !input_box_is_utf8_trailing_byte(text[at + 1]) {
+            return 0
+        }
+        return 2
+    }
+
+    if (first & 0xF0) == 0xE0 {
+        if at + 2 >= len(text) {
+            return 0
+        }
+        if !input_box_is_utf8_trailing_byte(text[at + 1]) ||
+            !input_box_is_utf8_trailing_byte(text[at + 2]) {
+            return 0
+        }
+        return 3
+    }
+
+    if (first & 0xF8) == 0xF0 {
+        if at + 3 >= len(text) {
+            return 0
+        }
+        if !input_box_is_utf8_trailing_byte(text[at + 1]) ||
+            !input_box_is_utf8_trailing_byte(text[at + 2]) ||
+            !input_box_is_utf8_trailing_byte(text[at + 3]) {
+            return 0
+        }
+        return 4
+    }
+
+    return 0
+}
+
+//   Return byte count from text that fits in max_bytes without splitting UTF-8 codepoints.
+input_box_utf8_prefix_fit :: #force_inline proc(text: string, max_bytes: int) -> int {
+    if len(text) <= 0 || max_bytes <= 0 {
+        return 0
+    }
+
+    offset := 0
+    for offset < len(text) {
+        sequence_len := input_box_utf8_sequence_len(text, offset)
+        if sequence_len <= 0 || offset + sequence_len > max_bytes {
+            break
+        }
+        offset += sequence_len
+    }
+
+    return offset
 }
 
 //   Compute visible column count for current draw width and character advance.
@@ -462,6 +530,45 @@ input_box_replace_byte_range :: proc(
     return true
 }
 
+//   Insert text at caret using UTF-8-safe truncation when capacity is limited.
+//   Side effects: mutates text_len and caret.
+input_box_insert_text_at_caret :: proc(
+    buffer: []u8,
+    text_len, caret: ^int,
+    text: string) -> bool {
+
+    if buffer == nil || text_len == nil || caret == nil || len(text) <= 0 {
+        return false
+    }
+
+    clamped_len := input_box_clamp_text_len(text_len^, len(buffer))
+    clamped_caret := input_box_clamp_cursor(caret^, clamped_len)
+    available := len(buffer) - clamped_len
+    if available <= 0 {
+        text_len^ = clamped_len
+        caret^ = clamped_caret
+        return false
+    }
+
+    insert_len := input_box_utf8_prefix_fit(text, available)
+    if insert_len <= 0 {
+        text_len^ = clamped_len
+        caret^ = clamped_caret
+        return false
+    }
+
+    for i := clamped_len; i > clamped_caret; i -= 1 {
+        buffer[i + insert_len - 1] = buffer[i - 1]
+    }
+    for i in 0..<insert_len {
+        buffer[clamped_caret + i] = text[i]
+    }
+
+    text_len^ = clamped_len + insert_len
+    caret^ = clamped_caret + insert_len
+    return true
+}
+
 //   Capture one frame of keyboard text/edit events for Input_Box processing.
 capture_input_box_events :: proc() -> Input_Box_Events {
     input_events := Input_Box_Events{}
@@ -489,6 +596,20 @@ capture_input_box_events :: proc() -> Input_Box_Events {
     input_events.end = rl.IsKeyPressed(.END)
     input_events.backspace = rl.IsKeyPressed(.BACKSPACE)
     input_events.delete = rl.IsKeyPressed(.DELETE)
+
+    ctrl_down := rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
+    paste_pressed := rl.IsKeyPressed(.V) && ctrl_down
+    if paste_pressed {
+        clipboard_text := rl.GetClipboardText()
+        if clipboard_text != nil {
+            pasted := string(clipboard_text)
+            if len(pasted) > 0 {
+                input_events.paste_requested = true
+                input_events.paste_text = pasted
+            }
+        }
+    }
+
     return input_events
 }
 
@@ -516,7 +637,7 @@ input_box_apply_keyboard_events :: proc(
     events: Input_Box_Events,
     visible_cols: int,
     text_len, caret, viewport: ^int,
-    moved_up, moved_down: ^bool) {
+    moved_up, moved_down, paste_applied: ^bool) {
 
     if !params.enabled || !params.has_focus {
         return
@@ -524,6 +645,7 @@ input_box_apply_keyboard_events :: proc(
 
     moved_up^ = false
     moved_down^ = false
+    paste_applied^ = false
 
     if events.up {
         moved_up^ = input_box_move_caret_up(params.text_buffer, text_len^, caret)
@@ -560,6 +682,14 @@ input_box_apply_keyboard_events :: proc(
         if codepoint >= rune(32) {
             input_box_insert_rune(params.text_buffer, text_len, caret, codepoint)
         }
+    }
+
+    if events.paste_requested {
+        paste_applied^ = input_box_insert_text_at_caret(
+            params.text_buffer,
+            text_len,
+            caret,
+            events.paste_text)
     }
 
     caret^ = input_box_clamp_cursor(caret^, text_len^)
@@ -708,6 +838,7 @@ handle_input_box :: proc(
     text_len_before := text_len
     moved_up := false
     moved_down := false
+    paste_applied := false
     input_box_apply_keyboard_events(
         params,
         events,
@@ -716,7 +847,8 @@ handle_input_box :: proc(
         &caret,
         &viewport,
         &moved_up,
-        &moved_down)
+        &moved_down,
+        &paste_applied)
     line_start, line_end = input_box_current_line_bounds(params.text_buffer, text_len, caret)
 
     line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
@@ -736,6 +868,7 @@ handle_input_box :: proc(
         history_previous = history_previous,
         history_next = history_next,
         tab_pressed = tab_pressed,
+        paste_applied = paste_applied,
         submit_pressed = submit_pressed,
         hovered = hovered,
         pressed = owns_press && params.mouse.left_down,

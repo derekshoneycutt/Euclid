@@ -150,3 +150,63 @@ scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
     testing.expect_value(t, ending, 5)
     testing.expect_value(t, replacement, "point!")
 }
+
+@(test)
+input_box_insert_text_at_caret_inserts_in_middle :: proc(t: ^testing.T) {
+    buffer: [32]u8
+    text_len := 0
+    caret := 0
+
+    app_ui.input_box_replace_text(buffer[:], &text_len, &caret, "ab")
+    caret = 1
+
+    inserted := app_ui.input_box_insert_text_at_caret(
+        buffer[:],
+        &text_len,
+        &caret,
+        "XYZ")
+
+    testing.expect(t, inserted)
+    testing.expect_value(t, string(buffer[:text_len]), "aXYZb")
+    testing.expect_value(t, caret, 4)
+}
+
+@(test)
+input_box_insert_text_at_caret_truncates_on_utf8_boundary :: proc(t: ^testing.T) {
+    buffer: [5]u8
+    text_len := 0
+    caret := 0
+
+    app_ui.input_box_replace_text(buffer[:], &text_len, &caret, "ab")
+
+    inserted := app_ui.input_box_insert_text_at_caret(
+        buffer[:],
+        &text_len,
+        &caret,
+        "αβ")
+
+    testing.expect(t, inserted)
+    testing.expect_value(t, string(buffer[:text_len]), "abα")
+    testing.expect_value(t, text_len, len("abα"))
+    testing.expect_value(t, caret, len("abα"))
+}
+
+@(test)
+input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
+    buffer: [2]u8
+    text_len := 0
+    caret := 0
+
+    app_ui.input_box_replace_text(buffer[:], &text_len, &caret, "ab")
+
+    inserted := app_ui.input_box_insert_text_at_caret(
+        buffer[:],
+        &text_len,
+        &caret,
+        "Z")
+
+    testing.expect(t, !inserted)
+    testing.expect_value(t, string(buffer[:text_len]), "ab")
+    testing.expect_value(t, text_len, 2)
+    testing.expect_value(t, caret, 2)
+}

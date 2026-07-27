@@ -351,7 +351,7 @@ draw_scratchpad_output_and_prompt :: proc(
         ui_runtime,
         input_result.tab_pressed)
 
-    if input_result.changed || completion_applied {
+    if input_result.changed || input_result.paste_applied || completion_applied {
         _ = julia.scratchpad_history_reset_cursor(state)
     }
 

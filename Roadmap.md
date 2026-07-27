@@ -86,7 +86,14 @@ General features:
 - [X] Initial Settings panel
 - [X] Initial basic SIMD and performance tweaks
 - [X] UUID animation handles
+- [X] Improved UI layout system
 - [X] Improved hybrid immediate mode, block-based view text rendering
+- [X] Scratchpad REPL
+  - [X] Basic setup and availability
+  - [X] Basic help feature
+  - [X] Basic input tab completion support, including unicode characters & function names
+  - [X] Basic clipboard support
+  - [X] Initial primitive drawing animation hooks
 - [X] View text more advanced layout engine
 - [ ] Continued view text support for colors, shape fill, etc.
 - [ ] Basic LaTeX type rendering support
@@ -97,18 +104,11 @@ General features:
   - [ ] Dynamic sized brackets
   - [ ] Matrices
   - [ ] Sums, Products, Integrals
-- [X] Improved UI layout system
 - [ ] Standard group-focused transformation animations for complex shapes
   - [ ] Translation
   - [ ] Rotation
   - [ ] Reflection
-- [ ] Scratchpad REPL
-  - [X] Basic setup and availability
-  - [X] Basic help feature
-  - [X] Basic input tab completion support, including unicode characters & function names
-  - [X] Initial primitive drawing animation hooks
-  - [ ] Basic group transformation animation hooks
-  - [ ] Basic clipboard support
+  - [ ] Basic group transformation animation hooks for REPL
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 
@@ -146,6 +146,7 @@ After v1 is complete, the following is suggestions to evaluate next.
 - More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Improved Scratchpad console-like REPL
+- Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
