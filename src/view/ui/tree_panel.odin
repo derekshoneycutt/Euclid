@@ -22,8 +22,10 @@ draw_tree_view :: proc(
 
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
+    show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
     toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input,
         &ui_runtime.ui_press_owner,
+        show_tree,
         ui_runtime.show_tree_gif, ui_runtime.show_tree_settings, ui_runtime.simulation_paused)
 
     if toolbar_hit.RefreshRequested {
@@ -41,6 +43,12 @@ draw_tree_view :: proc(
 
     if toolbar_hit.TogglePauseRequested {
         ui_runtime.simulation_paused = !ui_runtime.simulation_paused
+    }
+
+    if toolbar_hit.ToggleTreeRequested {
+        ui_runtime.show_tree_gif = false
+        ui_runtime.show_tree_settings = false
+        ui_runtime.tree_scroll_dragging = false
     }
 
     if toolbar_hit.ToggleSettingsRequested {

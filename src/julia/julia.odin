@@ -899,14 +899,29 @@ print_julia_exception :: proc(contextOfErr: string) {
 
     sprint_fn := jl_get_function(base_module, "sprint")
     showerror_fn := jl_get_function(base_module, "showerror")
+    catch_backtrace_fn := jl_get_function(base_module, "catch_backtrace")
 
     if sprint_fn == nil || showerror_fn == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
         return
     }
 
-    args: [2]^jl_value_t = {(^jl_value_t)(showerror_fn), ex}
-    msg_val := jl_call(sprint_fn, &args[0], 2)
+    bt_val: ^jl_value_t = nil
+    if catch_backtrace_fn != nil {
+        bt_val = jl_call0(catch_backtrace_fn)
+        if jl_exception_occurred() != nil {
+            bt_val = nil
+        }
+    }
+
+    msg_val: ^jl_value_t = nil
+    if bt_val != nil {
+        args: [3]^jl_value_t = {(^jl_value_t)(showerror_fn), ex, bt_val}
+        msg_val = jl_call(sprint_fn, &args[0], 3)
+    } else {
+        args: [2]^jl_value_t = {(^jl_value_t)(showerror_fn), ex}
+        msg_val = jl_call(sprint_fn, &args[0], 2)
+    }
 
     if jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
@@ -914,7 +929,8 @@ print_julia_exception :: proc(contextOfErr: string) {
     }
 
     msg := jl_string_ptr(msg_val)
-    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type, " msg=", msg)
+    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+    fmt.println(msg)
 }
 
 //   Increment cycle-boundary generation counter for one-time consumer notification.

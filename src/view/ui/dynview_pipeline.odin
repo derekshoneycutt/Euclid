@@ -171,6 +171,73 @@ dynview_inline_circle_cols :: #force_inline proc(
     return cols
 }
 
+//   Resolve draw color using command brush override with style fallback.
+dynview_command_draw_color :: #force_inline proc(
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style) -> rl.Color {
+
+    if cmd.has_brush_color {
+        return cmd.brush_color
+    }
+    return style.color
+}
+
+//   Normalize one degree angle into the [0, 360) range.
+dynview_normalize_angle_degrees :: #force_inline proc(angle: f32) -> f32 {
+    normalized := angle
+    for normalized < 0 {
+        normalized += 360
+    }
+    for normalized >= 360 {
+        normalized -= 360
+    }
+    return normalized
+}
+
+//   Compute positive sweep degrees from start to end with wraparound.
+dynview_positive_sweep_degrees :: #force_inline proc(start_degrees, end_degrees: f32) -> f32 {
+    start_n := dynview_normalize_angle_degrees(start_degrees)
+    end_n := dynview_normalize_angle_degrees(end_degrees)
+    sweep := end_n - start_n
+    if sweep < 0 {
+        sweep += 360
+    }
+    return sweep
+}
+
+//   Compute one point on a circle from center/radius and degree angle.
+dynview_pie_point :: #force_inline proc(center: rl.Vector2, radius, angle_degrees: f32) -> rl.Vector2 {
+    radians := angle_degrees * math.PI / 180.0
+    return rl.Vector2{
+        center.x + radius * f32(math.cos(f64(radians))),
+        center.y - radius * f32(math.sin(f64(radians))),
+    }
+}
+
+//   Draw a filled pie section using a deterministic triangle fan.
+dynview_draw_filled_pie_section :: proc(
+    center: rl.Vector2,
+    radius: f32,
+    start_degrees, end_degrees: f32,
+    color: rl.Color) {
+
+    sweep := dynview_positive_sweep_degrees(start_degrees, end_degrees)
+    if sweep <= 0 {
+        return
+    }
+
+    segments := max(1, int(math.ceil(f64(sweep / 8.0))))
+    for i in 0..<segments {
+        t0 := f32(i) / f32(segments)
+        t1 := f32(i + 1) / f32(segments)
+        a0 := dynview_normalize_angle_degrees(start_degrees + sweep * t0)
+        a1 := dynview_normalize_angle_degrees(start_degrees + sweep * t1)
+        p0 := dynview_pie_point(center, radius, a0)
+        p1 := dynview_pie_point(center, radius, a1)
+        rl.DrawTriangle(center, p0, p1, color)
+    }
+}
+
 //   Consume one text run in flow layout, optionally drawing each wrapped segment.
 dynview_flow_consume_text_run :: proc(
     flow: ^Dynview_Flow_State,
@@ -295,7 +362,7 @@ dynview_flow_consume_inline_line :: proc(
             thickness := max(1.0, cmd.inline_atom_stroke)
             start_pos := rl.Vector2{line_x, baseline_y}
             end_pos := rl.Vector2{line_x + line_w, baseline_y}
-            rl.DrawLineEx(start_pos, end_pos, thickness, style.color)
+            rl.DrawLineEx(start_pos, end_pos, thickness, dynview_command_draw_color(cmd, style))
         }
     }
 
@@ -339,7 +406,10 @@ dynview_flow_consume_inline_box :: proc(
             box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
             box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
             stroke := max(1.0, cmd.inline_atom_stroke)
-            rl.DrawRectangleLinesEx(rl.Rectangle{box_x, box_y, box_w, box_h}, stroke, style.color)
+            rl.DrawRectangleLinesEx(
+                rl.Rectangle{box_x, box_y, box_w, box_h},
+                stroke,
+                dynview_command_draw_color(cmd, style))
         }
     }
 
@@ -382,9 +452,168 @@ dynview_flow_consume_inline_circle :: proc(
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
             center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
             stroke := max(1.0, cmd.inline_atom_stroke)
-            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+            color := dynview_command_draw_color(cmd, style)
+            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, color)
             if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
+                rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), color)
+            }
+        }
+    }
+
+    flow^.had_visible = true
+    flow^.col += cols
+    dynview_wrap_if_full(flow, max_cols)
+}
+
+//   Consume one filled inline-box atom in flow layout, optionally drawing it.
+dynview_flow_consume_inline_filled_box :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    max_cols := dynview_chars_per_row_for_style(
+        draw_ctx^.panel.width,
+        draw_ctx^.text_padding,
+        draw_ctx^.wrap_advance,
+        style)
+    if max_cols <= 0 {
+        max_cols = 1
+    }
+
+    cols := dynview_inline_box_cols(cmd, style, max_cols)
+    if flow^.col > 0 && flow^.col + cols > max_cols {
+        flow^.row += 1
+        flow^.col = 0
+    }
+
+    if draw_ctx^.enabled {
+        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
+            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
+            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+
+            effective_advance := dynview_effective_advance(style, draw_ctx^.wrap_advance)
+            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            box_w := f32(cols) * effective_advance
+            raw_h := cmd.inline_box_height * effective_advance
+            box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
+            box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
+            color := dynview_command_draw_color(cmd, style)
+            rl.DrawRectangleRec(rl.Rectangle{box_x, box_y, box_w, box_h}, color)
+
+            if cmd.inline_outline_stroke > 0 {
+                rl.DrawRectangleLinesEx(
+                    rl.Rectangle{box_x, box_y, box_w, box_h},
+                    max(1.0, cmd.inline_outline_stroke),
+                    style.color)
+            }
+        }
+    }
+
+    flow^.had_visible = true
+    flow^.col += cols
+    dynview_wrap_if_full(flow, max_cols)
+}
+
+//   Consume one filled inline-circle atom in flow layout, optionally drawing it.
+dynview_flow_consume_inline_filled_circle :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    max_cols := dynview_chars_per_row_for_style(
+        draw_ctx^.panel.width,
+        draw_ctx^.text_padding,
+        draw_ctx^.wrap_advance,
+        style)
+    if max_cols <= 0 {
+        max_cols = 1
+    }
+
+    cols := dynview_inline_circle_cols(cmd, style, max_cols)
+    if flow^.col > 0 && flow^.col + cols > max_cols {
+        flow^.row += 1
+        flow^.col = 0
+    }
+
+    if draw_ctx^.enabled {
+        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
+            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
+            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+
+            effective_advance := dynview_effective_advance(style, draw_ctx^.wrap_advance)
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_w := f32(cols) * effective_advance
+            radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
+            center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
+            color := dynview_command_draw_color(cmd, style)
+            rl.DrawCircleV(center, radius, color)
+
+            if cmd.inline_outline_stroke > 0 {
+                stroke := max(1.0, cmd.inline_outline_stroke)
+                rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+                if stroke > 1 {
+                    rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
+                }
+            }
+        }
+    }
+
+    flow^.had_visible = true
+    flow^.col += cols
+    dynview_wrap_if_full(flow, max_cols)
+}
+
+//   Consume one inline pie-section atom in flow layout, optionally drawing it.
+dynview_flow_consume_inline_pie_section :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    max_cols := dynview_chars_per_row_for_style(
+        draw_ctx^.panel.width,
+        draw_ctx^.text_padding,
+        draw_ctx^.wrap_advance,
+        style)
+    if max_cols <= 0 {
+        max_cols = 1
+    }
+
+    cols := dynview_inline_circle_cols(cmd, style, max_cols)
+    if flow^.col > 0 && flow^.col + cols > max_cols {
+        flow^.row += 1
+        flow^.col = 0
+    }
+
+    if draw_ctx^.enabled {
+        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
+            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
+            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+
+            effective_advance := dynview_effective_advance(style, draw_ctx^.wrap_advance)
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_w := f32(cols) * effective_advance
+            radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
+            center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
+            color := dynview_command_draw_color(cmd, style)
+            dynview_draw_filled_pie_section(
+                center,
+                radius,
+                cmd.pie_start_angle_degrees,
+                cmd.pie_end_angle_degrees,
+                color)
+
+            if cmd.inline_outline_stroke > 0 {
+                stroke := max(1.0, cmd.inline_outline_stroke)
+                start_point := dynview_pie_point(center, radius, cmd.pie_start_angle_degrees)
+                end_point := dynview_pie_point(center, radius, cmd.pie_end_angle_degrees)
+                rl.DrawLineEx(center, start_point, stroke, style.color)
+                rl.DrawLineEx(center, end_point, stroke, style.color)
             }
         }
     }
@@ -570,6 +799,24 @@ dynview_count_styled_rows :: proc(
             dynview_flow_consume_inline_box(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineCircle:
             dynview_flow_consume_inline_circle(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .InlineFilledBox:
+            dynview_flow_consume_inline_filled_box(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
+        case .InlineFilledCircle:
+            dynview_flow_consume_inline_filled_circle(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
+        case .InlinePieSection:
+            dynview_flow_consume_inline_pie_section(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
         case .LineBreak, .Divider:
             flow.row += 1
             flow.col = 0
@@ -618,6 +865,24 @@ dynview_draw_styled_content :: proc(
             dynview_flow_consume_inline_box(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineCircle:
             dynview_flow_consume_inline_circle(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .InlineFilledBox:
+            dynview_flow_consume_inline_filled_box(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
+        case .InlineFilledCircle:
+            dynview_flow_consume_inline_filled_circle(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
+        case .InlinePieSection:
+            dynview_flow_consume_inline_pie_section(
+                &flow,
+                cmd,
+                dynview_style_by_id(cmd.style_id),
+                &draw_ctx)
         case .LineBreak, .Divider:
             flow.row += 1
             flow.col = 0
@@ -975,6 +1240,60 @@ dynview_compile_inline_circle :: #force_inline proc(
     return DYNVIEW_STATUS_OK
 }
 
+//   Apply inline-filled-box compilation rule.
+dynview_compile_inline_filled_box :: #force_inline proc(
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    if cmd.inline_atom_dimension <= 0 || cmd.inline_box_height <= 0 || cmd.inline_outline_stroke < 0 {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply inline-filled-circle compilation rule.
+dynview_compile_inline_filled_circle :: #force_inline proc(
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    if cmd.inline_atom_dimension <= 0 || cmd.inline_outline_stroke < 0 {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply inline pie-section compilation rule.
+dynview_compile_inline_pie_section :: #force_inline proc(
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    if cmd.inline_atom_dimension <= 0 || cmd.inline_outline_stroke < 0 {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
 //   Apply newline-like command rule shared by line-break and divider.
 dynview_compile_newline_command :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -1027,6 +1346,12 @@ dynview_compile_command :: #force_inline proc(
         return dynview_compile_inline_box(state, cmd)
     case .InlineCircle:
         return dynview_compile_inline_circle(state, cmd)
+    case .InlineFilledBox:
+        return dynview_compile_inline_filled_box(state, cmd)
+    case .InlineFilledCircle:
+        return dynview_compile_inline_filled_circle(state, cmd)
+    case .InlinePieSection:
+        return dynview_compile_inline_pie_section(state, cmd)
     }
 
     return DYNVIEW_STATUS_INVALID_ARGUMENT

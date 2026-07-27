@@ -62,20 +62,15 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 
     if OdinJuliaBridge.dynview_text_run(
         state_ptr,
-        "A point",
+        "A point ",
         DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
 
-    #= TODO This doesn't really work that great yet, but concept is beginnning
-    # The shapes are experimental features, and lots more features needed to make them
-    # worth anything. More to think on and get going. But the idea begins!
-    if OdinJuliaBridge.dynview_inline_circle(
-        state_ptr,
-        1, 1, DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
+    if OdinJuliaBridge.dynview_inline_filled_circle(
+        state_ptr, 1, DynviewStyleOutput, PointColor, 0) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
-    =#
 
     if OdinJuliaBridge.dynview_text_run(
         state_ptr,

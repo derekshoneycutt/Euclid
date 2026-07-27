@@ -7,15 +7,17 @@ import rl "vendor:raylib"
 Tree_Toolbar_Hit :: struct {
     RefreshRequested: bool,
     TogglePauseRequested: bool,
+    ToggleTreeRequested: bool,
     ToggleGifRequested: bool,
     ToggleSettingsRequested: bool,
 }
 
-//   Render toolbar row and report refresh/settings toggle hits.
+//   Render toolbar row and report refresh/tree/gif/settings toggle hits.
 draw_tree_toolbar :: proc(
     panel: rl.Rectangle,
     mouse_input: Mouse_Input_State,
     press_owner: ^core.Ui_Press_Owner_State,
+    show_tree: bool,
     show_gif: bool,
     show_settings: bool,
     simulation_paused: bool) -> Tree_Toolbar_Hit {
@@ -104,11 +106,25 @@ draw_tree_toolbar :: proc(
         segment_size = TREE_TOOLBAR_BUTTON_SIZE,
         cursor_in = right_cursor,
     })
+    right_cursor = gif_slot.cursor_out
+
+    books_slot := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = panel.x + panel.width - TREE_TOOLBAR_EDGE_PAD,
+        origin_y = lane_rect.y,
+        axis = .X,
+        direction_sign = -1,
+        rect = lane_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = TREE_TOOLBAR_BUTTON_SIZE,
+        cursor_in = right_cursor,
+    })
 
     refresh_rect := refresh_slot.segment_rect
     pause_rect := pause_slot.segment_rect
     settings_rect := settings_slot.segment_rect
     gif_rect := gif_slot.segment_rect
+    books_rect := books_slot.segment_rect
 
     refresh_button := draw_icon_button(Icon_Button_Params{
         id = 2001,
@@ -152,6 +168,19 @@ draw_tree_toolbar :: proc(
         inset_scale = 1.0,
     }, press_owner)
     hit.ToggleGifRequested = gif_button.clicked
+
+    tree_button := draw_icon_button(Icon_Button_Params{
+        id = 2005,
+        rect = books_rect,
+        icon_id = .Books,
+        toggle = show_tree,
+        mouse = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = panel,
+        interaction_enabled = true,
+        inset_scale = 1.0,
+    }, press_owner)
+    hit.ToggleTreeRequested = tree_button.clicked
 
     settings_button := draw_icon_button(Icon_Button_Params{
         id = 2004,

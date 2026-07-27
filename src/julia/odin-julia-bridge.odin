@@ -1047,6 +1047,246 @@ dynview_inline_circle :: proc "c" (
     })
 }
 
+//   Convert one bridge color payload into raylib color.
+bridge_color_to_raylib :: #force_inline proc(color: Bridge_Color) -> rl.Color {
+    return rl.Color{color.r, color.g, color.b, color.a}
+}
+
+//   Append one inline line atom with explicit brush color override.
+@(export)
+dynview_inline_line_brush :: proc "c" (
+    state: ^core.Euclid_General_State,
+    length, thickness: f32,
+    style_id: i32,
+    brush_color: Bridge_Color) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if length <= 0 || thickness <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineLine,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = length,
+        inline_atom_stroke = thickness,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(brush_color),
+    })
+}
+
+//   Append one inline box atom with explicit brush color override.
+@(export)
+dynview_inline_box_brush :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height, stroke: f32,
+    style_id: i32,
+    brush_color: Bridge_Color) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if width <= 0 || height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineBox,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_atom_stroke = stroke,
+        inline_box_height = height,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(brush_color),
+    })
+}
+
+//   Append one inline circle atom with explicit brush color override.
+@(export)
+dynview_inline_circle_brush :: proc "c" (
+    state: ^core.Euclid_General_State,
+    radius, stroke: f32,
+    style_id: i32,
+    brush_color: Bridge_Color) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if radius <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineCircle,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = radius,
+        inline_atom_stroke = stroke,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(brush_color),
+    })
+}
+
+//   Append one filled inline box atom with optional outline stroke.
+@(export)
+dynview_inline_filled_box :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height: f32,
+    style_id: i32,
+    fill_color: Bridge_Color,
+    outline_stroke: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if width <= 0 || height <= 0 || outline_stroke < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineFilledBox,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_box_height = height,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(fill_color),
+        inline_outline_stroke = outline_stroke,
+    })
+}
+
+//   Append one filled inline circle atom with optional outline stroke.
+@(export)
+dynview_inline_filled_circle :: proc "c" (
+    state: ^core.Euclid_General_State,
+    radius: f32,
+    style_id: i32,
+    fill_color: Bridge_Color,
+    outline_stroke: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if radius <= 0 || outline_stroke < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlineFilledCircle,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = radius,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(fill_color),
+        inline_outline_stroke = outline_stroke,
+    })
+}
+
+//   Append one filled inline pie-section atom with optional outline stroke.
+@(export)
+dynview_inline_pie_section :: proc "c" (
+    state: ^core.Euclid_General_State,
+    radius, start_angle_degrees, end_angle_degrees: f32,
+    style_id: i32,
+    fill_color: Bridge_Color,
+    outline_stroke: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if radius <= 0 || outline_stroke < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .InlinePieSection,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = radius,
+        has_brush_color = true,
+        brush_color = bridge_color_to_raylib(fill_color),
+        inline_outline_stroke = outline_stroke,
+        pie_start_angle_degrees = start_angle_degrees,
+        pie_end_angle_degrees = end_angle_degrees,
+    })
+}
+
 //   Insert an explicit line break in the current dynview block.
 @(export)
 dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {

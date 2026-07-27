@@ -700,6 +700,9 @@ Ui_Dynview_Command_Kind :: enum {
     InlineLine,
     InlineBox,
     InlineCircle,
+    InlineFilledBox,
+    InlineFilledCircle,
+    InlinePieSection,
 }
 
 Ui_Dynview_Command :: struct {
@@ -713,6 +716,11 @@ Ui_Dynview_Command :: struct {
     inline_atom_dimension: f32,
     inline_atom_stroke: f32,
     inline_box_height: f32,
+    has_brush_color: bool,
+    brush_color: rl.Color,
+    inline_outline_stroke: f32,
+    pie_start_angle_degrees: f32,
+    pie_end_angle_degrees: f32,
 }
 
 Ui_Dynview_Copy_Block :: struct {
@@ -737,6 +745,9 @@ Ui_Dynview_Layout_Item_Kind :: enum {
     InlineLine,
     InlineBox,
     InlineCircle,
+    InlineFilledBox,
+    InlineFilledCircle,
+    InlinePieSection,
 }
 
 Ui_Dynview_Layout_Item :: struct {
@@ -751,6 +762,11 @@ Ui_Dynview_Layout_Item :: struct {
     inline_atom_dimension: f32,
     inline_atom_stroke: f32,
     inline_box_height: f32,
+    has_brush_color: bool,
+    brush_color: rl.Color,
+    inline_outline_stroke: f32,
+    pie_start_angle_degrees: f32,
+    pie_end_angle_degrees: f32,
     x_offset: f32,
     y_offset: f32,
     draw_width: f32,

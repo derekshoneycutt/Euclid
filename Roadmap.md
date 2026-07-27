@@ -45,7 +45,7 @@ Core Content:
   - [X] Section 8
 - [ ] Algebraic groups
   - [ ] Definitions
-    - [ ] $\Z_2$ (irregular polygon reflecting about a line; special case of $C_n$)
+    - [ ] $\mathbb Z_2$ (irregular polygon reflecting about a line; special case of $C_n$)
       - [ ] Closure
       - [ ] Identity
       - [ ] Inverse
@@ -54,7 +54,7 @@ Core Content:
       - [ ] Commutative (Abelian)
     - [ ] $D_n$ (dihedrals, symmetry of shape with $n$ sides ; non-commutative)
       - [ ] Non-Abelian
-    - [ ] $(\R^2, +)$ (translation group -- moving shapes)
+    - [ ] $(\mathbb R^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
     - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
@@ -95,7 +95,7 @@ General features:
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
 - [X] View text more advanced layout engine
-- [ ] Continued view text support for colors, shape fill, etc.
+- [X] Continued view text support for colors, shape fill, etc.
 - [ ] Basic LaTeX type rendering support
   - [ ] LaTeX to unicode base
   - [ ] Superscript

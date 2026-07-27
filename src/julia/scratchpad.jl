@@ -691,16 +691,29 @@ function format_result_value(value)
     end
 end
 
-"""Format an exception plus first stack frame location for concise output lines."""
+"""Format an exception with a bounded stack trace for scratchpad output."""
 function format_exception_text(e, bt)
     message = sprint(showerror, e)
+    if bt === nothing
+        return message
+    end
+
     frames = stacktrace(bt)
     if isempty(frames)
         return message
     end
 
-    frame = first(frames)
-    return "$(message) @ $(frame.file):$(frame.line)"
+    lines = String[message, "Stacktrace:"]
+    limit = min(length(frames), 6)
+    for frame in frames[1:limit]
+        push!(lines, "  " * sprint(show, frame))
+    end
+
+    if length(frames) > limit
+        push!(lines, "  ... $(length(frames) - limit) more frames")
+    end
+
+    return join(lines, "\n")
 end
 
 """Echo submitted input into output using prompt-style prefixes for multiline input."""

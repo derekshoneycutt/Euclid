@@ -191,6 +191,33 @@ draw_gif_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     rl.DrawCircleV(flash_dot, 1.0, color)
 }
 
+//   Draw a stacked books icon for the treeview toolbar toggle.
+draw_books_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
+    left := rect.x + rect.width * 0.22
+    top := rect.y + rect.height * 0.18
+    width := rect.width * 0.56
+    height := rect.height * 0.64
+
+    upper := rl.Rectangle{left, top, width, height * 0.3}
+    middle := rl.Rectangle{left, top + height * 0.34, width * 0.94, height * 0.3}
+    lower := rl.Rectangle{left + width * 0.04, top + height * 0.68, width * 0.9, height * 0.3}
+
+    rl.DrawRectangleLinesEx(upper, 1, color)
+    rl.DrawRectangleLinesEx(middle, 1, color)
+    rl.DrawRectangleLinesEx(lower, 1, color)
+
+    rl.DrawLineEx(
+        rl.Vector2{upper.x + upper.width * 0.18, upper.y + upper.height * 0.5},
+        rl.Vector2{upper.x + upper.width * 0.82, upper.y + upper.height * 0.5},
+        1.0,
+        color)
+    rl.DrawLineEx(
+        rl.Vector2{middle.x + middle.width * 0.18, middle.y + middle.height * 0.5},
+        rl.Vector2{middle.x + middle.width * 0.82, middle.y + middle.height * 0.5},
+        1.0,
+        color)
+}
+
 //   Draw a simple two-sheet copy glyph used for scratchpad block copy actions.
 draw_copy_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     back := rl.Rectangle{

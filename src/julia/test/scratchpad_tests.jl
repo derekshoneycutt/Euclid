@@ -106,6 +106,19 @@ end
     end
 end
 
+@testset "format_exception_text" begin
+    formatted = try
+        1 + "a"
+        ""
+    catch e
+        Scratchpad.format_exception_text(e, catch_backtrace())
+    end
+
+    @test occursin("MethodError", formatted)
+    @test occursin("Stacktrace:", formatted)
+    @test occursin("+", formatted)
+end
+
 @testset "history navigation" begin
     with_test_session() do session
         @test Scratchpad.history_previous(TEST_STATE_PTR) == ""

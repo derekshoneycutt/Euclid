@@ -471,6 +471,8 @@ dynview_layout_consume_inline_line :: proc(
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
         inline_atom_stroke = thickness,
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
         draw_width = f32(cols) * dynview_effective_advance(style, cache^.last_wrap_advance),
         draw_height = draw_height,
         ascent = max(ascent, text_ascent * 0.08),
@@ -512,6 +514,11 @@ dynview_inline_box_item :: #force_inline proc(
         inline_atom_dimension = cmd.inline_atom_dimension,
         inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
         inline_box_height = box_height,
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        inline_outline_stroke = cmd.inline_outline_stroke,
+        pie_start_angle_degrees = cmd.pie_start_angle_degrees,
+        pie_end_angle_degrees = cmd.pie_end_angle_degrees,
         draw_width = f32(cols) * effective_advance,
         draw_height = box_height,
         ascent = max(0.0, -(center - box_height * 0.5)),
@@ -588,6 +595,11 @@ dynview_inline_circle_item :: #force_inline proc(
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
         inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        inline_outline_stroke = cmd.inline_outline_stroke,
+        pie_start_angle_degrees = cmd.pie_start_angle_degrees,
+        pie_end_angle_degrees = cmd.pie_end_angle_degrees,
         draw_width = atom_width,
         draw_height = radius * 2,
         ascent = max(0.0, -(center - radius)),
@@ -631,6 +643,198 @@ dynview_layout_consume_inline_circle :: proc(
     }
 
     item := dynview_inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = dynview_layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return dynview_layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled-box inline item using the same geometry as outline boxes.
+dynview_inline_filled_box_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := dynview_inline_box_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlineFilledBox
+    return item
+}
+
+//   Lay out one inline-filled-box command and return the line touched.
+dynview_layout_consume_inline_filled_box :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := dynview_layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := dynview_layout_max_cols(cache, style)
+    cols := dynview_inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := dynview_style_ascent_descent(style, font_size)
+
+    status := dynview_layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := dynview_inline_filled_box_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = dynview_layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return dynview_layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled-circle inline item using the same geometry as outline circles.
+dynview_inline_filled_circle_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := dynview_inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlineFilledCircle
+    return item
+}
+
+//   Lay out one inline-filled-circle command and return the line touched.
+dynview_layout_consume_inline_filled_circle :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := dynview_layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := dynview_layout_max_cols(cache, style)
+    cols := dynview_inline_circle_cols(cmd, style, max_cols)
+    text_ascent, text_descent := dynview_style_ascent_descent(style, font_size)
+
+    status := dynview_layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := dynview_inline_filled_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = dynview_layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return dynview_layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled pie-section item using circle-equivalent geometry.
+dynview_inline_pie_section_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := dynview_inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlinePieSection
+    item.pie_start_angle_degrees = cmd.pie_start_angle_degrees
+    item.pie_end_angle_degrees = cmd.pie_end_angle_degrees
+    item.inline_outline_stroke = max(0.0, cmd.inline_outline_stroke)
+    return item
+}
+
+//   Lay out one inline pie-section command and return the line touched.
+dynview_layout_consume_inline_pie_section :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := dynview_layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := dynview_layout_max_cols(cache, style)
+    cols := dynview_inline_circle_cols(cmd, style, max_cols)
+    text_ascent, text_descent := dynview_style_ascent_descent(style, font_size)
+
+    status := dynview_layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := dynview_inline_pie_section_item(cache, cmd, style, cols, text_ascent, text_descent)
     status = dynview_layout_push_item(cache, state, acc, item)
     if status != DYNVIEW_STATUS_OK {
         return status, -1
@@ -770,6 +974,15 @@ dynview_layout_consume_visible_command :: proc(
     case .InlineCircle:
         status, _ = dynview_layout_consume_inline_circle(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, effective_style, ctx^.font_size)
+    case .InlineFilledBox:
+        status, _ = dynview_layout_consume_inline_filled_box(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, effective_style, ctx^.font_size)
+    case .InlineFilledCircle:
+        status, _ = dynview_layout_consume_inline_filled_circle(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, effective_style, ctx^.font_size)
+    case .InlinePieSection:
+        status, _ = dynview_layout_consume_inline_pie_section(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, effective_style, ctx^.font_size)
     case .LineBreak, .Divider:
         status = dynview_layout_finalize_line(
             ctx^.cache,
@@ -781,6 +994,17 @@ dynview_layout_consume_visible_command :: proc(
     }
 
     return status
+}
+
+//   Resolve inline draw color using per-item brush override with style fallback.
+dynview_inline_draw_color :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Ui_Dynview_Layout_Item) -> rl.Color {
+
+    if item.has_brush_color {
+        return item.brush_color
+    }
+    return style.color
 }
 
 //   Finalize total layout metrics after all commands are consumed.
@@ -891,6 +1115,7 @@ dynview_draw_cached_inline_item :: proc(
     item: core.Ui_Dynview_Layout_Item,
     item_x, item_y: f32) {
 
+    color := dynview_inline_draw_color(style, item)
     switch item.kind {
     case .InlineLine:
         center_y := item_y + item.draw_height * 0.5
@@ -898,21 +1123,54 @@ dynview_draw_cached_inline_item :: proc(
             rl.Vector2{item_x, center_y},
             rl.Vector2{item_x + item.draw_width, center_y},
             max(1.0, item.inline_atom_stroke),
-            style.color)
+            color)
     case .InlineBox:
         rl.DrawRectangleLinesEx(
             rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height},
             max(1.0, item.inline_atom_stroke),
-            style.color)
+            color)
     case .InlineCircle:
         center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
-        rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, style.color)
+        rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
         if item.inline_atom_stroke > 1 {
             rl.DrawCircleLines(
                 i32(center.x),
                 i32(center.y),
                 max(1.0, item.draw_height * 0.5 - 1),
-                style.color)
+                color)
+        }
+    case .InlineFilledBox:
+        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+        rl.DrawRectangleRec(rect, color)
+        if item.inline_outline_stroke > 0 {
+            rl.DrawRectangleLinesEx(rect, max(1.0, item.inline_outline_stroke), style.color)
+        }
+    case .InlineFilledCircle:
+        center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
+        radius := item.draw_height * 0.5
+        rl.DrawCircleV(center, radius, color)
+        if item.inline_outline_stroke > 0 {
+            stroke := max(1.0, item.inline_outline_stroke)
+            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+            if stroke > 1 {
+                rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
+            }
+        }
+    case .InlinePieSection:
+        center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
+        radius := item.draw_height * 0.5
+        dynview_draw_filled_pie_section(
+            center,
+            radius,
+            item.pie_start_angle_degrees,
+            item.pie_end_angle_degrees,
+            color)
+        if item.inline_outline_stroke > 0 {
+            stroke := max(1.0, item.inline_outline_stroke)
+            start_point := dynview_pie_point(center, radius, item.pie_start_angle_degrees)
+            end_point := dynview_pie_point(center, radius, item.pie_end_angle_degrees)
+            rl.DrawLineEx(center, start_point, stroke, style.color)
+            rl.DrawLineEx(center, end_point, stroke, style.color)
         }
     case .TextRun:
     }

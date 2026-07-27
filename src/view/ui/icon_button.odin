@@ -15,6 +15,7 @@ Icon_Button_Id :: enum {
     Play,
     Gear,
     Gif,
+    Books,
     Copy,
     None,
 }
@@ -136,6 +137,8 @@ draw_icon_button_glyph :: proc(icon_id: Icon_Button_Id, rect: rl.Rectangle, colo
         draw_gear_icon(rect, color)
     case .Gif:
         draw_gif_icon(rect, color)
+    case .Books:
+        draw_books_icon(rect, color)
     case .Copy:
         draw_copy_icon(rect, color)
     case .None:
