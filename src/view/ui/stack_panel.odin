@@ -46,18 +46,6 @@ stack_panel_direction_sign :: #force_inline proc(direction_sign: int) -> f32 {
     return 1
 }
 
-//   Clamp a rectangle so width and height are never negative.
-stack_panel_clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
 //   Clamp rectangle on Y axis against bounds using intersection semantics.
 stack_panel_clamp_y :: #force_inline proc(rect, bounds: rl.Rectangle) -> rl.Rectangle {
     top := max(rect.y, bounds.y)
@@ -100,7 +88,7 @@ stack_panel_accumulate_used_rect :: #force_inline proc(
 
 //   Resolve one stack segment placement and advance cursor state.
 stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Result {
-    bounds := stack_panel_clamp_non_negative_rect(params.rect)
+    bounds := clamp_non_negative_rect(params.rect)
     direction := stack_panel_direction_sign(params.direction_sign)
     segment_size := stack_panel_segment_size(params)
 
@@ -137,7 +125,7 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
         }
     }
 
-    segment_rect = stack_panel_clamp_non_negative_rect(segment_rect)
+    segment_rect = clamp_non_negative_rect(segment_rect)
     has_used_rect, used_rect := stack_panel_accumulate_used_rect(params.cursor_in, segment_rect)
 
     cursor_out := Stack_Panel_Cursor{

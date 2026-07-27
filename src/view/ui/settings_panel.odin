@@ -55,7 +55,7 @@ draw_settings_fps_checkbox :: proc(
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.checkbox_press_active, &ui_runtime.checkbox_press_id)
+    }, &ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
         ui_runtime.display_fps = checkbox_result.checked_out
     }
@@ -92,7 +92,7 @@ draw_settings_limit_fps_checkbox :: proc(
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.checkbox_press_active, &ui_runtime.checkbox_press_id)
+    }, &ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
         ui_runtime.limit_fps = checkbox_result.checked_out
         if checkbox_result.checked_out {
@@ -138,7 +138,7 @@ draw_settings_simd_projection_checkbox :: proc(
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.checkbox_press_active, &ui_runtime.checkbox_press_id)
+    }, &ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
         ui_runtime.use_simd_batch_projection = checkbox_result.checked_out
     }
@@ -239,26 +239,18 @@ draw_settings_view :: proc(
         cursor_in = stack_cursor,
     })
 
-    _, slider_track, slider_hit := build_settings_slider_layout(panel)
-    ui_text("Maximum Dust particles",
-        int(panel.x + SETTINGS_PANEL_INSET), int(slider_label_row.segment_rect.y),
-        UI_TEXT_COLOR,
-        font)
-
     max_particles := core.MAX_LOW_PARTICLES
-    ps.use_max_dust_particles = clamp(ps.use_max_dust_particles, 0, max_particles)
-
-    ratio := slider_value_ratio(ps.use_max_dust_particles, max_particles)
-    knob_center_x, knob := build_slider_knob(slider_track, ratio)
-
-    update_use_max_particles_slider(ps, ui_runtime, mouse_input, max_particles,
-        slider_track, slider_hit, knob, knob_center_x)
-
-    ratio = slider_value_ratio(ps.use_max_dust_particles, max_particles)
-    knob_center_x, knob = build_slider_knob(slider_track, ratio)
-
-    draw_use_max_particles_slider(panel, slider_track, knob_center_x, knob,
-        ps.use_max_dust_particles, max_particles, font)
+    draw_settings_integer_slider(
+        panel,
+        slider_label_row.segment_rect.y,
+        mouse_input,
+        ui_runtime,
+        SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
+        "Maximum Dust particles",
+        &ps.use_max_dust_particles,
+        0,
+        max_particles,
+        font)
     draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, font)
     draw_settings_fps_checkbox(panel, fps_row.segment_rect.y, mouse_input, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)

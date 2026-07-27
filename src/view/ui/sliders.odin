@@ -3,38 +3,10 @@ package ui
 import "../../core"
 
 import "core:fmt"
-import "core:math"
 
 import rl "vendor:raylib"
 
-//   Compute label, track, and hit rectangles for the dust slider.
-build_settings_slider_layout :: proc(panel: rl.Rectangle) -> (f32, rl.Rectangle, rl.Rectangle) {
-    slider_label_y := panel.y + SETTINGS_SLIDER_LABEL_TOP_OFFSET
-
-    slider_track := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
-        slider_label_y + SETTINGS_TRACK_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        SETTINGS_TRACK_HEIGHT,
-    }
-
-    slider_hit := rl.Rectangle{
-        slider_track.x,
-        slider_track.y - SETTINGS_TRACK_HIT_PAD_Y,
-        slider_track.width,
-        slider_track.height + SETTINGS_TRACK_HIT_PAD_Y * 2,
-    }
-
-    return slider_label_y, slider_track, slider_hit
-}
-
-//   Convert an integer slider value into normalized [0,1] ratio.
-slider_value_ratio :: proc(value, max_value: int) -> f32 {
-    if max_value <= 0 {
-        return 0
-    }
-    return f32(value) / f32(max_value)
-}
+SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 
 //   Build knob geometry from track bounds and normalized ratio.
 build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
@@ -48,83 +20,174 @@ build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Re
     return knob_center_x, knob
 }
 
-//   Apply wheel/drag input to update max dust particle setting.
-update_use_max_particles_slider :: proc(
-    ps: ^core.Particle_System,
+//   Scale a rectangle around its center for hover/press visual feedback.
+scale_rect_about_center :: #force_inline proc(rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
+    if scale <= 0 {
+        return rect
+    }
+
+    center_x := rect.x + rect.width * 0.5
+    center_y := rect.y + rect.height * 0.5
+    width := rect.width * scale
+    height := rect.height * scale
+
+    return rl.Rectangle{
+        center_x - width * 0.5,
+        center_y - height * 0.5,
+        width,
+        height,
+    }
+}
+
+//   Build the slider track rectangle for one settings row.
+slider_track_rect :: #force_inline proc(panel: rl.Rectangle, row_y: f32) -> rl.Rectangle {
+    return rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y + SETTINGS_TRACK_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        SETTINGS_TRACK_HEIGHT,
+    }
+}
+
+//   Build the expanded hit area around a slider track.
+slider_hit_rect :: #force_inline proc(track: rl.Rectangle) -> rl.Rectangle {
+    return rl.Rectangle{
+        track.x,
+        track.y - SETTINGS_TRACK_HIT_PAD_Y,
+        track.width,
+        track.height + SETTINGS_TRACK_HIT_PAD_Y * 2,
+    }
+}
+
+//   Apply one wheel-step value change when the pointer is over the slider hit area.
+slider_apply_wheel_step :: proc(
+    clamped: ^int,
+    min_value, max_value: int,
+    mouse_input: Mouse_Input_State,
+    hit: rl.Rectangle) {
+
+    if !rl.CheckCollisionPointRec(mouse_input.position, hit) {
+        return
+    }
+
+    wheel := mouse_input.wheel_delta
+    if wheel == 0 {
+        return
+    }
+
+    delta := 1
+    if wheel < 0 {
+        delta = -1
+    }
+    clamped^ = clamp(clamped^ + delta, min_value, max_value)
+}
+
+//   Return whether this slider currently owns the shared global press state.
+slider_owns_press :: #force_inline proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    press_id: int) -> bool {
+
+    return ui_runtime.ui_press_owner.active &&
+        ui_runtime.ui_press_owner.kind == .Slider &&
+        ui_runtime.ui_press_owner.id == press_id
+}
+
+//   Capture shared press ownership for this slider if no control currently owns it.
+slider_try_capture_press :: proc(
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     mouse_input: Mouse_Input_State,
-    max_particles: int,
-    slider_track: rl.Rectangle,
-    slider_hit: rl.Rectangle,
-    knob: rl.Rectangle,
-    knob_center_x: f32) {
+    press_id: int,
+    hovered_hit: bool,
+    owns_press: ^bool) {
 
-    if !mouse_input.left_down {
-        ui_runtime.settings_slider_dragging = false
+    if ui_runtime.ui_press_owner.active || !mouse_input.left_pressed || !hovered_hit {
+        return
     }
 
-    if mouse_input.left_pressed && rl.CheckCollisionPointRec(mouse_input.position, knob) {
-        ui_runtime.settings_slider_dragging = true
-        ui_runtime.settings_slider_drag_offset_x = mouse_input.position.x - knob_center_x
-    }
-
-    slider_hovered := rl.CheckCollisionPointRec(mouse_input.position, slider_hit)
-    if slider_hovered {
-        wheel := mouse_input.wheel_delta
-        if wheel != 0 {
-            step := max(1, max_particles / 64)
-            delta := int(math.round(f64(wheel * f32(step))))
-            if delta == 0 {
-                if wheel > 0 {
-                    delta = step
-                } else {
-                    delta = -step
-                }
-            }
-
-            next_value := ps.use_max_dust_particles + delta
-            ps.use_max_dust_particles = clamp(next_value, 0, max_particles)
-        }
-    }
-
-    if slider_track.width > 0 && ui_runtime.settings_slider_dragging &&
-        mouse_input.left_down {
-
-        knob_target_x := mouse_input.position.x - ui_runtime.settings_slider_drag_offset_x
-        t_drag := clamp((knob_target_x - slider_track.x) / slider_track.width, 0, 1)
-        next_value := int(t_drag * f32(max_particles) + 0.5)
-        ps.use_max_dust_particles = clamp(next_value, 0, max_particles)
-    }
+    ui_runtime.ui_press_owner.active = true
+    ui_runtime.ui_press_owner.kind = .Slider
+    ui_runtime.ui_press_owner.id = press_id
+    owns_press^ = true
 }
 
-//   Render dust-capacity slider fill, knob, and value text.
-draw_use_max_particles_slider :: proc(
+//   Release shared press ownership when the current mouse hold ends.
+slider_release_if_needed :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    mouse_input: Mouse_Input_State,
+    owns_press: ^bool) {
+
+    if !owns_press^ || mouse_input.left_down {
+        return
+    }
+
+    ui_runtime.ui_press_owner.active = false
+    ui_runtime.ui_press_owner.kind = .None
+    ui_runtime.ui_press_owner.id = -1
+    owns_press^ = false
+}
+
+//   Apply drag position to compute slider value while this slider owns press.
+slider_apply_drag_value :: proc(
+    clamped: ^int,
+    min_value, max_value: int,
+    denom: int,
+    mouse_input: Mouse_Input_State,
+    track: rl.Rectangle,
+    owns_press: bool) {
+
+    if !owns_press || !mouse_input.left_down || track.width <= 0 {
+        return
+    }
+
+    t := clamp((mouse_input.position.x - track.x) / track.width, 0, 1)
+    clamped^ = clamp(min_value + int(t * f32(denom) + 0.5), min_value, max_value)
+}
+
+//   Build knob draw rect and color with icon-button-style hover/press feedback.
+slider_knob_draw_style :: proc(
+    knob: rl.Rectangle,
     panel: rl.Rectangle,
-    slider_track: rl.Rectangle,
-    knob_center_x: f32,
-    knob: rl.Rectangle,
-    current_value: int,
-    max_particles: int,
-    font: rl.Font) {
-    rl.DrawRectangleRec(slider_track, BACKGROUND_COLOR)
-    rl.DrawRectangleRec(rl.Rectangle{
-        slider_track.x,
-        slider_track.y,
-        max(0.0, knob_center_x - slider_track.x),
-        slider_track.height,
-    }, UI_BORDER_COLOR)
-    rl.DrawRectangleRec(knob, UI_TEXT_COLOR)
+    mouse_input: Mouse_Input_State,
+    pressed_knob: bool) -> (rl.Rectangle, rl.Color) {
 
-    use_max_text := fmt.tprintf("%d / %d", current_value, max_particles)
-    ui_text(use_max_text, int(panel.x + SETTINGS_PANEL_INSET),
-        int(slider_track.y + SETTINGS_VALUE_TOP_OFFSET), UI_TEXT_COLOR, font)
+    hovered_knob := rl.CheckCollisionPointRec(mouse_input.position, knob) &&
+        rl.CheckCollisionPointRec(mouse_input.position, panel)
+
+    knob_hover_t: f32 = 0
+    if hovered_knob {
+        knob_hover_t = 1
+    }
+
+    knob_press_t: f32 = 0
+    if pressed_knob {
+        knob_press_t = 1
+    }
+
+    knob_scale := 1.0 + ICON_BUTTON_HOVER_SCALE_ADD * knob_hover_t -
+        ICON_BUTTON_PRESS_SCALE_SUB * knob_press_t
+    knob_draw := scale_rect_about_center(knob, knob_scale)
+
+    knob_color := UI_TEXT_COLOR
+    if knob_press_t > 0 {
+        knob_color = icon_button_darken(knob_color, knob_press_t)
+    }
+
+    if pressed_knob {
+        knob_draw.x += 0.5
+        knob_draw.y += 0.5
+    }
+
+    return knob_draw, knob_color
 }
+
 
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    press_id: int,
     label: string,
     value: ^int,
     min_value, max_value: int,
@@ -132,47 +195,30 @@ draw_settings_integer_slider :: proc(
 
     ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
-    track := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
-        row_y + SETTINGS_TRACK_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        SETTINGS_TRACK_HEIGHT,
-    }
-
-    hit := rl.Rectangle{
-        track.x,
-        track.y - SETTINGS_TRACK_HIT_PAD_Y,
-        track.width,
-        track.height + SETTINGS_TRACK_HIT_PAD_Y * 2,
-    }
+    track := slider_track_rect(panel, row_y)
+    hit := slider_hit_rect(track)
 
     clamped := clamp(value^, min_value, max_value)
     denom := max(1, max_value - min_value)
     ratio := f32(clamped - min_value) / f32(denom)
     knob_center_x, knob := build_slider_knob(track, ratio)
 
-    if rl.CheckCollisionPointRec(mouse_input.position, hit) {
-        wheel := mouse_input.wheel_delta
-        if wheel != 0 {
-            delta := 1
-            if wheel < 0 {
-                delta = -1
-            }
-            clamped = clamp(clamped + delta, min_value, max_value)
-        }
-    }
+    slider_apply_wheel_step(&clamped, min_value, max_value, mouse_input, hit)
 
-    if mouse_input.left_down && rl.CheckCollisionPointRec(mouse_input.position, hit) {
-        if track.width > 0 {
-            t := clamp((mouse_input.position.x - track.x) / track.width, 0, 1)
-            clamped = clamp(min_value + int(t * f32(denom) + 0.5), min_value, max_value)
-        }
-    }
+    hovered_hit := rl.CheckCollisionPointRec(mouse_input.position, hit)
+
+    owns_press := slider_owns_press(ui_runtime, press_id)
+    slider_try_capture_press(ui_runtime, mouse_input, press_id, hovered_hit, &owns_press)
+    slider_release_if_needed(ui_runtime, mouse_input, &owns_press)
+    slider_apply_drag_value(&clamped, min_value, max_value, denom, mouse_input, track, owns_press)
 
     value^ = clamped
 
     ratio = f32(clamped - min_value) / f32(denom)
     knob_center_x, knob = build_slider_knob(track, ratio)
+
+    pressed_knob := owns_press && mouse_input.left_down
+    knob_draw, knob_color := slider_knob_draw_style(knob, panel, mouse_input, pressed_knob)
 
     rl.DrawRectangleRec(track, BACKGROUND_COLOR)
     rl.DrawRectangleRec(
@@ -183,9 +229,9 @@ draw_settings_integer_slider :: proc(
             track.height,
         },
         UI_BORDER_COLOR)
-    rl.DrawRectangleRec(knob, UI_TEXT_COLOR)
+    rl.DrawRectangleRec(knob_draw, knob_color)
 
     ui_text(fmt.tprintf("%d", clamped),
-        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 18), int(row_y),
+        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 32), int(row_y),
         UI_TEXT_COLOR, font)
 }

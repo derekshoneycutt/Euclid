@@ -23,18 +23,6 @@ Tree_Expander_Result :: struct {
     clicked: bool,
 }
 
-//   Clamp expander rect so hover tests never evaluate negative dimensions.
-tree_expander_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
 //   Convert screen-space mouse position into local expander coordinates.
 tree_expander_local_mouse :: #force_inline proc(
     mouse: Mouse_Input_State,
@@ -76,7 +64,7 @@ tree_expander_scaled_rect :: #force_inline proc(rect: rl.Rectangle, scale: f32) 
 //   Draw one tree expander chevron and report hover/click hit state.
 //   Click is gated by caller-provided toggle_triggered to preserve row click semantics.
 draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result {
-    expander_rect := tree_expander_clamp_rect(params.rect)
+    expander_rect := clamp_non_negative_rect(params.rect)
 
     local_mouse := tree_expander_local_mouse(params.mouse, params.scroll_offset)
     hovered := params.interaction_enabled &&

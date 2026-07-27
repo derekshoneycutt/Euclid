@@ -1,5 +1,7 @@
 package ui
 
+import "../../core"
+
 import rl "vendor:raylib"
 
 ICON_BUTTON_DEFAULT_INSET_SCALE :: 0.86
@@ -36,12 +38,51 @@ Icon_Button_Result :: struct {
     clicked: bool,
 }
 
-icon_button_clamp01 :: #force_inline proc(v: f32) -> f32 {
-    return max(0.0, min(1.0, v))
+//   Return whether this icon button owns the shared press state.
+icon_button_owns_press :: #force_inline proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int) -> bool {
+
+    return press_owner^.active &&
+        press_owner^.kind == .Icon_Button &&
+        press_owner^.id == id
+}
+
+//   Capture shared press ownership for an icon button on initial click.
+icon_button_try_capture_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    params: Icon_Button_Params,
+    hovered: bool,
+    owns_press: ^bool) {
+
+    if press_owner^.active || !params.interaction_enabled || !params.mouse.left_pressed || !hovered {
+        return
+    }
+
+    press_owner^.active = true
+    press_owner^.kind = .Icon_Button
+    press_owner^.id = params.id
+    owns_press^ = true
+}
+
+//   Release shared press ownership for an icon button when the mouse hold ends.
+icon_button_release_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    owns_press: ^bool,
+    mouse: Mouse_Input_State) {
+
+    if !owns_press^ || mouse.left_down {
+        return
+    }
+
+    press_owner^.active = false
+    press_owner^.kind = .None
+    press_owner^.id = -1
+    owns_press^ = false
 }
 
 icon_button_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Color {
-    t := icon_button_clamp01(amount)
+    t :=  clamp(amount, 0.0, 1.0)
     factor := 1.0 - (ICON_BUTTON_PRESS_DARKEN * t)
     return rl.Color{
         u8(f32(color.r) * factor),
@@ -49,18 +90,6 @@ icon_button_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Col
         u8(f32(color.b) * factor),
         color.a,
     }
-}
-
-//   Clamp a rectangle so width and height are never negative.
-icon_button_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
 }
 
 //   Resolve local mouse position from screen-space plus scroll offset.
@@ -76,7 +105,7 @@ icon_button_icon_draw_rect :: #force_inline proc(
     rect: rl.Rectangle,
     inset_scale: f32) -> rl.Rectangle {
 
-    draw_rect := icon_button_clamp_rect(rect)
+    draw_rect := clamp_non_negative_rect(rect)
     base_size := min(draw_rect.width, draw_rect.height)
     use_scale := max(inset_scale, 0.0)
     if use_scale <= 0 {
@@ -115,14 +144,18 @@ draw_icon_button_glyph :: proc(icon_id: Icon_Button_Id, rect: rl.Rectangle, colo
 }
 
 //   Draw and resolve one icon button interaction result.
-draw_icon_button :: proc(params: Icon_Button_Params) -> Icon_Button_Result {
-    slot_rect := icon_button_clamp_rect(params.rect)
+draw_icon_button :: proc(
+    params: Icon_Button_Params,
+    press_owner: ^core.Ui_Press_Owner_State) -> Icon_Button_Result {
+    slot_rect := clamp_non_negative_rect(params.rect)
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 
     hovered := params.interaction_enabled &&
         rl.CheckCollisionPointRec(local_mouse, slot_rect) &&
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
-    pressed := hovered && params.mouse.left_down
+    owns_press := icon_button_owns_press(press_owner, params.id)
+    icon_button_try_capture_press(press_owner, params, hovered, &owns_press)
+    pressed := owns_press && params.mouse.left_down
 
     hover_t: f32 = 0
     if hovered {
@@ -134,7 +167,11 @@ draw_icon_button :: proc(params: Icon_Button_Params) -> Icon_Button_Result {
         press_t = 1
     }
 
-    return draw_icon_button_with_visual_state(params, hover_t, press_t, true)
+    result := draw_icon_button_with_visual_state(params, hover_t, press_t, true)
+    result.pressed = pressed
+    result.clicked = owns_press && params.mouse.left_pressed
+    icon_button_release_press(press_owner, &owns_press, params.mouse)
+    return result
 }
 
 //   Draw icon button using externally supplied visual hover/press intensities.
@@ -144,20 +181,20 @@ draw_icon_button_with_visual_state :: proc(
     press_t: f32,
     draw_slot_fill: bool) -> Icon_Button_Result {
 
-    slot_rect := icon_button_clamp_rect(params.rect)
+    slot_rect := clamp_non_negative_rect(params.rect)
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 
     hovered := params.interaction_enabled &&
         rl.CheckCollisionPointRec(local_mouse, slot_rect) &&
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
-    pressed := hovered && params.mouse.left_down
     clicked := hovered && params.mouse.left_pressed
 
-    use_hover_t := icon_button_clamp01(hover_t)
-    use_press_t := icon_button_clamp01(press_t)
+    use_hover_t :=  clamp(hover_t, 0.0, 1.0)
+    use_press_t :=  clamp(press_t, 0.0, 1.0)
+    visual_pressed := use_press_t > 0
 
     icon_color := UI_TEXT_COLOR
-    if (params.toggle || pressed) && draw_slot_fill {
+    if (params.toggle || visual_pressed) && draw_slot_fill {
         rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
         icon_color = BACKGROUND_COLOR
     }
@@ -169,7 +206,7 @@ draw_icon_button_with_visual_state :: proc(
     scale := 1.0 + ICON_BUTTON_HOVER_SCALE_ADD * use_hover_t -
         ICON_BUTTON_PRESS_SCALE_SUB * use_press_t
     icon_drawn_rect := icon_button_icon_draw_rect(slot_rect, params.inset_scale * scale)
-    if pressed {
+    if visual_pressed {
         icon_drawn_rect.x += 0.5
         icon_drawn_rect.y += 0.5
     }
@@ -179,7 +216,7 @@ draw_icon_button_with_visual_state :: proc(
     return Icon_Button_Result{
         icon_drawn_rect = icon_drawn_rect,
         hovered = hovered,
-        pressed = pressed,
+        pressed = visual_pressed,
         clicked = clicked,
     }
 }

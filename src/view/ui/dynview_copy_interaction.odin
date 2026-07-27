@@ -13,12 +13,8 @@ COPY_ICON_PRESS_RISE_SPEED :: 32.0
 COPY_ICON_PRESS_FALL_SPEED :: 24.0
 COPY_ICON_CLICK_LINGER_SECONDS :: 0.1
 
-copy_icon_clamp01 :: #force_inline proc(v: f32) -> f32 {
-    return max(0.0, min(1.0, v))
-}
-
 copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32 {
-    t := copy_icon_clamp01(speed * dt)
+    t :=  clamp(speed * dt, 0.0, 1.0)
     return current + (target - current) * t
 }
 
@@ -166,7 +162,7 @@ copy_icon_linger_t :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, is_l
         return 0
     }
 
-    return copy_icon_clamp01(runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS)
+    return  clamp(runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
 }
 
 //   Draw one copy icon with hover and click feedback, returning click hit state.

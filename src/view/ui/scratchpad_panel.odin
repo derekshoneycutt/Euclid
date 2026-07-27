@@ -157,6 +157,7 @@ draw_scratchpad_output_and_prompt :: proc(
         rl.Vector2{},
         output_panel,
         scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime^.ui_press_owner,
         scratch_scroll_state)
     output_panel = scratch_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_begin.scroll_y_out
@@ -197,7 +198,8 @@ draw_scratchpad_output_and_prompt :: proc(
         state^.ui_runtime.view_text_scroll_y,
         mouse_input,
         rl.Vector2{},
-        output_panel)
+        output_panel,
+        &ui_runtime^.ui_press_owner)
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = scratch_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = scratch_scroll_end.state_out.drag_offset_y
@@ -237,7 +239,7 @@ draw_scratchpad_output_and_prompt :: proc(
         char_advance = TEXT_WRAP_ADVANCE,
         prompt_prefix = "> ",
         caret_blink_half_period_seconds = SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS,
-    }, &ui_runtime^.input_box_press_active, &ui_runtime^.input_box_press_id)
+    }, &ui_runtime^.ui_press_owner)
 
     ui_runtime^.scratchpad_input_len = input_result.text_len_out
     ui_runtime^.scratchpad_input_cursor = input_result.caret_col_out

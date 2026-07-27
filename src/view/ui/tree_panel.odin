@@ -23,6 +23,7 @@ draw_tree_view :: proc(
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
     toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input,
+        &ui_runtime.ui_press_owner,
         ui_runtime.show_tree_gif, ui_runtime.show_tree_settings, ui_runtime.simulation_paused)
 
     if toolbar_hit.RefreshRequested {
@@ -287,7 +288,7 @@ draw_tree_node_row :: proc(
         scroll_offset = scroll_offset,
         interaction_space_rect = interaction_space_rect,
         interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
-    }, &ui_runtime.tree_list_item_press_active, &ui_runtime.tree_list_item_press_id)
+    }, &ui_runtime.ui_press_owner)
 
     if node.first_child_id >= 0 {
         expander_result := draw_tree_expander(Tree_Expander_Params{
@@ -401,13 +402,7 @@ build_tree_view_panels :: proc(
         inner_h - TREE_TOOLBAR_HEIGHT - TREE_TOOLBAR_GAP,
     }
 
-    if list_panel.width < 0 {
-        list_panel.width = 0
-    }
-
-    if list_panel.height < 0 {
-        list_panel.height = 0
-    }
+    list_panel = clamp_non_negative_rect(list_panel)
 
     return toolbar_panel, list_panel
 }
@@ -442,6 +437,7 @@ draw_tree_list_panel :: proc(
         rl.Vector2{},
         list_panel,
         TREE_ROW_HEIGHT * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime.ui_press_owner,
         tree_scroll_state)
     view_panel := tree_scroll_begin.view_rect
     scroll_y^ = tree_scroll_begin.scroll_y_out
@@ -456,9 +452,13 @@ draw_tree_list_panel :: proc(
         allow_tree_clicks, mouse_input, rl.Vector2{}, view_panel, font)
     apply_tree_hit(ji, ui_runtime, hit)
 
-    if ui_runtime.tree_list_item_press_active && mouse_input.left_released {
-        ui_runtime.tree_list_item_press_active = false
-        ui_runtime.tree_list_item_press_id = -1
+    if ui_runtime.ui_press_owner.active &&
+        ui_runtime.ui_press_owner.kind == .List_Item &&
+        mouse_input.left_released {
+
+        ui_runtime.ui_press_owner.active = false
+        ui_runtime.ui_press_owner.kind = .None
+        ui_runtime.ui_press_owner.id = -1
     }
 
     tree_scroll_end := scroll_container_end(
@@ -467,7 +467,8 @@ draw_tree_list_panel :: proc(
         scroll_y^,
         mouse_input,
         rl.Vector2{},
-        view_panel)
+        view_panel,
+        &ui_runtime.ui_press_owner)
     scroll_y^ = tree_scroll_end.scroll_y_out
     ui_runtime.tree_scroll_dragging = tree_scroll_end.state_out.is_dragging_thumb
     ui_runtime.tree_scroll_drag_off = tree_scroll_end.state_out.drag_offset_y

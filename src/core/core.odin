@@ -834,25 +834,35 @@ Ui_Dynview_Runtime :: struct {
     compile_cache: Ui_Dynview_Compile_Cache,
 }
 
+Ui_Press_Owner_Kind :: enum {
+    None,
+    List_Item,
+    Icon_Button,
+    Text_Button,
+    Checkbox,
+    Input_Box,
+    Slider,
+    Scrollbar,
+}
+
+Ui_Press_Owner_State :: struct {
+    active: bool,
+    kind: Ui_Press_Owner_Kind,
+    id: int,
+}
+
 Euclid_UI_Runtime_State :: struct {
     tree_scroll_y: f32,
     view_text_scroll_y: f32,
 
     tree_scroll_dragging: bool,
     tree_scroll_drag_off: f32,
-    tree_list_item_press_active: bool,
-    tree_list_item_press_id: int,
+    ui_press_owner: Ui_Press_Owner_State,
 
     show_tree_settings: bool,
     show_tree_gif: bool,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
-    text_button_press_active: bool,
-    text_button_press_id: int,
-    checkbox_press_active: bool,
-    checkbox_press_id: int,
-    input_box_press_active: bool,
-    input_box_press_id: int,
 
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,

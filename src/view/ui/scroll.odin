@@ -1,5 +1,7 @@
 package ui
 
+import "../../core"
+
 import rl "vendor:raylib"
 
 Scroll_Container_State :: struct {
@@ -45,24 +47,61 @@ scroll_container_local_mouse :: #force_inline proc(
     }
 }
 
-//   Clamp rectangle dimensions so width and height are never negative.
-scroll_container_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
 //   Return whether local pointer input is inside the active interaction space.
 scroll_container_in_interaction_space :: #force_inline proc(
     local_mouse: rl.Vector2,
     interaction_space_rect: rl.Rectangle) -> bool {
 
     return rl.CheckCollisionPointRec(local_mouse, interaction_space_rect)
+}
+
+//   Return whether the shared press owner currently belongs to this scrollbar.
+scroll_container_owns_press :: #force_inline proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int) -> bool {
+
+    return press_owner^.active &&
+        press_owner^.kind == .Scrollbar &&
+        press_owner^.id == id
+}
+
+//   Capture shared press ownership for a scrollbar thumb when available.
+scroll_container_try_capture_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int,
+    mouse_input: Mouse_Input_State,
+    hovered_thumb: bool,
+    local_mouse: rl.Vector2,
+    thumb_rect: rl.Rectangle,
+    is_dragging_thumb: ^bool,
+    drag_offset_y: ^f32) {
+
+    if press_owner^.active || !mouse_input.left_pressed || !hovered_thumb {
+        return
+    }
+
+    press_owner^.active = true
+    press_owner^.kind = .Scrollbar
+    press_owner^.id = id
+    is_dragging_thumb^ = true
+    drag_offset_y^ = local_mouse.y - thumb_rect.y
+}
+
+//   Release shared press ownership when a scrollbar thumb drag ends.
+scroll_container_release_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int,
+    is_dragging_thumb: ^bool,
+    drag_offset_y: ^f32) {
+
+    if scroll_container_owns_press(press_owner, id) {
+        press_owner^.active = false
+        press_owner^.kind = .None
+        press_owner^.id = -1
+    }
+
+    is_dragging_thumb^ = false
+    drag_offset_y^ = 0
 }
 
 //   Create scroll-container frame state and apply wheel scrolling from hint data.
@@ -75,9 +114,10 @@ scroll_container_begin :: proc(
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     wheel_step: f32,
+    press_owner: ^core.Ui_Press_Owner_State,
     state_in: Scroll_Container_State) -> Scroll_Container_Begin_Result {
 
-    view_rect := scroll_container_clamp_rect(rect)
+    view_rect := clamp_non_negative_rect(rect)
     local_mouse := scroll_container_local_mouse(mouse_input, scroll_offset)
     in_interaction := scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
     hovered_view := in_interaction && rl.CheckCollisionPointRec(local_mouse, view_rect)
@@ -114,9 +154,22 @@ scroll_container_begin :: proc(
 
     is_dragging_thumb := state_in.is_dragging_thumb
     drag_offset_y := state_in.drag_offset_y
-    if had_overflow_hint && !is_dragging_thumb && mouse_input.left_pressed && hovered_thumb {
-        is_dragging_thumb = true
-        drag_offset_y = local_mouse.y - thumb_hint.y
+    owns_press := scroll_container_owns_press(press_owner, id)
+    if had_overflow_hint && is_dragging_thumb && !owns_press {
+        is_dragging_thumb = false
+        drag_offset_y = 0
+    }
+
+    if had_overflow_hint && !is_dragging_thumb {
+        scroll_container_try_capture_press(
+            press_owner,
+            id,
+            mouse_input,
+            hovered_thumb,
+            local_mouse,
+            thumb_hint,
+            &is_dragging_thumb,
+            &drag_offset_y)
     }
 
     scroll_ref := Scroll_Container_Ref{
@@ -152,7 +205,8 @@ scroll_container_end :: proc(
     scroll_y_in: f32,
     mouse_input: Mouse_Input_State,
     scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle) -> Scroll_Container_End_Result {
+    interaction_space_rect: rl.Rectangle,
+    press_owner: ^core.Ui_Press_Owner_State) -> Scroll_Container_End_Result {
 
     defer rl.EndScissorMode()
 
@@ -169,8 +223,11 @@ scroll_container_end :: proc(
     max_scroll := max(0.0, content_height_final - view_rect.height)
     if max_scroll <= 0 {
         scroll_y_out = 0
-        state_out.is_dragging_thumb = false
-        state_out.drag_offset_y = 0
+        scroll_container_release_press(
+            press_owner,
+            scroll_ref.id,
+            &state_out.is_dragging_thumb,
+            &state_out.drag_offset_y)
         return Scroll_Container_End_Result{
             scroll_y_out = scroll_y_out,
             state_out = state_out,
@@ -190,8 +247,11 @@ scroll_container_end :: proc(
         SCROLLBAR_WIDTH,
         SCROLLBAR_THUMB_MIN_HEIGHT)
     if !has_scrollbar {
-        state_out.is_dragging_thumb = false
-        state_out.drag_offset_y = 0
+        scroll_container_release_press(
+            press_owner,
+            scroll_ref.id,
+            &state_out.is_dragging_thumb,
+            &state_out.drag_offset_y)
         return Scroll_Container_End_Result{
             scroll_y_out = scroll_y_out,
             state_out = state_out,
@@ -201,17 +261,25 @@ scroll_container_end :: proc(
         }
     }
 
-    if !state_out.is_dragging_thumb && mouse_input.left_pressed &&
-        rl.CheckCollisionPointRec(local_mouse, thumb_rect) {
-
-        state_out.is_dragging_thumb = true
-        state_out.drag_offset_y = local_mouse.y - thumb_rect.y
+    if !state_out.is_dragging_thumb {
+        scroll_container_try_capture_press(
+            press_owner,
+            scroll_ref.id,
+            mouse_input,
+            rl.CheckCollisionPointRec(local_mouse, thumb_rect),
+            local_mouse,
+            thumb_rect,
+            &state_out.is_dragging_thumb,
+            &state_out.drag_offset_y)
     }
 
     if state_out.is_dragging_thumb {
         if !mouse_input.left_down {
-            state_out.is_dragging_thumb = false
-            state_out.drag_offset_y = 0
+            scroll_container_release_press(
+                press_owner,
+                scroll_ref.id,
+                &state_out.is_dragging_thumb,
+                &state_out.drag_offset_y)
         } else {
             thumb_range := view_rect.height - thumb_h
             if thumb_range <= SCROLLBAR_DRAG_EPSILON {

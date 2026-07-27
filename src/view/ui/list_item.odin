@@ -1,5 +1,7 @@
 package ui
 
+import "../../core"
+
 import rl "vendor:raylib"
 
 LIST_ITEM_ACTIVE_PRESS_ALPHA :: 96
@@ -22,18 +24,6 @@ List_Item_Result :: struct {
     clicked: bool,
 }
 
-//   Clamp a rectangle so width and height are never negative.
-list_item_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
 //   Convert screen-space mouse position into local interaction space.
 list_item_local_mouse :: #force_inline proc(
     mouse_input: Mouse_Input_State,
@@ -48,10 +38,9 @@ list_item_local_mouse :: #force_inline proc(
 //   Resolve one list-row interaction and draw visual state.
 draw_list_item :: proc(
     params: List_Item_Params,
-    press_active: ^bool,
-    press_id: ^int) -> List_Item_Result {
+    press_owner: ^core.Ui_Press_Owner_State) -> List_Item_Result {
 
-    drawn_rect := list_item_clamp_rect(params.rect)
+    drawn_rect := clamp_non_negative_rect(params.rect)
     inner_rect := drawn_rect
 
     local_mouse := list_item_local_mouse(params.mouse, params.scroll_offset)
@@ -59,18 +48,22 @@ draw_list_item :: proc(
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     hovered := hovered_item && hovered_space
 
-    owns_press := press_active^ && press_id^ == params.id
-    if params.interaction_enabled && !owns_press && params.mouse.left_pressed && hovered {
-        press_active^ = true
-        press_id^ = params.id
+    owns_press := press_owner^.active &&
+        press_owner^.kind == .List_Item &&
+        press_owner^.id == params.id
+    if params.interaction_enabled && !press_owner^.active && params.mouse.left_pressed && hovered {
+        press_owner^.active = true
+        press_owner^.kind = .List_Item
+        press_owner^.id = params.id
         owns_press = true
     }
 
     clicked := false
     if owns_press && params.mouse.left_released {
         clicked = hovered_item
-        press_active^ = false
-        press_id^ = -1
+        press_owner^.active = false
+        press_owner^.kind = .None
+        press_owner^.id = -1
         owns_press = false
     }
 

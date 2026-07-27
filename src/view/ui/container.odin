@@ -12,18 +12,6 @@ Container_Draw_Result :: struct {
     inner_rect: rl.Rectangle,
 }
 
-//   Clamp a rectangle so width and height are never negative.
-clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
 //   Resolve container fill color from the selected visual family variant.
 container_fill_color :: #force_inline proc(fill_variant: Container_Fill_Variant) -> rl.Color {
     switch fill_variant {

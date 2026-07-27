@@ -61,6 +61,7 @@ draw_view_text_panel :: proc(
         rl.Vector2{},
         text_panel,
         scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime^.ui_press_owner,
         text_scroll_state)
     text_panel = text_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = text_scroll_begin.scroll_y_out
@@ -94,7 +95,8 @@ draw_view_text_panel :: proc(
         state^.ui_runtime.view_text_scroll_y,
         mouse_input,
         rl.Vector2{},
-        text_panel)
+        text_panel,
+        &ui_runtime^.ui_press_owner)
     state^.ui_runtime.view_text_scroll_y = text_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = text_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = text_scroll_end.state_out.drag_offset_y

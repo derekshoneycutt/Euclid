@@ -1,5 +1,7 @@
 package ui
 
+import "../../core"
+
 import rl "vendor:raylib"
 
 Tree_Toolbar_Hit :: struct {
@@ -13,6 +15,7 @@ Tree_Toolbar_Hit :: struct {
 draw_tree_toolbar :: proc(
     panel: rl.Rectangle,
     mouse_input: Mouse_Input_State,
+    press_owner: ^core.Ui_Press_Owner_State,
     show_gif: bool,
     show_settings: bool,
     simulation_paused: bool) -> Tree_Toolbar_Hit {
@@ -117,7 +120,7 @@ draw_tree_toolbar :: proc(
         interaction_space_rect = panel,
         interaction_enabled = true,
         inset_scale = 1.0,
-    })
+    }, press_owner)
     hit.RefreshRequested = refresh_button.clicked
 
     pause_icon_id := Icon_Button_Id.Pause
@@ -134,7 +137,7 @@ draw_tree_toolbar :: proc(
         interaction_space_rect = panel,
         interaction_enabled = true,
         inset_scale = 1.0,
-    })
+    }, press_owner)
     hit.TogglePauseRequested = pause_button.clicked
 
     gif_button := draw_icon_button(Icon_Button_Params{
@@ -147,7 +150,7 @@ draw_tree_toolbar :: proc(
         interaction_space_rect = panel,
         interaction_enabled = true,
         inset_scale = 1.0,
-    })
+    }, press_owner)
     hit.ToggleGifRequested = gif_button.clicked
 
     settings_button := draw_icon_button(Icon_Button_Params{
@@ -160,7 +163,7 @@ draw_tree_toolbar :: proc(
         interaction_space_rect = panel,
         interaction_enabled = true,
         inset_scale = 1.0,
-    })
+    }, press_owner)
     hit.ToggleSettingsRequested = settings_button.clicked
     return hit
 }

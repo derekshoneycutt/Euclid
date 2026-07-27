@@ -36,12 +36,12 @@ TREE_ROW_LABEL_OFFSET_Y :: 2
 
 SETTINGS_PANEL_INSET :: 8
 SETTINGS_HEADER_TOP_OFFSET :: 8
-SETTINGS_SLIDER_LABEL_TOP_OFFSET :: 36
+SETTINGS_SLIDER_LABEL_TOP_OFFSET :: 32
 SETTINGS_TRACK_TOP_OFFSET :: 22
 SETTINGS_TRACK_HIT_PAD_Y :: 6
 SETTINGS_KNOB_PAD_Y :: 4
 SETTINGS_VALUE_TOP_OFFSET :: 16
-SETTINGS_STATS_TOP_OFFSET :: 46
+SETTINGS_STATS_TOP_OFFSET :: 26
 SETTINGS_STATS_ROW_GAP :: 22
 SETTINGS_TOGGLE_TOP_OFFSET :: 118
 SETTINGS_CHECKBOX_SIZE :: 14
@@ -106,6 +106,18 @@ Mouse_Input_State :: struct {
     left_down: bool,
     left_released: bool,
     timestamp_seconds: f64,
+}
+
+//   Clamp a rectangle so width and height are never negative.
+clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
+    clamped := rect
+    if clamped.width < 0 {
+        clamped.width = 0
+    }
+    if clamped.height < 0 {
+        clamped.height = 0
+    }
+    return clamped
 }
 
 //   Capture one canonical mouse input snapshot for this UI frame.

@@ -1,5 +1,6 @@
 package ui
 
+import "../../core"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -29,6 +30,93 @@ Checkbox_Result :: struct {
     pressed: bool,
 }
 
+//   Resolve checkbox label color from enabled state.
+checkbox_label_color :: #force_inline proc(enabled: bool) -> rl.Color {
+    if enabled {
+        return UI_TEXT_COLOR
+    }
+    return rl.Color{110, 110, 110, 255}
+}
+
+//   Measure and place the optional checkbox label, returning its rect and merged hit rect.
+checkbox_label_layout :: proc(
+    params: Checkbox_Params,
+    box_rect: rl.Rectangle,
+    hit_rect: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
+
+    if len(params.label) <= 0 {
+        return rl.Rectangle{}, hit_rect
+    }
+
+    label_x := box_rect.x + box_rect.width + params.label_offset_x
+    label_y := box_rect.y + params.label_offset_y
+    label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
+    measured := rl.MeasureTextEx(params.font, label_cstr, params.label_font_size, 0)
+    label_rect := rl.Rectangle{label_x, label_y, max(0.0, measured.x), max(0.0, measured.y)}
+    return label_rect, checkbox_union_rect(hit_rect, label_rect)
+}
+
+//   Resolve whether this checkbox currently owns the shared press state.
+checkbox_owns_press :: #force_inline proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    id: int) -> bool {
+
+    return press_owner^.active &&
+        press_owner^.kind == .Checkbox &&
+        press_owner^.id == id
+}
+
+//   Capture shared press ownership for a checkbox when it is newly pressed.
+checkbox_try_capture_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    params: Checkbox_Params,
+    hovered: bool,
+    can_interact: bool,
+    owns_press: ^bool) {
+
+    if !can_interact || press_owner^.active || !params.mouse.left_pressed || !hovered {
+        return
+    }
+
+    press_owner^.active = true
+    press_owner^.kind = .Checkbox
+    press_owner^.id = params.id
+    owns_press^ = true
+}
+
+//   Release shared press ownership and resolve checkbox toggle output.
+checkbox_release_press :: proc(
+    press_owner: ^core.Ui_Press_Owner_State,
+    params: Checkbox_Params,
+    can_interact: bool,
+    hovered_item: bool,
+    owns_press: ^bool) -> (bool, bool) {
+
+    if !owns_press^ || !params.mouse.left_released {
+        return false, params.checked
+    }
+
+    toggled := can_interact && hovered_item
+    checked_out := params.checked
+    if toggled {
+        checked_out = !params.checked
+    }
+
+    press_owner^.active = false
+    press_owner^.kind = .None
+    press_owner^.id = -1
+    owns_press^ = false
+    return toggled, checked_out
+}
+
+//   Resolve checkbox border and checkmark colors from enabled state.
+checkbox_mark_colors :: #force_inline proc(enabled: bool) -> (rl.Color, rl.Color) {
+    if enabled {
+        return UI_BORDER_COLOR, UI_TEXT_COLOR
+    }
+    return rl.Color{78, 78, 78, 255}, rl.Color{110, 110, 110, 255}
+}
+
 checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
     ax2 := a.x + a.width
     ay2 := a.y + a.height
@@ -40,18 +128,6 @@ checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
     max_x := max(ax2, bx2)
     max_y := max(ay2, by2)
     return rl.Rectangle{min_x, min_y, max(0.0, max_x - min_x), max(0.0, max_y - min_y)}
-}
-
-//   Clamp a rectangle so width and height are never negative.
-checkbox_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
 }
 
 //   Convert screen-space mouse position into local interaction space.
@@ -67,7 +143,7 @@ checkbox_local_mouse :: #force_inline proc(
 
 //   Build square checkbox box centered inside caller-provided rect.
 checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    drawn_rect := checkbox_clamp_rect(rect)
+    drawn_rect := clamp_non_negative_rect(rect)
     side := min(drawn_rect.width, drawn_rect.height)
 
     center_x := drawn_rect.x + drawn_rect.width * 0.5
@@ -83,60 +159,34 @@ checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
 //   Draw one checkbox and resolve release-confirmed toggle interaction.
 draw_checkbox :: proc(
     params: Checkbox_Params,
-    press_active: ^bool,
-    press_id: ^int) -> Checkbox_Result {
+    press_owner: ^core.Ui_Press_Owner_State) -> Checkbox_Result {
 
-    drawn_rect := checkbox_clamp_rect(params.rect)
+    drawn_rect := clamp_non_negative_rect(params.rect)
     box_rect := checkbox_box_drawn_rect(drawn_rect)
     local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
 
-    label_rect := rl.Rectangle{}
     hit_rect := drawn_rect
-    label_color := UI_TEXT_COLOR
-    if !params.enabled {
-        label_color = rl.Color{110, 110, 110, 255}
-    }
-    if len(params.label) > 0 {
-        label_x := box_rect.x + box_rect.width + params.label_offset_x
-        label_y := box_rect.y + params.label_offset_y
-        label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
-        measured := rl.MeasureTextEx(params.font, label_cstr, params.label_font_size, 0)
-        label_rect = rl.Rectangle{label_x, label_y, max(0.0, measured.x), max(0.0, measured.y)}
-        hit_rect = checkbox_union_rect(hit_rect, label_rect)
-    }
+    label_rect := rl.Rectangle{}
+    label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
+    label_color := checkbox_label_color(params.enabled)
 
     hovered_item := rl.CheckCollisionPointRec(local_mouse, hit_rect)
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     hovered := hovered_item && hovered_space
 
-    owns_press := press_active^ && press_id^ == params.id
+    owns_press := checkbox_owns_press(press_owner, params.id)
     can_interact := params.enabled && params.interaction_enabled
-    if can_interact && !owns_press && params.mouse.left_pressed && hovered {
-        press_active^ = true
-        press_id^ = params.id
-        owns_press = true
-    }
+    checkbox_try_capture_press(press_owner, params, hovered, can_interact, &owns_press)
 
-    toggled := false
-    checked_out := params.checked
-    if owns_press && params.mouse.left_released {
-        toggled = can_interact && hovered_item
-        if toggled {
-            checked_out = !params.checked
-        }
-        press_active^ = false
-        press_id^ = -1
-        owns_press = false
-    }
+    toggled, checked_out := checkbox_release_press(
+        press_owner,
+        params,
+        can_interact,
+        hovered_item,
+        &owns_press)
 
     pressed := owns_press && params.mouse.left_down
-
-    border := UI_BORDER_COLOR
-    mark := UI_TEXT_COLOR
-    if !params.enabled {
-        border = rl.Color{78, 78, 78, 255}
-        mark = rl.Color{110, 110, 110, 255}
-    }
+    border, mark := checkbox_mark_colors(params.enabled)
 
     rl.DrawRectangleLinesEx(box_rect, 1, border)
     if checked_out {

@@ -42,7 +42,7 @@ draw_settings_save_gif_button :: proc(
         font = font,
         has_font_color_override = false,
         font_color_override = rl.Color{},
-    }, &ui_runtime.text_button_press_active, &ui_runtime.text_button_press_id)
+    }, &ui_runtime.ui_press_owner)
 
     if button_result.clicked {
         ui_runtime.save_gif_requested = true
@@ -179,11 +179,11 @@ draw_gif_view :: proc(
     })
 
     draw_settings_integer_slider(panel,
-        downsample_row.segment_rect.y, mouse_input, "Downsample",
+        downsample_row.segment_rect.y, mouse_input, ui_runtime, 6201, "Downsample",
         &ui_runtime.gif_downsample_factor, 1, 4, font)
 
     draw_settings_integer_slider(panel,
-        frame_step_row.segment_rect.y, mouse_input, "Frame Step",
+        frame_step_row.segment_rect.y, mouse_input, ui_runtime, 6202, "Frame Step",
         &ui_runtime.gif_frame_step, 1, 4, font)
 
     draw_settings_save_gif_button(panel,

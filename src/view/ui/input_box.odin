@@ -1,5 +1,6 @@
 package ui
 
+import "../../core"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -82,18 +83,6 @@ input_box_should_draw_caret :: #force_inline proc(
 
     phase := int(timestamp_seconds / half_period_seconds)
     return phase % 2 == 0
-}
-
-//   Clamp input rect so width and height are never negative.
-input_box_clamp_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
 }
 
 //   Convert screen-space mouse coordinates into input-local coordinates.
@@ -408,32 +397,35 @@ input_box_move_caret_down :: proc(buffer: []u8, text_len: int, caret: ^int) -> b
 //   Parent may inspect result and apply policy (history/submit) before drawing.
 handle_input_box :: proc(
     params: Input_Box_Params,
-    press_active: ^bool,
-    press_id: ^int) -> Input_Box_Result {
+    press_owner: ^core.Ui_Press_Owner_State) -> Input_Box_Result {
 
     events := capture_input_box_events_ascii()
     history_previous := events.up
     history_next := events.down
     submit_pressed := rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER)
 
-    drawn_rect := input_box_clamp_rect(params.rect)
+    drawn_rect := clamp_non_negative_rect(params.rect)
     local_mouse := input_box_local_mouse(params.mouse, params.scroll_offset)
 
     hovered_item := rl.CheckCollisionPointRec(local_mouse, drawn_rect)
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     hovered := hovered_item && hovered_space
 
-    owns_press := press_active^ && press_id^ == params.id
+    owns_press := press_owner^.active &&
+        press_owner^.kind == .Input_Box &&
+        press_owner^.id == params.id
     can_interact := params.enabled && params.interaction_enabled
-    if can_interact && !owns_press && params.mouse.left_pressed && hovered {
-        press_active^ = true
-        press_id^ = params.id
+    if can_interact && !press_owner^.active && params.mouse.left_pressed && hovered {
+        press_owner^.active = true
+        press_owner^.kind = .Input_Box
+        press_owner^.id = params.id
         owns_press = true
     }
 
     if owns_press && params.mouse.left_released {
-        press_active^ = false
-        press_id^ = -1
+        press_owner^.active = false
+        press_owner^.kind = .None
+        press_owner^.id = -1
         owns_press = false
     }
 
@@ -507,7 +499,7 @@ handle_input_box :: proc(
 
 //   Draw input text and caret from caller-provided post-policy state.
 draw_input_box :: proc(params: Input_Box_Draw_Params) {
-    drawn_rect := input_box_clamp_rect(params.rect)
+    drawn_rect := clamp_non_negative_rect(params.rect)
 
     text_len := input_box_clamp_text_len(params.text_len, len(params.text_buffer))
     caret := input_box_clamp_cursor(params.caret_col, text_len)
