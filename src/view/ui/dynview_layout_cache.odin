@@ -565,10 +565,6 @@ dynview_layout_consume_accent_bar :: proc(
         buffer,
         cmd.script_sub_text_offset,
         cmd.script_sub_text_len)
-    index_text := dynview_text_span_from_buffer(
-        buffer,
-        cmd.radical_index_text_offset,
-        cmd.radical_index_text_len)
 
     placement_status := dynview_layout_prepare_style_placement(
         cache,

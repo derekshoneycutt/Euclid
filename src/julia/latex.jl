@@ -694,75 +694,93 @@ function script_payload_text(script_token::String)
     return script_token
 end
 
+"""Build one atom emit op from one normalized atom run."""
+function atom_emit_op(run::LatexRun)
+    kind = run.role == :text ? :TextRun : :MathGlyphRun
+    return EmitOp(kind, run.text, "", "", "", :none, :none, run.role)
+end
+
+"""Build one structured accent/radical emit op, or nothing when segment is not structured."""
+function structured_emit_op(run::LatexRun)
+    if run.segment == :accent_over
+        child_program = compile_emit_program(run.children)
+        accent_text, accent_sup_text, accent_sub_text, accent_role =
+            accent_payload_from_child_program(child_program)
+        return EmitOp(
+            :AccentBar,
+            accent_text,
+            "",
+            accent_sup_text,
+            accent_sub_text,
+            :overline,
+            :none,
+            accent_role)
+    end
+
+    if run.segment == :accent_under
+        child_program = compile_emit_program(run.children)
+        accent_text, accent_sup_text, accent_sub_text, accent_role =
+            accent_payload_from_child_program(child_program)
+        return EmitOp(
+            :AccentBar,
+            accent_text,
+            "",
+            accent_sup_text,
+            accent_sub_text,
+            :underline,
+            :none,
+            accent_role)
+    end
+
+    if run.segment == :radical_sqrt
+        child_program = compile_emit_program(run.children)
+        radical_text, radical_sup_text, radical_sub_text, radical_role =
+            accent_payload_from_child_program(child_program)
+        return EmitOp(
+            :RadicalBar,
+            radical_text,
+            run.text,
+            radical_sup_text,
+            radical_sub_text,
+            :none,
+            isempty(run.text) ? :sqrt : :nthroot,
+            radical_role)
+    end
+
+    return nothing
+end
+
+"""Attach one script run to prior op when possible, otherwise emit fallback math glyph run."""
+function append_script_emit_op!(program::Vector{EmitOp}, run::LatexRun)
+    script_text = script_payload_text(run.text)
+    if isempty(script_text)
+        return
+    end
+
+    if isempty(program) || !op_accepts_scripts(program[end])
+        push!(program, EmitOp(:MathGlyphRun, run.text, "", "", "", :none, :none, :math))
+        return
+    end
+
+    program[end] = op_with_script(program[end], run.segment, script_text)
+end
+
 """Compile normalized runs to replay-ready semantic emit ops."""
 function compile_emit_program(runs::Vector{LatexRun})
     program = EmitOp[]
     for run in runs
         if run.segment == :atom
-            kind = run.role == :text ? :TextRun : :MathGlyphRun
-            push!(program, EmitOp(kind, run.text, "", "", "", :none, :none, run.role))
+            push!(program, atom_emit_op(run))
             continue
         end
 
-        if run.segment == :accent_over
-            child_program = compile_emit_program(run.children)
-            accent_text, accent_sup_text, accent_sub_text, accent_role =
-                accent_payload_from_child_program(child_program)
-            push!(program, EmitOp(
-                :AccentBar,
-                accent_text,
-                "",
-                accent_sup_text,
-                accent_sub_text,
-                :overline,
-                :none,
-                accent_role))
+        structured_op = structured_emit_op(run)
+        if structured_op !== nothing
+            push!(program, structured_op)
             continue
         end
 
-        if run.segment == :accent_under
-            child_program = compile_emit_program(run.children)
-            accent_text, accent_sup_text, accent_sub_text, accent_role =
-                accent_payload_from_child_program(child_program)
-            push!(program, EmitOp(
-                :AccentBar,
-                accent_text,
-                "",
-                accent_sup_text,
-                accent_sub_text,
-                :underline,
-                :none,
-                accent_role))
-            continue
-        end
-
-        if run.segment == :radical_sqrt
-            child_program = compile_emit_program(run.children)
-            radical_text, radical_sup_text, radical_sub_text, radical_role =
-                accent_payload_from_child_program(child_program)
-            push!(program, EmitOp(
-                :RadicalBar,
-                radical_text,
-                run.text,
-                radical_sup_text,
-                radical_sub_text,
-                :none,
-                isempty(run.text) ? :sqrt : :nthroot,
-                radical_role))
-            continue
-        end
-
-        script_text = script_payload_text(run.text)
-        if isempty(script_text)
-            continue
-        end
-
-        if isempty(program) || !op_accepts_scripts(program[end])
-            push!(program, EmitOp(:MathGlyphRun, run.text, "", "", "", :none, :none, :math))
-            continue
-        end
-
-        program[end] = op_with_script(program[end], run.segment, script_text)
+        append_script_emit_op!(program, run)
     end
     return program
 end
