@@ -20,6 +20,7 @@ using Test
     @test program[1].text == "sin"
     @test program[2].kind == :MathGlyphRun
     @test program[2].text == "(x)+x"
+    @test program[2].style_role == :math
 end
 
 @testset "text command and scripts" begin
@@ -39,6 +40,27 @@ end
     @test canonical_swapped == "x^{2}_{1}"
 end
 
+@testset "mathbb uppercase mapping" begin
+    plain = EuclidLatex.latex_to_plain_text(
+        "\\mathbb{A}\\mathbb{B}\\mathbb{C}\\mathbb{H}\\mathbb{N}\\mathbb{P}\\mathbb{Q}\\mathbb{R}\\mathbb{Y}\\mathbb{Z}")
+    @test plain == "𝔸𝔹ℂℍℕℙℚℝ𝕐ℤ"
+
+    unsupported = EuclidLatex.latex_to_plain_text("\\mathbb{a}")
+    @test unsupported == "\\mathbb"
+end
+
+@testset "mathbb segmentation and style role" begin
+    program = EuclidLatex.compiled_program_for("A + \\mathbb{R} + B")
+    @test length(program) == 3
+    @test program[1].kind == :MathGlyphRun
+    @test program[1].style_role == :math
+    @test program[2].kind == :MathGlyphRun
+    @test program[2].text == "ℝ"
+    @test program[2].style_role == :mathbb
+    @test program[3].kind == :MathGlyphRun
+    @test program[3].style_role == :math
+end
+
 @testset "script attach emit program" begin
     program = EuclidLatex.compiled_program_for("A_1^2")
     @test length(program) == 1
@@ -46,6 +68,15 @@ end
     @test program[1].text == "A"
     @test program[1].sup_text == "2"
     @test program[1].sub_text == "1"
+    @test program[1].style_role == :math
+
+    mathbb_program = EuclidLatex.compiled_program_for("\\mathbb{R}_0")
+    @test length(mathbb_program) == 1
+    @test mathbb_program[1].kind == :ScriptAttach
+    @test mathbb_program[1].text == "ℝ"
+    @test mathbb_program[1].sup_text == ""
+    @test mathbb_program[1].sub_text == "0"
+    @test mathbb_program[1].style_role == :mathbb
 end
 
 @testset "accent bars" begin
@@ -61,10 +92,13 @@ end
     accent_program = EuclidLatex.compiled_program_for("f(\\overline{AB}) + \\underline{CD}")
     @test length(accent_program) == 4
     @test accent_program[1].kind == :MathGlyphRun
+    @test accent_program[1].style_role == :math
     @test accent_program[2].kind == :AccentBar
     @test accent_program[2].accent_mode == :overline
+    @test accent_program[2].style_role == :math
     @test accent_program[4].kind == :AccentBar
     @test accent_program[4].accent_mode == :underline
+    @test accent_program[4].style_role == :math
 
     embedded_scripts = EuclidLatex.compiled_program_for("\\overline{AB^2} + \\underline{CD_4}")
     @test length(embedded_scripts) == 3
@@ -73,11 +107,13 @@ end
     @test embedded_scripts[1].sup_text == "2"
     @test embedded_scripts[1].sub_text == ""
     @test embedded_scripts[1].accent_mode == :overline
+    @test embedded_scripts[1].style_role == :math
     @test embedded_scripts[3].kind == :AccentBar
     @test embedded_scripts[3].text == "CD"
     @test embedded_scripts[3].sup_text == ""
     @test embedded_scripts[3].sub_text == "4"
     @test embedded_scripts[3].accent_mode == :underline
+    @test embedded_scripts[3].style_role == :math
 end
 
 @testset "radicals" begin
@@ -104,9 +140,11 @@ end
     @test radical_program[1].kind == :RadicalBar
     @test radical_program[1].text == "AB"
     @test radical_program[1].radical_mode == :sqrt
+    @test radical_program[1].style_role == :math
     @test radical_program[3].kind == :RadicalBar
     @test radical_program[3].text == "x"
     @test radical_program[3].sup_text == "2"
+    @test radical_program[3].style_role == :math
 
     indexed_program = EuclidLatex.compiled_program_for("\\sqrt[n]{A_1^2}")
     @test length(indexed_program) == 1
@@ -116,6 +154,7 @@ end
     @test indexed_program[1].sup_text == "2"
     @test indexed_program[1].sub_text == "1"
     @test indexed_program[1].radical_mode == :nthroot
+    @test indexed_program[1].style_role == :math
 end
 
 @testset "cache behavior" begin

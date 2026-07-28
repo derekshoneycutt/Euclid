@@ -13,7 +13,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(6)
+const PARSER_GRAMMAR_VERSION = Int32(7)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -116,14 +116,35 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\Vert" => "‖",
     "\\backslash" => "∖",
     "\\{" => "{",
-    "\\}" => "}",
-    "\\mathbb{N}" => "ℕ",
-    "\\mathbb{Z}" => "ℤ",
-    "\\mathbb{Q}" => "ℚ",
-    "\\mathbb{R}" => "ℝ",
-    "\\mathbb{C}" => "ℂ",
-    "\\mathbb{H}" => "ℍ",
-    "\\mathbb{P}" => "ℙ")
+    "\\}" => "}")
+
+const MATHBB_UPPERCASE_MAP = Dict(
+    "A" => "𝔸",
+    "B" => "𝔹",
+    "C" => "ℂ",
+    "D" => "𝔻",
+    "E" => "𝔼",
+    "F" => "𝔽",
+    "G" => "𝔾",
+    "H" => "ℍ",
+    "I" => "𝕀",
+    "J" => "𝕁",
+    "K" => "𝕂",
+    "L" => "𝕃",
+    "M" => "𝕄",
+    "N" => "ℕ",
+    "O" => "𝕆",
+    "P" => "ℙ",
+    "Q" => "ℚ",
+    "R" => "ℝ",
+    "S" => "𝕊",
+    "T" => "𝕋",
+    "U" => "𝕌",
+    "V" => "𝕍",
+    "W" => "𝕎",
+    "X" => "𝕏",
+    "Y" => "𝕐",
+    "Z" => "ℤ")
 
 struct LatexToken
     kind::Symbol
@@ -145,6 +166,7 @@ struct EmitOp
     sub_text::String
     accent_mode::Symbol
     radical_mode::Symbol
+    style_role::Symbol
 end
 
 struct ParseCacheEntry
@@ -394,7 +416,7 @@ function parse_mathbb_atom(
 
     unicode, parsed = parse_mathbb_command(tokens, idx)
     if parsed
-        return [latex_atom_run(unicode, :math)]
+        return [latex_atom_run(unicode, :mathbb)]
     end
 
     return [latex_atom_run("\\mathbb", :math)]
@@ -507,16 +529,15 @@ function parse_required_group_as_text(tokens::Vector{LatexToken}, idx::Base.RefV
     return join((latex_run_serialized_text(run) for run in runs), "")
 end
 
-"""Parse `\\mathbb{...}` content and map known sets to Unicode glyphs."""
+"""Parse `\\mathbb{...}` content and map A-Z to Unicode double-struck glyphs."""
 function parse_mathbb_command(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     if idx[] > length(tokens) || tokens[idx[]].kind != :lbrace
         return "", false
     end
 
     content = parse_required_group_as_text(tokens, idx)
-    key = "\\mathbb{" * content * "}"
-    if haskey(UNICODE_COMMAND_MAP, key)
-        return UNICODE_COMMAND_MAP[key], true
+    if haskey(MATHBB_UPPERCASE_MAP, content)
+        return MATHBB_UPPERCASE_MAP[content], true
     end
 
     return "", false
@@ -651,7 +672,8 @@ function op_with_script(op::EmitOp, segment::Symbol, script_token::String)
         sup_text,
         sub_text,
         :none,
-        :none)
+        :none,
+        op.style_role)
 end
 
 """Extract script payload text from canonical script token form."""
@@ -678,13 +700,13 @@ function compile_emit_program(runs::Vector{LatexRun})
     for run in runs
         if run.segment == :atom
             kind = run.role == :text ? :TextRun : :MathGlyphRun
-            push!(program, EmitOp(kind, run.text, "", "", "", :none, :none))
+            push!(program, EmitOp(kind, run.text, "", "", "", :none, :none, run.role))
             continue
         end
 
         if run.segment == :accent_over
             child_program = compile_emit_program(run.children)
-            accent_text, accent_sup_text, accent_sub_text =
+            accent_text, accent_sup_text, accent_sub_text, accent_role =
                 accent_payload_from_child_program(child_program)
             push!(program, EmitOp(
                 :AccentBar,
@@ -693,13 +715,14 @@ function compile_emit_program(runs::Vector{LatexRun})
                 accent_sup_text,
                 accent_sub_text,
                 :overline,
-                :none))
+                :none,
+                accent_role))
             continue
         end
 
         if run.segment == :accent_under
             child_program = compile_emit_program(run.children)
-            accent_text, accent_sup_text, accent_sub_text =
+            accent_text, accent_sup_text, accent_sub_text, accent_role =
                 accent_payload_from_child_program(child_program)
             push!(program, EmitOp(
                 :AccentBar,
@@ -708,13 +731,14 @@ function compile_emit_program(runs::Vector{LatexRun})
                 accent_sup_text,
                 accent_sub_text,
                 :underline,
-                :none))
+                :none,
+                accent_role))
             continue
         end
 
         if run.segment == :radical_sqrt
             child_program = compile_emit_program(run.children)
-            radical_text, radical_sup_text, radical_sub_text =
+            radical_text, radical_sup_text, radical_sub_text, radical_role =
                 accent_payload_from_child_program(child_program)
             push!(program, EmitOp(
                 :RadicalBar,
@@ -723,7 +747,8 @@ function compile_emit_program(runs::Vector{LatexRun})
                 radical_sup_text,
                 radical_sub_text,
                 :none,
-                isempty(run.text) ? :sqrt : :nthroot))
+                isempty(run.text) ? :sqrt : :nthroot,
+                radical_role))
             continue
         end
 
@@ -733,7 +758,7 @@ function compile_emit_program(runs::Vector{LatexRun})
         end
 
         if isempty(program) || !op_accepts_scripts(program[end])
-            push!(program, EmitOp(:MathGlyphRun, run.text, "", "", "", :none, :none))
+            push!(program, EmitOp(:MathGlyphRun, run.text, "", "", "", :none, :none, :math))
             continue
         end
 
@@ -742,24 +767,24 @@ function compile_emit_program(runs::Vector{LatexRun})
     return program
 end
 
-"""Extract a single-script payload tuple for accent rendering from child emit ops."""
+"""Extract one accent payload tuple and style role from child emit ops."""
 function accent_payload_from_child_program(child_program::Vector{EmitOp})
     if isempty(child_program)
-        return "", "", ""
+        return "", "", "", :math
     end
 
     if length(child_program) == 1
         op = child_program[1]
         if op.kind == :ScriptAttach
-            return op.text, op.sup_text, op.sub_text
+            return op.text, op.sup_text, op.sub_text, op.style_role
         end
         if op.kind == :MathGlyphRun || op.kind == :TextRun
-            return op.text, "", ""
+            return op.text, "", "", op.style_role
         end
     end
 
     text_parts = map(accent_child_segment_text, child_program)
-    return join(text_parts, ""), "", ""
+    return join(text_parts, ""), "", "", :math
 end
 
 """Render one child emit op to literal LaTeX/text segment for accent payload fallback."""
@@ -872,10 +897,12 @@ function replay_emit_program!(
     state_ptr::Ptr{Cvoid},
     program::Vector{EmitOp};
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC)
+    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
+    mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
 
     for op in program
-        status = replay_emit_op!(state_ptr, op, text_style, math_style)
+        status = replay_emit_op!(state_ptr, op, text_style, math_style, mathbb_style)
         if status != OdinJuliaBridge.BRIDGE_STATUS_OK
             return false
         end
@@ -884,41 +911,58 @@ function replay_emit_program!(
     return true
 end
 
+"""Resolve per-op base style id, including dedicated mathbb styling."""
+function math_style_for_op(op::EmitOp, math_style::Integer, mathbb_style::Integer)
+    if op.style_role == :mathbb
+        return mathbb_style
+    end
+
+    return math_style
+end
+
 """Replay one compiled op through the dynview bridge and return status code."""
 function replay_emit_op!(
     state_ptr::Ptr{Cvoid},
     op::EmitOp,
     text_style::Integer,
-    math_style::Integer)
+    math_style::Integer,
+    mathbb_style::Integer)
+
+    base_style = math_style_for_op(op, math_style, mathbb_style)
 
     if op.kind == :MathGlyphRun
-        return OdinJuliaBridge.dynview_math_glyph_run(state_ptr, op.text, math_style)
+        return OdinJuliaBridge.dynview_math_glyph_run(state_ptr, op.text, base_style)
     end
 
     if op.kind == :ScriptAttach
-        return replay_script_attach_op!(state_ptr, op, math_style)
+        return replay_script_attach_op!(state_ptr, op, base_style, math_style)
     end
 
     if op.kind == :AccentBar
-        return replay_accent_bar_op!(state_ptr, op, math_style)
+        return replay_accent_bar_op!(state_ptr, op, base_style, math_style)
     end
 
     if op.kind == :RadicalBar
-        return replay_radical_bar_op!(state_ptr, op, math_style)
+        return replay_radical_bar_op!(state_ptr, op, base_style, math_style)
     end
 
     return OdinJuliaBridge.dynview_text_run(state_ptr, op.text, text_style)
 end
 
 """Replay one script-attach op through the dynview bridge."""
-function replay_script_attach_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::Integer)
+function replay_script_attach_op!(
+    state_ptr::Ptr{Cvoid},
+    op::EmitOp,
+    base_style::Integer,
+    script_style::Integer)
+
     return OdinJuliaBridge.dynview_script_attach(
         state_ptr,
         op.text,
         op.sup_text,
         op.sub_text,
-        math_style,
-        math_style,
+        base_style,
+        script_style,
         SCRIPT_SCALE,
         SCRIPT_SUP_RAISE,
         SCRIPT_SUB_DROP,
@@ -926,7 +970,12 @@ function replay_script_attach_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style:
 end
 
 """Replay one accent-bar op through the dynview bridge."""
-function replay_accent_bar_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::Integer)
+function replay_accent_bar_op!(
+    state_ptr::Ptr{Cvoid},
+    op::EmitOp,
+    base_style::Integer,
+    script_style::Integer)
+
     accent_mode = op.accent_mode == :overline ?
         OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
         OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE
@@ -936,10 +985,10 @@ function replay_accent_bar_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::In
         op.text,
         op.sup_text,
         op.sub_text,
-        math_style,
-        math_style,
+        base_style,
+        base_style,
         accent_mode,
-        math_style,
+        script_style,
         ACCENT_BAR_THICKNESS,
         ACCENT_BAR_OFFSET,
         SCRIPT_SCALE,
@@ -949,7 +998,12 @@ function replay_accent_bar_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::In
 end
 
 """Replay one radical-bar op through the dynview bridge."""
-function replay_radical_bar_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::Integer)
+function replay_radical_bar_op!(
+    state_ptr::Ptr{Cvoid},
+    op::EmitOp,
+    base_style::Integer,
+    script_style::Integer)
+
     radical_mode = op.radical_mode == :nthroot ?
         OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :
         OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_SQRT
@@ -960,10 +1014,10 @@ function replay_radical_bar_op!(state_ptr::Ptr{Cvoid}, op::EmitOp, math_style::I
         op.radical_index_text,
         op.sup_text,
         op.sub_text,
-        math_style,
-        math_style,
+        base_style,
+        base_style,
         radical_mode,
-        math_style,
+        script_style,
         RADICAL_BAR_THICKNESS,
         RADICAL_BAR_OFFSET,
         SCRIPT_SCALE,
@@ -981,7 +1035,9 @@ function emit_latex_dynview!(
     style_profile::Integer=DEFAULT_STYLE_PROFILE,
     copy_plain_text::Bool=true,
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC)
+    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
+    mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
 
     if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return false
@@ -1005,7 +1061,8 @@ function emit_latex_dynview!(
             state_ptr,
             program;
             text_style=text_style,
-            math_style=math_style)
+            math_style=math_style,
+            mathbb_style=mathbb_style)
         return false
     end
 

@@ -1603,7 +1603,11 @@ dynview_resolve_font_for_style :: #force_inline proc(
         return resolved
     }
 
-    flags := view_core.font_flags_from_bold_italic(style.bold, style.italic)
+    flags := style.font_flags
+    if flags == .None {
+        flags = view_core.font_flags_from_bold_italic(style.bold, style.italic)
+    }
+
     resolved = view_core.font_runtime_resolve(
         state,
         flags,
