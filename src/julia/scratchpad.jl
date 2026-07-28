@@ -66,6 +66,45 @@ const initialize_count_ref = Ref(0)
 const clean_count_ref = Ref(0)
 const reset_count_ref = Ref(0)
 
+const HELPER_DOC_ALIASES = Dict(
+    "register_frame_hook" => (:Scratchpad, :register_frame_hook,
+        "register_frame_hook(fn; label=\"\")"),
+    "remove_frame_hook" => (:Scratchpad, :remove_frame_hook,
+        "remove_frame_hook(hook_id)"),
+    "clear_frame_hooks" => (:Scratchpad, :clear_frame_hooks,
+        "clear_frame_hooks()"),
+    "list_frame_hooks" => (:Scratchpad, :list_frame_hooks,
+        "list_frame_hooks()"),
+    "save_history" => (:Scratchpad, :save_history_to_file,
+        "save_history(path)"),
+    "point!" => (:EuclidRepl, Symbol("point!"),
+        "point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)"),
+    "line!" => (:EuclidRepl, Symbol("line!"),
+        "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)"),
+    "circle!" => (:EuclidRepl, Symbol("circle!"),
+        "circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)"),
+    "translate_points!" => (:EuclidRepl, Symbol("translate_points!"),
+        "translate_points!(point_ids, start_positions, displacement; duration=2.5f0)"),
+    "rotate_points!" => (:EuclidRepl, Symbol("rotate_points!"),
+        "rotate_points!(point_ids, start_positions, axis_point_a, axis_point_b, theta; duration=2.5f0)"),
+    "rotate_points_x!" => (:EuclidRepl, Symbol("rotate_points_x!"),
+        "rotate_points_x!(point_ids, start_positions, theta; duration=2.5f0)"),
+    "rotate_points_y!" => (:EuclidRepl, Symbol("rotate_points_y!"),
+        "rotate_points_y!(point_ids, start_positions, theta; duration=2.5f0)"),
+    "rotate_points_z!" => (:EuclidRepl, Symbol("rotate_points_z!"),
+        "rotate_points_z!(point_ids, start_positions, theta; duration=2.5f0)"),
+    "reflect2d_points!" => (:EuclidRepl, Symbol("reflect2d_points!"),
+        "reflect2d_points!(point_ids, start_positions, line_point_a, line_point_b; duration=2.5f0)"),
+    "reflect2d_points_x_axis!" => (:EuclidRepl, Symbol("reflect2d_points_x_axis!"),
+        "reflect2d_points_x_axis!(point_ids, start_positions; duration=2.5f0)"),
+    "reflect2d_points_y_axis!" => (:EuclidRepl, Symbol("reflect2d_points_y_axis!"),
+        "reflect2d_points_y_axis!(point_ids, start_positions; duration=2.5f0)"),
+    "reflect2d_points_diag_pos!" => (:EuclidRepl, Symbol("reflect2d_points_diag_pos!"),
+        "reflect2d_points_diag_pos!(point_ids, start_positions; duration=2.5f0)"),
+    "reflect2d_points_diag_neg!" => (:EuclidRepl, Symbol("reflect2d_points_diag_neg!"),
+        "reflect2d_points_diag_neg!(point_ids, start_positions; duration=2.5f0)"),
+)
+
 # REPL-callable API is centered around: classify_input, queue_input,
 # register_frame_hook/remove_frame_hook/clear_frame_hooks/list_frame_hooks,
 # history_previous/history_next/history_reset_cursor, and save_history_to_file.
@@ -100,6 +139,16 @@ function create_runtime_module(session_id::Int)
         point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
         line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
         circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
+        translate_points!(args...; kwargs...) = EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
+        rotate_points!(args...; kwargs...) = EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
+        rotate_points_x!(args...; kwargs...) = EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
+        rotate_points_y!(args...; kwargs...) = EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
+        rotate_points_z!(args...; kwargs...) = EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
+        reflect2d_points!(args...; kwargs...) = EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
+        reflect2d_points_x_axis!(args...; kwargs...) = EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
+        reflect2d_points_y_axis!(args...; kwargs...) = EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
+        reflect2d_points_diag_pos!(args...; kwargs...) = EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
+        reflect2d_points_diag_neg!(args...; kwargs...) = EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
 
         # Intercept interactive exit/quit and reset only scratchpad session state.
         exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
@@ -652,6 +701,33 @@ function queue_input(state_ptr::Ptr{Cvoid}, text::String)
     return true
 end
 
+"""Return helper method names laid out in 2-3 text columns for :help output."""
+function helper_method_name_columns()
+    names = sort!(collect(keys(HELPER_DOC_ALIASES)))
+    if isempty(names)
+        return String["  (none)"]
+    end
+
+    column_count = length(names) >= 9 ? 3 : 2
+    row_count = cld(length(names), column_count)
+    col_width = maximum(length.(names)) + 3
+
+    lines = []
+    for row in 1:row_count
+        parts = []
+        for col in 0:(column_count - 1)
+            idx = row + col * row_count
+            if idx > length(names)
+                continue
+            end
+            push!(parts, rpad(names[idx], col_width))
+        end
+        push!(lines, "  " * rstrip(join(parts, "")))
+    end
+
+    return lines
+end
+
 """Append built-in scratchpad usage/help lines to output."""
 function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "Julia REPL Scratchpad")
@@ -672,14 +748,9 @@ function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "  EuclidRepl")
     append_output_line!(session, "")
     append_output_line!(session, "Common Helper Methods")
-    append_output_line!(session, "  register_frame_hook(fn; label=\"\")")
-    append_output_line!(session, "  remove_frame_hook(id)")
-    append_output_line!(session, "  clear_frame_hooks()")
-    append_output_line!(session, "  list_frame_hooks()")
-    append_output_line!(session, "  save_history(path)")
-    append_output_line!(session, "  point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)")
-    append_output_line!(session, "  line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)")
-    append_output_line!(session, "  circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)")
+    for line in helper_method_name_columns()
+        append_output_line!(session, line)
+    end
 end
 
 """Render a result value using text/plain when possible for REPL-style display."""
@@ -1191,58 +1262,35 @@ function render_struct_properties_help(query::AbstractString, value)
     return "Struct Properties for $(query)::$(struct_type)\n" * join(prop_lines, "\n")
 end
 
+"""Resolve a module/symbol alias spec to a docs binding, or `nothing` when unavailable."""
+function helper_alias_binding(module_name::Symbol, symbol_name::Symbol)
+    if module_name == :Scratchpad
+        return Base.Docs.Binding(Scratchpad, symbol_name)
+    end
+    if !isdefined(Main, module_name)
+        return nothing
+    end
+
+    target_module = getfield(Main, module_name)
+    return Base.Docs.Binding(target_module, symbol_name)
+end
+
 """Resolve runtime helper aliases to documented Scratchpad bindings and helper signatures."""
 function resolve_helper_doc_alias(query::AbstractString)
     helper_name = strip(String(query))
-    if helper_name == "register_frame_hook"
-        return (
-            binding = Base.Docs.Binding(Scratchpad, :register_frame_hook),
-            signature = "register_frame_hook(fn; label=\"\")",
-        )
+    alias_spec = get(HELPER_DOC_ALIASES, helper_name, nothing)
+    if alias_spec === nothing
+        return nothing
     end
-    if helper_name == "remove_frame_hook"
-        return (
-            binding = Base.Docs.Binding(Scratchpad, :remove_frame_hook),
-            signature = "remove_frame_hook(hook_id)",
-        )
+
+    module_name, symbol_name, signature = alias_spec
+
+    binding = helper_alias_binding(module_name, symbol_name)
+    if binding === nothing
+        return nothing
     end
-    if helper_name == "clear_frame_hooks"
-        return (
-            binding = Base.Docs.Binding(Scratchpad, :clear_frame_hooks),
-            signature = "clear_frame_hooks()",
-        )
-    end
-    if helper_name == "list_frame_hooks"
-        return (
-            binding = Base.Docs.Binding(Scratchpad, :list_frame_hooks),
-            signature = "list_frame_hooks()",
-        )
-    end
-    if helper_name == "save_history"
-        return (
-            binding = Base.Docs.Binding(Scratchpad, :save_history_to_file),
-            signature = "save_history(path)",
-        )
-    end
-    if helper_name == "point!"
-        return (
-            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("point!")),
-            signature = "point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)",
-        )
-    end
-    if helper_name == "line!"
-        return (
-            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("line!")),
-            signature = "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)",
-        )
-    end
-    if helper_name == "circle!"
-        return (
-            binding = Base.Docs.Binding(Main.EuclidRepl, Symbol("circle!")),
-            signature = "circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)",
-        )
-    end
-    return nothing
+
+    return (binding=binding, signature=signature)
 end
 
 """Handle `?` scratchpad queries for modules and documented bindings."""

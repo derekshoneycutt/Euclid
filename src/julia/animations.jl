@@ -18,7 +18,13 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_c
     animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
     animate_draw_circle, animate_compass_fill_arc_highlight,
     animate_repl_draw_point, animate_repl_draw_line,
-    animate_repl_draw_circle, animate_repl_draw_filledcircle
+    animate_repl_draw_circle, animate_repl_draw_filledcircle,
+    transform_translate_point,
+    transform_rotate_point, transform_rotate_point_x,
+    transform_rotate_point_y, transform_rotate_point_z,
+    transform_reflect2d_point, transform_reflect2d_point_x_axis,
+    transform_reflect2d_point_y_axis, transform_reflect2d_point_diag_pos,
+    transform_reflect2d_point_diag_neg
 
 const PenLength = 0.14f0
 
@@ -44,6 +50,499 @@ const MarkerRadialTrailSamples = 8f0
 const ReplToolTravelTopZ = 1.4f0
 const ReplDescendShare = 0.2f0
 const ReplDrawShare = 0.6f0
+const TransformEps = 1f-6
+
+
+"""
+Normalize elapsed time into `[0, 1]` progress.
+
+Treats non-positive duration as an immediate completion (`1f0`).
+"""
+@inline function normalized_progress(current_time::Real, total_duration::Real)
+    if total_duration <= 0
+        return 1f0
+    end
+    return clamp(Float32(current_time / total_duration), 0f0, 1f0)
+end
+
+
+"""
+Convert an input vector-like value to a concrete 3D `Float32` vector.
+
+Returns `nothing` when fewer than 3 components are provided.
+"""
+@inline function as_vec3(value::AbstractVector{<:Real})
+    if length(value) < 3
+        return nothing
+    end
+    return Float32[Float32(value[1]), Float32(value[2]), Float32(value[3])]
+end
+
+
+"""
+Build a displacement vector from direction and total displacement length.
+
+Returns a zero vector when the direction is degenerate.
+"""
+@inline function displacement_from_vector_and_length(
+    direction::Vector{Float32}, displacementLength::Float32)
+
+    directionLength = norm(direction)
+    if directionLength <= TransformEps
+        return Float32[0f0, 0f0, 0f0]
+    end
+    return (direction / directionLength) * displacementLength
+end
+
+
+"""
+Rotate one point around a 3D axis line using Rodrigues' rotation formula.
+
+Returns `nothing` when the axis line is degenerate.
+"""
+@inline function rotate_point_about_axis_line(
+    point::Vector{Float32}, axisA::Vector{Float32}, axisB::Vector{Float32}, angle::Float32)
+
+    axisDirection = axisB - axisA
+    axisLength = norm(axisDirection)
+    if axisLength <= TransformEps
+        return nothing
+    end
+
+    unitAxis = axisDirection / axisLength
+    relative = point - axisA
+    c = Float32(cos(angle))
+    s = Float32(sin(angle))
+
+    rotatedRelative =
+        relative * c +
+        cross(unitAxis, relative) * s +
+        unitAxis * dot(unitAxis, relative) * (1f0 - c)
+
+    return axisA + rotatedRelative
+end
+
+
+"""
+Reflect one 3D point across a 2D line on the XY plane.
+
+Only XY components participate in reflection geometry; `z` is preserved.
+Returns `nothing` when the line is degenerate.
+"""
+@inline function reflect_point_xy_across_line(
+    point::Vector{Float32}, lineA::Vector{Float32}, lineB::Vector{Float32})
+
+    lineDx = lineB[1] - lineA[1]
+    lineDy = lineB[2] - lineA[2]
+    lineLength = Float32(hypot(lineDx, lineDy))
+    if lineLength <= TransformEps
+        return nothing
+    end
+
+    ux = lineDx / lineLength
+    uy = lineDy / lineLength
+    relX = point[1] - lineA[1]
+    relY = point[2] - lineA[2]
+    proj = relX * ux + relY * uy
+    projX = proj * ux
+    projY = proj * uy
+    perpX = relX - projX
+    perpY = relY - projY
+
+    return Float32[
+        lineA[1] + (projX - perpX),
+        lineA[2] + (projY - perpY),
+        point[3],
+    ]
+end
+
+
+"""
+Choose the reflection half-turn branch with greater positive z lift.
+
+Returns `nothing` when axis rotation cannot be resolved.
+"""
+@inline function reflection_arc_point_above_surface(
+    startOnPlane::Vector{Float32},
+    lineA::Vector{Float32},
+    lineB::Vector{Float32},
+    angle::Float32)
+
+    rotatedPos = rotate_point_about_axis_line(startOnPlane, lineA, lineB, angle)
+    rotatedNeg = rotate_point_about_axis_line(startOnPlane, lineA, lineB, -angle)
+    if rotatedPos === nothing || rotatedNeg === nothing
+        return nothing
+    end
+
+    return rotatedPos[3] >= rotatedNeg[3] ? rotatedPos : rotatedNeg
+end
+
+
+"""
+Translate one point by a direct displacement vector over normalized time.
+
+--------
+
+Parameters:
+
+- `state_ptr` : Pointer to Euclid host state.
+- `point_id` : Target point id to update.
+- `start_position` : Initial `[x, y, z]` position for this animation step.
+- `displacement` : Final displacement vector applied at `t = 1`.
+- `current_time` : Elapsed time value for this step.
+- `total_duration` : Total step duration in the same unit as `current_time`.
+
+Returns:
+
+- Bridge status code (`BRIDGE_STATUS_OK` on success).
+"""
+function transform_translate_point(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    displacement::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    startVec = as_vec3(start_position)
+    displacementVec = as_vec3(displacement)
+    if startVec === nothing || displacementVec === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    t = normalized_progress(current_time, total_duration)
+    point = startVec + displacementVec * t
+    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+end
+
+
+"""
+Translate one point by direction and scalar displacement length over time.
+
+The direction is normalized internally; `displacement_length` controls total
+distance traveled at `t = 1`.
+
+--------
+
+Parameters:
+
+- `state_ptr` : Pointer to Euclid host state.
+- `point_id` : Target point id to update.
+- `start_position` : Initial `[x, y, z]` position for this animation step.
+- `direction` : Direction vector for translation.
+- `displacement_length` : Total displacement magnitude at `t = 1`.
+- `current_time` : Elapsed time value for this step.
+- `total_duration` : Total step duration in the same unit as `current_time`.
+
+Returns:
+
+- Bridge status code (`BRIDGE_STATUS_OK` on success).
+"""
+function transform_translate_point(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    direction::AbstractVector{<:Real},
+    displacement_length::Real,
+    current_time::Real,
+    total_duration::Real)
+
+    directionVec = as_vec3(direction)
+    if directionVec === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    displacementVec = displacement_from_vector_and_length(
+        directionVec,
+        Float32(displacement_length),
+    )
+    return transform_translate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        displacementVec,
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Rotate one point around a 3D axis line defined by two points.
+
+--------
+
+Parameters:
+
+- `state_ptr` : Pointer to Euclid host state.
+- `point_id` : Target point id to update.
+- `start_position` : Initial `[x, y, z]` position for this animation step.
+- `axis_point_a` : First point on the rotation axis line.
+- `axis_point_b` : Second point on the rotation axis line.
+- `theta` : Total rotation angle in radians at `t = 1`.
+- `current_time` : Elapsed time value for this step.
+- `total_duration` : Total step duration in the same unit as `current_time`.
+
+Returns:
+
+- Bridge status code (`BRIDGE_STATUS_OK` on success).
+"""
+function transform_rotate_point(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    axis_point_a::AbstractVector{<:Real},
+    axis_point_b::AbstractVector{<:Real},
+    theta::Real,
+    current_time::Real,
+    total_duration::Real)
+
+    startVec = as_vec3(start_position)
+    axisA = as_vec3(axis_point_a)
+    axisB = as_vec3(axis_point_b)
+    if startVec === nothing || axisA === nothing || axisB === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    t = normalized_progress(current_time, total_duration)
+    frameAngle = Float32(theta) * t
+    rotated = rotate_point_about_axis_line(startVec, axisA, axisB, frameAngle)
+    if rotated === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, rotated)
+end
+
+
+"""
+Rotate one point around the world X axis through the origin.
+
+Convenience overload for `transform_rotate_point`.
+"""
+function transform_rotate_point_x(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    theta::Real,
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_rotate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        theta,
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Rotate one point around the world Y axis through the origin.
+
+Convenience overload for `transform_rotate_point`.
+"""
+function transform_rotate_point_y(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    theta::Real,
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_rotate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 1f0, 0f0],
+        theta,
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Rotate one point around the world Z axis through the origin.
+
+Convenience overload for `transform_rotate_point`.
+"""
+function transform_rotate_point_z(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    theta::Real,
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_rotate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 0f0, 1f0],
+        theta,
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Reflect one point across a 2D line on XY, preserving the original `z`.
+
+For this first implementation, both line points must lie on `z = 0`.
+The animation path uses a half-turn around the reflection line so points lift
+off the surface during the transition and land on the reflected endpoint.
+
+--------
+
+Parameters:
+
+- `state_ptr` : Pointer to Euclid host state.
+- `point_id` : Target point id to update.
+- `start_position` : Initial `[x, y, z]` position for this animation step.
+- `line_point_a` : First point on the XY reflection axis (`z = 0`).
+- `line_point_b` : Second point on the XY reflection axis (`z = 0`).
+- `current_time` : Elapsed time value for this step.
+- `total_duration` : Total step duration in the same unit as `current_time`.
+
+Returns:
+
+- Bridge status code (`BRIDGE_STATUS_OK` on success).
+"""
+function transform_reflect2d_point(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    startVec = as_vec3(start_position)
+    lineA = as_vec3(line_point_a)
+    lineB = as_vec3(line_point_b)
+    if startVec === nothing || lineA === nothing || lineB === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    t = normalized_progress(current_time, total_duration)
+    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    angle = Float32(pi) * t
+    rotated = reflection_arc_point_above_surface(startOnPlane, lineA, lineB, angle)
+    if rotated === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    point = Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+end
+
+
+"""
+Reflect one point across the X axis (`y = 0`) on XY.
+
+Convenience overload for `transform_reflect2d_point`.
+"""
+function transform_reflect2d_point_x_axis(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_reflect2d_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Reflect one point across the Y axis (`x = 0`) on XY.
+
+Convenience overload for `transform_reflect2d_point`.
+"""
+function transform_reflect2d_point_y_axis(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_reflect2d_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 1f0, 0f0],
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Reflect one point across the diagonal line `y = x` on XY.
+
+Convenience overload for `transform_reflect2d_point`.
+"""
+function transform_reflect2d_point_diag_pos(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_reflect2d_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 1f0, 0f0],
+        current_time,
+        total_duration,
+    )
+end
+
+
+"""
+Reflect one point across the diagonal line `y = -x` on XY.
+
+Convenience overload for `transform_reflect2d_point`.
+"""
+function transform_reflect2d_point_diag_neg(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    return transform_reflect2d_point(
+        state_ptr,
+        point_id,
+        start_position,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, -1f0, 0f0],
+        current_time,
+        total_duration,
+    )
+end
 
 
 function place_pen_at_angles(

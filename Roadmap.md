@@ -45,7 +45,7 @@ Core Content:
   - [X] Section 8
 - [ ] Algebraic groups
   - [ ] Definitions
-    - [ ] $\mathbb Z_2$ (irregular polygon reflecting about a line; special case of $C_n$)
+    - [ ] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
       - [ ] Closure
       - [ ] Identity
       - [ ] Inverse
@@ -54,7 +54,7 @@ Core Content:
       - [ ] Commutative (Abelian)
     - [ ] $D_n$ (dihedrals, symmetry of shape with $n$ sides ; non-commutative)
       - [ ] Non-Abelian
-    - [ ] $(\mathbb R^2, +)$ (translation group -- moving shapes)
+    - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
     - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
     - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
@@ -94,6 +94,11 @@ General features:
   - [X] Basic input tab completion support, including unicode characters & function names
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
+- [X] Standard group-focused transformation animations for complex shapes
+  - [X] Translation
+  - [X] Rotation
+  - [X] Reflection
+  - [X] Basic group transformation animation hooks for REPL
 - [X] View text more advanced layout engine
 - [X] Continued view text support for colors, shape fill, etc.
 - [ ] Basic LaTeX type rendering support
@@ -104,11 +109,6 @@ General features:
   - [ ] Dynamic sized brackets
   - [ ] Matrices
   - [ ] Sums, Products, Integrals
-- [ ] Standard group-focused transformation animations for complex shapes
-  - [ ] Translation
-  - [ ] Rotation
-  - [ ] Reflection
-  - [ ] Basic group transformation animation hooks for REPL
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 

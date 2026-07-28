@@ -18,12 +18,17 @@ using ..EuclidAnimations
 using ..Scratchpad
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
-    DEFAULT_COLOR, DEFAULT_BRUSH,
-    point!, line!, circle!, stop!, clear!, status
+    DEFAULT_TRANSFORM_DURATION, DEFAULT_COLOR, DEFAULT_BRUSH,
+    point!, line!, circle!,
+    translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!, rotate_points_z!,
+    reflect2d_points!, reflect2d_points_x_axis!, reflect2d_points_y_axis!,
+    reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
+    stop!, clear!, status
 
 const DEFAULT_POINT_DURATION = 5.5f0
 const DEFAULT_LINE_DURATION = 7.5f0
 const DEFAULT_CIRCLE_DURATION = 8.0f0
+const DEFAULT_TRANSFORM_DURATION = 2.5f0
 const DEFAULT_COLOR = :steelblue
 const DEFAULT_BRUSH = 5f0
 
@@ -61,6 +66,29 @@ struct CirclePayload <: ReplDrawPayload
     angle_theta::Float32
     color
     brush::Float32
+end
+
+abstract type TransformSpec end
+
+struct TranslateSpec <: TransformSpec
+    displacement::Vector{Float32}
+end
+
+struct RotateSpec <: TransformSpec
+    axis_a::Vector{Float32}
+    axis_b::Vector{Float32}
+    theta::Float32
+end
+
+struct Reflect2DSpec <: TransformSpec
+    line_a::Vector{Float32}
+    line_b::Vector{Float32}
+end
+
+struct TransformPayload <: ReplDrawPayload
+    point_ids::Vector{Int}
+    start_positions::Vector{Vector{Float32}}
+    spec::TransformSpec
 end
 
 mutable struct ReplDrawJob
@@ -142,6 +170,33 @@ function vec3(name::AbstractString, value::Vector{Float32})
     return Float32[value[1], value[2], value[3]]
 end
 
+"""Return validated non-empty point ids as `Vector{Int}`."""
+function validated_point_ids(point_ids)
+    ids = Int[Int(id) for id in point_ids]
+    if isempty(ids)
+        throw(ArgumentError("point_ids must contain at least one id"))
+    end
+    return ids
+end
+
+"""Return validated start positions, one 3D position per point id."""
+function validated_start_positions(start_positions)
+    positions = Vector{Vector{Float32}}()
+    for (idx, pos) in enumerate(start_positions)
+        push!(positions, vec3("start_positions[$(idx)]", pos))
+    end
+    return positions
+end
+
+"""Validate matching lengths for point ids and start positions."""
+function validate_transform_batch_lengths(
+    point_ids::Vector{Int}, start_positions::Vector{Vector{Float32}})
+
+    if length(point_ids) != length(start_positions)
+        throw(ArgumentError("point_ids and start_positions must have equal length"))
+    end
+end
+
 """Compute final end theta for REPL circle semantics."""
 function effective_end_theta(start_theta::Float32, end_theta::Float32)
     if !isfinite(end_theta)
@@ -202,6 +257,14 @@ function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::CirclePayload)
         OdinJuliaBridge.set_point_offset(state_ptr, payload.host_id, 0f0)
     end
     OdinJuliaBridge.show_point(state_ptr, payload.host_id)
+end
+
+"""Apply final visible state for a transform payload at completed progress."""
+function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
+    for (index, point_id) in pairs(payload.point_ids)
+        start_position = payload.start_positions[index]
+        render_transform_spec!(state_ptr, 1f0, 1f0, point_id, start_position, payload.spec)
+    end
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -266,6 +329,81 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
     end
 end
 
+"""Render one frame of batch point translation."""
+function render_transform_spec!(
+    state_ptr::Ptr{Cvoid},
+    elapsed::Float32,
+    duration::Float32,
+    point_id::Int,
+    start_position::Vector{Float32},
+    spec::TranslateSpec)
+
+    EuclidAnimations.transform_translate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        spec.displacement,
+        elapsed,
+        duration,
+    )
+end
+
+"""Render one frame of batch point rotation."""
+function render_transform_spec!(
+    state_ptr::Ptr{Cvoid},
+    elapsed::Float32,
+    duration::Float32,
+    point_id::Int,
+    start_position::Vector{Float32},
+    spec::RotateSpec)
+
+    EuclidAnimations.transform_rotate_point(
+        state_ptr,
+        point_id,
+        start_position,
+        spec.axis_a,
+        spec.axis_b,
+        spec.theta,
+        elapsed,
+        duration,
+    )
+end
+
+"""Render one frame of batch point 2D reflection."""
+function render_transform_spec!(
+    state_ptr::Ptr{Cvoid},
+    elapsed::Float32,
+    duration::Float32,
+    point_id::Int,
+    start_position::Vector{Float32},
+    spec::Reflect2DSpec)
+
+    EuclidAnimations.transform_reflect2d_point(
+        state_ptr,
+        point_id,
+        start_position,
+        spec.line_a,
+        spec.line_b,
+        elapsed,
+        duration,
+    )
+end
+
+"""Render one frame of the active payload animation at elapsed draw time."""
+function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::TransformPayload)
+    for (index, point_id) in pairs(payload.point_ids)
+        start_position = payload.start_positions[index]
+        render_transform_spec!(
+            state_ptr,
+            elapsed,
+            duration,
+            point_id,
+            start_position,
+            payload.spec,
+        )
+    end
+end
+
 """Finalize active job visibility and hide the tool used for that job."""
 function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     if state_ptr == Ptr{Cvoid}(0)
@@ -275,7 +413,7 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     finalize_payload!(state_ptr, job.payload)
     if job.kind == :point || job.kind == :line
         OdinJuliaBridge.hide_pen(state_ptr)
-    else
+    elseif job.kind == :circle
         OdinJuliaBridge.hide_compass(state_ptr)
     end
 end
@@ -547,6 +685,215 @@ function circle!(state_ptr::Ptr{Cvoid}, center::Vector{Float32}, radius::Float32
     start_job!(state_ptr, job)
     track_managed_host!(ensure_session!(), Int(shape.hostId))
     return shape
+end
+
+"""
+Animate translation of multiple points using per-point start positions.
+
+Keywords:
+- `duration=DEFAULT_TRANSFORM_DURATION`
+"""
+function translate_points!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    displacement::Vector{Float32};
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    ids = validated_point_ids(point_ids)
+    starts = validated_start_positions(start_positions)
+    validate_transform_batch_lengths(ids, starts)
+    displacement3 = vec3("displacement", displacement)
+    draw_duration = validated_duration(duration)
+
+    payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    start_job!(state_ptr, job)
+    return ids
+end
+
+"""
+Animate rotation of multiple points around a shared 3D axis line.
+
+Keywords:
+- `duration=DEFAULT_TRANSFORM_DURATION`
+"""
+function rotate_points!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    axis_point_a::Vector{Float32},
+    axis_point_b::Vector{Float32},
+    theta::Real;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    ids = validated_point_ids(point_ids)
+    starts = validated_start_positions(start_positions)
+    validate_transform_batch_lengths(ids, starts)
+    axisA = vec3("axis_point_a", axis_point_a)
+    axisB = vec3("axis_point_b", axis_point_b)
+    draw_duration = validated_duration(duration)
+
+    payload = TransformPayload(
+        ids,
+        starts,
+        RotateSpec(axisA, axisB, Float32(theta)),
+    )
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    start_job!(state_ptr, job)
+    return ids
+end
+
+"""Rotate points around world X axis through origin."""
+function rotate_points_x!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    theta::Real;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return rotate_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        theta;
+        duration=duration,
+    )
+end
+
+"""Rotate points around world Y axis through origin."""
+function rotate_points_y!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    theta::Real;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return rotate_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 1f0, 0f0],
+        theta;
+        duration=duration,
+    )
+end
+
+"""Rotate points around world Z axis through origin."""
+function rotate_points_z!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    theta::Real;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return rotate_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 0f0, 1f0],
+        theta;
+        duration=duration,
+    )
+end
+
+"""
+Animate 2D reflection of multiple points across one XY line (`z=0`).
+
+Keywords:
+- `duration=DEFAULT_TRANSFORM_DURATION`
+"""
+function reflect2d_points!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions,
+    line_point_a::Vector{Float32},
+    line_point_b::Vector{Float32};
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    ids = validated_point_ids(point_ids)
+    starts = validated_start_positions(start_positions)
+    validate_transform_batch_lengths(ids, starts)
+    lineA = vec3("line_point_a", line_point_a)
+    lineB = vec3("line_point_b", line_point_b)
+    draw_duration = validated_duration(duration)
+
+    payload = TransformPayload(ids, starts, Reflect2DSpec(lineA, lineB))
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    start_job!(state_ptr, job)
+    return ids
+end
+
+"""Reflect points across world X axis (`y=0`) on XY plane."""
+function reflect2d_points_x_axis!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return reflect2d_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0];
+        duration=duration,
+    )
+end
+
+"""Reflect points across world Y axis (`x=0`) on XY plane."""
+function reflect2d_points_y_axis!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return reflect2d_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[0f0, 1f0, 0f0];
+        duration=duration,
+    )
+end
+
+"""Reflect points across diagonal `y=x` on XY plane."""
+function reflect2d_points_diag_pos!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return reflect2d_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 1f0, 0f0];
+        duration=duration,
+    )
+end
+
+"""Reflect points across diagonal `y=-x` on XY plane."""
+function reflect2d_points_diag_neg!(
+    state_ptr::Ptr{Cvoid},
+    point_ids,
+    start_positions;
+    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+
+    return reflect2d_points!(
+        state_ptr,
+        point_ids,
+        start_positions,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, -1f0, 0f0];
+        duration=duration,
+    )
 end
 
 end
