@@ -96,6 +96,13 @@ dynview_radical_lead_width :: #force_inline proc(font_size, base_advance: f32) -
     return max(base_advance * 1.48, font_size * 0.92)
 }
 
+//   Return asymmetric horizontal side padding for radical items.
+dynview_radical_side_paddings :: #force_inline proc(font_size, base_advance: f32) -> (f32, f32) {
+    front_padding := max(1.0, max(base_advance * 0.5, font_size * 0.5))
+    back_padding := max(0.1, max(base_advance * 0.1, font_size * 0.075))
+    return front_padding, back_padding
+}
+
 //   Return default block format values keyed by block kind.
 dynview_block_format_for_kind :: #force_inline proc(block_kind: i32) -> Dynview_Block_Format {
     switch block_kind {
@@ -224,12 +231,12 @@ dynview_layout_push_item :: proc(
 dynview_layout_apply_item_offsets :: proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
     start_index, item_count: int,
-    baseline: f32) {
+    line_height: f32) {
 
     item_end := start_index + item_count
     for item_index in start_index..<item_end {
         item := &cache^.layout_items[item_index]
-        item^.y_offset = baseline - item^.ascent
+        item^.y_offset = (line_height - item^.draw_height) * 0.5
     }
 }
 
@@ -268,7 +275,7 @@ dynview_layout_finalize_line :: proc(
     line^.max_ascent = acc^.max_ascent
     line^.max_descent = acc^.max_descent
 
-    dynview_layout_apply_item_offsets(cache, line^.item_start, line^.item_count, line^.baseline)
+    dynview_layout_apply_item_offsets(cache, line^.item_start, line^.item_count, line^.line_height)
     dynview_layout_advance_after_line(cache, state, acc, line_height, base_ascent, base_descent)
     return DYNVIEW_STATUS_OK
 }
@@ -729,17 +736,6 @@ dynview_layout_consume_radical_bar :: proc(
 
     max_cols := dynview_layout_max_cols(cache, style)
     text_ascent, text_descent := dynview_style_ascent_descent(style, font_size)
-    status := dynview_layout_wrap_before_inline(
-        cache,
-        state,
-        acc,
-        max_cols,
-        cols,
-        text_ascent,
-        text_descent)
-    if status != DYNVIEW_STATUS_OK {
-        return status, -1
-    }
 
     script_style := dynview_style_by_id(cmd.script_style_id)
     script_scale := max(0.2, cmd.script_scale)
@@ -791,7 +787,29 @@ dynview_layout_consume_radical_bar :: proc(
     lead_width := max(
         dynview_radical_lead_width(font_size, base_advance),
         index_width + max(1.0, base_advance * 1.05))
-    draw_width := lead_width + content_width
+    front_padding, back_padding := dynview_radical_side_paddings(font_size, base_advance)
+    draw_width := lead_width + content_width + front_padding + back_padding
+
+    required_cols := cols
+    if base_advance > 0 {
+        required_cols = max(required_cols, int(draw_width / base_advance))
+        if f32(required_cols) * base_advance < draw_width {
+            required_cols += 1
+        }
+    }
+    cols = min(max_cols, max(1, required_cols))
+
+    status := dynview_layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
 
     item := core.Ui_Dynview_Layout_Item{
         kind = .RadicalBar,
@@ -1773,7 +1791,8 @@ dynview_draw_radical_bar_item :: #force_inline proc(
     base_ascent, _ := dynview_style_ascent_descent(style, font_size)
     base_advance := dynview_effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     lead_width := dynview_radical_lead_width(font_size, base_advance)
-    content_x := draw_x + lead_width
+    front_padding, back_padding := dynview_radical_side_paddings(font_size, base_advance)
+    content_x := draw_x + front_padding + lead_width
     base_top := baseline_y - base_ascent
     ui_text_f32(text, content_x, base_top, style.color, resolved_font, font_size)
 
@@ -1799,22 +1818,22 @@ dynview_draw_radical_bar_item :: #force_inline proc(
     bar_offset := max(0.0, item.accent_offset * font_size)
 
     bar_y := baseline_y - content_ascent - bar_offset
-    bar_start_x := draw_x + lead_width * 0.84
-    bar_end_x := draw_x + item.draw_width
+    bar_start_x := draw_x + front_padding + lead_width * 0.84
+    bar_end_x := draw_x + item.draw_width - back_padding
     rl.DrawLineEx(
         rl.Vector2{bar_start_x, bar_y},
         rl.Vector2{bar_end_x, bar_y},
         bar_thickness,
         radical_style.color)
 
-    hook_start_x := draw_x - lead_width * 0.20
+    hook_start_x := draw_x + front_padding - lead_width * 0.20
     hook_start_y := baseline_y - font_size * 0.3
     hook_flag_x := hook_start_x - 2.5
-    root_low_x := draw_x + lead_width * 0.26
+    root_low_x := draw_x + front_padding + lead_width * 0.26
     root_low_y := baseline_y + font_size * 0.375
-    root_rise_x := draw_x + lead_width * 0.88
+    root_rise_x := draw_x + front_padding + lead_width * 0.88
     root_rise_y := bar_y - font_size * 0.14
-    root_high_x := draw_x + lead_width * 1.24
+    root_high_x := draw_x + front_padding + lead_width * 1.24
     root_high_y := bar_y - font_size * 0.06 + bar_thickness * 0.5
     hook_stroke := max(bar_thickness, bar_thickness * 1.25)
 
@@ -1851,7 +1870,7 @@ dynview_draw_radical_bar_item :: #force_inline proc(
         index_cols := max(1, text_codepoint_count(index_text))
         index_advance := dynview_effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * index_scale
         index_width := f32(index_cols) * index_advance
-        index_right_limit := draw_x + lead_width * 0.36
+        index_right_limit := draw_x + front_padding + lead_width * 0.36
         index_x := index_right_limit - index_width
         index_y := baseline_y - content_ascent * 0.62 - index_ascent * 0.50 - font_size * 0.25
         ui_text_f32(index_text, index_x, index_y, script_style.color, script_font, index_font_size)
