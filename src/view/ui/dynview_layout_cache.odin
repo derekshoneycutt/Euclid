@@ -1809,7 +1809,8 @@ dynview_draw_radical_bar_item :: #force_inline proc(
 
     hook_start_x := draw_x - lead_width * 0.20
     hook_start_y := baseline_y - font_size * 0.3
-    root_low_x := draw_x + lead_width * 0.36
+    hook_flag_x := hook_start_x - 2.5
+    root_low_x := draw_x + lead_width * 0.26
     root_low_y := baseline_y + font_size * 0.375
     root_rise_x := draw_x + lead_width * 0.88
     root_rise_y := bar_y - font_size * 0.14
@@ -1817,6 +1818,11 @@ dynview_draw_radical_bar_item :: #force_inline proc(
     root_high_y := bar_y - font_size * 0.06 + bar_thickness * 0.5
     hook_stroke := max(bar_thickness, bar_thickness * 1.25)
 
+    rl.DrawLineEx(
+        rl.Vector2{hook_flag_x, hook_start_y},
+        rl.Vector2{hook_start_x, hook_start_y},
+        hook_stroke,
+        radical_style.color)
     rl.DrawLineEx(
         rl.Vector2{hook_start_x, hook_start_y},
         rl.Vector2{root_low_x, root_low_y},
