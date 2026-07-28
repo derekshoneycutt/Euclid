@@ -1808,8 +1808,8 @@ dynview_draw_radical_bar_item :: #force_inline proc(
         radical_style.color)
 
     hook_start_x := draw_x - lead_width * 0.20
-    hook_start_y := baseline_y - font_size * 0.455
-    root_low_x := draw_x + lead_width * 0.66
+    hook_start_y := baseline_y - font_size * 0.3
+    root_low_x := draw_x + lead_width * 0.36
     root_low_y := baseline_y + font_size * 0.375
     root_rise_x := draw_x + lead_width * 0.88
     root_rise_y := bar_y - font_size * 0.14
@@ -1839,8 +1839,8 @@ dynview_draw_radical_bar_item :: #force_inline proc(
         radical_style.color)
 
     if len(index_text) > 0 {
-        index_scale := max(0.2, item.script_scale)
-        index_font_size := max(1.0, font_size * index_scale)
+        index_scale := max(0.75, item.script_scale)
+        index_font_size := max(3.0, font_size * index_scale)
         index_ascent, _ := dynview_style_ascent_descent(script_style, index_font_size)
         index_cols := max(1, text_codepoint_count(index_text))
         index_advance := dynview_effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * index_scale
