@@ -1,0 +1,134 @@
+if !isdefined(Main, :OdinJuliaBridge)
+    include("../odin-julia-bridge.jl")
+end
+if !isdefined(Main, :EuclidLatex)
+    include("../latex.jl")
+end
+
+using .EuclidLatex
+using Test
+
+@testset "unicode and text operators" begin
+    EuclidLatex.clear_cache!()
+
+    plain = EuclidLatex.latex_to_plain_text("\\alpha + \\beta + \\sin(x)")
+    @test plain == "α + β + sin(x)"
+
+    program = EuclidLatex.compiled_program_for("\\sin(x)+x")
+    @test length(program) == 2
+    @test program[1].kind == :TextRun
+    @test program[1].text == "sin"
+    @test program[2].kind == :MathGlyphRun
+    @test program[2].text == "(x)+x"
+end
+
+@testset "text command and scripts" begin
+    plain = EuclidLatex.latex_to_plain_text("\\text{Area }A_1^2")
+    @test plain == "Area A^{2}_{1}"
+
+    continued = EuclidLatex.latex_to_plain_text("A_1^2 + \\mathbb{R}")
+    @test continued == "A^{2}_{1} + ℝ"
+
+    fallback = EuclidLatex.latex_to_plain_text("x_{ij}")
+    @test fallback == "x_{ij}"
+
+    canonical = EuclidLatex.latex_to_plain_text("x^2_1")
+    @test canonical == "x^{2}_{1}"
+
+    canonical_swapped = EuclidLatex.latex_to_plain_text("x_1^2")
+    @test canonical_swapped == "x^{2}_{1}"
+end
+
+@testset "script attach emit program" begin
+    program = EuclidLatex.compiled_program_for("A_1^2")
+    @test length(program) == 1
+    @test program[1].kind == :ScriptAttach
+    @test program[1].text == "A"
+    @test program[1].sup_text == "2"
+    @test program[1].sub_text == "1"
+end
+
+@testset "accent bars" begin
+    over = EuclidLatex.latex_to_plain_text("\\overline{AB}")
+    @test over == "\\overline{AB}"
+
+    under = EuclidLatex.latex_to_plain_text("\\underline{CD}")
+    @test under == "\\underline{CD}"
+
+    nested = EuclidLatex.latex_to_plain_text("\\overline{\\underline{x}}")
+    @test nested == "\\overline{\\underline{x}}"
+
+    accent_program = EuclidLatex.compiled_program_for("f(\\overline{AB}) + \\underline{CD}")
+    @test length(accent_program) == 4
+    @test accent_program[1].kind == :MathGlyphRun
+    @test accent_program[2].kind == :AccentBar
+    @test accent_program[2].accent_mode == :overline
+    @test accent_program[4].kind == :AccentBar
+    @test accent_program[4].accent_mode == :underline
+
+    embedded_scripts = EuclidLatex.compiled_program_for("\\overline{AB^2} + \\underline{CD_4}")
+    @test length(embedded_scripts) == 3
+    @test embedded_scripts[1].kind == :AccentBar
+    @test embedded_scripts[1].text == "AB"
+    @test embedded_scripts[1].sup_text == "2"
+    @test embedded_scripts[1].sub_text == ""
+    @test embedded_scripts[1].accent_mode == :overline
+    @test embedded_scripts[3].kind == :AccentBar
+    @test embedded_scripts[3].text == "CD"
+    @test embedded_scripts[3].sup_text == ""
+    @test embedded_scripts[3].sub_text == "4"
+    @test embedded_scripts[3].accent_mode == :underline
+end
+
+@testset "radicals" begin
+    plain = EuclidLatex.latex_to_plain_text("\\sqrt{x}")
+    @test plain == "\\sqrt{x}"
+
+    indexed = EuclidLatex.latex_to_plain_text("\\sqrt[3]{x}")
+    @test indexed == "\\sqrt[3]{x}"
+
+    indexed_unicode = EuclidLatex.latex_to_plain_text("\\sqrt[α]{AB}")
+    @test indexed_unicode == "\\sqrt[α]{AB}"
+
+    indexed_unicode_command = EuclidLatex.latex_to_plain_text("\\sqrt[\\alpha]{AB}")
+    @test indexed_unicode_command == "\\sqrt[α]{AB}"
+
+    scripted = EuclidLatex.latex_to_plain_text("\\sqrt{A_1^2}")
+    @test scripted == "\\sqrt{A^{2}_{1}}"
+
+    out_of_scope_index = EuclidLatex.latex_to_plain_text("\\sqrt[2n]{x}")
+    @test out_of_scope_index == "\\sqrt{x}"
+
+    radical_program = EuclidLatex.compiled_program_for("\\sqrt{AB} + \\sqrt{x^2}")
+    @test length(radical_program) == 3
+    @test radical_program[1].kind == :RadicalBar
+    @test radical_program[1].text == "AB"
+    @test radical_program[1].radical_mode == :sqrt
+    @test radical_program[3].kind == :RadicalBar
+    @test radical_program[3].text == "x"
+    @test radical_program[3].sup_text == "2"
+
+    indexed_program = EuclidLatex.compiled_program_for("\\sqrt[n]{A_1^2}")
+    @test length(indexed_program) == 1
+    @test indexed_program[1].kind == :RadicalBar
+    @test indexed_program[1].text == "A"
+    @test indexed_program[1].radical_index_text == "n"
+    @test indexed_program[1].sup_text == "2"
+    @test indexed_program[1].sub_text == "1"
+    @test indexed_program[1].radical_mode == :nthroot
+end
+
+@testset "cache behavior" begin
+    EuclidLatex.clear_cache!()
+    @test EuclidLatex.cache_size() == 0
+
+    first_entry = EuclidLatex.resolve_cache_entry("\\gamma + \\delta")
+    second_entry = EuclidLatex.resolve_cache_entry("\\gamma + \\delta")
+
+    @test EuclidLatex.cache_size() == 1
+    @test first_entry === second_entry
+
+    _ = EuclidLatex.resolve_cache_entry("\\gamma + \\delta"; style_profile=1)
+    @test EuclidLatex.cache_size() == 2
+end
+

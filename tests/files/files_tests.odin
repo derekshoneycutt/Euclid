@@ -58,8 +58,7 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     required := []string{
         "julia/script.jl",
         "compass_icon.png",
-        "font.ttf",
-        "font_mono.ttf",
+        "JuliaMono-Regular.ttf",
         "manifest.txt",
     }
 

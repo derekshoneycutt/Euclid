@@ -3,6 +3,7 @@ package view_tests
 import "core:testing"
 
 import app_core "../../src/core"
+import app_view_core "../../src/view/core"
 import app_ui "../../src/view/ui"
 
 import rl "vendor:raylib"
@@ -209,4 +210,43 @@ input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, string(buffer[:text_len]), "ab")
     testing.expect_value(t, text_len, 2)
     testing.expect_value(t, caret, 2)
+}
+
+@(test)
+font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
+    flags := app_core.Font_Variant_Flags(
+        u32(app_core.Font_Variant_Flags.Light) |
+        u32(app_core.Font_Variant_Flags.Bold) |
+        u32(app_core.Font_Variant_Flags.Italic))
+
+    resolved := app_view_core.font_resolve_weight_from_flags(flags)
+    testing.expect_value(t, resolved, app_core.Font_Weight.Bold)
+
+    heavier := app_core.Font_Variant_Flags(
+        u32(flags) |
+        u32(app_core.Font_Variant_Flags.ExtraBold) |
+        u32(app_core.Font_Variant_Flags.Black))
+    resolved_heavier := app_view_core.font_resolve_weight_from_flags(heavier)
+    testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
+}
+
+@(test)
+dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
+    custom_flags := app_core.Font_Variant_Flags(
+        u32(app_core.Font_Variant_Flags.Light) |
+        u32(app_core.Font_Variant_Flags.Bold) |
+        u32(app_core.Font_Variant_Flags.Italic))
+
+    style_id := app_ui.DYNVIEW_STYLE_CUSTOM_FONT | i32(u32(custom_flags) & u32(app_ui.DYNVIEW_STYLE_CUSTOM_FONT_MASK))
+    style, ok := app_ui.dynview_style_from_custom_font_flags(style_id)
+
+    testing.expect(t, ok)
+    testing.expect(t, style.italic)
+    testing.expect_value(t, style.font_flags, custom_flags)
+    testing.expect_value(t, style.wrap_scale, f32(1.0))
+    testing.expect_value(t, style.line_height_multiplier, f32(1.0))
+
+    // Non-custom style ids should not decode through the custom-font flag path.
+    _, normal_ok := app_ui.dynview_style_from_custom_font_flags(app_ui.DYNVIEW_STYLE_OUTPUT)
+    testing.expect(t, !normal_ok)
 }

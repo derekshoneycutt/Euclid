@@ -8,6 +8,9 @@ if !isdefined(Main, :EuclidAnimations)
     @eval module EuclidAnimations
     end
 end
+if !isdefined(Main, :EuclidLatex)
+    include("../latex.jl")
+end
 
 include("../scratchpad.jl")
 if !isdefined(Main, :EuclidRepl)

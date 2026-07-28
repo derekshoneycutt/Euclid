@@ -2,6 +2,7 @@ module ElementsOneDefinitionPoint
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ...EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -26,6 +27,7 @@ const PhaseRise = 2f0
 
 const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
 const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
+const DynviewStyleItalic = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC
 const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 
 const DefinitionViewText = """Euclid Elements - Book I - Definition: Point
@@ -75,9 +77,41 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     if OdinJuliaBridge.dynview_text_run(
         state_ptr,
         " is that which has no part.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
+
+    # TEMPORARY TESTING ONLY: Phase 1 LaTeX sample rendering.
+    # Keep the original definition text and append test output on a new line.
+    latex_test_source = "\\text{TEMP TEST: Phase 2} \\alpha + \\beta + \\sin(x) + f(A_1^2) + \\overline{AB^2} + \\underline{CD_4} + \\mathbb{R}"
+    latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + \\sqrt[3]{AB} + \\sqrt[n]{A_1^2} + \\sqrt[α]{x}"
+    if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    latex_program = EuclidLatex.compiled_program_for(latex_test_source)
+    if !EuclidLatex.replay_emit_program!(
+        state_ptr,
+        latex_program;
+        text_style=DynviewStyleOutput,
+        math_style=DynviewStyleItalic)
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    latex_radical_program = EuclidLatex.compiled_program_for(latex_radical_test_source)
+    if !EuclidLatex.replay_emit_program!(
+        state_ptr,
+        latex_radical_program;
+        text_style=DynviewStyleOutput,
+        math_style=DynviewStyleItalic)
+        return fallback
+    end
+    # END TEMPORARY TESTING ONLY.
 
     if OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback

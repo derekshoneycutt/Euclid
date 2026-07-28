@@ -273,6 +273,7 @@ draw_scratchpad_output_and_prompt :: proc(
     draw_dynview_copy_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
 
     dynview_draw_scratchpad_styled_or_fallback(
+        state,
         ui_runtime,
         output_text_legacy,
         output_panel,

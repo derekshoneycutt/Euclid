@@ -2,6 +2,7 @@
 # This just loads all the system helpers and animation files, and registers in init for Odin
 
 include("./odin-julia-bridge.jl")
+include("./latex.jl")
 include("./geometry.jl")
 include("./animations.jl")
 include("./scratchpad.jl")

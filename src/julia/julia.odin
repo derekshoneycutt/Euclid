@@ -579,7 +579,7 @@ resolve_main_module :: proc() -> ^jl_module_t {
 
 //   Resolve Julia Base module handle used for exception formatting.
 resolve_base_module :: proc() -> ^jl_module_t {
-    base_value := jl_eval_string("base")
+    base_value := jl_eval_string("Base")
     if base_value == nil || jl_exception_occurred() != nil {
         return nil
     }
@@ -903,6 +903,7 @@ print_julia_exception :: proc(contextOfErr: string) {
 
     if sprint_fn == nil || showerror_fn == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        fmt.println("Julia exception formatter unavailable (Base.sprint/Base.showerror).")
         return
     }
 
@@ -925,6 +926,7 @@ print_julia_exception :: proc(contextOfErr: string) {
 
     if jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        fmt.println("Failed to format exception text via Base.sprint(showerror, ...).")
         return
     }
 

@@ -11,6 +11,77 @@ ui_text :: #force_inline proc(
     rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, 0, color)
 }
 
+//   Draw UTF-8 UI text using float coordinates to avoid pixel snap artifacts.
+ui_text_f32 :: #force_inline proc(
+    text: string, x, y: f32, color: rl.Color, font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
+    cloned := strings.clone_to_cstring(text, context.temp_allocator)
+    rl.DrawTextEx(font, cloned, rl.Vector2{x, y}, font_size, 0, color)
+}
+
+//   Count UTF-8 codepoints in the byte range [start, end) of a string.
+text_codepoint_count_span :: #force_inline proc(text: string, start, end: int) -> int {
+    if end <= start {
+        return 0
+    }
+
+    clamped_start := max(0, start)
+    clamped_end := min(len(text), end)
+    if clamped_end <= clamped_start {
+        return 0
+    }
+
+    count := 0
+    for i := clamped_start; i < clamped_end; i += 1 {
+        if !input_box_is_utf8_trailing_byte(text[i]) {
+            count += 1
+        }
+    }
+    return count
+}
+
+//   Count UTF-8 codepoints in a whole string.
+text_codepoint_count :: #force_inline proc(text: string) -> int {
+    return text_codepoint_count_span(text, 0, len(text))
+}
+
+//   Draw UTF-8 UI text and adjust spacing so the run fits a target width.
+ui_text_fit_width :: #force_inline proc(
+    text: string,
+    x, y: int,
+    color: rl.Color,
+    font: rl.Font,
+    target_width: f32,
+    font_size: f32 = TREE_FONT_SIZE) {
+
+    if len(text) == 0 || target_width <= 0 {
+        ui_text(text, x, y, color, font, font_size)
+        return
+    }
+
+    cloned := strings.clone_to_cstring(text, context.temp_allocator)
+    measured := rl.MeasureTextEx(font, cloned, font_size, 0).x
+    if measured <= 0 {
+        rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, 0, color)
+        return
+    }
+
+    glyph_gaps := len(text) - 1
+    if glyph_gaps <= 0 {
+        rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, 0, color)
+        return
+    }
+
+    spacing := (target_width - measured) / f32(glyph_gaps)
+    if spacing < -1.0 {
+        spacing = -1.0
+    }
+    if spacing > 1.0 {
+        spacing = 1.0
+    }
+
+    rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, spacing, color)
+}
+
 //   Estimate visible character capacity for one wrapped text row.
 chars_per_text_row :: #force_inline proc(width, wrap_advance: f32) -> int {
     count := int(width / wrap_advance)
@@ -37,21 +108,28 @@ next_wrapped_text_span :: proc(
             last_space = line_end
         }
 
+        seq_len := input_box_utf8_sequence_len(text, line_end)
+        if seq_len <= 0 {
+            seq_len = 1
+        }
+
         chars_used += 1
         if chars_used > max_chars {
             if last_space >= start {
                 line_end = last_space
-            } else if line_end > start {
-                line_end -= 1
             }
             break
         }
 
-        line_end += 1
+        line_end += seq_len
     }
 
     if line_end == start && line_end < len(text) && text[line_end] != '\n' {
-        line_end += 1
+        seq_len := input_box_utf8_sequence_len(text, line_end)
+        if seq_len <= 0 {
+            seq_len = 1
+        }
+        line_end += seq_len
     }
 
     next_start := line_end

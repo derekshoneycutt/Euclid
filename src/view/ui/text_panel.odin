@@ -76,6 +76,7 @@ draw_view_text_panel :: proc(
         DYNVIEW_COPY_ICON_X_PAD)
 
     dynview_draw_scratchpad_styled_or_fallback(
+        state,
         ui_runtime,
         view_text,
         text_panel,

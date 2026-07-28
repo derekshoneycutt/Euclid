@@ -7,11 +7,12 @@ import "core:fmt"
 
 import rl "vendor:raylib"
 
-//   Render particle render-count statistics in settings view.
+//   Render particle render-count statistics and Julia animation-entry counts in settings view.
 draw_settings_particle_stats :: proc(
     panel: rl.Rectangle,
     stats_y: f32,
     ps: ^core.Particle_System,
+    animation_entries_added: int,
     font: rl.Font) {
 
     ui_text(fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
@@ -21,6 +22,9 @@ draw_settings_particle_stats :: proc(
         UI_TEXT_COLOR, font)
     ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
+        UI_TEXT_COLOR, font)
+    ui_text(fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 3),
         UI_TEXT_COLOR, font)
 }
 
@@ -240,6 +244,10 @@ draw_settings_view :: proc(
     })
 
     max_particles := core.MAX_LOW_PARTICLES
+    animation_entries_added := 0
+    if state.julia_interface != nil {
+        animation_entries_added = state.julia_interface.next_animation_index
+    }
     draw_settings_integer_slider(
         panel,
         slider_label_row.segment_rect.y,
@@ -251,7 +259,7 @@ draw_settings_view :: proc(
         0,
         max_particles,
         font)
-    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, font)
+    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, animation_entries_added, font)
     draw_settings_fps_checkbox(panel, fps_row.segment_rect.y, mouse_input, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)
     draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y, mouse_input, ui_runtime, font)

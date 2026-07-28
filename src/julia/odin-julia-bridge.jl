@@ -20,7 +20,18 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     BRIDGE_DYNVIEW_STYLE_DEFAULT, BRIDGE_DYNVIEW_STYLE_PROMPT,
     BRIDGE_DYNVIEW_STYLE_OUTPUT, BRIDGE_DYNVIEW_STYLE_ERROR,
     BRIDGE_DYNVIEW_STYLE_BOLD, BRIDGE_DYNVIEW_STYLE_ITALIC,
-    BRIDGE_DYNVIEW_STYLE_CENTER, BRIDGE_DYNVIEW_STYLE_INLINE_ATOM,
+    BRIDGE_DYNVIEW_STYLE_CENTER, BRIDGE_DYNVIEW_STYLE_MEDIUM,
+    BRIDGE_DYNVIEW_STYLE_SEMIBOLD, BRIDGE_DYNVIEW_STYLE_EXTRABOLD,
+    BRIDGE_DYNVIEW_STYLE_BLACK, BRIDGE_DYNVIEW_STYLE_INLINE_ATOM,
+    BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT,
+    BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE, BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE,
+    BRIDGE_DYNVIEW_RADICAL_MODE_SQRT, BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT,
+    BRIDGE_DYNVIEW_FONT_FLAG_NONE, BRIDGE_DYNVIEW_FONT_FLAG_ITALIC,
+    BRIDGE_DYNVIEW_FONT_FLAG_LIGHT, BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
+    BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM, BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD,
+    BRIDGE_DYNVIEW_FONT_FLAG_BOLD, BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD,
+    BRIDGE_DYNVIEW_FONT_FLAG_BLACK,
+    dynview_style_with_font_flags,
     BRIDGE_STATUS_OK, BRIDGE_STATUS_INVALID_INDEX, BRIDGE_STATUS_INVALID_ARGUMENT,
     BRIDGE_STATUS_INVALID_GRAPH, BRIDGE_STATUS_INVALID_CONSTRAINT,
     BRIDGE_STATUS_OUT_OF_CAPACITY, BRIDGE_STATUS_ILLEGAL_STATE, BRIDGE_STATUS_NON_CONVERGED,
@@ -33,7 +44,10 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     create_new_triangle, create_new_square, create_new_pentagon, get_point, show_point,
     hide_point, hide_point_batch, set_point_position, set_point_brush, set_point_color,
     set_point_active_color, notify_animation_cycle_boundary,
-    dynview_reset_stream, dynview_begin_block, dynview_text_run,
+    dynview_reset_stream, dynview_begin_block, dynview_text_run, dynview_math_glyph_run,
+    dynview_script_attach,
+    dynview_accent_bar,
+    dynview_radical_bar,
     dynview_copyable_text_run,
     dynview_inline_line,
     dynview_inline_box,
@@ -235,7 +249,35 @@ const BRIDGE_DYNVIEW_STYLE_ERROR = Int32(3)
 const BRIDGE_DYNVIEW_STYLE_BOLD = Int32(10)
 const BRIDGE_DYNVIEW_STYLE_ITALIC = Int32(11)
 const BRIDGE_DYNVIEW_STYLE_CENTER = Int32(12)
+const BRIDGE_DYNVIEW_STYLE_MEDIUM = Int32(13)
+const BRIDGE_DYNVIEW_STYLE_SEMIBOLD = Int32(14)
+const BRIDGE_DYNVIEW_STYLE_EXTRABOLD = Int32(15)
+const BRIDGE_DYNVIEW_STYLE_BLACK = Int32(16)
 const BRIDGE_DYNVIEW_STYLE_INLINE_ATOM = Int32(20)
+const BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT = Int32(1 << 24)
+const BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE = Int32(1)
+const BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE = Int32(2)
+const BRIDGE_DYNVIEW_RADICAL_MODE_SQRT = Int32(1)
+const BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT = Int32(2)
+
+const BRIDGE_DYNVIEW_FONT_FLAG_NONE = Int32(0)
+const BRIDGE_DYNVIEW_FONT_FLAG_ITALIC = Int32(1 << 0)
+const BRIDGE_DYNVIEW_FONT_FLAG_LIGHT = Int32(1 << 1)
+const BRIDGE_DYNVIEW_FONT_FLAG_REGULAR = Int32(1 << 2)
+const BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM = Int32(1 << 3)
+const BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD = Int32(1 << 4)
+const BRIDGE_DYNVIEW_FONT_FLAG_BOLD = Int32(1 << 5)
+const BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD = Int32(1 << 6)
+const BRIDGE_DYNVIEW_FONT_FLAG_BLACK = Int32(1 << 7)
+
+"""
+Build a dynview style id that carries explicit JuliaMono font variant flags.
+
+Combine one or more `BRIDGE_DYNVIEW_FONT_FLAG_*` bits (including `ITALIC`) and
+pass the resulting style id into `dynview_text_run`/`dynview_math_glyph_run`.
+"""
+dynview_style_with_font_flags(flags::Integer) =
+    Int32(BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT | Int32(flags))
 
 const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
 const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
@@ -1367,6 +1409,132 @@ function dynview_text_run(state_ptr::Ptr{Cvoid}, text::AbstractString, style_id:
         state_ptr::Ptr{Cvoid},
         text::Cstring,
         Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit a visible math-glyph run inside the currently open host dynview block.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_math_glyph_run(state_ptr::Ptr{Cvoid}, text::AbstractString, style_id::Integer)
+    @ccall dynview_math_glyph_run(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit a script attachment with base and optional super/sub text payloads.
+
+`script_scale`, `script_sup_raise`, `script_sub_drop`, and `script_gap` are
+layout parameters consumed by the host dynview renderer.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_script_attach(
+    state_ptr::Ptr{Cvoid},
+    base_text::AbstractString,
+    sup_text::AbstractString,
+    sub_text::AbstractString,
+    base_style_id::Integer,
+    script_style_id::Integer,
+    script_scale::Real,
+    script_sup_raise::Real,
+    script_sub_drop::Real,
+    script_gap::Real)
+
+    @ccall dynview_script_attach(
+        state_ptr::Ptr{Cvoid},
+        base_text::Cstring,
+        sup_text::Cstring,
+        sub_text::Cstring,
+        Int32(base_style_id)::Int32,
+        Int32(script_style_id)::Int32,
+        Cfloat(script_scale)::Cfloat,
+        Cfloat(script_sup_raise)::Cfloat,
+        Cfloat(script_sub_drop)::Cfloat,
+        Cfloat(script_gap)::Cfloat)::Int32
+end
+
+    """
+    Emit one overline/underline accent bar attached to a base text payload.
+
+    `accent_mode` must be one of `BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE` or
+    `BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE`.
+    Returns a BRIDGE_STATUS_* code.
+    """
+    function dynview_accent_bar(
+        state_ptr::Ptr{Cvoid},
+        text::AbstractString,
+        sup_text::AbstractString,
+        sub_text::AbstractString,
+        base_style_id::Integer,
+        accent_style_id::Integer,
+        accent_mode::Integer,
+        script_style_id::Integer,
+        accent_thickness::Real,
+        accent_offset::Real,
+        script_scale::Real,
+        script_sup_raise::Real,
+        script_sub_drop::Real,
+        script_gap::Real)
+
+        @ccall dynview_accent_bar(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+            sup_text::Cstring,
+            sub_text::Cstring,
+        Int32(base_style_id)::Int32,
+        Int32(accent_style_id)::Int32,
+        Int32(accent_mode)::Int32,
+            Int32(script_style_id)::Int32,
+        Cfloat(accent_thickness)::Cfloat,
+            Cfloat(accent_offset)::Cfloat,
+            Cfloat(script_scale)::Cfloat,
+            Cfloat(script_sup_raise)::Cfloat,
+            Cfloat(script_sub_drop)::Cfloat,
+            Cfloat(script_gap)::Cfloat)::Int32
+    end
+
+"""
+Emit one square-root radical bar attached to a base text payload.
+
+`radical_mode` may be `BRIDGE_DYNVIEW_RADICAL_MODE_SQRT` or
+`BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT`.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_radical_bar(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    index_text::AbstractString,
+    sup_text::AbstractString,
+    sub_text::AbstractString,
+    base_style_id::Integer,
+    radical_style_id::Integer,
+    radical_mode::Integer,
+    script_style_id::Integer,
+    radical_thickness::Real,
+    radical_offset::Real,
+    script_scale::Real,
+    script_sup_raise::Real,
+    script_sub_drop::Real,
+    script_gap::Real)
+
+    @ccall dynview_radical_bar(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+        index_text::Cstring,
+        sup_text::Cstring,
+        sub_text::Cstring,
+        Int32(base_style_id)::Int32,
+        Int32(radical_style_id)::Int32,
+        Int32(radical_mode)::Int32,
+        Int32(script_style_id)::Int32,
+        Cfloat(radical_thickness)::Cfloat,
+        Cfloat(radical_offset)::Cfloat,
+        Cfloat(script_scale)::Cfloat,
+        Cfloat(script_sup_raise)::Cfloat,
+        Cfloat(script_sub_drop)::Cfloat,
+        Cfloat(script_gap)::Cfloat)::Int32
 end
 
 """

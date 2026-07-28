@@ -122,6 +122,7 @@ function create_runtime_module(session_id::Int)
     runtime = Module(mod_name)
 
     Core.eval(runtime, :(const OdinJuliaBridge = Main.OdinJuliaBridge))
+    Core.eval(runtime, :(const EuclidLatex = Main.EuclidLatex))
     Core.eval(runtime, :(const EuclidGeometry = Main.EuclidGeometry))
     Core.eval(runtime, :(const EuclidAnimations = Main.EuclidAnimations))
     Core.eval(runtime, :(const EuclidRepl = Main.EuclidRepl))

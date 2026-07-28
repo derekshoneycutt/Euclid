@@ -7,6 +7,9 @@ end
 if !isdefined(Main, :EuclidAnimations)
     include("../animations.jl")
 end
+if !isdefined(Main, :EuclidLatex)
+    include("../latex.jl")
+end
 if !isdefined(Main, :Scratchpad)
     include("../scratchpad.jl")
 end

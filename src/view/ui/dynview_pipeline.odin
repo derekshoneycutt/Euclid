@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 import "core:math"
 
 import rl "vendor:raylib"
@@ -10,7 +11,7 @@ DYNVIEW_INVALIDATE_PANEL :: (1 << 1)
 DYNVIEW_INVALIDATE_FONT :: (1 << 2)
 DYNVIEW_INVALIDATE_STYLE :: (1 << 3)
 
-DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 2
+DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 3
 
 DYNVIEW_STYLE_DEFAULT :: 0
 DYNVIEW_STYLE_PROMPT :: 1
@@ -19,7 +20,14 @@ DYNVIEW_STYLE_ERROR :: 3
 DYNVIEW_STYLE_BOLD :: 10
 DYNVIEW_STYLE_ITALIC :: 11
 DYNVIEW_STYLE_CENTER :: 12
+DYNVIEW_STYLE_MEDIUM :: 13
+DYNVIEW_STYLE_SEMIBOLD :: 14
+DYNVIEW_STYLE_EXTRABOLD :: 15
+DYNVIEW_STYLE_BLACK :: 16
 DYNVIEW_STYLE_INLINE_ATOM :: 20
+
+DYNVIEW_STYLE_CUSTOM_FONT :: (1 << 24)
+DYNVIEW_STYLE_CUSTOM_FONT_MASK :: 0xFF
 
 DYNVIEW_ENABLED_DEFAULT :: true
 
@@ -38,6 +46,7 @@ Dynview_Text_Style :: struct {
     alignment: Dynview_Text_Alignment,
     bold: bool,
     italic: bool,
+    font_flags: core.Font_Variant_Flags,
     indent_cols: int,
     paragraph_spacing_before: f32,
     paragraph_spacing_after: f32,
@@ -65,13 +74,30 @@ Dynview_Flow_State :: struct {
 
 Dynview_Draw_Context :: struct {
     enabled: bool,
+    state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     scroll_y: f32,
     text_padding: f32,
     text_row_height: f32,
     wrap_advance: f32,
     font_size: f32,
-    font: rl.Font,
+    fallback_font: rl.Font,
+}
+
+//   Resolve the render font for one dynview style via lazy variant lookup.
+dynview_style_font :: #force_inline proc(draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
+    if draw_ctx == nil || draw_ctx^.state == nil {
+        return draw_ctx^.fallback_font
+    }
+
+    flags := style.font_flags
+    if flags == .None {
+        flags = view_core.font_flags_from_bold_italic(style.bold, style.italic)
+    }
+    return view_core.font_runtime_resolve(
+        draw_ctx^.state,
+        flags,
+        view_core.JULIA_MONO_FONT_LOAD_SIZE)
 }
 
 //   Return style-adjusted horizontal advance for one column unit.
@@ -272,7 +298,7 @@ dynview_flow_consume_text_run :: proc(
 
         line_start, line_end, next_start := next_wrapped_text_span(text, start, available)
         line_text := text[line_start:line_end]
-        line_len := len(line_text)
+        line_len := text_codepoint_count(line_text)
         if line_len <= 0 {
             break
         }
@@ -290,24 +316,11 @@ dynview_flow_consume_text_run :: proc(
                     line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
                 }
 
-                if style.bold {
-                    ui_text(line_text,
-                        int(line_x + 1),
-                        int(row_y),
-                        style.color,
-                        draw_ctx^.font,
-                        draw_ctx^.font_size)
-                }
-
-                if style.italic {
-                    line_x += 1
-                }
-
                 ui_text(line_text,
                     int(line_x),
                     int(row_y),
                     style.color,
-                    draw_ctx^.font,
+                    dynview_style_font(draw_ctx, style),
                     draw_ctx^.font_size)
             }
         }
@@ -624,52 +637,121 @@ dynview_flow_consume_inline_pie_section :: proc(
 }
 
 //   Resolve a style id using a fixed host-owned table.
+dynview_style_from_custom_font_flags :: #force_inline proc(style_id: i32) -> (Dynview_Text_Style, bool) {
+    bits := u32(style_id)
+    if (bits & u32(DYNVIEW_STYLE_CUSTOM_FONT)) == 0 {
+        return Dynview_Text_Style{}, false
+    }
+
+    flags_bits := bits & u32(DYNVIEW_STYLE_CUSTOM_FONT_MASK)
+    flags := core.Font_Variant_Flags(flags_bits)
+    if flags == .None {
+        flags = .Regular
+    }
+
+    weight := view_core.font_resolve_weight_from_flags(flags)
+    italic := view_core.font_has_flag(flags, .Italic)
+
+    _ = weight
+    wrap_scale: f32 = 1.0
+    line_height: f32 = 1.0
+
+    return Dynview_Text_Style{
+        color = UI_TEXT_COLOR,
+        italic = italic,
+        font_flags = flags,
+        wrap_scale = wrap_scale,
+        line_height_multiplier = line_height,
+    }, true
+}
+
+//   Resolve a style id using a fixed host-owned table.
 dynview_style_by_id :: #force_inline proc(style_id: i32) -> Dynview_Text_Style {
+    custom_style, is_custom := dynview_style_from_custom_font_flags(style_id)
+    if is_custom {
+        return custom_style
+    }
+
     switch style_id {
     case DYNVIEW_STYLE_PROMPT:
         return Dynview_Text_Style{
             color = rl.Color{186, 198, 228, 255},
+            font_flags = .Regular,
             indent_cols = 1,
-            wrap_scale = 1.02,
+            wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_OUTPUT:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
+            font_flags = .Regular,
             wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_ERROR:
         return Dynview_Text_Style{
             color = rl.Color{220, 95, 95, 255},
-            wrap_scale = 1.03,
-            line_height_multiplier = 1.02,
+            font_flags = .Regular,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_BOLD:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             bold = true,
-            wrap_scale = 1.12,
-            line_height_multiplier = 1.05,
+            font_flags = .Bold,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_ITALIC:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             italic = true,
-            wrap_scale = 1.07,
-            line_height_multiplier = 1.02,
+            font_flags = core.Font_Variant_Flags(u32(core.Font_Variant_Flags.Regular) | u32(core.Font_Variant_Flags.Italic)),
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_CENTER:
         return Dynview_Text_Style{
             color = UI_TEXT_COLOR,
             alignment = .Center,
+            font_flags = .Regular,
             force_line_start = true,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
+        }
+    case DYNVIEW_STYLE_MEDIUM:
+        return Dynview_Text_Style{
+            color = UI_TEXT_COLOR,
+            font_flags = .Medium,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
+        }
+    case DYNVIEW_STYLE_SEMIBOLD:
+        return Dynview_Text_Style{
+            color = UI_TEXT_COLOR,
+            font_flags = .SemiBold,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
+        }
+    case DYNVIEW_STYLE_EXTRABOLD:
+        return Dynview_Text_Style{
+            color = UI_TEXT_COLOR,
+            font_flags = .ExtraBold,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
+        }
+    case DYNVIEW_STYLE_BLACK:
+        return Dynview_Text_Style{
+            color = UI_TEXT_COLOR,
+            font_flags = .Black,
             wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }
     case DYNVIEW_STYLE_INLINE_ATOM:
         return Dynview_Text_Style{
             color = rl.Color{170, 190, 218, 255},
+            font_flags = .Regular,
             wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }
@@ -677,6 +759,7 @@ dynview_style_by_id :: #force_inline proc(style_id: i32) -> Dynview_Text_Style {
 
     return Dynview_Text_Style{
         color = UI_TEXT_COLOR,
+        font_flags = .Regular,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
     }
@@ -713,6 +796,45 @@ dynview_text_for_command :: #force_inline proc(
         return ""
     }
     return string(buffer^.text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
+}
+
+//   Extract a text span from the shared dynview byte buffer using explicit offset/length.
+dynview_text_span_from_buffer :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    text_offset, text_len: int) -> string {
+
+    if text_offset < 0 || text_len < 0 {
+        return ""
+    }
+    if text_offset + text_len > buffer^.text_bytes_len {
+        return ""
+    }
+    return string(buffer^.text_bytes[text_offset:text_offset + text_len])
+}
+
+//   Build a plain-text fallback representation for one script-attach command.
+dynview_script_attach_plain_text :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> string {
+
+    base_text := dynview_text_span_from_buffer(buffer, cmd.script_base_text_offset, cmd.script_base_text_len)
+    return base_text
+}
+
+//   Build a base visible text representation for one accent-bar command.
+dynview_accent_bar_visible_text :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> string {
+
+    return dynview_text_for_command(buffer, cmd)
+}
+
+//   Build a base visible text representation for one radical-bar command.
+dynview_radical_bar_visible_text :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> string {
+
+    return dynview_text_for_command(buffer, cmd)
 }
 
 //   Return the first/last layout line indices that contain visible items for block_id.
@@ -753,16 +875,10 @@ dynview_draw_styled_line :: #force_inline proc(
 
     line_x := panel.x + text_padding
     if style.alignment == .Center {
-        line_w := f32(len(text)) * wrap_advance * max(0.5, style.wrap_scale)
+        line_w := f32(text_codepoint_count(text)) * wrap_advance * max(0.5, style.wrap_scale)
         line_x = panel.x + (panel.width - line_w) * 0.5
     }
 
-    if style.bold {
-        ui_text(text, int(line_x + 1), int(row_y), style.color, font, font_size)
-    }
-    if style.italic {
-        line_x += 1
-    }
     ui_text(text, int(line_x), int(row_y), style.color, font, font_size)
 }
 
@@ -792,6 +908,18 @@ dynview_count_styled_rows :: proc(
         switch cmd.kind {
         case .TextRun:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MathGlyphRun:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .ScriptAttach:
+            text := dynview_script_attach_plain_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .AccentBar:
+            text := dynview_accent_bar_visible_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .RadicalBar:
+            text := dynview_radical_bar_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineLine:
             dynview_flow_consume_inline_line(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -832,6 +960,7 @@ dynview_count_styled_rows :: proc(
 
 //   Draw style-aware wrapped dynview text content clipped by caller scissor.
 dynview_draw_styled_content :: proc(
+    state: ^core.Euclid_General_State,
     runtime: ^core.Ui_Dynview_Runtime,
     panel: rl.Rectangle,
     scroll_y, text_padding, text_row_height, wrap_advance, font_size: f32,
@@ -845,19 +974,32 @@ dynview_draw_styled_content :: proc(
     flow := Dynview_Flow_State{}
     draw_ctx := Dynview_Draw_Context{
         enabled = true,
+        state = state,
         panel = panel,
         scroll_y = scroll_y,
         text_padding = text_padding,
         text_row_height = text_row_height,
         wrap_advance = wrap_advance,
         font_size = font_size,
-        font = font,
+        fallback_font = font,
     }
     for i in 0..<buffer^.command_count {
         cmd := buffer^.commands[i]
         switch cmd.kind {
         case .TextRun:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MathGlyphRun:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .ScriptAttach:
+            text := dynview_script_attach_plain_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .AccentBar:
+            text := dynview_accent_bar_visible_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .RadicalBar:
+            text := dynview_radical_bar_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineLine:
             dynview_flow_consume_inline_line(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -1163,6 +1305,211 @@ dynview_compile_text_run :: #force_inline proc(
     return dynview_append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
 }
 
+//   Apply script-attach compilation rule using deterministic plain-text serialization.
+dynview_compile_script_attach :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    text := dynview_script_attach_plain_text(buffer, cmd)
+    for i in 0..<len(text) {
+        status = dynview_append_compiled_byte(cache, text[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply accent-bar compilation rule using literal command fallback serialization.
+dynview_compile_accent_bar :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    prefix := "\\underline{" 
+    if cmd.accent_mode == 1 {
+        prefix = "\\overline{" 
+    }
+
+    for i in 0..<len(prefix) {
+        status = dynview_append_compiled_byte(cache, prefix[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    status = dynview_append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    sup_text := dynview_text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    if len(sup_text) > 0 {
+        sup_prefix := "^{"
+        for i in 0..<len(sup_prefix) {
+            status = dynview_append_compiled_byte(cache, sup_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sup_text) {
+            status = dynview_append_compiled_byte(cache, sup_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_text := dynview_text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    if len(sub_text) > 0 {
+        sub_prefix := "_{"
+        for i in 0..<len(sub_prefix) {
+            status = dynview_append_compiled_byte(cache, sub_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sub_text) {
+            status = dynview_append_compiled_byte(cache, sub_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    status = dynview_append_compiled_byte(cache, '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply radical-bar compilation rule using literal command fallback serialization.
+dynview_compile_radical_bar :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    prefix := "\\sqrt"
+    for i in 0..<len(prefix) {
+        status = dynview_append_compiled_byte(cache, prefix[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    index_text := dynview_text_span_from_buffer(buffer, cmd.radical_index_text_offset, cmd.radical_index_text_len)
+    if len(index_text) > 0 {
+        status = dynview_append_compiled_byte(cache, '[')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+
+        for i in 0..<len(index_text) {
+            status = dynview_append_compiled_byte(cache, index_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+
+        status = dynview_append_compiled_byte(cache, ']')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    status = dynview_append_compiled_byte(cache, '{')
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    status = dynview_append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    sup_text := dynview_text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    if len(sup_text) > 0 {
+        sup_prefix := "^{"
+        for i in 0..<len(sup_prefix) {
+            status = dynview_append_compiled_byte(cache, sup_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sup_text) {
+            status = dynview_append_compiled_byte(cache, sup_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_text := dynview_text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    if len(sub_text) > 0 {
+        sub_prefix := "_{"
+        for i in 0..<len(sub_prefix) {
+            status = dynview_append_compiled_byte(cache, sub_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sub_text) {
+            status = dynview_append_compiled_byte(cache, sub_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    status = dynview_append_compiled_byte(cache, '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
 //   Apply copyable-run compilation rule.
 dynview_compile_copyable_text_run :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -1334,6 +1681,14 @@ dynview_compile_command :: #force_inline proc(
         return dynview_compile_end_block(cache, state)
     case .TextRun:
         return dynview_compile_text_run(cache, buffer, state, cmd)
+    case .MathGlyphRun:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
+    case .ScriptAttach:
+        return dynview_compile_script_attach(cache, buffer, state, cmd)
+    case .AccentBar:
+        return dynview_compile_accent_bar(cache, buffer, state, cmd)
+    case .RadicalBar:
+        return dynview_compile_radical_bar(cache, buffer, state, cmd)
     case .CopyableTextRun:
         return dynview_compile_copyable_text_run(cache, buffer, state, cmd)
     case .LineBreak:
@@ -1595,6 +1950,7 @@ dynview_scratchpad_styled_rows_or_fallback :: proc(
 
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
 dynview_draw_scratchpad_styled_or_fallback :: proc(
+    state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     fallback_text: string,
     panel: rl.Rectangle,
@@ -1620,7 +1976,8 @@ dynview_draw_scratchpad_styled_or_fallback :: proc(
     if runtime^.enabled && runtime^.compile_cache.is_valid &&
         !runtime^.command_buffer.has_stream_error && runtime^.command_buffer.command_count > 0 {
         if runtime^.compile_cache.layout_is_valid {
-            dynview_draw_cached_layout(runtime,
+            dynview_draw_cached_layout(state,
+                runtime,
                 panel,
                 scroll_y,
                 text_padding,

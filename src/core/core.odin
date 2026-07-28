@@ -11,7 +11,7 @@ import "core:encoding/uuid"
 
 import rl "vendor:raylib"
 
-MAX_LOW_PARTICLES :: 4096
+MAX_LOW_PARTICLES :: 8192//4096
 MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
 MAX_KINEPOINTS :: 256
@@ -33,6 +33,8 @@ UI_DYNVIEW_MAX_COMMANDS :: 1024
 UI_DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
 UI_DYNVIEW_MAX_LAYOUT_LINES :: 4096
 UI_DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
+
+FONT_VARIANT_SLOT_COUNT :: 14
 
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
@@ -677,6 +679,39 @@ Gif_Capture_Session :: struct {
     active: bool,
 }
 
+Font_Weight :: enum {
+    Light,
+    Regular,
+    Medium,
+    SemiBold,
+    Bold,
+    ExtraBold,
+    Black,
+}
+
+Font_Variant_Flags :: enum u32 {
+    None = 0,
+    Italic = 1 << 0,
+    Light = 1 << 1,
+    Regular = 1 << 2,
+    Medium = 1 << 3,
+    SemiBold = 1 << 4,
+    Bold = 1 << 5,
+    ExtraBold = 1 << 6,
+    Black = 1 << 7,
+}
+
+Euclid_Font_Variant_Slot :: struct {
+    loaded: bool,
+    missing_warned: bool,
+    font: rl.Font,
+}
+
+Euclid_Font_Runtime :: struct {
+    regular_slot_index: int,
+    variants: [FONT_VARIANT_SLOT_COUNT]Euclid_Font_Variant_Slot,
+}
+
 Ui_Layout_Mode :: enum {
     Baseline,
 }
@@ -694,6 +729,10 @@ Ui_Dynview_Command_Kind :: enum {
     BeginBlock,
     EndBlock,
     TextRun,
+    MathGlyphRun,
+    ScriptAttach,
+    AccentBar,
+    RadicalBar,
     CopyableTextRun,
     LineBreak,
     Divider,
@@ -711,6 +750,24 @@ Ui_Dynview_Command :: struct {
     style_id: i32,
     text_offset: int,
     text_len: int,
+    script_base_text_offset: int,
+    script_base_text_len: int,
+    script_sup_text_offset: int,
+    script_sup_text_len: int,
+    script_sub_text_offset: int,
+    script_sub_text_len: int,
+    script_style_id: i32,
+    script_scale: f32,
+    script_sup_raise: f32,
+    script_sub_drop: f32,
+    script_gap: f32,
+    accent_mode: i32,
+    radical_mode: i32,
+    radical_index_text_offset: int,
+    radical_index_text_len: int,
+    accent_style_id: i32,
+    accent_thickness: f32,
+    accent_offset: f32,
     copy_text_offset: int,
     copy_text_len: int,
     inline_atom_dimension: f32,
@@ -742,6 +799,10 @@ Ui_Dynview_Copy_Hit_Target :: struct {
 
 Ui_Dynview_Layout_Item_Kind :: enum {
     TextRun,
+    MathGlyphRun,
+    ScriptAttach,
+    AccentBar,
+    RadicalBar,
     InlineLine,
     InlineBox,
     InlineCircle,
@@ -759,6 +820,22 @@ Ui_Dynview_Layout_Item :: struct {
     col_span: int,
     text_offset: int,
     text_len: int,
+    script_sup_text_offset: int,
+    script_sup_text_len: int,
+    script_sub_text_offset: int,
+    script_sub_text_len: int,
+    script_style_id: i32,
+    script_scale: f32,
+    script_sup_raise: f32,
+    script_sub_drop: f32,
+    script_gap: f32,
+    accent_mode: i32,
+    radical_mode: i32,
+    radical_index_text_offset: int,
+    radical_index_text_len: int,
+    accent_style_id: i32,
+    accent_thickness: f32,
+    accent_offset: f32,
     inline_atom_dimension: f32,
     inline_atom_stroke: f32,
     inline_box_height: f32,
@@ -961,6 +1038,7 @@ Euclid_General_State :: struct {
     dust_render: Dust_Render_State,
     ui_runtime: Euclid_UI_Runtime_State,
     gif_capture: Gif_Capture_Session,
+    font_runtime: Euclid_Font_Runtime,
     font: rl.Font,
 
     cycle_boundary_generation: u64,

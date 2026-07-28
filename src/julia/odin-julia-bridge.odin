@@ -59,7 +59,27 @@ BRIDGE_DYNVIEW_STYLE_ERROR :: 3
 BRIDGE_DYNVIEW_STYLE_BOLD :: 10
 BRIDGE_DYNVIEW_STYLE_ITALIC :: 11
 BRIDGE_DYNVIEW_STYLE_CENTER :: 12
+BRIDGE_DYNVIEW_STYLE_MEDIUM :: 13
+BRIDGE_DYNVIEW_STYLE_SEMIBOLD :: 14
+BRIDGE_DYNVIEW_STYLE_EXTRABOLD :: 15
+BRIDGE_DYNVIEW_STYLE_BLACK :: 16
 BRIDGE_DYNVIEW_STYLE_INLINE_ATOM :: 20
+BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT :: (1 << 24)
+
+BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :: 1
+BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE :: 2
+BRIDGE_DYNVIEW_RADICAL_MODE_SQRT :: 1
+BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :: 2
+
+BRIDGE_DYNVIEW_FONT_FLAG_NONE :: i32(core.Font_Variant_Flags.None)
+BRIDGE_DYNVIEW_FONT_FLAG_ITALIC :: i32(core.Font_Variant_Flags.Italic)
+BRIDGE_DYNVIEW_FONT_FLAG_LIGHT :: i32(core.Font_Variant_Flags.Light)
+BRIDGE_DYNVIEW_FONT_FLAG_REGULAR :: i32(core.Font_Variant_Flags.Regular)
+BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM :: i32(core.Font_Variant_Flags.Medium)
+BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD :: i32(core.Font_Variant_Flags.SemiBold)
+BRIDGE_DYNVIEW_FONT_FLAG_BOLD :: i32(core.Font_Variant_Flags.Bold)
+BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD :: i32(core.Font_Variant_Flags.ExtraBold)
+BRIDGE_DYNVIEW_FONT_FLAG_BLACK :: i32(core.Font_Variant_Flags.Black)
 
 BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
 BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
@@ -897,6 +917,319 @@ dynview_text_run :: proc "c" (
         style_id = style_id,
         text_offset = offset,
         text_len = count,
+    })
+}
+
+//   Append one visible math-glyph run to the current dynview block.
+@(export)
+dynview_math_glyph_run :: proc "c" (
+    state: ^core.Euclid_General_State, text: cstring, style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    offset := 0
+    count := 0
+    status := dynview_append_text_payload(runtime, string(text), &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .MathGlyphRun,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        text_offset = offset,
+        text_len = count,
+    })
+}
+
+//   Append one script attachment command with base text and optional super/sub text.
+@(export)
+dynview_script_attach :: proc "c" (
+    state: ^core.Euclid_General_State,
+    base_text, sup_text, sub_text: cstring,
+    base_style_id, script_style_id: i32,
+    script_scale, script_sup_raise, script_sub_drop, script_gap: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if base_text == nil {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    base_value := string(base_text)
+    sup_value := ""
+    sub_value := ""
+    if sup_text != nil {
+        sup_value = string(sup_text)
+    }
+    if sub_text != nil {
+        sub_value = string(sub_text)
+    }
+
+    if len(base_value) <= 0 || (len(sup_value) <= 0 && len(sub_value) <= 0) {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if script_scale <= 0 || script_sup_raise < 0 || script_sub_drop < 0 || script_gap < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    base_offset := 0
+    base_count := 0
+    status := dynview_append_text_payload(runtime, base_value, &base_offset, &base_count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    sup_offset := 0
+    sup_count := 0
+    if len(sup_value) > 0 {
+        status = dynview_append_text_payload(runtime, sup_value, &sup_offset, &sup_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_offset := 0
+    sub_count := 0
+    if len(sub_value) > 0 {
+        status = dynview_append_text_payload(runtime, sub_value, &sub_offset, &sub_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .ScriptAttach,
+        block_id = buffer^.stream_open_block_id,
+        style_id = base_style_id,
+        text_offset = base_offset,
+        text_len = base_count,
+        script_base_text_offset = base_offset,
+        script_base_text_len = base_count,
+        script_sup_text_offset = sup_offset,
+        script_sup_text_len = sup_count,
+        script_sub_text_offset = sub_offset,
+        script_sub_text_len = sub_count,
+        script_style_id = script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = script_sup_raise,
+        script_sub_drop = script_sub_drop,
+        script_gap = script_gap,
+    })
+}
+
+//   Append one accent-bar command with overline/underline placement around a base text run.
+@(export)
+dynview_accent_bar :: proc "c" (
+    state: ^core.Euclid_General_State,
+    text, sup_text, sub_text: cstring,
+    base_style_id, accent_style_id, accent_mode, script_style_id: i32,
+    accent_thickness, accent_offset, script_scale, script_sup_raise, script_sub_drop, script_gap: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if text == nil {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if accent_mode != BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE &&
+        accent_mode != BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if accent_thickness <= 0 || accent_offset < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if script_scale <= 0 || script_sup_raise < 0 || script_sub_drop < 0 || script_gap < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    offset := 0
+    count := 0
+    status := dynview_append_text_payload(runtime, string(text), &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if count <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    sup_offset := 0
+    sup_count := 0
+    if sup_text != nil {
+        status = dynview_append_text_payload(runtime, string(sup_text), &sup_offset, &sup_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_offset := 0
+    sub_count := 0
+    if sub_text != nil {
+        status = dynview_append_text_payload(runtime, string(sub_text), &sub_offset, &sub_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .AccentBar,
+        block_id = buffer^.stream_open_block_id,
+        style_id = base_style_id,
+        text_offset = offset,
+        text_len = count,
+        script_sup_text_offset = sup_offset,
+        script_sup_text_len = sup_count,
+        script_sub_text_offset = sub_offset,
+        script_sub_text_len = sub_count,
+        script_style_id = script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = script_sup_raise,
+        script_sub_drop = script_sub_drop,
+        script_gap = script_gap,
+        accent_style_id = accent_style_id,
+        accent_mode = accent_mode,
+        accent_thickness = accent_thickness,
+        accent_offset = accent_offset,
+    })
+}
+
+//   Append one radical-bar command with sqrt placement around a base text run.
+@(export)
+dynview_radical_bar :: proc "c" (
+    state: ^core.Euclid_General_State,
+    text, index_text, sup_text, sub_text: cstring,
+    base_style_id, radical_style_id, radical_mode, script_style_id: i32,
+    radical_thickness, radical_offset, script_scale, script_sup_raise, script_sub_drop, script_gap: f32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if text == nil {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if radical_mode != BRIDGE_DYNVIEW_RADICAL_MODE_SQRT &&
+        radical_mode != BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if radical_thickness <= 0 || radical_offset < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+    if script_scale <= 0 || script_sup_raise < 0 || script_sub_drop < 0 || script_gap < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    offset := 0
+    count := 0
+    status := dynview_append_text_payload(runtime, string(text), &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if count <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    index_offset := 0
+    index_count := 0
+    if index_text != nil {
+        status = dynview_append_text_payload(runtime, string(index_text), &index_offset, &index_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+    if radical_mode == BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT && index_count <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    sup_offset := 0
+    sup_count := 0
+    if sup_text != nil {
+        status = dynview_append_text_payload(runtime, string(sup_text), &sup_offset, &sup_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_offset := 0
+    sub_count := 0
+    if sub_text != nil {
+        status = dynview_append_text_payload(runtime, string(sub_text), &sub_offset, &sub_count)
+        if status != BRIDGE_STATUS_OK {
+            return status
+        }
+    }
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .RadicalBar,
+        block_id = buffer^.stream_open_block_id,
+        style_id = base_style_id,
+        text_offset = offset,
+        text_len = count,
+        script_sup_text_offset = sup_offset,
+        script_sup_text_len = sup_count,
+        script_sub_text_offset = sub_offset,
+        script_sub_text_len = sub_count,
+        script_style_id = script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = script_sup_raise,
+        script_sub_drop = script_sub_drop,
+        script_gap = script_gap,
+        radical_mode = radical_mode,
+        radical_index_text_offset = index_offset,
+        radical_index_text_len = index_count,
+        accent_style_id = radical_style_id,
+        accent_thickness = radical_thickness,
+        accent_offset = radical_offset,
     })
 }
 
