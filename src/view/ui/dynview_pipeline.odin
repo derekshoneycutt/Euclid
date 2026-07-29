@@ -939,6 +939,9 @@ dynview_count_styled_rows :: proc(
         case .ScriptAttachRecursive:
             text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .FracRecursive:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
             text := dynview_large_op_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -1032,6 +1035,9 @@ dynview_draw_styled_content :: proc(
             text := dynview_script_attach_plain_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttachRecursive:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .FracRecursive:
             text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
@@ -1879,6 +1885,8 @@ dynview_compile_command :: #force_inline proc(
         return dynview_compile_script_attach(cache, buffer, state, cmd)
     case .ScriptAttachRecursive:
         return dynview_compile_script_attach_recursive(cache, buffer, state, cmd)
+    case .FracRecursive:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
     case .LargeOpRecursive:
         return dynview_compile_large_op_recursive(cache, buffer, state, cmd)
     case .AccentBar:

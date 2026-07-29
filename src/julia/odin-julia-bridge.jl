@@ -92,6 +92,7 @@ struct BridgeDynviewMathOp
     kind::Int32
     style_id::Int32
     child_program_id::Int32
+    secondary_child_program_id::Int32
     script_style_id::Int32
     accent_style_id::Int32
     accent_mode::Int32

@@ -14,7 +14,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(9)
+const PARSER_GRAMMAR_VERSION = Int32(10)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -33,6 +33,7 @@ const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(6)
 const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(7)
 const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
 const MATH_OP_LARGE_OP_RECURSIVE = Int32(9)
+const MATH_OP_FRACTION_RECURSIVE = Int32(10)
 
 const LARGE_OP_KIND_NONE = Int32(0)
 const LARGE_OP_KIND_SUM = Int32(1)
@@ -180,6 +181,7 @@ struct LatexRun
     role::Symbol
     segment::Symbol
     children::Vector{LatexRun}
+    secondary_children::Vector{LatexRun}
 end
 
 struct MathPayloadOp
@@ -193,6 +195,7 @@ struct MathPayloadOp
     large_op_kind::Int32
     style_role::Symbol
     children::Vector{MathPayloadOp}
+    secondary_children::Vector{MathPayloadOp}
 end
 
 struct ParseCacheEntry
@@ -210,23 +213,27 @@ const parse_cache = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
 const EMPTY_CHILD_RUNS = LatexRun[]
 
 """Return one normal atom run payload."""
-latex_atom_run(text::String, role::Symbol) = LatexRun(text, role, :atom, EMPTY_CHILD_RUNS)
+latex_atom_run(text::String, role::Symbol) = LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one superscript script-segment run payload."""
-latex_sup_run(text::String) = LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS)
+latex_sup_run(text::String) = LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one subscript script-segment run payload."""
-latex_sub_run(text::String) = LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS)
+latex_sub_run(text::String) = LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one overline accent run payload."""
-latex_overline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_over, children)
+latex_overline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_over, children, EMPTY_CHILD_RUNS)
 
 """Return one underline accent run payload."""
-latex_underline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_under, children)
+latex_underline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_under, children, EMPTY_CHILD_RUNS)
 
 """Return one square-root radical run payload."""
 latex_sqrt_run(children::Vector{LatexRun}, index_text::AbstractString="") =
-    LatexRun(String(index_text), :math, :radical_sqrt, children)
+    LatexRun(String(index_text), :math, :radical_sqrt, children, EMPTY_CHILD_RUNS)
+
+"""Return one fraction run payload with numerator and denominator child runs."""
+latex_fraction_run(numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
+    LatexRun("", :math, :fraction, numerator_children, denominator_children)
 
 """Clear all cached parse/compile entries."""
 function clear_cache!()
@@ -494,6 +501,12 @@ function parse_structured_math_command(
         return [parse_sqrt_run(tokens, idx)]
     end
 
+    if command == "\\frac"
+        numerator_children = parse_required_group_runs(tokens, idx)
+        denominator_children = parse_required_group_runs(tokens, idx)
+        return [latex_fraction_run(numerator_children, denominator_children)]
+    end
+
     return nothing
 end
 
@@ -502,6 +515,10 @@ function latex_run_serialized_text(run::LatexRun)
     child_text = ""
     if !isempty(run.children)
         child_text = join((latex_run_serialized_text(child) for child in run.children), "")
+    end
+    secondary_child_text = ""
+    if !isempty(run.secondary_children)
+        secondary_child_text = join((latex_run_serialized_text(child) for child in run.secondary_children), "")
     end
 
     if run.segment == :accent_over
@@ -515,6 +532,9 @@ function latex_run_serialized_text(run::LatexRun)
             return "\\sqrt[" * run.text * "]{" * child_text * "}"
         end
         return "\\sqrt{" * child_text * "}"
+    end
+    if run.segment == :fraction
+        return "\\frac{" * child_text * "}{" * secondary_child_text * "}"
     end
     return run.text
 end
@@ -672,21 +692,29 @@ function format_script_token(marker::Symbol, script_text::String, was_grouped::B
 end
 
 """Merge adjacent runs with identical semantic role."""
+run_has_no_content(run::LatexRun) = isempty(run.text) && isempty(run.children) && isempty(run.secondary_children)
+
+"""Return true when two atom runs can be merged into one normalized atom run."""
+function can_merge_adjacent_atom_runs(prev::LatexRun, run::LatexRun)
+    return prev.role == run.role &&
+           prev.segment == :atom &&
+           run.segment == :atom &&
+           isempty(prev.children) &&
+           isempty(prev.secondary_children) &&
+           isempty(run.children) &&
+           isempty(run.secondary_children)
+end
+
 function normalize_runs(runs::Vector{LatexRun})
     normalized = LatexRun[]
     for run in runs
-        if isempty(run.text) && isempty(run.children)
+        if run_has_no_content(run)
             continue
         end
 
-        if !isempty(normalized) &&
-                normalized[end].role == run.role &&
-                normalized[end].segment == :atom &&
-                run.segment == :atom &&
-                isempty(normalized[end].children) &&
-                isempty(run.children)
+        if !isempty(normalized) && can_merge_adjacent_atom_runs(normalized[end], run)
             prev = normalized[end]
-            normalized[end] = LatexRun(prev.text * run.text, prev.role, :atom, EMPTY_CHILD_RUNS)
+            normalized[end] = LatexRun(prev.text * run.text, prev.role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
             continue
         end
 
@@ -729,6 +757,9 @@ end
 function grouped_parent_with_script_suffix(parent::String, sup::String, sub::String)
     return accent_with_script_suffix("{" * parent * "}", sup, sub)
 end
+
+"""Build canonical fraction text from numerator/denominator strings."""
+fraction_text(numerator::String, denominator::String) = "{" * numerator * "}/{" * denominator * "}"
 
 """Append display-style lower/upper limits in canonical LaTeX order for large operators."""
 function large_operator_with_limits(base::String, sup::String, sub::String)
@@ -806,11 +837,17 @@ function latex_source_for_payload(op::MathPayloadOp)
     end
 
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        command = large_operator_command_text(Int32(op.radical_mode))
+        command = large_operator_command_text(op.large_op_kind)
         if isempty(command)
             command = op.text
         end
         return large_operator_with_limits(command, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_FRACTION_RECURSIVE
+        numerator = latex_source_for_program(op.children)
+        denominator = latex_source_for_program(op.secondary_children)
+        return "\\frac{" * numerator * "}{" * denominator * "}"
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -847,6 +884,12 @@ function plain_text_for_payload(op::MathPayloadOp)
 
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
         return large_operator_with_limits(op.text, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_FRACTION_RECURSIVE
+        numerator = plain_text_for_program(op.children)
+        denominator = plain_text_for_program(op.secondary_children)
+        return fraction_text(numerator, denominator)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -921,7 +964,8 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
     return op.kind == MATH_OP_MATH_GLYPH_RUN ||
         op.kind == MATH_OP_SCRIPT_ATTACH ||
         op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
-    op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
+        op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
+    op.kind == MATH_OP_FRACTION_RECURSIVE ||
         op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
         op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
 end
@@ -945,9 +989,10 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
             sub_text,
             op.accent_mode,
             op.radical_mode,
-                op.large_op_kind,
+            op.large_op_kind,
             op.style_role,
-            op.children)
+            op.children,
+            op.secondary_children)
     end
 
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
@@ -959,9 +1004,10 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
             sub_text,
             op.accent_mode,
             op.radical_mode,
-                op.large_op_kind,
+            op.large_op_kind,
             op.style_role,
-            op.children)
+            op.children,
+            op.secondary_children)
     end
 
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
@@ -973,9 +1019,10 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
             sub_text,
             op.accent_mode,
             op.radical_mode,
-                op.large_op_kind,
+            op.large_op_kind,
             op.style_role,
-            op.children)
+            op.children,
+            op.secondary_children)
     end
 
     parent_text = plain_text_for_payload(op)
@@ -989,7 +1036,8 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         :none,
         LARGE_OP_KIND_NONE,
         :math,
-        [op])
+        [op],
+        MathPayloadOp[])
 end
 
 """Return one plain-text fallback string for a run vector."""
@@ -1012,9 +1060,10 @@ function atom_payload_op(run::LatexRun)
             "",
             "",
             :none,
-                :none,
-                large_op_kind,
+            :none,
+            large_op_kind,
             :math,
+            MathPayloadOp[],
             MathPayloadOp[])
     end
 
@@ -1029,6 +1078,7 @@ function atom_payload_op(run::LatexRun)
         :none,
         LARGE_OP_KIND_NONE,
         run.role,
+        MathPayloadOp[],
         MathPayloadOp[])
 end
 
@@ -1046,7 +1096,8 @@ function accent_payload_op(run::LatexRun)
         :none,
         LARGE_OP_KIND_NONE,
         :math,
-        child_payloads)
+        child_payloads,
+        MathPayloadOp[])
 end
 
 """Return one recursive radical payload op from one structured run."""
@@ -1063,7 +1114,26 @@ function radical_payload_op(run::LatexRun)
         radical_mode,
         LARGE_OP_KIND_NONE,
         :math,
-        child_payloads)
+        child_payloads,
+        MathPayloadOp[])
+end
+
+"""Return one recursive fraction payload op from one structured run."""
+function fraction_payload_op(run::LatexRun)
+    numerator_payloads = math_payload_ops_for_runs(run.children)
+    denominator_payloads = math_payload_ops_for_runs(run.secondary_children)
+    return MathPayloadOp(
+        MATH_OP_FRACTION_RECURSIVE,
+        fraction_text(plain_text_for_runs(run.children), plain_text_for_runs(run.secondary_children)),
+        "",
+        "",
+        "",
+        :none,
+        :none,
+        LARGE_OP_KIND_NONE,
+        :math,
+        numerator_payloads,
+        denominator_payloads)
 end
 
 """Append one script payload op when no compatible prior payload exists."""
@@ -1078,7 +1148,38 @@ function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::Lat
         :none,
         LARGE_OP_KIND_NONE,
         :math,
+        MathPayloadOp[],
         MathPayloadOp[]))
+    return nothing
+end
+
+"""Return recursive payload op for a non-script structured run, or nothing if none applies."""
+function payload_for_non_script_segment(run::LatexRun)
+    if run.segment == :atom
+        return atom_payload_op(run)
+    end
+    if run.segment == :accent_over || run.segment == :accent_under
+        return accent_payload_op(run)
+    end
+    if run.segment == :radical_sqrt
+        return radical_payload_op(run)
+    end
+    if run.segment == :fraction
+        return fraction_payload_op(run)
+    end
+    return nothing
+end
+
+"""Return true when this segment is one of the script marker segments."""
+is_script_segment(segment::Symbol) = segment == :script_sup || segment == :script_sub
+
+"""Append one script run to prior payload when possible, otherwise append fallback payload."""
+function consume_script_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
+    if !isempty(payloads) && payload_op_accepts_scripts(payloads[end])
+        payloads[end] = payload_op_with_script(payloads[end], run.segment, run.text)
+    else
+        push_script_fallback_payload!(payloads, run)
+    end
     return nothing
 end
 
@@ -1086,27 +1187,14 @@ end
 function math_payload_ops_for_runs(runs::Vector{LatexRun})
     payloads = MathPayloadOp[]
     for run in normalize_runs(runs)
-        if run.segment == :atom
-            push!(payloads, atom_payload_op(run))
+        payload = payload_for_non_script_segment(run)
+        if payload !== nothing
+            push!(payloads, payload)
             continue
         end
 
-        if run.segment == :accent_over || run.segment == :accent_under
-            push!(payloads, accent_payload_op(run))
-            continue
-        end
-
-        if run.segment == :radical_sqrt
-            push!(payloads, radical_payload_op(run))
-            continue
-        end
-
-        if run.segment == :script_sup || run.segment == :script_sub
-            if !isempty(payloads) && payload_op_accepts_scripts(payloads[end])
-                payloads[end] = payload_op_with_script(payloads[end], run.segment, run.text)
-            else
-                push_script_fallback_payload!(payloads, run)
-            end
+        if is_script_segment(run.segment)
+            consume_script_payload!(payloads, run)
         end
     end
     return payloads
@@ -1117,6 +1205,7 @@ function bridge_math_payload_op(
     io::IOBuffer,
     op::MathPayloadOp,
     child_direct_count::Int32,
+    secondary_child_direct_count::Int32,
     text_style::Integer,
     math_style::Integer,
     mathbb_style::Integer)
@@ -1132,6 +1221,7 @@ function bridge_math_payload_op(
         op.kind,
         base_style,
         child_direct_count,
+        secondary_child_direct_count,
         Int32(math_style),
         base_style,
         accent_mode,
@@ -1170,14 +1260,26 @@ function bridge_math_payload_preorder(
             text_style,
             math_style,
             mathbb_style)
+        secondary_child_direct_count = 0
+        secondary_child_ops = OdinJuliaBridge.BridgeDynviewMathOp[]
+        if payload.kind == MATH_OP_FRACTION_RECURSIVE
+            secondary_child_direct_count, secondary_child_ops = bridge_math_payload_preorder(
+                payload.secondary_children,
+                io,
+                text_style,
+                math_style,
+                mathbb_style)
+        end
         push!(ops, bridge_math_payload_op(
             io,
             payload,
             Int32(child_direct_count),
+            Int32(secondary_child_direct_count),
             text_style,
             math_style,
             mathbb_style))
         append!(ops, child_ops)
+        append!(ops, secondary_child_ops)
     end
     return length(payloads), ops
 end

@@ -116,6 +116,16 @@ dynview_radical_root_low_offset :: #force_inline proc(font_size, content_descent
     return max(base_offset, stretched_offset)
 }
 
+//   Return small horizontal side padding for fraction composition.
+dynview_fraction_side_padding :: #force_inline proc(font_size, base_advance: f32) -> f32 {
+    return max(0.5, max(base_advance * 0.12, font_size * 0.08))
+}
+
+//   Return small vertical gap between fraction divider and child blocks.
+dynview_fraction_vertical_gap :: #force_inline proc(font_size: f32) -> f32 {
+    return max(0.5, font_size * 0.10)
+}
+
 //   Return glyph scale factor for display-style large operators.
 dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     switch large_op_kind {
@@ -233,6 +243,14 @@ dynview_math_program_from_id :: #force_inline proc(
     }
 
     return program, true
+}
+
+//   Return one secondary child math program from a command reference.
+dynview_secondary_math_program_from_command :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command) -> (^core.Ui_Dynview_Math_Program, bool) {
+
+    return dynview_math_program_from_id(cache, cmd.secondary_math_program_id)
 }
 
 //   Build one layout-like item for a text or math-glyph child command inside a math block.
@@ -493,6 +511,52 @@ dynview_math_program_large_op_item :: #force_inline proc(
         visual_padding_top = limit_top_pad,
         visual_padding_bottom = limit_bottom_pad,
     }
+}
+
+//   Build one layout-like item for a recursive fraction with centered numerator and denominator.
+dynview_math_program_recursive_fraction_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+
+    numerator_program, ok := dynview_math_program_from_command(cache, cmd)
+    if !ok || !dynview_measure_math_program(cache, buffer, numerator_program, font_size) {
+        return core.Ui_Dynview_Layout_Item{}, false
+    }
+
+    denominator_program, ok_den := dynview_secondary_math_program_from_command(cache, cmd)
+    if !ok_den || !dynview_measure_math_program(cache, buffer, denominator_program, font_size) {
+        return core.Ui_Dynview_Layout_Item{}, false
+    }
+
+    base_advance := dynview_effective_advance(style, cache^.last_wrap_advance)
+    side_padding := dynview_fraction_side_padding(font_size, base_advance)
+    divider_gap := dynview_fraction_vertical_gap(font_size)
+    divider_thickness := max(1.0, cmd.accent_thickness * font_size)
+    divider_half := divider_thickness * 0.5
+
+    content_width := max(numerator_program^.draw_width, denominator_program^.draw_width)
+    draw_width := max(content_width + side_padding * 2.0, base_advance)
+    ascent := numerator_program^.ascent + numerator_program^.descent + divider_gap + divider_half
+    descent := denominator_program^.ascent + denominator_program^.descent + divider_gap + divider_half
+    visual_pad := max(0.6, divider_thickness * 0.5)
+
+    return core.Ui_Dynview_Layout_Item{
+        kind = .FracRecursive,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        secondary_math_program_id = cmd.secondary_math_program_id,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        draw_width = draw_width,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+        visual_padding_top = max(max(numerator_program^.visual_padding_top, denominator_program^.visual_padding_top), visual_pad),
+        visual_padding_bottom = max(max(numerator_program^.visual_padding_bottom, denominator_program^.visual_padding_bottom), visual_pad),
+    }, true
 }
 
 //   Build one layout-like item for an accent-bar child command inside a math block.
@@ -835,6 +899,8 @@ dynview_math_program_item :: #force_inline proc(
         return dynview_math_program_script_item(cache, buffer, cmd, style, font_size), true
     case .ScriptAttachRecursive:
         return dynview_math_program_recursive_script_item(cache, buffer, cmd, font_size)
+    case .FracRecursive:
+        return dynview_math_program_recursive_fraction_item(cache, buffer, cmd, style, font_size)
     case .LargeOpRecursive:
         return dynview_math_program_large_op_item(cache, buffer, cmd, style, font_size), true
     case .AccentBar:
@@ -2331,6 +2397,8 @@ dynview_layout_consume_structured_math_command :: #force_inline proc(
         return status
     case .ScriptAttachRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .FracRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .LargeOpRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .AccentBar:
@@ -2397,7 +2465,7 @@ dynview_layout_consume_inline_shape_command :: #force_inline proc(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
         return status
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive,
         .CopyableTextRun, .LineBreak, .Divider:
     }
@@ -2415,7 +2483,7 @@ dynview_layout_consume_visible_command :: proc(
     switch cmd.kind {
     case .TextRun, .MathGlyphRun:
         return dynview_layout_consume_text_like_command(ctx, cmd, effective_style)
-    case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+    case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive:
         return dynview_layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
@@ -2846,6 +2914,53 @@ dynview_draw_recursive_script_attach_item :: #force_inline proc(
     }
 }
 
+//   Draw one recursive fraction with centered numerator/denominator and center divider.
+dynview_draw_recursive_fraction_item :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Ui_Dynview_Runtime,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    item: core.Ui_Dynview_Layout_Item,
+    style: Dynview_Text_Style,
+    draw_x, item_y: f32) {
+
+    numerator_program, ok := dynview_math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    if !ok {
+        return
+    }
+    denominator_program, ok_den := dynview_math_program_from_id(&runtime^.compile_cache, item.secondary_math_program_id)
+    if !ok_den {
+        return
+    }
+
+    baseline_y := item_y + item.ascent
+    divider_thickness := max(1.0, item.accent_thickness * font_size)
+    divider_half := divider_thickness * 0.5
+    divider_gap := dynview_fraction_vertical_gap(font_size)
+
+    numerator_x := draw_x + (item.draw_width - numerator_program^.draw_width) * 0.5
+    denominator_x := draw_x + (item.draw_width - denominator_program^.draw_width) * 0.5
+    numerator_baseline_y := baseline_y - divider_half - divider_gap - numerator_program^.descent
+    denominator_baseline_y := baseline_y + divider_half + divider_gap + denominator_program^.ascent
+    dynview_draw_math_program_at(state, runtime, panel, font, font_size, numerator_program^, numerator_x, numerator_baseline_y)
+    dynview_draw_math_program_at(state, runtime, panel, font, font_size, denominator_program^, denominator_x, denominator_baseline_y)
+
+    base_advance := dynview_effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    side_padding := dynview_fraction_side_padding(font_size, base_advance)
+    divider_start_x := draw_x + side_padding
+    divider_end_x := draw_x + item.draw_width - side_padding
+    divider_color := dynview_style_by_id(item.accent_style_id).color
+    if item.accent_style_id <= 0 {
+        divider_color = style.color
+    }
+    rl.DrawLineEx(
+        rl.Vector2{divider_start_x, baseline_y},
+        rl.Vector2{divider_end_x, baseline_y},
+        divider_thickness,
+        divider_color)
+}
+
 //   Draw one display-style large operator with stacked limits above and below.
 dynview_draw_large_op_recursive_item :: #force_inline proc(
     state: ^core.Euclid_General_State,
@@ -3110,6 +3225,17 @@ dynview_draw_cached_text_item :: proc(
             item,
             draw_x,
             item_y)
+    case .FracRecursive:
+        dynview_draw_recursive_fraction_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            item,
+            style,
+            draw_x,
+            item_y)
     case .LargeOpRecursive:
         dynview_draw_large_op_recursive_item(
             state,
@@ -3227,7 +3353,7 @@ dynview_draw_cached_inline_item :: proc(
             rl.DrawLineEx(center, start_point, stroke, style.color)
             rl.DrawLineEx(center, end_point, stroke, style.color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar,
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar,
         .AccentBarRecursive, .RadicalBar, .RadicalBarRecursive:
     }
 }
@@ -3253,6 +3379,7 @@ dynview_draw_cached_line :: proc(
             item.kind == .MathGlyphRun ||
             item.kind == .ScriptAttach ||
             item.kind == .ScriptAttachRecursive ||
+            item.kind == .FracRecursive ||
             item.kind == .LargeOpRecursive ||
             item.kind == .AccentBar ||
             item.kind == .RadicalBar {

@@ -215,6 +215,36 @@ end
     @test radical_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
 end
 
+@testset "fractions" begin
+    plain_basic = EuclidLatex.latex_to_plain_text("\\frac{a}{b}")
+    @test plain_basic == "{a}/{b}"
+
+    plain_scripts = EuclidLatex.latex_to_plain_text("\\frac{x^2}{y_1}")
+    @test plain_scripts == "{x^{2}}/{y_{1}}"
+
+    plain_nested = EuclidLatex.latex_to_plain_text("\\frac{\\frac{a}{b}}{c}")
+    @test plain_nested == "{{a}/{b}}/{c}"
+
+    plain_mixed = EuclidLatex.latex_to_plain_text("\\frac{\\sqrt{x}}{\\overline{y}}")
+    @test plain_mixed == "{\\sqrt{x}}/{\\overline{y}}"
+
+    basic_program = EuclidLatex.compiled_program_for("\\frac{a}{b}")
+    @test length(basic_program) == 1
+    @test basic_program[1].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test length(basic_program[1].children) == 1
+    @test length(basic_program[1].secondary_children) == 1
+    @test basic_program[1].children[1].text == "a"
+    @test basic_program[1].secondary_children[1].text == "b"
+
+    mixed_program = EuclidLatex.compiled_program_for("\\frac{\\sqrt{x}}{\\overline{y}}")
+    @test length(mixed_program) == 1
+    @test mixed_program[1].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test length(mixed_program[1].children) == 1
+    @test length(mixed_program[1].secondary_children) == 1
+    @test mixed_program[1].children[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
+    @test mixed_program[1].secondary_children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+end
+
 @testset "cache behavior" begin
     EuclidLatex.clear_cache!()
     @test EuclidLatex.cache_size() == 0
