@@ -84,16 +84,15 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 
     # TEMPORARY TESTING ONLY: Phase 1 LaTeX sample rendering.
     # Keep the original definition text and append test output on a new line.
-    latex_test_source = "\\text{TEMP TEST: Phase 2} \\alpha + \\beta + \\sin(x) + f(A_1^2) + \\overline{AB^2} + \\underline{CD_4} + \\mathbb{R}"
-    latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + q\\sqrt[3]{AB}b + \\sqrt[n]{A_1^2} + \\sqrt[α]{x}"
+    latex_test_source = "\\text{TEMP TEST: Phase 2} \\alpha + \\beta + \\sin(x) + f(A_1^2) + \\overline{AB^2} + \\underline{CD_4} + \\overline{A\\underline{B^2_6}} + \\mathbb{R}"
+    latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + q\\sqrt[3]{AB}b + \\sqrt[n]{\\underline{A_1^2}} + \\sqrt[α]{\\overline{x}}"
     if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
 
-    latex_program = EuclidLatex.compiled_program_for(latex_test_source)
-    if !EuclidLatex.replay_emit_program!(
+    if !EuclidLatex.replay_emit_math_block!(
         state_ptr,
-        latex_program;
+        latex_test_source;
         text_style=DynviewStyleOutput,
         math_style=DynviewStyleItalic)
         return fallback
@@ -103,10 +102,9 @@ function get_view_text(state_ptr::Ptr{Cvoid})
         return fallback
     end
 
-    latex_radical_program = EuclidLatex.compiled_program_for(latex_radical_test_source)
-    if !EuclidLatex.replay_emit_program!(
+    if !EuclidLatex.replay_emit_math_block!(
         state_ptr,
-        latex_radical_program;
+        latex_radical_test_source;
         text_style=DynviewStyleOutput,
         math_style=DynviewStyleItalic)
         return fallback

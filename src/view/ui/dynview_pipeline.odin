@@ -912,14 +912,26 @@ dynview_count_styled_rows :: proc(
         case .MathGlyphRun:
             text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MathBlock:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttach:
             text := dynview_script_attach_plain_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .ScriptAttachRecursive:
+            text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBar:
             text := dynview_accent_bar_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .AccentBarRecursive:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .RadicalBar:
             text := dynview_radical_bar_visible_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .RadicalBarRecursive:
+            text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineLine:
             dynview_flow_consume_inline_line(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -992,14 +1004,26 @@ dynview_draw_styled_content :: proc(
         case .MathGlyphRun:
             text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MathBlock:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttach:
             text := dynview_script_attach_plain_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .ScriptAttachRecursive:
+            text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBar:
             text := dynview_accent_bar_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .AccentBarRecursive:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .RadicalBar:
             text := dynview_radical_bar_visible_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .RadicalBarRecursive:
+            text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .InlineLine:
             dynview_flow_consume_inline_line(&flow, cmd, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -1073,6 +1097,9 @@ dynview_reset_command_buffer :: proc(runtime: ^core.Ui_Dynview_Runtime) {
     runtime^.command_buffer.has_stream_error = false
     runtime^.command_buffer.stream_open_block = false
     runtime^.command_buffer.stream_open_block_id = -1
+    runtime^.compile_cache.math_program_count = 0
+    runtime^.compile_cache.math_command_count = 0
+    runtime^.compile_cache.math_node_count = 0
     runtime^.compile_cache.copy_hit_target_count = 0
     runtime^.command_buffer.revision += 1
 }
@@ -1320,6 +1347,79 @@ dynview_compile_script_attach :: #force_inline proc(
     text := dynview_script_attach_plain_text(buffer, cmd)
     for i in 0..<len(text) {
         status = dynview_append_compiled_byte(cache, text[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply recursive script-wrapper compilation using grouped parent serialization.
+dynview_compile_script_attach_recursive :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    status = dynview_append_compiled_byte(cache, '{')
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    status = dynview_append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    status = dynview_append_compiled_byte(cache, '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    sup_text := dynview_text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    if len(sup_text) > 0 {
+        sup_prefix := "^{"
+        for i in 0..<len(sup_prefix) {
+            status = dynview_append_compiled_byte(cache, sup_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sup_text) {
+            status = dynview_append_compiled_byte(cache, sup_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_text := dynview_text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    if len(sub_text) > 0 {
+        sub_prefix := "_{"
+        for i in 0..<len(sub_prefix) {
+            status = dynview_append_compiled_byte(cache, sub_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sub_text) {
+            status = dynview_append_compiled_byte(cache, sub_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
         if status != DYNVIEW_STATUS_OK {
             return status
         }
@@ -1683,12 +1783,20 @@ dynview_compile_command :: #force_inline proc(
         return dynview_compile_text_run(cache, buffer, state, cmd)
     case .MathGlyphRun:
         return dynview_compile_text_run(cache, buffer, state, cmd)
+    case .MathBlock:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
     case .ScriptAttach:
         return dynview_compile_script_attach(cache, buffer, state, cmd)
+    case .ScriptAttachRecursive:
+        return dynview_compile_script_attach_recursive(cache, buffer, state, cmd)
     case .AccentBar:
         return dynview_compile_accent_bar(cache, buffer, state, cmd)
+    case .AccentBarRecursive:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
     case .RadicalBar:
         return dynview_compile_radical_bar(cache, buffer, state, cmd)
+    case .RadicalBarRecursive:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
     case .CopyableTextRun:
         return dynview_compile_copyable_text_run(cache, buffer, state, cmd)
     case .LineBreak:

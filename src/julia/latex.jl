@@ -9,11 +9,12 @@ export PARSER_GRAMMAR_VERSION,
     parse_latex,
     compile_emit_program,
     replay_emit_program!,
+    replay_emit_math_block!,
     emit_latex_dynview!,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(7)
+const PARSER_GRAMMAR_VERSION = Int32(8)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -23,6 +24,14 @@ const ACCENT_BAR_THICKNESS = Float32(0.08)
 const ACCENT_BAR_OFFSET = Float32(0.10)
 const RADICAL_BAR_THICKNESS = Float32(0.08)
 const RADICAL_BAR_OFFSET = Float32(0.10)
+const MATH_OP_TEXT_RUN = Int32(1)
+const MATH_OP_MATH_GLYPH_RUN = Int32(2)
+const MATH_OP_SCRIPT_ATTACH = Int32(3)
+const MATH_OP_ACCENT_BAR = Int32(4)
+const MATH_OP_RADICAL_BAR = Int32(5)
+const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(6)
+const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(7)
+const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
 
 const TEXT_OPERATOR_COMMANDS = Set([
     "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\cos", "\\csc", "\\cot",
@@ -146,6 +155,8 @@ const MATHBB_UPPERCASE_MAP = Dict(
     "Y" => "𝕐",
     "Z" => "ℤ")
 
+const MATHBB_GLYPH_TO_SOURCE_MAP = Dict(value => key for (key, value) in MATHBB_UPPERCASE_MAP)
+
 struct LatexToken
     kind::Symbol
     text::String
@@ -158,8 +169,8 @@ struct LatexRun
     children::Vector{LatexRun}
 end
 
-struct EmitOp
-    kind::Symbol
+struct MathPayloadOp
+    kind::Int32
     text::String
     radical_index_text::String
     sup_text::String
@@ -167,6 +178,7 @@ struct EmitOp
     accent_mode::Symbol
     radical_mode::Symbol
     style_role::Symbol
+    children::Vector{MathPayloadOp}
 end
 
 struct ParseCacheEntry
@@ -176,7 +188,7 @@ struct ParseCacheEntry
     tokens::Vector{LatexToken}
     ast::Vector{LatexRun}
     normalized_ast::Vector{LatexRun}
-    program::Vector{EmitOp}
+    program::Vector{MathPayloadOp}
 end
 
 const parse_cache = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
@@ -650,32 +662,6 @@ function normalize_runs(runs::Vector{LatexRun})
     return normalized
 end
 
-"""Return true when one emit op can host script attachments."""
-function op_accepts_scripts(op::EmitOp)
-    return op.kind == :MathGlyphRun || op.kind == :ScriptAttach
-end
-
-"""Lift one base math op into a script-attach op and set one script field."""
-function op_with_script(op::EmitOp, segment::Symbol, script_token::String)
-    sup_text = op.sup_text
-    sub_text = op.sub_text
-    if segment == :script_sup
-        sup_text = script_token
-    elseif segment == :script_sub
-        sub_text = script_token
-    end
-
-    return EmitOp(
-        :ScriptAttach,
-        op.text,
-        op.radical_index_text,
-        sup_text,
-        sub_text,
-        :none,
-        :none,
-        op.style_role)
-end
-
 """Extract script payload text from canonical script token form."""
 function script_payload_text(script_token::String)
     if isempty(script_token)
@@ -694,140 +680,6 @@ function script_payload_text(script_token::String)
     return script_token
 end
 
-"""Build one atom emit op from one normalized atom run."""
-function atom_emit_op(run::LatexRun)
-    kind = run.role == :text ? :TextRun : :MathGlyphRun
-    return EmitOp(kind, run.text, "", "", "", :none, :none, run.role)
-end
-
-"""Build one structured accent/radical emit op, or nothing when segment is not structured."""
-function structured_emit_op(run::LatexRun)
-    if run.segment == :accent_over
-        child_program = compile_emit_program(run.children)
-        accent_text, accent_sup_text, accent_sub_text, accent_role =
-            accent_payload_from_child_program(child_program)
-        return EmitOp(
-            :AccentBar,
-            accent_text,
-            "",
-            accent_sup_text,
-            accent_sub_text,
-            :overline,
-            :none,
-            accent_role)
-    end
-
-    if run.segment == :accent_under
-        child_program = compile_emit_program(run.children)
-        accent_text, accent_sup_text, accent_sub_text, accent_role =
-            accent_payload_from_child_program(child_program)
-        return EmitOp(
-            :AccentBar,
-            accent_text,
-            "",
-            accent_sup_text,
-            accent_sub_text,
-            :underline,
-            :none,
-            accent_role)
-    end
-
-    if run.segment == :radical_sqrt
-        child_program = compile_emit_program(run.children)
-        radical_text, radical_sup_text, radical_sub_text, radical_role =
-            accent_payload_from_child_program(child_program)
-        return EmitOp(
-            :RadicalBar,
-            radical_text,
-            run.text,
-            radical_sup_text,
-            radical_sub_text,
-            :none,
-            isempty(run.text) ? :sqrt : :nthroot,
-            radical_role)
-    end
-
-    return nothing
-end
-
-"""Attach one script run to prior op when possible, otherwise emit fallback math glyph run."""
-function append_script_emit_op!(program::Vector{EmitOp}, run::LatexRun)
-    script_text = script_payload_text(run.text)
-    if isempty(script_text)
-        return
-    end
-
-    if isempty(program) || !op_accepts_scripts(program[end])
-        push!(program, EmitOp(:MathGlyphRun, run.text, "", "", "", :none, :none, :math))
-        return
-    end
-
-    program[end] = op_with_script(program[end], run.segment, script_text)
-end
-
-"""Compile normalized runs to replay-ready semantic emit ops."""
-function compile_emit_program(runs::Vector{LatexRun})
-    program = EmitOp[]
-    for run in runs
-        if run.segment == :atom
-            push!(program, atom_emit_op(run))
-            continue
-        end
-
-        structured_op = structured_emit_op(run)
-        if structured_op !== nothing
-            push!(program, structured_op)
-            continue
-        end
-
-        append_script_emit_op!(program, run)
-    end
-    return program
-end
-
-"""Extract one accent payload tuple and style role from child emit ops."""
-function accent_payload_from_child_program(child_program::Vector{EmitOp})
-    if isempty(child_program)
-        return "", "", "", :math
-    end
-
-    if length(child_program) == 1
-        op = child_program[1]
-        if op.kind == :ScriptAttach
-            return op.text, op.sup_text, op.sub_text, op.style_role
-        end
-        if op.kind == :MathGlyphRun || op.kind == :TextRun
-            return op.text, "", "", op.style_role
-        end
-    end
-
-    text_parts = map(accent_child_segment_text, child_program)
-    return join(text_parts, ""), "", "", :math
-end
-
-"""Render one child emit op to literal LaTeX/text segment for accent payload fallback."""
-function accent_child_segment_text(op::EmitOp)
-    if op.kind == :ScriptAttach
-        return accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-    end
-
-    if op.kind == :AccentBar
-        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{"
-        inner = accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-        return command * inner * "}"
-    end
-
-    if op.kind == :RadicalBar
-        inner = accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-        if !isempty(op.radical_index_text)
-            return "\\sqrt[" * op.radical_index_text * "]{" * inner * "}"
-        end
-        return "\\sqrt{" * inner * "}"
-    end
-
-    return op.text
-end
-
 """Append optional canonical script suffixes to a base segment string."""
 function accent_with_script_suffix(base::String, sup::String, sub::String)
     segment = base
@@ -838,6 +690,16 @@ function accent_with_script_suffix(base::String, sup::String, sub::String)
         segment *= "_{" * sub * "}"
     end
     return segment
+end
+
+"""Append scripts to a grouped parent payload for recursive script wrappers."""
+function grouped_parent_with_script_suffix(parent::String, sup::String, sub::String)
+    return accent_with_script_suffix("{" * parent * "}", sup, sub)
+end
+
+"""Compile normalized runs to the recursive payload representation."""
+function compile_emit_program(runs::Vector{LatexRun})
+    return math_payload_ops_for_runs(runs)
 end
 
 """Compile and cache one latex string for the given grammar/style key."""
@@ -870,179 +732,443 @@ function compiled_program_for(source::AbstractString; style_profile::Integer=DEF
     return entry.program
 end
 
+"""Render one recursive payload op to canonical LaTeX-ish source."""
+function latex_source_for_payload(op::MathPayloadOp)
+    if op.kind == MATH_OP_SCRIPT_ATTACH
+        return accent_with_script_suffix(latex_source_atom_text(op), op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
+        parent = latex_source_for_program(op.children)
+        return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
+        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
+        return command * latex_source_for_program(op.children) * "}"
+    end
+
+    if op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
+        inner = latex_source_for_program(op.children)
+        if !isempty(op.radical_index_text)
+            return "\\sqrt[" * op.radical_index_text * "]{" * inner * "}"
+        end
+        return "\\sqrt{" * inner * "}"
+    end
+
+    return latex_source_atom_text(op)
+end
+
+"""Render one recursive program back to canonical LaTeX-ish source."""
+function latex_source_for_program(program::Vector{MathPayloadOp})
+    return join((latex_source_for_payload(op) for op in program), "")
+end
+
+"""Render one recursive payload op to plain-text fallback form."""
+function plain_text_for_payload(op::MathPayloadOp)
+    if op.kind == MATH_OP_SCRIPT_ATTACH
+        return accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
+        parent = plain_text_for_program(op.children)
+        return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
+        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
+        return command * plain_text_for_program(op.children) * "}"
+    end
+
+    if op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
+        inner = plain_text_for_program(op.children)
+        if !isempty(op.radical_index_text)
+            return "\\sqrt[" * op.radical_index_text * "]{" * inner * "}"
+        end
+        return "\\sqrt{" * inner * "}"
+    end
+
+    return op.text
+end
+
+"""Return the canonical source text for one payload atom, preserving mathbb styling when known."""
+function latex_source_atom_text(op::MathPayloadOp)
+    if op.style_role == :mathbb && haskey(MATHBB_GLYPH_TO_SOURCE_MAP, op.text)
+        return "\\mathbb{" * MATHBB_GLYPH_TO_SOURCE_MAP[op.text] * "}"
+    end
+    return op.text
+end
+
+"""Render one recursive program to a plain-text fallback payload."""
+function plain_text_for_program(program::Vector{MathPayloadOp})
+    return join((plain_text_for_payload(op) for op in program), "")
+end
+
 """Resolve latex input to plain Unicode/text fallback."""
 function latex_to_plain_text(source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
     entry = resolve_cache_entry(source; style_profile=style_profile)
-    parts = String[]
-    for op in entry.program
-        if op.kind == :ScriptAttach
-            push!(parts, op.text)
-            if !isempty(op.sup_text)
-                push!(parts, "^{" * op.sup_text * "}")
-            end
-            if !isempty(op.sub_text)
-                push!(parts, "_{" * op.sub_text * "}")
-            end
-            continue
-        end
-
-        if op.kind == :AccentBar
-            if op.accent_mode == :overline
-                push!(parts, "\\overline{" * op.text * "}")
-            else
-                push!(parts, "\\underline{" * op.text * "}")
-            end
-            continue
-        end
-
-        if op.kind == :RadicalBar
-            inner = accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-            if !isempty(op.radical_index_text)
-                push!(parts, "\\sqrt[" * op.radical_index_text * "]{" * inner * "}")
-            else
-                push!(parts, "\\sqrt{" * inner * "}")
-            end
-            continue
-        end
-
-        push!(parts, op.text)
-    end
-    return join(parts, "")
+    return plain_text_for_program(entry.program)
 end
 
-"""Replay a compiled semantic program to the currently open dynview block."""
+"""Replay a compiled recursive program to the currently open dynview block."""
 function replay_emit_program!(
     state_ptr::Ptr{Cvoid},
-    program::Vector{EmitOp};
+    program::Vector{MathPayloadOp};
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
         OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
 
-    for op in program
-        status = replay_emit_op!(state_ptr, op, text_style, math_style, mathbb_style)
-        if status != OdinJuliaBridge.BRIDGE_STATUS_OK
-            return false
+    source = latex_source_for_program(program)
+    return replay_emit_math_block!(
+        state_ptr,
+        source;
+        text_style=text_style,
+        math_style=math_style,
+        mathbb_style=mathbb_style)
+end
+
+"""Resolve bridge style id from payload role and kind."""
+function math_payload_style_id(kind::Int32, role::Symbol, text_style::Integer, math_style::Integer, mathbb_style::Integer)
+    if kind == MATH_OP_TEXT_RUN
+        return Int32(text_style)
+    end
+    if role == :mathbb
+        return Int32(mathbb_style)
+    end
+    return Int32(math_style)
+end
+
+"""Return true when one recursive payload op can host script attachments."""
+function payload_op_accepts_scripts(op::MathPayloadOp)
+    return op.kind == MATH_OP_MATH_GLYPH_RUN ||
+        op.kind == MATH_OP_SCRIPT_ATTACH ||
+        op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
+        op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
+        op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
+end
+
+"""Lift one payload op into a script-attach payload and set one script field."""
+function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token::String)
+    sup_text = op.sup_text
+    sub_text = op.sub_text
+    if segment == :script_sup
+        sup_text = script_payload_text(script_token)
+    elseif segment == :script_sub
+        sub_text = script_payload_text(script_token)
+    end
+
+    if op.kind == MATH_OP_MATH_GLYPH_RUN || op.kind == MATH_OP_SCRIPT_ATTACH
+        return MathPayloadOp(
+            MATH_OP_SCRIPT_ATTACH,
+            op.text,
+            op.radical_index_text,
+            sup_text,
+            sub_text,
+            op.accent_mode,
+            op.radical_mode,
+            op.style_role,
+            op.children)
+    end
+
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
+        return MathPayloadOp(
+            MATH_OP_SCRIPT_ATTACH_RECURSIVE,
+            op.text,
+            op.radical_index_text,
+            sup_text,
+            sub_text,
+            op.accent_mode,
+            op.radical_mode,
+            op.style_role,
+            op.children)
+    end
+
+    parent_text = plain_text_for_payload(op)
+    return MathPayloadOp(
+        MATH_OP_SCRIPT_ATTACH_RECURSIVE,
+        parent_text,
+        "",
+        sup_text,
+        sub_text,
+        :none,
+        :none,
+        :math,
+        [op])
+end
+
+"""Return one plain-text fallback string for a run vector."""
+function plain_text_for_runs(runs::Vector{LatexRun})
+    return plain_text_for_program(compile_emit_program(normalize_runs(runs)))
+end
+
+"""Return one atom payload op from one normalized atom run."""
+function atom_payload_op(run::LatexRun)
+    kind = run.role == :text ? MATH_OP_TEXT_RUN : MATH_OP_MATH_GLYPH_RUN
+    return MathPayloadOp(
+        kind,
+        run.text,
+        "",
+        "",
+        "",
+        :none,
+        :none,
+        run.role,
+        MathPayloadOp[])
+end
+
+"""Return one recursive accent payload op from one structured run."""
+function accent_payload_op(run::LatexRun)
+    child_payloads = math_payload_ops_for_runs(run.children)
+    accent_mode = run.segment == :accent_over ? :overline : :underline
+    return MathPayloadOp(
+        MATH_OP_ACCENT_BAR_RECURSIVE,
+        plain_text_for_runs(run.children),
+        "",
+        "",
+        "",
+        accent_mode,
+        :none,
+        :math,
+        child_payloads)
+end
+
+"""Return one recursive radical payload op from one structured run."""
+function radical_payload_op(run::LatexRun)
+    child_payloads = math_payload_ops_for_runs(run.children)
+    radical_mode = isempty(run.text) ? :sqrt : :nthroot
+    return MathPayloadOp(
+        MATH_OP_RADICAL_BAR_RECURSIVE,
+        plain_text_for_runs(run.children),
+        run.text,
+        "",
+        "",
+        :none,
+        radical_mode,
+        :math,
+        child_payloads)
+end
+
+"""Append one script payload op when no compatible prior payload exists."""
+function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
+    push!(payloads, MathPayloadOp(
+        MATH_OP_MATH_GLYPH_RUN,
+        script_payload_text(run.text),
+        "",
+        "",
+        "",
+        :none,
+        :none,
+        :math,
+        MathPayloadOp[]))
+    return nothing
+end
+
+"""Build recursive payload ops from normalized runs without flattening structured children."""
+function math_payload_ops_for_runs(runs::Vector{LatexRun})
+    payloads = MathPayloadOp[]
+    for run in normalize_runs(runs)
+        if run.segment == :atom
+            push!(payloads, atom_payload_op(run))
+            continue
+        end
+
+        if run.segment == :accent_over || run.segment == :accent_under
+            push!(payloads, accent_payload_op(run))
+            continue
+        end
+
+        if run.segment == :radical_sqrt
+            push!(payloads, radical_payload_op(run))
+            continue
+        end
+
+        if run.segment == :script_sup || run.segment == :script_sub
+            if !isempty(payloads) && payload_op_accepts_scripts(payloads[end])
+                payloads[end] = payload_op_with_script(payloads[end], run.segment, run.text)
+            else
+                push_script_fallback_payload!(payloads, run)
+            end
         end
     end
-
-    return true
+    return payloads
 end
 
-"""Resolve per-op base style id, including dedicated mathbb styling."""
-function math_style_for_op(op::EmitOp, math_style::Integer, mathbb_style::Integer)
-    if op.style_role == :mathbb
-        return mathbb_style
-    end
-
-    return math_style
-end
-
-"""Replay one compiled op through the dynview bridge and return status code."""
-function replay_emit_op!(
-    state_ptr::Ptr{Cvoid},
-    op::EmitOp,
+"""Build one bridge math op payload from one recursive payload op."""
+function bridge_math_payload_op(
+    io::IOBuffer,
+    op::MathPayloadOp,
+    child_direct_count::Int32,
     text_style::Integer,
     math_style::Integer,
     mathbb_style::Integer)
 
-    base_style = math_style_for_op(op, math_style, mathbb_style)
+    text_offset, text_len = append_math_block_blob!(io, op.text)
+    index_offset, index_len = append_math_block_blob!(io, op.radical_index_text)
+    sup_offset, sup_len = append_math_block_blob!(io, op.sup_text)
+    sub_offset, sub_len = append_math_block_blob!(io, op.sub_text)
+    base_style = math_payload_style_id(op.kind, op.style_role, text_style, math_style, mathbb_style)
+    accent_mode, radical_mode = math_block_mode_codes(op)
 
-    if op.kind == :MathGlyphRun
-        return OdinJuliaBridge.dynview_math_glyph_run(state_ptr, op.text, base_style)
-    end
-
-    if op.kind == :ScriptAttach
-        return replay_script_attach_op!(state_ptr, op, base_style, math_style)
-    end
-
-    if op.kind == :AccentBar
-        return replay_accent_bar_op!(state_ptr, op, base_style, math_style)
-    end
-
-    if op.kind == :RadicalBar
-        return replay_radical_bar_op!(state_ptr, op, base_style, math_style)
-    end
-
-    return OdinJuliaBridge.dynview_text_run(state_ptr, op.text, text_style)
-end
-
-"""Replay one script-attach op through the dynview bridge."""
-function replay_script_attach_op!(
-    state_ptr::Ptr{Cvoid},
-    op::EmitOp,
-    base_style::Integer,
-    script_style::Integer)
-
-    return OdinJuliaBridge.dynview_script_attach(
-        state_ptr,
-        op.text,
-        op.sup_text,
-        op.sub_text,
+    return OdinJuliaBridge.BridgeDynviewMathOp(
+        op.kind,
         base_style,
-        script_style,
-        SCRIPT_SCALE,
-        SCRIPT_SUP_RAISE,
-        SCRIPT_SUB_DROP,
-        SCRIPT_GAP)
-end
-
-"""Replay one accent-bar op through the dynview bridge."""
-function replay_accent_bar_op!(
-    state_ptr::Ptr{Cvoid},
-    op::EmitOp,
-    base_style::Integer,
-    script_style::Integer)
-
-    accent_mode = op.accent_mode == :overline ?
-        OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
-        OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE
-
-    return OdinJuliaBridge.dynview_accent_bar(
-        state_ptr,
-        op.text,
-        op.sup_text,
-        op.sub_text,
-        base_style,
+        child_direct_count,
+        Int32(math_style),
         base_style,
         accent_mode,
-        script_style,
+        radical_mode,
+        text_offset,
+        text_len,
+        index_offset,
+        index_len,
+        sup_offset,
+        sup_len,
+        sub_offset,
+        sub_len,
+        SCRIPT_SCALE,
+        SCRIPT_SUP_RAISE,
+        SCRIPT_SUB_DROP,
+        SCRIPT_GAP,
         ACCENT_BAR_THICKNESS,
         ACCENT_BAR_OFFSET,
-        SCRIPT_SCALE,
-        SCRIPT_SUP_RAISE,
-        SCRIPT_SUB_DROP,
-        SCRIPT_GAP)
+    )
 end
 
-"""Replay one radical-bar op through the dynview bridge."""
-function replay_radical_bar_op!(
-    state_ptr::Ptr{Cvoid},
-    op::EmitOp,
-    base_style::Integer,
-    script_style::Integer)
+"""Flatten recursive payload ops into preorder bridge ops and return direct child count."""
+function bridge_math_payload_preorder(
+    payloads::Vector{MathPayloadOp},
+    io::IOBuffer,
+    text_style::Integer,
+    math_style::Integer,
+    mathbb_style::Integer)
 
+    ops = OdinJuliaBridge.BridgeDynviewMathOp[]
+    for payload in payloads
+        child_direct_count, child_ops = bridge_math_payload_preorder(
+            payload.children,
+            io,
+            text_style,
+            math_style,
+            mathbb_style)
+        push!(ops, bridge_math_payload_op(
+            io,
+            payload,
+            Int32(child_direct_count),
+            text_style,
+            math_style,
+            mathbb_style))
+        append!(ops, child_ops)
+    end
+    return length(payloads), ops
+end
+
+"""Append one string to a shared math-block blob and return byte offset/length."""
+function append_math_block_blob!(io::IOBuffer, text::AbstractString)
+    data = codeunits(String(text))
+    offset = Int32(io.size)
+    write(io, data)
+    return offset, Int32(length(data))
+end
+
+"""Return bridge accent/radical mode codes for one payload op."""
+function math_block_mode_codes(op::MathPayloadOp)
+    accent_mode = op.accent_mode == :overline ?
+        OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
+        (op.accent_mode == :underline ?
+            OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE : Int32(0))
     radical_mode = op.radical_mode == :nthroot ?
         OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :
-        OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_SQRT
-
-    return OdinJuliaBridge.dynview_radical_bar(
-        state_ptr,
-        op.text,
-        op.radical_index_text,
-        op.sup_text,
-        op.sub_text,
-        base_style,
-        base_style,
-        radical_mode,
-        script_style,
-        RADICAL_BAR_THICKNESS,
-        RADICAL_BAR_OFFSET,
-        SCRIPT_SCALE,
-        SCRIPT_SUP_RAISE,
-        SCRIPT_SUB_DROP,
-        SCRIPT_GAP)
+        (op.radical_mode == :sqrt ?
+            OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_SQRT : Int32(0))
+    return Int32(accent_mode), Int32(radical_mode)
 end
+
+"""Encode one recursive payload program as recursive bridge ops plus shared text blob."""
+function bridge_math_block_payload(
+    program::Vector{MathPayloadOp};
+    text_style::Integer,
+    math_style::Integer,
+    mathbb_style::Integer)
+
+    blob = IOBuffer()
+    top_level_count, ops = bridge_math_payload_preorder(
+        program,
+        blob,
+        text_style,
+        math_style,
+        mathbb_style)
+    return plain_text_for_program(program), String(take!(blob)), ops, top_level_count
+end
+
+"""Encode one normalized LaTeX run tree as recursive bridge ops plus shared text blob."""
+function bridge_math_block_payload(
+    runs::Vector{LatexRun};
+    text_style::Integer,
+    math_style::Integer,
+    mathbb_style::Integer)
+
+    payloads = math_payload_ops_for_runs(runs)
+    blob = IOBuffer()
+    top_level_count, ops = bridge_math_payload_preorder(
+        payloads,
+        blob,
+        text_style,
+        math_style,
+        mathbb_style)
+    return plain_text_for_runs(runs), String(take!(blob)), ops, top_level_count
+end
+
+"""Replay a compiled recursive program as one atomic non-wrapping math block."""
+function replay_emit_math_block!(
+    state_ptr::Ptr{Cvoid},
+    program::Vector{MathPayloadOp};
+    text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
+    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
+    mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+
+    plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
+        program;
+        text_style=text_style,
+        math_style=math_style,
+        mathbb_style=mathbb_style)
+    status = OdinJuliaBridge.dynview_math_block_from_ops(
+        state_ptr,
+        plain_text,
+        math_style,
+        ops,
+        top_level_count,
+        text_blob)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Replay one LaTeX source string as one recursive non-wrapping math block."""
+function replay_emit_math_block!(
+    state_ptr::Ptr{Cvoid},
+    source::AbstractString;
+    style_profile::Integer=DEFAULT_STYLE_PROFILE,
+    text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
+    math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
+    mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+
+    entry = resolve_cache_entry(source; style_profile=style_profile)
+    plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
+        entry.normalized_ast;
+        text_style=text_style,
+        math_style=math_style,
+        mathbb_style=mathbb_style)
+    status = OdinJuliaBridge.dynview_math_block_from_ops(
+        state_ptr,
+        plain_text,
+        math_style,
+        ops,
+        top_level_count,
+        text_blob)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
 
 """Emit one latex string as a standalone dynview block with fallback copy payload."""
 function emit_latex_dynview!(
@@ -1074,10 +1200,10 @@ function emit_latex_dynview!(
         end
     end
 
-    program = compiled_program_for(source; style_profile=style_profile)
-    if !replay_emit_program!(
+    if !replay_emit_math_block!(
             state_ptr,
-            program;
+            source;
+            style_profile=style_profile,
             text_style=text_style,
             math_style=math_style,
             mathbb_style=mathbb_style)

@@ -107,6 +107,39 @@ Bridge_Color :: struct {
     a: u8,
 }
 
+Bridge_Dynview_Math_Op :: struct {
+    kind: i32,
+    style_id: i32,
+    child_program_id: i32,
+    script_style_id: i32,
+    accent_style_id: i32,
+    accent_mode: i32,
+    radical_mode: i32,
+    text_offset: i32,
+    text_len: i32,
+    index_text_offset: i32,
+    index_text_len: i32,
+    sup_text_offset: i32,
+    sup_text_len: i32,
+    sub_text_offset: i32,
+    sub_text_len: i32,
+    script_scale: f32,
+    script_sup_raise: f32,
+    script_sub_drop: f32,
+    script_gap: f32,
+    accent_thickness: f32,
+    accent_offset: f32,
+}
+
+BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN :: 1
+BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN :: 2
+BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH :: 3
+BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR :: 4
+BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR :: 5
+BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE :: 6
+BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE :: 7
+BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE :: 8
+
 Bridge_Point_View :: struct {
     valid: bool,
     index: int,
@@ -844,6 +877,9 @@ dynview_reset_stream :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     runtime^.command_buffer.has_stream_error = false
     runtime^.command_buffer.stream_open_block = false
     runtime^.command_buffer.stream_open_block_id = -1
+    runtime^.compile_cache.math_program_count = 0
+    runtime^.compile_cache.math_command_count = 0
+    runtime^.compile_cache.math_node_count = 0
     runtime^.command_buffer.revision += 1
     runtime^.compile_cache.last_error_code = BRIDGE_STATUS_OK
     runtime^.compile_cache.is_valid = false
@@ -953,6 +989,276 @@ dynview_math_glyph_run :: proc "c" (
         style_id = style_id,
         text_offset = offset,
         text_len = count,
+    })
+}
+
+//   Append one whole inline math block. Placeholder until recursive program storage is wired.
+@(export)
+dynview_math_block :: proc "c" (
+    state: ^core.Euclid_General_State,
+    latex_source: cstring,
+    style_id: i32) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+
+    if latex_source == nil || style_id < 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    _ = latex_source
+    _ = style_id
+    return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+}
+
+//   Append one whole inline math block from a flat child-command program payload.
+@(export)
+dynview_math_block_from_ops :: proc "c" (
+    state: ^core.Euclid_General_State,
+    plain_text: cstring,
+    style_id: i32,
+    ops: [^]Bridge_Dynview_Math_Op,
+    op_count: i32,
+    top_level_op_count: i32,
+    text_blob: cstring) -> i32 {
+
+    if state == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+
+    context = state^.saved_context
+    runtime := &state^.ui_runtime.dynview_runtime
+    if !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer := &runtime^.command_buffer
+    if !buffer^.stream_open_block {
+        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+    }
+    if plain_text == nil || text_blob == nil || op_count <= 0 || top_level_op_count <= 0 || ops == nil {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    cache := &runtime^.compile_cache
+    if cache^.math_program_count >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    recursive_accent_count := 0
+    recursive_radical_count := 0
+    recursive_script_count := 0
+    for i in 0..<int(op_count) {
+        if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE {
+            recursive_accent_count += 1
+        }
+        if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE {
+            recursive_radical_count += 1
+        }
+        if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE {
+            recursive_script_count += 1
+        }
+    }
+
+    if cache^.math_program_count + 1 + recursive_accent_count + recursive_radical_count + recursive_script_count > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+    if cache^.math_command_count + int(op_count) + recursive_accent_count + recursive_radical_count + recursive_script_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
+    }
+
+    plain_offset := 0
+    plain_count := 0
+    status := dynview_append_text_payload(runtime, string(plain_text), &plain_offset, &plain_count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    blob_offset := 0
+    blob_count := 0
+    status = dynview_append_text_payload(runtime, string(text_blob), &blob_offset, &blob_count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    program_id := cache^.math_program_count
+    next_child_program_id := program_id + 1
+    cursor := 0
+
+    dynview_math_command_kind_from_bridge :: #force_inline proc(kind: i32) -> (core.Ui_Dynview_Command_Kind, bool) {
+        switch kind {
+        case BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN:
+            return .TextRun, true
+        case BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN:
+            return .MathGlyphRun, true
+        case BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH:
+            return .ScriptAttach, true
+        case BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE:
+            return .ScriptAttachRecursive, true
+        case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR:
+            return .AccentBar, true
+        case BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR:
+            return .RadicalBar, true
+        case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE:
+            return .AccentBarRecursive, true
+        case BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE:
+            return .RadicalBarRecursive, true
+        }
+        return .TextRun, false
+    }
+
+    dynview_math_op_spans_valid :: #force_inline proc(op: Bridge_Dynview_Math_Op, blob_count: int) -> bool {
+        if op.text_offset < 0 || op.text_len < 0 ||
+            op.index_text_offset < 0 || op.index_text_len < 0 ||
+            op.sup_text_offset < 0 || op.sup_text_len < 0 ||
+            op.sub_text_offset < 0 || op.sub_text_len < 0 {
+            return false
+        }
+
+        return int(op.text_offset + op.text_len) <= blob_count &&
+            int(op.index_text_offset + op.index_text_len) <= blob_count &&
+            int(op.sup_text_offset + op.sup_text_len) <= blob_count &&
+            int(op.sub_text_offset + op.sub_text_len) <= blob_count
+    }
+
+    dynview_import_math_program_from_ops :: proc(
+        cache: ^core.Ui_Dynview_Compile_Cache,
+        block_id: i32,
+        ops: [^]Bridge_Dynview_Math_Op,
+        op_count: int,
+        cursor: ^int,
+        direct_count: int,
+        blob_offset, blob_count: int,
+        program_id: int,
+        next_program_id: ^int) -> i32 {
+
+        if direct_count <= 0 || cache == nil || cursor == nil || next_program_id == nil {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+
+        command_start := cache^.math_command_count
+        if command_start + direct_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+            return BRIDGE_STATUS_OUT_OF_CAPACITY
+        }
+        cache^.math_command_count += direct_count
+
+        for local_index in 0..<direct_count {
+            if cursor^ >= op_count {
+                return BRIDGE_STATUS_INVALID_ARGUMENT
+            }
+
+            op := ops[cursor^]
+            cursor^ += 1
+            command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
+            if !ok || !dynview_math_op_spans_valid(op, blob_count) {
+                return BRIDGE_STATUS_INVALID_ARGUMENT
+            }
+
+            child_program_id := op.child_program_id
+            if command_kind == .ScriptAttachRecursive || command_kind == .AccentBarRecursive || command_kind == .RadicalBarRecursive {
+                child_direct_count := int(op.child_program_id)
+                if child_direct_count <= 0 || next_program_id^ >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+                    return BRIDGE_STATUS_INVALID_ARGUMENT
+                }
+
+                host_child_program_id := next_program_id^
+                next_program_id^ += 1
+                status := dynview_import_math_program_from_ops(
+                    cache,
+                    block_id,
+                    ops,
+                    op_count,
+                    cursor,
+                    child_direct_count,
+                    blob_offset,
+                    blob_count,
+                    host_child_program_id,
+                    next_program_id)
+                if status != BRIDGE_STATUS_OK {
+                    return status
+                }
+
+                child_program_id = i32(host_child_program_id)
+            }
+
+            cache^.math_commands[command_start + local_index] = core.Ui_Dynview_Command{
+                kind = command_kind,
+                block_id = block_id,
+                style_id = op.style_id,
+                math_program_id = child_program_id,
+                text_offset = blob_offset + int(op.text_offset),
+                text_len = int(op.text_len),
+                script_base_text_offset = blob_offset + int(op.text_offset),
+                script_base_text_len = int(op.text_len),
+                script_sup_text_offset = blob_offset + int(op.sup_text_offset),
+                script_sup_text_len = int(op.sup_text_len),
+                script_sub_text_offset = blob_offset + int(op.sub_text_offset),
+                script_sub_text_len = int(op.sub_text_len),
+                script_style_id = op.script_style_id,
+                script_scale = op.script_scale,
+                script_sup_raise = op.script_sup_raise,
+                script_sub_drop = op.script_sub_drop,
+                script_gap = op.script_gap,
+                accent_mode = op.accent_mode,
+                radical_mode = op.radical_mode,
+                radical_index_text_offset = blob_offset + int(op.index_text_offset),
+                radical_index_text_len = int(op.index_text_len),
+                accent_style_id = op.accent_style_id,
+                accent_thickness = op.accent_thickness,
+                accent_offset = op.accent_offset,
+            }
+        }
+
+        cache^.math_programs[program_id] = core.Ui_Dynview_Math_Program{
+            valid = true,
+            command_start = command_start,
+            command_count = direct_count,
+        }
+        return BRIDGE_STATUS_OK
+    }
+
+    status = dynview_import_math_program_from_ops(
+        cache,
+        buffer^.stream_open_block_id,
+        ops,
+        int(op_count),
+        &cursor,
+        int(top_level_op_count),
+        blob_offset,
+        blob_count,
+        program_id,
+        &next_child_program_id)
+    if status != BRIDGE_STATUS_OK {
+        return dynview_fail(runtime, status)
+    }
+    if cursor != int(op_count) {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    cache^.math_programs[program_id].valid = true
+    cache^.math_programs[program_id].copy_text_offset = plain_offset
+    cache^.math_programs[program_id].copy_text_len = plain_count
+    cache^.math_program_count = next_child_program_id
+
+    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+        kind = .MathBlock,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        math_program_id = i32(program_id),
+        text_offset = plain_offset,
+        text_len = plain_count,
     })
 }
 

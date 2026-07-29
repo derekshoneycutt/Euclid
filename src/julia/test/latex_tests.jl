@@ -16,9 +16,9 @@ using Test
 
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
     @test length(program) == 2
-    @test program[1].kind == :TextRun
+    @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN
     @test program[1].text == "sin"
-    @test program[2].kind == :MathGlyphRun
+    @test program[2].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test program[2].text == "(x)+x"
     @test program[2].style_role == :math
 end
@@ -52,19 +52,19 @@ end
 @testset "mathbb segmentation and style role" begin
     program = EuclidLatex.compiled_program_for("A + \\mathbb{R} + B")
     @test length(program) == 3
-    @test program[1].kind == :MathGlyphRun
+    @test program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test program[1].style_role == :math
-    @test program[2].kind == :MathGlyphRun
+    @test program[2].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test program[2].text == "ℝ"
     @test program[2].style_role == :mathbb
-    @test program[3].kind == :MathGlyphRun
+    @test program[3].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test program[3].style_role == :math
 end
 
 @testset "script attach emit program" begin
     program = EuclidLatex.compiled_program_for("A_1^2")
     @test length(program) == 1
-    @test program[1].kind == :ScriptAttach
+    @test program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
     @test program[1].text == "A"
     @test program[1].sup_text == "2"
     @test program[1].sub_text == "1"
@@ -72,11 +72,19 @@ end
 
     mathbb_program = EuclidLatex.compiled_program_for("\\mathbb{R}_0")
     @test length(mathbb_program) == 1
-    @test mathbb_program[1].kind == :ScriptAttach
+    @test mathbb_program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
     @test mathbb_program[1].text == "ℝ"
     @test mathbb_program[1].sup_text == ""
     @test mathbb_program[1].sub_text == "0"
     @test mathbb_program[1].style_role == :mathbb
+
+    recursive_parent_program = EuclidLatex.compiled_program_for("\\overline{AB}_1^2")
+    @test length(recursive_parent_program) == 1
+    @test recursive_parent_program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test recursive_parent_program[1].sup_text == "2"
+    @test recursive_parent_program[1].sub_text == "1"
+    @test length(recursive_parent_program[1].children) == 1
+    @test recursive_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
 end
 
 @testset "accent bars" begin
@@ -91,28 +99,34 @@ end
 
     accent_program = EuclidLatex.compiled_program_for("f(\\overline{AB}) + \\underline{CD}")
     @test length(accent_program) == 4
-    @test accent_program[1].kind == :MathGlyphRun
+    @test accent_program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test accent_program[1].style_role == :math
-    @test accent_program[2].kind == :AccentBar
+    @test accent_program[2].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test accent_program[2].accent_mode == :overline
+    @test length(accent_program[2].children) == 1
+    @test accent_program[2].children[1].text == "AB"
     @test accent_program[2].style_role == :math
-    @test accent_program[4].kind == :AccentBar
+    @test accent_program[4].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test accent_program[4].accent_mode == :underline
+    @test length(accent_program[4].children) == 1
+    @test accent_program[4].children[1].text == "CD"
     @test accent_program[4].style_role == :math
 
     embedded_scripts = EuclidLatex.compiled_program_for("\\overline{AB^2} + \\underline{CD_4}")
     @test length(embedded_scripts) == 3
-    @test embedded_scripts[1].kind == :AccentBar
-    @test embedded_scripts[1].text == "AB"
-    @test embedded_scripts[1].sup_text == "2"
-    @test embedded_scripts[1].sub_text == ""
+    @test embedded_scripts[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[1].accent_mode == :overline
+    @test length(embedded_scripts[1].children) == 1
+    @test embedded_scripts[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test embedded_scripts[1].children[1].text == "AB"
+    @test embedded_scripts[1].children[1].sup_text == "2"
     @test embedded_scripts[1].style_role == :math
-    @test embedded_scripts[3].kind == :AccentBar
-    @test embedded_scripts[3].text == "CD"
-    @test embedded_scripts[3].sup_text == ""
-    @test embedded_scripts[3].sub_text == "4"
+    @test embedded_scripts[3].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[3].accent_mode == :underline
+    @test length(embedded_scripts[3].children) == 1
+    @test embedded_scripts[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test embedded_scripts[3].children[1].text == "CD"
+    @test embedded_scripts[3].children[1].sub_text == "4"
     @test embedded_scripts[3].style_role == :math
 end
 
@@ -137,24 +151,38 @@ end
 
     radical_program = EuclidLatex.compiled_program_for("\\sqrt{AB} + \\sqrt{x^2}")
     @test length(radical_program) == 3
-    @test radical_program[1].kind == :RadicalBar
+    @test radical_program[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test radical_program[1].text == "AB"
+    @test length(radical_program[1].children) == 1
+    @test radical_program[1].children[1].text == "AB"
     @test radical_program[1].radical_mode == :sqrt
     @test radical_program[1].style_role == :math
-    @test radical_program[3].kind == :RadicalBar
-    @test radical_program[3].text == "x"
-    @test radical_program[3].sup_text == "2"
+    @test radical_program[3].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
+    @test length(radical_program[3].children) == 1
+    @test radical_program[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test radical_program[3].children[1].text == "x"
+    @test radical_program[3].children[1].sup_text == "2"
     @test radical_program[3].style_role == :math
 
     indexed_program = EuclidLatex.compiled_program_for("\\sqrt[n]{A_1^2}")
     @test length(indexed_program) == 1
-    @test indexed_program[1].kind == :RadicalBar
-    @test indexed_program[1].text == "A"
+    @test indexed_program[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test indexed_program[1].radical_index_text == "n"
-    @test indexed_program[1].sup_text == "2"
-    @test indexed_program[1].sub_text == "1"
+    @test length(indexed_program[1].children) == 1
+    @test indexed_program[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test indexed_program[1].children[1].text == "A"
+    @test indexed_program[1].children[1].sup_text == "2"
+    @test indexed_program[1].children[1].sub_text == "1"
     @test indexed_program[1].radical_mode == :nthroot
     @test indexed_program[1].style_role == :math
+
+    radical_parent_program = EuclidLatex.compiled_program_for("\\sqrt{AB}_1^2")
+    @test length(radical_parent_program) == 1
+    @test radical_parent_program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test radical_parent_program[1].sup_text == "2"
+    @test radical_parent_program[1].sub_text == "1"
+    @test length(radical_parent_program[1].children) == 1
+    @test radical_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
 end
 
 @testset "cache behavior" begin

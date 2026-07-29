@@ -33,6 +33,9 @@ UI_DYNVIEW_MAX_COMMANDS :: 1024
 UI_DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
 UI_DYNVIEW_MAX_LAYOUT_LINES :: 4096
 UI_DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
+UI_DYNVIEW_MAX_MATH_PROGRAMS :: 256
+UI_DYNVIEW_MAX_MATH_NODES :: 4096
+UI_DYNVIEW_MAX_MATH_COMMANDS :: 4096
 
 FONT_VARIANT_SLOT_COUNT :: 14
 
@@ -730,9 +733,13 @@ Ui_Dynview_Command_Kind :: enum {
     EndBlock,
     TextRun,
     MathGlyphRun,
+    MathBlock,
     ScriptAttach,
+    ScriptAttachRecursive,
     AccentBar,
+    AccentBarRecursive,
     RadicalBar,
+    RadicalBarRecursive,
     CopyableTextRun,
     LineBreak,
     Divider,
@@ -748,6 +755,7 @@ Ui_Dynview_Command :: struct {
     kind: Ui_Dynview_Command_Kind,
     block_id: i32,
     style_id: i32,
+    math_program_id: i32,
     text_offset: int,
     text_len: int,
     script_base_text_offset: int,
@@ -800,9 +808,13 @@ Ui_Dynview_Copy_Hit_Target :: struct {
 Ui_Dynview_Layout_Item_Kind :: enum {
     TextRun,
     MathGlyphRun,
+    MathBlock,
     ScriptAttach,
+    ScriptAttachRecursive,
     AccentBar,
+    AccentBarRecursive,
     RadicalBar,
+    RadicalBarRecursive,
     InlineLine,
     InlineBox,
     InlineCircle,
@@ -815,6 +827,7 @@ Ui_Dynview_Layout_Item :: struct {
     kind: Ui_Dynview_Layout_Item_Kind,
     block_id: i32,
     style_id: i32,
+    math_program_id: i32,
     line_index: int,
     col_start: int,
     col_span: int,
@@ -850,6 +863,54 @@ Ui_Dynview_Layout_Item :: struct {
     draw_height: f32,
     ascent: f32,
     descent: f32,
+    visual_padding_top: f32,
+    visual_padding_bottom: f32,
+}
+
+Ui_Dynview_Math_Node_Kind :: enum {
+    None,
+    Sequence,
+    GlyphRun,
+    Script,
+    Radical,
+    Fraction,
+}
+
+Ui_Dynview_Math_Node :: struct {
+    kind: Ui_Dynview_Math_Node_Kind,
+    style_id: i32,
+    text_offset: int,
+    text_len: int,
+    first_child: int,
+    child_count: int,
+    base_child: int,
+    superscript_child: int,
+    subscript_child: int,
+    radicand_child: int,
+    index_child: int,
+    numerator_child: int,
+    denominator_child: int,
+    x_offset: f32,
+    y_offset: f32,
+    draw_width: f32,
+    ascent: f32,
+    descent: f32,
+}
+
+Ui_Dynview_Math_Program :: struct {
+    valid: bool,
+    root_node_index: int,
+    node_start: int,
+    node_count: int,
+    command_start: int,
+    command_count: int,
+    copy_text_offset: int,
+    copy_text_len: int,
+    draw_width: f32,
+    ascent: f32,
+    descent: f32,
+    visual_padding_top: f32,
+    visual_padding_bottom: f32,
 }
 
 Ui_Dynview_Layout_Line :: struct {
@@ -884,6 +945,9 @@ Ui_Dynview_Compile_Cache :: struct {
     copy_hit_target_count: int,
     layout_line_count: int,
     layout_item_count: int,
+    math_program_count: int,
+    math_command_count: int,
+    math_node_count: int,
     layout_is_valid: bool,
     is_valid: bool,
 
@@ -907,6 +971,9 @@ Ui_Dynview_Compile_Cache :: struct {
     copy_hit_targets: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Hit_Target,
     layout_lines: [UI_DYNVIEW_MAX_LAYOUT_LINES]Ui_Dynview_Layout_Line,
     layout_items: [UI_DYNVIEW_MAX_LAYOUT_ITEMS]Ui_Dynview_Layout_Item,
+    math_programs: [UI_DYNVIEW_MAX_MATH_PROGRAMS]Ui_Dynview_Math_Program,
+    math_commands: [UI_DYNVIEW_MAX_MATH_COMMANDS]Ui_Dynview_Command,
+    math_nodes: [UI_DYNVIEW_MAX_MATH_NODES]Ui_Dynview_Math_Node,
 }
 
 Ui_Dynview_Runtime :: struct {

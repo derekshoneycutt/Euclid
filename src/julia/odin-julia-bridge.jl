@@ -12,6 +12,7 @@ using Colors
 using UUIDs
 
 export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec, BridgeSolveResult,
+    BridgeDynviewMathOp,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle, BridgeShapeTriangle,
     BridgeShapeSquare, BridgeShapePentagon, BridgeShapePen, BridgeShapeCompass,
     LABEL_DECORATION_NONE, LABEL_DECORATION_PRIME, LABEL_DECORATION_DOUBLEPRIME,
@@ -45,6 +46,7 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     hide_point, hide_point_batch, set_point_position, set_point_brush, set_point_color,
     set_point_active_color, notify_animation_cycle_boundary,
     dynview_reset_stream, dynview_begin_block, dynview_text_run, dynview_math_glyph_run,
+    dynview_math_block_from_ops,
     dynview_script_attach,
     dynview_accent_bar,
     dynview_radical_bar,
@@ -83,6 +85,30 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     get_compass_joint1_position, lock_compass_joint2, unlock_compass_joint2,
     move_compass_joint2, get_compass_joint2_position, set_animation_meta,
     get_animation_meta, emit_trailing_particle, emit_flicker_particle
+
+struct BridgeDynviewMathOp
+    kind::Int32
+    style_id::Int32
+    child_program_id::Int32
+    script_style_id::Int32
+    accent_style_id::Int32
+    accent_mode::Int32
+    radical_mode::Int32
+    text_offset::Int32
+    text_len::Int32
+    index_text_offset::Int32
+    index_text_len::Int32
+    sup_text_offset::Int32
+    sup_text_len::Int32
+    sub_text_offset::Int32
+    sub_text_len::Int32
+    script_scale::Float32
+    script_sup_raise::Float32
+    script_sub_drop::Float32
+    script_gap::Float32
+    accent_thickness::Float32
+    accent_offset::Float32
+end
 
 struct BridgeColor
     r::UInt8
@@ -1421,6 +1447,51 @@ function dynview_math_glyph_run(state_ptr::Ptr{Cvoid}, text::AbstractString, sty
         state_ptr::Ptr{Cvoid},
         text::Cstring,
         Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one whole inline math block inside the currently open host dynview block.
+
+This bridge surface is reserved for recursive, non-wrapping math-block layout.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_math_block(
+    state_ptr::Ptr{Cvoid},
+    latex_source::AbstractString,
+    style_id::Integer)
+
+    @ccall dynview_math_block(
+        state_ptr::Ptr{Cvoid},
+        latex_source::Cstring,
+        Int32(style_id)::Int32)::Int32
+end
+
+"""
+Emit one whole inline math block using a compiled flat math-op stream and shared text blob.
+
+This is the bridge surface used by recursive-supportive math-block layout work.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_math_block_from_ops(
+    state_ptr::Ptr{Cvoid},
+    plain_text::AbstractString,
+    style_id::Integer,
+    ops::Vector{BridgeDynviewMathOp},
+    top_level_op_count::Integer,
+    text_blob::AbstractString)
+
+    op_count = Int32(length(ops))
+    GC.@preserve ops plain_text text_blob begin
+        ops_ptr = op_count > 0 ? pointer(ops) : Ptr{BridgeDynviewMathOp}(C_NULL)
+        @ccall dynview_math_block_from_ops(
+            state_ptr::Ptr{Cvoid},
+            plain_text::Cstring,
+            Int32(style_id)::Int32,
+            ops_ptr::Ptr{BridgeDynviewMathOp},
+            op_count::Int32,
+            Int32(top_level_op_count)::Int32,
+            text_blob::Cstring)::Int32
+    end
 end
 
 """
