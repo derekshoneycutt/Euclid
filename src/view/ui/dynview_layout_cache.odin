@@ -103,6 +103,13 @@ dynview_radical_side_paddings :: #force_inline proc(font_size, base_advance: f32
     return front_padding, back_padding
 }
 
+//   Return baseline-to-hook-low offset for one radical sign, scaled by content depth.
+dynview_radical_root_low_offset :: #force_inline proc(font_size, content_descent: f32) -> f32 {
+    base_offset := font_size * 0.375
+    stretched_offset := content_descent * 0.72 + font_size * 0.04
+    return max(base_offset, stretched_offset)
+}
+
 //   Return glyph scale factor for display-style large operators.
 dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     switch large_op_kind {
@@ -655,7 +662,9 @@ dynview_math_program_recursive_radical_item :: #force_inline proc(
         index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
         ascent = max(ascent, index_top_from_baseline + script_top_pad)
     }
-    descent := max(content_descent, font_size * 0.18)
+    root_low_offset := dynview_radical_root_low_offset(font_size, content_descent)
+    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
+    descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
     if index_cols > 0 {
         descent = max(descent, index_descent * 0.2)
     }
@@ -751,7 +760,9 @@ dynview_math_program_radical_item :: #force_inline proc(
         index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
         ascent = max(ascent, index_top_from_baseline + script_top_pad)
     }
-    descent := max(content_descent, font_size * 0.18)
+    root_low_offset := dynview_radical_root_low_offset(font_size, content_descent)
+    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
+    descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
     if index_cols > 0 {
         descent = max(descent, index_descent * 0.2)
     }
@@ -1615,7 +1626,9 @@ dynview_layout_consume_radical_bar :: proc(
         index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
         ascent = max(ascent, index_top_from_baseline + script_top_pad)
     }
-    root_descent := max(content_descent, font_size * 0.18)
+    root_low_offset := dynview_radical_root_low_offset(font_size, content_descent)
+    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
+    root_descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
     descent := root_descent
     if index_cols > 0 {
         descent = max(descent, index_descent * 0.2)
@@ -2630,7 +2643,8 @@ dynview_draw_recursive_radical_item :: proc(
     hook_start_y := baseline_y - font_size * 0.3
     hook_flag_x := hook_start_x - 2.5
     root_low_x := draw_x + front_padding + lead_width * 0.26
-    root_low_y := baseline_y + font_size * 0.375
+    root_low_offset := dynview_radical_root_low_offset(font_size, child_program^.descent)
+    root_low_y := baseline_y + root_low_offset
     root_rise_x := draw_x + front_padding + lead_width * 0.88
     root_rise_y := bar_y - font_size * 0.14
     root_high_x := draw_x + front_padding + lead_width * 1.24
@@ -2963,7 +2977,7 @@ dynview_draw_radical_bar_item :: #force_inline proc(
     base_top := baseline_y - base_ascent
     ui_text_f32(text, content_x, base_top, style.color, resolved_font, font_size)
 
-    content_ascent, _ := dynview_draw_script_children(
+    content_ascent, content_descent := dynview_draw_script_children(
         runtime,
         item,
         style,
@@ -2997,7 +3011,8 @@ dynview_draw_radical_bar_item :: #force_inline proc(
     hook_start_y := baseline_y - font_size * 0.3
     hook_flag_x := hook_start_x - 2.5
     root_low_x := draw_x + front_padding + lead_width * 0.26
-    root_low_y := baseline_y + font_size * 0.375
+    root_low_offset := dynview_radical_root_low_offset(font_size, content_descent)
+    root_low_y := baseline_y + root_low_offset
     root_rise_x := draw_x + front_padding + lead_width * 0.88
     root_rise_y := bar_y - font_size * 0.14
     root_high_x := draw_x + front_padding + lead_width * 1.24

@@ -86,7 +86,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     # Keep the original definition text and append test output on a new line.
     latex_test_source = "\\text{TEMP TEST: Phase 2} \\alpha + \\beta + \\sin(x) + f(A_1^2) + \\overline{AB^2} + \\underline{CD_4} + \\overline{A\\underline{B^2_6}} + \\mathbb{R}"
     latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + q\\sqrt[3]{AB}b + \\sqrt[n]{\\underline{A_1^2}} + \\sqrt[α]{\\overline{x}}"
-    latex_largeop_test_source = "\\text{TEMP TEST: Phase 4} \\sum_{i=1}^{n} a_i + \\sqrt{\\sum_{k=0}^{m} b_k} + \\prod_{j=1}^{p} \\sqrt{j} + \\int_{0}^{1} \\sqrt{x} + \\lim_{x \\to 0} \\sqrt{x}"
+    latex_largeop_test_source = "\\text{TEMP TEST: Phase 4} \\sum_{i=1}^{n} a_i + \\sqrt[2]{\\sum_{k=0}^{m} b_k} + \\prod_{j=1}^{p} \\sqrt{j} + \\int_{0}^{1} \\sqrt{x} + \\lim_{x \\to 0} \\sqrt{x}"
     if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
