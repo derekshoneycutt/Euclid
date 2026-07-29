@@ -109,7 +109,7 @@ dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     case 1, 2:
         return 1.35
     case 3:
-        return 1.95
+        return 1.65
     case 4:
         return 1.10
     }
