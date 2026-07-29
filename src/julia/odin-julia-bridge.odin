@@ -163,6 +163,7 @@ BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE :: 8
 BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE :: 9
 BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE :: 10
 BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE :: 11
+BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE :: 12
 
 Bridge_Point_View :: struct {
     valid: bool,
@@ -1086,6 +1087,7 @@ dynview_math_block_from_ops :: proc "c" (
     recursive_script_count := 0
     recursive_fraction_count := 0
     recursive_stretch_count := 0
+    recursive_matrix_count := 0
     for i in 0..<int(op_count) {
         if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE {
             recursive_accent_count += 1
@@ -1102,12 +1104,15 @@ dynview_math_block_from_ops :: proc "c" (
         if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE && ops[i].child_program_id > 0 {
             recursive_stretch_count += 1
         }
+        if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE && ops[i].child_program_id > 0 {
+            recursive_matrix_count += 1
+        }
     }
 
-    if cache^.math_program_count + 1 + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if cache^.math_program_count + 1 + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count + recursive_matrix_count > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
-    if cache^.math_command_count + int(op_count) + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+    if cache^.math_command_count + int(op_count) + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count + recursive_matrix_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
@@ -1143,6 +1148,8 @@ dynview_math_block_from_ops :: proc "c" (
             return .FracRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE:
             return .StretchDelimiterRecursive, true
+        case BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE:
+            return .MatrixRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE:
             return .LargeOpRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR:
@@ -1306,6 +1313,31 @@ dynview_math_block_from_ops :: proc "c" (
                 } else {
                     child_program_id = 0
                 }
+            }
+            if command_kind == .MatrixRecursive {
+                child_direct_count := int(op.child_program_id)
+                if child_direct_count <= 0 || next_program_id^ >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+                    return BRIDGE_STATUS_INVALID_ARGUMENT
+                }
+
+                child_host_program_id := next_program_id^
+                next_program_id^ += 1
+                status := dynview_import_math_program_from_ops(
+                    cache,
+                    block_id,
+                    ops,
+                    op_count,
+                    cursor,
+                    child_direct_count,
+                    blob_offset,
+                    blob_count,
+                    child_host_program_id,
+                    next_program_id)
+                if status != BRIDGE_STATUS_OK {
+                    return status
+                }
+
+                child_program_id = i32(child_host_program_id)
             }
 
             cache^.math_commands[command_start + local_index] = core.Ui_Dynview_Command{

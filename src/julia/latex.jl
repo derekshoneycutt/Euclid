@@ -14,7 +14,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(11)
+const PARSER_GRAMMAR_VERSION = Int32(12)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -35,6 +35,7 @@ const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
 const MATH_OP_LARGE_OP_RECURSIVE = Int32(9)
 const MATH_OP_FRACTION_RECURSIVE = Int32(10)
 const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(11)
+const MATH_OP_MATRIX_RECURSIVE = Int32(12)
 
 const STRETCH_DELIMITER_NONE = "."
 const STRETCH_DELIMITER_RIGHT = "\\right"
@@ -276,6 +277,17 @@ latex_fraction_run(numerator_children::Vector{LatexRun}, denominator_children::V
 latex_stretch_delimiter_run(left::String, right::String, children::Vector{LatexRun}) =
     LatexRun(left, :math, :stretch_delimiter, children, [latex_atom_run(right, :math)])
 
+"""Return compact matrix dimension text for one matrix run."""
+matrix_dims_text(rows::Int, cols::Int) = string(rows) * "," * string(cols)
+
+"""Return one matrix-cell run payload wrapping child runs for a single cell."""
+latex_matrix_cell_run(children::Vector{LatexRun}) =
+    LatexRun("", :math, :matrix_cell, children, EMPTY_CHILD_RUNS)
+
+"""Return one matrix run payload with row/column metadata and row-major cell runs."""
+latex_matrix_run(rows::Int, cols::Int, cells::Vector{LatexRun}) =
+    LatexRun(matrix_dims_text(rows, cols), :math, :matrix, cells, EMPTY_CHILD_RUNS)
+
 """Clear all cached parse/compile entries."""
 function clear_cache!()
     empty!(parse_cache)
@@ -321,6 +333,11 @@ function tokenize_latex(source::String)
             i = nextind(source, i)
             continue
         end
+        if c == '&'
+            push!(tokens, LatexToken(:amp, "&"))
+            i = nextind(source, i)
+            continue
+        end
         if c == '\\'
             token, next_i = read_command_token(source, i)
             push!(tokens, token)
@@ -358,11 +375,13 @@ function read_command_token(source::String, slash_i::Int)
 end
 
 """Read one plain-text token until the next control/syntax character."""
+is_text_token_stop_char(c::Char) = c == '\\' || c == '{' || c == '}' || c == '^' || c == '_' || c == '[' || c == ']' || c == '&'
+
+"""Read one plain-text token until the next control/syntax character."""
 function read_text_token(source::String, start_i::Int)
     j = start_i
     while j <= lastindex(source)
-        c = source[j]
-        if c == '\\' || c == '{' || c == '}' || c == '^' || c == '_' || c == '[' || c == ']'
+        if is_text_token_stop_char(source[j])
             break
         end
         j = nextind(source, j)
@@ -553,7 +572,147 @@ function parse_structured_math_command(
         return [stretch_run]
     end
 
+    if command == "\\begin"
+        matrix_run, ok = parse_matrix_environment(tokens, idx)
+        if ok
+            return [matrix_run]
+        end
+        return [latex_atom_run("\\begin", :math)]
+    end
+
     return nothing
+end
+
+"""Parse positive integer text, returning `(value, valid)` for matrix metadata fields."""
+function parse_positive_int(text::AbstractString)
+    value = 0
+    if isempty(text)
+        return 0, false
+    end
+
+    for c in text
+        if c < '0' || c > '9'
+            return 0, false
+        end
+        value = value * 10 + (Int(c) - Int('0'))
+    end
+
+    return value, value > 0
+end
+
+"""Parse compact matrix dimension text (`rows,cols`) into `(rows, cols, valid)`."""
+function parse_matrix_dims_text(text::String)
+    parts = split(text, ","; limit=2)
+    if length(parts) != 2
+        return 0, 0, false
+    end
+
+    rows, rows_ok = parse_positive_int(parts[1])
+    cols, cols_ok = parse_positive_int(parts[2])
+    return rows, cols, rows_ok && cols_ok
+end
+
+"""Return one matrix fallback atom used when matrix parsing fails."""
+matrix_parse_fallback() = latex_atom_run("\\begin{matrix}", :math)
+
+"""Append one normalized matrix cell to the active matrix-row buffer."""
+function push_matrix_cell!(row_cells::Vector{Vector{LatexRun}}, cell_runs::Vector{LatexRun})
+    push!(row_cells, normalize_runs(cell_runs))
+    return LatexRun[]
+end
+
+"""Append one completed matrix row and reset row/cell builders."""
+function push_matrix_row!(matrix_rows::Vector{Vector{Vector{LatexRun}}}, row_cells::Vector{Vector{LatexRun}}, cell_runs::Vector{LatexRun})
+    cell_runs = push_matrix_cell!(row_cells, cell_runs)
+    push!(matrix_rows, row_cells)
+    return Vector{Vector{LatexRun}}(), cell_runs
+end
+
+"""Parse matrix cell grid rows until `\\end{matrix}` and return row-major rows/cells."""
+function parse_matrix_rows(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    matrix_rows = Vector{Vector{Vector{LatexRun}}}()
+    row_cells = Vector{Vector{LatexRun}}()
+    cell_runs = LatexRun[]
+    while idx[] <= length(tokens)
+        token = tokens[idx[]]
+        if token.kind == :amp
+            idx[] += 1
+            cell_runs = push_matrix_cell!(row_cells, cell_runs)
+            continue
+        end
+
+        if token.kind == :command && token.text == "\\end"
+            idx[] += 1
+            end_name = parse_required_group_as_text(tokens, idx)
+            if end_name != "matrix"
+                return matrix_rows, false
+            end
+
+            _, _ = push_matrix_row!(matrix_rows, row_cells, cell_runs)
+            return matrix_rows, true
+        end
+
+        if token.kind == :command && token.text == "\\\\"
+            idx[] += 1
+            row_cells, cell_runs = push_matrix_row!(matrix_rows, row_cells, cell_runs)
+            continue
+        end
+
+        if token.kind == :lbrace
+            idx[] += 1
+            append!(cell_runs, parse_sequence(tokens, idx, true))
+            continue
+        end
+
+        append!(cell_runs, parse_atom(tokens, idx))
+        consume_scripts!(cell_runs, tokens, idx)
+    end
+
+    return matrix_rows, false
+end
+
+"""Return true when all matrix rows are non-empty and have equal column counts."""
+function matrix_rows_valid(matrix_rows::Vector{Vector{Vector{LatexRun}}})
+    if isempty(matrix_rows)
+        return false
+    end
+
+    cols = length(matrix_rows[1])
+    if cols <= 0
+        return false
+    end
+
+    for row in matrix_rows
+        if length(row) != cols
+            return false
+        end
+    end
+
+    return true
+end
+
+"""Parse one `\\begin{matrix}...\\end{matrix}` environment into a matrix run."""
+function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    env_name = parse_required_group_as_text(tokens, idx)
+    if env_name != "matrix"
+        return matrix_parse_fallback(), false
+    end
+
+    matrix_rows, parse_ok = parse_matrix_rows(tokens, idx)
+    if !parse_ok || !matrix_rows_valid(matrix_rows)
+        return matrix_parse_fallback(), false
+    end
+
+    cols = length(matrix_rows[1])
+
+    cells = LatexRun[]
+    for row in matrix_rows
+        for cell in row
+            push!(cells, latex_matrix_cell_run(cell))
+        end
+    end
+
+    return latex_matrix_run(length(matrix_rows), cols, cells), true
 end
 
 """Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""
@@ -648,16 +807,30 @@ function parse_stretch_delimiter_run(tokens::Vector{LatexToken}, idx::Base.RefVa
 end
 
 """Serialize one semantic run back into deterministic plain-text LaTeX form."""
-function latex_run_serialized_text(run::LatexRun)
-    child_text = ""
-    if !isempty(run.children)
-        child_text = join((latex_run_serialized_text(child) for child in run.children), "")
-    end
-    secondary_child_text = ""
-    if !isempty(run.secondary_children)
-        secondary_child_text = join((latex_run_serialized_text(child) for child in run.secondary_children), "")
-    end
+function matrix_serialized_text(rows::Int, cols::Int, cells::Vector{LatexRun})
+    matrix_text = "\\begin{matrix}"
+    cell_index = 1
+    for row in 1:rows
+        if row > 1
+            matrix_text *= "\\\\"
+        end
+        for col in 1:cols
+            if col > 1
+                matrix_text *= "&"
+            end
 
+            if cell_index <= length(cells)
+                cell = cells[cell_index]
+                matrix_text *= join((latex_run_serialized_text(child) for child in cell.children), "")
+            end
+            cell_index += 1
+        end
+    end
+    return matrix_text * "\\end{matrix}"
+end
+
+"""Serialize one non-matrix run segment into deterministic plain-text LaTeX form."""
+function latex_run_non_matrix_text(run::LatexRun, child_text::String, secondary_child_text::String)
     if run.segment == :accent_over
         return "\\overline{" * child_text * "}"
     end
@@ -676,7 +849,31 @@ function latex_run_serialized_text(run::LatexRun)
     if run.segment == :stretch_delimiter
         return stretch_delimiter_text(run.text, child_text, secondary_child_text)
     end
+    if run.segment == :matrix_cell
+        return child_text
+    end
     return run.text
+end
+
+"""Serialize one semantic run back into deterministic plain-text LaTeX form."""
+function latex_run_serialized_text(run::LatexRun)
+    child_text = ""
+    if !isempty(run.children)
+        child_text = join((latex_run_serialized_text(child) for child in run.children), "")
+    end
+    secondary_child_text = ""
+    if !isempty(run.secondary_children)
+        secondary_child_text = join((latex_run_serialized_text(child) for child in run.secondary_children), "")
+    end
+
+    if run.segment == :matrix
+        rows, cols, ok = parse_matrix_dims_text(run.text)
+        if !ok || rows <= 0 || cols <= 0
+            return "\\begin{matrix}\\end{matrix}"
+        end
+        return matrix_serialized_text(rows, cols, run.children)
+    end
+    return latex_run_non_matrix_text(run, child_text, secondary_child_text)
 end
 
 """Parse one sqrt run with optional single-rune bracket index."""
@@ -942,6 +1139,37 @@ end
 bridge_delimiter_kind(delimiter::String) = get(BRIDGE_DELIMITER_KIND_MAP, delimiter, Int32(0))
 
 """Render one recursive non-script payload op to canonical LaTeX-ish source."""
+function matrix_payload_text(rows::Int, cols::Int, children::Vector{MathPayloadOp}, cell_text_fn::Function)
+    matrix_text = "\\begin{matrix}"
+    cell_index = 1
+    for row in 1:rows
+        if row > 1
+            matrix_text *= "\\\\"
+        end
+        for col in 1:cols
+            if col > 1
+                matrix_text *= "&"
+            end
+            if cell_index <= length(children)
+                matrix_text *= cell_text_fn(children[cell_index])
+            end
+            cell_index += 1
+        end
+    end
+    return matrix_text * "\\end{matrix}"
+end
+
+"""Render matrix payload fallback text when matrix metadata is valid."""
+function valid_matrix_payload_text(rows_text::String, cols_text::String, children::Vector{MathPayloadOp}, cell_text_fn::Function)
+    rows, rows_ok = parse_positive_int(rows_text)
+    cols, cols_ok = parse_positive_int(cols_text)
+    if !rows_ok || !cols_ok || rows <= 0 || cols <= 0
+        return "\\begin{matrix}\\end{matrix}"
+    end
+    return matrix_payload_text(rows, cols, children, cell_text_fn)
+end
+
+"""Render one recursive non-script payload op to canonical LaTeX-ish source."""
 function latex_source_for_recursive_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
         command = large_operator_command_text(op.large_op_kind)
@@ -959,6 +1187,14 @@ function latex_source_for_recursive_payload(op::MathPayloadOp)
 
     if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
         return stretch_delimiter_text(op.radical_index_text, latex_source_for_program(op.children), op.sup_text)
+    end
+
+    if op.kind == MATH_OP_MATRIX_RECURSIVE
+        return valid_matrix_payload_text(
+            op.radical_index_text,
+            op.sup_text,
+            op.children,
+            latex_source_for_payload)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -1032,16 +1268,7 @@ function latex_source_for_program(program::Vector{MathPayloadOp})
 end
 
 """Render one recursive payload op to plain-text fallback form."""
-function plain_text_for_payload(op::MathPayloadOp)
-    if op.kind == MATH_OP_SCRIPT_ATTACH
-        return accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-    end
-
-    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
-        parent = plain_text_for_program(op.children)
-        return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
-    end
-
+function plain_text_for_recursive_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
         return large_operator_with_limits(op.text, op.sup_text, op.sub_text)
     end
@@ -1054,6 +1281,14 @@ function plain_text_for_payload(op::MathPayloadOp)
 
     if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
         return stretch_delimiter_text(op.radical_index_text, plain_text_for_program(op.children), op.sup_text)
+    end
+
+    if op.kind == MATH_OP_MATRIX_RECURSIVE
+        return valid_matrix_payload_text(
+            op.radical_index_text,
+            op.sup_text,
+            op.children,
+            plain_text_for_payload)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -1070,6 +1305,19 @@ function plain_text_for_payload(op::MathPayloadOp)
     end
 
     return op.text
+end
+
+"""Render one recursive payload op to plain-text fallback form."""
+function plain_text_for_payload(op::MathPayloadOp)
+    if op.kind == MATH_OP_SCRIPT_ATTACH
+        return accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
+        parent = plain_text_for_program(op.children)
+        return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
+    end
+    return plain_text_for_recursive_payload(op)
 end
 
 """Return the canonical source text for one payload atom, preserving mathbb styling when known."""
@@ -1131,6 +1379,7 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
         op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
         op.kind == MATH_OP_FRACTION_RECURSIVE ||
         op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE ||
+        op.kind == MATH_OP_MATRIX_RECURSIVE ||
         op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
         op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
 end
@@ -1320,6 +1569,69 @@ end
         MathPayloadOp[])
     end
 
+"""Return one matrix-cell payload op with cell children wrapped into one root payload."""
+function matrix_cell_payload_op(cell_run::LatexRun)
+    cell_payloads = math_payload_ops_for_runs(cell_run.children)
+    if isempty(cell_payloads)
+        return MathPayloadOp(
+            MATH_OP_MATH_GLYPH_RUN,
+            " ",
+            "",
+            "",
+            "",
+            :none,
+            :none,
+            LARGE_OP_KIND_NONE,
+            :math,
+            MathPayloadOp[],
+            MathPayloadOp[])
+    end
+
+    if length(cell_payloads) == 1
+        return cell_payloads[1]
+    end
+
+    return MathPayloadOp(
+        MATH_OP_SCRIPT_ATTACH_RECURSIVE,
+        plain_text_for_program(cell_payloads),
+        "",
+        "",
+        "",
+        :none,
+        :none,
+        LARGE_OP_KIND_NONE,
+        :math,
+        cell_payloads,
+        MathPayloadOp[])
+end
+
+"""Return one recursive matrix payload op from one structured run."""
+function matrix_payload_op(run::LatexRun)
+    rows, cols, ok = parse_matrix_dims_text(run.text)
+    if !ok || rows <= 0 || cols <= 0
+        rows = 1
+        cols = max(1, length(run.children))
+    end
+
+    cells = MathPayloadOp[]
+    for cell_run in run.children
+        push!(cells, matrix_cell_payload_op(cell_run))
+    end
+
+    return MathPayloadOp(
+        MATH_OP_MATRIX_RECURSIVE,
+        latex_run_serialized_text(run),
+        string(rows),
+        string(cols),
+        "",
+        :none,
+        :none,
+        LARGE_OP_KIND_NONE,
+        :math,
+        cells,
+        MathPayloadOp[])
+end
+
 """Append one script payload op when no compatible prior payload exists."""
 function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
     push!(payloads, MathPayloadOp(
@@ -1353,6 +1665,9 @@ function payload_for_non_script_segment(run::LatexRun)
     end
     if run.segment == :stretch_delimiter
         return stretch_delimiter_payload_op(run)
+    end
+    if run.segment == :matrix
+        return matrix_payload_op(run)
     end
     return nothing
 end

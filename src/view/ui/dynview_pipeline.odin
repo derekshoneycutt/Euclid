@@ -953,6 +953,9 @@ dynview_count_styled_rows :: proc(
         case .StretchDelimiterRecursive:
             text := dynview_stretch_delimiter_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MatrixRecursive:
+            text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
             text := dynview_large_op_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
@@ -1053,6 +1056,9 @@ dynview_draw_styled_content :: proc(
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .StretchDelimiterRecursive:
             text := dynview_stretch_delimiter_visible_text(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .MatrixRecursive:
+            text := dynview_text_for_command(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
             text := dynview_large_op_visible_text(buffer, cmd)
@@ -1902,6 +1908,8 @@ dynview_compile_command :: #force_inline proc(
     case .FracRecursive:
         return dynview_compile_text_run(cache, buffer, state, cmd)
     case .StretchDelimiterRecursive:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
+    case .MatrixRecursive:
         return dynview_compile_text_run(cache, buffer, state, cmd)
     case .LargeOpRecursive:
         return dynview_compile_large_op_recursive(cache, buffer, state, cmd)

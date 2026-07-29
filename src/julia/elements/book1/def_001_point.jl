@@ -88,6 +88,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + q\\sqrt[3]{AB}b + \\sqrt[n]{\\underline{A_1^2}} + \\sqrt[α]{\\overline{x}}"
     latex_largeop_test_source = "\\text{TEMP TEST: Phase 4} \\sum_{i=1}^{n} a_i + \\sqrt[2]{\\sum_{k=0}^{m} b_k} + \\prod_{j=1}^{p} \\sqrt{j} + \\int_{0}^{1} \\sqrt{x} + \\lim_{x \\to 0} \\sqrt{x}"
     latex_fraction_test_source = "\\text{TEMP TEST: Phase 5} \\frac{a+b}{c+d} + \\left(\\frac{\\sqrt{x}}{\\overline{y_1}}\\right] + \\left\\{\\frac{\\frac{m}{n}}{\\sum_{i=1}^{k} i}\\right) + \\left[\\overline{\\frac{A_1^2}{\\underline{B}}}\\right\\}"
+    latex_matrix_test_source = "\\text{TEMP TEST: Phase 6} \\left(\\begin{matrix}a&\\frac{1}{2}\\\\\\sqrt{x}&d_1\\end{matrix}\\right) + \\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}"
     if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
@@ -131,6 +132,18 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     if !EuclidLatex.replay_emit_math_block!(
         state_ptr,
         latex_fraction_test_source;
+        text_style=DynviewStyleOutput,
+        math_style=DynviewStyleItalic)
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if !EuclidLatex.replay_emit_math_block!(
+        state_ptr,
+        latex_matrix_test_source;
         text_style=DynviewStyleOutput,
         math_style=DynviewStyleItalic)
         return fallback

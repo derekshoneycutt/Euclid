@@ -284,6 +284,26 @@ end
     @test unmatched_right == "x \\right)"
 end
 
+@testset "matrix blocks" begin
+    plain_square = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c&d\\end{matrix}")
+    @test plain_square == "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
+
+    plain_rect = EuclidLatex.latex_to_plain_text("\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}")
+    @test plain_rect == "\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}"
+
+    matrix_program = EuclidLatex.compiled_program_for("\\begin{matrix}a&\\frac{1}{2}\\\\c&d_1\\end{matrix}")
+    @test length(matrix_program) == 1
+    @test matrix_program[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
+    @test matrix_program[1].radical_index_text == "2"
+    @test matrix_program[1].sup_text == "2"
+    @test length(matrix_program[1].children) == 4
+    @test matrix_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test matrix_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+
+    malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
+    @test malformed == "\\begin"
+end
+
 @testset "cache behavior" begin
     EuclidLatex.clear_cache!()
     @test EuclidLatex.cache_size() == 0

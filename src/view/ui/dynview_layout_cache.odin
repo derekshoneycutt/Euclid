@@ -160,6 +160,50 @@ dynview_stretch_delimiter_side_padding :: #force_inline proc(font_size, base_adv
     return max(0.5, max(base_advance * 0.12, font_size * 0.08))
 }
 
+//   Return horizontal gap used between matrix columns.
+dynview_matrix_column_gap :: #force_inline proc(font_size, base_advance: f32) -> f32 {
+    return max(1.0, max(base_advance * 0.38, font_size * 0.34))
+}
+
+//   Return vertical gap used between matrix rows.
+dynview_matrix_row_gap :: #force_inline proc(font_size: f32) -> f32 {
+    return max(0.8, font_size * 0.28)
+}
+
+//   Parse one positive decimal integer from text.
+dynview_parse_positive_int :: #force_inline proc(text: string) -> (int, bool) {
+    if len(text) <= 0 {
+        return 0, false
+    }
+
+    value := 0
+    for c in text {
+        if c < '0' || c > '9' {
+            return 0, false
+        }
+        value = value * 10 + int(c - '0')
+    }
+    return value, value > 0
+}
+
+//   Read matrix row/column metadata from command text fields.
+dynview_matrix_dims_from_command :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> (int, int, bool) {
+
+    rows_text := dynview_text_span_from_buffer(
+        buffer,
+        cmd.radical_index_text_offset,
+        cmd.radical_index_text_len)
+    cols_text := dynview_text_span_from_buffer(
+        buffer,
+        cmd.script_sup_text_offset,
+        cmd.script_sup_text_len)
+    rows, rows_ok := dynview_parse_positive_int(rows_text)
+    cols, cols_ok := dynview_parse_positive_int(cols_text)
+    return rows, cols, rows_ok && cols_ok
+}
+
 //   Return delimiter draw text for one supported delimiter kind.
 dynview_delimiter_text :: #force_inline proc(delimiter_kind: i32) -> string {
     switch delimiter_kind {
@@ -799,6 +843,89 @@ dynview_math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     }, true
 }
 
+//   Build one layout-like item for a recursive matrix with row-major child cells.
+dynview_math_program_recursive_matrix_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+
+    rows, cols, dims_ok := dynview_matrix_dims_from_command(buffer, cmd)
+    if !dims_ok || rows > 16 || cols > 16 {
+        return core.Ui_Dynview_Layout_Item{}, false
+    }
+
+    cell_program, ok := dynview_math_program_from_command(cache, cmd)
+    if !ok || !dynview_measure_math_program(cache, buffer, cell_program, font_size) {
+        return core.Ui_Dynview_Layout_Item{}, false
+    }
+
+    cell_count := rows * cols
+    if cell_program^.command_count != cell_count {
+        return core.Ui_Dynview_Layout_Item{}, false
+    }
+
+    col_widths: [16]f32
+    row_ascents: [16]f32
+    row_descents: [16]f32
+    top_pad: f32 = 0
+    bottom_pad: f32 = 0
+    for row in 0..<rows {
+        for col in 0..<cols {
+            cell_index := row * cols + col
+            cmd_index := cell_program^.command_start + cell_index
+            cell_cmd := cache^.math_commands[cmd_index]
+            cell_item, cell_ok := dynview_math_program_item(cache, buffer, cell_cmd, font_size)
+            if !cell_ok {
+                return core.Ui_Dynview_Layout_Item{}, false
+            }
+
+            col_widths[col] = max(col_widths[col], cell_item.draw_width)
+            row_ascents[row] = max(row_ascents[row], cell_item.ascent)
+            row_descents[row] = max(row_descents[row], cell_item.descent)
+            top_pad = max(top_pad, cell_item.visual_padding_top)
+            bottom_pad = max(bottom_pad, cell_item.visual_padding_bottom)
+        }
+    }
+
+    base_advance := dynview_effective_advance(style, cache^.last_wrap_advance)
+    column_gap := dynview_matrix_column_gap(font_size, base_advance)
+    row_gap := dynview_matrix_row_gap(font_size)
+
+    draw_width: f32 = 0
+    for col in 0..<cols {
+        draw_width += col_widths[col]
+    }
+    if cols > 1 {
+        draw_width += f32(cols - 1) * column_gap
+    }
+
+    total_height: f32 = 0
+    for row in 0..<rows {
+        total_height += row_ascents[row] + row_descents[row]
+    }
+    if rows > 1 {
+        total_height += f32(rows - 1) * row_gap
+    }
+
+    ascent := total_height * 0.5
+    descent := total_height - ascent
+    return core.Ui_Dynview_Layout_Item{
+        kind = .MatrixRecursive,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        accent_mode = i32(rows),
+        radical_mode = i32(cols),
+        draw_width = max(draw_width, base_advance),
+        draw_height = total_height,
+        ascent = ascent,
+        descent = descent,
+        visual_padding_top = top_pad,
+        visual_padding_bottom = bottom_pad,
+    }, true
+}
+
 //   Build one layout-like item for an accent-bar child command inside a math block.
 dynview_math_program_accent_item :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -1143,6 +1270,8 @@ dynview_math_program_item :: #force_inline proc(
         return dynview_math_program_recursive_fraction_item(cache, buffer, cmd, style, font_size)
     case .StretchDelimiterRecursive:
         return dynview_math_program_recursive_stretch_delimiter_item(cache, buffer, cmd, style, font_size)
+    case .MatrixRecursive:
+        return dynview_math_program_recursive_matrix_item(cache, buffer, cmd, style, font_size)
     case .LargeOpRecursive:
         return dynview_math_program_large_op_item(cache, buffer, cmd, style, font_size), true
     case .AccentBar:
@@ -2643,6 +2772,8 @@ dynview_layout_consume_structured_math_command :: #force_inline proc(
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .StretchDelimiterRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .MatrixRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .LargeOpRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .AccentBar:
@@ -2709,7 +2840,7 @@ dynview_layout_consume_inline_shape_command :: #force_inline proc(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
         return status
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive,
         .CopyableTextRun, .LineBreak, .Divider:
     }
@@ -2728,7 +2859,7 @@ dynview_layout_consume_visible_command :: proc(
     case .TextRun, .MathGlyphRun:
         return dynview_layout_consume_text_like_command(ctx, cmd, effective_style)
     case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
-        .StretchDelimiterRecursive,
+        .StretchDelimiterRecursive, .MatrixRecursive,
         .RadicalBarRecursive:
         return dynview_layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
@@ -3479,6 +3610,97 @@ dynview_draw_recursive_stretch_delimiter_item :: #force_inline proc(
         baseline_y)
 }
 
+//   Draw one recursive matrix wrapper by centering cells per column and baselining per row.
+dynview_draw_recursive_matrix_item :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Ui_Dynview_Runtime,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    item: core.Ui_Dynview_Layout_Item,
+    style: Dynview_Text_Style,
+    draw_x, item_y: f32) {
+
+    rows := int(item.accent_mode)
+    cols := int(item.radical_mode)
+    if rows <= 0 || cols <= 0 || rows > 16 || cols > 16 {
+        return
+    }
+
+    cell_program, ok := dynview_math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    if !ok || cell_program^.command_count < rows * cols {
+        return
+    }
+
+    col_widths: [16]f32
+    row_ascents: [16]f32
+    row_descents: [16]f32
+    cell_items: [256]core.Ui_Dynview_Layout_Item
+    for row in 0..<rows {
+        for col in 0..<cols {
+            cell_index := row * cols + col
+            cmd_index := cell_program^.command_start + cell_index
+            cell_cmd := runtime^.compile_cache.math_commands[cmd_index]
+            cell_item, cell_ok := dynview_math_program_item(
+                &runtime^.compile_cache,
+                &runtime^.command_buffer,
+                cell_cmd,
+                font_size)
+            if !cell_ok {
+                return
+            }
+
+            cell_items[cell_index] = cell_item
+            col_widths[col] = max(col_widths[col], cell_item.draw_width)
+            row_ascents[row] = max(row_ascents[row], cell_item.ascent)
+            row_descents[row] = max(row_descents[row], cell_item.descent)
+        }
+    }
+
+    base_advance := dynview_effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    column_gap := dynview_matrix_column_gap(font_size, base_advance)
+    row_gap := dynview_matrix_row_gap(font_size)
+
+    row_top := item_y
+    for row in 0..<rows {
+        row_baseline := row_top + row_ascents[row]
+        col_x := draw_x
+        for col in 0..<cols {
+            cell_index := row * cols + col
+            cell_item := cell_items[cell_index]
+            cell_x := col_x + (col_widths[col] - cell_item.draw_width) * 0.5
+            command_start := cell_program^.command_start + cell_index
+            cell_single_program := core.Ui_Dynview_Math_Program{
+                valid = true,
+                command_start = command_start,
+                command_count = 1,
+                draw_width = cell_item.draw_width,
+                ascent = cell_item.ascent,
+                descent = cell_item.descent,
+            }
+            dynview_draw_math_program_at(
+                state,
+                runtime,
+                panel,
+                font,
+                font_size,
+                cell_single_program,
+                cell_x,
+                row_baseline)
+
+            col_x += col_widths[col]
+            if col + 1 < cols {
+                col_x += column_gap
+            }
+        }
+
+        row_top += row_ascents[row] + row_descents[row]
+        if row + 1 < rows {
+            row_top += row_gap
+        }
+    }
+}
+
 //   Draw one recursive structured math item variant routed by layout item kind.
 dynview_draw_recursive_structured_item :: #force_inline proc(
     state: ^core.Euclid_General_State,
@@ -3516,6 +3738,17 @@ dynview_draw_recursive_structured_item :: #force_inline proc(
             item_y)
     case .StretchDelimiterRecursive:
         dynview_draw_recursive_stretch_delimiter_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            item,
+            style,
+            draw_x,
+            item_y)
+    case .MatrixRecursive:
+        dynview_draw_recursive_matrix_item(
             state,
             runtime,
             panel,
@@ -3832,7 +4065,7 @@ dynview_draw_cached_text_item :: proc(
             draw_x,
             item_y)
     case .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive,
-        .LargeOpRecursive, .AccentBarRecursive, .RadicalBarRecursive:
+        .MatrixRecursive, .LargeOpRecursive, .AccentBarRecursive, .RadicalBarRecursive:
         dynview_draw_recursive_structured_item(
             state,
             runtime,
@@ -3916,7 +4149,7 @@ dynview_draw_cached_inline_item :: proc(
             rl.DrawLineEx(center, start_point, stroke, style.color)
             rl.DrawLineEx(center, end_point, stroke, style.color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .LargeOpRecursive, .AccentBar,
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive, .AccentBar,
         .AccentBarRecursive, .RadicalBar, .RadicalBarRecursive:
     }
 }
@@ -3944,6 +4177,7 @@ dynview_draw_cached_line :: proc(
             item.kind == .ScriptAttachRecursive ||
             item.kind == .FracRecursive ||
             item.kind == .StretchDelimiterRecursive ||
+            item.kind == .MatrixRecursive ||
             item.kind == .LargeOpRecursive ||
             item.kind == .AccentBar ||
             item.kind == .RadicalBar {
