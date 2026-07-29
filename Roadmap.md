@@ -110,7 +110,6 @@ General features:
   - [X] Dynamic sized brackets
   - [X] Matrices
   - [X] Sums, Products, Integrals
-  - [ ] Basic document (bold, italic, math mode, euclid shapes extension)
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 
@@ -147,6 +146,7 @@ After v1 is complete, the following is suggestions to evaluate next.
 - Category theory?
 - More primitives (gnomons, strings--small connectors, arrows)
 - Limited lifetime line/arc segments--disintegrate after drawing
+- More LaTeX support (more math; document mode)
 - Improved Scratchpad console-like REPL
 - Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support

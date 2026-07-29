@@ -17,6 +17,7 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: What about AI?](#q-what-about-ai)
     1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
+    1. [Q: You Support LaTeX?](#q-you-support-latex)
     1. [Q: Any Performance Hacks for Users?](#q-any-performance-hacks-for-users)
     1. [Q: Why 2 languages?](#q-why-2-languages)
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
@@ -177,6 +178,23 @@ camera tab, but for today, it is just gifs. The current code was ported from sev
 pieces of C code walking through saving a gif, and something like ffmpeg could probably
 significantly improve on even that, as well as adding other formats. Such are
 considerations for the future.
+
+### Q: You Support LaTeX?
+
+Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
+kind of a pain in the ass for half a week, and it does not yet support everything one might
+hope to find in a more thorough LaTeX rendering engine. This is basically a work in
+progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
+shame about it, but we're just gonna sit in that and learn.
+
+Check out [LaTeX Support](LaTeXSupport.md) for exactly what we do support today.
+
+The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
+For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
+much as is supported. If you `using LaTeXStrings` in the REPL, you can use this to play
+with what is supported.
+
+Currently, only math mode is supported. Maybe I'll add more? Hmm...
 
 ### Q: Any Performance Hacks for Users?
 
