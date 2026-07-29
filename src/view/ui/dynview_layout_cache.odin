@@ -40,6 +40,12 @@ Dynview_Layout_Build_Context :: struct {
     base_descent: f32,
 }
 
+LARGE_OP_KIND_NONE :: 0
+LARGE_OP_KIND_SUM :: 1
+LARGE_OP_KIND_PROD :: 2
+LARGE_OP_KIND_INT :: 3
+LARGE_OP_KIND_LIM :: 4
+
 //   Return style-aware ascent/descent estimates from active font size.
 dynview_style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
     scale := max(0.8, style.wrap_scale)
@@ -113,11 +119,11 @@ dynview_radical_root_low_offset :: #force_inline proc(font_size, content_descent
 //   Return glyph scale factor for display-style large operators.
 dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     switch large_op_kind {
-    case 1, 2:
+    case LARGE_OP_KIND_SUM, LARGE_OP_KIND_PROD:
         return 1.35
-    case 3:
+    case LARGE_OP_KIND_INT:
         return 1.65
-    case 4:
+    case LARGE_OP_KIND_LIM:
         return 1.10
     }
     return 1.28
@@ -139,7 +145,7 @@ dynview_large_op_limit_gap_for_kind :: #force_inline proc(
     font_size, script_gap: f32) -> f32 {
 
     gap := dynview_large_op_limit_gap(font_size, script_gap)
-    if large_op_kind == 3 {
+    if large_op_kind == LARGE_OP_KIND_INT {
         return max(0.01, gap * 0.22)
     }
     return gap
