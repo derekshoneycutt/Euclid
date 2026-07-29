@@ -103,6 +103,29 @@ dynview_radical_side_paddings :: #force_inline proc(font_size, base_advance: f32
     return front_padding, back_padding
 }
 
+//   Return glyph scale factor for display-style large operators.
+dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
+    switch large_op_kind {
+    case 1, 2:
+        return 1.35
+    case 3:
+        return 1.24
+    case 4:
+        return 1.10
+    }
+    return 1.28
+}
+
+//   Return limit text scale factor for display-style large operators.
+dynview_large_op_limit_scale :: #force_inline proc(script_scale: f32) -> f32 {
+    return max(0.68, script_scale * 1.12)
+}
+
+//   Return vertical gap between large-operator glyph and stacked limits.
+dynview_large_op_limit_gap :: #force_inline proc(font_size, script_gap: f32) -> f32 {
+    return max(1.0, font_size * 0.16 + script_gap * font_size)
+}
+
 //   Return default block format values keyed by block kind.
 dynview_block_format_for_kind :: #force_inline proc(block_kind: i32) -> Dynview_Block_Format {
     switch block_kind {
@@ -366,6 +389,85 @@ dynview_math_program_recursive_script_item :: #force_inline proc(
         visual_padding_top = max(child_program^.visual_padding_top, script_top_pad),
         visual_padding_bottom = max(child_program^.visual_padding_bottom, script_bottom_pad),
     }, true
+}
+
+//   Build one layout-like item for a display-style large operator with stacked limits.
+dynview_math_program_large_op_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> core.Ui_Dynview_Layout_Item {
+
+    base_text := dynview_text_for_command(buffer, cmd)
+    sup_text := dynview_text_span_from_buffer(
+        buffer,
+        cmd.script_sup_text_offset,
+        cmd.script_sup_text_len)
+    sub_text := dynview_text_span_from_buffer(
+        buffer,
+        cmd.script_sub_text_offset,
+        cmd.script_sub_text_len)
+
+    glyph_cols := max(1, text_codepoint_count(base_text))
+    sup_cols := text_codepoint_count(sup_text)
+    sub_cols := text_codepoint_count(sub_text)
+
+    glyph_scale := dynview_large_op_glyph_scale(cmd.large_op_kind)
+    glyph_font_size := max(1.0, font_size * glyph_scale)
+    glyph_ascent, glyph_descent := dynview_style_ascent_descent(style, glyph_font_size)
+    glyph_advance := dynview_effective_advance(style, cache^.last_wrap_advance) * glyph_scale
+    glyph_width := f32(glyph_cols) * glyph_advance
+
+    script_style := dynview_style_by_id(cmd.script_style_id)
+    limit_scale := dynview_large_op_limit_scale(max(0.2, cmd.script_scale))
+    limit_font_size := max(1.0, font_size * limit_scale)
+    limit_ascent, limit_descent := dynview_style_ascent_descent(script_style, limit_font_size)
+    limit_top_pad, limit_bottom_pad := dynview_script_visual_padding(limit_font_size)
+    limit_advance := dynview_effective_advance(script_style, cache^.last_wrap_advance) * limit_scale
+    sup_width := f32(sup_cols) * limit_advance
+    sub_width := f32(sub_cols) * limit_advance
+
+    upper_height: f32 = 0
+    if sup_cols > 0 {
+        upper_height = limit_ascent + limit_descent
+    }
+    lower_height: f32 = 0
+    if sub_cols > 0 {
+        lower_height = limit_ascent + limit_descent
+    }
+
+    limit_gap := dynview_large_op_limit_gap(font_size, cmd.script_gap)
+    ascent := glyph_ascent
+    descent := glyph_descent
+    if sup_cols > 0 {
+        ascent += upper_height + limit_gap
+    }
+    if sub_cols > 0 {
+        descent += lower_height + limit_gap
+    }
+
+    draw_width := max(glyph_width, max(sup_width, sub_width))
+    return core.Ui_Dynview_Layout_Item{
+        kind = .LargeOpRecursive,
+        style_id = cmd.style_id,
+        text_offset = cmd.text_offset,
+        text_len = cmd.text_len,
+        script_sup_text_offset = cmd.script_sup_text_offset,
+        script_sup_text_len = cmd.script_sup_text_len,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        script_style_id = cmd.script_style_id,
+        script_scale = limit_scale,
+        script_gap = cmd.script_gap,
+        large_op_kind = cmd.large_op_kind,
+        draw_width = draw_width,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+        visual_padding_top = limit_top_pad,
+        visual_padding_bottom = limit_bottom_pad,
+    }
 }
 
 //   Build one layout-like item for an accent-bar child command inside a math block.
@@ -704,6 +806,8 @@ dynview_math_program_item :: #force_inline proc(
         return dynview_math_program_script_item(cache, buffer, cmd, style, font_size), true
     case .ScriptAttachRecursive:
         return dynview_math_program_recursive_script_item(cache, buffer, cmd, font_size)
+    case .LargeOpRecursive:
+        return dynview_math_program_large_op_item(cache, buffer, cmd, style, font_size), true
     case .AccentBar:
         return dynview_math_program_accent_item(cache, buffer, cmd, style, font_size), true
     case .AccentBarRecursive:
@@ -2196,6 +2300,8 @@ dynview_layout_consume_structured_math_command :: #force_inline proc(
         return status
     case .ScriptAttachRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .LargeOpRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .AccentBar:
         status, _ := dynview_layout_consume_accent_bar(
             ctx^.cache,
@@ -2260,7 +2366,7 @@ dynview_layout_consume_inline_shape_command :: #force_inline proc(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
         return status
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .ScriptAttach, .ScriptAttachRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive,
         .CopyableTextRun, .LineBreak, .Divider:
     }
@@ -2278,7 +2384,7 @@ dynview_layout_consume_visible_command :: proc(
     switch cmd.kind {
     case .TextRun, .MathGlyphRun:
         return dynview_layout_consume_text_like_command(ctx, cmd, effective_style)
-    case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+    case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive:
         return dynview_layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
@@ -2708,6 +2814,73 @@ dynview_draw_recursive_script_attach_item :: #force_inline proc(
     }
 }
 
+//   Draw one display-style large operator with stacked limits above and below.
+dynview_draw_large_op_recursive_item :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Ui_Dynview_Runtime,
+    item: core.Ui_Dynview_Layout_Item,
+    style: Dynview_Text_Style,
+    resolved_font: rl.Font,
+    text: string,
+    font_size, draw_x, item_y: f32) {
+
+    glyph_scale := dynview_large_op_glyph_scale(item.large_op_kind)
+    glyph_font_size := max(1.0, font_size * glyph_scale)
+    glyph_ascent, glyph_descent := dynview_style_ascent_descent(style, glyph_font_size)
+    glyph_cols := max(1, text_codepoint_count(text))
+    glyph_advance := dynview_effective_advance(style, runtime^.compile_cache.last_wrap_advance) * glyph_scale
+    glyph_width := f32(glyph_cols) * glyph_advance
+
+    script_style := dynview_style_by_id(item.script_style_id)
+    script_font := dynview_resolve_font_for_style(state, script_style, resolved_font)
+    limit_scale := dynview_large_op_limit_scale(max(0.2, item.script_scale))
+    limit_font_size := max(1.0, font_size * limit_scale)
+    limit_ascent, limit_descent := dynview_style_ascent_descent(script_style, limit_font_size)
+    limit_advance := dynview_effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * limit_scale
+
+    sup_text := dynview_text_span_from_buffer(
+        &runtime^.command_buffer,
+        item.script_sup_text_offset,
+        item.script_sup_text_len)
+    sub_text := dynview_text_span_from_buffer(
+        &runtime^.command_buffer,
+        item.script_sub_text_offset,
+        item.script_sub_text_len)
+    sup_cols := text_codepoint_count(sup_text)
+    sub_cols := text_codepoint_count(sub_text)
+
+    upper_height: f32 = 0
+    if sup_cols > 0 {
+        upper_height = limit_ascent + limit_descent
+    }
+    lower_height: f32 = 0
+    if sub_cols > 0 {
+        lower_height = limit_ascent + limit_descent
+    }
+
+    limit_gap := dynview_large_op_limit_gap(font_size, item.script_gap)
+    glyph_top := item_y
+    if sup_cols > 0 {
+        glyph_top += upper_height + limit_gap
+    }
+    glyph_x := draw_x + (item.draw_width - glyph_width) * 0.5
+    ui_text_f32(text, glyph_x, glyph_top, style.color, resolved_font, glyph_font_size)
+
+    if sup_cols > 0 {
+        sup_width := f32(sup_cols) * limit_advance
+        sup_x := draw_x + (item.draw_width - sup_width) * 0.5
+        sup_top := glyph_top - limit_gap - upper_height
+        ui_text_f32(sup_text, sup_x, sup_top, script_style.color, script_font, limit_font_size)
+    }
+
+    if sub_cols > 0 {
+        sub_width := f32(sub_cols) * limit_advance
+        sub_x := draw_x + (item.draw_width - sub_width) * 0.5
+        sub_top := glyph_top + glyph_ascent + glyph_descent + limit_gap
+        ui_text_f32(sub_text, sub_x, sub_top, script_style.color, script_font, limit_font_size)
+    }
+}
+
 //   Draw one AccentBar item including optional script children and accent stroke.
 dynview_draw_accent_bar_item :: #force_inline proc(
     state: ^core.Euclid_General_State,
@@ -2904,6 +3077,17 @@ dynview_draw_cached_text_item :: proc(
             item,
             draw_x,
             item_y)
+    case .LargeOpRecursive:
+        dynview_draw_large_op_recursive_item(
+            state,
+            runtime,
+            item,
+            style,
+            resolved_font,
+            text,
+            font_size,
+            draw_x,
+            item_y)
     case .AccentBar:
         dynview_draw_accent_bar_item(
             state,
@@ -3010,7 +3194,7 @@ dynview_draw_cached_inline_item :: proc(
             rl.DrawLineEx(center, start_point, stroke, style.color)
             rl.DrawLineEx(center, end_point, stroke, style.color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .AccentBar,
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .LargeOpRecursive, .AccentBar,
         .AccentBarRecursive, .RadicalBar, .RadicalBarRecursive:
     }
 }
@@ -3036,6 +3220,7 @@ dynview_draw_cached_line :: proc(
             item.kind == .MathGlyphRun ||
             item.kind == .ScriptAttach ||
             item.kind == .ScriptAttachRecursive ||
+            item.kind == .LargeOpRecursive ||
             item.kind == .AccentBar ||
             item.kind == .RadicalBar {
             dynview_draw_cached_text_item(state, runtime, panel, font, font_size, style, item, item_x, item_y)

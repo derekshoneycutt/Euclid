@@ -70,6 +70,10 @@ BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :: 1
 BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE :: 2
 BRIDGE_DYNVIEW_RADICAL_MODE_SQRT :: 1
 BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :: 2
+BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM :: 1
+BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD :: 2
+BRIDGE_DYNVIEW_LARGE_OP_KIND_INT :: 3
+BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :: 4
 
 BRIDGE_DYNVIEW_FONT_FLAG_NONE :: i32(core.Font_Variant_Flags.None)
 BRIDGE_DYNVIEW_FONT_FLAG_ITALIC :: i32(core.Font_Variant_Flags.Italic)
@@ -115,6 +119,7 @@ Bridge_Dynview_Math_Op :: struct {
     accent_style_id: i32,
     accent_mode: i32,
     radical_mode: i32,
+    large_op_kind: i32,
     text_offset: i32,
     text_len: i32,
     index_text_offset: i32,
@@ -139,6 +144,7 @@ BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR :: 5
 BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE :: 6
 BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE :: 7
 BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE :: 8
+BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE :: 9
 
 Bridge_Point_View :: struct {
     valid: bool,
@@ -1107,6 +1113,8 @@ dynview_math_block_from_ops :: proc "c" (
             return .ScriptAttach, true
         case BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE:
             return .ScriptAttachRecursive, true
+        case BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE:
+            return .LargeOpRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR:
             return .AccentBar, true
         case BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR:
@@ -1213,6 +1221,7 @@ dynview_math_block_from_ops :: proc "c" (
                 script_gap = op.script_gap,
                 accent_mode = op.accent_mode,
                 radical_mode = op.radical_mode,
+                large_op_kind = op.large_op_kind,
                 radical_index_text_offset = blob_offset + int(op.index_text_offset),
                 radical_index_text_len = int(op.index_text_len),
                 accent_style_id = op.accent_style_id,

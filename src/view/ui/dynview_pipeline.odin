@@ -837,6 +837,24 @@ dynview_radical_bar_visible_text :: #force_inline proc(
     return dynview_text_for_command(buffer, cmd)
 }
 
+//   Build display-style large-operator plain-text fallback using canonical command name.
+dynview_large_op_visible_text :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> string {
+
+    switch cmd.large_op_kind {
+    case 1:
+        return "\\sum"
+    case 2:
+        return "\\prod"
+    case 3:
+        return "\\int"
+    case 4:
+        return "\\lim"
+    }
+    return dynview_text_for_command(buffer, cmd)
+}
+
 //   Return the first/last layout line indices that contain visible items for block_id.
 dynview_layout_item_line_span_for_block :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -920,6 +938,9 @@ dynview_count_styled_rows :: proc(
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttachRecursive:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .LargeOpRecursive:
+            text := dynview_large_op_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBar:
             text := dynview_accent_bar_visible_text(buffer, cmd)
@@ -1012,6 +1033,9 @@ dynview_draw_styled_content :: proc(
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttachRecursive:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .LargeOpRecursive:
+            text := dynview_large_op_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBar:
             text := dynview_accent_bar_visible_text(buffer, cmd)
@@ -1429,6 +1453,72 @@ dynview_compile_script_attach_recursive :: #force_inline proc(
     return DYNVIEW_STATUS_OK
 }
 
+//   Apply display-style large-operator compilation with canonical limits ordering.
+dynview_compile_large_op_recursive :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    status := dynview_require_open_block(state^.open_block)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    base_text := dynview_large_op_visible_text(buffer, cmd)
+    for i in 0..<len(base_text) {
+        status = dynview_append_compiled_byte(cache, base_text[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    sub_text := dynview_text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    if len(sub_text) > 0 {
+        sub_prefix := "_{"
+        for i in 0..<len(sub_prefix) {
+            status = dynview_append_compiled_byte(cache, sub_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sub_text) {
+            status = dynview_append_compiled_byte(cache, sub_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    sup_text := dynview_text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    if len(sup_text) > 0 {
+        sup_prefix := "^{"
+        for i in 0..<len(sup_prefix) {
+            status = dynview_append_compiled_byte(cache, sup_prefix[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        for i in 0..<len(sup_text) {
+            status = dynview_append_compiled_byte(cache, sup_text[i])
+            if status != DYNVIEW_STATUS_OK {
+                return status
+            }
+        }
+        status = dynview_append_compiled_byte(cache, '}')
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    state^.block_row_end = state^.current_row
+    return DYNVIEW_STATUS_OK
+}
+
 //   Apply accent-bar compilation rule using literal command fallback serialization.
 dynview_compile_accent_bar :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -1789,6 +1879,8 @@ dynview_compile_command :: #force_inline proc(
         return dynview_compile_script_attach(cache, buffer, state, cmd)
     case .ScriptAttachRecursive:
         return dynview_compile_script_attach_recursive(cache, buffer, state, cmd)
+    case .LargeOpRecursive:
+        return dynview_compile_large_op_recursive(cache, buffer, state, cmd)
     case .AccentBar:
         return dynview_compile_accent_bar(cache, buffer, state, cmd)
     case .AccentBarRecursive:

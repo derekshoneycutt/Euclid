@@ -87,6 +87,36 @@ end
     @test recursive_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
 end
 
+@testset "large operators" begin
+    plain_sum = EuclidLatex.latex_to_plain_text("\\sum_{i=1}^n i")
+    @test plain_sum == "∑_{i=1}^{n} i"
+
+    plain_prod = EuclidLatex.latex_to_plain_text("\\prod_{k=0}^{m} x_k")
+    @test plain_prod == "∏_{k=0}^{m} x_{k}"
+
+    plain_int = EuclidLatex.latex_to_plain_text("\\int_0^1 f(x)")
+    @test plain_int == "∫_{0}^{1} f(x)"
+
+    plain_lim = EuclidLatex.latex_to_plain_text("\\lim_{x \\to 0} f(x)")
+    @test plain_lim == "lim_{x → 0} f(x)"
+
+    sum_program = EuclidLatex.compiled_program_for("\\sum_{i=1}^n i")
+    @test length(sum_program) == 2
+    @test sum_program[1].kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
+    @test sum_program[1].text == "∑"
+    @test sum_program[1].sup_text == "n"
+    @test sum_program[1].sub_text == "i=1"
+    @test sum_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_SUM
+
+    lim_program = EuclidLatex.compiled_program_for("\\lim_{x \\to 0} f(x)")
+    @test length(lim_program) == 2
+    @test lim_program[1].kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
+    @test lim_program[1].text == "lim"
+    @test lim_program[1].sup_text == ""
+    @test lim_program[1].sub_text == "x → 0"
+    @test lim_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_LIM
+end
+
 @testset "accent bars" begin
     over = EuclidLatex.latex_to_plain_text("\\overline{AB}")
     @test over == "\\overline{AB}"

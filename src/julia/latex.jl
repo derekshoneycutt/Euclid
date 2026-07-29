@@ -14,7 +14,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(8)
+const PARSER_GRAMMAR_VERSION = Int32(9)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -32,13 +32,26 @@ const MATH_OP_RADICAL_BAR = Int32(5)
 const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(6)
 const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(7)
 const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
+const MATH_OP_LARGE_OP_RECURSIVE = Int32(9)
+
+const LARGE_OP_KIND_NONE = Int32(0)
+const LARGE_OP_KIND_SUM = Int32(1)
+const LARGE_OP_KIND_PROD = Int32(2)
+const LARGE_OP_KIND_INT = Int32(3)
+const LARGE_OP_KIND_LIM = Int32(4)
 
 const TEXT_OPERATOR_COMMANDS = Set([
     "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\cos", "\\csc", "\\cot",
     "\\coth", "\\deg", "\\det", "\\dim", "\\exp", "\\gcd", "\\hom", "\\inf",
-    "\\ker", "\\lg", "\\lim", "\\liminf", "\\limsup", "\\ln", "\\log", "\\max",
+    "\\ker", "\\lg", "\\liminf", "\\limsup", "\\ln", "\\log", "\\max",
     "\\min", "\\Pr", "\\sec", "\\sin", "\\sinh", "\\sup", "\\tan", "\\tanh"
 ])
+
+const LARGE_OPERATOR_COMMAND_MAP = Dict(
+    "\\sum" => ("∑", LARGE_OP_KIND_SUM),
+    "\\prod" => ("∏", LARGE_OP_KIND_PROD),
+    "\\int" => ("∫", LARGE_OP_KIND_INT),
+    "\\lim" => ("lim", LARGE_OP_KIND_LIM))
 
 const UNICODE_COMMAND_MAP = Dict(
     "\\alpha" => "α",
@@ -177,6 +190,7 @@ struct MathPayloadOp
     sub_text::String
     accent_mode::Symbol
     radical_mode::Symbol
+    large_op_kind::Int32
     style_role::Symbol
     children::Vector{MathPayloadOp}
 end
@@ -381,6 +395,11 @@ function parse_command_atom(
         return mathbb_runs
     end
 
+    large_operator_runs = parse_large_operator_atom(command)
+    if !isnothing(large_operator_runs)
+        return large_operator_runs
+    end
+
     operator_runs = parse_text_operator_atom(command)
     if !isnothing(operator_runs)
         return operator_runs
@@ -392,6 +411,20 @@ function parse_command_atom(
     end
 
     return [latex_atom_run(command, :math)]
+end
+
+"""Parse display-style large operators that accept stacked upper/lower limits."""
+function parse_large_operator_atom(command::String)
+    value = get(LARGE_OPERATOR_COMMAND_MAP, command, nothing)
+    if isnothing(value)
+        return nothing
+    end
+
+    glyph, large_op_kind = value
+    role = large_op_kind == LARGE_OP_KIND_SUM ? :largeop_sum :
+        (large_op_kind == LARGE_OP_KIND_PROD ? :largeop_prod :
+            (large_op_kind == LARGE_OP_KIND_INT ? :largeop_int : :largeop_lim))
+    return [latex_atom_run(glyph, role)]
 end
 
 """Parse special command forms that produce plain text runs."""
@@ -697,6 +730,35 @@ function grouped_parent_with_script_suffix(parent::String, sup::String, sub::Str
     return accent_with_script_suffix("{" * parent * "}", sup, sub)
 end
 
+"""Append display-style lower/upper limits in canonical LaTeX order for large operators."""
+function large_operator_with_limits(base::String, sup::String, sub::String)
+    segment = base
+    if !isempty(sub)
+        segment *= "_{" * sub * "}"
+    end
+    if !isempty(sup)
+        segment *= "^{" * sup * "}"
+    end
+    return segment
+end
+
+"""Map large-operator kind code to canonical LaTeX command text."""
+function large_operator_command_text(kind::Int32)
+    if kind == LARGE_OP_KIND_SUM
+        return "\\sum"
+    end
+    if kind == LARGE_OP_KIND_PROD
+        return "\\prod"
+    end
+    if kind == LARGE_OP_KIND_INT
+        return "\\int"
+    end
+    if kind == LARGE_OP_KIND_LIM
+        return "\\lim"
+    end
+    return ""
+end
+
 """Compile normalized runs to the recursive payload representation."""
 function compile_emit_program(runs::Vector{LatexRun})
     return math_payload_ops_for_runs(runs)
@@ -743,6 +805,14 @@ function latex_source_for_payload(op::MathPayloadOp)
         return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
     end
 
+    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        command = large_operator_command_text(Int32(op.radical_mode))
+        if isempty(command)
+            command = op.text
+        end
+        return large_operator_with_limits(command, op.sup_text, op.sub_text)
+    end
+
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
         command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
         return command * latex_source_for_program(op.children) * "}"
@@ -773,6 +843,10 @@ function plain_text_for_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
         parent = plain_text_for_program(op.children)
         return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        return large_operator_with_limits(op.text, op.sup_text, op.sub_text)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -833,6 +907,9 @@ function math_payload_style_id(kind::Int32, role::Symbol, text_style::Integer, m
     if kind == MATH_OP_TEXT_RUN
         return Int32(text_style)
     end
+    if kind == MATH_OP_LARGE_OP_RECURSIVE
+        return OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_MEDIUM
+    end
     if role == :mathbb
         return Int32(mathbb_style)
     end
@@ -844,6 +921,7 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
     return op.kind == MATH_OP_MATH_GLYPH_RUN ||
         op.kind == MATH_OP_SCRIPT_ATTACH ||
         op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
+    op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
         op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
         op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
 end
@@ -867,6 +945,7 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
             sub_text,
             op.accent_mode,
             op.radical_mode,
+                op.large_op_kind,
             op.style_role,
             op.children)
     end
@@ -880,6 +959,21 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
             sub_text,
             op.accent_mode,
             op.radical_mode,
+                op.large_op_kind,
+            op.style_role,
+            op.children)
+    end
+
+    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        return MathPayloadOp(
+            MATH_OP_LARGE_OP_RECURSIVE,
+            op.text,
+            op.radical_index_text,
+            sup_text,
+            sub_text,
+            op.accent_mode,
+            op.radical_mode,
+                op.large_op_kind,
             op.style_role,
             op.children)
     end
@@ -893,6 +987,7 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         sub_text,
         :none,
         :none,
+        LARGE_OP_KIND_NONE,
         :math,
         [op])
 end
@@ -904,6 +999,25 @@ end
 
 """Return one atom payload op from one normalized atom run."""
 function atom_payload_op(run::LatexRun)
+    large_op_kind =
+        run.role == :largeop_sum ? LARGE_OP_KIND_SUM :
+        (run.role == :largeop_prod ? LARGE_OP_KIND_PROD :
+            (run.role == :largeop_int ? LARGE_OP_KIND_INT :
+                (run.role == :largeop_lim ? LARGE_OP_KIND_LIM : LARGE_OP_KIND_NONE)))
+    if large_op_kind != LARGE_OP_KIND_NONE
+        return MathPayloadOp(
+            MATH_OP_LARGE_OP_RECURSIVE,
+            run.text,
+            "",
+            "",
+            "",
+            :none,
+                :none,
+                large_op_kind,
+            :math,
+            MathPayloadOp[])
+    end
+
     kind = run.role == :text ? MATH_OP_TEXT_RUN : MATH_OP_MATH_GLYPH_RUN
     return MathPayloadOp(
         kind,
@@ -913,6 +1027,7 @@ function atom_payload_op(run::LatexRun)
         "",
         :none,
         :none,
+        LARGE_OP_KIND_NONE,
         run.role,
         MathPayloadOp[])
 end
@@ -929,6 +1044,7 @@ function accent_payload_op(run::LatexRun)
         "",
         accent_mode,
         :none,
+        LARGE_OP_KIND_NONE,
         :math,
         child_payloads)
 end
@@ -945,6 +1061,7 @@ function radical_payload_op(run::LatexRun)
         "",
         :none,
         radical_mode,
+        LARGE_OP_KIND_NONE,
         :math,
         child_payloads)
 end
@@ -959,6 +1076,7 @@ function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::Lat
         "",
         :none,
         :none,
+        LARGE_OP_KIND_NONE,
         :math,
         MathPayloadOp[]))
     return nothing
@@ -1008,7 +1126,7 @@ function bridge_math_payload_op(
     sup_offset, sup_len = append_math_block_blob!(io, op.sup_text)
     sub_offset, sub_len = append_math_block_blob!(io, op.sub_text)
     base_style = math_payload_style_id(op.kind, op.style_role, text_style, math_style, mathbb_style)
-    accent_mode, radical_mode = math_block_mode_codes(op)
+    accent_mode, radical_mode, large_op_kind = math_block_mode_codes(op)
 
     return OdinJuliaBridge.BridgeDynviewMathOp(
         op.kind,
@@ -1018,6 +1136,7 @@ function bridge_math_payload_op(
         base_style,
         accent_mode,
         radical_mode,
+        large_op_kind,
         text_offset,
         text_len,
         index_offset,
@@ -1073,7 +1192,7 @@ end
 
 """Return bridge accent/radical mode codes for one payload op."""
 function math_block_mode_codes(op::MathPayloadOp)
-    accent_mode = op.accent_mode == :overline ?
+    accent_mode = op.accent_mode == :overline ? 
         OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
         (op.accent_mode == :underline ?
             OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE : Int32(0))
@@ -1081,7 +1200,13 @@ function math_block_mode_codes(op::MathPayloadOp)
         OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :
         (op.radical_mode == :sqrt ?
             OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_SQRT : Int32(0))
-    return Int32(accent_mode), Int32(radical_mode)
+
+    large_op_kind =
+        op.large_op_kind == LARGE_OP_KIND_SUM ? OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM :
+        (op.large_op_kind == LARGE_OP_KIND_PROD ? OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD :
+            (op.large_op_kind == LARGE_OP_KIND_INT ? OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_INT :
+                (op.large_op_kind == LARGE_OP_KIND_LIM ? OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM : Int32(0))))
+    return Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind)
 end
 
 """Encode one recursive payload program as recursive bridge ops plus shared text blob."""

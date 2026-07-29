@@ -86,6 +86,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     # Keep the original definition text and append test output on a new line.
     latex_test_source = "\\text{TEMP TEST: Phase 2} \\alpha + \\beta + \\sin(x) + f(A_1^2) + \\overline{AB^2} + \\underline{CD_4} + \\overline{A\\underline{B^2_6}} + \\mathbb{R}"
     latex_radical_test_source = "\\text{TEMP TEST: Phase 3} \\sqrt{x} + q\\sqrt[3]{AB}b + \\sqrt[n]{\\underline{A_1^2}} + \\sqrt[α]{\\overline{x}}"
+    latex_largeop_test_source = "\\text{TEMP TEST: Phase 4} \\sum_{i=1}^{n} a_i + \\sqrt{\\sum_{k=0}^{m} b_k} + \\prod_{j=1}^{p} \\sqrt{j} + \\int_{0}^{1} \\sqrt{x} + \\lim_{x \\to 0} \\sqrt{x}"
     if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
@@ -107,6 +108,26 @@ function get_view_text(state_ptr::Ptr{Cvoid})
         latex_radical_test_source;
         text_style=DynviewStyleOutput,
         math_style=DynviewStyleItalic)
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if !EuclidLatex.replay_emit_math_block!(
+        state_ptr,
+        latex_largeop_test_source;
+        text_style=DynviewStyleOutput,
+        math_style=DynviewStyleItalic)
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_text_run(
+        state_ptr,
+        "So ends the LaTeX Testing blocks and All That Fun.",
+        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
     # END TEMPORARY TESTING ONLY.
