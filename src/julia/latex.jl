@@ -891,7 +891,7 @@ function replay_emit_program!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
     source = latex_source_for_program(program)
     return replay_emit_math_block!(
@@ -1251,7 +1251,7 @@ function replay_emit_math_block!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
     plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
         program;
@@ -1276,7 +1276,7 @@ function replay_emit_math_block!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
     entry = resolve_cache_entry(source; style_profile=style_profile)
     plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
@@ -1306,7 +1306,7 @@ function emit_latex_dynview!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
     if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return false

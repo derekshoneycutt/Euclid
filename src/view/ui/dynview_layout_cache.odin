@@ -109,7 +109,7 @@ dynview_large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     case 1, 2:
         return 1.35
     case 3:
-        return 1.24
+        return 1.95
     case 4:
         return 1.10
     }
@@ -123,7 +123,19 @@ dynview_large_op_limit_scale :: #force_inline proc(script_scale: f32) -> f32 {
 
 //   Return vertical gap between large-operator glyph and stacked limits.
 dynview_large_op_limit_gap :: #force_inline proc(font_size, script_gap: f32) -> f32 {
-    return max(1.0, font_size * 0.16 + script_gap * font_size)
+    return max(0.75, font_size * 0.12 + script_gap * font_size * 0.85)
+}
+
+//   Return the stacked-limit gap for one large operator kind.
+dynview_large_op_limit_gap_for_kind :: #force_inline proc(
+    large_op_kind: i32,
+    font_size, script_gap: f32) -> f32 {
+
+    gap := dynview_large_op_limit_gap(font_size, script_gap)
+    if large_op_kind == 3 {
+        return max(0.01, gap * 0.22)
+    }
+    return gap
 }
 
 //   Return default block format values keyed by block kind.
@@ -437,7 +449,7 @@ dynview_math_program_large_op_item :: #force_inline proc(
         lower_height = limit_ascent + limit_descent
     }
 
-    limit_gap := dynview_large_op_limit_gap(font_size, cmd.script_gap)
+    limit_gap := dynview_large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
     ascent := glyph_ascent
     descent := glyph_descent
     if sup_cols > 0 {
@@ -2858,7 +2870,7 @@ dynview_draw_large_op_recursive_item :: #force_inline proc(
         lower_height = limit_ascent + limit_descent
     }
 
-    limit_gap := dynview_large_op_limit_gap(font_size, item.script_gap)
+    limit_gap := dynview_large_op_limit_gap_for_kind(item.large_op_kind, font_size, item.script_gap)
     glyph_top := item_y
     if sup_cols > 0 {
         glyph_top += upper_height + limit_gap
