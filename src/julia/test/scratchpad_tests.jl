@@ -33,12 +33,24 @@ function new_session(; id::Int=TEST_SESSION_ID_REF[])
         Scratchpad.create_runtime_module(id),
         String[],
         String[],
+    Scratchpad.ScratchpadOutputEntry[],
         String[],
         Scratchpad.ScratchpadFrameHook[],
         new_metrics(),
         1,
         1)
 end
+
+struct ScratchpadLatexResultMock
+end
+
+Base.show(io::IO, ::MIME"text/plain", ::ScratchpadLatexResultMock) = print(io, "ScratchpadLatexResultMock()")
+Base.show(io::IO, ::MIME"text/latex", ::ScratchpadLatexResultMock) = print(io, "\\frac{1}{2}")
+
+struct ScratchpadPlainResultMock
+end
+
+Base.show(io::IO, ::MIME"text/plain", ::ScratchpadPlainResultMock) = print(io, "ScratchpadPlainResultMock()")
 
 function with_test_session(f::Function)
     old_session = Scratchpad.session_ref[]
@@ -120,6 +132,34 @@ end
     @test occursin("MethodError", formatted)
     @test occursin("Stacktrace:", formatted)
     @test occursin("+", formatted)
+end
+
+@testset "latex result formatting helpers" begin
+    @test Scratchpad.normalize_latex_result_source("\$\\alpha\$") == "\\alpha"
+    @test Scratchpad.normalize_latex_result_source("\$\$\\frac{1}{2}\$\$") == "\\frac{1}{2}"
+    @test Scratchpad.normalize_latex_result_source("  \\beta  ") == "\\beta"
+
+    latex_source = Scratchpad.format_result_latex_source(ScratchpadLatexResultMock())
+    @test latex_source == "\\frac{1}{2}"
+
+    plain_source = Scratchpad.format_result_latex_source(ScratchpadPlainResultMock())
+    @test plain_source === nothing
+end
+
+@testset "append eval result output" begin
+    session = new_session()
+
+    Scratchpad.append_eval_result_output!(session, ScratchpadLatexResultMock())
+    @test length(session.output) == 1
+    @test session.output[1] == "=> ScratchpadLatexResultMock()"
+    @test length(session.output_entries) == 1
+    @test session.output_entries[1].latex_source == "\\frac{1}{2}"
+
+    Scratchpad.append_eval_result_output!(session, ScratchpadPlainResultMock())
+    @test length(session.output) == 2
+    @test session.output[2] == "=> ScratchpadPlainResultMock()"
+    @test length(session.output_entries) == 2
+    @test session.output_entries[2].latex_source == ""
 end
 
 @testset "history navigation" begin

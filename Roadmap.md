@@ -94,6 +94,7 @@ General features:
   - [X] Basic input tab completion support, including unicode characters & function names
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
+  - [X] LaTeX output
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -101,14 +102,15 @@ General features:
   - [X] Basic group transformation animation hooks for REPL
 - [X] View text more advanced layout engine
 - [X] Continued view text support for colors, shape fill, etc.
-- [ ] Basic LaTeX type rendering support
-  - [ ] LaTeX to unicode base
-  - [ ] Superscript
-  - [ ] Subscript
-  - [ ] Fractions
-  - [ ] Dynamic sized brackets
-  - [ ] Matrices
-  - [ ] Sums, Products, Integrals
+- [X] Basic LaTeX type rendering support
+  - [X] LaTeX to unicode base
+  - [X] Superscript
+  - [X] Subscript
+  - [X] Fractions
+  - [X] Dynamic sized brackets
+  - [X] Matrices
+  - [X] Sums, Products, Integrals
+  - [ ] Basic document (bold, italic, math mode, euclid shapes extension)
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 

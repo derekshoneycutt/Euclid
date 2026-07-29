@@ -1,6 +1,7 @@
 module Scratchpad
 
 using ..OdinJuliaBridge
+using ..EuclidLatex
 using REPL
 
 export init_euclid_scripts_scratchpad, get_view_text, initialize, clean, loop,
@@ -34,11 +35,19 @@ mutable struct ScratchpadFrameHook
     consecutive_failures::Int
 end
 
+struct ScratchpadOutputEntry
+    line::String
+    block_kind::Int32
+    style_id::Int32
+    latex_source::String
+end
+
 mutable struct ScratchpadSession
     id::Int
     runtime::Module
     queue::Vector{String}
     output::Vector{String}
+    output_entries::Vector{ScratchpadOutputEntry}
     history::Vector{String}
     hooks::Vector{ScratchpadFrameHook}
     metrics::ScratchpadMetrics
@@ -159,16 +168,6 @@ function create_runtime_module(session_id::Int)
     return runtime
 end
 
-"""Append one output line while enforcing the configured output retention cap."""
-function append_output_line!(session::ScratchpadSession, line::AbstractString)
-    push!(session.output, String(line))
-    extra = length(session.output) - MaxOutputLines
-    if extra > 0
-        session.metrics.output_trimmed += extra
-        deleteat!(session.output, 1:extra)
-    end
-end
-
 """Append one history line while enforcing the configured history retention cap."""
 function append_history_line!(session::ScratchpadSession, line::String)
     push!(session.history, line)
@@ -273,6 +272,7 @@ function reset_session!(state_ptr::Ptr{Cvoid})
         runtime,
         String[],
         String[],
+        ScratchpadOutputEntry[],
         String[],
         ScratchpadFrameHook[],
         ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -293,6 +293,35 @@ function ensure_session!(state_ptr::Ptr{Cvoid})
 
     Core.eval(session.runtime, :(state_ptr = $state_ptr))
     return session
+end
+
+"""Append one output entry while enforcing the configured output retention cap."""
+function append_output_entry!(session::ScratchpadSession, entry::ScratchpadOutputEntry)
+    push!(session.output, entry.line)
+    push!(session.output_entries, entry)
+    extra = length(session.output) - MaxOutputLines
+    if extra > 0
+        session.metrics.output_trimmed += extra
+        deleteat!(session.output, 1:extra)
+        deleteat!(session.output_entries, 1:extra)
+    end
+end
+
+"""Append one output line while enforcing the configured output retention cap."""
+function append_output_line!(session::ScratchpadSession, line::AbstractString)
+    text = String(line)
+    block_kind, style_id = dynview_ids_for_line(text)
+    append_output_entry!(session, ScratchpadOutputEntry(text, block_kind, style_id, ""))
+end
+
+"""Append one eval-result output line that should render as inline formatted LaTeX."""
+function append_latex_result_line!(session::ScratchpadSession, latex_source::AbstractString, plain_text::AbstractString)
+    line = "=> " * String(plain_text)
+    append_output_entry!(session, ScratchpadOutputEntry(
+        line,
+        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+        DynviewStyleOutput,
+        String(latex_source)))
 end
 
 """Apply REPL softscope transformation to parsed expressions when available."""
@@ -763,6 +792,44 @@ function format_result_value(value)
     end
 end
 
+"""Remove one pair of surrounding `\$...\$` or `\$\$...\$\$` delimiters when present."""
+function normalize_latex_result_source(latex_source::AbstractString)
+    source = strip(String(latex_source))
+    if length(source) >= 4 && startswith(source, "\$\$") && endswith(source, "\$\$")
+        return strip(source[3:end-2])
+    end
+
+    if length(source) >= 2 && startswith(source, "\$") && endswith(source, "\$")
+        return strip(source[2:end-1])
+    end
+
+    return source
+end
+
+"""Render a result value using `text/latex` MIME when supported, else return `nothing`."""
+function format_result_latex_source(value)
+    latex_source = try
+        sprint(show, MIME("text/latex"), value)
+    catch
+        return nothing
+    end
+
+    normalized = normalize_latex_result_source(latex_source)
+    return isempty(normalized) ? nothing : normalized
+end
+
+"""Append one eval-result output using LaTeX rendering when available."""
+function append_eval_result_output!(session::ScratchpadSession, result)
+    plain_text = format_result_value(result)
+    latex_source = format_result_latex_source(result)
+    if latex_source === nothing
+        append_output_line!(session, "=> " * plain_text)
+        return
+    end
+
+    append_latex_result_line!(session, latex_source, plain_text)
+end
+
 """Format an exception with a bounded stack trace for scratchpad output."""
 function format_exception_text(e, bt)
     message = sprint(showerror, e)
@@ -865,25 +932,77 @@ function dynview_emit_line!(state_ptr::Ptr{Cvoid}, line::AbstractString, style_i
     return true
 end
 
+"""Return line text after a leading REPL result prefix when present."""
+function line_after_result_prefix(line::AbstractString)
+    text = String(line)
+    if startswith(text, "=> ")
+        return text[4:end]
+    end
+    return text
+end
+
+"""Emit one LaTeX result line while preserving `=>` prefix and plain-text fallback."""
+function dynview_emit_latex_result_line!(
+    state_ptr::Ptr{Cvoid},
+    entry::ScratchpadOutputEntry,
+    add_line_break::Bool)
+
+    line = entry.line
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, line))
+        return false
+    end
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, "=> ", entry.style_id))
+        return false
+    end
+
+    rendered = EuclidLatex.replay_emit_math_block!(
+        state_ptr,
+        entry.latex_source;
+        text_style=entry.style_id)
+
+    if !rendered
+        fallback_text = line_after_result_prefix(line)
+        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, fallback_text, entry.style_id))
+            return false
+        end
+    end
+
+    if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
+        return false
+    end
+    return true
+end
+
 """Emit current scratchpad output as a dynview command stream for host-side rendering."""
 function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadSession)
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) || isempty(session.output)
-        return isempty(session.output)
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) || isempty(session.output_entries)
+        return isempty(session.output_entries)
     end
 
     block_id = Int32(1)
     current_kind = Int32(0)
     open_block = false
-    last_line_index = lastindex(session.output)
-    for i in eachindex(session.output)
-        block_kind, style_id = dynview_ids_for_line(session.output[i])
+    last_line_index = lastindex(session.output_entries)
+    for i in eachindex(session.output_entries)
+        entry = session.output_entries[i]
         ok, open_block, current_kind, block_id = dynview_switch_block!(
             state_ptr,
             open_block,
             current_kind,
-            block_kind,
+            entry.block_kind,
             block_id)
-        if !ok || !dynview_emit_line!(state_ptr, session.output[i], style_id, i != last_line_index)
+        if !ok
+            return false
+        end
+
+        if isempty(entry.latex_source)
+            if !dynview_emit_line!(state_ptr, entry.line, entry.style_id, i != last_line_index)
+                return false
+            end
+            continue
+        end
+
+        if !dynview_emit_latex_result_line!(state_ptr, entry, i != last_line_index)
             return false
         end
     end
@@ -1350,6 +1469,7 @@ function handle_local_command!(state_ptr::Ptr{Cvoid}, text::AbstractString)
     end
     if text == ":clear"
         empty!(session.output)
+        empty!(session.output_entries)
         return true
     end
     if text == ":hooks"
@@ -1425,7 +1545,7 @@ function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid
     try
         result = Core.eval(runtime, scoped)
         if result !== nothing
-            append_output_line!(session, "=> " * format_result_value(result))
+            append_eval_result_output!(session, result)
         end
     catch e
         session.metrics.eval_errors += 1
