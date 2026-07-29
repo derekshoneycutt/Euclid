@@ -855,6 +855,14 @@ dynview_large_op_visible_text :: #force_inline proc(
     return dynview_text_for_command(buffer, cmd)
 }
 
+//   Build visible text representation for one stretch-delimiter wrapper.
+dynview_stretch_delimiter_visible_text :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command) -> string {
+
+    return dynview_text_for_command(buffer, cmd)
+}
+
 //   Return the first/last layout line indices that contain visible items for block_id.
 dynview_layout_item_line_span_for_block :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -941,6 +949,9 @@ dynview_count_styled_rows :: proc(
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .FracRecursive:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .StretchDelimiterRecursive:
+            text := dynview_stretch_delimiter_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
             text := dynview_large_op_visible_text(buffer, cmd)
@@ -1039,6 +1050,9 @@ dynview_draw_styled_content :: proc(
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .FracRecursive:
             text := dynview_text_for_command(buffer, cmd)
+            dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
+        case .StretchDelimiterRecursive:
+            text := dynview_stretch_delimiter_visible_text(buffer, cmd)
             dynview_flow_consume_text_run(&flow, text, dynview_style_by_id(cmd.style_id), &draw_ctx)
         case .LargeOpRecursive:
             text := dynview_large_op_visible_text(buffer, cmd)
@@ -1886,6 +1900,8 @@ dynview_compile_command :: #force_inline proc(
     case .ScriptAttachRecursive:
         return dynview_compile_script_attach_recursive(cache, buffer, state, cmd)
     case .FracRecursive:
+        return dynview_compile_text_run(cache, buffer, state, cmd)
+    case .StretchDelimiterRecursive:
         return dynview_compile_text_run(cache, buffer, state, cmd)
     case .LargeOpRecursive:
         return dynview_compile_large_op_recursive(cache, buffer, state, cmd)

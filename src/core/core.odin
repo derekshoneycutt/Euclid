@@ -737,6 +737,7 @@ Ui_Dynview_Command_Kind :: enum {
     ScriptAttach,
     ScriptAttachRecursive,
     FracRecursive,
+    StretchDelimiterRecursive,
     LargeOpRecursive,
     AccentBar,
     AccentBarRecursive,
@@ -816,6 +817,7 @@ Ui_Dynview_Layout_Item_Kind :: enum {
     ScriptAttach,
     ScriptAttachRecursive,
     FracRecursive,
+    StretchDelimiterRecursive,
     LargeOpRecursive,
     AccentBar,
     AccentBarRecursive,
@@ -882,6 +884,7 @@ Ui_Dynview_Math_Node_Kind :: enum {
     Script,
     Radical,
     Fraction,
+    StretchDelimiter,
 }
 
 Ui_Dynview_Math_Node :: struct {

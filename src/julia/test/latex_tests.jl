@@ -245,6 +245,45 @@ end
     @test mixed_program[1].secondary_children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
 end
 
+@testset "stretch delimiters" begin
+    plain_basic = EuclidLatex.latex_to_plain_text("\\left( x + y \\right)")
+    @test plain_basic == "\\left( x + y \\right)"
+
+    plain_mixed = EuclidLatex.latex_to_plain_text("\\left[ a + b \\right)")
+    @test plain_mixed == "\\left[ a + b \\right)"
+
+    mixed_program = EuclidLatex.compiled_program_for("\\left[ a + b \\right)")
+    @test length(mixed_program) == 1
+    @test mixed_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test mixed_program[1].radical_index_text == "["
+    @test mixed_program[1].sup_text == ")"
+
+    plain_left_omit = EuclidLatex.latex_to_plain_text("\\left. x \\right)")
+    @test plain_left_omit == "\\left. x \\right)"
+
+    plain_right_omit = EuclidLatex.latex_to_plain_text("\\left( x \\right.")
+    @test plain_right_omit == "\\left( x \\right."
+
+    plain_nested = EuclidLatex.latex_to_plain_text("\\left[ a + \\left( b \\right) \\right]")
+    @test plain_nested == "\\left[ a + \\left( b \\right) \\right]"
+
+    plain_embedded = EuclidLatex.latex_to_plain_text("\\left\\{ \\frac{a}{b} + \\sqrt{x} \\right\\}")
+    @test plain_embedded == "\\left\\{ {a}/{b} + \\sqrt{x} \\right\\}"
+
+    structure_program = EuclidLatex.compiled_program_for("\\left( \\frac{a}{b} \\right)")
+    @test length(structure_program) == 1
+    @test structure_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test structure_program[1].radical_index_text == "("
+    @test structure_program[1].sup_text == ")"
+    @test any(op -> op.kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE, structure_program[1].children)
+
+    unmatched_left = EuclidLatex.latex_to_plain_text("\\left( x")
+    @test unmatched_left == "\\left( x\\right."
+
+    unmatched_right = EuclidLatex.latex_to_plain_text("x \\right)")
+    @test unmatched_right == "x \\right)"
+end
+
 @testset "cache behavior" begin
     EuclidLatex.clear_cache!()
     @test EuclidLatex.cache_size() == 0

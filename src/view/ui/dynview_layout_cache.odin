@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import "core:math"
 
 import rl "vendor:raylib"
 
@@ -45,6 +46,34 @@ LARGE_OP_KIND_SUM :: 1
 LARGE_OP_KIND_PROD :: 2
 LARGE_OP_KIND_INT :: 3
 LARGE_OP_KIND_LIM :: 4
+
+DELIMITER_KIND_NONE :: 0
+DELIMITER_KIND_LEFT_PAREN :: 1
+DELIMITER_KIND_RIGHT_PAREN :: 2
+DELIMITER_KIND_LEFT_BRACKET :: 3
+DELIMITER_KIND_RIGHT_BRACKET :: 4
+DELIMITER_KIND_LEFT_BRACE :: 5
+DELIMITER_KIND_RIGHT_BRACE :: 6
+DELIMITER_KIND_VERT :: 7
+DELIMITER_KIND_DOUBLE_VERT :: 8
+DELIMITER_KIND_LEFT_CEIL :: 9
+DELIMITER_KIND_RIGHT_CEIL :: 10
+DELIMITER_KIND_LEFT_FLOOR :: 11
+DELIMITER_KIND_RIGHT_FLOOR :: 12
+DELIMITER_KIND_LEFT_ANGLE :: 13
+DELIMITER_KIND_RIGHT_ANGLE :: 14
+
+Dynview_Delimiter_Family :: enum {
+    None,
+    Paren,
+    Bracket,
+    Brace,
+    Vert,
+    DoubleVert,
+    Ceil,
+    Floor,
+    Angle,
+}
 
 //   Return style-aware ascent/descent estimates from active font size.
 dynview_style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
@@ -124,6 +153,160 @@ dynview_fraction_side_padding :: #force_inline proc(font_size, base_advance: f32
 //   Return small vertical gap between fraction divider and child blocks.
 dynview_fraction_vertical_gap :: #force_inline proc(font_size: f32) -> f32 {
     return max(0.5, font_size * 0.10)
+}
+
+//   Return small horizontal side padding for stretch-delimiter wrappers.
+dynview_stretch_delimiter_side_padding :: #force_inline proc(font_size, base_advance: f32) -> f32 {
+    return max(0.5, max(base_advance * 0.12, font_size * 0.08))
+}
+
+//   Return delimiter draw text for one supported delimiter kind.
+dynview_delimiter_text :: #force_inline proc(delimiter_kind: i32) -> string {
+    switch delimiter_kind {
+    case DELIMITER_KIND_LEFT_PAREN:
+        return "("
+    case DELIMITER_KIND_RIGHT_PAREN:
+        return ")"
+    case DELIMITER_KIND_LEFT_BRACKET:
+        return "["
+    case DELIMITER_KIND_RIGHT_BRACKET:
+        return "]"
+    case DELIMITER_KIND_LEFT_BRACE:
+        return "{"
+    case DELIMITER_KIND_RIGHT_BRACE:
+        return "}"
+    case DELIMITER_KIND_VERT:
+        return "|"
+    case DELIMITER_KIND_DOUBLE_VERT:
+        return "‖"
+    case DELIMITER_KIND_LEFT_CEIL:
+        return "⌈"
+    case DELIMITER_KIND_RIGHT_CEIL:
+        return "⌉"
+    case DELIMITER_KIND_LEFT_FLOOR:
+        return "⌊"
+    case DELIMITER_KIND_RIGHT_FLOOR:
+        return "⌋"
+    case DELIMITER_KIND_LEFT_ANGLE:
+        return "⟨"
+    case DELIMITER_KIND_RIGHT_ANGLE:
+        return "⟩"
+    }
+    return ""
+}
+
+//   Return family type for one delimiter kind.
+dynview_delimiter_family :: #force_inline proc(delimiter_kind: i32) -> Dynview_Delimiter_Family {
+    switch delimiter_kind {
+    case DELIMITER_KIND_LEFT_PAREN, DELIMITER_KIND_RIGHT_PAREN:
+        return .Paren
+    case DELIMITER_KIND_LEFT_BRACKET, DELIMITER_KIND_RIGHT_BRACKET:
+        return .Bracket
+    case DELIMITER_KIND_LEFT_BRACE, DELIMITER_KIND_RIGHT_BRACE:
+        return .Brace
+    case DELIMITER_KIND_VERT:
+        return .Vert
+    case DELIMITER_KIND_DOUBLE_VERT:
+        return .DoubleVert
+    case DELIMITER_KIND_LEFT_CEIL, DELIMITER_KIND_RIGHT_CEIL:
+        return .Ceil
+    case DELIMITER_KIND_LEFT_FLOOR, DELIMITER_KIND_RIGHT_FLOOR:
+        return .Floor
+    case DELIMITER_KIND_LEFT_ANGLE, DELIMITER_KIND_RIGHT_ANGLE:
+        return .Angle
+    }
+    return .None
+}
+
+//   Return true when delimiter kind is a right-side shape.
+dynview_delimiter_is_right :: #force_inline proc(delimiter_kind: i32) -> bool {
+    switch delimiter_kind {
+    case DELIMITER_KIND_RIGHT_PAREN,
+        DELIMITER_KIND_RIGHT_BRACKET,
+        DELIMITER_KIND_RIGHT_BRACE,
+        DELIMITER_KIND_RIGHT_CEIL,
+        DELIMITER_KIND_RIGHT_FLOOR,
+        DELIMITER_KIND_RIGHT_ANGLE:
+        return true
+    }
+    return false
+}
+
+//   Return one recipe-like base width factor keyed by delimiter family.
+dynview_delimiter_base_width_factor :: #force_inline proc(family: Dynview_Delimiter_Family) -> f32 {
+    switch family {
+    case .Paren:
+        return 0.42
+    case .Bracket:
+        return 0.40
+    case .Brace:
+        return 0.34
+    case .Vert:
+        return 0.24
+    case .DoubleVert:
+        return 0.34
+    case .Ceil, .Floor:
+        return 0.40
+    case .Angle:
+        return 0.46
+    case .None:
+    }
+    return 0
+}
+
+//   Draw one sampled cubic segment in normalized delimiter coordinates.
+dynview_draw_normalized_cubic_segment :: #force_inline proc(
+    draw_x, top_y, width, height, thickness: f32,
+    right_side: bool,
+    p0, p1, p2, p3: rl.Vector2,
+    color: rl.Color,
+    segment_count: int) {
+
+    if segment_count <= 0 {
+        return
+    }
+
+    x0_norm := p0.x
+    if right_side {
+        x0_norm = 1.0 - x0_norm
+    }
+    prev := rl.Vector2{draw_x + width * x0_norm, top_y + height * p0.y}
+
+    for i in 1..=segment_count {
+        t := f32(i) / f32(segment_count)
+        u := 1.0 - t
+        x_norm := u * u * u * p0.x + 3.0 * u * u * t * p1.x + 3.0 * u * t * t * p2.x + t * t * t * p3.x
+        y_norm := u * u * u * p0.y + 3.0 * u * u * t * p1.y + 3.0 * u * t * t * p2.y + t * t * t * p3.y
+        if right_side {
+            x_norm = 1.0 - x_norm
+        }
+
+        current := rl.Vector2{draw_x + width * x_norm, top_y + height * y_norm}
+        rl.DrawLineEx(prev, current, thickness, color)
+        prev = current
+    }
+}
+
+//   Return scaled delimiter width from one child content-height target.
+dynview_stretch_delimiter_width :: #force_inline proc(
+    style: Dynview_Text_Style,
+    wrap_advance, font_size, content_height: f32,
+    delimiter_kind: i32) -> f32 {
+
+    if delimiter_kind == DELIMITER_KIND_NONE {
+        return 0
+    }
+
+    family := dynview_delimiter_family(delimiter_kind)
+    if family == .None {
+        return 0
+    }
+
+    base_advance := dynview_effective_advance(style, wrap_advance)
+    base_width := max(base_advance * 0.2, font_size * dynview_delimiter_base_width_factor(family))
+    raw_scale := max(1.0, content_height / max(1.0, font_size))
+    width_scale := min(1.7, 1.0 + (raw_scale - 1.0) * 0.28)
+    return max(1.0, base_width * width_scale)
 }
 
 //   Return glyph scale factor for display-style large operators.
@@ -559,6 +742,63 @@ dynview_math_program_recursive_fraction_item :: #force_inline proc(
     }, true
 }
 
+//   Build one layout-like item for a recursive stretch-delimiter wrapper.
+dynview_math_program_recursive_stretch_delimiter_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+
+    content_width: f32 = 0
+    content_ascent, content_descent := dynview_style_ascent_descent(style, font_size)
+    top_pad: f32 = 0
+    bottom_pad: f32 = 0
+
+    if cmd.math_program_id > 0 {
+        child_program, ok := dynview_math_program_from_command(cache, cmd)
+        if !ok || !dynview_measure_math_program(cache, buffer, child_program, font_size) {
+            return core.Ui_Dynview_Layout_Item{}, false
+        }
+        content_width = child_program^.draw_width
+        content_ascent = child_program^.ascent
+        content_descent = child_program^.descent
+        top_pad = child_program^.visual_padding_top
+        bottom_pad = child_program^.visual_padding_bottom
+    }
+
+    content_height := content_ascent + content_descent
+    base_advance := dynview_effective_advance(style, cache^.last_wrap_advance)
+    side_padding := dynview_stretch_delimiter_side_padding(font_size, base_advance)
+    left_width := dynview_stretch_delimiter_width(
+        style,
+        cache^.last_wrap_advance,
+        font_size,
+        content_height,
+        cmd.accent_mode)
+    right_width := dynview_stretch_delimiter_width(
+        style,
+        cache^.last_wrap_advance,
+        font_size,
+        content_height,
+        cmd.radical_mode)
+
+    draw_width := max(content_width + left_width + right_width + side_padding * 2.0, base_advance)
+    return core.Ui_Dynview_Layout_Item{
+        kind = .StretchDelimiterRecursive,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        accent_mode = cmd.accent_mode,
+        radical_mode = cmd.radical_mode,
+        draw_width = draw_width,
+        draw_height = content_height,
+        ascent = content_ascent,
+        descent = content_descent,
+        visual_padding_top = top_pad,
+        visual_padding_bottom = bottom_pad,
+    }, true
+}
+
 //   Build one layout-like item for an accent-bar child command inside a math block.
 dynview_math_program_accent_item :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -901,6 +1141,8 @@ dynview_math_program_item :: #force_inline proc(
         return dynview_math_program_recursive_script_item(cache, buffer, cmd, font_size)
     case .FracRecursive:
         return dynview_math_program_recursive_fraction_item(cache, buffer, cmd, style, font_size)
+    case .StretchDelimiterRecursive:
+        return dynview_math_program_recursive_stretch_delimiter_item(cache, buffer, cmd, style, font_size)
     case .LargeOpRecursive:
         return dynview_math_program_large_op_item(cache, buffer, cmd, style, font_size), true
     case .AccentBar:
@@ -2399,6 +2641,8 @@ dynview_layout_consume_structured_math_command :: #force_inline proc(
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .FracRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .StretchDelimiterRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .LargeOpRecursive:
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .AccentBar:
@@ -2465,7 +2709,7 @@ dynview_layout_consume_inline_shape_command :: #force_inline proc(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
         return status
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
         .RadicalBarRecursive,
         .CopyableTextRun, .LineBreak, .Divider:
     }
@@ -2484,6 +2728,7 @@ dynview_layout_consume_visible_command :: proc(
     case .TextRun, .MathGlyphRun:
         return dynview_layout_consume_text_like_command(ctx, cmd, effective_style)
     case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .StretchDelimiterRecursive,
         .RadicalBarRecursive:
         return dynview_layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
@@ -2961,6 +3206,355 @@ dynview_draw_recursive_fraction_item :: #force_inline proc(
         divider_color)
 }
 
+//   Draw one stretched delimiter glyph at the requested content height.
+dynview_draw_stretch_delimiter_glyph :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    style: Dynview_Text_Style,
+    fallback_font: rl.Font,
+    wrap_advance, font_size, content_height, content_ascent, content_descent: f32,
+    delimiter_kind: i32,
+    draw_x, baseline_y: f32) -> f32 {
+
+    if delimiter_kind == DELIMITER_KIND_NONE {
+        return 0
+    }
+
+    family := dynview_delimiter_family(delimiter_kind)
+    width := dynview_stretch_delimiter_width(style, wrap_advance, font_size, content_height, delimiter_kind)
+    if family == .None || width <= 0 {
+        return 0
+    }
+
+    top_y := baseline_y - content_ascent
+    bottom_y := baseline_y + content_descent
+    center_y := (top_y + bottom_y) * 0.5
+    height := max(1.0, bottom_y - top_y)
+    thickness := max(1.0, font_size * 0.09)
+    right_side := dynview_delimiter_is_right(delimiter_kind)
+
+    switch family {
+    case .Vert:
+        x := draw_x + width * 0.5
+        rl.DrawLineEx(rl.Vector2{x, top_y}, rl.Vector2{x, bottom_y}, thickness, style.color)
+        return width
+    case .DoubleVert:
+        lane_gap := max(1.0, width * 0.26)
+        x1 := draw_x + width * 0.5 - lane_gap
+        x2 := draw_x + width * 0.5 + lane_gap
+        rl.DrawLineEx(rl.Vector2{x1, top_y}, rl.Vector2{x1, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{x2, top_y}, rl.Vector2{x2, bottom_y}, thickness, style.color)
+        return width
+    case .Bracket:
+        stem_x := draw_x + width * 0.28
+        hook_x := draw_x + width * 0.88
+        if right_side {
+            stem_x = draw_x + width * 0.72
+            hook_x = draw_x + width * 0.12
+        }
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{hook_x, top_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y}, rl.Vector2{hook_x, bottom_y}, thickness, style.color)
+        return width
+    case .Ceil:
+        stem_x := draw_x + width * 0.28
+        hook_x := draw_x + width * 0.88
+        if right_side {
+            stem_x = draw_x + width * 0.72
+            hook_x = draw_x + width * 0.12
+        }
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{hook_x, top_y}, thickness, style.color)
+        return width
+    case .Floor:
+        stem_x := draw_x + width * 0.28
+        hook_x := draw_x + width * 0.88
+        if right_side {
+            stem_x = draw_x + width * 0.72
+            hook_x = draw_x + width * 0.12
+        }
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y}, rl.Vector2{hook_x, bottom_y}, thickness, style.color)
+        return width
+    case .Angle:
+        apex_x := draw_x + width * 0.14
+        rail_x := draw_x + width * 0.86
+        if right_side {
+            apex_x = draw_x + width * 0.86
+            rail_x = draw_x + width * 0.14
+        }
+        rl.DrawLineEx(rl.Vector2{rail_x, top_y}, rl.Vector2{apex_x, center_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{apex_x, center_y}, rl.Vector2{rail_x, bottom_y}, thickness, style.color)
+        return width
+    case .Paren:
+        segment_count := 12
+        for i in 0..<segment_count {
+            t0 := f32(i) / f32(segment_count)
+            t1 := f32(i + 1) / f32(segment_count)
+            y0 := top_y + height * t0
+            y1 := top_y + height * t1
+            curve0 := math.sin(t0 * math.PI)
+            curve1 := math.sin(t1 * math.PI)
+
+            x0 := draw_x + width * (0.78 - 0.46 * curve0)
+            x1 := draw_x + width * (0.78 - 0.46 * curve1)
+            if right_side {
+                x0 = draw_x + width * (0.22 + 0.46 * curve0)
+                x1 = draw_x + width * (0.22 + 0.46 * curve1)
+            }
+
+            rl.DrawLineEx(rl.Vector2{x0, y0}, rl.Vector2{x1, y1}, thickness, style.color)
+        }
+        return width
+    case .Brace:
+        //   Left brace layout (mirrored automatically for right): tips point right
+        //   toward the content, the vertical stem sits just left of center, and the
+        //   middle cusp juts left away from the content. Four quarter-turn cubic
+        //   curves join two straight stem runs; corner radius stays fixed while the
+        //   stems absorb any extra height, matching how TeX stretches braces.
+        segment_count := 16
+        brace_thickness := max(1.0, thickness * 0.85)
+
+        half_height := height * 0.5
+        radius_px := min(max(2.0, font_size * 0.24), half_height * 0.5)
+        stem_len := max(0.0, half_height - 2.0 * radius_px)
+
+        r_norm := radius_px / height
+        tip_x := f32(0.88)
+        stem_x := f32(0.45)
+        cusp_x := f32(0.06)
+        bend := f32(0.55)
+
+        // Top hook: horizontal at the tip, vertical where it joins the stem.
+        dynview_draw_normalized_cubic_segment(
+            draw_x,
+            top_y,
+            width,
+            height,
+            brace_thickness,
+            right_side,
+            rl.Vector2{tip_x, 0.0},
+            rl.Vector2{tip_x - bend * (tip_x - stem_x), 0.0},
+            rl.Vector2{stem_x, r_norm * (1.0 - bend)},
+            rl.Vector2{stem_x, r_norm},
+            style.color,
+            segment_count)
+
+        if stem_len > 0.5 {
+            x_stem := draw_x + width * stem_x
+            if right_side {
+                x_stem = draw_x + width * (1.0 - stem_x)
+            }
+            rl.DrawLineEx(
+                rl.Vector2{x_stem, top_y + radius_px},
+                rl.Vector2{x_stem, center_y - radius_px},
+                brace_thickness,
+                style.color)
+        }
+
+        // Upper cusp curve: vertical at the stem, horizontal into the cusp point.
+        dynview_draw_normalized_cubic_segment(
+            draw_x,
+            top_y,
+            width,
+            height,
+            brace_thickness,
+            right_side,
+            rl.Vector2{stem_x, 0.5 - r_norm},
+            rl.Vector2{stem_x, 0.5 - r_norm * (1.0 - bend)},
+            rl.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5},
+            rl.Vector2{cusp_x, 0.5},
+            style.color,
+            segment_count)
+
+        // Lower cusp curve mirrors the upper one below the midline.
+        dynview_draw_normalized_cubic_segment(
+            draw_x,
+            top_y,
+            width,
+            height,
+            brace_thickness,
+            right_side,
+            rl.Vector2{cusp_x, 0.5},
+            rl.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5},
+            rl.Vector2{stem_x, 0.5 + r_norm * (1.0 - bend)},
+            rl.Vector2{stem_x, 0.5 + r_norm},
+            style.color,
+            segment_count)
+
+        if stem_len > 0.5 {
+            x_stem := draw_x + width * stem_x
+            if right_side {
+                x_stem = draw_x + width * (1.0 - stem_x)
+            }
+            rl.DrawLineEx(
+                rl.Vector2{x_stem, center_y + radius_px},
+                rl.Vector2{x_stem, bottom_y - radius_px},
+                brace_thickness,
+                style.color)
+        }
+
+        // Bottom hook mirrors the top hook.
+        dynview_draw_normalized_cubic_segment(
+            draw_x,
+            top_y,
+            width,
+            height,
+            brace_thickness,
+            right_side,
+            rl.Vector2{stem_x, 1.0 - r_norm},
+            rl.Vector2{stem_x, 1.0 - r_norm * (1.0 - bend)},
+            rl.Vector2{tip_x - bend * (tip_x - stem_x), 1.0},
+            rl.Vector2{tip_x, 1.0},
+            style.color,
+            segment_count)
+        return width
+    case .None:
+    }
+
+    delimiter := dynview_delimiter_text(delimiter_kind)
+    if len(delimiter) == 0 {
+        return width
+    }
+
+    stretch_scale := max(1.0, content_height / max(1.0, font_size))
+    delimiter_font_size := max(1.0, font_size * stretch_scale)
+    delim_ascent, _ := dynview_style_ascent_descent(style, delimiter_font_size)
+    resolved_font := dynview_resolve_font_for_style(state, style, fallback_font)
+    ui_text_f32(delimiter, draw_x, baseline_y - delim_ascent, style.color, resolved_font, delimiter_font_size)
+    return width
+}
+
+//   Draw one recursive stretch-delimiter wrapper with optional child content.
+dynview_draw_recursive_stretch_delimiter_item :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Ui_Dynview_Runtime,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    item: core.Ui_Dynview_Layout_Item,
+    style: Dynview_Text_Style,
+    draw_x, item_y: f32) {
+
+    baseline_y := item_y + item.ascent
+    base_advance := dynview_effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    side_padding := dynview_stretch_delimiter_side_padding(font_size, base_advance)
+    content_height := item.ascent + item.descent
+
+    left_draw_x := draw_x + side_padding
+    left_width := dynview_draw_stretch_delimiter_glyph(
+        state,
+        style,
+        font,
+        runtime^.compile_cache.last_wrap_advance,
+        font_size,
+        content_height,
+        item.ascent,
+        item.descent,
+        item.accent_mode,
+        left_draw_x,
+        baseline_y)
+
+    content_x := left_draw_x + left_width
+    content_width: f32 = 0
+    if item.math_program_id > 0 {
+        child_program, ok := dynview_math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+        if ok {
+            content_width = child_program^.draw_width
+            dynview_draw_math_program_at(state, runtime, panel, font, font_size, child_program^, content_x, baseline_y)
+        }
+    }
+
+    right_draw_x := content_x + content_width
+    _ = dynview_draw_stretch_delimiter_glyph(
+        state,
+        style,
+        font,
+        runtime^.compile_cache.last_wrap_advance,
+        font_size,
+        content_height,
+        item.ascent,
+        item.descent,
+        item.radical_mode,
+        right_draw_x,
+        baseline_y)
+}
+
+//   Draw one recursive structured math item variant routed by layout item kind.
+dynview_draw_recursive_structured_item :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Ui_Dynview_Runtime,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    style: Dynview_Text_Style,
+    item: core.Ui_Dynview_Layout_Item,
+    resolved_font: rl.Font,
+    text: string,
+    draw_x, item_y: f32) {
+
+    switch item.kind {
+    case .ScriptAttachRecursive:
+        dynview_draw_recursive_script_attach_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            item,
+            draw_x,
+            item_y)
+    case .FracRecursive:
+        dynview_draw_recursive_fraction_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            item,
+            style,
+            draw_x,
+            item_y)
+    case .StretchDelimiterRecursive:
+        dynview_draw_recursive_stretch_delimiter_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            item,
+            style,
+            draw_x,
+            item_y)
+    case .LargeOpRecursive:
+        dynview_draw_large_op_recursive_item(
+            state,
+            runtime,
+            item,
+            style,
+            resolved_font,
+            text,
+            font_size,
+            draw_x,
+            item_y)
+    case .AccentBarRecursive:
+        dynview_draw_recursive_accent_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            style,
+            item,
+            draw_x,
+            item_y)
+    case .RadicalBarRecursive:
+        dynview_draw_recursive_radical_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .AccentBar, .RadicalBar,
+        .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
+        .InlinePieSection:
+    }
+}
+
 //   Draw one display-style large operator with stacked limits above and below.
 dynview_draw_large_op_recursive_item :: #force_inline proc(
     state: ^core.Euclid_General_State,
@@ -3215,38 +3809,6 @@ dynview_draw_cached_text_item :: proc(
             font_size,
             draw_x,
             item_y)
-    case .ScriptAttachRecursive:
-        dynview_draw_recursive_script_attach_item(
-            state,
-            runtime,
-            panel,
-            font,
-            font_size,
-            item,
-            draw_x,
-            item_y)
-    case .FracRecursive:
-        dynview_draw_recursive_fraction_item(
-            state,
-            runtime,
-            panel,
-            font,
-            font_size,
-            item,
-            style,
-            draw_x,
-            item_y)
-    case .LargeOpRecursive:
-        dynview_draw_large_op_recursive_item(
-            state,
-            runtime,
-            item,
-            style,
-            resolved_font,
-            text,
-            font_size,
-            draw_x,
-            item_y)
     case .AccentBar:
         dynview_draw_accent_bar_item(
             state,
@@ -3256,17 +3818,6 @@ dynview_draw_cached_text_item :: proc(
             resolved_font,
             text,
             font_size,
-            draw_x,
-            item_y)
-    case .AccentBarRecursive:
-        dynview_draw_recursive_accent_item(
-            state,
-            runtime,
-            panel,
-            font,
-            font_size,
-            style,
-            item,
             draw_x,
             item_y)
     case .RadicalBar:
@@ -3280,8 +3831,20 @@ dynview_draw_cached_text_item :: proc(
             font_size,
             draw_x,
             item_y)
-    case .RadicalBarRecursive:
-        dynview_draw_recursive_radical_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
+    case .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive,
+        .LargeOpRecursive, .AccentBarRecursive, .RadicalBarRecursive:
+        dynview_draw_recursive_structured_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            style,
+            item,
+            resolved_font,
+            text,
+            draw_x,
+            item_y)
     case .MathBlock:
         dynview_draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun:
@@ -3353,7 +3916,7 @@ dynview_draw_cached_inline_item :: proc(
             rl.DrawLineEx(center, start_point, stroke, style.color)
             rl.DrawLineEx(center, end_point, stroke, style.color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar,
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .LargeOpRecursive, .AccentBar,
         .AccentBarRecursive, .RadicalBar, .RadicalBarRecursive:
     }
 }
@@ -3380,6 +3943,7 @@ dynview_draw_cached_line :: proc(
             item.kind == .ScriptAttach ||
             item.kind == .ScriptAttachRecursive ||
             item.kind == .FracRecursive ||
+            item.kind == .StretchDelimiterRecursive ||
             item.kind == .LargeOpRecursive ||
             item.kind == .AccentBar ||
             item.kind == .RadicalBar {

@@ -14,7 +14,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(10)
+const PARSER_GRAMMAR_VERSION = Int32(11)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -34,6 +34,43 @@ const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(7)
 const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
 const MATH_OP_LARGE_OP_RECURSIVE = Int32(9)
 const MATH_OP_FRACTION_RECURSIVE = Int32(10)
+const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(11)
+
+const STRETCH_DELIMITER_NONE = "."
+const STRETCH_DELIMITER_RIGHT = "\\right"
+const STRETCH_DELIMITER_TOKEN_MAP = Dict(
+    "(" => "(",
+    ")" => ")",
+    "[" => "[",
+    "]" => "]",
+    "|" => "|",
+    "." => STRETCH_DELIMITER_NONE,
+    "\\{" => "\\{",
+    "\\}" => "\\}",
+    "\\|" => "\\|",
+    "\\lceil" => "\\lceil",
+    "\\rceil" => "\\rceil",
+    "\\lfloor" => "\\lfloor",
+    "\\rfloor" => "\\rfloor",
+    "\\langle" => "\\langle",
+    "\\rangle" => "\\rangle")
+
+const BRIDGE_DELIMITER_KIND_MAP = Dict(
+    STRETCH_DELIMITER_NONE => Int32(0),
+    "(" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN,
+    ")" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN,
+    "[" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACKET,
+    "]" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACKET,
+    "\\{" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACE,
+    "\\}" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACE,
+    "|" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_VERT,
+    "\\|" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_DOUBLE_VERT,
+    "\\lceil" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_CEIL,
+    "\\rceil" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_CEIL,
+    "\\lfloor" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_FLOOR,
+    "\\rfloor" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_FLOOR,
+    "\\langle" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_ANGLE,
+    "\\rangle" => OdinJuliaBridge.BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_ANGLE)
 
 const LARGE_OP_KIND_NONE = Int32(0)
 const LARGE_OP_KIND_SUM = Int32(1)
@@ -234,6 +271,10 @@ latex_sqrt_run(children::Vector{LatexRun}, index_text::AbstractString="") =
 """Return one fraction run payload with numerator and denominator child runs."""
 latex_fraction_run(numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
     LatexRun("", :math, :fraction, numerator_children, denominator_children)
+
+"""Return one stretch-delimiter run payload with left/right delimiters and inner runs."""
+latex_stretch_delimiter_run(left::String, right::String, children::Vector{LatexRun}) =
+    LatexRun(left, :math, :stretch_delimiter, children, [latex_atom_run(right, :math)])
 
 """Clear all cached parse/compile entries."""
 function clear_cache!()
@@ -507,7 +548,103 @@ function parse_structured_math_command(
         return [latex_fraction_run(numerator_children, denominator_children)]
     end
 
+    if command == "\\left"
+        stretch_run, _ = parse_stretch_delimiter_run(tokens, idx)
+        return [stretch_run]
+    end
+
     return nothing
+end
+
+"""Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""
+function parse_stretch_delimiter_token(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    if idx[] > length(tokens)
+        return "", false
+    end
+
+    token = tokens[idx[]]
+    if token.kind == :lbracket
+        idx[] += 1
+        return "[", true
+    end
+    if token.kind == :rbracket
+        idx[] += 1
+        return "]", true
+    end
+
+    if token.kind == :command
+        delimiter = get(STRETCH_DELIMITER_TOKEN_MAP, token.text, "")
+        if isempty(delimiter)
+            return "", false
+        end
+        idx[] += 1
+        return delimiter, true
+    end
+
+    if token.kind != :text || isempty(token.text)
+        return "", false
+    end
+
+    first_char_i = firstindex(token.text)
+    delimiter = string(token.text[first_char_i])
+    mapped = get(STRETCH_DELIMITER_TOKEN_MAP, delimiter, "")
+    if isempty(mapped)
+        return "", false
+    end
+
+    next_i = nextind(token.text, first_char_i)
+    if next_i <= lastindex(token.text)
+        tokens[idx[]] = LatexToken(:text, token.text[next_i:end])
+    else
+        idx[] += 1
+    end
+    return mapped, true
+end
+
+"""Parse runs until a matching `\\right` marker at current nesting depth."""
+function parse_runs_until_right(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    runs = LatexRun[]
+    while idx[] <= length(tokens)
+        token = tokens[idx[]]
+        if token.kind == :command && token.text == STRETCH_DELIMITER_RIGHT
+            return runs, true
+        end
+
+        if token.kind == :lbrace
+            idx[] += 1
+            append!(runs, parse_sequence(tokens, idx, true))
+            continue
+        end
+
+        append!(runs, parse_atom(tokens, idx))
+        consume_scripts!(runs, tokens, idx)
+    end
+
+    return runs, false
+end
+
+"""Return canonical text for one structured stretch-delimiter expression."""
+stretch_delimiter_text(left::String, inner::String, right::String) = "\\left" * left * inner * "\\right" * right
+
+"""Parse one `\\left ... \\right` expression and validate delimiter tokens."""
+function parse_stretch_delimiter_run(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    left_delimiter, left_ok = parse_stretch_delimiter_token(tokens, idx)
+    if !left_ok
+        return latex_atom_run("\\left", :math), false
+    end
+
+    children, has_right = parse_runs_until_right(tokens, idx)
+    if !has_right
+        return latex_atom_run(stretch_delimiter_text(left_delimiter, plain_text_for_runs(children), STRETCH_DELIMITER_NONE), :math), false
+    end
+
+    idx[] += 1
+    right_delimiter, right_ok = parse_stretch_delimiter_token(tokens, idx)
+    if !right_ok
+        return latex_atom_run(stretch_delimiter_text(left_delimiter, plain_text_for_runs(children), STRETCH_DELIMITER_NONE), :math), false
+    end
+
+    return latex_stretch_delimiter_run(left_delimiter, right_delimiter, children), true
 end
 
 """Serialize one semantic run back into deterministic plain-text LaTeX form."""
@@ -535,6 +672,9 @@ function latex_run_serialized_text(run::LatexRun)
     end
     if run.segment == :fraction
         return "\\frac{" * child_text * "}{" * secondary_child_text * "}"
+    end
+    if run.segment == :stretch_delimiter
+        return stretch_delimiter_text(run.text, child_text, secondary_child_text)
     end
     return run.text
 end
@@ -761,6 +901,14 @@ end
 """Build canonical fraction text from numerator/denominator strings."""
 fraction_text(numerator::String, denominator::String) = "{" * numerator * "}/{" * denominator * "}"
 
+"""Return right delimiter text from one stretch-delimiter run."""
+function stretch_right_delimiter(run::LatexRun)
+    if isempty(run.secondary_children)
+        return STRETCH_DELIMITER_NONE
+    end
+    return run.secondary_children[1].text
+end
+
 """Append display-style lower/upper limits in canonical LaTeX order for large operators."""
 function large_operator_with_limits(base::String, sup::String, sub::String)
     segment = base
@@ -788,6 +936,45 @@ function large_operator_command_text(kind::Int32)
         return "\\lim"
     end
     return ""
+end
+
+"""Map delimiter token text to bridge delimiter kind constants."""
+bridge_delimiter_kind(delimiter::String) = get(BRIDGE_DELIMITER_KIND_MAP, delimiter, Int32(0))
+
+"""Render one recursive non-script payload op to canonical LaTeX-ish source."""
+function latex_source_for_recursive_payload(op::MathPayloadOp)
+    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        command = large_operator_command_text(op.large_op_kind)
+        if isempty(command)
+            command = op.text
+        end
+        return large_operator_with_limits(command, op.sup_text, op.sub_text)
+    end
+
+    if op.kind == MATH_OP_FRACTION_RECURSIVE
+        numerator = latex_source_for_program(op.children)
+        denominator = latex_source_for_program(op.secondary_children)
+        return "\\frac{" * numerator * "}{" * denominator * "}"
+    end
+
+    if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
+        return stretch_delimiter_text(op.radical_index_text, latex_source_for_program(op.children), op.sup_text)
+    end
+
+    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
+        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
+        return command * latex_source_for_program(op.children) * "}"
+    end
+
+    if op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
+        inner = latex_source_for_program(op.children)
+        if !isempty(op.radical_index_text)
+            return "\\sqrt[" * op.radical_index_text * "]{" * inner * "}"
+        end
+        return "\\sqrt{" * inner * "}"
+    end
+
+    return latex_source_atom_text(op)
 end
 
 """Compile normalized runs to the recursive payload representation."""
@@ -836,34 +1023,7 @@ function latex_source_for_payload(op::MathPayloadOp)
         return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
     end
 
-    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        command = large_operator_command_text(op.large_op_kind)
-        if isempty(command)
-            command = op.text
-        end
-        return large_operator_with_limits(command, op.sup_text, op.sub_text)
-    end
-
-    if op.kind == MATH_OP_FRACTION_RECURSIVE
-        numerator = latex_source_for_program(op.children)
-        denominator = latex_source_for_program(op.secondary_children)
-        return "\\frac{" * numerator * "}{" * denominator * "}"
-    end
-
-    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
-        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
-        return command * latex_source_for_program(op.children) * "}"
-    end
-
-    if op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
-        inner = latex_source_for_program(op.children)
-        if !isempty(op.radical_index_text)
-            return "\\sqrt[" * op.radical_index_text * "]{" * inner * "}"
-        end
-        return "\\sqrt{" * inner * "}"
-    end
-
-    return latex_source_atom_text(op)
+    return latex_source_for_recursive_payload(op)
 end
 
 """Render one recursive program back to canonical LaTeX-ish source."""
@@ -890,6 +1050,10 @@ function plain_text_for_payload(op::MathPayloadOp)
         numerator = plain_text_for_program(op.children)
         denominator = plain_text_for_program(op.secondary_children)
         return fraction_text(numerator, denominator)
+    end
+
+    if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
+        return stretch_delimiter_text(op.radical_index_text, plain_text_for_program(op.children), op.sup_text)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
@@ -965,7 +1129,8 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
         op.kind == MATH_OP_SCRIPT_ATTACH ||
         op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
         op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
-    op.kind == MATH_OP_FRACTION_RECURSIVE ||
+        op.kind == MATH_OP_FRACTION_RECURSIVE ||
+        op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE ||
         op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
         op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
 end
@@ -1136,6 +1301,25 @@ function fraction_payload_op(run::LatexRun)
         denominator_payloads)
 end
 
+    """Return one recursive stretch-delimiter payload op from one structured run."""
+    function stretch_delimiter_payload_op(run::LatexRun)
+        child_payloads = math_payload_ops_for_runs(run.children)
+        left = run.text
+        right = stretch_right_delimiter(run)
+        return MathPayloadOp(
+        MATH_OP_STRETCH_DELIMITER_RECURSIVE,
+        stretch_delimiter_text(left, plain_text_for_runs(run.children), right),
+        left,
+        right,
+        "",
+        :none,
+        :none,
+        LARGE_OP_KIND_NONE,
+        :math,
+        child_payloads,
+        MathPayloadOp[])
+    end
+
 """Append one script payload op when no compatible prior payload exists."""
 function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
     push!(payloads, MathPayloadOp(
@@ -1166,6 +1350,9 @@ function payload_for_non_script_segment(run::LatexRun)
     end
     if run.segment == :fraction
         return fraction_payload_op(run)
+    end
+    if run.segment == :stretch_delimiter
+        return stretch_delimiter_payload_op(run)
     end
     return nothing
 end
@@ -1294,6 +1481,12 @@ end
 
 """Return bridge accent/radical mode codes for one payload op."""
 function math_block_mode_codes(op::MathPayloadOp)
+    if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
+        return bridge_delimiter_kind(op.radical_index_text),
+            bridge_delimiter_kind(op.sup_text),
+            Int32(0)
+    end
+
     accent_mode = op.accent_mode == :overline ? 
         OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
         (op.accent_mode == :underline ?

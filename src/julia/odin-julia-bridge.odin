@@ -74,6 +74,21 @@ BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM :: 1
 BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD :: 2
 BRIDGE_DYNVIEW_LARGE_OP_KIND_INT :: 3
 BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :: 4
+BRIDGE_DYNVIEW_DELIMITER_KIND_NONE :: 0
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN :: 1
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN :: 2
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACKET :: 3
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACKET :: 4
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACE :: 5
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACE :: 6
+BRIDGE_DYNVIEW_DELIMITER_KIND_VERT :: 7
+BRIDGE_DYNVIEW_DELIMITER_KIND_DOUBLE_VERT :: 8
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_CEIL :: 9
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_CEIL :: 10
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_FLOOR :: 11
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_FLOOR :: 12
+BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_ANGLE :: 13
+BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_ANGLE :: 14
 
 BRIDGE_DYNVIEW_FONT_FLAG_NONE :: i32(core.Font_Variant_Flags.None)
 BRIDGE_DYNVIEW_FONT_FLAG_ITALIC :: i32(core.Font_Variant_Flags.Italic)
@@ -147,6 +162,7 @@ BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE :: 7
 BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE :: 8
 BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE :: 9
 BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE :: 10
+BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE :: 11
 
 Bridge_Point_View :: struct {
     valid: bool,
@@ -1069,6 +1085,7 @@ dynview_math_block_from_ops :: proc "c" (
     recursive_radical_count := 0
     recursive_script_count := 0
     recursive_fraction_count := 0
+    recursive_stretch_count := 0
     for i in 0..<int(op_count) {
         if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE {
             recursive_accent_count += 1
@@ -1082,12 +1099,15 @@ dynview_math_block_from_ops :: proc "c" (
         if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE {
             recursive_fraction_count += 2
         }
+        if ops[i].kind == BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE && ops[i].child_program_id > 0 {
+            recursive_stretch_count += 1
+        }
     }
 
-    if cache^.math_program_count + 1 + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if cache^.math_program_count + 1 + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
-    if cache^.math_command_count + int(op_count) + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+    if cache^.math_command_count + int(op_count) + recursive_accent_count + recursive_radical_count + recursive_script_count + recursive_fraction_count + recursive_stretch_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
@@ -1121,6 +1141,8 @@ dynview_math_block_from_ops :: proc "c" (
             return .ScriptAttachRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE:
             return .FracRecursive, true
+        case BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE:
+            return .StretchDelimiterRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE:
             return .LargeOpRecursive, true
         case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR:
@@ -1255,6 +1277,35 @@ dynview_math_block_from_ops :: proc "c" (
 
                 child_program_id = i32(numerator_program_id)
                 secondary_child_program_id = i32(denominator_program_id)
+            }
+            if command_kind == .StretchDelimiterRecursive {
+                child_direct_count := int(op.child_program_id)
+                if child_direct_count > 0 {
+                    if next_program_id^ >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+                        return BRIDGE_STATUS_INVALID_ARGUMENT
+                    }
+
+                    child_host_program_id := next_program_id^
+                    next_program_id^ += 1
+                    status := dynview_import_math_program_from_ops(
+                        cache,
+                        block_id,
+                        ops,
+                        op_count,
+                        cursor,
+                        child_direct_count,
+                        blob_offset,
+                        blob_count,
+                        child_host_program_id,
+                        next_program_id)
+                    if status != BRIDGE_STATUS_OK {
+                        return status
+                    }
+
+                    child_program_id = i32(child_host_program_id)
+                } else {
+                    child_program_id = 0
+                }
             }
 
             cache^.math_commands[command_start + local_index] = core.Ui_Dynview_Command{
