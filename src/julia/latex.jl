@@ -5,6 +5,11 @@ using ..OdinJuliaBridge
 export PARSER_GRAMMAR_VERSION,
     clear_cache!,
     cache_size,
+    cache_max_entries,
+    prune_cache!,
+    invalidate_cache_for_source!,
+    invalidate_cache_for_style!,
+    invalidate_cache_for_grammar!,
     resolve_cache_entry,
     parse_latex,
     compile_emit_program,
@@ -24,6 +29,7 @@ const ACCENT_BAR_THICKNESS = Float32(0.08)
 const ACCENT_BAR_OFFSET = Float32(0.10)
 const RADICAL_BAR_THICKNESS = Float32(0.08)
 const RADICAL_BAR_OFFSET = Float32(0.10)
+const PARSE_CACHE_MAX_ENTRIES = 256
 const MATH_OP_TEXT_RUN = Int32(1)
 const MATH_OP_MATH_GLYPH_RUN = Int32(2)
 const MATH_OP_SCRIPT_ATTACH = Int32(3)
@@ -247,6 +253,7 @@ struct ParseCacheEntry
 end
 
 const parse_cache = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
+const parse_cache_order = Tuple{String, Int32, Int32}[]
 
 const EMPTY_CHILD_RUNS = LatexRun[]
 
@@ -291,11 +298,92 @@ latex_matrix_run(rows::Int, cols::Int, cells::Vector{LatexRun}) =
 """Clear all cached parse/compile entries."""
 function clear_cache!()
     empty!(parse_cache)
+    empty!(parse_cache_order)
     return nothing
 end
 
 """Return current cache entry count."""
 cache_size() = length(parse_cache)
+
+"""Return hard cache-entry limit used for automatic eviction."""
+cache_max_entries() = PARSE_CACHE_MAX_ENTRIES
+
+"""Drop one cached key from insertion-order bookkeeping if present."""
+function cache_order_remove_key!(key::Tuple{String, Int32, Int32})
+    index = findfirst(isequal(key), parse_cache_order)
+    if index !== nothing
+        deleteat!(parse_cache_order, index)
+    end
+    return nothing
+end
+
+"""Mark one cache key as most recently inserted/resolved."""
+function cache_order_touch_key!(key::Tuple{String, Int32, Int32})
+    cache_order_remove_key!(key)
+    push!(parse_cache_order, key)
+    return nothing
+end
+
+"""Trim cache entries so at most `limit` entries remain."""
+function prune_cache!(limit::Integer=PARSE_CACHE_MAX_ENTRIES)
+    target = max(0, Int(limit))
+    while length(parse_cache_order) > target
+        stale_key = popfirst!(parse_cache_order)
+        delete!(parse_cache, stale_key)
+    end
+    return cache_size()
+end
+
+"""Drop all cached entries for one exact source string."""
+function invalidate_cache_for_source!(source::AbstractString)
+    source_text = String(source)
+    stale_keys = Tuple{String, Int32, Int32}[]
+    for key in keys(parse_cache)
+        if key[1] == source_text
+            push!(stale_keys, key)
+        end
+    end
+
+    for key in stale_keys
+        delete!(parse_cache, key)
+        cache_order_remove_key!(key)
+    end
+    return length(stale_keys)
+end
+
+"""Drop all cached entries for one style-profile id."""
+function invalidate_cache_for_style!(style_profile::Integer)
+    style_id = Int32(style_profile)
+    stale_keys = Tuple{String, Int32, Int32}[]
+    for key in keys(parse_cache)
+        if key[3] == style_id
+            push!(stale_keys, key)
+        end
+    end
+
+    for key in stale_keys
+        delete!(parse_cache, key)
+        cache_order_remove_key!(key)
+    end
+    return length(stale_keys)
+end
+
+"""Drop all cached entries for one parser grammar version id."""
+function invalidate_cache_for_grammar!(grammar_version::Integer)
+    grammar_id = Int32(grammar_version)
+    stale_keys = Tuple{String, Int32, Int32}[]
+    for key in keys(parse_cache)
+        if key[2] == grammar_id
+            push!(stale_keys, key)
+        end
+    end
+
+    for key in stale_keys
+        delete!(parse_cache, key)
+        cache_order_remove_key!(key)
+    end
+    return length(stale_keys)
+end
 
 """Tokenize source into command/group/script/plain-text tokens."""
 function tokenize_latex(source::String)
@@ -1223,6 +1311,7 @@ function resolve_cache_entry(source::AbstractString; style_profile::Integer=DEFA
     key = (String(source), PARSER_GRAMMAR_VERSION, Int32(style_profile))
     existing = get(parse_cache, key, nothing)
     if existing !== nothing
+        cache_order_touch_key!(key)
         return existing
     end
 
@@ -1239,6 +1328,8 @@ function resolve_cache_entry(source::AbstractString; style_profile::Integer=DEFA
         normalized_ast,
         program)
     parse_cache[key] = entry
+    cache_order_touch_key!(key)
+    _ = prune_cache!(PARSE_CACHE_MAX_ENTRIES)
     return entry
 end
 
