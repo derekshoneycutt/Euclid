@@ -18,8 +18,9 @@ using ..EuclidAnimations
 using ..Scratchpad
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
-    DEFAULT_TRANSFORM_DURATION, DEFAULT_COLOR, DEFAULT_BRUSH,
-    point!, line!, circle!,
+    DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
+    DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
+    point!, line!, circle!, highlight_pen!, highlight_compass!,
     translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!, rotate_points_z!,
     reflect2d_points!, reflect2d_points_x_axis!, reflect2d_points_y_axis!,
     reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
@@ -29,8 +30,13 @@ const DEFAULT_POINT_DURATION = 5.5f0
 const DEFAULT_LINE_DURATION = 7.5f0
 const DEFAULT_CIRCLE_DURATION = 8.0f0
 const DEFAULT_TRANSFORM_DURATION = 2.5f0
+const DEFAULT_HIGHLIGHT_DURATION = 3.2f0
 const DEFAULT_COLOR = :steelblue
+const DEFAULT_HIGHLIGHT_COLOR = :lightgreen
 const DEFAULT_BRUSH = 5f0
+const HIGHLIGHT_TOOL_TOP_Z = 1.4f0
+const HIGHLIGHT_DESCEND_SHARE = 0.2f0
+const HIGHLIGHT_PASS_SHARE = 0.3f0
 
 const TWO_PI_F32 = Float32(2π)
 
@@ -66,6 +72,22 @@ struct CirclePayload <: ReplDrawPayload
     angle_theta::Float32
     color
     brush::Float32
+end
+
+struct PenHighlightPayload <: ReplDrawPayload
+    start_pos::Vector{Float32}
+    end_pos::Vector{Float32}
+    color
+end
+
+struct CompassHighlightPayload <: ReplDrawPayload
+    center::Vector{Float32}
+    start_pos::Vector{Float32}
+    end_pos::Vector{Float32}
+    angle_theta::Float32
+    radius::Float32
+    color
+    filled::Bool
 end
 
 abstract type TransformSpec end
@@ -157,6 +179,26 @@ function validated_end_theta(value)::Float32
     return theta
 end
 
+"""Validate highlight angle theta as a finite Float32 value."""
+function validated_angle_theta(value)::Float32
+    theta = Float32(value)
+    if !isfinite(theta)
+        throw(ArgumentError("angle_theta must be finite"))
+    end
+
+    return theta
+end
+
+"""Validate highlight radius as finite and positive Float32."""
+function validated_radius(value)::Float32
+    radius = Float32(value)
+    if !isfinite(radius) || radius <= 0f0
+        throw(ArgumentError("radius must be finite and > 0f0"))
+    end
+
+    return radius
+end
+
 """Return a copied 3D Float32 vector, failing when length is below 3."""
 function vec3(name::AbstractString, value::Vector{Float32})
     if length(value) < 3
@@ -226,6 +268,11 @@ function point_on_circle(center::Vector{Float32}, radius::Float32, theta::Float3
         center[2] + radius * Float32(sin(theta)),
         center[3],
     ]
+end
+
+"""Return XY polar angle from center to point as Float32."""
+function theta_from_center(center::Vector{Float32}, point::Vector{Float32})
+    return Float32(atan(point[2] - center[2], point[1] - center[1]))
 end
 
 """Apply final visible state for a point payload."""
@@ -329,6 +376,159 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
     end
 end
 
+"""Render one frame of pen highlight with descend-pass-pass-rise sequencing."""
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::PenHighlightPayload)
+
+    descend_duration = duration * HIGHLIGHT_DESCEND_SHARE
+    pass_duration = duration * HIGHLIGHT_PASS_SHARE
+    first_pass_start = descend_duration
+    second_pass_start = first_pass_start + pass_duration
+    rise_start = second_pass_start + pass_duration
+    rise_duration = max(duration - rise_start, 1f-5)
+
+    if elapsed < first_pass_start
+        EuclidAnimations.animate_pen_descend(
+            state_ptr,
+            elapsed,
+            descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z,
+            payload.start_pos[1],
+            payload.start_pos[2],
+        )
+        return
+    end
+
+    if elapsed < second_pass_start
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr,
+            elapsed - first_pass_start,
+            pass_duration,
+            payload.start_pos,
+            payload.end_pos,
+            payload.color,
+        )
+        return
+    end
+
+    if elapsed < rise_start
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr,
+            elapsed - second_pass_start,
+            pass_duration,
+            payload.end_pos,
+            payload.start_pos,
+            payload.color,
+        )
+        return
+    end
+
+    EuclidAnimations.animate_pen_rise(
+        state_ptr,
+        elapsed - rise_start,
+        rise_duration,
+        HIGHLIGHT_TOOL_TOP_Z,
+        payload.start_pos[1],
+        payload.start_pos[2],
+    )
+end
+
+"""Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::CompassHighlightPayload)
+
+    descend_duration = duration * HIGHLIGHT_DESCEND_SHARE
+    pass_duration = duration * HIGHLIGHT_PASS_SHARE
+    first_pass_start = descend_duration
+    second_pass_start = first_pass_start + pass_duration
+    rise_start = second_pass_start + pass_duration
+    rise_duration = max(duration - rise_start, 1f-5)
+
+    if elapsed < first_pass_start
+        EuclidAnimations.animate_compass_descend(
+            state_ptr,
+            elapsed,
+            descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z,
+            payload.center[1],
+            payload.center[2],
+            payload.start_pos[1],
+            payload.start_pos[2],
+        )
+        return
+    end
+
+    if elapsed < second_pass_start
+        render_compass_highlight_pass!(
+            state_ptr,
+            elapsed - first_pass_start,
+            pass_duration,
+            payload,
+            payload.start_pos,
+            payload.angle_theta,
+        )
+        return
+    end
+
+    if elapsed < rise_start
+        render_compass_highlight_pass!(
+            state_ptr,
+            elapsed - second_pass_start,
+            pass_duration,
+            payload,
+            payload.end_pos,
+            -payload.angle_theta,
+        )
+        return
+    end
+
+    EuclidAnimations.animate_compass_rise(
+        state_ptr,
+        elapsed - rise_start,
+        rise_duration,
+        HIGHLIGHT_TOOL_TOP_Z,
+        payload.center[1],
+        payload.center[2],
+        payload.start_pos[1],
+        payload.start_pos[2],
+    )
+end
+
+"""Render one compass highlight pass using filled or unfilled trail styling."""
+function render_compass_highlight_pass!(
+    state_ptr::Ptr{Cvoid},
+    elapsed::Float32,
+    duration::Float32,
+    payload::CompassHighlightPayload,
+    start_pos::Vector{Float32},
+    angle_theta::Float32)
+
+    if payload.filled
+        EuclidAnimations.animate_compass_fill_arc_highlight(
+            state_ptr,
+            elapsed,
+            duration,
+            payload.center,
+            start_pos,
+            angle_theta,
+            payload.radius,
+            payload.color,
+        )
+        return
+    end
+
+    EuclidAnimations.animate_compass_arc_highlight(
+        state_ptr,
+        elapsed,
+        duration,
+        payload.center,
+        start_pos,
+        angle_theta,
+        payload.radius,
+        payload.color,
+    )
+end
+
 """Render one frame of batch point translation."""
 function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
@@ -411,9 +611,9 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     end
 
     finalize_payload!(state_ptr, job.payload)
-    if job.kind == :point || job.kind == :line
+    if job.kind == :point || job.kind == :line || job.kind == :highlight_pen
         OdinJuliaBridge.hide_pen(state_ptr)
-    elseif job.kind == :circle
+    elseif job.kind == :circle || job.kind == :highlight_compass
         OdinJuliaBridge.hide_compass(state_ptr)
     end
 end
@@ -685,6 +885,84 @@ function circle!(state_ptr::Ptr{Cvoid}, center::Vector{Float32}, radius::Float32
     start_job!(state_ptr, job)
     track_managed_host!(ensure_session!(), Int(shape.hostId))
     return shape
+end
+
+"""
+Highlight one segment with pen motion and a return pass.
+
+Sequence:
+- descend at start,
+- drag start->end,
+- drag end->start,
+- rise at start.
+
+Keywords:
+- `color=:lightgreen`
+- `duration=DEFAULT_HIGHLIGHT_DURATION`
+"""
+function highlight_pen!(
+    state_ptr::Ptr{Cvoid},
+    start_pos::Vector{Float32},
+    end_pos::Vector{Float32};
+    color=DEFAULT_HIGHLIGHT_COLOR,
+    duration::Float32=DEFAULT_HIGHLIGHT_DURATION)
+
+    start_pos3 = vec3("start_pos", start_pos)
+    end_pos3 = vec3("end_pos", end_pos)
+    draw_duration = validated_duration(duration)
+
+    payload = PenHighlightPayload(start_pos3, end_pos3, color)
+    job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), nothing, payload)
+    start_job!(state_ptr, job)
+    return nothing
+end
+
+"""
+Highlight one compass arc with a return sweep.
+
+Sequence:
+- descend at pivot/start,
+- sweep start->end,
+- sweep end->start,
+- rise at start.
+
+Keywords:
+- `color=:lightgreen`
+- `filled=false`
+- `duration=DEFAULT_HIGHLIGHT_DURATION`
+"""
+function highlight_compass!(
+    state_ptr::Ptr{Cvoid},
+    center::Vector{Float32},
+    start_pos::Vector{Float32},
+    angle_theta::Real,
+    radius::Real;
+    color=DEFAULT_HIGHLIGHT_COLOR,
+    filled::Bool=false,
+    duration::Float32=DEFAULT_HIGHLIGHT_DURATION)
+
+    center3 = vec3("center", center)
+    start_pos3 = vec3("start_pos", start_pos)
+    angle_theta32 = validated_angle_theta(angle_theta)
+    radius32 = validated_radius(radius)
+    draw_duration = validated_duration(duration)
+
+    start_theta = theta_from_center(center3, start_pos3)
+    start_on_arc = point_on_circle(center3, radius32, start_theta)
+    end_on_arc = point_on_circle(center3, radius32, start_theta + angle_theta32)
+
+    payload = CompassHighlightPayload(
+        center3,
+        start_on_arc,
+        end_on_arc,
+        angle_theta32,
+        radius32,
+        color,
+        filled,
+    )
+    job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
+    start_job!(state_ptr, job)
+    return nothing
 end
 
 """

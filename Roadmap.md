@@ -150,6 +150,7 @@ After v1 is complete, the following is suggestions to evaluate next.
 - Improved Scratchpad console-like REPL
 - Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support
+- Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording! ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions

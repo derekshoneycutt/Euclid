@@ -213,3 +213,12 @@ end
     @test rendered !== nothing
     @test occursin("REPL-first geometry helpers", rendered)
 end
+
+@testset "highlight helper aliases and bindings" begin
+    @test haskey(Scratchpad.HELPER_DOC_ALIASES, "highlight_pen!")
+    @test haskey(Scratchpad.HELPER_DOC_ALIASES, "highlight_compass!")
+
+    runtime = Scratchpad.create_runtime_module(5_001)
+    @test isdefined(runtime, Symbol("highlight_pen!"))
+    @test isdefined(runtime, Symbol("highlight_compass!"))
+end

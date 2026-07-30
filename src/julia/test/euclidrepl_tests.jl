@@ -36,12 +36,71 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
 
     @test_throws ArgumentError EuclidRepl.validated_end_theta(NaN32)
 
+    @test_throws ArgumentError EuclidRepl.validated_angle_theta(Inf32)
+    @test_throws ArgumentError EuclidRepl.validated_angle_theta(NaN32)
+
+    @test_throws ArgumentError EuclidRepl.validated_radius(0f0)
+    @test_throws ArgumentError EuclidRepl.validated_radius(-1f0)
+    @test_throws ArgumentError EuclidRepl.validated_radius(Inf32)
+
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, 2f0])
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, Inf32, 3f0])
 
     @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 1f0) ≈ 1f0
+end
+
+@testset "EuclidRepl highlight APIs" begin
+    EuclidRepl.reset_scratchpad_session!()
+
+    @test_throws ArgumentError EuclidRepl.highlight_pen!(
+        TEST_STATE_PTR,
+        Float32[0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+    )
+
+    @test_throws ArgumentError EuclidRepl.highlight_compass!(
+        TEST_STATE_PTR,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        Inf32,
+        1f0,
+    )
+
+    @test_throws ArgumentError EuclidRepl.highlight_compass!(
+        TEST_STATE_PTR,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        0.5f0,
+        0f0,
+    )
+
+    @test isnothing(EuclidRepl.highlight_pen!(
+        TEST_STATE_PTR,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+    ))
+
+    pen_status = EuclidRepl.status(TEST_STATE_PTR)
+    @test pen_status.active == true
+    @test pen_status.kind == :highlight_pen
+
+    @test isnothing(EuclidRepl.highlight_compass!(
+        TEST_STATE_PTR,
+        Float32[0f0, 0f0, 0f0],
+        Float32[1f0, 0f0, 0f0],
+        π / 2,
+        1f0,
+        filled=true,
+    ))
+
+    compass_status = EuclidRepl.status(TEST_STATE_PTR)
+    @test compass_status.active == true
+    @test compass_status.kind == :highlight_compass
+
+    @test EuclidRepl.stop!(TEST_STATE_PTR) == true
+    @test EuclidRepl.status(TEST_STATE_PTR).active == false
 end
 
 @testset "EuclidRepl session lifecycle" begin

@@ -92,6 +92,10 @@ const HELPER_DOC_ALIASES = Dict(
         "line!(start_pos, end_pos; color=:steelblue, brush=5f0, duration=7.5f0)"),
     "circle!" => (:EuclidRepl, Symbol("circle!"),
         "circle!(center, radius; color=:steelblue, brush=5f0, duration=8.0f0)"),
+    "highlight_pen!" => (:EuclidRepl, Symbol("highlight_pen!"),
+        "highlight_pen!(start_pos, end_pos; color=:lightgreen, duration=3.2f0)"),
+    "highlight_compass!" => (:EuclidRepl, Symbol("highlight_compass!"),
+        "highlight_compass!(center, start_pos, angle_theta, radius; color=:lightgreen, filled=false, duration=3.2f0)"),
     "translate_points!" => (:EuclidRepl, Symbol("translate_points!"),
         "translate_points!(point_ids, start_positions, displacement; duration=2.5f0)"),
     "rotate_points!" => (:EuclidRepl, Symbol("rotate_points!"),
@@ -149,6 +153,8 @@ function create_runtime_module(session_id::Int)
         point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
         line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
         circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
+        highlight_pen!(args...; kwargs...) = EuclidRepl.highlight_pen!(state_ptr, args...; kwargs...)
+        highlight_compass!(args...; kwargs...) = EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
         translate_points!(args...; kwargs...) = EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
         rotate_points!(args...; kwargs...) = EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
         rotate_points_x!(args...; kwargs...) = EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
