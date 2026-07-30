@@ -314,7 +314,7 @@ draw_tree_node_row :: proc(
         }
     }
 
-    ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
+    view_core.ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
         UI_TEXT_COLOR, font)
 
     if list_item_result.clicked {

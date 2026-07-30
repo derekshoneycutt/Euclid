@@ -2,6 +2,8 @@ package ui
 
 import "../../core"
 import "../../julia"
+import view_core "../core"
+import dynview "./dynview"
 
 import rl "vendor:raylib"
 
@@ -209,14 +211,14 @@ draw_scratchpad_output_and_prompt :: proc(
     }
 
     output_text_legacy := julia.call_current_animation_get_view_text(state)
-    output_text := dynview_compiled_scratchpad_text_or_fallback(
+    output_text := dynview.compiled_scratchpad_text_or_fallback(
         ui_runtime,
         output_panel,
         TREE_FONT_SIZE,
         TEXT_WRAP_ADVANCE,
-        DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+        dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         output_text_legacy)
-    content_h := dynview_scratchpad_content_height_or_fallback(
+    content_h := dynview.scratchpad_content_height_or_fallback(
         ui_runtime,
         output_panel,
         TEXT_PADDING,
@@ -224,7 +226,7 @@ draw_scratchpad_output_and_prompt :: proc(
         TEXT_ROW_HEIGHT,
         output_text_legacy)
     max_scroll := max(0.0, content_h - output_panel.height)
-    scroll_step := dynview_scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
+    scroll_step := dynview.scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
 
     output_len := len(output_text)
     if output_len != ui_runtime^.scratchpad_last_output_len {
@@ -261,7 +263,7 @@ draw_scratchpad_output_and_prompt :: proc(
         ui_runtime^.scratchpad_follow_output = true
     }
 
-    dynview_refresh_scratchpad_copy_targets(
+    dynview.refresh_scratchpad_copy_targets(
         ui_runtime,
         output_panel,
         state^.ui_runtime.view_text_scroll_y,
@@ -270,9 +272,9 @@ draw_scratchpad_output_and_prompt :: proc(
         DYNVIEW_COPY_ICON_SIZE,
         DYNVIEW_COPY_ICON_X_PAD)
 
-    draw_dynview_copy_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
+    view_core.draw_copy_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
 
-    dynview_draw_scratchpad_styled_or_fallback(
+    dynview.draw_scratchpad_styled_or_fallback(
         state,
         ui_runtime,
         output_text_legacy,
@@ -285,7 +287,7 @@ draw_scratchpad_output_and_prompt :: proc(
         TREE_FONT_SIZE,
         UI_TEXT_COLOR)
 
-    _ = draw_dynview_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse_input)
+    _ = view_core.draw_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse_input)
 
     pre_drag_scroll := state^.ui_runtime.view_text_scroll_y
     scratch_scroll_end := scroll_container_end(

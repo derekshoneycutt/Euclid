@@ -1,4 +1,4 @@
-package ui
+package view_core
 
 import "../../core"
 
@@ -14,12 +14,12 @@ COPY_ICON_PRESS_FALL_SPEED :: 24.0
 COPY_ICON_CLICK_LINGER_SECONDS :: 0.1
 
 copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32 {
-    t :=  clamp(speed * dt, 0.0, 1.0)
+    t := clamp(speed * dt, 0.0, 1.0)
     return current + (target - current) * t
 }
 
 //   Draw soft hover backgrounds for copy-enabled dynview blocks.
-draw_dynview_copy_hover_backgrounds :: proc(
+draw_copy_hover_backgrounds :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     mouse: rl.Vector2) {
 
@@ -162,7 +162,55 @@ copy_icon_linger_t :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, is_l
         return 0
     }
 
-    return  clamp(runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
+    return clamp(runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
+}
+
+//   Draw a copy icon button using shared icon primitives with hover/press feedback.
+draw_copy_icon_button :: proc(
+    rect: rl.Rectangle,
+    hover_t: f32,
+    press_t: f32,
+    hovered_icon: bool,
+    mouse_input: Mouse_Input_State) -> bool {
+
+    slot_rect := rect
+    if slot_rect.width <= 0 || slot_rect.height <= 0 {
+        return false
+    }
+
+    use_hover_t := clamp(hover_t, 0.0, 1.0)
+    use_press_t := clamp(press_t, 0.0, 1.0)
+
+    icon_color := UI_TEXT_COLOR
+    if use_press_t > 0 {
+        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
+        icon_color = BACKGROUND_COLOR
+    }
+
+    if use_press_t > 0 {
+        factor := 1.0 - (0.45 * use_press_t)
+        icon_color = rl.Color{
+            u8(f32(icon_color.r) * factor),
+            u8(f32(icon_color.g) * factor),
+            u8(f32(icon_color.b) * factor),
+            icon_color.a,
+        }
+    }
+
+    scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t - COPY_ICON_PRESS_SCALE_SUB * use_press_t
+    cx := slot_rect.x + slot_rect.width * 0.5
+    cy := slot_rect.y + slot_rect.height * 0.5
+    icon_w := slot_rect.width * max(0.4, scale)
+    icon_h := slot_rect.height * max(0.4, scale)
+    icon_rect := rl.Rectangle{cx - icon_w * 0.5, cy - icon_h * 0.5, icon_w, icon_h}
+
+    if use_press_t > 0 {
+        icon_rect.x += 0.5
+        icon_rect.y += 0.5
+    }
+
+    draw_copy_icon(icon_rect, icon_color)
+    return hovered_icon && mouse_input.left_released
 }
 
 //   Draw one copy icon with hover and click feedback, returning click hit state.
@@ -198,18 +246,7 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    button_result := draw_icon_button_with_visual_state(Icon_Button_Params{
-        id = int(target.block_id),
-        rect = target.rect,
-        icon_id = .Copy,
-        toggle = false,
-        mouse = mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = target.rect,
-        interaction_enabled = true,
-        inset_scale = 1.0,
-    }, hover_t, press_visual, false)
-    return button_result.clicked
+    return draw_copy_icon_button(target.rect, hover_t, press_visual, hovered_icon, mouse_input)
 }
 
 //   Resolve per-frame copy-icon hover/press ownership and animation transitions.
@@ -228,8 +265,30 @@ copy_icon_update_runtime_state :: proc(
     copy_icon_update_transition_values(runtime, dt)
 }
 
+//   Return compiled copy payload string for one hit target index.
+copy_target_payload :: proc(runtime: ^core.Ui_Dynview_Runtime, target_index: int) -> string {
+    if runtime == nil {
+        return ""
+    }
+
+    cache := &runtime^.compile_cache
+    if target_index < 0 || target_index >= cache^.copy_hit_target_count {
+        return ""
+    }
+
+    target := cache^.copy_hit_targets[target_index]
+    if target.payload_offset < 0 || target.payload_len <= 0 {
+        return ""
+    }
+    if target.payload_offset + target.payload_len > cache^.compiled_copy_payload_len {
+        return ""
+    }
+
+    return string(cache^.compiled_copy_payload[target.payload_offset:target.payload_offset + target.payload_len])
+}
+
 //   Draw per-block copy icons and return whether one was clicked.
-draw_dynview_copy_icons :: proc(
+draw_copy_icons :: proc(
     runtime: ^core.Ui_Dynview_Runtime,
     panel: rl.Rectangle,
     mouse_input: Mouse_Input_State) -> bool {
@@ -260,7 +319,7 @@ draw_dynview_copy_icons :: proc(
         return false
     }
 
-    payload := dynview_copy_target_payload(runtime, clicked_index)
+    payload := copy_target_payload(runtime, clicked_index)
     if len(payload) <= 0 {
         return false
     }

@@ -3,6 +3,7 @@ package ui
 // Shared UI constants and basic drawing helpers for panel modules.
 
 import view_core "../core"
+import dynview "./dynview"
 import "../../core"
 import "core:fmt"
 
@@ -98,15 +99,11 @@ SURFACE_COLOR :: view_core.SURFACE_COLOR
 SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
 SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 
-Mouse_Input_State :: struct {
-    position: rl.Vector2,
-    delta: rl.Vector2,
-    wheel_delta: f32,
-    left_pressed: bool,
-    left_down: bool,
-    left_released: bool,
-    timestamp_seconds: f64,
-}
+DYNVIEW_STYLE_OUTPUT :: dynview.DYNVIEW_STYLE_OUTPUT
+DYNVIEW_STYLE_CUSTOM_FONT :: dynview.DYNVIEW_STYLE_CUSTOM_FONT
+DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dynview.DYNVIEW_STYLE_CUSTOM_FONT_MASK
+
+Mouse_Input_State :: view_core.Mouse_Input_State
 
 //   Clamp a rectangle so width and height are never negative.
 clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
@@ -120,20 +117,6 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     return clamped
 }
 
-//   Capture one canonical mouse input snapshot for this UI frame.
-capture_mouse_input_state :: proc() -> Mouse_Input_State {
-    return Mouse_Input_State{
-        position = rl.GetMousePosition(),
-        delta = rl.GetMouseDelta(),
-        wheel_delta = rl.GetMouseWheelMove(),
-        left_pressed = rl.IsMouseButtonPressed(.LEFT),
-        left_down = rl.IsMouseButtonDown(.LEFT),
-        left_released = rl.IsMouseButtonReleased(.LEFT),
-        timestamp_seconds = rl.GetTime(),
-    }
-}
-
-
 //   Render all UI panels in baseline layout.
 draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
     regions := compute_ui_regions(state^.ui_runtime.current_layout_mode)
@@ -142,7 +125,7 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         regions = compute_ui_regions(.Baseline)
     }
     state^.ui_runtime.ui_regions = regions
-    mouse_input := capture_mouse_input_state()
+    mouse_input := view_core.capture_mouse_input_state()
 
     bottom_bar := rl.Rectangle{
         regions.world_rect.x,

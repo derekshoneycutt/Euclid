@@ -1,5 +1,6 @@
 package ui
 
+import view_core "../core"
 import "../../core"
 
 import "core:fmt"
@@ -193,7 +194,7 @@ draw_settings_integer_slider :: proc(
     min_value, max_value: int,
     font: rl.Font) {
 
-    ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
+    view_core.ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     track := slider_track_rect(panel, row_y)
     hit := slider_hit_rect(track)
@@ -231,7 +232,7 @@ draw_settings_integer_slider :: proc(
         UI_BORDER_COLOR)
     rl.DrawRectangleRec(knob_draw, knob_color)
 
-    ui_text(fmt.tprintf("%d", clamped),
+    view_core.ui_text(fmt.tprintf("%d", clamped),
         int(panel.x + panel.width - SETTINGS_PANEL_INSET - 32), int(row_y),
         UI_TEXT_COLOR, font)
 }

@@ -7,10 +7,10 @@
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Scratchpad Architecture (Interactive Runtime Surface)](#scratchpad-architecture-interactive-runtime-surface)
 1. [Dynview Text Engine (Hybrid-Immediate Rendering)](#dynview-text-engine-hybrid-immediate-rendering)
+1. [Dynamic LaTeX Pipeline (Julia Parse + Odin Layout)](#dynamic-latex-pipeline-julia-parse--odin-layout)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
-1. [Isometric Projection and Right-Hand Rule](#isometric-projection-and-right-hand-rule)
 1. [Practical Contributor Guide](#practical-contributor-guide)
 1. [Key Architecture Takeaways](#key-architecture-takeaways)
 
@@ -110,46 +110,88 @@ like an embedded REPL control plane.
 - Queue/history/output are bounded with retention caps and overflow behavior.
 - Runtime diagnostics are exposed through `:stats` counters.
 
-Primary files:
-
-- `src/view/ui/scratchpad_panel.odin`
-- `src/julia/scratchpad.jl`
-- `src/julia/euclidrepl.jl`
-- `src/julia/script.jl`
-
 ---
 
 ## Dynview Text Engine (Hybrid-Immediate Rendering)
 
-Dynview is hybrid in a specific sense:
+Dynview now has 2 parallel surfaces every frame:
 
-- Julia authors text in an immediate-style way each frame.
-- Odin evaluates and renders that text through retained dynview caches.
-- Input can be plain fallback text or structured stream content.
+- Plain fallback text (`get_view_text`) for guaranteed readability.
+- Structured command stream for styled text, inline atoms, and recursive math blocks.
 
-Runtime path:
+Story of one frame:
 
-1. Julia always returns fallback text from `get_view_text`.
-1. Julia may also emit a dynview stream via bridge calls.
-1. Odin validates stream data, updates retained cache state, and performs
-  layout/render from the cache for the frame.
-1. On stream failure, Odin renders fallback text.
+1. Julia returns fallback text and may emit dynview commands.
+1. Odin validates and compiles command buffers to cached plain/copy/layout state.
+1. If compile/layout is valid, Odin renders dynview output.
+1. If any stream stage fails, Odin falls back to plain text with no host crash.
 
 ### Architectural Contract
 
-- Odin owns stream storage, parsing, layout, interaction, and final rendering.
-- Julia owns per-frame text intent and optional dynview emission.
-- Bridge failures in dynview are non-fatal and never remove text output.
+| Ownership | Odin | Julia |
+| --- | --- | --- |
+| Runtime/UI state | Owns buffer/cache/layout/draw and copy-hit targets | Reads nothing directly |
+| Text intent | Consumes structured commands | Produces fallback + optional stream |
+| Failure semantics | Invalid stream marks cache invalid and falls back | Must treat non-OK bridge status as stop-and-fallback |
 
-### Primary Files
+---
 
-- `src/view/ui/dynview_pipeline.odin`
-- `src/view/ui/dynview_layout_cache.odin`
-- `src/view/ui/text_panel.odin`
-- `src/view/ui/scratchpad_panel.odin`
-- `src/julia/odin-julia-bridge.jl`
-- `src/julia/odin-julia-bridge.odin`
-- `src/julia/script.jl`
+## Dynamic LaTeX Pipeline (Julia Parse + Odin Layout)
+
+Dynamic LaTeX support is now a first-class dynview path, not a special case.
+The parser and compiler live in `src/julia/latex.jl`; host import, measure,
+and draw live in dynview/bridge Odin modules.
+
+### Parsing Algorithm (Julia)
+
+`src/julia/latex.jl` uses a recursive-descent parser with normalization and
+payload compilation:
+
+| Stage | Core functions in `src/julia/latex.jl` | Result |
+| --- | --- | --- |
+| Tokenize | `tokenize_latex`, `read_command_token`, `read_text_token` | `LatexToken[]` stream |
+| Parse | `parse_sequence`, `parse_atom`, `parse_command_atom`, `consume_scripts!` | `LatexRun[]` semantic tree |
+| Normalize | `normalize_runs` and script canonicalization | Stable AST form |
+| Compile | `compile_emit_program`, `math_payload_ops_for_runs` | Recursive `MathPayloadOp[]` |
+| Serialize/Cache | `resolve_cache_entry`, `latex_to_plain_text` | Cached parse + canonical fallback |
+| Bridge Encode | `bridge_math_payload_preorder`, `replay_emit_math_block!` | Flat op stream + shared text blob |
+
+Key parsing behavior now covered in tests includes nested scripts, accents,
+radicals, fractions, stretch delimiters, and matrix environments.
+
+### End-To-End Flow
+
+```mermaid
+flowchart LR
+    A[Julia source string]
+    B[src/julia/latex.jl\nparse_latex]
+    C[LatexRun tree]
+    D[compile_emit_program\nMathPayloadOp tree]
+    E[bridge_math_payload_preorder\nops + text blob]
+    F[Odin bridge\ndynview_math_block_from_ops]
+    G[Odin cache\nmath_programs/math_commands]
+    H[Odin dynview layout\nmeasure_math_program + layout_consume_math_block]
+    I[Rendered dynview math block]
+    J[Fallback plain text]
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I
+    D --> J
+```
+
+### Runtime Boundaries For LaTeX
+
+- Julia side:
+  - `replay_emit_math_block!` and `emit_latex_dynview!` emit recursive math
+    blocks through `dynview_math_block_from_ops`.
+  - Parse cache key is `(source, PARSER_GRAMMAR_VERSION, style_profile)`.
+- Odin side:
+  - `dynview_math_block_from_ops` validates spans/capacity and recursively imports
+    child programs into `math_programs` and `math_commands`.
+  - `layout_math_programs.odin` measures script/large-op/fraction/radical/matrix
+    structures before draw.
+
+Practical effect: math layout is now data-driven from Julia but rendered with
+host-side deterministic metrics and fallback safety.
 
 ---
 
@@ -225,31 +267,6 @@ This policy is strict by design.
 
 ---
 
-## Isometric Projection and Right-Hand Rule
-
-The isometric helper in `src/view/core/isomath.odin` uses a right-handed
-world-space convention.
-
-What that means in practice:
-
-- Hand-position rule used in this project: hold your **right hand palm up**,
-  curl the last three fingers naturally, and keep your thumb and index finger
-  perpendicular.
-- In that pose, the **thumb points +X** and the **index finger points +Y**.
-- Therefore, by the right-hand rule (`X × Y = Z`), **+Z is up**
-  (height/elevation).
-- Positive rotation follows the right-hand rule around each axis: curl your right-hand
-  fingers in the rotation direction; your thumb points toward the positive axis.
-
-Projection note:
-
-- The projection maps world coordinates into screen coordinates, so signs in the
-  formula account for screen-space Y increasing downward.
-- In effect, increasing `coord.z` renders higher on screen, consistent with
-  treating +Z as world up.
-
----
-
 ## Build and Packaging Model
 
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
@@ -303,4 +320,6 @@ make animations "fit in".
 - The app is **host-driven**: Odin controls lifecycle, simulation pacing, rendering, and core state.
 - Julia is **content-driven**: scripts define what animation behavior runs and what geometry/tools are manipulated.
 - The bridge is the contract: keep Odin exports and Julia wrappers aligned.
+- Dynview is now a dual-path text system: fallback plain text plus validated structured streams.
+- LaTeX is parsed and compiled in Julia (`src/julia/latex.jl`) and laid out/rendered in Odin dynview.
 - Assets are packaged and loaded at runtime, enabling script/content iteration without redesigning host architecture.

@@ -44,6 +44,10 @@ SURFACE_COLOR :: rl.Color{25, 25, 25, 255}
 SURFACE_EDGE_SIZE :: 0.05
 SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 
+
+TREE_FONT_SIZE :: 16
+
+
 //   Full codepoint set used for JuliaMono font loading.
 JULIA_MONO_CODE_POINTS :: []rune{
 		// Basic ASCII (0x20 to 0x7E)

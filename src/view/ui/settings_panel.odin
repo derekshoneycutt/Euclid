@@ -15,15 +15,15 @@ draw_settings_particle_stats :: proc(
     animation_entries_added: int,
     font: rl.Font) {
 
-    ui_text(fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
+    view_core.ui_text(fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y), UI_TEXT_COLOR, font)
-    ui_text(fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
+    view_core.ui_text(fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP),
         UI_TEXT_COLOR, font)
-    ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
+    view_core.ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
         UI_TEXT_COLOR, font)
-    ui_text(fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+    view_core.ui_text(fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 3),
         UI_TEXT_COLOR, font)
 }
@@ -168,7 +168,7 @@ draw_settings_view :: proc(
     _ = draw_container(panel, .Grey)
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
+    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,

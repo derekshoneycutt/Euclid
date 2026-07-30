@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 
 import "core:fmt"
 
@@ -76,12 +77,12 @@ draw_settings_gif_status :: proc(
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     font: rl.Font) {
 
-    ui_text(gif_capture_status_label(ui_runtime),
+    view_core.ui_text(gif_capture_status_label(ui_runtime),
         int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
 
     if ui_runtime.gif_status_note_len > 0 {
         note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
-        ui_text(note_text,
+        view_core.ui_text(note_text,
             int(panel.x + SETTINGS_PANEL_INSET),
             int(row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET),
             UI_TEXT_COLOR,
@@ -90,7 +91,7 @@ draw_settings_gif_status :: proc(
 
     if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
         path_text := string(ui_runtime.last_gif_path[:ui_runtime.last_gif_path_len])
-        ui_text(fmt.tprintf("Path: %s", path_text),
+        view_core.ui_text(fmt.tprintf("Path: %s", path_text),
             int(panel.x + SETTINGS_PANEL_INSET),
             int(row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET),
             UI_TEXT_COLOR,
@@ -114,7 +115,7 @@ draw_gif_view :: proc(
     _ = draw_container(panel, .Grey)
 
     gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
-    ui_text("GIF Export",
+    view_core.ui_text("GIF Export",
         int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
 
     stack_rect := rl.Rectangle{

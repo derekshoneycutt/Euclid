@@ -1,0 +1,1582 @@
+package dynview
+
+import "../../../core"
+import view_core "../../core"
+
+import rl "vendor:raylib"
+
+layout_seed_line_accumulator :: #force_inline proc(
+    acc: ^Dynview_Layout_Line_Accumulator,
+    item_start: int,
+    base_ascent, base_descent: f32) {
+
+    acc^.item_start = item_start
+    acc^.item_count = 0
+    acc^.max_ascent = base_ascent
+    acc^.max_descent = base_descent
+}
+
+//   Return wrapped column capacity for one style in active panel.
+layout_max_cols :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    style: Dynview_Text_Style) -> int {
+
+    max_cols := chars_per_row_for_style(
+        cache^.last_panel_width,
+        TEXT_PADDING,
+        cache^.last_wrap_advance,
+        style)
+    return max(1, max_cols)
+}
+
+//   Enforce style-level line-start behavior before placing content.
+layout_prepare_style_placement :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    style: Dynview_Text_Style,
+    font_size: f32) -> i32 {
+
+    if style.force_line_start && state^.col > 0 {
+        ascent, descent := style_ascent_descent(style, font_size)
+        status := layout_finalize_line(cache, state, acc, ascent, descent)
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    if state^.col == 0 && style.indent_cols > 0 {
+        state^.col = style.indent_cols
+    }
+
+    return DYNVIEW_STATUS_OK
+}
+
+//   Reserve a new layout item slot and append a prepared item.
+layout_push_item :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    item: core.Ui_Dynview_Layout_Item) -> i32 {
+
+    if cache^.layout_item_count >= len(cache^.layout_items) {
+        return DYNVIEW_STATUS_OUT_OF_CAPACITY
+    }
+
+    item_slot := &cache^.layout_items[cache^.layout_item_count]
+    item_slot^ = item
+    item_slot^.block_id = state^.active_block_id
+    item_slot^.line_index = state^.line_index
+    item_slot^.col_start = state^.col
+    item_slot^.x_offset = f32(state^.col) * effective_advance(
+        style_by_id(item.style_id),
+        cache^.last_wrap_advance)
+
+    cache^.layout_item_count += 1
+    state^.col += max(1, item.col_span)
+    acc^.item_count += 1
+    acc^.max_ascent = max(acc^.max_ascent, item.ascent)
+    acc^.max_descent = max(acc^.max_descent, item.descent)
+    return DYNVIEW_STATUS_OK
+}
+
+//   Apply per-item vertical offsets from finalized baseline metrics.
+layout_apply_item_offsets :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    start_index, item_count: int,
+    line_height: f32) {
+
+    item_end := start_index + item_count
+    for item_index in start_index..<item_end {
+        item := &cache^.layout_items[item_index]
+        item^.y_offset = (line_height - item^.draw_height) * 0.5
+    }
+}
+
+//   Advance state after one line finalization.
+layout_advance_after_line :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    line_height, base_ascent, base_descent: f32) {
+
+    cache^.layout_line_count += 1
+    state^.line_index += 1
+    state^.col = 0
+    state^.y_offset += line_height + state^.line_gap
+    layout_seed_line_accumulator(acc, cache^.layout_item_count, base_ascent, base_descent)
+}
+
+//   Finalize one layout line and compute y-offsets from per-item ascent/descent.
+layout_finalize_line :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    base_ascent, base_descent: f32) -> i32 {
+
+    if state^.line_index >= len(cache^.layout_lines) {
+        return DYNVIEW_STATUS_OUT_OF_CAPACITY
+    }
+
+    line_height := max(1.0, acc^.max_ascent + acc^.max_descent)
+    line := &cache^.layout_lines[state^.line_index]
+    line^.item_start = acc^.item_start
+    line^.item_count = acc^.item_count
+    line^.y_offset = state^.y_offset
+    line^.line_height = line_height
+    line^.baseline = acc^.max_ascent
+    line^.max_ascent = acc^.max_ascent
+    line^.max_descent = acc^.max_descent
+
+    layout_apply_item_offsets(cache, line^.item_start, line^.item_count, line^.line_height)
+    layout_advance_after_line(cache, state, acc, line_height, base_ascent, base_descent)
+    return DYNVIEW_STATUS_OK
+}
+
+//   Finalize current line when wrapping a multi-line item is required.
+layout_finalize_for_wrap :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    ascent, descent: f32) -> i32 {
+
+    if state^.col < 0 {
+        return DYNVIEW_STATUS_ILLEGAL_STATE
+    }
+
+    return layout_finalize_line(cache, state, acc, ascent, descent)
+}
+
+//   Build a text-run layout item for one wrapped line segment.
+text_run_item :: #force_inline proc(
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    wrap_advance: f32,
+    line_start, line_byte_len, line_col_span: int,
+    ascent, descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    return core.Ui_Dynview_Layout_Item{
+        kind = .TextRun,
+        style_id = cmd.style_id,
+        col_span = line_col_span,
+        text_offset = cmd.text_offset + line_start,
+        text_len = line_byte_len,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+    }
+}
+
+//   Consume one wrapped text segment and optionally force a line break.
+layout_push_wrapped_text_segment :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    line_start, line_byte_len, line_col_span: int,
+    should_break: bool,
+    ascent, descent: f32) -> i32 {
+
+    item := text_run_item(
+        cmd,
+        style,
+        cache^.last_wrap_advance,
+        line_start,
+        line_byte_len,
+        line_col_span,
+        ascent,
+        descent)
+
+    status := layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    if should_break {
+        return layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+    }
+
+    return DYNVIEW_STATUS_OK
+}
+
+//   Lay out one wrapped text command and return the last line touched.
+layout_consume_text_run :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    text: string,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    if len(text) <= 0 {
+        return DYNVIEW_STATUS_OK, -1
+    }
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    ascent, descent := style_ascent_descent(style, font_size)
+    last_line := -1
+    start := 0
+    for start < len(text) {
+        if state^.col >= max_cols {
+            status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+            if status != DYNVIEW_STATUS_OK {
+                return status, last_line
+            }
+        }
+
+        available := max_cols - state^.col
+        if available <= 0 {
+            status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+            if status != DYNVIEW_STATUS_OK {
+                return status, last_line
+            }
+            continue
+        }
+
+        line_start, line_end, next_start := view_core.next_wrapped_text_span(text, start, available)
+        line_col_span := view_core.text_codepoint_count_span(text, line_start, line_end)
+        line_byte_len := line_end - line_start
+        if line_col_span <= 0 || line_byte_len <= 0 {
+            break
+        }
+
+        status := layout_push_wrapped_text_segment(
+            cache,
+            state,
+            acc,
+            cmd,
+            style,
+            line_start,
+            line_byte_len,
+            line_col_span,
+            next_start < len(text),
+            ascent,
+            descent)
+        if status != DYNVIEW_STATUS_OK {
+            return status, last_line
+        }
+
+        last_line = state^.line_index
+        if next_start <= start {
+            break
+        }
+
+        start = next_start
+        if next_start < len(text) {
+            last_line = state^.line_index - 1
+        }
+    }
+
+    return DYNVIEW_STATUS_OK, last_line
+}
+
+//   Lay out one premeasured recursive math block as an atomic non-wrapping inline item.
+layout_consume_math_block :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    program, ok := math_program_from_command(cache, cmd)
+    if !ok {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT, -1
+    }
+    if !measure_math_program(cache, buffer, program, font_size) {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+    cols := 1
+    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    if base_advance > 0 {
+        cols = max(cols, int(program^.draw_width / base_advance))
+        if f32(cols) * base_advance < program^.draw_width {
+            cols += 1
+        }
+    }
+    cols = min(max_cols, max(1, cols))
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := core.Ui_Dynview_Layout_Item{
+        kind = .MathBlock,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        col_span = cols,
+        draw_width = program^.draw_width,
+        draw_height = program^.ascent + program^.descent,
+        ascent = program^.ascent,
+        descent = program^.descent,
+        visual_padding_top = program^.visual_padding_top,
+        visual_padding_bottom = program^.visual_padding_bottom,
+    }
+
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Lay out one script-attach command as a single inline atom with stacked script metrics.
+layout_consume_script_attach :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    base_text := text_span_from_buffer(
+        buffer,
+        cmd.script_base_text_offset,
+        cmd.script_base_text_len)
+    sup_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sup_text_offset,
+        cmd.script_sup_text_len)
+    sub_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sub_text_offset,
+        cmd.script_sub_text_len)
+
+    base_cols := max(1, view_core.text_codepoint_count(base_text))
+    sup_cols := view_core.text_codepoint_count(sup_text)
+    sub_cols := view_core.text_codepoint_count(sub_text)
+    script_cols := max(sup_cols, sub_cols)
+
+    max_cols := layout_max_cols(cache, style)
+    cols := base_cols + script_cols
+    if cols <= 0 {
+        cols = 1
+    }
+
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    script_style := style_by_id(cmd.script_style_id)
+    script_scale := max(0.2, cmd.script_scale)
+    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
+        font_size,
+        script_scale,
+        cmd.script_sup_raise,
+        cmd.script_sub_drop)
+    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
+    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
+    ascent := text_ascent
+    descent := text_descent
+    if sup_cols > 0 {
+        ascent = max(ascent, script_ascent + sup_raise_px + script_top_pad)
+    }
+    if sub_cols > 0 {
+        descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
+    }
+
+    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
+    gap_px := max(1.0, cmd.script_gap * font_size)
+    base_width := f32(base_cols) * base_advance
+    script_width := f32(script_cols) * script_advance
+    draw_width := base_width
+    if script_cols > 0 {
+        draw_width += gap_px + script_width
+    }
+
+    item := core.Ui_Dynview_Layout_Item{
+        kind = .ScriptAttach,
+        style_id = cmd.style_id,
+        col_span = cols,
+        text_offset = cmd.script_base_text_offset,
+        text_len = cmd.script_base_text_len,
+        script_sup_text_offset = cmd.script_sup_text_offset,
+        script_sup_text_len = cmd.script_sup_text_len,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        script_style_id = cmd.script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = cmd.script_sup_raise,
+        script_sub_drop = cmd.script_sub_drop,
+        script_gap = cmd.script_gap,
+        draw_width = draw_width,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+    }
+
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Lay out one accent-bar command as an atomic text span with over/underline metrics.
+layout_consume_accent_bar :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    base_text := text_for_command(buffer, cmd)
+    if len(base_text) <= 0 {
+        return DYNVIEW_STATUS_OK, -1
+    }
+
+    sup_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sup_text_offset,
+        cmd.script_sup_text_len)
+    sub_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sub_text_offset,
+        cmd.script_sub_text_len)
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    base_cols := max(1, view_core.text_codepoint_count(base_text))
+    sup_cols := view_core.text_codepoint_count(sup_text)
+    sub_cols := view_core.text_codepoint_count(sub_text)
+    script_cols := max(sup_cols, sub_cols)
+    cols := base_cols + script_cols
+    if cols <= 0 {
+        cols = 1
+    }
+    max_cols := layout_max_cols(cache, style)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    script_style := style_by_id(cmd.script_style_id)
+    script_scale := max(0.2, cmd.script_scale)
+    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
+        font_size,
+        script_scale,
+        cmd.script_sup_raise,
+        cmd.script_sub_drop)
+    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
+    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
+
+    ascent := text_ascent
+    descent := text_descent
+    if sup_cols > 0 {
+        ascent = max(ascent, script_ascent + sup_raise_px + script_top_pad)
+    }
+    if sub_cols > 0 {
+        descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
+    }
+
+    bar_thickness := max(1.0, cmd.accent_thickness * font_size)
+    has_scripts := sup_cols > 0 || sub_cols > 0
+    bar_offset := max(0.0, cmd.accent_offset * font_size) +
+        accent_script_clearance(font_size, script_scale, has_scripts)
+    bar_half := bar_thickness * 0.5
+    content_ascent := ascent
+    content_descent := descent
+    if cmd.accent_mode == 1 {
+        ascent = max(ascent, content_ascent + bar_offset + bar_half)
+    } else {
+        descent = max(descent, content_descent + bar_offset + bar_half)
+    }
+
+    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
+    gap_px := max(1.0, cmd.script_gap * font_size)
+    base_width := f32(base_cols) * base_advance
+    script_width := f32(script_cols) * script_advance
+    draw_width := base_width
+    if script_cols > 0 {
+        draw_width += gap_px + script_width
+    }
+
+    item := core.Ui_Dynview_Layout_Item{
+        kind = .AccentBar,
+        style_id = cmd.style_id,
+        col_span = cols,
+        text_offset = cmd.text_offset,
+        text_len = cmd.text_len,
+        script_sup_text_offset = cmd.script_sup_text_offset,
+        script_sup_text_len = cmd.script_sup_text_len,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        script_style_id = cmd.script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = cmd.script_sup_raise,
+        script_sub_drop = cmd.script_sub_drop,
+        script_gap = cmd.script_gap,
+        accent_mode = cmd.accent_mode,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        accent_offset = cmd.accent_offset,
+        draw_width = draw_width,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+    }
+
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Lay out one radical-bar command as an atomic text span with square-root metrics.
+layout_consume_radical_bar :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    base_text := text_for_command(buffer, cmd)
+    if len(base_text) <= 0 {
+        return DYNVIEW_STATUS_OK, -1
+    }
+
+    sup_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sup_text_offset,
+        cmd.script_sup_text_len)
+    sub_text := text_span_from_buffer(
+        buffer,
+        cmd.script_sub_text_offset,
+        cmd.script_sub_text_len)
+    index_text := text_span_from_buffer(
+        buffer,
+        cmd.radical_index_text_offset,
+        cmd.radical_index_text_len)
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    base_cols := max(1, view_core.text_codepoint_count(base_text))
+    sup_cols := view_core.text_codepoint_count(sup_text)
+    sub_cols := view_core.text_codepoint_count(sub_text)
+    index_cols := view_core.text_codepoint_count(index_text)
+    script_cols := max(sup_cols, sub_cols)
+    cols := base_cols + script_cols + max(1, index_cols)
+    if cols <= 0 {
+        cols = 1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    script_style := style_by_id(cmd.script_style_id)
+    script_scale := max(0.2, cmd.script_scale)
+    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
+        font_size,
+        script_scale,
+        cmd.script_sup_raise,
+        cmd.script_sub_drop)
+    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
+    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
+    index_scale := max(0.2, script_scale)
+    index_font_size := max(1.0, font_size * index_scale)
+    index_ascent, index_descent := style_ascent_descent(script_style, index_font_size)
+
+    content_ascent := text_ascent
+    content_descent := text_descent
+    if sup_cols > 0 {
+        content_ascent = max(content_ascent, script_ascent + sup_raise_px + script_top_pad)
+    }
+    if sub_cols > 0 {
+        content_descent = max(content_descent, script_descent + sub_drop_px + script_bottom_pad)
+    }
+
+    bar_thickness := max(1.0, cmd.accent_thickness * font_size)
+    bar_offset := max(0.0, cmd.accent_offset * font_size)
+    ascent := max(content_ascent, content_ascent + bar_offset + bar_thickness * 0.5)
+    if index_cols > 0 {
+        // Keep index visible before the radical sign with explicit top clearance.
+        index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
+        ascent = max(ascent, index_top_from_baseline + script_top_pad)
+    }
+    root_low_offset := radical_root_low_offset(font_size, content_descent)
+    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
+    root_descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
+    descent := root_descent
+    if index_cols > 0 {
+        descent = max(descent, index_descent * 0.2)
+    }
+
+    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
+    index_advance := effective_advance(script_style, cache^.last_wrap_advance) * index_scale
+    gap_px := max(1.0, cmd.script_gap * font_size)
+    base_width := f32(base_cols) * base_advance
+    script_width := f32(script_cols) * script_advance
+    index_width := f32(index_cols) * index_advance
+    content_width := base_width
+    if script_cols > 0 {
+        content_width += gap_px + script_width
+    }
+    lead_width := max(
+        radical_lead_width(font_size, base_advance),
+        index_width + max(1.0, base_advance * 1.05))
+    front_padding, back_padding := radical_side_paddings(font_size, base_advance)
+    draw_width := lead_width + content_width + front_padding + back_padding
+
+    required_cols := cols
+    if base_advance > 0 {
+        required_cols = max(required_cols, int(draw_width / base_advance))
+        if f32(required_cols) * base_advance < draw_width {
+            required_cols += 1
+        }
+    }
+    cols = min(max_cols, max(1, required_cols))
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := core.Ui_Dynview_Layout_Item{
+        kind = .RadicalBar,
+        style_id = cmd.style_id,
+        col_span = cols,
+        text_offset = cmd.text_offset,
+        text_len = cmd.text_len,
+        script_sup_text_offset = cmd.script_sup_text_offset,
+        script_sup_text_len = cmd.script_sup_text_len,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        script_style_id = cmd.script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = cmd.script_sup_raise,
+        script_sub_drop = cmd.script_sub_drop,
+        script_gap = cmd.script_gap,
+        radical_mode = cmd.radical_mode,
+        radical_index_text_offset = cmd.radical_index_text_offset,
+        radical_index_text_len = cmd.radical_index_text_len,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        accent_offset = cmd.accent_offset,
+        draw_width = draw_width,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+    }
+
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Compute line-style inline stroke metrics centered on baseline zone.
+inline_line_metrics :: #force_inline proc(
+    thickness, text_ascent, text_descent: f32) -> (f32, f32, f32) {
+
+    center := (text_descent - text_ascent) * 0.5
+    top := center - thickness * 0.5
+    bottom := center + thickness * 0.5
+    ascent := max(0.0, -top)
+    descent := max(0.0, bottom)
+    return ascent, descent, thickness
+}
+
+//   Finalize line before placing one inline item if current row overflows.
+layout_wrap_before_inline :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    max_cols, cols: int,
+    text_ascent, text_descent: f32) -> i32 {
+
+    if state^.col <= 0 || state^.col + cols <= max_cols {
+        return DYNVIEW_STATUS_OK
+    }
+
+    return layout_finalize_line(cache, state, acc, text_ascent, text_descent)
+}
+
+//   Finalize line after placing one inline item when row reaches capacity.
+layout_finalize_after_inline_if_full :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    max_cols: int,
+    text_ascent, text_descent: f32) -> (i32, int) {
+
+    if state^.col < max_cols {
+        return DYNVIEW_STATUS_OK, state^.line_index
+    }
+
+    status := layout_finalize_line(cache, state, acc, text_ascent, text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, state^.line_index - 1
+    }
+
+    return DYNVIEW_STATUS_OK, state^.line_index - 1
+}
+
+//   Lay out one inline-line command and return the line touched.
+layout_consume_inline_line :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_line_cols(cmd, style, cache^.last_wrap_advance, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    thickness := max(1.0, cmd.inline_atom_stroke)
+    ascent, descent, draw_height := inline_line_metrics(thickness, text_ascent, text_descent)
+    item := core.Ui_Dynview_Layout_Item{
+        kind = .InlineLine,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = thickness,
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        draw_width = f32(cols) * effective_advance(style, cache^.last_wrap_advance),
+        draw_height = draw_height,
+        ascent = max(ascent, text_ascent * 0.08),
+        descent = max(descent, text_descent * 0.08),
+    }
+
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a box inline item anchored around the text baseline zone.
+inline_box_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    content_height := text_ascent + text_descent
+    requested := cmd.inline_box_height * effective_advance
+    box_height := max(2.0, min(content_height, requested))
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Ui_Dynview_Layout_Item{
+        kind = .InlineBox,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        inline_box_height = box_height,
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        inline_outline_stroke = cmd.inline_outline_stroke,
+        pie_start_angle_degrees = cmd.pie_start_angle_degrees,
+        pie_end_angle_degrees = cmd.pie_end_angle_degrees,
+        draw_width = f32(cols) * effective_advance,
+        draw_height = box_height,
+        ascent = max(0.0, -(center - box_height * 0.5)),
+        descent = max(0.0, center + box_height * 0.5),
+    }
+}
+
+//   Lay out one inline-box command and return the line touched.
+layout_consume_inline_box :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_box_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a circle inline item centered in the text baseline zone.
+inline_circle_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    atom_width := f32(cols) * effective_advance
+    radius := max(2.0, min(atom_width * 0.5, (text_ascent + text_descent) * 0.5))
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Ui_Dynview_Layout_Item{
+        kind = .InlineCircle,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        inline_outline_stroke = cmd.inline_outline_stroke,
+        pie_start_angle_degrees = cmd.pie_start_angle_degrees,
+        pie_end_angle_degrees = cmd.pie_end_angle_degrees,
+        draw_width = atom_width,
+        draw_height = radius * 2,
+        ascent = max(0.0, -(center - radius)),
+        descent = max(0.0, center + radius),
+    }
+}
+
+//   Lay out one inline-circle command and return the line touched.
+layout_consume_inline_circle :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_circle_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled-box inline item using the same geometry as outline boxes.
+inline_filled_box_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := inline_box_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlineFilledBox
+    return item
+}
+
+//   Lay out one inline-filled-box command and return the line touched.
+layout_consume_inline_filled_box :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_filled_box_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled-circle inline item using the same geometry as outline circles.
+inline_filled_circle_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlineFilledCircle
+    return item
+}
+
+//   Lay out one inline-filled-circle command and return the line touched.
+layout_consume_inline_filled_circle :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_circle_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_filled_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Build a filled pie-section item using circle-equivalent geometry.
+inline_pie_section_item :: #force_inline proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+
+    item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    item.kind = .InlinePieSection
+    item.pie_start_angle_degrees = cmd.pie_start_angle_degrees
+    item.pie_end_angle_degrees = cmd.pie_end_angle_degrees
+    item.inline_outline_stroke = max(0.0, cmd.inline_outline_stroke)
+    return item
+}
+
+//   Lay out one inline pie-section command and return the line touched.
+layout_consume_inline_pie_section :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(
+        cache,
+        state,
+        acc,
+        style,
+        font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_circle_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(
+        cache,
+        state,
+        acc,
+        max_cols,
+        cols,
+        text_ascent,
+        text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_pie_section_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(
+        cache,
+        state,
+        acc,
+        max_cols,
+        text_ascent,
+        text_descent)
+}
+
+//   Fill a one-line layout cache for an empty command stream.
+layout_set_empty_default :: proc(cache: ^core.Ui_Dynview_Compile_Cache) {
+    cache^.layout_is_valid = true
+    cache^.layout_line_count = 1
+    cache^.layout_lines[0] = core.Ui_Dynview_Layout_Line{
+        y_offset = 0,
+        line_height = max(1.0, cache^.last_font_size),
+        baseline = max(1.0, cache^.last_font_size * 0.8),
+        max_ascent = max(1.0, cache^.last_font_size * 0.8),
+        max_descent = max(1.0, cache^.last_font_size * 0.2),
+    }
+    cache^.layout_total_height = cache^.layout_lines[0].line_height
+    cache^.layout_average_line_height = cache^.layout_lines[0].line_height
+}
+
+//   Seed layout context from cached panel/font metrics.
+layout_build_context :: proc(
+    cache: ^core.Ui_Dynview_Compile_Cache,
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator) -> Dynview_Layout_Build_Context {
+
+    base_style := style_by_id(DYNVIEW_STYLE_OUTPUT)
+    base_ascent, base_descent := style_ascent_descent(base_style, cache^.last_font_size)
+    state^ = Dynview_Layout_State{
+        line_gap = max(1.0, (base_ascent + base_descent) * 0.16),
+        active_block_id = -1,
+        active_block_kind = -1,
+        active_block_format = block_format_for_kind(-1),
+    }
+    layout_seed_line_accumulator(acc, 0, base_ascent, base_descent)
+
+    return Dynview_Layout_Build_Context{
+        cache = cache,
+        buffer = buffer,
+        state = state,
+        acc = acc,
+        font_size = cache^.last_font_size,
+        base_ascent = base_ascent,
+        base_descent = base_descent,
+    }
+}
+
+//   Apply before/after paragraph spacing at block boundaries.
+layout_apply_block_spacing :: #force_inline proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    spacing: f32) -> i32 {
+
+    if spacing <= 0 {
+        return DYNVIEW_STATUS_OK
+    }
+
+    if ctx^.acc^.item_count > 0 {
+        status := layout_finalize_line(
+            ctx^.cache,
+            ctx^.state,
+            ctx^.acc,
+            ctx^.base_ascent,
+            ctx^.base_descent)
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    ctx^.state^.y_offset += spacing
+    return DYNVIEW_STATUS_OK
+}
+
+//   Update copy-span tracking for block lifecycle commands.
+layout_handle_block_markers :: proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    cmd: core.Ui_Dynview_Command) -> i32 {
+
+    if cmd.kind == .BeginBlock {
+        new_format := block_format_for_kind(cmd.style_id)
+        spacing_status := layout_apply_block_spacing(ctx, new_format.paragraph_spacing_before)
+        if spacing_status != DYNVIEW_STATUS_OK {
+            return spacing_status
+        }
+
+        ctx^.state^.active_block_id = cmd.block_id
+        ctx^.state^.active_block_kind = cmd.style_id
+        ctx^.state^.active_block_format = new_format
+        return DYNVIEW_STATUS_OK
+    }
+
+    if cmd.kind == .EndBlock {
+        spacing_status := layout_apply_block_spacing(
+            ctx,
+            ctx^.state^.active_block_format.paragraph_spacing_after)
+        if spacing_status != DYNVIEW_STATUS_OK {
+            return spacing_status
+        }
+
+        ctx^.state^.active_block_id = -1
+        ctx^.state^.active_block_kind = -1
+        ctx^.state^.active_block_format = block_format_for_kind(-1)
+        return DYNVIEW_STATUS_OK
+    }
+
+    return DYNVIEW_STATUS_OK
+}
+
+//   Consume one visible text-like command using normal wrapped text flow.
+layout_consume_text_like_command :: #force_inline proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style) -> i32 {
+
+    text := text_for_command(ctx^.buffer, cmd)
+    status, _ := layout_consume_text_run(
+        ctx^.cache, ctx^.state, ctx^.acc, cmd, text, style, ctx^.font_size)
+    return status
+}
+
+//   Consume one visible math-structure command using the matching layout helper.
+layout_consume_structured_math_command :: #force_inline proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style) -> i32 {
+
+    switch cmd.kind {
+    case .MathBlock:
+        status, _ := layout_consume_math_block(
+            ctx^.cache,
+            ctx^.buffer,
+            ctx^.state,
+            ctx^.acc,
+            cmd,
+            style,
+            ctx^.font_size)
+        return status
+    case .ScriptAttach:
+        status, _ := layout_consume_script_attach(
+            ctx^.cache,
+            ctx^.buffer,
+            ctx^.state,
+            ctx^.acc,
+            cmd,
+            style,
+            ctx^.font_size)
+        return status
+    case .ScriptAttachRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .FracRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .StretchDelimiterRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .MatrixRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .LargeOpRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .AccentBar:
+        status, _ := layout_consume_accent_bar(
+            ctx^.cache,
+            ctx^.buffer,
+            ctx^.state,
+            ctx^.acc,
+            cmd,
+            style,
+            ctx^.font_size)
+        return status
+    case .RadicalBar:
+        status, _ := layout_consume_radical_bar(
+            ctx^.cache,
+            ctx^.buffer,
+            ctx^.state,
+            ctx^.acc,
+            cmd,
+            style,
+            ctx^.font_size)
+        return status
+    case .AccentBarRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .RadicalBarRecursive:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .CopyableTextRun,
+        .LineBreak, .Divider, .InlineLine, .InlineBox, .InlineCircle,
+        .InlineFilledBox, .InlineFilledCircle, .InlinePieSection:
+    }
+
+    return DYNVIEW_STATUS_INVALID_ARGUMENT
+}
+
+//   Consume one visible inline-shape command using the matching layout helper.
+layout_consume_inline_shape_command :: #force_inline proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style) -> i32 {
+
+    switch cmd.kind {
+    case .InlineLine:
+        status, _ := layout_consume_inline_line(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlineBox:
+        status, _ := layout_consume_inline_box(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlineCircle:
+        status, _ := layout_consume_inline_circle(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlineFilledBox:
+        status, _ := layout_consume_inline_filled_box(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlineFilledCircle:
+        status, _ := layout_consume_inline_filled_circle(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlinePieSection:
+        status, _ := layout_consume_inline_pie_section(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
+        .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .RadicalBarRecursive,
+        .CopyableTextRun, .LineBreak, .Divider:
+    }
+
+    return DYNVIEW_STATUS_INVALID_ARGUMENT
+}
+
+//   Consume one visible dynview command and update copy-row span.
+layout_consume_visible_command :: proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    cmd: core.Ui_Dynview_Command,
+    style: Dynview_Text_Style) -> i32 {
+
+    effective_style := style_with_block_format(style, ctx^.state^.active_block_format)
+    switch cmd.kind {
+    case .TextRun, .MathGlyphRun:
+        return layout_consume_text_like_command(ctx, cmd, effective_style)
+    case .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBar, .AccentBarRecursive, .RadicalBar,
+        .StretchDelimiterRecursive, .MatrixRecursive,
+        .RadicalBarRecursive:
+        return layout_consume_structured_math_command(ctx, cmd, effective_style)
+    case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
+        .InlineFilledCircle, .InlinePieSection:
+        return layout_consume_inline_shape_command(ctx, cmd, effective_style)
+    case .LineBreak, .Divider:
+        return layout_finalize_line(
+            ctx^.cache,
+            ctx^.state,
+            ctx^.acc,
+            ctx^.base_ascent,
+            ctx^.base_descent)
+    case .BeginBlock, .EndBlock, .CopyableTextRun:
+    }
+
+    return DYNVIEW_STATUS_OK
+}
+
+//   Resolve inline draw color using per-item brush override with style fallback.
+inline_draw_color :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Ui_Dynview_Layout_Item) -> rl.Color {
+
+    if item.has_brush_color {
+        return item.brush_color
+    }
+    return style.color
+}
+
+//   Finalize total layout metrics after all commands are consumed.
+layout_finalize_metrics :: proc(ctx: ^Dynview_Layout_Build_Context) -> i32 {
+    status := layout_finalize_line(
+        ctx^.cache,
+        ctx^.state,
+        ctx^.acc,
+        ctx^.base_ascent,
+        ctx^.base_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+
+    if ctx^.cache^.layout_line_count <= 0 {
+        return DYNVIEW_STATUS_ILLEGAL_STATE
+    }
+
+    last_line := ctx^.cache^.layout_lines[ctx^.cache^.layout_line_count - 1]
+    ctx^.cache^.layout_total_height = last_line.y_offset + last_line.line_height
+    ctx^.cache^.layout_average_line_height =
+        ctx^.cache^.layout_total_height / f32(ctx^.cache^.layout_line_count)
+    ctx^.cache^.layout_is_valid = true
+    return DYNVIEW_STATUS_OK
+}
+
+//   Build deterministic line/item layout cache from current validated command stream.
+rebuild_layout_cache :: proc(runtime: ^core.Ui_Dynview_Runtime) -> i32 {
+    if runtime == nil {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    }
+
+    cache := &runtime^.compile_cache
+    buffer := &runtime^.command_buffer
+    layout_reset_cache(cache)
+
+    if buffer^.command_count <= 0 {
+        layout_set_empty_default(cache)
+        return DYNVIEW_STATUS_OK
+    }
+
+    state := Dynview_Layout_State{}
+    acc := Dynview_Layout_Line_Accumulator{}
+    ctx := layout_build_context(cache, buffer, &state, &acc)
+
+    for i in 0..<buffer^.command_count {
+        cmd := buffer^.commands[i]
+        marker_status := layout_handle_block_markers(&ctx, cmd)
+        if marker_status != DYNVIEW_STATUS_OK {
+            return marker_status
+        }
+
+        style := style_by_id(cmd.style_id)
+        status := layout_consume_visible_command(&ctx, cmd, style)
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+
+    return layout_finalize_metrics(&ctx)
+}
+
+//   Return true when one layout line is outside the visible panel bounds.

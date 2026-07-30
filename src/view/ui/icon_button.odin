@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 
 import rl "vendor:raylib"
 
@@ -128,19 +129,19 @@ icon_button_icon_draw_rect :: #force_inline proc(
 draw_icon_button_glyph :: proc(icon_id: Icon_Button_Id, rect: rl.Rectangle, color: rl.Color) {
     switch icon_id {
     case .Refresh:
-        draw_refresh_icon(rect, color)
+        view_core.draw_refresh_icon(rect, color)
     case .Pause:
-        draw_pause_icon(rect, color)
+        view_core.draw_pause_icon(rect, color)
     case .Play:
-        draw_play_icon(rect, color)
+        view_core.draw_play_icon(rect, color)
     case .Gear:
-        draw_gear_icon(rect, color)
+        view_core.draw_gear_icon(rect, color)
     case .Gif:
-        draw_gif_icon(rect, color)
+        view_core.draw_gif_icon(rect, color)
     case .Books:
-        draw_books_icon(rect, color)
+        view_core.draw_books_icon(rect, color)
     case .Copy:
-        draw_copy_icon(rect, color)
+        view_core.draw_copy_icon(rect, color)
     case .None:
         // Intentional no-op for external/custom icon draw paths.
     }

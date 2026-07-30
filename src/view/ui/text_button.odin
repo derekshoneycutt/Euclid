@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -144,7 +145,7 @@ draw_text_button :: proc(
     measured := rl.MeasureTextEx(params.font, label_cstr, TREE_FONT_SIZE, 0)
     text_x := int(button_rect.x + (button_rect.width - measured.x) * 0.5)
     text_y := int(button_rect.y + (button_rect.height - measured.y) * 0.5)
-    ui_text(params.label, text_x, text_y, fg, params.font)
+    view_core.ui_text(params.label, text_x, text_y, fg, params.font)
 
     return Text_Button_Result{
         button_drawn_rect = button_rect,

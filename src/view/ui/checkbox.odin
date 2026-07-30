@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -202,7 +203,7 @@ draw_checkbox :: proc(
     }
 
     if len(params.label) > 0 {
-        ui_text(params.label,
+           view_core.ui_text(params.label,
             int(label_rect.x),
             int(label_rect.y),
             label_color,

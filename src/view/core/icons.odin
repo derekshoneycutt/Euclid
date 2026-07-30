@@ -1,4 +1,4 @@
-package ui
+package view_core
 
 import "core:math"
 

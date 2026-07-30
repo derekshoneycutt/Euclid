@@ -1,8 +1,50 @@
-package ui
+package view_core
 
 import "core:strings"
 
 import rl "vendor:raylib"
+
+//   Return whether one byte is a UTF-8 continuation byte (10xxxxxx).
+text_is_utf8_trailing_byte :: #force_inline proc(b: u8) -> bool {
+    return (b & 0xC0) == 0x80
+}
+
+//   Return UTF-8 sequence length from one byte index, clamped to available bytes.
+text_utf8_sequence_len :: #force_inline proc(text: string, start: int) -> int {
+    if start < 0 || start >= len(text) {
+        return 0
+    }
+
+    b := text[start]
+    if (b & 0x80) == 0x00 {
+        return 1
+    }
+    if (b & 0xE0) == 0xC0 {
+        if start + 1 < len(text) && text_is_utf8_trailing_byte(text[start + 1]) {
+            return 2
+        }
+        return 1
+    }
+    if (b & 0xF0) == 0xE0 {
+        if start + 2 < len(text) &&
+            text_is_utf8_trailing_byte(text[start + 1]) &&
+            text_is_utf8_trailing_byte(text[start + 2]) {
+            return 3
+        }
+        return 1
+    }
+    if (b & 0xF8) == 0xF0 {
+        if start + 3 < len(text) &&
+            text_is_utf8_trailing_byte(text[start + 1]) &&
+            text_is_utf8_trailing_byte(text[start + 2]) &&
+            text_is_utf8_trailing_byte(text[start + 3]) {
+            return 4
+        }
+        return 1
+    }
+
+    return 1
+}
 
 //   Draw UTF-8 UI text using temp C-string conversion.
 ui_text :: #force_inline proc(
@@ -32,7 +74,7 @@ text_codepoint_count_span :: #force_inline proc(text: string, start, end: int) -
 
     count := 0
     for i := clamped_start; i < clamped_end; i += 1 {
-        if !input_box_is_utf8_trailing_byte(text[i]) {
+        if !text_is_utf8_trailing_byte(text[i]) {
             count += 1
         }
     }
@@ -108,7 +150,7 @@ next_wrapped_text_span :: proc(
             last_space = line_end
         }
 
-        seq_len := input_box_utf8_sequence_len(text, line_end)
+        seq_len := text_utf8_sequence_len(text, line_end)
         if seq_len <= 0 {
             seq_len = 1
         }
@@ -125,7 +167,7 @@ next_wrapped_text_span :: proc(
     }
 
     if line_end == start && line_end < len(text) && text[line_end] != '\n' {
-        seq_len := input_box_utf8_sequence_len(text, line_end)
+        seq_len := text_utf8_sequence_len(text, line_end)
         if seq_len <= 0 {
             seq_len = 1
         }

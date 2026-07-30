@@ -86,6 +86,29 @@ those objects interact.
   - Avoid negative `z` for standard plane demonstrations unless a script has a
     specific, documented reason.
 
+## Isometric Projection and Right-Hand Rule
+
+The isometric helper in `src/view/core/isomath.odin` uses a right-handed
+world-space convention.
+
+What that means in practice:
+
+- Hand-position rule used in this project: hold your **right hand palm up**,
+  curl the last three fingers naturally, and keep your thumb and index finger
+  perpendicular.
+- In that pose, the **thumb points +X** and the **index finger points +Y**.
+- Therefore, by the right-hand rule (`X × Y = Z`), **+Z is up**
+  (height/elevation).
+- Positive rotation follows the right-hand rule around each axis: curl your right-hand
+  fingers in the rotation direction; your thumb points toward the positive axis.
+
+Projection note:
+
+- The projection maps world coordinates into screen coordinates, so signs in the
+  formula account for screen-space Y increasing downward.
+- In effect, increasing `coord.z` renders higher on screen, consistent with
+  treating +Z as world up.
+
 ## Draw Order and Layering Constraints
 
 The renderer is layered in a fixed order and animation scripts should be staged

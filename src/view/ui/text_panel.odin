@@ -2,6 +2,8 @@ package ui
 
 import "../../core"
 import "../../julia"
+import view_core "../core"
+import dynview "./dynview"
 
 import rl "vendor:raylib"
 
@@ -30,24 +32,24 @@ draw_view_text_panel :: proc(
         return
     }
 
-    dynview_reset_command_buffer(&ui_runtime^.dynview_runtime)
+    dynview.reset_command_buffer(&ui_runtime^.dynview_runtime)
     view_text := julia.call_current_animation_get_view_text(state)
-    _ = dynview_compiled_scratchpad_text_or_fallback(
+    _ = dynview.compiled_scratchpad_text_or_fallback(
         ui_runtime,
         text_panel,
         TREE_FONT_SIZE,
         TEXT_WRAP_ADVANCE,
-        DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+        dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         view_text)
 
-    content_h := dynview_scratchpad_content_height_or_fallback(
+    content_h := dynview.scratchpad_content_height_or_fallback(
         ui_runtime,
         text_panel,
         TEXT_PADDING,
         TEXT_WRAP_ADVANCE,
         TEXT_ROW_HEIGHT,
         view_text)
-    scroll_step := dynview_scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
+    scroll_step := dynview.scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
     text_scroll_state := Scroll_Container_State{
         is_dragging_thumb = ui_runtime.text_scroll_dragging,
         drag_offset_y = ui_runtime.text_scroll_drag_off,
@@ -66,7 +68,7 @@ draw_view_text_panel :: proc(
     text_panel = text_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = text_scroll_begin.scroll_y_out
 
-    dynview_refresh_scratchpad_copy_targets(
+    dynview.refresh_scratchpad_copy_targets(
         ui_runtime,
         text_panel,
         state^.ui_runtime.view_text_scroll_y,
@@ -75,7 +77,7 @@ draw_view_text_panel :: proc(
         DYNVIEW_COPY_ICON_SIZE,
         DYNVIEW_COPY_ICON_X_PAD)
 
-    dynview_draw_scratchpad_styled_or_fallback(
+    dynview.draw_scratchpad_styled_or_fallback(
         state,
         ui_runtime,
         view_text,
@@ -88,7 +90,7 @@ draw_view_text_panel :: proc(
         TREE_FONT_SIZE,
         UI_TEXT_COLOR)
 
-    _ = draw_dynview_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse_input)
+    _ = view_core.draw_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse_input)
 
     text_scroll_end := scroll_container_end(
         text_scroll_begin.scroll_ref,

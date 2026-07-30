@@ -5,6 +5,7 @@ package view
 
 import view_core "core"
 import "ui"
+import dynview "ui/dynview"
 import "../core"
 import "../kine"
 import "../julia"
@@ -159,7 +160,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.ui_runtime.limit_fps = true
     state^.ui_runtime.simulation_paused = false
     state^.ui_runtime.use_simd_batch_projection = view_core.simd_batch_projection_available()
-    ui.dynview_set_enabled(&state^.ui_runtime, ui.DYNVIEW_ENABLED_DEFAULT)
+    dynview.set_enabled(&state^.ui_runtime, dynview.DYNVIEW_ENABLED_DEFAULT)
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle

@@ -4,6 +4,7 @@ import "core:testing"
 
 import app_core "../../src/core"
 import app_view_core "../../src/view/core"
+import app_dynview "../../src/view/ui/dynview"
 import app_ui "../../src/view/ui"
 
 import rl "vendor:raylib"
@@ -56,17 +57,17 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
 
 @(test)
 text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
-    testing.expect_value(t, app_ui.chars_per_text_row(0, 8), 1)
-    testing.expect_value(t, app_ui.count_wrapped_text_rows("", 20), 1)
+    testing.expect_value(t, app_view_core.chars_per_text_row(0, 8), 1)
+    testing.expect_value(t, app_view_core.count_wrapped_text_rows("", 20), 1)
 
     text := "supercalifragilistic"
-    line_start, line_end, next_start := app_ui.next_wrapped_text_span(text, 0, 4)
+    line_start, line_end, next_start := app_view_core.next_wrapped_text_span(text, 0, 4)
 
     testing.expect_value(t, line_start, 0)
     testing.expect(t, line_end > line_start)
     testing.expect(t, next_start > line_start)
 
-    rows := app_ui.count_wrapped_text_rows("aaaa bbbb cccc", 4)
+    rows := app_view_core.count_wrapped_text_rows("aaaa bbbb cccc", 4)
     testing.expect(t, rows >= 3)
 }
 
@@ -237,8 +238,8 @@ dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
         u32(app_core.Font_Variant_Flags.Bold) |
         u32(app_core.Font_Variant_Flags.Italic))
 
-    style_id := app_ui.DYNVIEW_STYLE_CUSTOM_FONT | i32(u32(custom_flags) & u32(app_ui.DYNVIEW_STYLE_CUSTOM_FONT_MASK))
-    style, ok := app_ui.dynview_style_from_custom_font_flags(style_id)
+    style_id := app_dynview.DYNVIEW_STYLE_CUSTOM_FONT | i32(u32(custom_flags) & u32(app_dynview.DYNVIEW_STYLE_CUSTOM_FONT_MASK))
+    style, ok := app_dynview.style_from_custom_font_flags(style_id)
 
     testing.expect(t, ok)
     testing.expect(t, style.italic)
@@ -247,6 +248,6 @@ dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, style.line_height_multiplier, f32(1.0))
 
     // Non-custom style ids should not decode through the custom-font flag path.
-    _, normal_ok := app_ui.dynview_style_from_custom_font_flags(app_ui.DYNVIEW_STYLE_OUTPUT)
+    _, normal_ok := app_dynview.style_from_custom_font_flags(app_dynview.DYNVIEW_STYLE_OUTPUT)
     testing.expect(t, !normal_ok)
 }

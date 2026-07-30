@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import view_core "../core"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -921,7 +922,7 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
     }
 
     if len(visible_text) > 0 {
-        ui_text(visible_text,
+        view_core.ui_text(visible_text,
             int(content_x),
             int(drawn_rect.y),
             display_color,
@@ -930,7 +931,7 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
     }
 
     if len(params.prompt_prefix) > 0 {
-        ui_text(params.prompt_prefix,
+        view_core.ui_text(params.prompt_prefix,
             int(drawn_rect.x),
             int(drawn_rect.y),
             display_color,
@@ -945,6 +946,6 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
 
         caret_col_local := clamp(caret_col_in_line - visible_start, 0, visible_cols)
         caret_x := content_x + f32(caret_col_local) * max(1.0, params.char_advance) - 4.0
-        ui_text("|", int(caret_x), int(drawn_rect.y), display_color, params.font, params.font_size)
+        view_core.ui_text("|", int(caret_x), int(drawn_rect.y), display_color, params.font, params.font_size)
     }
 }

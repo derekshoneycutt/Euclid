@@ -1,5 +1,6 @@
 package ui
 
+import view_core "../core"
 import rl "vendor:raylib"
 
 TREE_EXPANDER_HOVER_SCALE_ADD :: 0.095
@@ -91,7 +92,7 @@ draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result
         icon_color = tree_expander_darken(icon_color, press_t)
     }
 
-    draw_tree_disclosure_icon(icon_rect, params.expanded, icon_color)
+    view_core.draw_tree_disclosure_icon(icon_rect, params.expanded, icon_color)
 
     return Tree_Expander_Result{
         hovered = hovered,
