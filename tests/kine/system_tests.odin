@@ -2,7 +2,9 @@ package kine_tests
 
 import "core:testing"
 
+import app_core "../../src/core"
 import app_kine "../../src/kine"
+import test_helpers "../helpers"
 
 @(test)
 kine_update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.T) {
@@ -18,11 +20,11 @@ kine_update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.
     app_kine.kine_update_last_cache_vectors(&system)
 
     snapshot := system.points[0].previous_position.? or_else app_kine.Vector3{}
-    expect_vec3_close(t, snapshot, app_kine.Vector3{2, 4, 6},
+    test_helpers.expect_vec3_close(t, snapshot, app_kine.Vector3{2, 4, 6},
         "active points should snapshot current position")
 
     untouched := system.points[1].previous_position.? or_else app_kine.Vector3{}
-    expect_vec3_close(t, untouched, preserved,
+    test_helpers.expect_vec3_close(t, untouched, preserved,
         "points past next_point_index should remain untouched")
 }
 
@@ -35,7 +37,7 @@ lerped_point_position_uses_previous_position_when_present :: proc(t: ^testing.T)
     point, ok := app_kine.lerped_point_position(&system, 0, 0.25)
 
     testing.expect(t, ok)
-    expect_vec3_close(t, point, app_kine.Vector3{4, 0, 0},
+    test_helpers.expect_vec3_close(t, point, app_kine.Vector3{4, 0, 0},
         "lerped_point_position should blend previous and current")
 }
 
@@ -47,7 +49,7 @@ lerped_point_position_falls_back_to_current_without_previous :: proc(t: ^testing
     point, ok := app_kine.lerped_point_position(&system, 0, 0.5)
 
     testing.expect(t, ok)
-    expect_vec3_close(t, point, app_kine.Vector3{7, -1, 3},
+    test_helpers.expect_vec3_close(t, point, app_kine.Vector3{7, -1, 3},
         "lerped_point_position should fall back when previous_position is missing")
 }
 
@@ -71,9 +73,9 @@ lerped_child_positions_follows_child_chain_order :: proc(t: ^testing.T) {
     ok := app_kine.lerped_child_positions(&system, &host, 0.5, out[:])
 
     testing.expect(t, ok)
-    expect_vec3_close(t, out[0], app_kine.Vector3{0.5, 0, 0}, "child 0 should lerp")
-    expect_vec3_close(t, out[1], app_kine.Vector3{2, 0, 0}, "child 1 should lerp")
-    expect_vec3_close(t, out[2], app_kine.Vector3{4, 0, 0}, "child 2 should lerp")
+    test_helpers.expect_vec3_close(t, out[0], app_kine.Vector3{0.5, 0, 0}, "child 0 should lerp")
+    test_helpers.expect_vec3_close(t, out[1], app_kine.Vector3{2, 0, 0}, "child 1 should lerp")
+    test_helpers.expect_vec3_close(t, out[2], app_kine.Vector3{4, 0, 0}, "child 2 should lerp")
 }
 
 @(test)
@@ -89,6 +91,62 @@ draw_cache_next_item_slot_updates_count_and_capacity :: proc(t: ^testing.T) {
 
     testing.expect(t, !has_slot)
     testing.expect_value(t, system.draw_cache.item_count, len(system.draw_cache.items))
+}
+
+@(test)
+lerped_child_positions_returns_false_for_invalid_chain :: proc(t: ^testing.T) {
+    system: app_kine.Kine_Point_System
+    host := app_kine.Kine_Shape_Point{child_point_head = 12}
+
+    out: [2]app_kine.Vector3
+    ok := app_kine.lerped_child_positions(&system, &host, 0.5, out[:])
+
+    testing.expect(t, !ok)
+}
+
+@(test)
+draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
+    system: app_kine.Kine_Point_System
+
+    first, ok := app_kine.draw_cache_reserve_polygon_vertices(&system, 2)
+    testing.expect(t, ok)
+    testing.expect_value(t, first, 0)
+    testing.expect_value(t, system.draw_cache.polygon_vertex_count, 2)
+
+    second, ok2 := app_kine.draw_cache_reserve_polygon_vertices(&system, len(system.draw_cache.polygon_vertices))
+    testing.expect(t, !ok2)
+    testing.expect_value(t, second, 0)
+}
+
+@(test)
+polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^testing.T) {
+    vertices := [3]app_kine.Vector3{{0, 0, 0}, {2, 0, 0}, {1, 2, 0}}
+    testing.expect(t, app_kine.polygon_signed_area_xy(vertices[:]) > 0)
+    testing.expect(t, app_kine.point_in_triangle_xy({1, 1, 0}, vertices[0], vertices[1], vertices[2]))
+    testing.expect(t, app_kine.point_in_triangle_xy({0, 0, 0}, vertices[0], vertices[1], vertices[2]))
+}
+
+@(test)
+kine_clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
+    system: app_kine.Kine_Point_System
+    particle_system := new(app_core.Particle_System)
+    defer free(particle_system)
+
+    particle_system^.use_max_dust_particles = 2
+    system.next_point_index = 2
+    system.next_constraint_index = 1
+    system.anim_points_start = 1
+    system.anim_constraints_start = 0
+    system.points[0].do_draw = true
+    system.points[1].do_draw = true
+    system.constraints[0].do_apply = true
+
+    app_kine.kine_clear_animation_data(&system, particle_system)
+
+    testing.expect_value(t, system.next_point_index, 1)
+    testing.expect_value(t, system.next_constraint_index, 0)
+    testing.expect(t, !system.points[1].do_draw)
+    testing.expect(t, !system.constraints[0].do_apply)
 }
 
 expect_polygon_triangle_indices_in_range :: proc(

@@ -5,6 +5,7 @@ import "core:testing"
 
 import app_core "../../src/core"
 import app_particles "../../src/particles"
+import test_helpers "../helpers"
 
 EPS :: f32(1e-5)
 
@@ -16,12 +17,12 @@ expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
 @(test)
 normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
     theta := app_particles.normalize_theta(f32(-0.5))
-    expect_close(t, theta, f32(2.0 * math.PI - 0.5), "normalize_theta should wrap negatives")
+    test_helpers.expect_close(t, theta, f32(2.0 * math.PI - 0.5), "normalize_theta should wrap negatives")
 
     delta := app_particles.compute_sweep_delta(
         f32(1.5 * math.PI),
         f32(0.5 * math.PI))
-    expect_close(t, delta, f32(math.PI), "sweep delta should wrap across zero")
+    test_helpers.expect_close(t, delta, f32(math.PI), "sweep delta should wrap across zero")
 }
 
 @(test)
@@ -98,14 +99,14 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS * app_particles.DUST_COLLISION_RADIUS
     app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
-    expect_close(t, ps^.low_particles.pos_x[0], before_ax, "no collision should keep ax")
-    expect_close(t, ps^.low_particles.pos_y[0], before_ay, "no collision should keep ay")
-    expect_close(t, ps^.low_particles.pos_x[1], before_bx, "no collision should keep bx")
-    expect_close(t, ps^.low_particles.pos_y[1], before_by, "no collision should keep by")
-    expect_close(t, ps^.low_particles.vel_x[0], before_avx, "no collision should keep avx")
-    expect_close(t, ps^.low_particles.vel_y[0], before_avy, "no collision should keep avy")
-    expect_close(t, ps^.low_particles.vel_x[1], before_bvx, "no collision should keep bvx")
-    expect_close(t, ps^.low_particles.vel_y[1], before_bvy, "no collision should keep bvy")
+    test_helpers.expect_close(t, ps^.low_particles.pos_x[0], before_ax, "no collision should keep ax")
+    test_helpers.expect_close(t, ps^.low_particles.pos_y[0], before_ay, "no collision should keep ay")
+    test_helpers.expect_close(t, ps^.low_particles.pos_x[1], before_bx, "no collision should keep bx")
+    test_helpers.expect_close(t, ps^.low_particles.pos_y[1], before_by, "no collision should keep by")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], before_avx, "no collision should keep avx")
+    test_helpers.expect_close(t, ps^.low_particles.vel_y[0], before_avy, "no collision should keep avy")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], before_bvx, "no collision should keep bvx")
+    test_helpers.expect_close(t, ps^.low_particles.vel_y[1], before_bvy, "no collision should keep bvy")
 }
 
 @(test)
@@ -160,6 +161,85 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
-    expect_close(t, ps^.low_particles.vel_x[0], f32(-0.01), "separating vx0 should be unchanged")
-    expect_close(t, ps^.low_particles.vel_x[1], f32(0.01), "separating vx1 should be unchanged")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], f32(-0.01), "separating vx0 should be unchanged")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], f32(0.01), "separating vx1 should be unchanged")
+}
+
+@(test)
+reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+
+    ps^.use_max_dust_particles = 2
+    ps^.spawn_timer = 1.0
+    ps^.next_index = 3
+    ps^.low_particles.alive[0] = true
+    ps^.low_particles.age[0] = 0.25
+    ps^.particles.alive[0] = true
+    ps^.particles.age[0] = 0.5
+    ps^.high_particles.alive[0] = true
+    ps^.high_particles.age[0] = 0.75
+
+    app_particles.reset_particles(ps)
+
+    testing.expect_value(t, ps^.next_index, 0)
+    testing.expect_value(t, ps^.spawn_timer, 0.0)
+    testing.expect(t, !ps^.low_particles.alive[0])
+    testing.expect_value(t, ps^.low_particles.age[0], 0.0)
+    testing.expect(t, !ps^.particles.alive[0])
+    testing.expect_value(t, ps^.particles.age[0], 0.0)
+    testing.expect(t, !ps^.high_particles.alive[0])
+    testing.expect_value(t, ps^.high_particles.age[0], 0.0)
+}
+
+@(test)
+reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+
+    ps^.use_max_dust_particles = 2
+    ps^.next_index = 0
+    ps^.low_particles.alive[0] = true
+    ps^.low_particles.alive[1] = true
+
+    idx, ok := app_particles.reserve_dead_low_particle_slot(ps)
+    testing.expect(t, ok)
+    testing.expect_value(t, idx, 0)
+    testing.expect_value(t, ps^.next_index, 1)
+}
+
+@(test)
+emit_kine_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+
+    ks: app_core.Kine_Point_System
+    ks.points[0].do_draw = true
+    ks.points[0].kind = .Point
+    ks.points[0].position = app_core.Vector3{1, 2, 0}
+
+    app_particles.emit_kine_hide_burst(ps, &ks, 0, false)
+
+    testing.expect(t, ps^.low_particles.alive[0])
+    testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] || ps^.low_particles.alive[3])
+}
+
+@(test)
+clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+
+    ps^.low_particles.pos_x[0] = -0.5
+    ps^.low_particles.pos_y[0] = 1.2
+    ps^.low_particles.vel_x[0] = -0.1
+    ps^.low_particles.vel_y[0] = 0.2
+
+    app_particles.clamp_xy_bounds_index(ps, 0)
+
+    testing.expect_value(t, ps^.low_particles.pos_x[0], app_particles.DUST_XY_MIN)
+    testing.expect_value(t, ps^.low_particles.pos_y[0], app_particles.DUST_XY_MAX)
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+    testing.expect(t, ps^.low_particles.vel_y[0] < 0)
 }
