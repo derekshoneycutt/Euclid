@@ -11,6 +11,7 @@ import rl "vendor:raylib"
 
 @(test)
 ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
+    // Verifies baseline UI region construction is internally consistent and matches fixed panel sizing contracts.
     regions := app_ui.compute_ui_regions(.Baseline)
 
     testing.expect(t, app_ui.validate_ui_regions(regions))
@@ -26,6 +27,7 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
 
 @(test)
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
+    // Ensures region validation fails when any panel rectangle has negative width or height.
     regions := app_core.Ui_Regions{}
     regions.world_rect = rl.Rectangle{0, 0, -1, 10}
 
@@ -38,6 +40,7 @@ validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
 
 @(test)
 scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
+    // Checks scrollbar thumb sizing and placement clamp correctly across top, bottom, and constructed panel geometry.
     thumb_h := app_ui.scrollbar_thumb_height(100, 1000, 24)
     testing.expect(t, thumb_h >= 24)
     testing.expect(t, thumb_h <= 100)
@@ -57,6 +60,7 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
 
 @(test)
 text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
+    // Validates wrapping helpers handle empty input and long tokens while still advancing span boundaries.
     testing.expect_value(t, app_view_core.chars_per_text_row(0, 8), 1)
     testing.expect_value(t, app_view_core.count_wrapped_text_rows("", 20), 1)
 
@@ -86,6 +90,7 @@ seed_tree_node :: proc(
 
 @(test)
 tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
+    // Verifies visible tree row counting respects node expansion state and first-child expansion helper behavior.
     ji := app_core.Euclid_Julia_Interface{}
     ji.next_animation_index = 3
 
@@ -107,6 +112,7 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
 
 @(test)
 build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
+    // Confirms tiny tree panels still produce a fixed-height toolbar and non-negative list viewport dimensions.
     panel := rl.Rectangle{0, 0, 8, 8}
     toolbar, list := app_ui.build_tree_view_panels(panel)
 
@@ -117,6 +123,7 @@ build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
 
 @(test)
 input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
+    // Ensures UTF-8 cursor movement, backspace, and replacement operations preserve codepoint boundaries.
     buffer: [32]u8
     text_len := 0
     caret := 0
@@ -146,6 +153,7 @@ input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
+    // Verifies completion payload parsing extracts start, end, and replacement text from the wire format.
     start, ending, replacement, ok := app_ui.scratchpad_parse_completion_payload("2\n5\npoint!")
     testing.expect(t, ok)
     testing.expect_value(t, start, 2)
@@ -155,12 +163,14 @@ scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_parse_non_negative_int_rejects_non_digits :: proc(t: ^testing.T) {
+    // Confirms non-digit characters invalidate scratchpad non-negative integer parsing.
     _, ok := app_ui.scratchpad_parse_non_negative_int("12x")
     testing.expect(t, !ok)
 }
 
 @(test)
 input_box_backspace_codepoint_removes_multibyte_cursor :: proc(t: ^testing.T) {
+    // Checks backspace removes one full multibyte codepoint and updates caret to the previous codepoint start.
     buffer: [8]u8
     text_len := 0
     caret := 0
@@ -175,6 +185,7 @@ input_box_backspace_codepoint_removes_multibyte_cursor :: proc(t: ^testing.T) {
 
 @(test)
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
+    // Verifies row counting guard limits recursive traversal depth to prevent runaway tree walks.
     ji := app_core.Euclid_Julia_Interface{}
     ji.next_animation_index = 2
     seed_tree_node(&ji, 0, -1, 1, -1, true)
@@ -185,6 +196,7 @@ tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
 
 @(test)
 input_box_insert_text_at_caret_inserts_in_middle :: proc(t: ^testing.T) {
+    // Ensures inserting text at an interior caret position shifts existing bytes and advances caret correctly.
     buffer: [32]u8
     text_len := 0
     caret := 0
@@ -205,6 +217,7 @@ input_box_insert_text_at_caret_inserts_in_middle :: proc(t: ^testing.T) {
 
 @(test)
 input_box_insert_text_at_caret_truncates_on_utf8_boundary :: proc(t: ^testing.T) {
+    // Validates insertion truncates safely at UTF-8 boundaries when destination capacity is limited.
     buffer: [5]u8
     text_len := 0
     caret := 0
@@ -225,6 +238,7 @@ input_box_insert_text_at_caret_truncates_on_utf8_boundary :: proc(t: ^testing.T)
 
 @(test)
 input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
+    // Confirms insertion is rejected without mutating text when there is no remaining buffer capacity.
     buffer: [2]u8
     text_len := 0
     caret := 0
@@ -245,6 +259,7 @@ input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
 
 @(test)
 input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.T) {
+    // Checks byte-range replacement swaps UTF-8 content and repositions caret to the end of replacement text.
     buffer: [16]u8
     text_len := 0
     caret := 0
@@ -265,12 +280,14 @@ input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.
 
 @(test)
 scratchpad_completion_payload_rejects_missing_separator :: proc(t: ^testing.T) {
+    // Verifies malformed completion payloads without all required separators are rejected.
     _, _, _, ok := app_ui.scratchpad_parse_completion_payload("1\n2")
     testing.expect(t, !ok)
 }
 
 @(test)
 font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
+    // Ensures font-weight resolution chooses the heaviest requested weight when multiple flags are set.
     flags := app_core.Font_Variant_Flags(
         u32(app_core.Font_Variant_Flags.Light) |
         u32(app_core.Font_Variant_Flags.Bold) |
@@ -289,6 +306,7 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
 
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
+    // Validates dynview text span extraction bounds checks and script-attach plain-text fallback behavior.
     buffer := app_core.Ui_Dynview_Command_Buffer{}
     text := "abc"
     for i in 0..<len(text) {
@@ -314,6 +332,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
 
 @(test)
 dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(t: ^testing.T) {
+    // Verifies style placement can force a line break and apply configured indentation at the next line start.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     state := app_dynview.Dynview_Layout_State{col = 2, line_index = 0}
@@ -331,6 +350,7 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(t: ^
 
 @(test)
 dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T) {
+    // Confirms pushed layout items capture block metadata and advance line-column bookkeeping correctly.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     state := app_dynview.Dynview_Layout_State{active_block_id = 7, line_index = 2, col = 1}
@@ -354,6 +374,7 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
 
 @(test)
 dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T) {
+    // Checks wrapped text-run consumption emits layout items and lines with a valid reported last line index.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     cache^.last_panel_width = 48
@@ -382,6 +403,7 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
 
 @(test)
 dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
+    // Ensures script math helper outputs produce sensible ascent, descent, offsets, and visual padding values.
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_BOLD)
     ascent, descent := app_dynview.style_ascent_descent(style, 12)
 
@@ -400,6 +422,7 @@ dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
 
 @(test)
 dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
+    // Verifies delimiter and large-operator sizing helpers scale with content height and operator kind.
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
 
     width_none := app_dynview.stretch_delimiter_width(style, 8, 16, 10, app_dynview.DELIMITER_KIND_NONE)
@@ -423,6 +446,7 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
 
 @(test)
 dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
+    // Confirms math program measurement aggregates child command metrics into non-zero outer dimensions.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     cache^.last_wrap_advance = 8
@@ -456,6 +480,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
 
 @(test)
 dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T) {
+    // Checks fraction and radical spacing helpers return positive values and scale upward with larger inputs.
     side_pad_small := app_dynview.fraction_side_padding(10, 4)
     side_pad_large := app_dynview.fraction_side_padding(24, 10)
     vert_gap_small := app_dynview.fraction_vertical_gap(10)
@@ -475,6 +500,7 @@ dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T
 
 @(test)
 dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.T) {
+    // Verifies integral stacked-limit gap is intentionally tighter than the sum/product stacked-limit gap.
     gap_sum := app_dynview.large_op_limit_gap_for_kind(app_dynview.LARGE_OP_KIND_SUM, 16, 0.25)
     gap_int := app_dynview.large_op_limit_gap_for_kind(app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
 
@@ -485,6 +511,7 @@ dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.
 
 @(test)
 dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
+    // Ensures math program measurement rejects invalid or out-of-range command windows.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
 
@@ -507,6 +534,7 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
 
 @(test)
 dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T) {
+    // Confirms measured width increases when additional child commands are included in the same math program.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     cache^.last_wrap_advance = 8
@@ -552,6 +580,7 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
 
 @(test)
 dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
+    // Verifies layout cache reset clears counters, aggregate metrics, and layout validity state.
     cache := new(app_core.Ui_Dynview_Compile_Cache)
     defer free(cache)
     cache^.layout_line_count = 2
@@ -571,6 +600,7 @@ dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
 
 @(test)
 dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
+    // Checks custom-font style ids decode expected flags and non-custom ids do not use that decoding path.
     custom_flags := app_core.Font_Variant_Flags(
         u32(app_core.Font_Variant_Flags.Light) |
         u32(app_core.Font_Variant_Flags.Bold) |
