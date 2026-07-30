@@ -221,4 +221,8 @@ end
     runtime = Scratchpad.create_runtime_module(5_001)
     @test isdefined(runtime, Symbol("highlight_pen!"))
     @test isdefined(runtime, Symbol("highlight_compass!"))
+    @test isdefined(runtime, :LaTeXStrings)
+
+    latex_value = Core.eval(runtime, :(L"\\alpha"))
+    @test latex_value isa Main.LaTeXStrings.LaTeXString
 end

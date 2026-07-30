@@ -1,6 +1,8 @@
 # Main Julia script body
 # This just loads all the system helpers and animation files, and registers in init for Odin
 
+using LaTeXStrings
+
 include("./odin-julia-bridge.jl")
 include("./latex.jl")
 include("./geometry.jl")

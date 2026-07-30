@@ -191,8 +191,8 @@ Check out [LaTeX Support](LaTeXSupport.md) for exactly what we do support today.
 
 The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
 For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
-much as is supported. If you `using LaTeXStrings` in the REPL, you can use this to play
-with what is supported.
+much as is supported. `LaTeXStrings` is automatically included in the REPL, so you can use
+this to play with what is supported.
 
 Currently, only math mode is supported. Maybe I'll add more? Hmm...
 

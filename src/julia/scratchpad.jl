@@ -134,12 +134,18 @@ function create_runtime_module(session_id::Int)
     mod_name = Symbol("EuclidScratchpadSession_", session_id)
     runtime = Module(mod_name)
 
+    if !isdefined(Main, :LaTeXStrings)
+        Core.eval(Main, :(using LaTeXStrings))
+    end
+
     Core.eval(runtime, :(const OdinJuliaBridge = Main.OdinJuliaBridge))
     Core.eval(runtime, :(const EuclidLatex = Main.EuclidLatex))
     Core.eval(runtime, :(const EuclidGeometry = Main.EuclidGeometry))
     Core.eval(runtime, :(const EuclidAnimations = Main.EuclidAnimations))
     Core.eval(runtime, :(const EuclidRepl = Main.EuclidRepl))
     Core.eval(runtime, :(const Scratchpad = Main.Scratchpad))
+    Core.eval(runtime, :(const LaTeXStrings = Main.LaTeXStrings))
+    Core.eval(runtime, :(using Main.LaTeXStrings))
 
     # Expose helpers directly in session scope so users can register/remove hooks from input.
     Core.eval(runtime, quote
