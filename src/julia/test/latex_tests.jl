@@ -291,6 +291,27 @@ end
     plain_square = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c&d\\end{matrix}")
     @test plain_square == "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
 
+    array_single = EuclidLatex.latex_to_plain_text("\\begin{array}{c}x\\end{array}")
+    @test array_single == "\\begin{array}{c}x\\end{array}"
+
+    array_rect = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\end{array}")
+    @test array_rect == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
+
+    array_formatted = EuclidLatex.latex_to_plain_text("\\begin{array}{cccc}\n1 & 2 & 3 & 4 \\\\ \n5 & 6 & 7 & 8 \\\\ \n\\end{array}")
+    @test array_formatted == "\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\end{array}"
+
+    array_with_trailing_row_sep = EuclidLatex.latex_to_plain_text("\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\\\\\end{array}")
+    @test array_with_trailing_row_sep == "\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\end{array}"
+
+    array_trailing_sep = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
+    @test array_trailing_sep == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
+
+    matrix_trailing_sep = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c&d\\\\\\end{matrix}")
+    @test matrix_trailing_sep == "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
+
+    array_trailing_row_break = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
+    @test array_trailing_row_break == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
+
     plain_rect = EuclidLatex.latex_to_plain_text("\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}")
     @test plain_rect == "\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}"
 
@@ -303,8 +324,21 @@ end
     @test matrix_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
     @test matrix_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
 
+    array_program = EuclidLatex.compiled_program_for("\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}")
+    @test length(array_program) == 1
+    @test array_program[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
+    @test array_program[1].radical_index_text == "2"
+    @test array_program[1].sup_text == "2"
+    @test array_program[1].text == "\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}"
+    @test length(array_program[1].children) == 4
+    @test array_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test array_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+
     malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
     @test malformed == "\\begin"
+
+    malformed_array = EuclidLatex.latex_to_plain_text("\\begin{array}{cx}a&b\\\\c&d\\end{array}")
+    @test malformed_array == "\\begin"
 end
 
 @testset "cache behavior" begin

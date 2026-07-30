@@ -226,7 +226,11 @@ end
     @test isdefined(runtime, Symbol("hide!"))
     @test isdefined(runtime, Symbol("euclidcolors"))
     @test isdefined(runtime, :LaTeXStrings)
+    @test isdefined(runtime, :Latexify)
 
     latex_value = Core.eval(runtime, :(L"\\alpha"))
     @test latex_value isa Main.LaTeXStrings.LaTeXString
+
+    latexify_value = Core.eval(runtime, :(latexify([1 2; 3 4])))
+    @test latexify_value !== nothing
 end
