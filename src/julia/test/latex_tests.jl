@@ -329,16 +329,26 @@ end
     @test array_program[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
     @test array_program[1].radical_index_text == "2"
     @test array_program[1].sup_text == "2"
+    @test array_program[1].sub_text == "cc"
     @test array_program[1].text == "\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}"
     @test length(array_program[1].children) == 4
     @test array_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
     @test array_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+
+    array_program_mixed = EuclidLatex.compiled_program_for("\\begin{array}{l c r}a&b&c\\end{array}")
+    @test length(array_program_mixed) == 1
+    @test array_program_mixed[1].sub_text == "lcr"
+
+    @test matrix_program[1].sub_text == ""
 
     malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
     @test malformed == "\\begin"
 
     malformed_array = EuclidLatex.latex_to_plain_text("\\begin{array}{cx}a&b\\\\c&d\\end{array}")
     @test malformed_array == "\\begin"
+
+    malformed_array_mismatch = EuclidLatex.latex_to_plain_text("\\begin{array}{c}a&b\\end{array}")
+    @test malformed_array_mismatch == "\\begin"
 end
 
 @testset "cache behavior" begin

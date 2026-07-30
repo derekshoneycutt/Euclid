@@ -713,6 +713,14 @@ draw_recursive_matrix_item :: #force_inline proc(
         }
     }
 
+    alignments, _ := decode_matrix_column_alignments(
+        &runtime^.command_buffer,
+        core.Ui_Dynview_Command{
+            script_sub_text_offset = item.script_sub_text_offset,
+            script_sub_text_len = item.script_sub_text_len,
+        },
+        cols)
+
     base_advance := effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     column_gap := matrix_column_gap(font_size, base_advance)
     row_gap := matrix_row_gap(font_size)
@@ -724,7 +732,11 @@ draw_recursive_matrix_item :: #force_inline proc(
         for col in 0..<cols {
             cell_index := row * cols + col
             cell_item := cell_items[cell_index]
-            cell_x := col_x + (col_widths[col] - cell_item.draw_width) * 0.5
+            cell_x := matrix_aligned_cell_x(
+                col_x,
+                col_widths[col],
+                cell_item.draw_width,
+                alignments[col])
             command_start := cell_program^.command_start + cell_index
             cell_single_program := core.Ui_Dynview_Math_Program{
                 valid = true,

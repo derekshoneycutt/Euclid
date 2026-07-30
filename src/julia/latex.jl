@@ -766,6 +766,24 @@ function skip_environment_body!(tokens::Vector{LatexToken}, idx::Base.RefValue{I
     return nothing
 end
 
+"""Return true when matrix-like environment metadata is compatible with parsed cell shape."""
+function matrix_environment_metadata_ok(
+    env_name::String,
+    array_preamble::String,
+    matrix_rows::Vector{Vector{Vector{LatexRun}}})
+
+    if env_name != "array"
+        return true
+    end
+
+    if isempty(matrix_rows)
+        return false
+    end
+
+    cols = length(matrix_rows[1])
+    return ncodeunits(array_preamble) == cols
+end
+
 """Append one normalized matrix cell to the active matrix-row buffer."""
 function push_matrix_cell!(row_cells::Vector{Vector{LatexRun}}, cell_runs::Vector{LatexRun})
     cell_runs = trim_matrix_cell_edge_whitespace(cell_runs)
@@ -1066,6 +1084,10 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
 
     matrix_rows, parse_ok = parse_matrix_rows(tokens, idx, env_name)
     if !parse_ok || !matrix_rows_valid(matrix_rows)
+        return matrix_parse_fallback(), false
+    end
+
+    if !matrix_environment_metadata_ok(env_name, array_preamble, matrix_rows)
         return matrix_parse_fallback(), false
     end
 
@@ -2019,12 +2041,17 @@ function matrix_payload_op(run::LatexRun)
         push!(cells, matrix_cell_payload_op(cell_run))
     end
 
+    array_alignment = ""
+    if run.segment == :array && !isempty(run.secondary_children)
+        array_alignment = run.secondary_children[1].text
+    end
+
     return MathPayloadOp(
         MATH_OP_MATRIX_RECURSIVE,
         latex_run_serialized_text(run),
         string(rows),
         string(cols),
-        "",
+        array_alignment,
         :none,
         :none,
         LARGE_OP_KIND_NONE,

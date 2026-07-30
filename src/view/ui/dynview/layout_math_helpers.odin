@@ -4,6 +4,8 @@ import "../../../core"
 
 import rl "vendor:raylib"
 
+Dynview_Matrix_Column_Alignment :: core.Ui_Dynview_Matrix_Column_Alignment
+
 //   Return style-aware ascent/descent estimates from active font size.
 style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
     scale := max(0.8, style.wrap_scale)
@@ -131,6 +133,66 @@ matrix_dims_from_command :: #force_inline proc(
     rows, rows_ok := parse_positive_int(rows_text)
     cols, cols_ok := parse_positive_int(cols_text)
     return rows, cols, rows_ok && cols_ok
+}
+
+//   Decode strict array alignment metadata; return all-center on any invalid shape.
+decode_matrix_column_alignments :: #force_inline proc(
+    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cmd: core.Ui_Dynview_Command,
+    cols: int) -> ([16]Dynview_Matrix_Column_Alignment, bool) {
+
+    alignments: [16]Dynview_Matrix_Column_Alignment
+    if cols <= 0 || cols > 16 {
+        return alignments, false
+    }
+
+    for col in 0..<cols {
+        alignments[col] = .Center
+    }
+
+    preamble := text_span_from_buffer(
+        buffer,
+        cmd.script_sub_text_offset,
+        cmd.script_sub_text_len)
+    if len(preamble) <= 0 {
+        return alignments, true
+    }
+    if len(preamble) != cols {
+        return alignments, false
+    }
+
+    for col in 0..<cols {
+        switch preamble[col] {
+        case 'l':
+            alignments[col] = .Left
+        case 'c':
+            alignments[col] = .Center
+        case 'r':
+            alignments[col] = .Right
+        case:
+            for idx in 0..<cols {
+                alignments[idx] = .Center
+            }
+            return alignments, false
+        }
+    }
+
+    return alignments, true
+}
+
+//   Resolve one cell x-position within a matrix column using l/c/r alignment rules.
+matrix_aligned_cell_x :: #force_inline proc(
+    col_x, column_width, cell_width: f32,
+    alignment: Dynview_Matrix_Column_Alignment) -> f32 {
+
+    switch alignment {
+    case .Left:
+        return col_x
+    case .Right:
+        return col_x + column_width - cell_width
+    case .Center:
+    }
+    return col_x + (column_width - cell_width) * 0.5
 }
 
 //   Return delimiter draw text for one supported delimiter kind.

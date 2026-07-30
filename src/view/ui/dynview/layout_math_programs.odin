@@ -492,6 +492,8 @@ math_program_recursive_matrix_item :: #force_inline proc(
         kind = .MatrixRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
         accent_mode = i32(rows),
         radical_mode = i32(cols),
         draw_width = max(draw_width, base_advance),

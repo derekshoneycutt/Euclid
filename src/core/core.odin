@@ -745,6 +745,13 @@ Ui_Regions :: struct {
     scratchpad_rect: rl.Rectangle,
 }
 
+
+Ui_Dynview_Matrix_Column_Alignment :: enum i32 {
+    Left = 0,
+    Center = 1,
+    Right = 2,
+}
+
 Ui_Dynview_Command_Kind :: enum {
     BeginBlock,
     EndBlock,
