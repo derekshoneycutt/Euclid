@@ -174,6 +174,7 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\approx" => "≈",
     "\\equiv" => "≡",
     "\\propto" => "∝",
+    "\\circ" => "∘",
     "\\lceil" => "⌈",
     "\\rceil" => "⌉",
     "\\lfloor" => "⌊",

@@ -14,6 +14,9 @@ using Test
     plain = EuclidLatex.latex_to_plain_text("\\alpha + \\beta + \\sin(x)")
     @test plain == "α + β + sin(x)"
 
+    circ_plain = EuclidLatex.latex_to_plain_text("f \\circ g")
+    @test circ_plain == "f ∘ g"
+
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
     @test length(program) == 2
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN

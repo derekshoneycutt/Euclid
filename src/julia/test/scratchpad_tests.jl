@@ -217,10 +217,14 @@ end
 @testset "highlight helper aliases and bindings" begin
     @test haskey(Scratchpad.HELPER_DOC_ALIASES, "highlight_pen!")
     @test haskey(Scratchpad.HELPER_DOC_ALIASES, "highlight_compass!")
+    @test haskey(Scratchpad.HELPER_DOC_ALIASES, "hide!")
+    @test haskey(Scratchpad.HELPER_DOC_ALIASES, "euclidcolors")
 
     runtime = Scratchpad.create_runtime_module(5_001)
     @test isdefined(runtime, Symbol("highlight_pen!"))
     @test isdefined(runtime, Symbol("highlight_compass!"))
+    @test isdefined(runtime, Symbol("hide!"))
+    @test isdefined(runtime, Symbol("euclidcolors"))
     @test isdefined(runtime, :LaTeXStrings)
 
     latex_value = Core.eval(runtime, :(L"\\alpha"))

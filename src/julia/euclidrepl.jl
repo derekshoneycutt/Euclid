@@ -16,11 +16,12 @@ module EuclidRepl
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..Scratchpad
+using Colors: Colorant
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
-    point!, line!, circle!, highlight_pen!, highlight_compass!,
+    euclidcolors, hide!, point!, line!, circle!, highlight_pen!, highlight_compass!,
     translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!, rotate_points_z!,
     reflect2d_points!, reflect2d_points_x_axis!, reflect2d_points_y_axis!,
     reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
@@ -39,6 +40,20 @@ const HIGHLIGHT_DESCEND_SHARE = 0.2f0
 const HIGHLIGHT_PASS_SHARE = 0.3f0
 
 const TWO_PI_F32 = Float32(2π)
+const EUCLID_COLORS = (
+    :steelblue,
+    :palevioletred1,
+    :khaki3,
+    :grey60,
+    :plum1,
+    :lightgreen,
+    :firebrick,
+)
+
+"""Return the curated Euclid color palette as Julia Colors objects."""
+function euclidcolors()
+    [parse(Colorant, String(name)) for name in EUCLID_COLORS]
+end
 
 abstract type ReplDrawPayload end
 
@@ -140,7 +155,7 @@ function ensure_session!()
 end
 
 """Return `value` as `Float32` and fail when duration is non-positive or non-finite."""
-function validated_duration(value)::Float32
+function validated_duration(value::Real)::Float32
     duration = Float32(value)
     if !isfinite(duration) || duration <= 0f0
         throw(ArgumentError("duration must be finite and > 0f0"))
@@ -150,7 +165,7 @@ function validated_duration(value)::Float32
 end
 
 """Return `value` as `Float32` and fail when brush is non-positive or non-finite."""
-function validated_brush(value)::Float32
+function validated_brush(value::Real)::Float32
     brush = Float32(value)
     if !isfinite(brush) || brush <= 0f0
         throw(ArgumentError("brush must be finite and > 0f0"))
@@ -160,7 +175,7 @@ function validated_brush(value)::Float32
 end
 
 """Validate that start theta is finite and return it as `Float32`."""
-function validated_start_theta(value)::Float32
+function validated_start_theta(value::Real)::Float32
     theta = Float32(value)
     if !isfinite(theta)
         throw(ArgumentError("start_theta must be finite"))
@@ -170,7 +185,7 @@ function validated_start_theta(value)::Float32
 end
 
 """Validate end theta and return it as `Float32`, allowing `Inf` sentinel."""
-function validated_end_theta(value)::Float32
+function validated_end_theta(value::Real)::Float32
     theta = Float32(value)
     if isnan(theta)
         throw(ArgumentError("end_theta must not be NaN"))
@@ -180,7 +195,7 @@ function validated_end_theta(value)::Float32
 end
 
 """Validate highlight angle theta as a finite Float32 value."""
-function validated_angle_theta(value)::Float32
+function validated_angle_theta(value::Real)::Float32
     theta = Float32(value)
     if !isfinite(theta)
         throw(ArgumentError("angle_theta must be finite"))
@@ -190,7 +205,7 @@ function validated_angle_theta(value)::Float32
 end
 
 """Validate highlight radius as finite and positive Float32."""
-function validated_radius(value)::Float32
+function validated_radius(value::Real)::Float32
     radius = Float32(value)
     if !isfinite(radius) || radius <= 0f0
         throw(ArgumentError("radius must be finite and > 0f0"))
@@ -200,21 +215,24 @@ function validated_radius(value)::Float32
 end
 
 """Return a copied 3D Float32 vector, failing when length is below 3."""
-function vec3(name::AbstractString, value::Vector{Float32})
+function vec3(name::AbstractString, value::AbstractVector{<:Real})
     if length(value) < 3
         throw(ArgumentError("$(name) must have at least 3 Float32 components"))
     end
 
-    if !isfinite(value[1]) || !isfinite(value[2]) || !isfinite(value[3])
+    first_value = Float32(value[1])
+    second_value = Float32(value[2])
+    third_value = Float32(value[3])
+    if !isfinite(first_value) || !isfinite(second_value) || !isfinite(third_value)
         throw(ArgumentError("$(name) components must be finite"))
     end
 
-    return Float32[value[1], value[2], value[3]]
+    return Float32[first_value, second_value, third_value]
 end
 
 """Return validated non-empty point ids as `Vector{Int}`."""
 function validated_point_ids(point_ids)
-    ids = Int[Int(id) for id in point_ids]
+    ids = Int[Integer(id) for id in point_ids]
     if isempty(ids)
         throw(ArgumentError("point_ids must contain at least one id"))
     end
@@ -262,17 +280,22 @@ function is_full_sweep_request(start_theta::Float32, end_theta::Float32)::Bool
 end
 
 """Compute a point on the XY circle at `theta`, keeping center z."""
-function point_on_circle(center::Vector{Float32}, radius::Float32, theta::Float32)
+function point_on_circle(center::AbstractVector{<:Real}, radius::Real, theta::Real)
+    center_vec = vec3("center", center)
+    radius32 = Float32(radius)
+    theta32 = Float32(theta)
     return Float32[
-        center[1] + radius * Float32(cos(theta)),
-        center[2] + radius * Float32(sin(theta)),
-        center[3],
+        center_vec[1] + radius32 * Float32(cos(theta32)),
+        center_vec[2] + radius32 * Float32(sin(theta32)),
+        center_vec[3],
     ]
 end
 
 """Return XY polar angle from center to point as Float32."""
-function theta_from_center(center::Vector{Float32}, point::Vector{Float32})
-    return Float32(atan(point[2] - center[2], point[1] - center[1]))
+function theta_from_center(center::AbstractVector{<:Real}, point::AbstractVector{<:Real})
+    center_vec = vec3("center", center)
+    point_vec = vec3("point", point)
+    return Float32(atan(point_vec[2] - center_vec[2], point_vec[1] - center_vec[1]))
 end
 
 """Apply final visible state for a point payload."""
@@ -315,11 +338,11 @@ function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::PointPayload)
+function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PointPayload)
     EuclidAnimations.animate_repl_draw_point(
         state_ptr,
-        elapsed,
-        duration,
+        Float32(elapsed),
+        Float32(duration),
         payload.pos,
         payload.brush,
         payload.color,
@@ -327,11 +350,11 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::LinePayload)
+function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::LinePayload)
     EuclidAnimations.animate_repl_draw_line(
         state_ptr,
-        elapsed,
-        duration,
+        Float32(elapsed),
+        Float32(duration),
         payload.start_pos,
         payload.end_pos,
         payload.brush,
@@ -342,12 +365,12 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::CirclePayload)
+function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::CirclePayload)
     if payload.filled
         EuclidAnimations.animate_repl_draw_filledcircle(
             state_ptr,
-            elapsed,
-            duration,
+            Float32(elapsed),
+            Float32(duration),
             payload.center,
             payload.start_pos,
             payload.angle_theta,
@@ -361,8 +384,8 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Floa
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
-            elapsed,
-            duration,
+            Float32(elapsed),
+            Float32(duration),
             payload.center,
             payload.start_pos,
             payload.angle_theta,
@@ -378,7 +401,7 @@ end
 
 """Render one frame of pen highlight with descend-pass-pass-rise sequencing."""
 function render_payload!(
-    state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::PenHighlightPayload)
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PenHighlightPayload)
 
     descend_duration = duration * HIGHLIGHT_DESCEND_SHARE
     pass_duration = duration * HIGHLIGHT_PASS_SHARE
@@ -435,7 +458,7 @@ end
 
 """Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
 function render_payload!(
-    state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::CompassHighlightPayload)
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::CompassHighlightPayload)
 
     descend_duration = duration * HIGHLIGHT_DESCEND_SHARE
     pass_duration = duration * HIGHLIGHT_PASS_SHARE
@@ -497,11 +520,11 @@ end
 """Render one compass highlight pass using filled or unfilled trail styling."""
 function render_compass_highlight_pass!(
     state_ptr::Ptr{Cvoid},
-    elapsed::Float32,
-    duration::Float32,
+    elapsed::Real,
+    duration::Real,
     payload::CompassHighlightPayload,
-    start_pos::Vector{Float32},
-    angle_theta::Float32)
+    start_pos::AbstractVector{<:Real},
+    angle_theta::Real)
 
     if payload.filled
         EuclidAnimations.animate_compass_fill_arc_highlight(
@@ -532,10 +555,10 @@ end
 """Render one frame of batch point translation."""
 function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
-    elapsed::Float32,
-    duration::Float32,
+    elapsed::Real,
+    duration::Real,
     point_id::Int,
-    start_position::Vector{Float32},
+    start_position::AbstractVector{<:Real},
     spec::TranslateSpec)
 
     EuclidAnimations.transform_translate_point(
@@ -551,10 +574,10 @@ end
 """Render one frame of batch point rotation."""
 function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
-    elapsed::Float32,
-    duration::Float32,
+    elapsed::Real,
+    duration::Real,
     point_id::Int,
-    start_position::Vector{Float32},
+    start_position::AbstractVector{<:Real},
     spec::RotateSpec)
 
     EuclidAnimations.transform_rotate_point(
@@ -572,10 +595,10 @@ end
 """Render one frame of batch point 2D reflection."""
 function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
-    elapsed::Float32,
-    duration::Float32,
+    elapsed::Real,
+    duration::Real,
     point_id::Int,
-    start_position::Vector{Float32},
+    start_position::AbstractVector{<:Real},
     spec::Reflect2DSpec)
 
     EuclidAnimations.transform_reflect2d_point(
@@ -590,7 +613,7 @@ function render_transform_spec!(
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Float32, duration::Float32, payload::TransformPayload)
+function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::TransformPayload)
     for (index, point_id) in pairs(payload.point_ids)
         start_position = payload.start_positions[index]
         render_transform_spec!(
@@ -652,7 +675,7 @@ function clear_managed_geometry!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession
 end
 
 """Advance the current active EuclidRepl draw job by one frame."""
-function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Float32)
+function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Real)
     session = ensure_session!()
     job = session.active_job
     if job === nothing
@@ -724,6 +747,49 @@ function clear!(state_ptr::Ptr{Cvoid})
     return true
 end
 
+function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
+    try
+        OdinJuliaBridge.hide_point(state_ptr, Int(id))
+    catch err
+        message = sprint(showerror, err)
+        if occursin("could not load symbol", message) || occursin("undefined symbol", message)
+            return nothing
+        end
+        rethrow(err)
+    end
+    return nothing
+end
+
+"""Hide a REPL-managed geometry target by integer index or bridge shape/view handle."""
+function hide!(state_ptr::Ptr{Cvoid}, index::Integer)
+    _hide_bridge_point(state_ptr, Int(index))
+    return nothing
+end
+
+"""Hide a point-view handle by taking its index."""
+function hide!(state_ptr::Ptr{Cvoid}, view::OdinJuliaBridge.BridgePointView)
+    _hide_bridge_point(state_ptr, Int(view.index))
+    return nothing
+end
+
+"""Hide a line-shape handle by its host id."""
+function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeLine)
+    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    return nothing
+end
+
+"""Hide a circle-shape handle by its host id."""
+function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeCircle)
+    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    return nothing
+end
+
+"""Hide a filled-circle-shape handle by its host id."""
+function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeFilledCircle)
+    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    return nothing
+end
+
 """Return compact EuclidRepl runtime status for REPL inspection."""
 function status(state_ptr::Ptr{Cvoid})
     session = ensure_session!()
@@ -758,9 +824,9 @@ Keywords:
 - `brush=5f0`
 - `duration=DEFAULT_POINT_DURATION` (draw animation duration only)
 """
-function point!(state_ptr::Ptr{Cvoid}, pos::Vector{Float32};
-    color=DEFAULT_COLOR, brush::Float32=DEFAULT_BRUSH,
-    duration::Float32=DEFAULT_POINT_DURATION)
+function point!(state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real};
+    color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
+    duration::Real=DEFAULT_POINT_DURATION)
     pos3 = vec3("pos", pos)
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
@@ -782,9 +848,9 @@ Keywords:
 - `brush=5f0`
 - `duration=DEFAULT_LINE_DURATION` (draw animation duration only)
 """
-function line!(state_ptr::Ptr{Cvoid}, start_pos::Vector{Float32}, end_pos::Vector{Float32};
-    color=DEFAULT_COLOR, brush::Float32=DEFAULT_BRUSH,
-    duration::Float32=DEFAULT_LINE_DURATION)
+function line!(state_ptr::Ptr{Cvoid}, start_pos::AbstractVector{<:Real}, end_pos::AbstractVector{<:Real};
+    color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
+    duration::Real=DEFAULT_LINE_DURATION)
     start_pos3 = vec3("start_pos", start_pos)
     end_pos3 = vec3("end_pos", end_pos)
     brush_value = validated_brush(brush)
@@ -827,31 +893,28 @@ Circle rules:
 - full circle when `end_theta - start_theta >= 2pi` or `end_theta` is infinite,
 - full circles still start at `start_theta` and sweep one full turn.
 """
-function circle!(state_ptr::Ptr{Cvoid}, center::Vector{Float32}, radius::Float32;
-    start_theta::Float32=0f0, end_theta::Float32=Inf32, filled::Bool=false,
-    color=DEFAULT_COLOR, brush::Float32=DEFAULT_BRUSH,
-    duration::Float32=DEFAULT_CIRCLE_DURATION)
+function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
+    start_theta::Real=0f0, end_theta::Real=Inf32, filled::Bool=false,
+    color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
+    duration::Real=DEFAULT_CIRCLE_DURATION)
     center3 = vec3("center", center)
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
     start_theta_valid = validated_start_theta(start_theta)
     end_theta_valid = validated_end_theta(end_theta)
     full_sweep = is_full_sweep_request(start_theta_valid, end_theta_valid)
-
-    if !isfinite(radius) || radius <= 0f0
-        throw(ArgumentError("radius must be finite and > 0f0"))
-    end
+    radius_valid = validated_radius(radius)
 
     final_end_theta = effective_end_theta(start_theta_valid, end_theta_valid)
-    start_pos = point_on_circle(center3, radius, start_theta_valid)
-    end_pos = point_on_circle(center3, radius, final_end_theta)
+    start_pos = point_on_circle(center3, radius_valid, start_theta_valid)
+    end_pos = point_on_circle(center3, radius_valid, final_end_theta)
     angle_theta = final_end_theta - start_theta_valid
 
     shape = if filled
         OdinJuliaBridge.create_new_filledcircle(
             state_ptr,
             center3,
-            radius,
+            radius_valid,
             start_theta_valid,
             final_end_theta,
             color,
@@ -860,7 +923,7 @@ function circle!(state_ptr::Ptr{Cvoid}, center::Vector{Float32}, radius::Float32
         OdinJuliaBridge.create_new_circle(
             state_ptr,
             center3,
-            radius,
+            radius_valid,
             start_theta_valid,
             final_end_theta,
             color,
@@ -876,7 +939,7 @@ function circle!(state_ptr::Ptr{Cvoid}, center::Vector{Float32}, radius::Float32
         center3,
         start_pos,
         end_pos,
-        radius,
+        radius_valid,
         angle_theta,
         color,
         brush_value)
@@ -902,10 +965,10 @@ Keywords:
 """
 function highlight_pen!(
     state_ptr::Ptr{Cvoid},
-    start_pos::Vector{Float32},
-    end_pos::Vector{Float32};
+    start_pos::AbstractVector{<:Real},
+    end_pos::AbstractVector{<:Real};
     color=DEFAULT_HIGHLIGHT_COLOR,
-    duration::Float32=DEFAULT_HIGHLIGHT_DURATION)
+    duration::Real=DEFAULT_HIGHLIGHT_DURATION)
 
     start_pos3 = vec3("start_pos", start_pos)
     end_pos3 = vec3("end_pos", end_pos)
@@ -933,13 +996,13 @@ Keywords:
 """
 function highlight_compass!(
     state_ptr::Ptr{Cvoid},
-    center::Vector{Float32},
-    start_pos::Vector{Float32},
+    center::AbstractVector{<:Real},
+    start_pos::AbstractVector{<:Real},
     angle_theta::Real,
     radius::Real;
     color=DEFAULT_HIGHLIGHT_COLOR,
     filled::Bool=false,
-    duration::Float32=DEFAULT_HIGHLIGHT_DURATION)
+    duration::Real=DEFAULT_HIGHLIGHT_DURATION)
 
     center3 = vec3("center", center)
     start_pos3 = vec3("start_pos", start_pos)
@@ -975,8 +1038,8 @@ function translate_points!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
-    displacement::Vector{Float32};
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    displacement::AbstractVector{<:Real};
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
@@ -1000,10 +1063,10 @@ function rotate_points!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
-    axis_point_a::Vector{Float32},
-    axis_point_b::Vector{Float32},
+    axis_point_a::AbstractVector{<:Real},
+    axis_point_b::AbstractVector{<:Real},
     theta::Real;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
@@ -1028,7 +1091,7 @@ function rotate_points_x!(
     point_ids,
     start_positions,
     theta::Real;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
         state_ptr,
@@ -1047,7 +1110,7 @@ function rotate_points_y!(
     point_ids,
     start_positions,
     theta::Real;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
         state_ptr,
@@ -1066,7 +1129,7 @@ function rotate_points_z!(
     point_ids,
     start_positions,
     theta::Real;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
         state_ptr,
@@ -1089,9 +1152,9 @@ function reflect2d_points!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
-    line_point_a::Vector{Float32},
-    line_point_b::Vector{Float32};
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real};
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
@@ -1111,7 +1174,7 @@ function reflect2d_points_x_axis!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         state_ptr,
@@ -1128,7 +1191,7 @@ function reflect2d_points_y_axis!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         state_ptr,
@@ -1145,7 +1208,7 @@ function reflect2d_points_diag_pos!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         state_ptr,
@@ -1162,7 +1225,7 @@ function reflect2d_points_diag_neg!(
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
-    duration::Float32=DEFAULT_TRANSFORM_DURATION)
+    duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         state_ptr,

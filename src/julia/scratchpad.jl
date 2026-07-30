@@ -86,6 +86,10 @@ const HELPER_DOC_ALIASES = Dict(
         "list_frame_hooks()"),
     "save_history" => (:Scratchpad, :save_history_to_file,
         "save_history(path)"),
+    "hide!" => (:EuclidRepl, Symbol("hide!"),
+        "hide!(target)"),
+    "euclidcolors" => (:EuclidRepl, Symbol("euclidcolors"),
+        "euclidcolors()"),
     "point!" => (:EuclidRepl, Symbol("point!"),
         "point!(pos; color=:steelblue, brush=5f0, duration=5.5f0)"),
     "line!" => (:EuclidRepl, Symbol("line!"),
@@ -156,6 +160,8 @@ function create_runtime_module(session_id::Int)
         save_history(path) = Scratchpad.save_history_to_file(state_ptr, path)
 
         # Convenience wrappers for common EuclidRepl draw APIs.
+        hide!(args...; kwargs...) = EuclidRepl.hide!(state_ptr, args...; kwargs...)
+        euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
         point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
         line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
         circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)

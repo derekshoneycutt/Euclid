@@ -4,7 +4,7 @@ end
 if !isdefined(Main, :EuclidGeometry)
     include("../geometry.jl")
 end
-if !isdefined(Main, :EuclidAnimations)
+if !isdefined(Main, :EuclidAnimations) || !isdefined(Main.EuclidAnimations, :displacement_from_vector_and_length)
     include("../animations.jl")
 end
 if !isdefined(Main, :EuclidLatex)
@@ -18,6 +18,7 @@ if !isdefined(Main, :EuclidRepl)
 end
 
 using .EuclidRepl
+using Colors
 using Test
 
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
@@ -26,6 +27,9 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
     @test_throws ArgumentError EuclidRepl.validated_duration(0f0)
     @test_throws ArgumentError EuclidRepl.validated_duration(-1f0)
     @test_throws ArgumentError EuclidRepl.validated_duration(Inf32)
+
+    @test EuclidRepl.vec3("pos", Int[1, 2, 3]) == Float32[1f0, 2f0, 3f0]
+    @test EuclidAnimations.displacement_from_vector_and_length(Int[1, 0, 0], 1) == Float32[1f0, 0f0, 0f0]
 
     @test_throws ArgumentError EuclidRepl.validated_brush(0f0)
     @test_throws ArgumentError EuclidRepl.validated_brush(-2f0)
@@ -49,6 +53,53 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
     @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 1f0) ≈ 1f0
+end
+
+@testset "EuclidRepl hide helpers" begin
+    point_view = OdinJuliaBridge.BridgePointView(
+        0x0,
+        7,
+        0,
+        0x0,
+        0f0,
+        0f0,
+        0x0,
+        (0f0, 0f0, 0f0),
+        0x0,
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        0x0,
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        0x0,
+        UInt32(0),
+        Int32(0),
+        0,
+        0,
+        0,
+        0,
+    )
+    line_shape = OdinJuliaBridge.BridgeShapeLine(11, 12, 13)
+    circle_shape = OdinJuliaBridge.BridgeShapeCircle(21, 22, 23)
+    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(31, 32, 33)
+
+    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, 5))
+    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, point_view))
+    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, line_shape))
+    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, circle_shape))
+    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, filled_circle_shape))
+end
+
+@testset "EuclidRepl color palette helpers" begin
+    colors = EuclidRepl.euclidcolors()
+
+    @test colors isa Vector{<:Colorant}
+    @test length(colors) == 7
+    @test colors[1] == parse(Colorant, "steelblue")
+    @test colors[2] == parse(Colorant, "palevioletred1")
+    @test colors[3] == parse(Colorant, "khaki3")
+    @test colors[4] == parse(Colorant, "grey60")
+    @test colors[5] == parse(Colorant, "plum1")
+    @test colors[6] == parse(Colorant, "lightgreen")
+    @test colors[7] == parse(Colorant, "firebrick")
 end
 
 @testset "EuclidRepl highlight APIs" begin

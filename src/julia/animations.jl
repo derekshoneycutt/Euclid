@@ -86,13 +86,14 @@ Build a displacement vector from direction and total displacement length.
 Returns a zero vector when the direction is degenerate.
 """
 @inline function displacement_from_vector_and_length(
-    direction::Vector{Float32}, displacementLength::Float32)
+    direction::AbstractVector{<:Real}, displacementLength::Real)
 
-    directionLength = norm(direction)
+    directionVec = Float32[Float32(d) for d in direction]
+    directionLength = norm(directionVec)
     if directionLength <= TransformEps
         return Float32[0f0, 0f0, 0f0]
     end
-    return (direction / directionLength) * displacementLength
+    return (directionVec / directionLength) * Float32(displacementLength)
 end
 
 
@@ -102,25 +103,28 @@ Rotate one point around a 3D axis line using Rodrigues' rotation formula.
 Returns `nothing` when the axis line is degenerate.
 """
 @inline function rotate_point_about_axis_line(
-    point::Vector{Float32}, axisA::Vector{Float32}, axisB::Vector{Float32}, angle::Float32)
+    point::AbstractVector{<:Real}, axisA::AbstractVector{<:Real}, axisB::AbstractVector{<:Real}, angle::Real)
 
-    axisDirection = axisB - axisA
+    pointVec = Float32[Float32(p) for p in point]
+    axisAVec = Float32[Float32(a) for a in axisA]
+    axisBVec = Float32[Float32(b) for b in axisB]
+    axisDirection = axisBVec - axisAVec
     axisLength = norm(axisDirection)
     if axisLength <= TransformEps
         return nothing
     end
 
     unitAxis = axisDirection / axisLength
-    relative = point - axisA
-    c = Float32(cos(angle))
-    s = Float32(sin(angle))
+    relative = pointVec - axisAVec
+    c = Float32(cos(Float32(angle)))
+    s = Float32(sin(Float32(angle)))
 
     rotatedRelative =
         relative * c +
         cross(unitAxis, relative) * s +
         unitAxis * dot(unitAxis, relative) * (1f0 - c)
 
-    return axisA + rotatedRelative
+    return axisAVec + rotatedRelative
 end
 
 
@@ -131,10 +135,13 @@ Only XY components participate in reflection geometry; `z` is preserved.
 Returns `nothing` when the line is degenerate.
 """
 @inline function reflect_point_xy_across_line(
-    point::Vector{Float32}, lineA::Vector{Float32}, lineB::Vector{Float32})
+    point::AbstractVector{<:Real}, lineA::AbstractVector{<:Real}, lineB::AbstractVector{<:Real})
 
-    lineDx = lineB[1] - lineA[1]
-    lineDy = lineB[2] - lineA[2]
+    pointVec = Float32[Float32(p) for p in point]
+    lineAVec = Float32[Float32(a) for a in lineA]
+    lineBVec = Float32[Float32(b) for b in lineB]
+    lineDx = lineBVec[1] - lineAVec[1]
+    lineDy = lineBVec[2] - lineAVec[2]
     lineLength = Float32(hypot(lineDx, lineDy))
     if lineLength <= TransformEps
         return nothing
@@ -142,8 +149,8 @@ Returns `nothing` when the line is degenerate.
 
     ux = lineDx / lineLength
     uy = lineDy / lineLength
-    relX = point[1] - lineA[1]
-    relY = point[2] - lineA[2]
+    relX = pointVec[1] - lineAVec[1]
+    relY = pointVec[2] - lineAVec[2]
     proj = relX * ux + relY * uy
     projX = proj * ux
     projY = proj * uy
@@ -151,9 +158,9 @@ Returns `nothing` when the line is degenerate.
     perpY = relY - projY
 
     return Float32[
-        lineA[1] + (projX - perpX),
-        lineA[2] + (projY - perpY),
-        point[3],
+        lineAVec[1] + (projX - perpX),
+        lineAVec[2] + (projY - perpY),
+        pointVec[3],
     ]
 end
 
@@ -164,10 +171,10 @@ Choose the reflection half-turn branch with greater positive z lift.
 Returns `nothing` when axis rotation cannot be resolved.
 """
 @inline function reflection_arc_point_above_surface(
-    startOnPlane::Vector{Float32},
-    lineA::Vector{Float32},
-    lineB::Vector{Float32},
-    angle::Float32)
+    startOnPlane::AbstractVector{<:Real},
+    lineA::AbstractVector{<:Real},
+    lineB::AbstractVector{<:Real},
+    angle::Real)
 
     rotatedPos = rotate_point_about_axis_line(startOnPlane, lineA, lineB, angle)
     rotatedNeg = rotate_point_about_axis_line(startOnPlane, lineA, lineB, -angle)
