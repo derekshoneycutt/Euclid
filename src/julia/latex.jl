@@ -19,7 +19,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(13)
+const PARSER_GRAMMAR_VERSION = Int32(14)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -169,12 +169,18 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\Leftarrow" => "⇐",
     "\\iff" => "⇔",
     "\\leq" => "≤",
+    "\\ge" => "≥",
     "\\geq" => "≥",
+    "\\ne" => "≠",
     "\\neq" => "≠",
     "\\approx" => "≈",
     "\\equiv" => "≡",
     "\\propto" => "∝",
     "\\circ" => "∘",
+    "\\dots" => "…",
+    "\\mapsto" => "↦",
+    "\\rtimes" => "⋊",
+    "\\;" => " ",
     "\\lceil" => "⌈",
     "\\rceil" => "⌉",
     "\\lfloor" => "⌊",
@@ -593,7 +599,7 @@ function parse_special_text_command(
     tokens::Vector{LatexToken},
     idx::Base.RefValue{Int})
 
-    if command == "\\text"
+    if command == "\\text" || command == "\\mathrm"
         return [latex_atom_run(parse_required_group_as_text(tokens, idx), :text)]
     end
 
@@ -709,7 +715,8 @@ end
 matrix_parse_fallback() = latex_atom_run("\\begin", :math)
 
 """Return true when one environment name is matrix-like and supported in phase 1."""
-is_matrix_like_environment(env_name::String) = env_name == "matrix" || env_name == "array"
+is_matrix_like_environment(env_name::String) =
+    env_name == "matrix" || env_name == "array" || env_name == "bmatrix" || env_name == "pmatrix" || env_name == "vmatrix"
 
 """Normalize one array alignment preamble by removing all whitespace."""
 function normalize_array_preamble_text(text::String)
@@ -782,6 +789,36 @@ function matrix_environment_metadata_ok(
 
     cols = length(matrix_rows[1])
     return ncodeunits(array_preamble) == cols
+end
+
+"""Return one matrix-like semantic run for parsed environment name and cells."""
+function matrix_environment_run(
+    env_name::String,
+    rows::Int,
+    cols::Int,
+    cells::Vector{LatexRun},
+    array_preamble::String)
+
+    if env_name == "array"
+        return latex_array_run(rows, cols, cells, array_preamble)
+    end
+
+    if env_name == "bmatrix"
+        matrix_run = latex_matrix_run(rows, cols, cells)
+        return latex_stretch_delimiter_run("[", "]", [matrix_run])
+    end
+
+    if env_name == "pmatrix"
+        matrix_run = latex_matrix_run(rows, cols, cells)
+        return latex_stretch_delimiter_run("(", ")", [matrix_run])
+    end
+
+    if env_name == "vmatrix"
+        matrix_run = latex_matrix_run(rows, cols, cells)
+        return latex_stretch_delimiter_run("|", "|", [matrix_run])
+    end
+
+    return latex_matrix_run(rows, cols, cells)
 end
 
 """Append one normalized matrix cell to the active matrix-row buffer."""
@@ -1100,11 +1137,12 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
         end
     end
 
-    if env_name == "array"
-        return latex_array_run(length(matrix_rows), cols, cells, array_preamble), true
-    end
-
-    return latex_matrix_run(length(matrix_rows), cols, cells), true
+    return matrix_environment_run(
+        env_name,
+        length(matrix_rows),
+        cols,
+        cells,
+        array_preamble), true
 end
 
 """Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""

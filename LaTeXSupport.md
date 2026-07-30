@@ -45,14 +45,15 @@ The current implementation supports these major groups:
 
 - Unicode substitution commands for many Greek letters, operators, relations, arrows, and set symbols.
 - Upright text operators like `\sin`, `\cos`, `\log`, `\lim`, `\max`.
-- `\text{...}` for non-italic text inside math.
+- `\text{...}` and `\mathrm{...}` for non-italic text inside math.
 - Scripts: `^` and `_` including grouped forms.
 - Fractions: `\frac{...}{...}`.
 - Radicals: `\sqrt{...}` and `\sqrt[n]{...}`.
 - Accent bars: `\overline{...}` and `\underline{...}`.
 - Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
 - Large operators with limits: `\sum`, `\prod`, `\int`, `\lim`.
-- Matrix blocks: `\begin{matrix} ... \end{matrix}` with `&` column separators and `\\` row separators.
+- Matrix blocks: `\begin{matrix} ... \end{matrix}` and `\begin{array}{...} ... \end{array}` with `&` column separators and `\\` row separators.
+- Matrix wrapper environments composed through stretch delimiters: `bmatrix`, `pmatrix`, `vmatrix`.
 
 ## Character Support
 
@@ -65,7 +66,7 @@ Character handling is currently practical and intentionally limited. Command sup
 | LaTeX command substitutions | Supported (fixed list only) | `\alpha`, `\leq`, `\mathbb{R}` | Only mapped commands are supported; unknown commands are not auto-implemented. |
 | `\text{...}` plain text content | Supported | `\text{Area}`, `\text{TEMP TEST}` | Use for upright words inside math mode. |
 | Raw Unicode math symbols typed directly | Limited / best-effort | `α`, `≤`, `∑` | May render as plain glyphs, but command forms are more reliable for parser/style behavior. |
-| Arbitrary TeX-special characters/environments | Not generally supported | `#`, `%`, `\begin{array}` | Outside current command/environment coverage unless explicitly listed in this document. |
+| Arbitrary TeX-special characters/environments | Not generally supported | `#`, `%`, unknown `\begin{...}` envs | Outside current command/environment coverage unless explicitly listed in this document. |
 
 Practical rule: if a symbol matters, prefer its LaTeX command form over raw character entry.
 
@@ -85,8 +86,9 @@ Practical rule: if a symbol matters, prefer its LaTeX command form over raw char
 | Calculus/analysis | `\infty`, `\partial`, `\nabla`, `\propto` |
 | Logic/quantifiers | `\forall`, `\exists`, `\neg`, `\land`, `\lor` |
 | Set relations/ops | `\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\cup`, `\cap` |
-| Relations | `\leq`, `\geq`, `\neq`, `\approx`, `\equiv` |
-| Arrows | `\to`, `\leftarrow`, `\Rightarrow`, `\Leftarrow`, `\iff` |
+| Relations | `\leq`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv` |
+| Arrows | `\to`, `\leftarrow`, `\Rightarrow`, `\Leftarrow`, `\iff`, `\mapsto` |
+| Additional symbols | `\dots`, `\rtimes`, `\;` (mapped to one normal space) |
 | Delimiter glyph commands | `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`, `\Vert`, `\backslash`, `\{`, `\}` |
 
 ### `\mathbb` Coverage
@@ -103,8 +105,10 @@ If a Greek letter or symbol command is not in the tables above, treat it as unsu
 Matrix support is currently MVP-level:
 
 - Supported: `\begin{matrix}...\end{matrix}`.
+- Supported: `\begin{array}{...}...\end{array}` with validated `l/c/r` preamble and strict shape checks.
 - Supported inside cells: other structured math primitives (fractions, radicals, scripts, etc.).
-- Not yet included in MVP: `pmatrix`, `bmatrix`, `vmatrix` shortcuts as dedicated parser forms.
+- Supported by composition rewrite: `\begin{bmatrix}...\end{bmatrix}`, `\begin{pmatrix}...\end{pmatrix}`, `\begin{vmatrix}...\end{vmatrix}`.
+- Canonical output for wrappers is normalized to composed stretch-delimiter form: `\left[...\right]`, `\left(...\right)`, `\left|...\right|` around `\begin{matrix}...\end{matrix}`.
 
 Rows must be rectangular. If matrix shape is malformed, parser recovery falls back safely rather than crashing the frame path.
 
@@ -149,7 +153,7 @@ In normal animation usage, calling `replay_emit_math_block!` is sufficient and c
 ## Known Limitations
 
 - No full TeX environment coverage beyond current command set.
-- Matrix wrapper environments like `pmatrix`/`bmatrix` are not yet first-class parser commands.
+- Matrix wrapper environments are currently implemented by parser-level composition rewrite, not dedicated standalone AST node types.
 - Recovery is designed to preserve rendering continuity, not to provide full TeX-grade diagnostics yet.
 
 ## Summary

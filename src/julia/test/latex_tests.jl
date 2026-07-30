@@ -17,6 +17,15 @@ using Test
     circ_plain = EuclidLatex.latex_to_plain_text("f \\circ g")
     @test circ_plain == "f ∘ g"
 
+    alias_plain = EuclidLatex.latex_to_plain_text("a \\ne b, x \\ge y")
+    @test alias_plain == "a ≠ b, x ≥ y"
+
+    symbol_plain = EuclidLatex.latex_to_plain_text("1,2,\\dots,n; x \\mapsto y; A \\rtimes B")
+    @test symbol_plain == "1,2,…,n; x ↦ y; A ⋊ B"
+
+    spacing_plain = EuclidLatex.latex_to_plain_text("a\\;b")
+    @test spacing_plain == "a b"
+
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
     @test length(program) == 2
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN
@@ -29,6 +38,9 @@ end
 @testset "text command and scripts" begin
     plain = EuclidLatex.latex_to_plain_text("\\text{Area }A_1^2")
     @test plain == "Area A^{2}_{1}"
+
+    roman_plain = EuclidLatex.latex_to_plain_text("i+j \\mathrm{mod} n")
+    @test roman_plain == "i+j mod n"
 
     continued = EuclidLatex.latex_to_plain_text("A_1^2 + \\mathbb{R}")
     @test continued == "A^{2}_{1} + ℝ"
@@ -314,6 +326,39 @@ end
 
     plain_rect = EuclidLatex.latex_to_plain_text("\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}")
     @test plain_rect == "\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}"
+
+    bmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
+    @test bmatrix_plain == "\\left[\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right]"
+
+    bmatrix_program = EuclidLatex.compiled_program_for("\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
+    @test length(bmatrix_program) == 1
+    @test bmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test bmatrix_program[1].radical_index_text == "["
+    @test bmatrix_program[1].sup_text == "]"
+    @test length(bmatrix_program[1].children) == 1
+    @test bmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
+
+    pmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
+    @test pmatrix_plain == "\\left(\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right)"
+
+    pmatrix_program = EuclidLatex.compiled_program_for("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
+    @test length(pmatrix_program) == 1
+    @test pmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test pmatrix_program[1].radical_index_text == "("
+    @test pmatrix_program[1].sup_text == ")"
+    @test length(pmatrix_program[1].children) == 1
+    @test pmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
+
+    vmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
+    @test vmatrix_plain == "\\left|\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right|"
+
+    vmatrix_program = EuclidLatex.compiled_program_for("\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
+    @test length(vmatrix_program) == 1
+    @test vmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test vmatrix_program[1].radical_index_text == "|"
+    @test vmatrix_program[1].sup_text == "|"
+    @test length(vmatrix_program[1].children) == 1
+    @test vmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
 
     matrix_program = EuclidLatex.compiled_program_for("\\begin{matrix}a&\\frac{1}{2}\\\\c&d_1\\end{matrix}")
     @test length(matrix_program) == 1
