@@ -773,6 +773,52 @@ function push_matrix_cell!(row_cells::Vector{Vector{LatexRun}}, cell_runs::Vecto
     return LatexRun[]
 end
 
+"""Return true when run is one plain math atom with no structured children."""
+is_plain_math_atom(run::LatexRun) = run.segment == :atom && run.role == :math && isempty(run.children) && isempty(run.secondary_children)
+
+"""Trim left edge whitespace from first matrix/array cell run when plain atom text."""
+function trim_matrix_cell_first_edge!(runs::Vector{LatexRun})
+    if isempty(runs)
+        return nothing
+    end
+
+    first_run = runs[1]
+    if !is_plain_math_atom(first_run)
+        return nothing
+    end
+
+    text = String(lstrip(first_run.text))
+    if isempty(text)
+        deleteat!(runs, 1)
+    else
+        runs[1] = latex_atom_run(text, first_run.role)
+    end
+
+    return nothing
+end
+
+"""Trim right edge whitespace from last matrix/array cell run when plain atom text."""
+function trim_matrix_cell_last_edge!(runs::Vector{LatexRun})
+    if isempty(runs)
+        return nothing
+    end
+
+    last_index = length(runs)
+    last_run = runs[last_index]
+    if !is_plain_math_atom(last_run)
+        return nothing
+    end
+
+    text = String(rstrip(last_run.text))
+    if isempty(text)
+        deleteat!(runs, last_index)
+    else
+        runs[last_index] = latex_atom_run(text, last_run.role)
+    end
+
+    return nothing
+end
+
 """Trim matrix/array cell edge whitespace from first/last plain atom runs only."""
 function trim_matrix_cell_edge_whitespace(cell_runs::Vector{LatexRun})
     if isempty(cell_runs)
@@ -780,31 +826,8 @@ function trim_matrix_cell_edge_whitespace(cell_runs::Vector{LatexRun})
     end
 
     runs = copy(cell_runs)
-    first_run = runs[1]
-    if first_run.segment == :atom && first_run.role == :math && isempty(first_run.children) && isempty(first_run.secondary_children)
-        text = String(lstrip(first_run.text))
-        if isempty(text)
-            deleteat!(runs, 1)
-        else
-            runs[1] = latex_atom_run(text, first_run.role)
-        end
-    end
-
-    if isempty(runs)
-        return runs
-    end
-
-    last_index = length(runs)
-    last_run = runs[last_index]
-    if last_run.segment == :atom && last_run.role == :math && isempty(last_run.children) && isempty(last_run.secondary_children)
-        text = String(rstrip(last_run.text))
-        if isempty(text)
-            deleteat!(runs, last_index)
-        else
-            runs[last_index] = latex_atom_run(text, last_run.role)
-        end
-    end
-
+    trim_matrix_cell_first_edge!(runs)
+    trim_matrix_cell_last_edge!(runs)
     return runs
 end
 
