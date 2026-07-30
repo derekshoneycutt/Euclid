@@ -82,9 +82,10 @@ kine_freeze_system_indices :: proc(
 //   - none.
 kine_clear_animation_data :: proc(
     point_system: ^Kine_Point_System,
-    particle_system: ^core.Particle_System) {
+    particle_system: ^core.Particle_System,
+    iso_scale: ^core.Iso_Scale = nil) {
 
-    particles.emit_kine_clear_burst(particle_system, point_system)
+    particles.emit_kine_clear_burst(particle_system, point_system, iso_scale)
 
     for i in point_system^.anim_points_start..<MAX_KINEPOINTS {
         point_system^.points[i] = {}

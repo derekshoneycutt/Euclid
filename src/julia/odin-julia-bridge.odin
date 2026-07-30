@@ -775,7 +775,12 @@ show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
 hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
     if index >= 0 && index < MAX_KINEPOINTS {
         context = state^.saved_context
-        particles.emit_kine_hide_burst(state^.particle_system, state^.point_system, index, true)
+        particles.emit_kine_hide_burst(
+            state^.particle_system,
+            state^.point_system,
+            index,
+            true,
+            state^.iso_scale)
         state^.point_system^.points[index].do_draw = false
     }
 }
@@ -792,11 +797,16 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
         return
     }
     context = state^.saved_context
-    particles.kick_existing_dust(state^.particle_system)
+    particles.kick_existing_dust(state^.particle_system, state^.iso_scale)
     for i in 0..<int(count) {
         index := int(indices[i])
         if index >= 0 && index < MAX_KINEPOINTS {
-            particles.emit_kine_hide_burst(state^.particle_system, state^.point_system, index, false)
+            particles.emit_kine_hide_burst(
+                state^.particle_system,
+                state^.point_system,
+                index,
+                false,
+                state^.iso_scale)
             state^.point_system^.points[index].do_draw = false
         }
     }
@@ -3376,7 +3386,7 @@ freeze_kine_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -
 @(export)
 clear_kine_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    kine.kine_clear_animation_data(state^.point_system, state^.particle_system)
+    kine.kine_clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
     return BRIDGE_STATUS_OK
 }
 

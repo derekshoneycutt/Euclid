@@ -165,6 +165,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.ui_runtime.gif_frame_step = 2
     state^.ui_runtime.gif_capture_phase = .Idle
     view_core.clear_gif_status_note(&state^.ui_runtime)
+    view_core.screenshake_clear(state^.iso_scale)
 
 
     julia.init_euclid_scripts(state)
@@ -294,6 +295,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
         frame_dt = MAX_FRAME_DT
     }
     update_average_fps(state, frame_dt)
+    view_core.screenshake_update(state^.iso_scale, frame_dt)
 
     if state^.ui_runtime.simulation_paused {
         state^.accumulator = 0
@@ -329,6 +331,16 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     rl.ClearBackground(BACKGROUND_COLOR)
 
+    base_x_offset := state^.iso_scale^.x_offset
+    base_y_offset := state^.iso_scale^.y_offset
+
+    apply_world_shake := state^.particle_system != nil &&
+        state^.ui_runtime.gif_capture_phase != .Recording
+    if apply_world_shake {
+        state^.iso_scale^.x_offset += state^.iso_scale^.screenshake_offset_x
+        state^.iso_scale^.y_offset += state^.iso_scale^.screenshake_offset_y
+    }
+
     draw_drawing_surface(state)
 
     draw_kine_points_low_cached(state)
@@ -337,6 +349,9 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
     render_particles(state^.particle_system, state)
     draw_kine_points_high_cached(state)
     render_high_particles(state^.particle_system, state)
+
+    state^.iso_scale^.x_offset = base_x_offset
+    state^.iso_scale^.y_offset = base_y_offset
 
     if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
         if !view_core.gif_capture_submit_frame(state) {

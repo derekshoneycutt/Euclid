@@ -3,11 +3,113 @@ package view_core
 // The isometric projection code is here. We perform precomputations and the projection here.
 
 import "core:simd"
+import "core:math"
+
+SCREENSHAKE_TRAUMA_MAX :: 1.0
+SCREENSHAKE_DUST_KICK_IMPULSE :: 0.82
+SCREENSHAKE_DUST_KICK_BATCH_BASE_IMPULSE :: 0.55
+SCREENSHAKE_DUST_KICK_BATCH_GAIN_IMPULSE :: 0.22
+SCREENSHAKE_DECAY_RATE :: 8.8
+SCREENSHAKE_PHASE_SPEED :: 78.0
+SCREENSHAKE_MAX_PIXELS :: 10.0
+SCREENSHAKE_TRAUMA_EPSILON :: 0.01
+SCREENSHAKE_MAX_TIME :: 0.24
 
 USE_SIMD_BATCH_PROJECTION :: true
 
 simd_batch_projection_available :: proc() -> bool {
     return USE_SIMD_BATCH_PROJECTION && simd.HAS_HARDWARE_SIMD
+}
+
+//   Wrap one angle to [0, 2π).
+screenshake_normalize_theta :: #force_inline proc(theta: f32) -> f32 {
+    tau := f32(2.0 * math.PI)
+    if tau <= 0 {
+        return theta
+    }
+
+    t := math.mod(theta, tau)
+    if t < 0 {
+        t += tau
+    }
+    return t
+}
+
+//   Reset shake state to a fully at-rest condition.
+screenshake_clear :: proc(scale: ^Iso_Scale) {
+    scale^.screenshake_trauma = 0
+    scale^.screenshake_elapsed = 0
+    scale^.screenshake_offset_x = 0
+    scale^.screenshake_offset_y = 0
+    scale^.screenshake_phase = 0
+}
+
+//   Add one single dust-kick trauma impulse.
+screenshake_on_dust_kick :: proc(scale: ^Iso_Scale) {
+    screenshake_add_trauma(scale, SCREENSHAKE_DUST_KICK_IMPULSE)
+}
+
+//   Add one aggregated trauma impulse for batched dust-kick events.
+screenshake_on_dust_kick_batch :: proc(scale: ^Iso_Scale, count: int) {
+    if count <= 0 {
+        return
+    }
+
+    count_scale := f32(math.sqrt(f64(count)))
+    impulse := SCREENSHAKE_DUST_KICK_BATCH_BASE_IMPULSE +
+        SCREENSHAKE_DUST_KICK_BATCH_GAIN_IMPULSE * count_scale
+    screenshake_add_trauma(scale, impulse)
+}
+
+//   Add trauma, clamp, and restart deterministic shake window.
+screenshake_add_trauma :: proc(scale: ^Iso_Scale, impulse: f32) {
+    if impulse <= 0 {
+        return
+    }
+
+    scale^.screenshake_trauma = math.clamp(
+        scale^.screenshake_trauma + impulse,
+        f32(0.0),
+        SCREENSHAKE_TRAUMA_MAX)
+    scale^.screenshake_elapsed = 0
+
+    if scale^.screenshake_phase == 0 {
+        scale^.screenshake_phase = 0.6180339
+    }
+
+    screenshake_set_offsets_from_trauma(scale)
+}
+
+//   Rebuild current shake offsets from trauma and phase without advancing time.
+screenshake_set_offsets_from_trauma :: proc(scale: ^Iso_Scale) {
+    amplitude := SCREENSHAKE_MAX_PIXELS * scale^.screenshake_trauma * scale^.screenshake_trauma
+    phase_y := screenshake_normalize_theta(scale^.screenshake_phase * 1.6180339 + 1.0471976)
+    scale^.screenshake_offset_x = amplitude * f32(math.sin(scale^.screenshake_phase))
+    scale^.screenshake_offset_y = amplitude * f32(math.sin(phase_y))
+}
+
+//   Advance trauma envelope and synthesize per-frame x/y shake offsets.
+screenshake_update :: proc(scale: ^Iso_Scale, dt: f32) {
+    if scale^.screenshake_trauma <= 0 {
+        screenshake_clear(scale)
+        return
+    }
+
+    scale^.screenshake_elapsed += dt
+
+    decay := f32(math.exp(f64(-SCREENSHAKE_DECAY_RATE * dt)))
+    scale^.screenshake_trauma *= decay
+
+    if scale^.screenshake_elapsed >= SCREENSHAKE_MAX_TIME ||
+        scale^.screenshake_trauma <= SCREENSHAKE_TRAUMA_EPSILON {
+        screenshake_clear(scale)
+        return
+    }
+
+    scale^.screenshake_phase = screenshake_normalize_theta(
+        scale^.screenshake_phase + SCREENSHAKE_PHASE_SPEED * dt)
+
+    screenshake_set_offsets_from_trauma(scale)
 }
 
 //   Recompute cached scalar coefficients used by isometric projection.

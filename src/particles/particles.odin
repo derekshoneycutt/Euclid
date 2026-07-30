@@ -21,6 +21,7 @@ package particles
 //   single pixels drawn on the screen. The result is a kind of sparkling flicker effect.
 
 import "../core"
+import view_core "../view/core"
 
 import "core:math"
 import "core:mem"
@@ -34,6 +35,7 @@ Particle_System :: core.Particle_System
 Kine_Point_System :: core.Kine_Point_System
 Kine_Shape_Point :: core.Kine_Shape_Point
 Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
+Iso_Scale :: core.Iso_Scale
 
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
@@ -296,13 +298,17 @@ kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
 //
 // Returns:
 //   - none.
-kick_existing_dust :: proc(ps: ^Particle_System) {
+kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
         }
 
         kick_existing_dust_index(ps, i)
+    }
+
+    if iso_scale != nil {
+        view_core.screenshake_on_dust_kick(iso_scale)
     }
 }
 
@@ -317,7 +323,11 @@ kick_existing_dust :: proc(ps: ^Particle_System) {
 // Returns:
 //   - none.
 emit_kine_hide_burst :: proc(
-    ps: ^Particle_System, ks: ^Kine_Point_System, index: int, kick_dust: bool = true) {
+    ps: ^Particle_System,
+    ks: ^Kine_Point_System,
+    index: int,
+    kick_dust: bool = true,
+    iso_scale: ^Iso_Scale = nil) {
     if index < 0 || index >= MAX_KINEPOINTS || ps^.use_max_dust_particles < 1 {
         return
     }
@@ -332,7 +342,7 @@ emit_kine_hide_burst :: proc(
     }
 
     if kick_dust {
-        kick_existing_dust(ps)
+        kick_existing_dust(ps, iso_scale)
     }
 
     col := kp.color.? or_else rl.WHITE
@@ -349,12 +359,15 @@ emit_kine_hide_burst :: proc(
 //
 // Returns:
 //   - none.
-emit_kine_clear_burst :: proc(ps: ^Particle_System, ks: ^Kine_Point_System) {
+emit_kine_clear_burst :: proc(
+    ps: ^Particle_System,
+    ks: ^Kine_Point_System,
+    iso_scale: ^Iso_Scale = nil) {
     if  ps^.use_max_dust_particles < 1 {
         return
     }
 
-    kick_existing_dust(ps)
+    kick_existing_dust(ps, iso_scale)
 
     for i in 0..<MAX_KINEPOINTS {
         kp := &ks.points[i]

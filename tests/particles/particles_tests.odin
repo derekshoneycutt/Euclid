@@ -5,6 +5,7 @@ import "core:testing"
 
 import app_core "../../src/core"
 import app_particles "../../src/particles"
+import app_view_core "../../src/view/core"
 import test_helpers "../helpers"
 
 EPS :: f32(1e-5)
@@ -190,6 +191,47 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.particles.age[0], 0.0)
     testing.expect(t, !ps^.high_particles.alive[0])
     testing.expect_value(t, ps^.high_particles.age[0], 0.0)
+}
+
+@(test)
+screenshake_on_dust_kick_adds_trauma :: proc(t: ^testing.T) {
+    scale: app_core.Iso_Scale
+
+    app_view_core.screenshake_on_dust_kick(&scale)
+
+    testing.expect(t, scale.screenshake_trauma > 0)
+    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
+}
+
+@(test)
+screenshake_on_dust_kick_batch_uses_stronger_aggregated_impulse :: proc(t: ^testing.T) {
+    single: app_core.Iso_Scale
+    batch: app_core.Iso_Scale
+
+    app_view_core.screenshake_on_dust_kick(&single)
+    app_view_core.screenshake_on_dust_kick_batch(&batch, 8)
+
+    testing.expect(t, batch.screenshake_trauma > single.screenshake_trauma)
+}
+
+@(test)
+screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
+    scale: app_core.Iso_Scale
+
+    app_view_core.screenshake_on_dust_kick(&scale)
+    before := scale.screenshake_trauma
+
+    app_view_core.screenshake_update(&scale, 0.01)
+
+    testing.expect(t, scale.screenshake_trauma < before)
+    testing.expect(t, scale.screenshake_offset_x != 0 || scale.screenshake_offset_y != 0)
+
+    app_view_core.screenshake_update(&scale, app_view_core.SCREENSHAKE_MAX_TIME)
+
+    testing.expect_value(t, scale.screenshake_trauma, 0.0)
+    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
+    testing.expect_value(t, scale.screenshake_offset_x, 0.0)
+    testing.expect_value(t, scale.screenshake_offset_y, 0.0)
 }
 
 @(test)

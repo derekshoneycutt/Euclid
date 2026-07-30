@@ -590,11 +590,13 @@ Particle_System :: struct {
     use_max_dust_particles : int,
 }
 
+
+
+
+
 /****
-    The UI state information controls scaling and view-based primitives, including UI control
+    Draw scaling and framing information; controls for screen shaking and Isometric Scaling
 */
-
-
 
 
 Iso_Scale :: struct {
@@ -607,7 +609,22 @@ Iso_Scale :: struct {
 
     main_light_dir : Vector3,
     use_directional_shadow : bool,
+
+    screenshake_trauma : f32,
+    screenshake_elapsed : f32,
+    screenshake_offset_x : f32,
+    screenshake_offset_y : f32,
+    screenshake_phase : f32,
 }
+
+
+
+
+
+/****
+    The UI state information controls scaling and view-based primitives, including UI control
+*/
+
 
 Stroke3D_Render_State :: struct {
     shader: rl.Shader,
