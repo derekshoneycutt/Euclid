@@ -31,6 +31,8 @@ SHADOW_ALPHA_BASE :: 90
 SHADOW_ALPHA_MIN :: 35
 SHADOW_ALPHA_HEIGHT_SCALE :: 35.0
 SHADOW_EPSILON_LZ :: 0.0001
+Z_SPLIT_EPSILON :: 0.0001
+Z_SPLIT_ALPHA_FACTOR :: 0.25
 
 STROKE3D_AMBIENT :: 0.28
 STROKE3D_DIFFUSE :: 1.05
@@ -351,16 +353,12 @@ draw_cached_point_high :: #force_inline proc(state: ^Euclid_General_State, p: ^k
 
 //   Draw one cached line only when it belongs to the lower geometry layer.
 draw_cached_line_low :: #force_inline proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
-    if !draw_cached_line_is_elevated(l) {
-        draw_cached_line(state, l)
-    }
+    draw_cached_line(state, l, false)
 }
 
 //   Draw one cached line only when it belongs to the merged higher layer.
 draw_cached_line_high :: #force_inline proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
-    if draw_cached_line_is_elevated(l) {
-        draw_cached_line(state, l)
-    }
+    draw_cached_line(state, l, true)
 }
 
 //   Draw one cached circle only when it belongs to the lower geometry layer.
@@ -609,6 +607,82 @@ has_any_elevated_shadow_point :: #force_inline proc(points: []Vector3) -> bool {
         }
     }
     return false
+}
+
+//   Classify one z value against the split plane using a symmetric epsilon dead-zone.
+z_split_sign :: #force_inline proc(z: f32) -> int {
+    if z > Z_SPLIT_EPSILON {
+        return 1
+    }
+    if z < -Z_SPLIT_EPSILON {
+        return -1
+    }
+    return 0
+}
+
+//   Return true when one point belongs to the selected z-halfspace.
+z_split_point_in_halfspace :: #force_inline proc(point: Vector3, keep_above: bool) -> bool {
+    sign := z_split_sign(point.z)
+    if keep_above {
+        return sign > 0
+    }
+    return sign <= 0
+}
+
+//   Return true when one segment strictly crosses z=0.
+z_split_segment_crosses_plane :: #force_inline proc(point0, point1: Vector3) -> bool {
+    sign0 := z_split_sign(point0.z)
+    sign1 := z_split_sign(point1.z)
+    return sign0 * sign1 < 0
+}
+
+//   Compute one segment intersection point against the z=0 plane.
+z_split_intersection_with_plane :: #force_inline proc(point0, point1: Vector3) -> Vector3 {
+    dz := point1.z - point0.z
+    if math.abs(dz) <= Z_SPLIT_EPSILON {
+        return point0
+    }
+
+    t := -point0.z / dz
+    t = math.clamp(t, 0, 1)
+    return linalg.lerp(point0, point1, t)
+}
+
+//   Clip one segment against either z<=0 or z>0 halfspace.
+z_split_clip_segment_halfspace :: #force_inline proc(
+    point0, point1: Vector3,
+    keep_above: bool,
+    out0, out1: ^Vector3) -> bool {
+
+    point0_in := z_split_point_in_halfspace(point0, keep_above)
+    point1_in := z_split_point_in_halfspace(point1, keep_above)
+
+    if point0_in && point1_in {
+        out0^ = point0
+        out1^ = point1
+        return true
+    }
+
+    if !point0_in && !point1_in {
+        return false
+    }
+
+    intersection := z_split_intersection_with_plane(point0, point1)
+    if point0_in {
+        out0^ = point0
+        out1^ = intersection
+    } else {
+        out0^ = intersection
+        out1^ = point1
+    }
+
+    return true
+}
+
+//   Apply 0.25x alpha attenuation for lower z-split fragments.
+z_split_lower_fragment_color :: #force_inline proc(color: rl.Color) -> rl.Color {
+    attenuated := u8(math.clamp(int(f32(color.a) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
+    return rl.Color{color.r, color.g, color.b, attenuated}
 }
 
 //   Compute average height across one point slice for shadow alpha attenuation.
@@ -874,10 +948,21 @@ draw_cached_point :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw
 
 
 //   Render one cached line draw item.
-draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
-    c0 := view_core.iso_to_cartesian(l^.point1, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(l^.point2, state^.iso_scale^)
-    rl.DrawLineEx(c0, c1, l^.brush_size, l^.color)
+draw_cached_line :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw, keep_above: bool) {
+    clipped0 := Vector3{}
+    clipped1 := Vector3{}
+    if !z_split_clip_segment_halfspace(l^.point1, l^.point2, keep_above, &clipped0, &clipped1) {
+        return
+    }
+
+    color := l^.color
+    if !keep_above && (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
+        color = z_split_lower_fragment_color(color)
+    }
+
+    c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
+    rl.DrawLineEx(c0, c1, l^.brush_size, color)
 }
 
 
