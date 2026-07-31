@@ -97,6 +97,14 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
             draw_frame(state, alpha)
         rl.EndDrawing()
 
+        if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
+            if !view_core.gif_capture_submit_frame(state) {
+                view_core.gif_capture_abort_session(&state^.gif_capture)
+                state^.ui_runtime.gif_capture_phase = .Error
+                view_core.set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
+            }
+        }
+
         free_all(context.temp_allocator)
     }
 }
@@ -353,14 +361,6 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     state^.iso_scale^.x_offset = base_x_offset
     state^.iso_scale^.y_offset = base_y_offset
-
-    if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
-        if !view_core.gif_capture_submit_frame(state) {
-            view_core.gif_capture_abort_session(&state^.gif_capture)
-            state^.ui_runtime.gif_capture_phase = .Error
-            view_core.set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
-        }
-    }
 
     ui.draw_ui_panels(state)
 

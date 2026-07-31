@@ -74,19 +74,30 @@ gif_capture_submit_frame :: proc(
         return true
     }
 
+    capture_w, capture_h := gif_capture_source_dimensions()
+
     image := rl.LoadImageFromScreen()
     if image.data == nil {
         return false
     }
     defer rl.UnloadImage(image)
 
-    rl.ImageCrop(&image, rl.Rectangle{0, 0, VIEW_WIDTH, VIEW_HEIGHT})
+    crop_w := min(capture_w, int(image.width))
+    crop_h := min(capture_h, int(image.height))
+    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
 
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
     if downsample > 1 {
         out_w := max(1, int(image.width) / downsample)
         out_h := max(1, int(image.height) / downsample)
         rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
+    }
+
+    expected_w := state^.gif_capture.encoder.width
+    expected_h := state^.gif_capture.encoder.height
+    if int(image.width) != expected_w || int(image.height) != expected_h {
+        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
+        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
     }
 
     pitch := int(image.width) * 4
@@ -249,6 +260,33 @@ gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
     return max(1, int(f32(frame_step) * FIXED_DT * 100.0 + 0.5))
 }
 
+//   Map one logical axis extent into framebuffer pixels using screen/render sizes.
+gif_capture_scaled_extent :: #force_inline proc(logical_extent, screen_extent, render_extent: int) -> int {
+    if logical_extent <= 0 {
+        return 1
+    }
+
+    safe_screen := max(1, screen_extent)
+    safe_render := max(1, render_extent)
+    scaled := (logical_extent * safe_render + safe_screen / 2) / safe_screen
+    return max(1, scaled)
+}
+
+//   Compute capture dimensions in framebuffer pixels for the world view area.
+gif_capture_source_dimensions :: proc() -> (int, int) {
+    screen_w := max(1, int(rl.GetScreenWidth()))
+    screen_h := max(1, int(rl.GetScreenHeight()))
+    render_w := max(1, int(rl.GetRenderWidth()))
+    render_h := max(1, int(rl.GetRenderHeight()))
+
+    capture_w := gif_capture_scaled_extent(VIEW_WIDTH, screen_w, render_w)
+    capture_h := gif_capture_scaled_extent(VIEW_HEIGHT, screen_h, render_h)
+
+    capture_w = min(capture_w, render_w)
+    capture_h = min(capture_h, render_h)
+    return capture_w, capture_h
+}
+
 //   Write encoded GIF bytes to disk at the provided path.
 gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
     if len(data) == 0 {
@@ -266,9 +304,10 @@ gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
 gif_capture_begin_session :: proc(
     state: ^core.Euclid_General_State) -> bool {
     ui_runtime := &state.ui_runtime
+    capture_w, capture_h := gif_capture_source_dimensions()
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
-    out_w := max(1, VIEW_WIDTH / downsample)
-    out_h := max(1, VIEW_HEIGHT / downsample)
+    out_w := max(1, capture_w / downsample)
+    out_h := max(1, capture_h / downsample)
 
     if !files.gif_encode_begin(&state^.gif_capture.encoder, out_w, out_h) {
         return false

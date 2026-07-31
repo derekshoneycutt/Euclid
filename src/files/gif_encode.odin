@@ -20,7 +20,7 @@ GIF_FRAME_DEPTH_BIAS :: 160
 GIF_GCE_INTRODUCER :: 0x21
 GIF_GCE_LABEL :: 0xF9
 GIF_GCE_BLOCK_SIZE :: 0x04
-GIF_GCE_PACKED_DISPOSE_BACKGROUND_NO_TRANSPARENCY :: 0x05
+GIF_GCE_PACKED_DISPOSE_BACKGROUND_NO_TRANSPARENCY :: 0x08
 GIF_GCE_PACKED_DISPOSE_BACKGROUND_TRANSPARENCY :: 0x09
 GIF_GCE_TRANSPARENT_INDEX_DEFAULT :: 0x00
 GIF_GCE_BLOCK_TERMINATOR :: 0x00
@@ -865,14 +865,14 @@ gif_encode_write_graphics_control_extension :: proc(
     out[w^ + 1] = GIF_GCE_LABEL
     out[w^ + 2] = GIF_GCE_BLOCK_SIZE
     out[w^ + 3] = GIF_GCE_PACKED_DISPOSE_BACKGROUND_NO_TRANSPARENCY
+    if has_transparent_pixels {
+        out[w^ + 3] = GIF_GCE_PACKED_DISPOSE_BACKGROUND_TRANSPARENCY
+    }
     if !gif_encode_write_u16le(out, w^ + 4, centiseconds) {
         return false
     }
     out[w^ + 6] = GIF_GCE_TRANSPARENT_INDEX_DEFAULT
     out[w^ + 7] = GIF_GCE_BLOCK_TERMINATOR
-    if has_transparent_pixels && state.frames_submitted > 0 && state.list_tail != nil {
-        state.list_tail.data[3] = GIF_GCE_PACKED_DISPOSE_BACKGROUND_TRANSPARENCY
-    }
     w^ += 8
     return true
 }
@@ -1004,7 +1004,9 @@ gif_encode_compress_frame :: proc(
     prev := state.previous_frame
     has_same_pal :=
         frame.r_bits == prev.r_bits && frame.g_bits == prev.g_bits && frame.b_bits == prev.b_bits
-    frames_compatible := has_same_pal && !palette.has_transparent_pixels && state.frames_submitted > 0
+    // Only emit unchanged pixels as index 0 when the frame advertises transparency.
+    // For opaque captures (our default), index 0 is an actual color, not transparency.
+    frames_compatible := has_same_pal && palette.has_transparent_pixels && state.frames_submitted > 0
 
     bitstream: []u8 = nil
     stream_len := 0

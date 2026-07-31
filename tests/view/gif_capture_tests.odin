@@ -48,6 +48,21 @@ gif_capture_delay_centiseconds_matches_expected_steps :: proc(t: ^testing.T) {
 }
 
 @(test)
+gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) {
+    one_x := app_view.gif_capture_scaled_extent(900, 1280, 1280)
+    testing.expect_value(t, one_x, 900)
+
+    two_x := app_view.gif_capture_scaled_extent(900, 1280, 2560)
+    testing.expect_value(t, two_x, 1800)
+
+    round_nearest := app_view.gif_capture_scaled_extent(3, 2, 3)
+    testing.expect_value(t, round_nearest, 5)
+
+    safe_minimum := app_view.gif_capture_scaled_extent(0, 0, 0)
+    testing.expect_value(t, safe_minimum, 1)
+}
+
+@(test)
 gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
     defer free(state)
