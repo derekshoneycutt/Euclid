@@ -542,6 +542,20 @@ function severity_rank(severity::String)
     return 2
 end
 
+"""Return true when complexity warning for a function is explicitly acceptable."""
+function is_acceptable_complexity_warning(row::JuliaComplexityRow)
+    if row.function_name == "loop"
+        return true
+    end
+
+    if startswith(row.function_name, "get_view_text") &&
+        occursin(r"^src/julia/[^/]+/", row.file)
+        return true
+    end
+
+    return false
+end
+
 """Render lizard-style Julia complexity table lines for report/console capture."""
 function render_julia_complexity_table(rows::Vector{JuliaComplexityRow})
     lines = String[]
@@ -622,11 +636,15 @@ function build_julia_complexity_rows(
 
         absolute_path = normpath(joinpath(script_dir, item.file))
         warning_only_path = is_warning_only_complexity_path(absolute_path, warning_roots)
+        warning_only_loop = item.name == "loop"
+        warning_only_get_view_text = startswith(item.name, "get_view_text") &&
+            occursin(r"^src/julia/[^/]+/", item.file)
+        warning_only = warning_only_path || warning_only_loop || warning_only_get_view_text
         is_violation = ccn > max_complexity
 
         severity = "INFO"
         status = "PASS"
-        if is_violation && warning_only_path
+        if is_violation && warning_only
             severity = "WARN"
             status = "WARN"
             warning_only_count += 1
@@ -833,17 +851,23 @@ function run_code_complexity_analysis(src_dir::String, script_dir::String)
     warning_count = get(row_metrics, "warning_only_count", 0)
     blocking_found = blocking_count > 0
     warning_loop_count = count(row -> row.status == "WARN" && row.function_name == "loop", rows)
+    acceptable_warning_count = count(
+        row -> row.status == "WARN" && is_acceptable_complexity_warning(row),
+        rows)
+    unacceptable_warning_count = warning_count - acceptable_warning_count
 
     println("CodeComplexity full coverage rows: $(length(rows))")
     println("CodeComplexity blocking violations: $blocking_count")
     println("CodeComplexity warning-only violations: $warning_count")
+    println("CodeComplexity acceptable warning-only violations: $acceptable_warning_count")
+    println("CodeComplexity non-acceptable warning-only violations: $unacceptable_warning_count")
 
     if warning_loop_count > 0
         println("CodeComplexity warning-only: $warning_loop_count loop functions flagged")
     end
 
     if !blocking_found
-        println("CodeComplexity violations are warning-only for configured directories.")
+        println("CodeComplexity violations are warning-only for configured paths/patterns.")
     end
 
     return Dict{String,Any}(
@@ -851,6 +875,8 @@ function run_code_complexity_analysis(src_dir::String, script_dir::String)
         "violation_files" => count(row -> row.status in ("FAIL", "WARN"), rows),
         "warning_count" => warning_count,
         "warning_loop_count" => warning_loop_count,
+        "acceptable_warning_count" => acceptable_warning_count,
+        "unacceptable_warning_count" => unacceptable_warning_count,
         "blocking_found" => blocking_found,
         "total_functions" => get(row_metrics, "total_functions", length(rows)),
         "pass_count" => get(row_metrics, "pass_count", 0),

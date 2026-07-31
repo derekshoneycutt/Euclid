@@ -2,7 +2,7 @@ module ElementsOneDefinitionPoint
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
-using ...EuclidLatex
+using ..EuclidLatex
 using LaTeXStrings
 
 export get_view_text, initialize, clean, loop

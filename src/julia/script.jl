@@ -15,6 +15,7 @@ include("./nullanimation.jl")
 include("./elements/elements.jl")
 include("./proclus/proclus.jl")
 include("./hilbert/hilbert.jl")
+include("./algebra/algebra.jl")
 
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid})
@@ -27,6 +28,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     init_euclid_scripts_euclid_elements(state_ptr)
     init_euclid_scripts_proclus(state_ptr)
     init_euclid_scripts_hilbert(state_ptr)
+    init_euclid_scripts_algebra(state_ptr)
 
 end
 

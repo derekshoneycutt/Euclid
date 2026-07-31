@@ -16,6 +16,7 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_c
     animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
     animate_compass_arcmove, animate_highlight_point, animate_extend_line,
     animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
+    animate_draw_two_line_segments,
     animate_draw_circle, animate_compass_fill_arc_highlight,
     animate_compass_arc_highlight,
     animate_repl_draw_point, animate_repl_draw_line,
@@ -23,9 +24,11 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_c
     transform_translate_point,
     transform_rotate_point, transform_rotate_point_x,
     transform_rotate_point_y, transform_rotate_point_z,
-    transform_reflect2d_point, transform_reflect2d_point_x_axis,
+    transform_reflect2d_point, transform_reflect2d_point_negative, transform_reflect2d_point_x_axis,
     transform_reflect2d_point_y_axis, transform_reflect2d_point_diag_pos,
-    transform_reflect2d_point_diag_neg
+    transform_reflect2d_point_diag_neg,
+    reflected_angle_marker_pose_xy,
+    animate_reflect2d_filled_angle_marker
 
 const PenLength = 0.14f0
 
@@ -183,6 +186,27 @@ Returns `nothing` when axis rotation cannot be resolved.
     end
 
     return rotatedPos[3] >= rotatedNeg[3] ? rotatedPos : rotatedNeg
+end
+
+
+"""
+Choose the reflection half-turn branch with greater negative z lift.
+
+Returns `nothing` when axis rotation cannot be resolved.
+"""
+@inline function reflection_arc_point_below_surface(
+    startOnPlane::AbstractVector{<:Real},
+    lineA::AbstractVector{<:Real},
+    lineB::AbstractVector{<:Real},
+    angle::Real)
+
+    rotatedPos = rotate_point_about_axis_line(startOnPlane, lineA, lineB, angle)
+    rotatedNeg = rotate_point_about_axis_line(startOnPlane, lineA, lineB, -angle)
+    if rotatedPos === nothing || rotatedNeg === nothing
+        return nothing
+    end
+
+    return rotatedPos[3] <= rotatedNeg[3] ? rotatedPos : rotatedNeg
 end
 
 
@@ -458,6 +482,44 @@ end
 
 
 """
+Reflect one point across a 2D line on XY, preserving the original `z`.
+
+This variant follows the negative-Z half-turn branch during the transition.
+"""
+function transform_reflect2d_point_negative(
+    state_ptr::Ptr{Cvoid},
+    point_id::Integer,
+    start_position::AbstractVector{<:Real},
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    startVec = as_vec3(start_position)
+    lineA = as_vec3(line_point_a)
+    lineB = as_vec3(line_point_b)
+    if startVec === nothing || lineA === nothing || lineB === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    t = normalized_progress(current_time, total_duration)
+    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    angle = Float32(pi) * t
+    rotated = reflection_arc_point_below_surface(startOnPlane, lineA, lineB, angle)
+    if rotated === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    point = Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+end
+
+
+"""
 Reflect one point across the X axis (`y = 0`) on XY.
 
 Convenience overload for `transform_reflect2d_point`.
@@ -550,6 +612,165 @@ function transform_reflect2d_point_diag_neg(
         current_time,
         total_duration,
     )
+end
+
+
+"""
+Compute reflected target pose for a filled angle marker on XY.
+
+When `swap_boundary_points` is true, reflected start/end are swapped so filled
+sectors stay on the interior side after reflection.
+"""
+function reflected_angle_marker_pose_xy(
+    center::AbstractVector{<:Real},
+    start_point::AbstractVector{<:Real},
+    end_point::AbstractVector{<:Real},
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real};
+    swap_boundary_points::Bool=true)
+
+    reflected_center = reflect_point_xy_across_line(center, line_point_a, line_point_b)
+    reflected_start = reflect_point_xy_across_line(start_point, line_point_a, line_point_b)
+    reflected_end = reflect_point_xy_across_line(end_point, line_point_a, line_point_b)
+
+    if reflected_center === nothing || reflected_start === nothing || reflected_end === nothing
+        return nothing
+    end
+
+    if swap_boundary_points
+        return reflected_center, reflected_end, reflected_start
+    end
+
+    return reflected_center, reflected_start, reflected_end
+end
+
+
+"""Return one point's animated 3D reflection-arc position for current progress."""
+@inline function reflected_arc_point_xy_progress(
+    start_position::AbstractVector{<:Real},
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real)
+
+    startVec = as_vec3(start_position)
+    lineA = as_vec3(line_point_a)
+    lineB = as_vec3(line_point_b)
+    if startVec === nothing || lineA === nothing || lineB === nothing
+        return nothing
+    end
+
+    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+        return nothing
+    end
+
+    t = normalized_progress(current_time, total_duration)
+    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    angle = Float32(pi) * t
+    rotated = reflection_arc_point_above_surface(startOnPlane, lineA, lineB, angle)
+    if rotated === nothing
+        return nothing
+    end
+
+    return Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+end
+
+
+"""Return CCW sweep angle in `[0, 2pi)` from `start_point` to `end_point` around `center`."""
+@inline function ccw_sweep_xy(
+    center::AbstractVector{<:Real},
+    start_point::AbstractVector{<:Real},
+    end_point::AbstractVector{<:Real})
+
+    cx = Float32(center[1])
+    cy = Float32(center[2])
+    sx = Float32(start_point[1]) - cx
+    sy = Float32(start_point[2]) - cy
+    ex = Float32(end_point[1]) - cx
+    ey = Float32(end_point[2]) - cy
+
+    start_norm = Float32(hypot(sx, sy))
+    end_norm = Float32(hypot(ex, ey))
+    if start_norm <= TransformEps || end_norm <= TransformEps
+        return 0f0
+    end
+
+    cross_z = sx * ey - sy * ex
+    dot_xy = sx * ex + sy * ey
+    sweep = Float32(atan(cross_z, dot_xy))
+    if sweep < 0f0
+        sweep += Float32(2f0 * pi)
+    end
+    return sweep
+end
+
+
+"""
+Animate a filled angle marker through 3D reflection arc motion.
+
+This animates the center/start/end point IDs with the same half-turn lift used
+by `transform_reflect2d_point`, and optionally swaps start/end IDs each frame
+to preserve interior sector orientation after reflection.
+"""
+function animate_reflect2d_filled_angle_marker(
+    state_ptr::Ptr{Cvoid},
+    marker_host_id::Integer,
+    marker_start_id::Integer,
+    marker_end_id::Integer,
+    start_center::AbstractVector{<:Real},
+    start_point::AbstractVector{<:Real},
+    end_point::AbstractVector{<:Real},
+    line_point_a::AbstractVector{<:Real},
+    line_point_b::AbstractVector{<:Real},
+    current_time::Real,
+    total_duration::Real;
+    preserve_interior::Bool=true)
+
+    # TODO : This looks like ass lmfao we should fix this.
+
+    reflected_center = reflected_arc_point_xy_progress(
+        start_center,
+        line_point_a,
+        line_point_b,
+        current_time,
+        total_duration)
+    reflected_start = reflected_arc_point_xy_progress(
+        start_point,
+        line_point_a,
+        line_point_b,
+        current_time,
+        total_duration)
+    reflected_end = reflected_arc_point_xy_progress(
+        end_point,
+        line_point_a,
+        line_point_b,
+        current_time,
+        total_duration)
+
+    if reflected_center === nothing || reflected_start === nothing || reflected_end === nothing
+        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    end
+
+    start_out = reflected_start
+    end_out = reflected_end
+    if preserve_interior
+        sweep = ccw_sweep_xy(reflected_center, reflected_start, reflected_end)
+        if sweep > Float32(pi)
+            start_out, end_out = reflected_end, reflected_start
+        end
+    end
+
+    host_status = OdinJuliaBridge.set_point_position_status(state_ptr, marker_host_id, reflected_center)
+    if host_status != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return host_status
+    end
+
+    start_status = OdinJuliaBridge.set_point_position_status(state_ptr, marker_start_id, start_out)
+    if start_status != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return start_status
+    end
+
+    return OdinJuliaBridge.set_point_position_status(state_ptr, marker_end_id, end_out)
 end
 
 
@@ -1281,6 +1502,94 @@ function animate_draw_line(
             state_ptr, timer - duration * GroundTrailEndTime,
             duration * (1f0 - GroundTrailEndTime), endpos,
             PenDrawLineAngle, PenStraightFloorAngle, azimuth)
+    end
+end
+
+"""
+Animate two connected line segments as one continuous pen stroke.
+
+This keeps pen contact across the shared midpoint so the result reads as one
+drawn line while still updating two independent host line primitives.
+"""
+function animate_draw_two_line_segments(
+    state_ptr::Ptr{Cvoid},
+    timer::Float32, duration::Float32,
+    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
+    penbrush::Float32, pencolor,
+    line1HostId::Integer, line1Joint1Id::Integer, line1Joint2Id::Integer,
+    line2HostId::Integer, line2Joint1Id::Integer, line2Joint2Id::Integer)
+
+    t = clamp(timer / duration, 0f0, 1f0)
+
+    seg1 = max(norm(midpos - startpos), TransformEps)
+    seg2 = max(norm(endpos - midpos), TransformEps)
+    seg_total = seg1 + seg2
+
+    azimuth1 = Float32(atan(midpos[2] - startpos[2], midpos[1] - startpos[1]))
+    azimuth2 = Float32(atan(endpos[2] - midpos[2], endpos[1] - midpos[1]))
+    draw_duration = duration * GroundLineDuration
+    seg1_duration = draw_duration * (seg1 / seg_total)
+    seg2_duration = draw_duration - seg1_duration
+
+    if t < TiltToLineDuration
+        animate_pen_tilt(
+            state_ptr, timer, duration * TiltToLineDuration, startpos,
+            PenStraightFloorAngle, PenDrawLineAngle, azimuth1)
+    elseif t < GroundLineEndTime
+        drag_time = timer - duration * TiltToLineDuration
+
+        if drag_time <= seg1_duration
+            tippos = animate_pen_drag(
+                state_ptr, drag_time, seg1_duration,
+                startpos, midpos, PenDrawLineAngle, azimuth1, pencolor)
+
+            OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
+            OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
+            OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
+            OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, tippos)
+            OdinJuliaBridge.show_point(state_ptr, line1HostId)
+
+            OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
+            OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
+            OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
+            OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, midpos)
+            OdinJuliaBridge.hide_point(state_ptr, line2HostId)
+        else
+            tippos = animate_pen_drag(
+                state_ptr, drag_time - seg1_duration, seg2_duration,
+                midpos, endpos, PenDrawLineAngle, azimuth2, pencolor)
+
+            OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
+            OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
+            OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
+            OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, midpos)
+            OdinJuliaBridge.show_point(state_ptr, line1HostId)
+
+            OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
+            OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
+            OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
+            OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, tippos)
+            OdinJuliaBridge.show_point(state_ptr, line2HostId)
+        end
+
+        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+    else
+        OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, midpos)
+        OdinJuliaBridge.show_point(state_ptr, line1HostId)
+
+        OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
+        OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, endpos)
+        OdinJuliaBridge.show_point(state_ptr, line2HostId)
+
+        animate_pen_tilt(
+            state_ptr, timer - duration * GroundTrailEndTime,
+            duration * (1f0 - GroundTrailEndTime), endpos,
+            PenDrawLineAngle, PenStraightFloorAngle, azimuth2)
     end
 end
 

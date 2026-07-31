@@ -3,6 +3,7 @@ module ElementsOne
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidGeometry
+using ..EuclidLatex
 using ..NullAnimation
 
 include("./def_001_point.jl")

@@ -3,6 +3,7 @@ module HilbertChapterOne
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidGeometry
+using ..EuclidLatex
 using ..NullAnimation
 
 include("./axiom_I1.jl")
