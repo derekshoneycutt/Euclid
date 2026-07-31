@@ -820,8 +820,9 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
 //   - pos: 3D position used for shape/tool placement in world space.
 @(export)
 set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, pos: core.Vector3) {
+    context = state^.saved_context
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
+        set_point_position_with_floor_crossing_dust(state, index, pos)
     }
 }
 
@@ -2230,7 +2231,7 @@ set_point_position_status :: proc "c" (
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].position = pos
+    set_point_position_with_floor_crossing_dust(state, pointIndex, pos)
     return BRIDGE_STATUS_OK
 }
 
@@ -3504,6 +3505,29 @@ clear_pen_active :: proc "c" (
     }
 }
 
+//   Update one point position and emit floor-crossing dust only.
+set_point_position_with_floor_crossing_dust :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    index: int,
+    pos: core.Vector3) {
+
+    previous_pos, has_previous := state^.point_system^.points[index].position.?
+    state^.point_system^.points[index].position = pos
+    if push_dust_if_floor_crossing(state, previous_pos, pos, has_previous) {
+        push_dust_for_connected_lines_on_floor_event(state, index)
+    }
+}
+
+//   Update one point position and emit floor-contact plus crossing dust effects.
+set_point_position_with_floor_dust_effects :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    index: int,
+    pos: core.Vector3) {
+
+    set_point_position_with_floor_crossing_dust(state, index, pos)
+    push_dust_if_floor_contact(state, pos)
+}
+
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.
 //
 // Parameters:
@@ -3515,8 +3539,7 @@ lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     index := state^.pen.joint1_id
     constraintIndex := state^.pen.lock_point1_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
@@ -3546,8 +3569,7 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     context = state^.saved_context
     index := state^.pen.joint1_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
     }
 }
 
@@ -3578,8 +3600,7 @@ lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     index := state^.pen.joint2_id
     constraintIndex := state^.pen.lock_point2_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
     }
     if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
@@ -3609,8 +3630,7 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     context = state^.saved_context
     index := state^.pen.joint2_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
     }
 }
 
@@ -3699,8 +3719,7 @@ lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     pivotIndex := state^.compass.pivot_id
     constraintIndex := state^.compass.lock_point1_id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
-        state^.point_system^.points[pointIndex].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, pointIndex, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
@@ -3742,8 +3761,7 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     index := state^.compass.joint1_id
     pivotIndex := state^.compass.pivot_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
@@ -3786,8 +3804,7 @@ lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     pivotIndex := state^.compass.pivot_id
     constraintIndex := state^.compass.lock_point2_id
     if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
-        state^.point_system^.points[pointIndex].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, pointIndex, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
@@ -3829,8 +3846,7 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     index := state^.compass.joint2_id
     pivotIndex := state^.compass.pivot_id
     if index >= 0 && index < MAX_KINEPOINTS {
-        state^.point_system^.points[index].position = pos
-        push_dust_if_floor_contact(state, pos)
+        set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }

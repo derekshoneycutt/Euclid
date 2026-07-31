@@ -877,6 +877,138 @@ push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.Euclid_Gener
     }
 }
 
+//   Emit dust for line segments connected to a point when a crossing/touch event occurs.
+//
+// Notes:
+//   - If a connected line lies on z=0, emit sampled pushes along the segment.
+//   - If a connected line straddles z=0, emit one push at the segment crossing point.
+push_dust_for_connected_lines_on_floor_event :: proc(
+    state: ^core.Euclid_General_State,
+    point_index: int) {
+
+    next_index := state^.point_system^.next_point_index
+    if point_index < 0 || point_index >= next_index {
+        return
+    }
+
+    for host_index in 0..<next_index {
+        host := state^.point_system^.points[host_index]
+        if host.kind != .Line {
+            continue
+        }
+
+        p1 := host.child_point_head
+        if p1 < 0 || p1 >= next_index {
+            continue
+        }
+
+        p2 := state^.point_system^.points[p1].next_child_point
+        if p2 < 0 || p2 >= next_index {
+            continue
+        }
+
+        if p1 != point_index && p2 != point_index {
+            continue
+        }
+
+        pos1, has_pos1 := state^.point_system^.points[p1].position.?
+        pos2, has_pos2 := state^.point_system^.points[p2].position.?
+        if !has_pos1 || !has_pos2 {
+            continue
+        }
+
+        sign1 := floor_contact_sign(pos1.z)
+        sign2 := floor_contact_sign(pos2.z)
+
+        if sign1 == 0 && sign2 == 0 {
+            samples := COMPASS_LINE_DUST_SAMPLES
+            inv_samples := f32(1.0) / f32(samples)
+            for i in 0..<samples {
+                t := f32(i) * inv_samples
+                x := math.lerp(pos1.x, pos2.x, t)
+                y := math.lerp(pos1.y, pos2.y, t)
+                particles.push_dust_away_from_xy(state^.particle_system, x, y)
+            }
+            continue
+        }
+
+        if sign1 * sign2 >= 0 {
+            continue
+        }
+
+        dz := pos2.z - pos1.z
+        if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
+            continue
+        }
+
+        t := -pos1.z / dz
+        t = math.clamp(t, 0, 1)
+
+        x := math.lerp(pos1.x, pos2.x, t)
+        y := math.lerp(pos1.y, pos2.y, t)
+        particles.push_dust_away_from_xy(state^.particle_system, x, y)
+    }
+}
+
+//   Classify one z value relative to floor contact dead-zone.
+floor_contact_sign :: #force_inline proc(z: f32) -> int {
+    if z > FLOOR_CONTACT_Z_EPSILON {
+        return 1
+    }
+    if z < -FLOOR_CONTACT_Z_EPSILON {
+        return -1
+    }
+    return 0
+}
+
+//   Emit one dust push only when a point newly reaches or crosses z=0.
+//
+// Notes:
+//   - Remaining on the floor plane emits no repeated pushes.
+//   - Leaving the floor plane emits no push.
+push_dust_if_floor_crossing :: proc(
+    state: ^core.Euclid_General_State,
+    previous_pos, current_pos: core.Vector3,
+    has_previous: bool) -> bool {
+
+    if !has_previous {
+        return false
+    }
+
+    previous_sign := floor_contact_sign(previous_pos.z)
+    current_sign := floor_contact_sign(current_pos.z)
+
+    if previous_sign == 0 && current_sign == 0 {
+        return false
+    }
+
+    if previous_sign != 0 && current_sign == 0 {
+        particles.push_dust_away_from_xy(state^.particle_system, current_pos.x, current_pos.y)
+        return true
+    }
+
+    if previous_sign == 0 && current_sign != 0 {
+        return false
+    }
+
+    if previous_sign * current_sign >= 0 {
+        return false
+    }
+
+    dz := current_pos.z - previous_pos.z
+    if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
+        return false
+    }
+
+    t := -previous_pos.z / dz
+    t = math.clamp(t, 0, 1)
+
+    x := math.lerp(previous_pos.x, current_pos.x, t)
+    y := math.lerp(previous_pos.y, current_pos.y, t)
+    particles.push_dust_away_from_xy(state^.particle_system, x, y)
+    return true
+}
+
 //   Print Julia exception type/message details for a named bridge context.
 //
 // Notes:
