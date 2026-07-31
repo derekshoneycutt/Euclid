@@ -508,6 +508,8 @@ Kine_Draw_Cache_Item :: union {
     Kine_Circle_Draw,
     Kine_Filled_Circle_Draw,
     Kine_Polygon_Draw,
+    Kine_Pen_Draw,
+    Kine_Compass_Draw,
 }
 
 Kine_Draw_Cache :: struct {

@@ -171,23 +171,20 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 //   - none.
 draw_kine_points_low_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.point_system^.draw_cache.item_count {
-        item := &state^.point_system^.draw_cache.items[i]
-        switch &item_typed in item {
-        case core.Kine_Label_Draw:
-            draw_cached_label(state, &item_typed)
-        case core.Kine_Point_Draw:
-            draw_cached_point(state, &item_typed)
-        case core.Kine_Line_Draw:
-            draw_cached_line(state, &item_typed)
-        case core.Kine_Circle_Draw:
-            draw_cached_circle(state, &item_typed)
-        case core.Kine_Filled_Circle_Draw:
-            draw_cached_filledcircle(state, &item_typed)
-        case core.Kine_Polygon_Draw:
-            draw_cached_polygon(state, &item_typed)
-        case:
-            continue
-        }
+        draw_cached_item_low(state, &state^.point_system^.draw_cache.items[i])
+    }
+}
+
+//   Render cached higher-layer items after shadows and particles.
+//
+// Parameters:
+//   - state: Global app state containing the draw cache to render.
+//
+// Returns:
+//   - none.
+draw_kine_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
+    for i in 0..<state^.point_system^.draw_cache.item_count {
+        draw_cached_item_high_merged(state, &state^.point_system^.draw_cache.items[i])
     }
 }
 
@@ -232,6 +229,196 @@ draw_kine_points_shadows_cached :: proc(state: ^Euclid_General_State) {
     if state^.point_system^.draw_cache.draw_compass {
         draw_cached_compass_shadow(state, &state^.point_system^.draw_cache.compass)
     }
+}
+
+//   Render floor shadows for cached low-layer geometry when any defining point is above the surface.
+//
+// Notes:
+//   - Flat and below-surface geometry draws no shadow.
+//   - Labels are intentionally excluded from the shape-shadow pass.
+draw_kine_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
+    for i in 0..<state^.point_system^.draw_cache.item_count {
+        draw_cached_item_shadow(state, &state^.point_system^.draw_cache.items[i])
+    }
+}
+
+//   Draw one cached item only when it belongs to the lower geometry layer.
+draw_cached_item_low :: proc(state: ^Euclid_General_State, item: ^core.Kine_Draw_Cache_Item) {
+    switch &item_typed in item {
+    case core.Kine_Label_Draw:
+        draw_cached_label(state, &item_typed)
+    case core.Kine_Point_Draw:
+        draw_cached_point_low(state, &item_typed)
+    case core.Kine_Line_Draw:
+        draw_cached_line_low(state, &item_typed)
+    case core.Kine_Circle_Draw:
+        draw_cached_circle_low(state, &item_typed)
+    case core.Kine_Filled_Circle_Draw:
+        draw_cached_filledcircle_low(state, &item_typed)
+    case core.Kine_Polygon_Draw:
+        draw_cached_polygon_low(state, &item_typed)
+    case core.Kine_Pen_Draw,
+        core.Kine_Compass_Draw:
+    }
+}
+
+//   Draw one cached item only when it belongs to the merged higher layer.
+draw_cached_item_high_merged :: proc(state: ^Euclid_General_State, item: ^core.Kine_Draw_Cache_Item) {
+    switch &item_typed in item {
+    case core.Kine_Label_Draw:
+    case core.Kine_Point_Draw:
+        draw_cached_point_high(state, &item_typed)
+    case core.Kine_Line_Draw:
+        draw_cached_line_high(state, &item_typed)
+    case core.Kine_Circle_Draw:
+        draw_cached_circle_high(state, &item_typed)
+    case core.Kine_Filled_Circle_Draw:
+        draw_cached_filledcircle_high(state, &item_typed)
+    case core.Kine_Polygon_Draw:
+        draw_cached_polygon_high(state, &item_typed)
+    case core.Kine_Pen_Draw:
+        draw_cached_pen_full(state, &item_typed)
+    case core.Kine_Compass_Draw:
+        draw_cached_compass_full(state, &item_typed)
+    }
+}
+
+//   Draw one cached item's floor shadow when that item can cast one.
+draw_cached_item_shadow :: proc(state: ^Euclid_General_State, item: ^core.Kine_Draw_Cache_Item) {
+    switch &item_typed in item {
+    case core.Kine_Label_Draw,
+        core.Kine_Pen_Draw,
+        core.Kine_Compass_Draw:
+    case core.Kine_Point_Draw:
+        draw_cached_point_shadow(state, &item_typed)
+    case core.Kine_Line_Draw:
+        draw_cached_line_shadow(state, &item_typed)
+    case core.Kine_Circle_Draw:
+        draw_cached_circle_shadow(state, &item_typed)
+    case core.Kine_Filled_Circle_Draw:
+        draw_cached_filledcircle_shadow(state, &item_typed)
+    case core.Kine_Polygon_Draw:
+        draw_cached_polygon_shadow(state, &item_typed)
+    }
+}
+
+//   Return true when a cached point draw item belongs to the elevated layer.
+draw_cached_point_is_elevated :: #force_inline proc(p: ^kine.Kine_Point_Draw) -> bool {
+    return shadow_point_is_elevated(p^.point1)
+}
+
+//   Return true when a cached line draw item belongs to the elevated layer.
+draw_cached_line_is_elevated :: #force_inline proc(l: ^kine.Kine_Line_Draw) -> bool {
+    line_points := [2]Vector3{l^.point1, l^.point2}
+    return has_any_elevated_shadow_point(line_points[:])
+}
+
+//   Return true when a cached circle draw item belongs to the elevated layer.
+draw_cached_circle_is_elevated :: #force_inline proc(c: ^kine.Kine_Circle_Draw) -> bool {
+    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
+    return has_any_elevated_shadow_point(circle_points[:])
+}
+
+//   Return true when a cached filled-circle draw item belongs to the elevated layer.
+draw_cached_filledcircle_is_elevated :: #force_inline proc(c: ^kine.Kine_Filled_Circle_Draw) -> bool {
+    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
+    return has_any_elevated_shadow_point(circle_points[:])
+}
+
+//   Return true when any cached polygon vertex belongs to the elevated layer.
+draw_cached_polygon_is_elevated :: #force_inline proc(
+    state: ^Euclid_General_State,
+    poly: ^kine.Kine_Polygon_Draw) -> bool {
+
+    cache := &state^.point_system^.draw_cache
+    vertices := cache^.polygon_vertices[poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
+    return has_any_elevated_shadow_point(vertices)
+}
+
+//   Draw one cached point only when it belongs to the lower geometry layer.
+draw_cached_point_low :: #force_inline proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
+    if !draw_cached_point_is_elevated(p) {
+        draw_cached_point(state, p)
+    }
+}
+
+//   Draw one cached point only when it belongs to the merged higher layer.
+draw_cached_point_high :: #force_inline proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
+    if draw_cached_point_is_elevated(p) {
+        draw_cached_point(state, p)
+    }
+}
+
+//   Draw one cached line only when it belongs to the lower geometry layer.
+draw_cached_line_low :: #force_inline proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
+    if !draw_cached_line_is_elevated(l) {
+        draw_cached_line(state, l)
+    }
+}
+
+//   Draw one cached line only when it belongs to the merged higher layer.
+draw_cached_line_high :: #force_inline proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
+    if draw_cached_line_is_elevated(l) {
+        draw_cached_line(state, l)
+    }
+}
+
+//   Draw one cached circle only when it belongs to the lower geometry layer.
+draw_cached_circle_low :: #force_inline proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Draw) {
+    if !draw_cached_circle_is_elevated(c) {
+        draw_cached_circle(state, c)
+    }
+}
+
+//   Draw one cached circle only when it belongs to the merged higher layer.
+draw_cached_circle_high :: #force_inline proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Draw) {
+    if draw_cached_circle_is_elevated(c) {
+        draw_cached_circle(state, c)
+    }
+}
+
+//   Draw one cached filled circle only when it belongs to the lower geometry layer.
+draw_cached_filledcircle_low :: #force_inline proc(state: ^Euclid_General_State, c: ^kine.Kine_Filled_Circle_Draw) {
+    if !draw_cached_filledcircle_is_elevated(c) {
+        draw_cached_filledcircle(state, c)
+    }
+}
+
+//   Draw one cached filled circle only when it belongs to the merged higher layer.
+draw_cached_filledcircle_high :: #force_inline proc(state: ^Euclid_General_State, c: ^kine.Kine_Filled_Circle_Draw) {
+    if draw_cached_filledcircle_is_elevated(c) {
+        draw_cached_filledcircle(state, c)
+    }
+}
+
+//   Draw one cached polygon only when it belongs to the lower geometry layer.
+draw_cached_polygon_low :: #force_inline proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polygon_Draw) {
+    if !draw_cached_polygon_is_elevated(state, poly) {
+        draw_cached_polygon(state, poly)
+    }
+}
+
+//   Draw one cached polygon only when it belongs to the merged higher layer.
+draw_cached_polygon_high :: #force_inline proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polygon_Draw) {
+    if draw_cached_polygon_is_elevated(state, poly) {
+        draw_cached_polygon(state, poly)
+    }
+}
+
+//   Render one full cached pen item for the merged higher layer.
+draw_cached_pen_full :: proc(state: ^Euclid_General_State, pen: ^kine.Kine_Pen_Draw) {
+    draw_cached_pen_active_dot(state, pen)
+    begin_stroke3d_mode(state)
+    draw_cached_pen(state, pen)
+    end_stroke3d_mode(state)
+}
+
+//   Render one full cached compass item for the merged higher layer.
+draw_cached_compass_full :: proc(state: ^Euclid_General_State, comp: ^kine.Kine_Compass_Draw) {
+    draw_cached_compass_active_dot(state, comp)
+    begin_stroke3d_mode(state)
+    draw_cached_compass(state, comp)
+    end_stroke3d_mode(state)
 }
 
 
@@ -409,6 +596,35 @@ make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
     return rl.Color{0, 0, 0, a}
 }
 
+//   Return true when one point should cast a floor shadow.
+shadow_point_is_elevated :: #force_inline proc(point: Vector3) -> bool {
+    return point.z > 0
+}
+
+//   Return true when any cached point in one slice is above the drawing surface.
+has_any_elevated_shadow_point :: #force_inline proc(points: []Vector3) -> bool {
+    for point in points {
+        if shadow_point_is_elevated(point) {
+            return true
+        }
+    }
+    return false
+}
+
+//   Compute average height across one point slice for shadow alpha attenuation.
+average_shadow_height :: #force_inline proc(points: []Vector3) -> f32 {
+    if len(points) <= 0 {
+        return 0
+    }
+
+    total: f32 = 0
+    for point in points {
+        total += point.z
+    }
+
+    return total / f32(len(points))
+}
+
 //   Project a 3D point onto the floor plane using light direction.
 project_to_floor_shadow :: proc(p: Vector3, scale: Iso_Scale) -> Vector3 {
     if !scale.use_directional_shadow {
@@ -520,6 +736,133 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Label_Draw
     case .Bar:
         //TODO: Do this
     }
+}
+
+
+//   Render one cached point floor shadow.
+draw_cached_point_shadow :: proc(state: ^Euclid_General_State, p: ^kine.Kine_Point_Draw) {
+    if !shadow_point_is_elevated(p^.point1) {
+        return
+    }
+
+    shadow := shadow_to_screen(p^.point1, state)
+    shadow_color := make_shadow_color(p^.color, p^.point1.z)
+    rl.DrawCircleV(shadow, p^.brush_size, shadow_color)
+}
+
+
+//   Render one cached line floor shadow.
+draw_cached_line_shadow :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line_Draw) {
+    line_points := [2]Vector3{l^.point1, l^.point2}
+    if !has_any_elevated_shadow_point(line_points[:]) {
+        return
+    }
+
+    s0 := shadow_to_screen(l^.point1, state)
+    s1 := shadow_to_screen(l^.point2, state)
+    avg_height := average_shadow_height(line_points[:])
+    shadow_color := make_shadow_color(l^.color, avg_height)
+    thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    rl.DrawLineEx(s0, s1, thickness, shadow_color)
+}
+
+
+//   Render one cached circle/arc floor shadow.
+draw_cached_circle_shadow :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Circle_Draw) {
+    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
+    if !has_any_elevated_shadow_point(circle_points[:]) {
+        return
+    }
+
+    start := c^.start
+    finish := c^.end
+    center := c^.center
+
+    start_vec := start - center
+    end_vec := finish - center
+
+    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
+
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
+    avg_height := average_shadow_height(circle_points[:])
+    shadow_color := make_shadow_color(c^.color, avg_height)
+    thickness := math.max(c^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    arc_world[0] = start
+    seg_count := f32(CIRCLE_ARC_SEGMENTS)
+
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        t := f32(i) / seg_count
+        theta := start_theta + sweep_delta * t
+        radius := math.lerp(start_radius, end_radius, t)
+
+        arc_world[i] = Vector3{
+            center.x + f32(math.cos(theta)) * radius,
+            center.y + f32(math.sin(theta)) * radius,
+            center.z,
+        }
+    }
+
+    prev := shadow_to_screen(arc_world[0], state)
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        curr := shadow_to_screen(arc_world[i], state)
+        rl.DrawLineEx(prev, curr, thickness, shadow_color)
+        prev = curr
+    }
+}
+
+
+//   Render one cached filled-circle floor shadow.
+draw_cached_filledcircle_shadow :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Filled_Circle_Draw) {
+    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
+    if !has_any_elevated_shadow_point(circle_points[:]) {
+        return
+    }
+
+    start := c^.start
+    finish := c^.end
+    center := c^.center
+
+    start_vec := start - center
+    end_vec := finish - center
+
+    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
+
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
+    avg_height := average_shadow_height(circle_points[:])
+    shadow_color := make_shadow_color(c^.color, avg_height)
+
+    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
+    points[0] = shadow_to_screen(center, state)
+
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    arc_world[0] = start
+
+    seg_count := f32(CIRCLE_ARC_SEGMENTS)
+    for i in 1..=CIRCLE_ARC_SEGMENTS {
+        t := f32(i) / seg_count
+        theta := start_theta + sweep_delta * t
+        radius := math.lerp(start_radius, end_radius, t)
+
+        arc_world[i] = Vector3{
+            center.x + f32(math.cos(theta)) * radius,
+            center.y + f32(math.sin(theta)) * radius,
+            center.z,
+        }
+    }
+
+    for i in 0..<len(arc_world) {
+        points[i + 1] = shadow_to_screen(arc_world[i], state)
+    }
+
+    rl.DrawTriangleFan(&points[0], len(points), shadow_color)
 }
 
 
@@ -665,7 +1008,8 @@ project_cached_polygon_vertices :: #force_inline proc(
 draw_cached_polygon_triangles :: #force_inline proc(
     cache: ^core.Kine_Draw_Cache,
     poly: ^kine.Kine_Polygon_Draw,
-    projected: []Vector2) {
+    projected: []Vector2,
+    color: rl.Color) {
 
     triangles := cache^.polygon_triangles[poly^.first_triangle:poly^.first_triangle + poly^.triangle_count]
     for tri in triangles {
@@ -682,8 +1026,30 @@ draw_cached_polygon_triangles :: #force_inline proc(
             continue
         }
 
-        rl.DrawTriangle(projected[i0], projected[i1], projected[i2], poly^.color)
+        rl.DrawTriangle(projected[i0], projected[i1], projected[i2], color)
     }
+}
+
+
+//   Render one cached polygon floor shadow.
+draw_cached_polygon_shadow :: proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polygon_Draw) {
+    if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
+        return
+    }
+
+    cache := &state^.point_system^.draw_cache
+    vertices := cache^.polygon_vertices[poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
+    if !has_any_elevated_shadow_point(vertices) {
+        return
+    }
+
+    projected: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    for i in 0..<poly^.vertex_count {
+        projected[i] = shadow_to_screen(vertices[i], state)
+    }
+
+    shadow_color := make_shadow_color(poly^.color, average_shadow_height(vertices))
+    draw_cached_polygon_triangles(cache, poly, projected[:], shadow_color)
 }
 
 //   Render one cached polygon draw item.
@@ -698,7 +1064,7 @@ draw_cached_polygon :: proc(state: ^Euclid_General_State, poly: ^kine.Kine_Polyg
     }
 
     cache := &state^.point_system^.draw_cache
-    draw_cached_polygon_triangles(cache, poly, projected[:])
+    draw_cached_polygon_triangles(cache, poly, projected[:], poly^.color)
 }
 
 

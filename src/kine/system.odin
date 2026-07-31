@@ -10,6 +10,8 @@ import "core:math/linalg"
 
 import rl "vendor:raylib"
 
+DRAW_CACHE_SORT_FLAT_EPSILON :: 1e-5
+
 MAX_KINEPOINTS :: core.MAX_KINEPOINTS
 MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
 
@@ -120,29 +122,10 @@ build_kine_draw_cache :: proc(
             continue
         }
 
-        switch src^.kind {
-        case .Label:
-            cache_push_label(point_system, index, src, alpha)
-        case .Point:
-            cache_push_point(point_system, index, src, alpha)
-        case .Line:
-            cache_push_line(point_system, index, src, alpha)
-        case .Circle:
-            cache_push_circle(point_system, index, src, alpha)
-        case .FilledCircle:
-            cache_push_filledcircle(point_system, index, src, alpha)
-        case .Triangle:
-            cache_push_polygon(point_system, index, src, alpha)
-        case .Square:
-            cache_push_polygon(point_system, index, src, alpha)
-        case .Pentagon:
-            cache_push_polygon(point_system, index, src, alpha)
-        case .Pen:
-            cache_push_pen(point_system, index, src, alpha)
-        case .Compass:
-            cache_push_compass(point_system, index, src, alpha)
-        }
+        cache_push_draw_item(point_system, index, src, alpha)
     }
+
+    sort_kine_draw_cache_low(point_system)
 }
 
 
@@ -156,6 +139,182 @@ kine_draw_cache_reset :: proc(
     point_system^.draw_cache.polygon_triangle_count = 0
     point_system^.draw_cache.draw_pen = false
     point_system^.draw_cache.draw_compass = false
+}
+
+//   Return true when one z coordinate should count as on-surface for cache sorting.
+draw_cache_coord_is_flat :: #force_inline proc(value: f32) -> bool {
+    return value >= -DRAW_CACHE_SORT_FLAT_EPSILON && value <= DRAW_CACHE_SORT_FLAT_EPSILON
+}
+
+//   Return true when one cached point lies on the drawing surface within epsilon.
+draw_cache_point_is_flat :: #force_inline proc(point: Vector3) -> bool {
+    return draw_cache_coord_is_flat(point.z)
+}
+
+//   Compute one visual depth scalar matching the isometric layering heuristic.
+draw_cache_visual_depth :: #force_inline proc(point: Vector3) -> f32 {
+    return point.x + point.y - point.z
+}
+
+//   Compute one polygon centroid and whether all cached polygon vertices are flat.
+draw_cache_polygon_centroid_and_flatness :: proc(
+    point_system: ^Kine_Point_System,
+    poly: ^Kine_Polygon_Draw) -> (Vector3, bool) {
+
+    if poly^.vertex_count <= 0 {
+        return {}, false
+    }
+
+    vertices := point_system^.draw_cache.polygon_vertices[
+        poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
+    sum := Vector3{}
+    flat := true
+
+    for vertex in vertices {
+        sum += vertex
+        if !draw_cache_point_is_flat(vertex) {
+            flat = false
+        }
+    }
+
+    inv_count := 1.0 / f32(poly^.vertex_count)
+    return sum * inv_count, flat
+}
+
+//   Return representative depth and flatness for one cached line item.
+draw_cache_line_depth_and_flatness :: #force_inline proc(line: Kine_Line_Draw) -> (f32, bool) {
+    midpoint := (line.point1 + line.point2) * 0.5
+    flat := draw_cache_point_is_flat(line.point1) && draw_cache_point_is_flat(line.point2)
+    return draw_cache_visual_depth(midpoint), flat
+}
+
+//   Return representative depth and flatness for one cached circle item.
+draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Kine_Circle_Draw) -> (f32, bool) {
+    flat := draw_cache_point_is_flat(circle.center) &&
+        draw_cache_point_is_flat(circle.start) &&
+        draw_cache_point_is_flat(circle.end)
+    return draw_cache_visual_depth(circle.center), flat
+}
+
+//   Return representative depth and flatness for one cached filled-circle item.
+draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Kine_Filled_Circle_Draw) -> (f32, bool) {
+    flat := draw_cache_point_is_flat(circle.center) &&
+        draw_cache_point_is_flat(circle.start) &&
+        draw_cache_point_is_flat(circle.end)
+    return draw_cache_visual_depth(circle.center), flat
+}
+
+//   Return representative depth and flatness for one cached pen item.
+draw_cache_pen_depth_and_flatness :: #force_inline proc(pen: Kine_Pen_Draw) -> (f32, bool) {
+    midpoint := (pen.joint1 + pen.joint2) * 0.5
+    flat := draw_cache_point_is_flat(pen.joint1) && draw_cache_point_is_flat(pen.joint2)
+    return draw_cache_visual_depth(midpoint), flat
+}
+
+//   Return representative depth and flatness for one cached compass item.
+draw_cache_compass_depth_and_flatness :: #force_inline proc(compass: Kine_Compass_Draw) -> (f32, bool) {
+    centroid := (compass.joint1 + compass.pivot + compass.joint2) / 3.0
+    flat := draw_cache_point_is_flat(compass.joint1) &&
+        draw_cache_point_is_flat(compass.pivot) &&
+        draw_cache_point_is_flat(compass.joint2)
+    return draw_cache_visual_depth(centroid), flat
+}
+
+//   Return representative depth and flatness for one cached low-geometry item.
+//
+// Notes:
+//   - Flat items are later kept in authored creation order when compared to
+//     other flat items.
+draw_cache_item_depth_and_flatness :: proc(
+    point_system: ^Kine_Point_System,
+    item: ^Kine_Draw_Cache_Item) -> (f32, bool) {
+
+    switch &typed in item {
+    case Kine_Label_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
+    case Kine_Point_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
+    case Kine_Line_Draw: return draw_cache_line_depth_and_flatness(typed)
+    case Kine_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
+    case Kine_Filled_Circle_Draw: return draw_cache_filledcircle_depth_and_flatness(typed)
+    case Kine_Polygon_Draw:
+        centroid, flat := draw_cache_polygon_centroid_and_flatness(point_system, &typed)
+        return draw_cache_visual_depth(centroid), flat
+    case Kine_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
+    case Kine_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
+    case:
+        return 0, false
+    }
+}
+
+//   Return true when lhs should be drawn earlier than rhs in the low-cache pass.
+//
+// Notes:
+//   - Two fully flat items preserve authored order and do not reorder by x/y.
+//   - Near-equal depth also preserves authored order for stable playback.
+draw_cache_item_should_precede :: #force_inline proc(
+    lhs_depth: f32,
+    lhs_flat: bool,
+    rhs_depth: f32,
+    rhs_flat: bool) -> bool {
+
+    if lhs_flat && rhs_flat {
+        return false
+    }
+
+    depth_delta := lhs_depth - rhs_depth
+    if depth_delta >= -DRAW_CACHE_SORT_FLAT_EPSILON && depth_delta <= DRAW_CACHE_SORT_FLAT_EPSILON {
+        return false
+    }
+
+    return lhs_depth > rhs_depth
+}
+
+//   Stable-sort low cached geometry items by representative visual depth.
+//
+// Notes:
+//   - Applies only whole-primitive painter ordering; it does not split
+//     primitives or solve exact visibility.
+//   - Fully flat `z = 0` items keep their authored creation order.
+sort_kine_draw_cache_low :: proc(point_system: ^Kine_Point_System) {
+    item_count := point_system^.draw_cache.item_count
+    if item_count <= 1 {
+        return
+    }
+
+    depths: [MAX_KINEPOINTS]f32
+    flats: [MAX_KINEPOINTS]bool
+
+    for i in 0..<item_count {
+        depths[i], flats[i] = draw_cache_item_depth_and_flatness(
+            point_system,
+            &point_system^.draw_cache.items[i])
+    }
+
+    for i in 1..<item_count {
+        item := point_system^.draw_cache.items[i]
+        item_depth := depths[i]
+        item_flat := flats[i]
+        j := i
+
+        for j > 0 {
+            prev_index := j - 1
+            if !draw_cache_item_should_precede(
+                item_depth,
+                item_flat,
+                depths[prev_index],
+                flats[prev_index]) {
+                break
+            }
+
+            point_system^.draw_cache.items[j] = point_system^.draw_cache.items[prev_index]
+            depths[j] = depths[prev_index]
+            flats[j] = flats[prev_index]
+            j = prev_index
+        }
+
+        point_system^.draw_cache.items[j] = item
+        depths[j] = item_depth
+        flats[j] = item_flat
+    }
 }
 
 //   Compute interpolated point position between previous and current vectors.
@@ -608,6 +767,29 @@ finalize_polygon_triangle_reservation :: #force_inline proc(
 }
 
 
+//   Dispatch one visible point-system shape into its cached draw-item representation.
+cache_push_draw_item :: #force_inline proc(
+    point_system: ^Kine_Point_System,
+    source_index: int,
+    src: ^Kine_Shape_Point,
+    alpha: f32) {
+
+    switch src^.kind {
+    case .Label: cache_push_label(point_system, source_index, src, alpha)
+    case .Point: cache_push_point(point_system, source_index, src, alpha)
+    case .Line: cache_push_line(point_system, source_index, src, alpha)
+    case .Circle: cache_push_circle(point_system, source_index, src, alpha)
+    case .FilledCircle: cache_push_filledcircle(point_system, source_index, src, alpha)
+    case .Triangle,
+        .Square,
+        .Pentagon:
+        cache_push_polygon(point_system, source_index, src, alpha)
+    case .Pen: cache_push_pen(point_system, source_index, src, alpha)
+    case .Compass: cache_push_compass(point_system, source_index, src, alpha)
+    }
+}
+
+
 //   Push a cached label draw item into the draw-cache item list.
 cache_push_label :: proc(
     point_system: ^Kine_Point_System,
@@ -809,10 +991,16 @@ cache_push_pen :: proc(
         return
     }
 
-    point_system^.draw_cache.pen.base = make_draw_base(source_index, src)
-    point_system^.draw_cache.pen.joint1 = child_points[0]
-    point_system^.draw_cache.pen.joint2 = child_points[1]
+    point := Kine_Pen_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
+    point_system^.draw_cache.pen = point
     point_system^.draw_cache.draw_pen = src^.do_draw
+
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        return
+    }
+
+    slot^ = point
 }
 
 //   Update cached compass tool draw data and compass draw-enable flag.
@@ -827,9 +1015,19 @@ cache_push_compass :: proc(
         return
     }
 
-    point_system^.draw_cache.compass.base = make_draw_base(source_index, src)
-    point_system^.draw_cache.compass.joint1 = child_points[0]
-    point_system^.draw_cache.compass.pivot = child_points[1]
-    point_system^.draw_cache.compass.joint2 = child_points[2]
+    point := Kine_Compass_Draw{
+        make_draw_base(source_index, src),
+        child_points[0],
+        child_points[1],
+        child_points[2],
+    }
+    point_system^.draw_cache.compass = point
     point_system^.draw_cache.draw_compass = src^.do_draw
+
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        return
+    }
+
+    slot^ = point
 }

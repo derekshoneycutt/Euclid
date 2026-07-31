@@ -110,6 +110,7 @@ General features:
   - [X] Dynamic sized brackets
   - [X] Matrices
   - [X] Sums, Products, Integrals
+- [X] Naive spatial-aware shape drawing
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 

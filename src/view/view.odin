@@ -345,9 +345,10 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     draw_kine_points_low_cached(state)
     render_low_particles(state^.particle_system, state)
+    draw_kine_shapes_shadows_cached(state)
     draw_kine_points_shadows_cached(state)
     render_particles(state^.particle_system, state)
-    draw_kine_points_high_cached(state)
+    draw_kine_points_high_merged_cached(state)
     render_high_particles(state^.particle_system, state)
 
     state^.iso_scale^.x_offset = base_x_offset

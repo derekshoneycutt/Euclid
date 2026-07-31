@@ -3,6 +3,7 @@ module EuclidAlgebraGroupsZ2
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
+using Colors
 
 export get_view_text, initialize, clean, loop
 
@@ -14,6 +15,22 @@ const VertexM = Float32[0.50f0, 0.34f0, 0f0]
 const SideStarts = (VertexA, VertexM, VertexB, VertexC)
 const SideEnds = (VertexM, VertexB, VertexC, VertexA)
 const SideColors = (:steelblue, :steelblue, :palevioletred1, :khaki3)
+
+function darkened_bridge_color(name::Symbol)
+    rgb = RGB{Float32}(parse(Colorant, String(name)))
+    return OdinJuliaBridge.bridge_color(RGBA{Float32}(
+        rgb.r,
+        rgb.g,
+        rgb.b,
+        0.25f0))
+end
+
+const DarkenedSideColors = (
+    darkened_bridge_color(SideColors[1]),
+    darkened_bridge_color(SideColors[2]),
+    darkened_bridge_color(SideColors[3]),
+    darkened_bridge_color(SideColors[4]),
+)
 
 const ReflectionLinePointA = Float32[0.5f0, 0.18f0, 0f0]
 const ReflectionLinePointB = Float32[0.5f0, 0.88f0, 0f0]
@@ -253,6 +270,39 @@ function animate_reflection_step!(
     end
 end
 
+function reset_line_colors!(
+    state_ptr::Ptr{Cvoid},
+    lineHostId1::Int,
+    lineHostId2::Int,
+    lineHostId3::Int,
+    lineHostId4::Int)
+
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId1, SideColors[1])
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId2, SideColors[2])
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId3, SideColors[3])
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId4, SideColors[4])
+end
+
+function apply_negative_reflection_line_colors!(
+    state_ptr::Ptr{Cvoid},
+    mirrored::Bool,
+    lineHostId1::Int,
+    lineHostId2::Int,
+    lineHostId3::Int,
+    lineHostId4::Int)
+
+    reset_line_colors!(state_ptr, lineHostId1, lineHostId2, lineHostId3, lineHostId4)
+
+    if mirrored
+        OdinJuliaBridge.set_point_color(state_ptr, lineHostId2, DarkenedSideColors[2])
+        OdinJuliaBridge.set_point_color(state_ptr, lineHostId3, DarkenedSideColors[3])
+        return
+    end
+
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId1, DarkenedSideColors[1])
+    OdinJuliaBridge.set_point_color(state_ptr, lineHostId4, DarkenedSideColors[4])
+end
+
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
         lineHostId1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1])))
         lineHostId2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[2])))
@@ -283,6 +333,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id3, SideStarts[3])
     OdinJuliaBridge.set_point_position(state_ptr, lineJoint1Id4, SideStarts[4])
     OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id4, SideStarts[4])
+    reset_line_colors!(state_ptr, lineHostId1, lineHostId2, lineHostId3, lineHostId4)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -354,6 +405,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
     timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+
+    reset_line_colors!(state_ptr, lineHostId1, lineHostId2, lineHostId3, lineHostId4)
 
     if phase == PhasePenDescend
         EuclidAnimations.animate_pen_descend(
@@ -436,6 +489,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseReflectOnce
+        apply_negative_reflection_line_colors!(
+            state_ptr,
+            false,
+            lineHostId1,
+            lineHostId2,
+            lineHostId3,
+            lineHostId4)
         animate_reflection_step!(
             state_ptr,
             timer,
@@ -450,6 +510,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseReflectTwiceFirst
+        apply_negative_reflection_line_colors!(
+            state_ptr,
+            true,
+            lineHostId1,
+            lineHostId2,
+            lineHostId3,
+            lineHostId4)
         animate_reflection_step!(
             state_ptr,
             timer,
@@ -464,6 +531,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseReflectTwiceSecond
+        apply_negative_reflection_line_colors!(
+            state_ptr,
+            false,
+            lineHostId1,
+            lineHostId2,
+            lineHostId3,
+            lineHostId4)
         animate_reflection_step!(
             state_ptr,
             timer,
