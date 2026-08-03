@@ -242,6 +242,22 @@ end
 """Return validated start positions, one 3D position per point id."""
 function validated_start_positions(start_positions)
     positions = Vector{Vector{Float32}}()
+
+    # Accept flat xyz-packed input (e.g. [x1, y1, z1, x2, y2, z2]) for convenience.
+    if start_positions isa AbstractVector{<:Real}
+        if length(start_positions) % 3 != 0
+            throw(ArgumentError(
+                "flat start_positions must contain a multiple of 3 values (x, y, z per point)"))
+        end
+
+        point_count = Int(length(start_positions) ÷ 3)
+        for idx in 1:point_count
+            base = (idx - 1) * 3
+            push!(positions, vec3("start_positions[$(idx)]", @view start_positions[(base + 1):(base + 3)]))
+        end
+        return positions
+    end
+
     for (idx, pos) in enumerate(start_positions)
         push!(positions, vec3("start_positions[$(idx)]", pos))
     end

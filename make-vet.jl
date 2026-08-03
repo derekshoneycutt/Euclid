@@ -544,12 +544,14 @@ end
 
 """Return true when complexity warning for a function is explicitly acceptable."""
 function is_acceptable_complexity_warning(row::JuliaComplexityRow)
+    normalized_file = replace(row.file, '\\' => '/')
+
     if row.function_name == "loop"
         return true
     end
 
     if startswith(row.function_name, "get_view_text") &&
-        occursin(r"^src/julia/[^/]+/", row.file)
+        occursin(r"^src/julia/[^/]+/", normalized_file)
         return true
     end
 
@@ -637,8 +639,9 @@ function build_julia_complexity_rows(
         absolute_path = normpath(joinpath(script_dir, item.file))
         warning_only_path = is_warning_only_complexity_path(absolute_path, warning_roots)
         warning_only_loop = item.name == "loop"
+        normalized_file = replace(item.file, '\\' => '/')
         warning_only_get_view_text = startswith(item.name, "get_view_text") &&
-            occursin(r"^src/julia/[^/]+/", item.file)
+            occursin(r"^src/julia/[^/]+/", normalized_file)
         warning_only = warning_only_path || warning_only_loop || warning_only_get_view_text
         is_violation = ccn > max_complexity
 

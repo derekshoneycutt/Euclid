@@ -50,6 +50,22 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, 2f0])
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, Inf32, 3f0])
 
+    nested_positions = EuclidRepl.validated_start_positions([
+        Float64[1.0, 2.0, 3.0],
+        Float64[4.0, 5.0, 6.0],
+    ])
+    @test nested_positions == [
+        Float32[1f0, 2f0, 3f0],
+        Float32[4f0, 5f0, 6f0],
+    ]
+
+    flat_positions = EuclidRepl.validated_start_positions(Float64[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    @test flat_positions == [
+        Float32[1f0, 2f0, 3f0],
+        Float32[4f0, 5f0, 6f0],
+    ]
+    @test_throws ArgumentError EuclidRepl.validated_start_positions(Float64[1.0, 2.0, 3.0, 4.0])
+
     @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 1f0) ≈ 1f0

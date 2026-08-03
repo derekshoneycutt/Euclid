@@ -297,7 +297,7 @@ Choose the owning module first, then touch that module's highlighted files.
 - **Julia feature surface / bridge contract**:
   - Bridge and Embedding Module + Bridge Wrapper Module
     (`src/julia/odin-julia-bridge.odin`, `src/julia/odin-julia-bridge.jl`).
-- **New lesson/content animation**:
+- **New content animation**:
   - Content Modules (`src/julia/elements/**`, `src/julia/proclus/**`,
     `src/julia/hilbert/**`).
 - **Modify the Scratchpad/REPL surface**:
