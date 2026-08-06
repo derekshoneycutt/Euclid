@@ -45,8 +45,8 @@ Core Content:
   - [X] Section 8
 - [ ] Algebraic groups
   - [ ] Definitions
-    - [ ] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
-      - [ ] Closure
+    - [X] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
+      - [X] Closure
       - [ ] Identity
       - [ ] Inverse
     - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
@@ -111,6 +111,7 @@ General features:
   - [X] Matrices
   - [X] Sums, Products, Integrals
 - [X] Naive spatial-aware shape drawing
+- [ ] Improved clipping through 3D polygons
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 

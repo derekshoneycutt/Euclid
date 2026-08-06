@@ -7,6 +7,7 @@ using ..EuclidLatex
 using ..NullAnimation
 
 include("./z_2.jl")
+include("./z_2_closure.jl")
 
 const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
 const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
@@ -145,7 +146,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
         NullAnimation.loop, NullAnimation.clean,
         "Groups", rootId)
 
-    register_child_animation(
+    z2_id = register_child_animation(
         state_ptr,
         EuclidAlgebraGroupsZ2.get_view_text,
         EuclidAlgebraGroupsZ2.initialize,
@@ -153,6 +154,15 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
         EuclidAlgebraGroupsZ2.clean,
         "ℤ₂",
         groupsId)
+
+    register_child_animation(
+        state_ptr,
+        EuclidAlgebraGroupsZ2Closure.get_view_text,
+        EuclidAlgebraGroupsZ2Closure.initialize,
+        EuclidAlgebraGroupsZ2Closure.loop,
+        EuclidAlgebraGroupsZ2Closure.clean,
+        "Closure",
+        z2_id)
 
 end
 

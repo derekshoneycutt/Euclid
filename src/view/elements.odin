@@ -832,9 +832,17 @@ draw_cached_line_shadow :: proc(state: ^Euclid_General_State, l: ^kine.Kine_Line
         return
     }
 
-    s0 := shadow_to_screen(l^.point1, state)
-    s1 := shadow_to_screen(l^.point2, state)
-    avg_height := average_shadow_height(line_points[:])
+    // Shadow pass keeps only the visible-above-plane fragment for split lines.
+    clipped0 := Vector3{}
+    clipped1 := Vector3{}
+    if !z_split_clip_segment_halfspace(l^.point1, l^.point2, true, &clipped0, &clipped1) {
+        return
+    }
+
+    s0 := shadow_to_screen(clipped0, state)
+    s1 := shadow_to_screen(clipped1, state)
+    clipped_points := [2]Vector3{clipped0, clipped1}
+    avg_height := average_shadow_height(clipped_points[:])
     shadow_color := make_shadow_color(l^.color, avg_height)
     thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
@@ -861,8 +869,6 @@ draw_cached_circle_shadow :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Ci
     start_theta := f32(math.atan2(start_vec.y, start_vec.x))
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
     sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
-    avg_height := average_shadow_height(circle_points[:])
-    shadow_color := make_shadow_color(c^.color, avg_height)
     thickness := math.max(c^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
@@ -881,11 +887,25 @@ draw_cached_circle_shadow :: proc(state: ^Euclid_General_State, c: ^kine.Kine_Ci
         }
     }
 
-    prev := shadow_to_screen(arc_world[0], state)
     for i in 1..=CIRCLE_ARC_SEGMENTS {
-        curr := shadow_to_screen(arc_world[i], state)
-        rl.DrawLineEx(prev, curr, thickness, shadow_color)
-        prev = curr
+        clipped0 := Vector3{}
+        clipped1 := Vector3{}
+        if !z_split_clip_segment_halfspace(
+            arc_world[i - 1],
+            arc_world[i],
+            true,
+            &clipped0,
+            &clipped1) {
+
+            continue
+        }
+
+        s0 := shadow_to_screen(clipped0, state)
+        s1 := shadow_to_screen(clipped1, state)
+        clipped_points := [2]Vector3{clipped0, clipped1}
+        clipped_avg_height := average_shadow_height(clipped_points[:])
+        clipped_shadow_color := make_shadow_color(c^.color, clipped_avg_height)
+        rl.DrawLineEx(s0, s1, thickness, clipped_shadow_color)
     }
 }
 
