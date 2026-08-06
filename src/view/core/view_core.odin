@@ -351,19 +351,30 @@ font_runtime_resolve :: proc(state: ^core.Euclid_General_State, flags: core.Font
 	return state^.font
 }
 
-//   Preload and set the Regular variant during startup.
+//   Preload baseline JuliaMono variants during startup.
+//
+// Notes:
+//   - Baseline startup set is Regular, Bold, and RegularItalic.
+//   - Other variants still load lazily when requested.
 font_runtime_init_with_regular :: proc(state: ^core.Euclid_General_State, font_size: i32) -> bool {
 	if state == nil {
 		return false
 	}
 
-	state^.font_runtime.regular_slot_index = font_variant_slot_index(.Regular, false)
-	loaded := font_load_variant(state, state^.font_runtime.regular_slot_index, .Regular, false, font_size)
-	if loaded {
-		state^.font = state^.font_runtime.variants[state^.font_runtime.regular_slot_index].font
+	regular_slot := font_variant_slot_index(.Regular, false)
+	bold_slot := font_variant_slot_index(.Bold, false)
+	italic_slot := font_variant_slot_index(.Regular, true)
+
+	state^.font_runtime.regular_slot_index = regular_slot
+	loaded_regular := font_load_variant(state, regular_slot, .Regular, false, font_size)
+	if loaded_regular {
+		state^.font = state^.font_runtime.variants[regular_slot].font
 	}
 
-	return loaded
+	_ = font_load_variant(state, bold_slot, .Bold, false, font_size)
+	_ = font_load_variant(state, italic_slot, .Regular, true, font_size)
+
+	return loaded_regular
 }
 
 //   Unload all lazily loaded variants and reset runtime tracking.

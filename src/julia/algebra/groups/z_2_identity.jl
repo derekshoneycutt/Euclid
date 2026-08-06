@@ -1,4 +1,4 @@
-module EuclidAlgebraGroupsZ2Closure
+module EuclidAlgebraGroupsZ2Identity
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
@@ -25,8 +25,9 @@ const TriangleBrush = 5f0
 const PenDescendDuration = 1.6f0
 const SideDrawDuration = 1.9f0
 const PenRiseDuration = 1.6f0
-const PauseDuration = 1.0f0
+const PauseBeforeDoubleReflectDuration = 0.9f0
 const ReflectionDuration = 2.4f0
+const PauseAfterDoubleReflectDuration = 0.8f0
 
 const MetaLineHostIds = (1, 4, 7)
 const MetaLineJoint1Ids = (2, 5, 8)
@@ -39,29 +40,26 @@ const PhaseDrawAB = 1f0
 const PhaseDrawBC = 2f0
 const PhaseDrawCA = 3f0
 const PhasePenRise = 4f0
-const PhaseReflectOnce = 5f0
-const PhasePauseAfterOnce = 6f0
+const PhasePauseBeforeDoubleReflect = 5f0
+const PhaseReflectFirst = 6f0
 const PhaseReflectSecond = 7f0
-const PhasePauseAfterSecond = 8f0
-const PhaseReflectThird = 9f0
-const PhaseReflectFourth = 10f0
-const PhasePauseAfterFourth = 11f0
+const PhasePauseAfterDoubleReflect = 8f0
 
 const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
 const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
 
-const ClosureFallbackText = raw"""Closure
+const IdentityFallbackText = raw"""Identity
 
-Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
+Identity means there is a motion that changes nothing at all.
 
-In this example, composing reflections still produces one of the same allowed motions:
+In this model, that is the do-nothing motion e.
 
-1. One reflection maps the figure to its mirror image, still in the same state space.
-2. Two reflections across the same axis return to the original state.
-3. Any allowed composition remains one of the 2 allowed motions: e or r.
+1. e ∘ r = r: doing nothing before reflection changes nothing.
+2. r ∘ e = r: doing nothing after reflection changes nothing.
+3. The visual cue r ∘ r = e also reinforces that returning to start is a valid identity outcome.
 
-So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
+Formally, this means e ∘ a = a ∘ e = a for every allowed motion a."""
 
 function reflect_about_axis_x_half(point::Vector{Float32})
     Float32[1f0 - point[1], point[2], point[3]]
@@ -91,7 +89,7 @@ const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = ClosureFallbackText
+    fallback = IdentityFallbackText
 
     if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
@@ -102,7 +100,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
         return fallback
     end
 
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Closure", DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+    if OdinJuliaBridge.dynview_text_run(state_ptr, "Identity", DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
@@ -110,52 +108,49 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 
     if OdinJuliaBridge.dynview_text_run(
         state_ptr,
-        "Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.",
+        "Identity means there is a motion that changes nothing at all.",
         DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
 
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "In this example, composing reflections still produces one of the same allowed motions:",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "1. One reflection maps the figure to its mirror image, still in the same state space.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "2. Two reflections across the same axis return to the original state.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "3. Any allowed composition remains one of the 2 allowed motions: ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+    if OdinJuliaBridge.dynview_text_run(state_ptr, "In this model, that is the do-nothing motion ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         !EuclidLatex.replay_emit_math_block!(state_ptr, "e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " or ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "r") ||
         OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
 
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+    if !EuclidLatex.replay_emit_math_block!(state_ptr, "1.\\; e \\circ r = r") ||
+        OdinJuliaBridge.dynview_text_run(state_ptr, ": doing nothing before reflection changes nothing.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if !EuclidLatex.replay_emit_math_block!(state_ptr, "2.\\; r \\circ e = r") ||
+        OdinJuliaBridge.dynview_text_run(state_ptr, ": doing nothing after reflection changes nothing.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_text_run(state_ptr, "3. The visual cue ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        !EuclidLatex.replay_emit_math_block!(state_ptr, "r \\circ r = e") ||
+        OdinJuliaBridge.dynview_text_run(
+            state_ptr,
+            " also reinforces that returning to start is a valid identity outcome.",
+            DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return fallback
+    end
+
+    if OdinJuliaBridge.dynview_text_run(state_ptr, "Formally, this means ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        !EuclidLatex.replay_emit_math_block!(state_ptr, "e \\circ a = a \\circ e = a") ||
+        OdinJuliaBridge.dynview_text_run(state_ptr, " for every allowed motion ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        !EuclidLatex.replay_emit_math_block!(state_ptr, "a") ||
+        OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
         OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return fallback
     end
@@ -242,6 +237,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id_2, SideStarts[2])
     OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id_3, SideStarts[3])
     OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id_3, SideStarts[3])
+
     reset_line_colors!(
         state_ptr,
         line_host_id_1,
@@ -373,23 +369,17 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= PenRiseDuration
             OdinJuliaBridge.hide_pen(state_ptr)
-            phase = PhaseReflectOnce
+            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineStartBase)
+            phase = PhasePauseBeforeDoubleReflect
             timer = 0f0
         end
-    elseif phase == PhasePauseAfterOnce || phase == PhasePauseAfterSecond || phase == PhasePauseAfterFourth
+    elseif phase == PhasePauseBeforeDoubleReflect
         timer += dt
-        if timer >= PauseDuration
-            if phase == PhasePauseAfterOnce
-                phase = PhaseReflectSecond
-            elseif phase == PhasePauseAfterSecond
-                phase = PhaseReflectThird
-            else
-                reset_cycle_state(state_ptr)
-                return
-            end
+        if timer >= PauseBeforeDoubleReflectDuration
+            phase = PhaseReflectFirst
             timer = 0f0
         end
-    elseif phase == PhaseReflectOnce || phase == PhaseReflectThird
+    elseif phase == PhaseReflectFirst
         animate_reflection_step!(
             state_ptr,
             timer,
@@ -400,14 +390,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= ReflectionDuration
             set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndBase)
-            if phase == PhaseReflectOnce
-                phase = PhasePauseAfterOnce
-            else
-                phase = PhaseReflectFourth
-            end
+            phase = PhaseReflectSecond
             timer = 0f0
         end
-    elseif phase == PhaseReflectSecond || phase == PhaseReflectFourth
+    elseif phase == PhaseReflectSecond
         animate_reflection_step!(
             state_ptr,
             timer,
@@ -418,12 +404,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= ReflectionDuration
             set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndMirrored)
-            if phase == PhaseReflectSecond
-                phase = PhasePauseAfterSecond
-            else
-                phase = PhasePauseAfterFourth
-            end
+            phase = PhasePauseAfterDoubleReflect
             timer = 0f0
+        end
+    elseif phase == PhasePauseAfterDoubleReflect
+        timer += dt
+        if timer >= PauseAfterDoubleReflectDuration
+            reset_cycle_state(state_ptr)
+            return
         end
     end
 

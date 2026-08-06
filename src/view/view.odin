@@ -231,7 +231,7 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
 
     font_size: i32 = view_core.JULIA_MONO_FONT_LOAD_SIZE
     if !view_core.font_runtime_init_with_regular(state, font_size) {
-        fmt.eprintln("warning: failed to preload JuliaMono-Regular.ttf; text rendering may fallback")
+        fmt.eprintln("warning: failed to preload baseline JuliaMono fonts (Regular/Bold/RegularItalic); text rendering may fallback")
     }
 }
 
