@@ -33,6 +33,10 @@ SHADOW_ALPHA_HEIGHT_SCALE :: 35.0
 SHADOW_EPSILON_LZ :: 0.0001
 Z_SPLIT_EPSILON :: 0.0001
 Z_SPLIT_ALPHA_FACTOR :: 0.25
+TOOL_POLYGON_CLIP_EPSILON :: 0.0001
+TOOL_POLYGON_SEGMENT_EPSILON :: 0.00001
+PEN_BOTTOM_CLIP_BIAS :: Vector3{-0.01, -0.01, 0.01}
+PEN_CLIP_FRONT_DIRECTION :: Vector3{-1.0, -1.0, 1.0}
 
 STROKE3D_AMBIENT :: 0.28
 STROKE3D_DIFFUSE :: 1.05
@@ -46,6 +50,20 @@ LABEL_DECORATION_PRIME_SIZE_SCALE :: 1
 LABEL_DECORATION_PRIME_X_OFFSET_SCALE :: 0.72
 LABEL_DECORATION_PRIME_Y_OFFSET_SCALE :: 0.30
 LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE :: 0.44
+
+
+Pen_Polygon_Crossing :: struct {
+    pen_index: int,
+    polygon_index: int,
+    pen: kine.Kine_Pen_Draw,
+    polygon: kine.Kine_Polygon_Draw,
+    back0: Vector3,
+    back1: Vector3,
+    front0: Vector3,
+    front1: Vector3,
+    has_back: bool,
+    has_front: bool,
+}
 
 
 //   Initialize stroke3d shader handles and uniform locations from packaged assets.
@@ -185,7 +203,23 @@ draw_kine_points_low_cached :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 draw_kine_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
+    crossing := Pen_Polygon_Crossing {
+        pen_index = -1,
+        polygon_index = -1,
+    }
+    has_crossing := find_pen_polygon_crossing(state, &crossing)
+
     for i in 0..<state^.point_system^.draw_cache.item_count {
+        if has_crossing {
+            if i == crossing.polygon_index {
+                draw_pen_polygon_crossing(state, &crossing)
+                continue
+            }
+            if i == crossing.pen_index {
+                continue
+            }
+        }
+
         draw_cached_item_high_merged(state, &state^.point_system^.draw_cache.items[i])
     }
 }
@@ -683,6 +717,364 @@ z_split_clip_segment_halfspace :: #force_inline proc(
 z_split_lower_fragment_color :: #force_inline proc(color: rl.Color) -> rl.Color {
     attenuated := u8(math.clamp(int(f32(color.a) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
     return rl.Color{color.r, color.g, color.b, attenuated}
+}
+
+//   Return true when one segment has enough length to render reliably.
+segment_has_length :: #force_inline proc(point0, point1: Vector3) -> bool {
+    delta := point1 - point0
+    return linalg.dot(delta, delta) > TOOL_POLYGON_SEGMENT_EPSILON * TOOL_POLYGON_SEGMENT_EPSILON
+}
+
+//   Classify one plane distance with tool-front priority in near-equal cases.
+tool_plane_side :: #force_inline proc(distance: f32) -> int {
+    if distance > TOOL_POLYGON_CLIP_EPSILON {
+        return 1
+    }
+    if distance < -TOOL_POLYGON_CLIP_EPSILON {
+        return -1
+    }
+    return 1
+}
+
+//   Compute signed distance from one point to one plane.
+plane_signed_distance :: #force_inline proc(point, plane_point, plane_normal: Vector3) -> f32 {
+    return linalg.dot(plane_normal, point - plane_point)
+}
+
+//   Compute one segment/plane intersection point if the denominator is stable.
+segment_plane_intersection :: proc(
+    point0, point1: Vector3,
+    plane_point, plane_normal: Vector3,
+    out: ^Vector3) -> bool {
+
+    direction := point1 - point0
+    denom := linalg.dot(plane_normal, direction)
+    if math.abs(denom) <= TOOL_POLYGON_SEGMENT_EPSILON {
+        return false
+    }
+
+    numer := linalg.dot(plane_normal, plane_point-point0)
+    t := numer / denom
+    if t < 0 || t > 1 {
+        return false
+    }
+
+    out^ = point0 + direction * t
+    return true
+}
+
+//   Return true when one 3D point lies inside one triangle using barycentric weights.
+point_in_triangle :: #force_inline proc(point, a, b, c: Vector3) -> bool {
+    v0 := b - a
+    v1 := c - a
+    v2 := point - a
+
+    d00 := linalg.dot(v0, v0)
+    d01 := linalg.dot(v0, v1)
+    d11 := linalg.dot(v1, v1)
+    d20 := linalg.dot(v2, v0)
+    d21 := linalg.dot(v2, v1)
+    denom := d00 * d11 - d01 * d01
+    if math.abs(denom) <= TOOL_POLYGON_SEGMENT_EPSILON {
+        return false
+    }
+
+    inv := 1.0 / denom
+    bary_v := (d11*d20 - d01*d21) * inv
+    bary_w := (d00*d21 - d01*d20) * inv
+    bary_u := 1.0 - bary_v - bary_w
+
+    return bary_u >= -TOOL_POLYGON_CLIP_EPSILON &&
+        bary_v >= -TOOL_POLYGON_CLIP_EPSILON &&
+        bary_w >= -TOOL_POLYGON_CLIP_EPSILON
+}
+
+//   Resolve one stable polygon plane from cached polygon triangles.
+polygon_plane :: proc(
+    state: ^Euclid_General_State,
+    polygon: ^kine.Kine_Polygon_Draw,
+    plane_point, plane_normal: ^Vector3) -> bool {
+
+    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
+        return false
+    }
+
+    cache := &state^.point_system^.draw_cache
+    vertices := cache^.polygon_vertices[
+        polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
+    triangles := cache^.polygon_triangles[
+        polygon^.first_triangle:polygon^.first_triangle + polygon^.triangle_count]
+
+    for tri in triangles {
+        local_a := tri.a - polygon^.first_vertex
+        local_b := tri.b - polygon^.first_vertex
+        local_c := tri.c - polygon^.first_vertex
+        if local_a < 0 || local_a >= polygon^.vertex_count {
+            continue
+        }
+        if local_b < 0 || local_b >= polygon^.vertex_count {
+            continue
+        }
+        if local_c < 0 || local_c >= polygon^.vertex_count {
+            continue
+        }
+
+        a := vertices[local_a]
+        b := vertices[local_b]
+        c := vertices[local_c]
+        normal := linalg.cross(b-a, c-a)
+        if linalg.dot(normal, normal) <= TOOL_POLYGON_SEGMENT_EPSILON {
+            continue
+        }
+
+        plane_point^ = a
+        plane_normal^ = normal
+        return true
+    }
+
+    return false
+}
+
+//   Return true when one point lies inside any cached triangle of one polygon.
+point_inside_polygon :: proc(
+    state: ^Euclid_General_State,
+    polygon: ^kine.Kine_Polygon_Draw,
+    point: Vector3) -> bool {
+
+    cache := &state^.point_system^.draw_cache
+    vertices := cache^.polygon_vertices[
+        polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
+    triangles := cache^.polygon_triangles[
+        polygon^.first_triangle:polygon^.first_triangle + polygon^.triangle_count]
+
+    for tri in triangles {
+        local_a := tri.a - polygon^.first_vertex
+        local_b := tri.b - polygon^.first_vertex
+        local_c := tri.c - polygon^.first_vertex
+        if local_a < 0 || local_a >= polygon^.vertex_count {
+            continue
+        }
+        if local_b < 0 || local_b >= polygon^.vertex_count {
+            continue
+        }
+        if local_c < 0 || local_c >= polygon^.vertex_count {
+            continue
+        }
+
+        if point_in_triangle(point, vertices[local_a], vertices[local_b], vertices[local_c]) {
+            return true
+        }
+    }
+
+    return false
+}
+
+//   Draw one world-space pen segment fragment with standard cached pen styling.
+draw_pen_segment_fragment :: #force_inline proc(
+    state: ^Euclid_General_State,
+    pen: ^kine.Kine_Pen_Draw,
+    point0, point1: Vector3) {
+
+    c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
+    c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
+    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
+}
+
+//   Build one pen/polygon crossing event using z=0 clipping as stage one.
+build_pen_polygon_crossing :: proc(
+    state: ^Euclid_General_State,
+    pen: ^kine.Kine_Pen_Draw,
+    polygon: ^kine.Kine_Polygon_Draw,
+    crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    stage0_start, stage0_end: Vector3
+    if !z_split_clip_segment_halfspace(
+        pen^.joint1,
+        pen^.joint2,
+        true,
+        &stage0_start,
+        &stage0_end) {
+        return false
+    }
+
+    plane_point, plane_normal: Vector3
+    if !polygon_plane(state, polygon, &plane_point, &plane_normal) {
+        return false
+    }
+
+    // Keep front/back classification stable regardless of polygon triangle winding.
+    if linalg.dot(plane_normal, PEN_CLIP_FRONT_DIRECTION) < 0 {
+        plane_normal *= -1.0
+    }
+
+    clip_start := stage0_start
+    clip_end := stage0_end
+    if linalg.dot(stage0_start-pen^.joint1, stage0_start-pen^.joint1) <=
+        linalg.dot(stage0_end-pen^.joint1, stage0_end-pen^.joint1) {
+        clip_start += PEN_BOTTOM_CLIP_BIAS
+    } else {
+        clip_end += PEN_BOTTOM_CLIP_BIAS
+    }
+
+    raw_distance0 := plane_signed_distance(stage0_start, plane_point, plane_normal)
+    raw_distance1 := plane_signed_distance(stage0_end, plane_point, plane_normal)
+    distance0 := plane_signed_distance(clip_start, plane_point, plane_normal)
+    distance1 := plane_signed_distance(clip_end, plane_point, plane_normal)
+    side0 := tool_plane_side(distance0)
+    side1 := tool_plane_side(distance1)
+    on_plane0 := math.abs(raw_distance0) <= TOOL_POLYGON_CLIP_EPSILON
+    on_plane1 := math.abs(raw_distance1) <= TOOL_POLYGON_CLIP_EPSILON
+
+    crossing^.has_back = false
+    crossing^.has_front = false
+
+    if side0 == side1 {
+        if !(on_plane0 || on_plane1) {
+            return false
+        }
+
+        contact_point := stage0_start
+        if !on_plane0 && on_plane1 {
+            contact_point = stage0_end
+        }
+        if !point_inside_polygon(state, polygon, contact_point) {
+            return false
+        }
+
+        if side0 > 0 {
+            crossing^.front0 = stage0_start
+            crossing^.front1 = stage0_end
+            crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
+            return crossing^.has_front
+        }
+
+        crossing^.back0 = stage0_start
+        crossing^.back1 = stage0_end
+        crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
+        return crossing^.has_back
+    }
+
+    intersection := Vector3{}
+    if !segment_plane_intersection(
+        clip_start,
+        clip_end,
+        plane_point,
+        plane_normal,
+        &intersection) {
+        return false
+    }
+    if !point_inside_polygon(state, polygon, intersection) {
+        return false
+    }
+
+    clip_direction := clip_end - clip_start
+    clip_len_sq := linalg.dot(clip_direction, clip_direction)
+    if clip_len_sq <= TOOL_POLYGON_SEGMENT_EPSILON {
+        return false
+    }
+    intersection_t := linalg.dot(intersection-clip_start, clip_direction) / clip_len_sq
+    intersection_t = math.clamp(intersection_t, 0, 1)
+    intersection_unbiased := linalg.lerp(stage0_start, stage0_end, intersection_t)
+
+    if side0 < side1 {
+        crossing^.back0 = stage0_start
+        crossing^.back1 = intersection_unbiased
+        crossing^.front0 = intersection_unbiased
+        crossing^.front1 = stage0_end
+    } else {
+        crossing^.back0 = stage0_end
+        crossing^.back1 = intersection_unbiased
+        crossing^.front0 = intersection_unbiased
+        crossing^.front1 = stage0_start
+    }
+
+    crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
+    crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
+    return crossing^.has_back || crossing^.has_front
+}
+
+//   Find one pen/polygon crossing pair in current high merged cache items.
+find_pen_polygon_crossing :: proc(
+    state: ^Euclid_General_State,
+    out_crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    cache := &state^.point_system^.draw_cache
+    pen_index := -1
+    pen := kine.Kine_Pen_Draw {}
+
+    for i in 0..<cache^.item_count {
+        switch &item_typed in &cache^.items[i] {
+        case kine.Kine_Pen_Draw:
+            pen = item_typed
+            pen_index = i
+            break
+        case kine.Kine_Label_Draw,
+            kine.Kine_Point_Draw,
+            kine.Kine_Line_Draw,
+            kine.Kine_Circle_Draw,
+            kine.Kine_Filled_Circle_Draw,
+            kine.Kine_Polygon_Draw,
+            kine.Kine_Compass_Draw:
+        }
+        if pen_index >= 0 {
+            break
+        }
+    }
+    if pen_index < 0 {
+        return false
+    }
+
+    for i in 0..<cache^.item_count {
+        switch &item_typed in &cache^.items[i] {
+        case kine.Kine_Polygon_Draw:
+            if !draw_cached_polygon_is_elevated(state, &item_typed) {
+                continue
+            }
+
+            trial := Pen_Polygon_Crossing {}
+            if !build_pen_polygon_crossing(state, &pen, &item_typed, &trial) {
+                continue
+            }
+
+            trial.pen_index = pen_index
+            trial.polygon_index = i
+            trial.pen = pen
+            trial.polygon = item_typed
+            out_crossing^ = trial
+            return true
+        case kine.Kine_Label_Draw,
+            kine.Kine_Point_Draw,
+            kine.Kine_Line_Draw,
+            kine.Kine_Circle_Draw,
+            kine.Kine_Filled_Circle_Draw,
+            kine.Kine_Pen_Draw,
+            kine.Kine_Compass_Draw:
+        }
+    }
+
+    return false
+}
+
+//   Draw interleaving for one crossing pen/polygon pair.
+draw_pen_polygon_crossing :: proc(
+    state: ^Euclid_General_State,
+    crossing: ^Pen_Polygon_Crossing) {
+
+    draw_cached_pen_active_dot(state, &crossing^.pen)
+
+    begin_stroke3d_mode(state)
+    if crossing^.has_back {
+        draw_pen_segment_fragment(state, &crossing^.pen, crossing^.back0, crossing^.back1)
+    }
+    end_stroke3d_mode(state)
+
+    draw_cached_polygon(state, &crossing^.polygon)
+
+    begin_stroke3d_mode(state)
+    if crossing^.has_front {
+        draw_pen_segment_fragment(state, &crossing^.pen, crossing^.front0, crossing^.front1)
+    }
+    end_stroke3d_mode(state)
 }
 
 //   Compute average height across one point slice for shadow alpha attenuation.

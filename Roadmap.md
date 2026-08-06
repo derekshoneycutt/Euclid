@@ -111,7 +111,7 @@ General features:
   - [X] Matrices
   - [X] Sums, Products, Integrals
 - [X] Naive spatial-aware shape drawing
-- [ ] Improved clipping through 3D polygons
+- [X] Improved pen clipping through 3D polygons
 - [ ] Drawing Sounds
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 
@@ -147,6 +147,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
 - Category theory?
 - More primitives (gnomons, strings--small connectors, arrows)
+- Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support (more math; document mode)
 - Improved Scratchpad console-like REPL
