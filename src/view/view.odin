@@ -9,7 +9,7 @@ import dynview "ui/dynview"
 import "../core"
 import "../audio"
 import "../kine"
-import "../julia"
+import julia "../bridge"
 import "../particles"
 import "../files"
 

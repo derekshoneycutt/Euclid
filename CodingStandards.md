@@ -23,11 +23,6 @@ Normative language:
 - SHOULD = strong default; justify exceptions.
 - MAY = optional.
 
-Precedence if rules conflict:
-
-1. This file.
-1. `ArchitectureSummary.md` for architectural boundaries.
-
 ## Fast Compliance Checklist
 
 Before marking work complete, verify all items below:

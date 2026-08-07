@@ -1,7 +1,7 @@
 package ui
 
 import "../../core"
-import "../../julia"
+import julia "../../bridge"
 import view_core "../core"
 import dynview "./dynview"
 

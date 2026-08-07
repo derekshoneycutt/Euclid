@@ -37,15 +37,9 @@ A useful mental model:
 
 If you are new, read in this order:
 
-1. Host lifecycle path:
-   - `src/main.odin`
-   - `src/view/view.odin`
-1. Host/runtime boundary:
-   - `src/julia/julia.odin`
-   - `src/julia/odin-julia-bridge.odin`
-   - `src/julia/odin-julia-bridge.jl`
-1. Julia runtime entry:
-   - `src/julia/script.jl`
+1. Host lifecycle path (`src/main.odin`, `src/view/view.odin`).
+1. Host/runtime boundary (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin`, `src/julia/odin-julia-bridge.jl`).
+1. Julia runtime entry (`src/julia/script.jl`).
 1. Then continue by module using the maps below, touching only each module's
    highlighted files first.
 
@@ -59,7 +53,8 @@ If you are new, read in this order:
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/kine/shapes.odin`, `src/kine/constraints.odin`, `src/kine/system.odin` |
-| **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/julia/julia.odin`, `src/julia/odin-julia-bridge.odin`, `src/julia/julialib.odin` |
+| **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin` |
+| **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
 | **Odin** | Particles | Multi-layer particle systems and visual effects. | `src/particles/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
@@ -296,12 +291,12 @@ Choose the owning module first, then touch that module's highlighted files.
     `src/kine/constraints.odin`, `src/kine/system.odin`).
 - **Julia feature surface / bridge contract**:
   - Bridge and Embedding Module + Bridge Wrapper Module
-    (`src/julia/odin-julia-bridge.odin`, `src/julia/odin-julia-bridge.jl`).
+    (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/julia/odin-julia-bridge.jl`).
 - **New content animation**:
   - Content Modules (`src/julia/elements/**`, `src/julia/proclus/**`,
     `src/julia/hilbert/**`).
 - **Modify the Scratchpad/REPL surface**:
-  - Scratchpad and UI modules (`src/julia/sratchpad.jl`, `src/julia/euclidrepl.jl`,
+  - Scratchpad and UI modules (`src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl`,
     `src/view/ui/scratchpad_panel.odin`)
 
 ### Typical New Animation Workflow

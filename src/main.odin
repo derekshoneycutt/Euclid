@@ -2,7 +2,7 @@ package main
 
 import "core"
 import "files"
-import "julia"
+import julia "bridge"
 import "view"
 
 import "core:fmt"
