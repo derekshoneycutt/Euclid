@@ -15,6 +15,7 @@ package julia
 // it can feel a little tight here. Ultimately, the Julia is more in control of the catalogue,
 // though it is stored and chosen from via the Odin.
 
+import "../julialib"
 import "../core"
 import "../audio"
 import "../particles"
@@ -240,7 +241,7 @@ Bridge_Solve_Result :: struct {
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
-    getViewText, init, loop, clean: ^jl_value_t) {
+    getViewText, init, loop, clean: ^julialib.jl_value_t) {
     
     state^.julia_interface^.null_animation.get_view_text = getViewText
     state^.julia_interface^.null_animation.initiate = init
@@ -264,7 +265,7 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    getViewText, init, loop, clean : ^jl_value_t,
+    getViewText, init, loop, clean : ^julialib.jl_value_t,
     name, stable_id : cstring) -> int {
 
     context = state^.saved_context
@@ -313,7 +314,7 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    getViewText, init, loop, clean : ^jl_value_t,
+    getViewText, init, loop, clean : ^julialib.jl_value_t,
     name, stable_id : cstring,
     parentId : int) -> int {
 

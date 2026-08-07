@@ -1,0 +1,3 @@
+[submodule "src/julialib"]
+	path = src/julialib
+	url = https://github.com/derekshoneycutt/julialib.odin
