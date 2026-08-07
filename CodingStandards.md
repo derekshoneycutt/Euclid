@@ -17,8 +17,6 @@ This document is the coding source of truth for this repository.
 
 ## Purpose
 
-Keep standards short, enforceable, and hard to misread by humans or AI.
-
 Normative language:
 
 - MUST = required.
@@ -29,8 +27,6 @@ Precedence if rules conflict:
 
 1. This file.
 1. `ArchitectureSummary.md` for architectural boundaries.
-1. Official Julia style guidance.
-1. Odin style conventions.
 
 ## Fast Compliance Checklist
 
