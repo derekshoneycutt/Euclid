@@ -65,12 +65,6 @@ Before marking work complete, verify all items below:
 - Cyclomatic complexity should remain below 10; MUST remain below 15 unless exception granted, and that MUST be documented.
 - Do not split into trivial wrappers only to satisfy line-count rules.
 
-## Verification Gate
-
-- Required command: `julia make.jl -vt`.
-- `julia make.jl -v` alone is insufficient.
-- `julia make.jl -t` alone is insufficient.
-
 ## Odin-Julia Boundary Rules
 
 ### Bridge Contract

@@ -32,16 +32,13 @@ const RADICAL_BAR_OFFSET = Float32(0.10)
 const PARSE_CACHE_MAX_ENTRIES = 256
 const MATH_OP_TEXT_RUN = Int32(1)
 const MATH_OP_MATH_GLYPH_RUN = Int32(2)
-const MATH_OP_SCRIPT_ATTACH = Int32(3)
-const MATH_OP_ACCENT_BAR = Int32(4)
-const MATH_OP_RADICAL_BAR = Int32(5)
-const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(6)
-const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(7)
-const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(8)
-const MATH_OP_LARGE_OP_RECURSIVE = Int32(9)
-const MATH_OP_FRACTION_RECURSIVE = Int32(10)
-const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(11)
-const MATH_OP_MATRIX_RECURSIVE = Int32(12)
+const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(3)
+const MATH_OP_RADICAL_BAR_RECURSIVE = Int32(4)
+const MATH_OP_SCRIPT_ATTACH_RECURSIVE = Int32(5)
+const MATH_OP_LARGE_OP_RECURSIVE = Int32(6)
+const MATH_OP_FRACTION_RECURSIVE = Int32(7)
+const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(8)
+const MATH_OP_MATRIX_RECURSIVE = Int32(9)
 
 const STRETCH_DELIMITER_NONE = "."
 const STRETCH_DELIMITER_RIGHT = "\\right"
@@ -1715,10 +1712,6 @@ end
 
 """Render one recursive payload op to canonical LaTeX-ish source."""
 function latex_source_for_payload(op::MathPayloadOp)
-    if op.kind == MATH_OP_SCRIPT_ATTACH
-        return accent_with_script_suffix(latex_source_atom_text(op), op.sup_text, op.sub_text)
-    end
-
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
         parent = latex_source_for_program(op.children)
         return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
@@ -1770,10 +1763,6 @@ end
 
 """Render one recursive payload op to plain-text fallback form."""
 function plain_text_for_payload(op::MathPayloadOp)
-    if op.kind == MATH_OP_SCRIPT_ATTACH
-        return accent_with_script_suffix(op.text, op.sup_text, op.sub_text)
-    end
-
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
         parent = plain_text_for_program(op.children)
         return grouped_parent_with_script_suffix(parent, op.sup_text, op.sub_text)
@@ -1835,7 +1824,6 @@ end
 """Return true when one recursive payload op can host script attachments."""
 function payload_op_accepts_scripts(op::MathPayloadOp)
     return op.kind == MATH_OP_MATH_GLYPH_RUN ||
-        op.kind == MATH_OP_SCRIPT_ATTACH ||
         op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
         op.kind == MATH_OP_LARGE_OP_RECURSIVE ||
         op.kind == MATH_OP_FRACTION_RECURSIVE ||
@@ -1853,21 +1841,6 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         sup_text = script_payload_text(script_token)
     elseif segment == :script_sub
         sub_text = script_payload_text(script_token)
-    end
-
-    if op.kind == MATH_OP_MATH_GLYPH_RUN || op.kind == MATH_OP_SCRIPT_ATTACH
-        return MathPayloadOp(
-            MATH_OP_SCRIPT_ATTACH,
-            op.text,
-            op.radical_index_text,
-            sup_text,
-            sub_text,
-            op.accent_mode,
-            op.radical_mode,
-            op.large_op_kind,
-            op.style_role,
-            op.children,
-            op.secondary_children)
     end
 
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE

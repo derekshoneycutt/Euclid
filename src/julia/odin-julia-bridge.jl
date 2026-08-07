@@ -64,9 +64,6 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     set_point_active_color, notify_animation_cycle_boundary,
     dynview_reset_stream, dynview_begin_block, dynview_text_run, dynview_math_glyph_run,
     dynview_math_block_from_ops,
-    dynview_script_attach,
-    dynview_accent_bar,
-    dynview_radical_bar,
     dynview_copyable_text_run,
     dynview_inline_line,
     dynview_inline_box,
@@ -334,15 +331,6 @@ const BRIDGE_DYNVIEW_FONT_FLAG_BOLD = Int32(1 << 5)
 const BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD = Int32(1 << 6)
 const BRIDGE_DYNVIEW_FONT_FLAG_BLACK = Int32(1 << 7)
 
-"""
-Build a dynview style id that carries explicit JuliaMono font variant flags.
-
-Combine one or more `BRIDGE_DYNVIEW_FONT_FLAG_*` bits (including `ITALIC`) and
-pass the resulting style id into `dynview_text_run`/`dynview_math_glyph_run`.
-"""
-dynview_style_with_font_flags(flags::Integer) =
-    Int32(BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT | Int32(flags))
-
 const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
 const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
 const CONSTRAINT_SPEC_RESTRICTION = Int32(1 << 2)
@@ -353,6 +341,15 @@ const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
 const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
 
 const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
+
+"""
+Build a dynview style id that carries explicit JuliaMono font variant flags.
+
+Combine one or more `BRIDGE_DYNVIEW_FONT_FLAG_*` bits (including `ITALIC`) and
+pass the resulting style id into `dynview_text_run`/`dynview_math_glyph_run`.
+"""
+dynview_style_with_font_flags(flags::Integer) =
+    Int32(BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT | Int32(flags))
 
 """
 Derive a deterministic animation stable ID string from a semantic key.
@@ -1530,120 +1527,6 @@ function dynview_math_block_from_ops(
             Int32(top_level_op_count)::Int32,
             text_blob::Cstring)::Int32
     end
-end
-
-"""
-Emit a script attachment with base and optional super/sub text payloads.
-
-`script_scale`, `script_sup_raise`, `script_sub_drop`, and `script_gap` are
-layout parameters consumed by the host dynview renderer.
-Returns a BRIDGE_STATUS_* code.
-"""
-function dynview_script_attach(
-    state_ptr::Ptr{Cvoid},
-    base_text::AbstractString,
-    sup_text::AbstractString,
-    sub_text::AbstractString,
-    base_style_id::Integer,
-    script_style_id::Integer,
-    script_scale::Real,
-    script_sup_raise::Real,
-    script_sub_drop::Real,
-    script_gap::Real)
-
-    @ccall dynview_script_attach(
-        state_ptr::Ptr{Cvoid},
-        base_text::Cstring,
-        sup_text::Cstring,
-        sub_text::Cstring,
-        Int32(base_style_id)::Int32,
-        Int32(script_style_id)::Int32,
-        Cfloat(script_scale)::Cfloat,
-        Cfloat(script_sup_raise)::Cfloat,
-        Cfloat(script_sub_drop)::Cfloat,
-        Cfloat(script_gap)::Cfloat)::Int32
-end
-
-    """
-    Emit one overline/underline accent bar attached to a base text payload.
-
-    `accent_mode` must be one of `BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE` or
-    `BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE`.
-    Returns a BRIDGE_STATUS_* code.
-    """
-    function dynview_accent_bar(
-        state_ptr::Ptr{Cvoid},
-        text::AbstractString,
-        sup_text::AbstractString,
-        sub_text::AbstractString,
-        base_style_id::Integer,
-        accent_style_id::Integer,
-        accent_mode::Integer,
-        script_style_id::Integer,
-        accent_thickness::Real,
-        accent_offset::Real,
-        script_scale::Real,
-        script_sup_raise::Real,
-        script_sub_drop::Real,
-        script_gap::Real)
-
-        @ccall dynview_accent_bar(
-        state_ptr::Ptr{Cvoid},
-        text::Cstring,
-            sup_text::Cstring,
-            sub_text::Cstring,
-        Int32(base_style_id)::Int32,
-        Int32(accent_style_id)::Int32,
-        Int32(accent_mode)::Int32,
-            Int32(script_style_id)::Int32,
-        Cfloat(accent_thickness)::Cfloat,
-            Cfloat(accent_offset)::Cfloat,
-            Cfloat(script_scale)::Cfloat,
-            Cfloat(script_sup_raise)::Cfloat,
-            Cfloat(script_sub_drop)::Cfloat,
-            Cfloat(script_gap)::Cfloat)::Int32
-    end
-
-"""
-Emit one square-root radical bar attached to a base text payload.
-
-`radical_mode` may be `BRIDGE_DYNVIEW_RADICAL_MODE_SQRT` or
-`BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT`.
-Returns a BRIDGE_STATUS_* code.
-"""
-function dynview_radical_bar(
-    state_ptr::Ptr{Cvoid},
-    text::AbstractString,
-    index_text::AbstractString,
-    sup_text::AbstractString,
-    sub_text::AbstractString,
-    base_style_id::Integer,
-    radical_style_id::Integer,
-    radical_mode::Integer,
-    script_style_id::Integer,
-    radical_thickness::Real,
-    radical_offset::Real,
-    script_scale::Real,
-    script_sup_raise::Real,
-    script_sub_drop::Real,
-    script_gap::Real)
-
-    @ccall dynview_radical_bar(
-        state_ptr::Ptr{Cvoid},
-        text::Cstring,
-        index_text::Cstring,
-        sup_text::Cstring,
-        sub_text::Cstring,
-        Int32(base_style_id)::Int32,
-        Int32(radical_style_id)::Int32,
-        Int32(radical_mode)::Int32,
-        Int32(script_style_id)::Int32,
-        Cfloat(radical_thickness)::Cfloat,
-        Cfloat(radical_offset)::Cfloat,
-        Cfloat(script_scale)::Cfloat,
-        Cfloat(script_sup_raise)::Cfloat,
-        Cfloat(script_sub_drop)::Cfloat,
-        Cfloat(script_gap)::Cfloat)::Int32
 end
 
 """

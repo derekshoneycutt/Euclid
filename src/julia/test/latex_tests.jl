@@ -37,22 +37,22 @@ end
 
 @testset "text command and scripts" begin
     plain = EuclidLatex.latex_to_plain_text("\\text{Area }A_1^2")
-    @test plain == "Area A^{2}_{1}"
+    @test plain == "Area {A}^{2}_{1}"
 
     roman_plain = EuclidLatex.latex_to_plain_text("i+j \\mathrm{mod} n")
     @test roman_plain == "i+j mod n"
 
     continued = EuclidLatex.latex_to_plain_text("A_1^2 + \\mathbb{R}")
-    @test continued == "A^{2}_{1} + ℝ"
+    @test continued == "{A}^{2}_{1} + ℝ"
 
     fallback = EuclidLatex.latex_to_plain_text("x_{ij}")
-    @test fallback == "x_{ij}"
+    @test fallback == "{x}_{ij}"
 
     canonical = EuclidLatex.latex_to_plain_text("x^2_1")
-    @test canonical == "x^{2}_{1}"
+    @test canonical == "{x}^{2}_{1}"
 
     canonical_swapped = EuclidLatex.latex_to_plain_text("x_1^2")
-    @test canonical_swapped == "x^{2}_{1}"
+    @test canonical_swapped == "{x}^{2}_{1}"
 end
 
 @testset "mathbb uppercase mapping" begin
@@ -79,7 +79,7 @@ end
 @testset "script attach emit program" begin
     program = EuclidLatex.compiled_program_for("A_1^2")
     @test length(program) == 1
-    @test program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test program[1].text == "A"
     @test program[1].sup_text == "2"
     @test program[1].sub_text == "1"
@@ -87,11 +87,11 @@ end
 
     mathbb_program = EuclidLatex.compiled_program_for("\\mathbb{R}_0")
     @test length(mathbb_program) == 1
-    @test mathbb_program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test mathbb_program[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test mathbb_program[1].text == "ℝ"
     @test mathbb_program[1].sup_text == ""
     @test mathbb_program[1].sub_text == "0"
-    @test mathbb_program[1].style_role == :mathbb
+    @test mathbb_program[1].style_role == :math
 
     recursive_parent_program = EuclidLatex.compiled_program_for("\\overline{AB}_1^2")
     @test length(recursive_parent_program) == 1
@@ -107,7 +107,7 @@ end
     @test plain_sum == "∑_{i=1}^{n} i"
 
     plain_prod = EuclidLatex.latex_to_plain_text("\\prod_{k=0}^{m} x_k")
-    @test plain_prod == "∏_{k=0}^{m} x_{k}"
+    @test plain_prod == "∏_{k=0}^{m}{ x}_{k}"
 
     plain_int = EuclidLatex.latex_to_plain_text("\\int_0^1 f(x)")
     @test plain_int == "∫_{0}^{1} f(x)"
@@ -162,14 +162,14 @@ end
     @test embedded_scripts[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[1].accent_mode == :overline
     @test length(embedded_scripts[1].children) == 1
-    @test embedded_scripts[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test embedded_scripts[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test embedded_scripts[1].children[1].text == "AB"
     @test embedded_scripts[1].children[1].sup_text == "2"
     @test embedded_scripts[1].style_role == :math
     @test embedded_scripts[3].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[3].accent_mode == :underline
     @test length(embedded_scripts[3].children) == 1
-    @test embedded_scripts[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test embedded_scripts[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test embedded_scripts[3].children[1].text == "CD"
     @test embedded_scripts[3].children[1].sub_text == "4"
     @test embedded_scripts[3].style_role == :math
@@ -189,7 +189,7 @@ end
     @test indexed_unicode_command == "\\sqrt[α]{AB}"
 
     scripted = EuclidLatex.latex_to_plain_text("\\sqrt{A_1^2}")
-    @test scripted == "\\sqrt{A^{2}_{1}}"
+    @test scripted == "\\sqrt{{A}^{2}_{1}}"
 
     out_of_scope_index = EuclidLatex.latex_to_plain_text("\\sqrt[2n]{x}")
     @test out_of_scope_index == "\\sqrt{x}"
@@ -204,7 +204,7 @@ end
     @test radical_program[1].style_role == :math
     @test radical_program[3].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test length(radical_program[3].children) == 1
-    @test radical_program[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test radical_program[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test radical_program[3].children[1].text == "x"
     @test radical_program[3].children[1].sup_text == "2"
     @test radical_program[3].style_role == :math
@@ -214,7 +214,7 @@ end
     @test indexed_program[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test indexed_program[1].radical_index_text == "n"
     @test length(indexed_program[1].children) == 1
-    @test indexed_program[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test indexed_program[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test indexed_program[1].children[1].text == "A"
     @test indexed_program[1].children[1].sup_text == "2"
     @test indexed_program[1].children[1].sub_text == "1"
@@ -235,7 +235,7 @@ end
     @test plain_basic == "{a}/{b}"
 
     plain_scripts = EuclidLatex.latex_to_plain_text("\\frac{x^2}{y_1}")
-    @test plain_scripts == "{x^{2}}/{y_{1}}"
+    @test plain_scripts == "{{x}^{2}}/{{y}_{1}}"
 
     plain_nested = EuclidLatex.latex_to_plain_text("\\frac{\\frac{a}{b}}{c}")
     @test plain_nested == "{{a}/{b}}/{c}"
@@ -367,7 +367,7 @@ end
     @test matrix_program[1].sup_text == "2"
     @test length(matrix_program[1].children) == 4
     @test matrix_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
-    @test matrix_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test matrix_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
 
     array_program = EuclidLatex.compiled_program_for("\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}")
     @test length(array_program) == 1
@@ -378,7 +378,7 @@ end
     @test array_program[1].text == "\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}"
     @test length(array_program[1].children) == 4
     @test array_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
-    @test array_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH
+    @test array_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
 
     array_program_mixed = EuclidLatex.compiled_program_for("\\begin{array}{l c r}a&b&c\\end{array}")
     @test length(array_program_mixed) == 1

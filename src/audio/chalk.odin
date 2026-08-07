@@ -8,34 +8,22 @@ import "core:math/rand"
 
 import rl "vendor:raylib"
 
-// Stream format and pacing constants.
 CHALK_SAMPLE_RATE :: 44100
 CHALK_BUFFER_SIZE :: 512
-
-// Motion-to-audio mapping constants.
 CHALK_SPEED_FOR_MAX :: 50.0
 CHALK_RESONANCE_FREQ :: 250.0
 CHALK_MOUSE_EQUIV_SCALE :: 900.0
 CHALK_MAX_BUFFERS_PER_FRAME :: 8
-
-// Tone/noise blend constants.
 CHALK_RESONANCE_MIX :: 0.18
 CHALK_NOISE_MIX :: 0.82
 CHALK_DRAW_GAIN :: 1.2
-
-// Keep the noise filter bright so it reads as chalk hiss.
 CHALK_FILTER_ALPHA_BASE :: 0.08
 CHALK_FILTER_ALPHA_RANGE :: 0.32
-
-// Grain envelope: a fast random-walk "hold and slide" that fakes the
-// irregularity real friction (or human hand jitter) would otherwise provide.
 CHALK_GRAIN_MIN_LEVEL :: 0.25
 CHALK_GRAIN_SNAP_ALPHA :: 0.35
 CHALK_GRAIN_HOLD_MIN_SAMPLES :: 90.0
 CHALK_GRAIN_HOLD_MAX_SAMPLES :: 380.0
 CHALK_RESONANCE_OFFSET_HZ :: 18.0
-
-// One-shot floor-hit transient tuning.
 CHALK_HIT_ENVELOPE_GAIN :: 0.8
 CHALK_HIT_ENVELOPE_DECAY :: 0.988
 CHALK_HIT_MIX :: 0.32
@@ -43,7 +31,11 @@ CHALK_HIT_MIX :: 0.32
 Chalk_Audio_Runtime :: core.Chalk_Audio_Runtime
 Vector3 :: core.Vector3
 
-// Create and start the chalk audio stream.
+//   Initialize the chalk stream and start playback.
+//
+// Notes:
+//   - The stream is created once and immediately started so later updates can
+//     push fresh audio buffers without waiting for a separate setup step.
 init_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     if runtime^.initialized {
         return
@@ -55,7 +47,11 @@ init_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     runtime^.initialized = true
 }
 
-// Stop and unload the chalk audio stream.
+//   Tear down the chalk stream and clear its initialized state.
+//
+// Notes:
+//   - Unloading the stream makes the runtime safe to restart later without
+//     leaving an active audio handle behind.
 shutdown_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     if !runtime^.initialized {
         return
@@ -65,8 +61,13 @@ shutdown_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     runtime^.initialized = false
 }
 
-// Register pen-tip motion for one simulation step.
-register_pen_tip_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+//   Record the pen tip's latest position for the next audio update.
+//
+// Notes:
+//   - The pen motion is folded into the shared motion tracker so the synth can
+//     convert stroke movement into audible energy.
+register_pen_tip_motion :: proc(
+    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
     register_tip_motion(
         runtime,
         &runtime^.pen_prev_pos,
@@ -78,8 +79,13 @@ register_pen_tip_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_
     )
 }
 
-// Register compass joint1 motion for one simulation step.
-register_compass_tip1_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+//   Record the first compass tip's latest position for the next audio update.
+//
+// Notes:
+//   - The compass motion is tracked separately so the synth can react to its
+//     movement across the drawing plane.
+register_compass_tip1_motion :: proc(
+    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
     register_tip_motion(
         runtime,
         &runtime^.compass_tip1_prev_pos,
@@ -91,8 +97,13 @@ register_compass_tip1_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3
     )
 }
 
-// Register compass joint2 motion for one simulation step.
-register_compass_tip2_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+//   Record the second compass tip's latest position for the next audio update.
+//
+// Notes:
+//   - The compass motion is tracked separately so the synth can react to its
+//     movement across the drawing plane.
+register_compass_tip2_motion :: proc(
+    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
     register_tip_motion(
         runtime,
         &runtime^.compass_tip2_prev_pos,
@@ -104,7 +115,10 @@ register_compass_tip2_motion :: proc(runtime: ^Chalk_Audio_Runtime, pos: Vector3
     )
 }
 
-// Trigger a short impact transient when a tool tip hits z=0.
+//   Raise a brief hit envelope when a tool tip touches the floor plane.
+//
+// Notes:
+//   - The envelope makes the next audio buffer carry a short contact-like pop.
 trigger_hit_sound :: proc(runtime: ^Chalk_Audio_Runtime) {
     if !runtime^.initialized {
         return
@@ -116,7 +130,11 @@ trigger_hit_sound :: proc(runtime: ^Chalk_Audio_Runtime) {
     }
 }
 
-// Accumulate peak contact speed from one tool tip stream.
+//   Track the largest contact speed seen from one tool tip stream.
+//
+// Notes:
+//   - The peak speed is used to scale the chalk synth's loudness while the tip is
+//     in contact with the floor.
 register_tip_motion :: #force_inline proc(
     runtime: ^Chalk_Audio_Runtime,
     previous_pos: ^Vector3,
@@ -124,8 +142,7 @@ register_tip_motion :: #force_inline proc(
     previous_contact: ^bool,
     pos: Vector3,
     is_floor_contact: bool,
-    dt: f32,
-) {
+    dt: f32) {
     if !runtime^.initialized {
         return
     }
@@ -148,7 +165,11 @@ register_tip_motion :: #force_inline proc(
     previous_contact^ = is_floor_contact
 }
 
-// Fill all pending stream buffers using the latest accumulated motion state.
+//   Drain processed audio buffers and write the next chalk synth frame.
+//
+// Notes:
+//   - The runtime uses the current contact speed, grain state, and hit envelope to
+//     fill each pending buffer with fresh synthetic samples.
 update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     if !runtime^.initialized {
         return
@@ -162,7 +183,8 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
 
         volume := normalized_speed * CHALK_DRAW_GAIN
         filter_alpha := CHALK_FILTER_ALPHA_BASE + (normalized_speed * CHALK_FILTER_ALPHA_RANGE)
-        phase_step := (2.0 * math.PI * (CHALK_RESONANCE_FREQ + runtime^.resonance_freq_offset)) / f32(CHALK_SAMPLE_RATE)
+        phase_step := (2.0 * math.PI *
+            (CHALK_RESONANCE_FREQ + runtime^.resonance_freq_offset)) / f32(CHALK_SAMPLE_RATE)
 
         for i := 0; i < CHALK_BUFFER_SIZE; i += 1 {
             // Advance the stick-slip grain envelope: hold a random level for a
@@ -177,12 +199,15 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
                 runtime^.resonance_freq_offset =
                     rand.float32_range(-CHALK_RESONANCE_OFFSET_HZ, CHALK_RESONANCE_OFFSET_HZ)
             }
-            runtime^.grain_level += (runtime^.grain_target - runtime^.grain_level) * CHALK_GRAIN_SNAP_ALPHA
+            runtime^.grain_level +=
+                (runtime^.grain_target - runtime^.grain_level) * CHALK_GRAIN_SNAP_ALPHA
 
             raw_noise := rand.float32_range(-1.0, 1.0)
 
             runtime^.phase += phase_step
-            if runtime^.phase > 2.0 * math.PI do runtime^.phase -= 2.0 * math.PI
+            if runtime^.phase > 2.0 * math.PI {
+                runtime^.phase -= 2.0 * math.PI
+            }
             sine_tone := math.sin(runtime^.phase)
 
             modulated_resonance := sine_tone * math.abs(raw_noise) * runtime^.grain_level

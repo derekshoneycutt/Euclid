@@ -306,7 +306,7 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
 
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
-    // Validates dynview text span extraction bounds checks and script-attach plain-text fallback behavior.
+    // Validates dynview text span extraction bounds checks for base and scripted spans.
     buffer := app_core.Ui_Dynview_Command_Buffer{}
     text := "abc"
     for i in 0..<len(text) {
@@ -326,8 +326,8 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
         script_sup_text_offset = 1,
         script_sup_text_len = 1,
     }
-    plain_text := app_dynview.script_attach_plain_text(&buffer, cmd)
-    testing.expect_value(t, plain_text, "abc")
+    base_text := app_dynview.text_span_from_buffer(&buffer, cmd.script_base_text_offset, cmd.script_base_text_len)
+    testing.expect_value(t, base_text, "abc")
 }
 
 @(test)

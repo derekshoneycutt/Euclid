@@ -157,30 +157,6 @@ compile_text_run :: #force_inline proc(
     return append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
 }
 
-//   Apply script-attach compilation rule using deterministic plain-text serialization.
-compile_script_attach :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
-
-    status := require_open_block(state^.open_block)
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    text := script_attach_plain_text(buffer, cmd)
-    for i in 0..<len(text) {
-        status = append_compiled_byte(cache, text[i])
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    state^.block_row_end = state^.current_row
-    return DYNVIEW_STATUS_OK
-}
-
 //   Apply recursive script-wrapper compilation using grouped parent serialization.
 compile_script_attach_recursive :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -314,187 +290,6 @@ compile_large_op_recursive :: #force_inline proc(
         if status != DYNVIEW_STATUS_OK {
             return status
         }
-    }
-
-    state^.block_row_end = state^.current_row
-    return DYNVIEW_STATUS_OK
-}
-
-//   Apply accent-bar compilation rule using literal command fallback serialization.
-compile_accent_bar :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
-
-    status := require_open_block(state^.open_block)
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    prefix := "\\underline{" 
-    if cmd.accent_mode == 1 {
-        prefix = "\\overline{" 
-    }
-
-    for i in 0..<len(prefix) {
-        status = append_compiled_byte(cache, prefix[i])
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    status = append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    sup_text := text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_prefix := "^{"
-        for i in 0..<len(sup_prefix) {
-            status = append_compiled_byte(cache, sup_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sup_text) {
-            status = append_compiled_byte(cache, sup_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    sub_text := text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_prefix := "_{"
-        for i in 0..<len(sub_prefix) {
-            status = append_compiled_byte(cache, sub_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sub_text) {
-            status = append_compiled_byte(cache, sub_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    status = append_compiled_byte(cache, '}')
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    state^.block_row_end = state^.current_row
-    return DYNVIEW_STATUS_OK
-}
-
-//   Apply radical-bar compilation rule using literal command fallback serialization.
-compile_radical_bar :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
-
-    status := require_open_block(state^.open_block)
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    prefix := "\\sqrt"
-    for i in 0..<len(prefix) {
-        status = append_compiled_byte(cache, prefix[i])
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    index_text := text_span_from_buffer(buffer, cmd.radical_index_text_offset, cmd.radical_index_text_len)
-    if len(index_text) > 0 {
-        status = append_compiled_byte(cache, '[')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-
-        for i in 0..<len(index_text) {
-            status = append_compiled_byte(cache, index_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-
-        status = append_compiled_byte(cache, ']')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    status = append_compiled_byte(cache, '{')
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    status = append_compiled_text_slice(cache, buffer, cmd.text_offset, cmd.text_len)
-    if status != DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    sup_text := text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_prefix := "^{"
-        for i in 0..<len(sup_prefix) {
-            status = append_compiled_byte(cache, sup_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sup_text) {
-            status = append_compiled_byte(cache, sup_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    sub_text := text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_prefix := "_{"
-        for i in 0..<len(sub_prefix) {
-            status = append_compiled_byte(cache, sub_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sub_text) {
-            status = append_compiled_byte(cache, sub_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    status = append_compiled_byte(cache, '}')
-    if status != DYNVIEW_STATUS_OK {
-        return status
     }
 
     state^.block_row_end = state^.current_row
@@ -676,8 +471,6 @@ compile_command :: #force_inline proc(
         return compile_text_run(cache, buffer, state, cmd)
     case .MathBlock:
         return compile_text_run(cache, buffer, state, cmd)
-    case .ScriptAttach:
-        return compile_script_attach(cache, buffer, state, cmd)
     case .ScriptAttachRecursive:
         return compile_script_attach_recursive(cache, buffer, state, cmd)
     case .FracRecursive:
@@ -688,12 +481,8 @@ compile_command :: #force_inline proc(
         return compile_text_run(cache, buffer, state, cmd)
     case .LargeOpRecursive:
         return compile_large_op_recursive(cache, buffer, state, cmd)
-    case .AccentBar:
-        return compile_accent_bar(cache, buffer, state, cmd)
     case .AccentBarRecursive:
         return compile_text_run(cache, buffer, state, cmd)
-    case .RadicalBar:
-        return compile_radical_bar(cache, buffer, state, cmd)
     case .RadicalBarRecursive:
         return compile_text_run(cache, buffer, state, cmd)
     case .CopyableTextRun:

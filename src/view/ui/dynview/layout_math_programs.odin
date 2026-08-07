@@ -85,85 +85,6 @@ math_program_text_item :: #force_inline proc(
     }
 }
 
-//   Build one layout-like item for a script-attach child command inside a math block.
-math_program_script_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    font_size: f32) -> core.Ui_Dynview_Layout_Item {
-
-    base_text := text_span_from_buffer(
-        buffer,
-        cmd.script_base_text_offset,
-        cmd.script_base_text_len)
-    sup_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    sub_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
-
-    base_cols := max(1, view_core.text_codepoint_count(base_text))
-    sup_cols := view_core.text_codepoint_count(sup_text)
-    sub_cols := view_core.text_codepoint_count(sub_text)
-    script_cols := max(sup_cols, sub_cols)
-
-    text_ascent, text_descent := style_ascent_descent(style, font_size)
-    script_style := style_by_id(cmd.script_style_id)
-    script_scale := max(0.2, cmd.script_scale)
-    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
-        font_size,
-        script_scale,
-        cmd.script_sup_raise,
-        cmd.script_sub_drop)
-    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
-    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
-
-    ascent := text_ascent
-    descent := text_descent
-    if sup_cols > 0 {
-        ascent = max(ascent, script_ascent + sup_raise_px + script_top_pad)
-    }
-    if sub_cols > 0 {
-        descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
-    }
-
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
-    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
-    gap_px := max(1.0, cmd.script_gap * font_size)
-    base_width := f32(base_cols) * base_advance
-    script_width := f32(script_cols) * script_advance
-    draw_width := base_width
-    if script_cols > 0 {
-        draw_width += gap_px + script_width
-    }
-
-    return core.Ui_Dynview_Layout_Item{
-        kind = .ScriptAttach,
-        style_id = cmd.style_id,
-        text_offset = cmd.script_base_text_offset,
-        text_len = cmd.script_base_text_len,
-        script_sup_text_offset = cmd.script_sup_text_offset,
-        script_sup_text_len = cmd.script_sup_text_len,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id,
-        script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise,
-        script_sub_drop = cmd.script_sub_drop,
-        script_gap = cmd.script_gap,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = script_top_pad,
-        visual_padding_bottom = script_bottom_pad,
-    }
-}
-
 //   Build one layout-like item for a recursive script wrapper around a child math program.
 math_program_recursive_script_item :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -505,99 +426,6 @@ math_program_recursive_matrix_item :: #force_inline proc(
     }, true
 }
 
-//   Build one layout-like item for an accent-bar child command inside a math block.
-math_program_accent_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    font_size: f32) -> core.Ui_Dynview_Layout_Item {
-
-    base_text := text_for_command(buffer, cmd)
-    sup_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    sub_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
-
-    base_cols := max(1, view_core.text_codepoint_count(base_text))
-    sup_cols := view_core.text_codepoint_count(sup_text)
-    sub_cols := view_core.text_codepoint_count(sub_text)
-    script_cols := max(sup_cols, sub_cols)
-
-    text_ascent, text_descent := style_ascent_descent(style, font_size)
-    script_style := style_by_id(cmd.script_style_id)
-    script_scale := max(0.2, cmd.script_scale)
-    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
-        font_size,
-        script_scale,
-        cmd.script_sup_raise,
-        cmd.script_sub_drop)
-    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
-    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
-
-    ascent := text_ascent
-    descent := text_descent
-    if sup_cols > 0 {
-        ascent = max(ascent, script_ascent + sup_raise_px + script_top_pad)
-    }
-    if sub_cols > 0 {
-        descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
-    }
-
-    bar_thickness := max(1.0, cmd.accent_thickness * font_size)
-    has_scripts := sup_cols > 0 || sub_cols > 0
-    accent_pad := accent_script_clearance(font_size, script_scale, has_scripts)
-    bar_offset := max(0.0, cmd.accent_offset * font_size) + accent_pad
-    bar_half := bar_thickness * 0.5
-    content_ascent := ascent
-    content_descent := descent
-    if cmd.accent_mode == 1 {
-        ascent = max(ascent, content_ascent + bar_offset + bar_half)
-    } else {
-        descent = max(descent, content_descent + bar_offset + bar_half)
-    }
-
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
-    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
-    gap_px := max(1.0, cmd.script_gap * font_size)
-    base_width := f32(base_cols) * base_advance
-    script_width := f32(script_cols) * script_advance
-    draw_width := base_width
-    if script_cols > 0 {
-        draw_width += gap_px + script_width
-    }
-
-    return core.Ui_Dynview_Layout_Item{
-        kind = .AccentBar,
-        style_id = cmd.style_id,
-        text_offset = cmd.text_offset,
-        text_len = cmd.text_len,
-        script_sup_text_offset = cmd.script_sup_text_offset,
-        script_sup_text_len = cmd.script_sup_text_len,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id,
-        script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise,
-        script_sub_drop = cmd.script_sub_drop,
-        script_gap = cmd.script_gap,
-        accent_mode = cmd.accent_mode,
-        accent_style_id = cmd.accent_style_id,
-        accent_thickness = cmd.accent_thickness,
-        accent_offset = cmd.accent_offset,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = max(script_top_pad, accent_pad),
-        visual_padding_bottom = max(script_bottom_pad, accent_pad),
-    }
-}
-
 //   Build one layout-like item for a recursive accent wrapper around a child math program.
 math_program_recursive_accent_item :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -718,118 +546,6 @@ math_program_recursive_radical_item :: #force_inline proc(
     }, true
 }
 
-//   Build one layout-like item for a radical child command inside a math block.
-math_program_radical_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    font_size: f32) -> core.Ui_Dynview_Layout_Item {
-
-    base_text := text_for_command(buffer, cmd)
-    sup_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    sub_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
-    index_text := text_span_from_buffer(
-        buffer,
-        cmd.radical_index_text_offset,
-        cmd.radical_index_text_len)
-
-    base_cols := max(1, view_core.text_codepoint_count(base_text))
-    sup_cols := view_core.text_codepoint_count(sup_text)
-    sub_cols := view_core.text_codepoint_count(sub_text)
-    index_cols := view_core.text_codepoint_count(index_text)
-    script_cols := max(sup_cols, sub_cols)
-
-    text_ascent, text_descent := style_ascent_descent(style, font_size)
-    script_style := style_by_id(cmd.script_style_id)
-    script_scale := max(0.2, cmd.script_scale)
-    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
-        font_size,
-        script_scale,
-        cmd.script_sup_raise,
-        cmd.script_sub_drop)
-    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
-    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
-    index_scale := max(0.2, script_scale)
-    index_font_size := max(1.0, font_size * index_scale)
-    index_ascent, index_descent := style_ascent_descent(script_style, index_font_size)
-
-    content_ascent := text_ascent
-    content_descent := text_descent
-    if sup_cols > 0 {
-        content_ascent = max(content_ascent, script_ascent + sup_raise_px + script_top_pad)
-    }
-    if sub_cols > 0 {
-        content_descent = max(content_descent, script_descent + sub_drop_px + script_bottom_pad)
-    }
-
-    bar_thickness := max(1.0, cmd.accent_thickness * font_size)
-    bar_offset := max(0.0, cmd.accent_offset * font_size)
-    ascent := max(content_ascent, content_ascent + bar_offset + bar_thickness * 0.5)
-    if index_cols > 0 {
-        index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
-        ascent = max(ascent, index_top_from_baseline + script_top_pad)
-    }
-    root_low_offset := radical_root_low_offset(font_size, content_descent)
-    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
-    descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
-    if index_cols > 0 {
-        descent = max(descent, index_descent * 0.2)
-    }
-
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
-    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
-    index_advance := effective_advance(script_style, cache^.last_wrap_advance) * index_scale
-    gap_px := max(1.0, cmd.script_gap * font_size)
-    base_width := f32(base_cols) * base_advance
-    script_width := f32(script_cols) * script_advance
-    index_width := f32(index_cols) * index_advance
-    content_width := base_width
-    if script_cols > 0 {
-        content_width += gap_px + script_width
-    }
-    lead_width := max(
-        radical_lead_width(font_size, base_advance),
-        index_width + max(1.0, base_advance * 1.05))
-    front_padding, back_padding := radical_side_paddings(font_size, base_advance)
-    draw_width := lead_width + content_width + front_padding + back_padding
-    accent_pad := accent_script_clearance(font_size, script_scale, sup_cols > 0 || sub_cols > 0)
-
-    return core.Ui_Dynview_Layout_Item{
-        kind = .RadicalBar,
-        style_id = cmd.style_id,
-        text_offset = cmd.text_offset,
-        text_len = cmd.text_len,
-        script_sup_text_offset = cmd.script_sup_text_offset,
-        script_sup_text_len = cmd.script_sup_text_len,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id,
-        script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise,
-        script_sub_drop = cmd.script_sub_drop,
-        script_gap = cmd.script_gap,
-        radical_mode = cmd.radical_mode,
-        radical_index_text_offset = cmd.radical_index_text_offset,
-        radical_index_text_len = cmd.radical_index_text_len,
-        accent_style_id = cmd.accent_style_id,
-        accent_thickness = cmd.accent_thickness,
-        accent_offset = cmd.accent_offset,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = max(script_top_pad, accent_pad),
-        visual_padding_bottom = max(script_bottom_pad, accent_pad),
-    }
-}
-
 //   Build one layout-like child item for the command kinds supported inside math blocks.
 math_program_item :: #force_inline proc(
     cache: ^core.Ui_Dynview_Compile_Cache,
@@ -841,8 +557,6 @@ math_program_item :: #force_inline proc(
     switch cmd.kind {
     case .TextRun, .MathGlyphRun:
         return math_program_text_item(cache, buffer, cmd, style, font_size), true
-    case .ScriptAttach:
-        return math_program_script_item(cache, buffer, cmd, style, font_size), true
     case .ScriptAttachRecursive:
         return math_program_recursive_script_item(cache, buffer, cmd, font_size)
     case .FracRecursive:
@@ -853,12 +567,8 @@ math_program_item :: #force_inline proc(
         return math_program_recursive_matrix_item(cache, buffer, cmd, style, font_size)
     case .LargeOpRecursive:
         return math_program_large_op_item(cache, buffer, cmd, style, font_size), true
-    case .AccentBar:
-        return math_program_accent_item(cache, buffer, cmd, style, font_size), true
     case .AccentBarRecursive:
         return math_program_recursive_accent_item(cache, buffer, cmd, font_size)
-    case .RadicalBar:
-        return math_program_radical_item(cache, buffer, cmd, style, font_size), true
     case .RadicalBarRecursive:
         return math_program_recursive_radical_item(cache, buffer, cmd, style, font_size)
     case .MathBlock, .BeginBlock, .EndBlock, .CopyableTextRun, .LineBreak, .Divider,

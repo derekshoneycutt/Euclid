@@ -7,7 +7,6 @@ package core
 
 import "../julialib"
 import "base:runtime"
-import "core:c"
 import "core:encoding/uuid"
 
 import rl "vendor:raylib"
@@ -576,15 +575,12 @@ Ui_Dynview_Command_Kind :: enum {
     TextRun,
     MathGlyphRun,
     MathBlock,
-    ScriptAttach,
     ScriptAttachRecursive,
     FracRecursive,
     StretchDelimiterRecursive,
     MatrixRecursive,
     LargeOpRecursive,
-    AccentBar,
     AccentBarRecursive,
-    RadicalBar,
     RadicalBarRecursive,
     CopyableTextRun,
     LineBreak,
@@ -657,15 +653,12 @@ Ui_Dynview_Layout_Item_Kind :: enum {
     TextRun,
     MathGlyphRun,
     MathBlock,
-    ScriptAttach,
     ScriptAttachRecursive,
     FracRecursive,
     StretchDelimiterRecursive,
     MatrixRecursive,
     LargeOpRecursive,
-    AccentBar,
     AccentBarRecursive,
-    RadicalBar,
     RadicalBarRecursive,
     InlineLine,
     InlineBox,

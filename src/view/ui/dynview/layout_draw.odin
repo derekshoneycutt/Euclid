@@ -25,20 +25,11 @@ line_visual_padding :: #force_inline proc(
         item := cache^.layout_items[item_index]
         top_pad = max(top_pad, item.visual_padding_top)
         bottom_pad = max(bottom_pad, item.visual_padding_bottom)
-        if item.kind != .ScriptAttach && item.kind != .AccentBar && item.kind != .RadicalBar {
-            continue
-        }
 
         script_font_size := max(1.0, font_size * max(0.2, item.script_scale))
         script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
         top_pad = max(top_pad, script_top_pad)
         bottom_pad = max(bottom_pad, script_bottom_pad)
-        if item.kind == .AccentBar || item.kind == .RadicalBar {
-            has_scripts := item.script_sup_text_len > 0 || item.script_sub_text_len > 0
-            accent_pad := accent_script_clearance(font_size, item.script_scale, has_scripts)
-            top_pad = max(top_pad, accent_pad)
-            bottom_pad = max(bottom_pad, accent_pad)
-        }
     }
 
     return top_pad, bottom_pad
@@ -850,7 +841,7 @@ draw_recursive_structured_item :: #force_inline proc(
             item_y)
     case .RadicalBarRecursive:
         draw_recursive_radical_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .AccentBar, .RadicalBar,
+    case .TextRun, .MathGlyphRun, .MathBlock,
         .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
         .InlinePieSection:
     }
@@ -1099,53 +1090,10 @@ draw_cached_text_item :: proc(
     draw_x := text_item_draw_x(panel, style, item, item_x)
 
     switch item.kind {
-    case .ScriptAttach:
-        draw_script_attach_item(
-            state,
-            runtime,
-            item,
-            style,
-            resolved_font,
-            text,
-            font_size,
-            draw_x,
-            item_y)
-    case .AccentBar:
-        draw_accent_bar_item(
-            state,
-            runtime,
-            item,
-            style,
-            resolved_font,
-            text,
-            font_size,
-            draw_x,
-            item_y)
-    case .RadicalBar:
-        draw_radical_bar_item(
-            state,
-            runtime,
-            item,
-            style,
-            resolved_font,
-            text,
-            font_size,
-            draw_x,
-            item_y)
     case .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive,
         .MatrixRecursive, .LargeOpRecursive, .AccentBarRecursive, .RadicalBarRecursive:
-        draw_recursive_structured_item(
-            state,
-            runtime,
-            panel,
-            font,
-            font_size,
-            style,
-            item,
-            resolved_font,
-            text,
-            draw_x,
-            item_y)
+        draw_recursive_structured_item(state, runtime, panel, font, font_size, style,
+            item, resolved_font, text, draw_x, item_y)
     case .MathBlock:
         draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun:
@@ -1217,8 +1165,9 @@ draw_cached_inline_item :: proc(
             rl.DrawLineEx(center, start_point, stroke, style.color)
             rl.DrawLineEx(center, end_point, stroke, style.color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttach, .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive, .AccentBar,
-        .AccentBarRecursive, .RadicalBar, .RadicalBarRecursive:
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
+        .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
+        .AccentBarRecursive, .RadicalBarRecursive:
     }
 }
 
@@ -1241,14 +1190,11 @@ draw_cached_line :: proc(
         if item.kind == .TextRun ||
             item.kind == .MathBlock ||
             item.kind == .MathGlyphRun ||
-            item.kind == .ScriptAttach ||
             item.kind == .ScriptAttachRecursive ||
             item.kind == .FracRecursive ||
             item.kind == .StretchDelimiterRecursive ||
             item.kind == .MatrixRecursive ||
-            item.kind == .LargeOpRecursive ||
-            item.kind == .AccentBar ||
-            item.kind == .RadicalBar {
+            item.kind == .LargeOpRecursive {
             draw_cached_text_item(state, runtime, panel, font, font_size, style, item, item_x, item_y)
             continue
         }

@@ -622,31 +622,6 @@ text_span_from_buffer :: #force_inline proc(
     return string(buffer^.text_bytes[text_offset:text_offset + text_len])
 }
 
-//   Build a plain-text fallback representation for one script-attach command.
-script_attach_plain_text :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
-    base_text := text_span_from_buffer(buffer, cmd.script_base_text_offset, cmd.script_base_text_len)
-    return base_text
-}
-
-//   Build a base visible text representation for one accent-bar command.
-accent_bar_visible_text :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
-    return text_for_command(buffer, cmd)
-}
-
-//   Build a base visible text representation for one radical-bar command.
-radical_bar_visible_text :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
-    return text_for_command(buffer, cmd)
-}
-
 //   Build display-style large-operator plain-text fallback using canonical command name.
 large_op_visible_text :: #force_inline proc(
     buffer: ^core.Ui_Dynview_Command_Buffer,
@@ -662,14 +637,6 @@ large_op_visible_text :: #force_inline proc(
     case 4:
         return "\\lim"
     }
-    return text_for_command(buffer, cmd)
-}
-
-//   Build visible text representation for one stretch-delimiter wrapper.
-stretch_delimiter_visible_text :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
     return text_for_command(buffer, cmd)
 }
 
@@ -751,9 +718,6 @@ count_styled_rows :: proc(
         case .MathBlock:
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .ScriptAttach:
-            text := script_attach_plain_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttachRecursive:
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
@@ -761,7 +725,7 @@ count_styled_rows :: proc(
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .StretchDelimiterRecursive:
-            text := stretch_delimiter_visible_text(buffer, cmd)
+            text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .MatrixRecursive:
             text := text_for_command(buffer, cmd)
@@ -769,14 +733,8 @@ count_styled_rows :: proc(
         case .LargeOpRecursive:
             text := large_op_visible_text(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .AccentBar:
-            text := accent_bar_visible_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBarRecursive:
             text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .RadicalBar:
-            text := radical_bar_visible_text(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .RadicalBarRecursive:
             text := text_for_command(buffer, cmd)
@@ -855,9 +813,6 @@ draw_styled_content :: proc(
         case .MathBlock:
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .ScriptAttach:
-            text := script_attach_plain_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .ScriptAttachRecursive:
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
@@ -865,7 +820,7 @@ draw_styled_content :: proc(
             text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .StretchDelimiterRecursive:
-            text := stretch_delimiter_visible_text(buffer, cmd)
+            text := text_for_command(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .MatrixRecursive:
             text := text_for_command(buffer, cmd)
@@ -873,14 +828,8 @@ draw_styled_content :: proc(
         case .LargeOpRecursive:
             text := large_op_visible_text(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .AccentBar:
-            text := accent_bar_visible_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .AccentBarRecursive:
             text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .RadicalBar:
-            text := radical_bar_visible_text(buffer, cmd)
             flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
         case .RadicalBarRecursive:
             text := text_for_command(buffer, cmd)
