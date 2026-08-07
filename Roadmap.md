@@ -112,7 +112,7 @@ General features:
   - [X] Sums, Products, Integrals
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
-- [ ] Drawing Sounds
+- [X] Drawing Sounds (Initial procedural)
 - [ ] Alternative tree for connected view vs book view -- Nice to have --
 
 Final tasks:
@@ -164,6 +164,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Scaling
   - Shearing
 - Window sizing and portrait mode
+- Revisit sounds? Maybe
 
 ## Brainstorming
 

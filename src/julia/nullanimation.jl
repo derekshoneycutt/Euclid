@@ -24,6 +24,8 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
+    OdinJuliaBridge.set_drawing_sound_enabled(state_ptr, false)
+
     useRotation = π - PenRotation
 
     OdinJuliaBridge.set_animation_meta(state_ptr, 1, StartRotation)

@@ -7,6 +7,7 @@ import view_core "core"
 import "ui"
 import dynview "ui/dynview"
 import "../core"
+import "../audio"
 import "../kine"
 import "../julia"
 import "../particles"
@@ -92,6 +93,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
 
     for !rl.WindowShouldClose() {
         alpha := accumulate_and_update_systems(state)
+        audio.update_chalk_runtime(&state^.chalk_audio)
 
         rl.BeginDrawing()
             draw_frame(state, alpha)
@@ -161,6 +163,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.julia_interface = julia_interface
     state^.point_system = point_system
     state^.particle_system = particle_system
+    state^.drawing_sound_enabled = true
     state^.compass = compass
     state^.pen = pen
     state^.current_delta_time = FIXED_DT
@@ -212,6 +215,12 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
     }
 
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+    rl.InitAudioDevice()
+    if !rl.IsAudioDeviceReady() {
+        fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
+    } else {
+        audio.init_chalk_runtime(&state^.chalk_audio)
+    }
 
     if state^.ui_runtime.limit_fps {
         rl.SetTargetFPS(LIMIT_FPS)
@@ -240,6 +249,10 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
 // Notes:
 //   - Intended as the shutdown pair for initiate_window.
 close_window :: proc(state : ^Euclid_General_State) {
+    audio.shutdown_chalk_runtime(&state^.chalk_audio)
+    if rl.IsAudioDeviceReady() {
+        rl.CloseAudioDevice()
+    }
     shutdown_particle_render_resources(state)
     shutdown_stroke3d_shader(state)
     view_core.font_runtime_unload_all(state)

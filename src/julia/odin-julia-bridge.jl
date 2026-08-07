@@ -3294,6 +3294,34 @@ function get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
 end
 
 """
+Enable or disable drawing sound emission for the active animation.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `enabled` : `true` to allow drawing sound, `false` to mute it
+"""
+function set_drawing_sound_enabled(state_ptr::Ptr{Cvoid}, enabled::Bool)
+    @ccall set_drawing_sound_enabled(state_ptr::Ptr{Cvoid}, enabled::Bool)::Cvoid
+end
+
+"""
+Inject drawing sound activity at a specific speed for scripted phases.
+
+------
+
+Parameters:
+
+- `state_ptr` : The Euclid application state pointer passed to the native API
+- `speed` : Drawing speed scalar in the same units used by the host chalk runtime
+"""
+function simulate_drawing_sound(state_ptr::Ptr{Cvoid}, speed::Real)
+    @ccall simulate_drawing_sound(state_ptr::Ptr{Cvoid}, speed::Cfloat)::Cvoid
+end
+
+"""
 Emit a trailing particle at a 2D position.
 
 ------

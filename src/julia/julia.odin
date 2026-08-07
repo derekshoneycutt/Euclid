@@ -523,6 +523,7 @@ change_current_animation_loop :: proc(
     for i in 0..<len(state^.anim_metadata) {
         state^.anim_metadata[i] = 0.0
     }
+    state^.drawing_sound_enabled = true
 
    jl_call1(animation^.initiate, state_value)
     if jl_exception_occurred() != nil {
@@ -560,6 +561,7 @@ reset_current_animation_loop :: proc(
     for i in 0..<len(state^.anim_metadata) {
         state^.anim_metadata[i] = 0.0
     }
+    state^.drawing_sound_enabled = true
     
    jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
     if jl_exception_occurred() != nil {

@@ -16,6 +16,7 @@ package julia
 // though it is stored and chosen from via the Odin.
 
 import "../core"
+import "../audio"
 import "../particles"
 import "../kine"
 
@@ -3514,6 +3515,12 @@ set_point_position_with_floor_crossing_dust :: #force_inline proc(
     previous_pos, has_previous := state^.point_system^.points[index].position.?
     state^.point_system^.points[index].position = pos
     if push_dust_if_floor_crossing(state, previous_pos, pos, has_previous) {
+        if state^.drawing_sound_enabled {
+            if index == state^.pen.joint1_id || index == state^.pen.joint2_id ||
+                index == state^.compass.joint1_id || index == state^.compass.joint2_id {
+                audio.trigger_hit_sound(&state^.chalk_audio)
+            }
+        }
         push_dust_for_connected_lines_on_floor_event(state, index)
     }
 }
@@ -3526,6 +3533,53 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
 
     set_point_position_with_floor_crossing_dust(state, index, pos)
     push_dust_if_floor_contact(state, pos)
+
+    is_floor_contact :=
+        state^.drawing_sound_enabled &&
+        pos.z <= FLOOR_CONTACT_Z_EPSILON && pos.z >= -FLOOR_CONTACT_Z_EPSILON
+    dt := state^.current_delta_time
+
+    pen_active_child := -1
+    if state^.pen.host_id >= 0 && state^.pen.host_id < MAX_KINEPOINTS {
+        pen_active_child = state^.point_system^.points[state^.pen.host_id].active_child
+    }
+
+    compass_active_child := -1
+    if state^.compass.host_id >= 0 && state^.compass.host_id < MAX_KINEPOINTS {
+        compass_active_child = state^.point_system^.points[state^.compass.host_id].active_child
+    }
+
+    if index == state^.pen.joint1_id {
+        audio.register_pen_tip_motion(&state^.chalk_audio, pos, is_floor_contact && pen_active_child == 1, dt)
+    } else if index == state^.compass.joint1_id {
+        audio.register_compass_tip1_motion(&state^.chalk_audio, pos, is_floor_contact && compass_active_child == 1, dt)
+    } else if index == state^.compass.joint2_id {
+        audio.register_compass_tip2_motion(&state^.chalk_audio, pos, is_floor_contact && compass_active_child == 3, dt)
+    }
+}
+
+//   Enable or disable drawing sound for the currently running animation.
+@(export)
+set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enabled: bool) {
+    state^.drawing_sound_enabled = enabled
+}
+
+//   Inject drawing sound activity at an explicit speed for scripted motions.
+@(export)
+simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
+    if !state^.drawing_sound_enabled {
+        return
+    }
+
+    use_speed := speed
+    if use_speed < 0 {
+        use_speed = 0
+    }
+
+    state^.chalk_audio.has_contact_this_frame = true
+    if use_speed > state^.chalk_audio.accum_speed {
+        state^.chalk_audio.accum_speed = use_speed
+    }
 }
 
 //   Read or update tool joint state, including optional lock constraints and floor-contact effects.

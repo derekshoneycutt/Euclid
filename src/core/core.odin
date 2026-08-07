@@ -1120,6 +1120,36 @@ Euclid_Drawing_Surface :: struct {
     edge_size : f32,
 }
 
+Chalk_Audio_Runtime :: struct {
+    stream: rl.AudioStream,
+    sample_buffer: [512]f32,
+    prev_out: f32,
+    phase: f32,
+    accum_speed: f32,
+    has_contact_this_frame: bool,
+    initialized: bool,
+
+    // Stick-slip grain envelope: gives constant-speed scripted motion the same
+    // organic irregularity that human mouse jitter provides naturally.
+    grain_level: f32,
+    grain_target: f32,
+    grain_hold_remaining: f32,
+    resonance_freq_offset: f32,
+    hit_envelope: f32,
+
+    pen_prev_pos: Vector3,
+    pen_has_prev: bool,
+    pen_prev_contact: bool,
+
+    compass_tip1_prev_pos: Vector3,
+    compass_tip1_has_prev: bool,
+    compass_tip1_prev_contact: bool,
+
+    compass_tip2_prev_pos: Vector3,
+    compass_tip2_has_prev: bool,
+    compass_tip2_prev_contact: bool,
+}
+
 
 /****
     General state of the application is the host of all primary memory for Odin and the application
@@ -1137,6 +1167,8 @@ Euclid_General_State :: struct {
     julia_interface : ^Euclid_Julia_Interface,
     point_system : ^Kine_Point_System,
     particle_system : ^Particle_System,
+    chalk_audio: Chalk_Audio_Runtime,
+    drawing_sound_enabled: bool,
     compass : Kine_Shape_Compass,
     pen : Kine_Shape_Pen,
 
