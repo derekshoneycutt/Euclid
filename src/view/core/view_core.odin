@@ -111,16 +111,16 @@ JULIA_MONO_CODE_POINTS :: []rune{
 		0x2283, 0x2286, 0x2287, 0x2295, 0x22a5, 0x25cb, 0x2026, 0x22ca,
 }
 
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
 
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Iso_Scale :: core.Iso_Scale
-Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
-Kine_Shape_Point :: core.Kine_Shape_Point
-Kine_Constraint :: core.Kine_Constraint
-Kine_Point_System :: core.Kine_Point_System
+Shapes_Point_Type :: core.Shapes_Point_Type
+Shapes_Point :: core.Shapes_Point
+Shapes_Constraint :: core.Shapes_Constraint
+Shapes_Point_System :: core.Shapes_Point_System
 Particle :: core.Particle
 Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface

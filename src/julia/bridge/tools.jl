@@ -136,8 +136,8 @@ Parameters:
 
 Returns: `Int32` animation point start index
 """
-function get_kine_anim_points_start(state_ptr::Ptr{Cvoid})
-    @ccall get_kine_anim_points_start(state_ptr::Ptr{Cvoid})::Int32
+function get_shapes_anim_points_start(state_ptr::Ptr{Cvoid})
+    @ccall get_shapes_anim_points_start(state_ptr::Ptr{Cvoid})::Int32
 end
 
 """
@@ -151,8 +151,8 @@ Parameters:
 
 Returns: `Int32` animation constraint start index
 """
-function get_kine_anim_constraints_start(state_ptr::Ptr{Cvoid})
-    @ccall get_kine_anim_constraints_start(state_ptr::Ptr{Cvoid})::Int32
+function get_shapes_anim_constraints_start(state_ptr::Ptr{Cvoid})
+    @ccall get_shapes_anim_constraints_start(state_ptr::Ptr{Cvoid})::Int32
 end
 
 """
@@ -166,12 +166,12 @@ Parameters:
 
 Returns: `Int32` status code
 """
-function freeze_kine_animation_boundary(state_ptr::Ptr{Cvoid})
-    @ccall freeze_kine_animation_boundary(state_ptr::Ptr{Cvoid})::Int32
+function freeze_shapes_animation_boundary(state_ptr::Ptr{Cvoid})
+    @ccall freeze_shapes_animation_boundary(state_ptr::Ptr{Cvoid})::Int32
 end
 
 """
-Clear animation-owned kine points and constraints.
+Clear animation-owned shapes points and constraints.
 
 ------
 
@@ -181,34 +181,34 @@ Parameters:
 
 Returns: `Int32` status code
 """
-function clear_kine_animation_data(state_ptr::Ptr{Cvoid})
-    @ccall clear_kine_animation_data(state_ptr::Ptr{Cvoid})::Int32
+function clear_shapes_animation_data(state_ptr::Ptr{Cvoid})
+    @ccall clear_shapes_animation_data(state_ptr::Ptr{Cvoid})::Int32
 end
 
 """
-Get the maximum number of kine points.
+Get the maximum number of shapes points.
 
 ------
 
 Returns: `Int32` max point count
 """
-function get_max_kine_points()
-    @ccall get_max_kine_points()::Int32
+function get_max_shapes_points()
+    @ccall get_max_shapes_points()::Int32
 end
 
 """
-Get the maximum number of kine constraints.
+Get the maximum number of shapes constraints.
 
 ------
 
 Returns: `Int32` max constraint count
 """
-function get_max_kine_constraints()
-    @ccall get_max_kine_constraints()::Int32
+function get_max_shapes_constraints()
+    @ccall get_max_shapes_constraints()::Int32
 end
 
 """
-Run native kine graph validation.
+Run native shapes graph validation.
 
 ------
 
@@ -218,8 +218,8 @@ Parameters:
 
 Returns: `Int32` status code
 """
-function validate_kine_graph(state_ptr::Ptr{Cvoid})
-    @ccall validate_kine_graph(state_ptr::Ptr{Cvoid})::Int32
+function validate_shapes_graph(state_ptr::Ptr{Cvoid})
+    @ccall validate_shapes_graph(state_ptr::Ptr{Cvoid})::Int32
 end
 
 

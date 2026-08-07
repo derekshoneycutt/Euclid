@@ -971,7 +971,7 @@ function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Abstr
 end
 
 """
-Get the maximum number of kine points supported by the bridge.
+Get the maximum number of shapes points supported by the bridge.
 
 ------
 
@@ -982,7 +982,7 @@ function get_point_capacity()
 end
 
 """
-Get the next point index in the kine point system.
+Get the next point index in the shapes point system.
 
 ------
 

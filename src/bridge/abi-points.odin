@@ -2,11 +2,11 @@ package bridge
 
 import "../core"
 import "../particles"
-import "../kine"
+import "../shapes"
 
 import rl "vendor:raylib"
 
-//   Create a new label shape in the kine system for Julia-driven animation state.
+//   Create a new label shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -23,10 +23,10 @@ create_new_label :: proc "c" (
     label: rune, pos: core.Vector3, color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
 
     return create_new_label_decorated(
-        state, label, i32(core.Kine_Label_Decoration_Kind.None), pos, color, brushSize)
+        state, label, i32(core.Shapes_Label_Decoration_Kind.None), pos, color, brushSize)
 }
 
-//   Create a new label shape in the kine system for Julia-driven animation state.
+//   Create a new label shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -51,7 +51,7 @@ create_new_label_decorated :: proc "c" (
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
     use_decoration_kind := label_decoration_kind_from_i32(decoration_kind)
-    point, index := kine.init_kineshape_label(
+    point, index := shapes.init_label(
         state^.point_system, label, use_decoration_kind, pos, rlColor, brushSize)
 
     use_pos, hasPos := point^.position.?
@@ -88,7 +88,7 @@ create_new_label_decorated :: proc "c" (
     }
 }
 
-//   Create a new point shape in the kine system for Julia-driven animation state.
+//   Create a new point shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -105,7 +105,7 @@ create_new_point :: proc "c" (
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    point, index := kine.init_kineshape_point(
+    point, index := shapes.init_point(
         state^.point_system, pos, rlColor, brushSize)
 
     use_pos, hasPos := point^.position.?
@@ -142,7 +142,7 @@ create_new_point :: proc "c" (
     }
 }
 
-//   Create a new line shape in the kine system for Julia-driven animation state.
+//   Create a new line shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -156,17 +156,17 @@ create_new_point :: proc "c" (
 @(export)
 create_new_line :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2: core.Vector3, color: Bridge_Color, brushSize: f32) -> core.Kine_Shape_Line {
+    point1, point2: core.Vector3, color: Bridge_Color, brushSize: f32) -> core.Shapes_Line {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    line := kine.init_kineshape_line(
+    line := shapes.init_line(
         state^.point_system, point1, point2, rlColor, brushSize)
 
     return line
 }
 
-//   Create a new circle shape in the kine system for Julia-driven animation state.
+//   Create a new circle shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -183,17 +183,17 @@ create_new_line :: proc "c" (
 create_new_circle :: proc "c" (
     state: ^core.Euclid_General_State,
     center: core.Vector3, radius, startTheta, endTheta: f32,
-    color: Bridge_Color, brushSize: f32) -> core.Kine_Shape_Circle {
+    color: Bridge_Color, brushSize: f32) -> core.Shapes_Circle {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := kine.init_kineshape_circle(
+    circle := shapes.init_circle(
         state^.point_system, center, radius, startTheta, endTheta, rlColor, brushSize)
 
     return circle
 }
 
-//   Create a new filledcircle shape in the kine system for Julia-driven animation state.
+//   Create a new filledcircle shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -210,17 +210,17 @@ create_new_circle :: proc "c" (
 create_new_filledcircle :: proc "c" (
     state: ^core.Euclid_General_State,
     center: core.Vector3, radius, startTheta, endTheta: f32,
-    color: Bridge_Color, brushSize: f32) -> core.Kine_Shape_Filled_Circle {
+    color: Bridge_Color, brushSize: f32) -> core.Shapes_Filled_Circle {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := kine.init_kineshape_filledcircle(
+    circle := shapes.init_filledcircle(
         state^.point_system, center, radius, startTheta, endTheta, rlColor, brushSize)
 
     return circle
 }
 
-//   Create a new triangle shape in the kine system for Julia-driven animation state.
+//   Create a new triangle shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -234,17 +234,17 @@ create_new_filledcircle :: proc "c" (
 @(export)
 create_new_triangle :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3: core.Vector3, color: Bridge_Color) -> core.Kine_Shape_Triangle {
+    point1, point2, point3: core.Vector3, color: Bridge_Color) -> core.Shapes_Triangle {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    line := kine.init_kineshape_triangle(
+    line := shapes.init_triangle(
         state^.point_system, point1, point2, point3, rlColor)
 
     return line
 }
 
-//   Create a new square shape in the kine system for Julia-driven animation state.
+//   Create a new square shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -259,17 +259,17 @@ create_new_triangle :: proc "c" (
 @(export)
 create_new_square :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4: core.Vector3, color: Bridge_Color) -> core.Kine_Shape_Square {
+    point1, point2, point3, point4: core.Vector3, color: Bridge_Color) -> core.Shapes_Square {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    line := kine.init_kineshape_square(
+    line := shapes.init_square(
         state^.point_system, point1, point2, point3, point4, rlColor)
 
     return line
 }
 
-//   Create a new pentagon shape in the kine system for Julia-driven animation state.
+//   Create a new pentagon shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
@@ -286,11 +286,11 @@ create_new_square :: proc "c" (
 create_new_pentagon :: proc "c" (
     state: ^core.Euclid_General_State,
     point1, point2, point3, point4, point5: core.Vector3,
-    color: Bridge_Color) -> core.Kine_Shape_Pentagon {
+    color: Bridge_Color) -> core.Shapes_Pentagon {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    line := kine.init_kineshape_pentagon(
+    line := shapes.init_pentagon(
         state^.point_system, point1, point2, point3, point4, point5, rlColor)
 
     return line
@@ -309,7 +309,7 @@ get_point_view :: proc "c" (
     state: ^core.Euclid_General_State,
     index: int) -> Bridge_Point_View {
 
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
         type: int = 0
         switch point.kind {
@@ -386,7 +386,7 @@ get_point_view :: proc "c" (
 
         has_label = false,
         label = 0,
-        decoration_kind = i32(core.Kine_Label_Decoration_Kind.None),
+        decoration_kind = i32(core.Shapes_Label_Decoration_Kind.None),
 
         active_child = 0,
         child_count = 0,
@@ -403,7 +403,7 @@ get_point_view :: proc "c" (
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
 show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         context = state^.saved_context
         point := &state^.point_system^.points[index]
         point^.do_draw = true
@@ -418,9 +418,9 @@ show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
 hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         context = state^.saved_context
-        particles.emit_kine_hide_burst(
+        particles.emit_shapes_hide_burst(
             state^.particle_system,
             state^.point_system,
             index,
@@ -445,8 +445,8 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
     particles.kick_existing_dust(state^.particle_system, state^.iso_scale)
     for i in 0..<int(count) {
         index := int(indices[i])
-        if index >= 0 && index < MAX_KINEPOINTS {
-            particles.emit_kine_hide_burst(
+        if index >= 0 && index < MAX_SHAPESPOINTS {
+            particles.emit_shapes_hide_burst(
                 state^.particle_system,
                 state^.point_system,
                 index,
@@ -466,7 +466,7 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
 @(export)
 set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, pos: core.Vector3) {
     context = state^.saved_context
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_crossing_dust(state, index, pos)
     }
 }
@@ -479,7 +479,7 @@ set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, p
 //   - brushSize: Stroke thickness for rendered point/shape geometry.
 @(export)
 set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brushSize: f32) {
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].brush_size = brushSize
     }
 }
@@ -492,7 +492,7 @@ set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brus
 //   - color: RGBA color payload in bridge format.
 @(export)
 set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, color: Bridge_Color) {
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].color = rlColor
     }
@@ -506,7 +506,7 @@ set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, colo
 //   - color: RGBA color payload in bridge format.
 @(export)
 set_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: int, color: Bridge_Color) {
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].active_color = rlColor
     }
@@ -518,7 +518,7 @@ set_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: in
 //   - Bridge integer value for the requested capability, index, or status code.
 @(export)
 get_point_capacity :: proc "c" () -> i32 {
-    return i32(MAX_KINEPOINTS)
+    return i32(MAX_SHAPESPOINTS)
 }
 
 //   Return the next point allocation index from runtime state.
@@ -797,7 +797,7 @@ attach_child_point :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    visited: [MAX_KINEPOINTS]bool
+    visited: [MAX_SHAPESPOINTS]bool
     current := parentPoint^.child_point_head
     tail := current
     count := 0
@@ -856,7 +856,7 @@ detach_child_point :: proc "c" (
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    visited: [MAX_KINEPOINTS]bool
+    visited: [MAX_SHAPESPOINTS]bool
     current := head
     prev := -1
     removed := false
@@ -918,7 +918,7 @@ rebuild_child_count :: proc "c" (state: ^core.Euclid_General_State, parentIndex:
         return BRIDGE_STATUS_OK
     }
 
-    visited: [MAX_KINEPOINTS]bool
+    visited: [MAX_SHAPESPOINTS]bool
     current := parentPoint^.child_point_head
     count := 0
     for current >= 0 {
@@ -966,7 +966,7 @@ validate_parent_child_chain :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    visited: [MAX_KINEPOINTS]bool
+    visited: [MAX_SHAPESPOINTS]bool
     current := parentPoint^.child_point_head
     count := 0
     for current >= 0 {
@@ -1002,29 +1002,29 @@ validate_parent_child_chain :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_line_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Line {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Line {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Line{ -1, -1, -1 }
+        return core.Shapes_Line{ -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .Line {
-        return core.Kine_Shape_Line{ -1, -1, -1 }
+        return core.Shapes_Line{ -1, -1, -1 }
     }
 
     p1 := point.child_point_head
     if !is_point_index_in_bounds(p1) {
-        return core.Kine_Shape_Line{ -1, -1, -1 }
+        return core.Shapes_Line{ -1, -1, -1 }
     }
     p2 := state^.point_system^.points[p1].next_child_point
     if !is_point_index_in_bounds(p2) {
-        return core.Kine_Shape_Line{ -1, -1, -1 }
+        return core.Shapes_Line{ -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Line{ host, p1, p2 }
+    return core.Shapes_Line{ host, p1, p2 }
 }
 
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
@@ -1037,29 +1037,29 @@ get_shape_line_view :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_circle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Circle {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Circle {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Circle{ -1, -1, -1 }
+        return core.Shapes_Circle{ -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .Circle {
-        return core.Kine_Shape_Circle{ -1, -1, -1 }
+        return core.Shapes_Circle{ -1, -1, -1 }
     }
 
     start := point.child_point_head
     if !is_point_index_in_bounds(start) {
-        return core.Kine_Shape_Circle{ -1, -1, -1 }
+        return core.Shapes_Circle{ -1, -1, -1 }
     }
     finish := state^.point_system^.points[start].next_child_point
     if !is_point_index_in_bounds(finish) {
-        return core.Kine_Shape_Circle{ -1, -1, -1 }
+        return core.Shapes_Circle{ -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Circle{ host, start, finish }
+    return core.Shapes_Circle{ host, start, finish }
 }
 
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
@@ -1072,29 +1072,29 @@ get_shape_circle_view :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_filledcircle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Filled_Circle {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Filled_Circle {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Filled_Circle{ -1, -1, -1 }
+        return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .FilledCircle {
-        return core.Kine_Shape_Filled_Circle{ -1, -1, -1 }
+        return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
 
     start := point.child_point_head
     if !is_point_index_in_bounds(start) {
-        return core.Kine_Shape_Filled_Circle{ -1, -1, -1 }
+        return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
     finish := state^.point_system^.points[start].next_child_point
     if !is_point_index_in_bounds(finish) {
-        return core.Kine_Shape_Filled_Circle{ -1, -1, -1 }
+        return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Filled_Circle{ host, start, finish }
+    return core.Shapes_Filled_Circle{ host, start, finish }
 }
 
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
@@ -1107,33 +1107,33 @@ get_shape_filledcircle_view :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_triangle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Triangle {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Triangle {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Triangle{ -1, -1, -1, -1 }
+        return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .Triangle {
-        return core.Kine_Shape_Triangle{ -1, -1, -1, -1 }
+        return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
 
     p1 := point.child_point_head
     if !is_point_index_in_bounds(p1) {
-        return core.Kine_Shape_Triangle{ -1, -1, -1, -1 }
+        return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
     p2 := state^.point_system^.points[p1].next_child_point
     if !is_point_index_in_bounds(p2) {
-        return core.Kine_Shape_Triangle{ -1, -1, -1, -1 }
+        return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
     p3 := state^.point_system^.points[p2].next_child_point
     if !is_point_index_in_bounds(p3) {
-        return core.Kine_Shape_Triangle{ -1, -1, -1, -1 }
+        return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Triangle{ host, p1, p2, p3 }
+    return core.Shapes_Triangle{ host, p1, p2, p3 }
 }
 
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
@@ -1146,37 +1146,37 @@ get_shape_triangle_view :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_square_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Square {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Square {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .Square {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
 
     p1 := point.child_point_head
     if !is_point_index_in_bounds(p1) {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
     p2 := state^.point_system^.points[p1].next_child_point
     if !is_point_index_in_bounds(p2) {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
     p3 := state^.point_system^.points[p2].next_child_point
     if !is_point_index_in_bounds(p3) {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
     p4 := state^.point_system^.points[p3].next_child_point
     if !is_point_index_in_bounds(p4) {
-        return core.Kine_Shape_Square{ -1, -1, -1, -1, -1 }
+        return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Square{ host, p1, p2, p3, p4 }
+    return core.Shapes_Square{ host, p1, p2, p3, p4 }
 }
 
 //   Resolve a typed shape view from a host point and validate expected child linkage indices.
@@ -1189,40 +1189,40 @@ get_shape_square_view :: proc "c" (
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_pentagon_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Kine_Shape_Pentagon {
+    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Pentagon {
 
     context = state^.saved_context
     host := int(hostId)
     if !is_point_index_in_bounds(host) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
     if point.kind != .Pentagon {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
 
     p1 := point.child_point_head
     if !is_point_index_in_bounds(p1) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
     p2 := state^.point_system^.points[p1].next_child_point
     if !is_point_index_in_bounds(p2) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
     p3 := state^.point_system^.points[p2].next_child_point
     if !is_point_index_in_bounds(p3) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
     p4 := state^.point_system^.points[p3].next_child_point
     if !is_point_index_in_bounds(p4) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
     p5 := state^.point_system^.points[p4].next_child_point
     if !is_point_index_in_bounds(p5) {
-        return core.Kine_Shape_Pentagon{ -1, -1, -1, -1, -1, -1 }
+        return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }
 
-    return core.Kine_Shape_Pentagon{ host, p1, p2, p3, p4, p5 }
+    return core.Shapes_Pentagon{ host, p1, p2, p3, p4, p5 }
 }
 

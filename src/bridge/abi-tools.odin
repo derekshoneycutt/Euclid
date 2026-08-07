@@ -2,7 +2,7 @@ package bridge
 
 import "../core"
 import "../particles"
-import "../kine"
+import "../shapes"
 
 import rl "vendor:raylib"
 
@@ -14,7 +14,7 @@ import rl "vendor:raylib"
 // Returns:
 //   - Current pen handle, including host and joint indices.
 @(export)
-get_pen_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Shape_Pen {
+get_pen_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Shapes_Pen {
     return state^.pen
 }
 
@@ -26,7 +26,7 @@ get_pen_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Shape_
 // Returns:
 //   - Current compass handle, including host, pivot, and joint indices.
 @(export)
-get_compass_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Shape_Compass {
+get_compass_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Shapes_Compass {
     return state^.compass
 }
 
@@ -38,7 +38,7 @@ get_compass_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Kine_Sh
 // Returns:
 //   - Animation point-start index.
 @(export)
-get_kine_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+get_Shapes_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     return i32(state^.point_system^.anim_points_start)
 }
 
@@ -50,7 +50,7 @@ get_kine_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i3
 // Returns:
 //   - Animation constraint-start index.
 @(export)
-get_kine_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+get_Shapes_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     return i32(state^.point_system^.anim_constraints_start)
 }
 
@@ -62,9 +62,9 @@ get_kine_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) 
 // Returns:
 //   - BRIDGE_STATUS_OK after boundary indices are captured.
 @(export)
-freeze_kine_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+freeze_Shapes_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    kine.kine_freeze_system_indices(state^.point_system)
+    shapes.freeze_system_indices(state^.point_system)
     return BRIDGE_STATUS_OK
 }
 
@@ -76,28 +76,28 @@ freeze_kine_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -
 // Returns:
 //   - BRIDGE_STATUS_OK after animation data is cleared.
 @(export)
-clear_kine_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+clear_Shapes_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    kine.kine_clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
     return BRIDGE_STATUS_OK
 }
 
 //   Read compile-time point capacity exposed by the bridge ABI.
 //
 // Returns:
-//   - Maximum number of kine points.
+//   - Maximum number of shapes points.
 @(export)
-get_max_kine_points :: proc "c" () -> i32 {
-    return i32(MAX_KINEPOINTS)
+get_max_Shapes_points :: proc "c" () -> i32 {
+    return i32(MAX_SHAPESPOINTS)
 }
 
 //   Read compile-time constraint capacity exposed by the bridge ABI.
 //
 // Returns:
-//   - Maximum number of kine constraints.
+//   - Maximum number of shapes constraints.
 @(export)
-get_max_kine_constraints :: proc "c" () -> i32 {
-    return i32(MAX_KINECONSTRAINTS)
+get_max_Shapes_constraints :: proc "c" () -> i32 {
+    return i32(MAX_SHAPESCONSTRAINTS)
 }
 
 //   Validate point child chains and enabled constraint references.
@@ -110,10 +110,10 @@ get_max_kine_constraints :: proc "c" () -> i32 {
 //   - BRIDGE_STATUS_INVALID_GRAPH when a child chain fails validation.
 //   - BRIDGE_STATUS_INVALID_CONSTRAINT when enabled constraints reference invalid indices.
 @(export)
-validate_kine_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+validate_Shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
 
-    for i in 0..<MAX_KINEPOINTS {
+    for i in 0..<MAX_SHAPESPOINTS {
         point := state^.point_system^.points[i]
         if point.child_point_head >= 0 {
             validateStatus := validate_parent_child_chain(state, i32(i))
@@ -123,7 +123,7 @@ validate_kine_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
         }
     }
 
-    for i in 0..<MAX_KINECONSTRAINTS {
+    for i in 0..<MAX_SHAPESCONSTRAINTS {
         constraint := state^.point_system^.constraints[i]
         if constraint.do_apply {
             if !is_point_index_in_bounds(constraint.on_point) {
@@ -146,7 +146,7 @@ validate_kine_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
 @(export)
 show_pen :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.pen.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = true
     }
 }
@@ -158,7 +158,7 @@ show_pen :: proc "c" (state: ^core.Euclid_General_State) {
 @(export)
 hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.pen.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = false
     }
 }
@@ -174,7 +174,7 @@ set_pen_active :: proc "c" (
     state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
 
     index := state^.pen.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].active_color = rlColor
         state^.point_system^.points[index].active_child = active
@@ -190,7 +190,7 @@ clear_pen_active :: proc "c" (
     state: ^core.Euclid_General_State) {
 
     index := state^.pen.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].active_child = -1
     }
 }
@@ -237,10 +237,10 @@ lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     context = state^.saved_context
     index := state^.pen.joint1_id
     constraintIndex := state^.pen.lock_point1_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
         state^.point_system^.constraints[constraintIndex].do_apply = true
     }
@@ -253,7 +253,7 @@ lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 @(export)
 unlock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.pen.lock_point1_id
-    if index >= 0 && index < MAX_KINECONSTRAINTS {
+    if index >= 0 && index < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[index].do_apply = false
     }
 }
@@ -267,7 +267,7 @@ unlock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
 move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
     context = state^.saved_context
     index := state^.pen.joint1_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
 }
@@ -282,7 +282,7 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 @(export)
 get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
     index := state^.pen.joint1_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
@@ -298,10 +298,10 @@ lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     context = state^.saved_context
     index := state^.pen.joint2_id
     constraintIndex := state^.pen.lock_point2_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
         state^.point_system^.constraints[constraintIndex].do_apply = true
     }
@@ -314,7 +314,7 @@ lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 @(export)
 unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.pen.lock_point2_id
-    if index >= 0 && index < MAX_KINECONSTRAINTS {
+    if index >= 0 && index < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[index].do_apply = false
     }
 }
@@ -328,7 +328,7 @@ unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
 move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
     context = state^.saved_context
     index := state^.pen.joint2_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
 }
@@ -343,7 +343,7 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 @(export)
 get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
     index := state^.pen.joint2_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
@@ -356,7 +356,7 @@ get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
 @(export)
 show_compass :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.compass.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = true
     }
 }
@@ -368,7 +368,7 @@ show_compass :: proc "c" (state: ^core.Euclid_General_State) {
 @(export)
 hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.compass.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = false
     }
 }
@@ -384,7 +384,7 @@ set_compass_active :: proc "c" (
     state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
 
     index := state^.compass.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].active_color = rlColor
         state^.point_system^.points[index].active_child = active
@@ -400,7 +400,7 @@ clear_compass_active :: proc "c" (
     state: ^core.Euclid_General_State) {
 
     index := state^.compass.host_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].active_child = -1
     }
 }
@@ -417,7 +417,7 @@ lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     pointIndex := state^.compass.joint1_id
     pivotIndex := state^.compass.pivot_id
     constraintIndex := state^.compass.lock_point1_id
-    if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
+    if pointIndex > 0 && pointIndex < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, pointIndex, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
@@ -430,7 +430,7 @@ lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
                 core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
         state^.point_system^.constraints[constraintIndex].do_apply = true
     }
@@ -443,7 +443,7 @@ lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 @(export)
 unlock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.compass.lock_point1_id
-    if index >= 0 && index < MAX_KINECONSTRAINTS {
+    if index >= 0 && index < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[index].do_apply = false
     }
 }
@@ -459,7 +459,7 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     context = state^.saved_context
     index := state^.compass.joint1_id
     pivotIndex := state^.compass.pivot_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
@@ -484,7 +484,7 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 @(export)
 get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
     index := state^.compass.joint1_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}
@@ -502,7 +502,7 @@ lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     pointIndex := state^.compass.joint2_id
     pivotIndex := state^.compass.pivot_id
     constraintIndex := state^.compass.lock_point2_id
-    if pointIndex > 0 && pointIndex < MAX_KINEPOINTS {
+    if pointIndex > 0 && pointIndex < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, pointIndex, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
@@ -515,7 +515,7 @@ lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
                 core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_KINECONSTRAINTS {
+    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[constraintIndex].restriction = pos
         state^.point_system^.constraints[constraintIndex].do_apply = true
     }
@@ -528,7 +528,7 @@ lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 @(export)
 unlock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
     index := state^.compass.lock_point2_id
-    if index >= 0 && index < MAX_KINECONSTRAINTS {
+    if index >= 0 && index < MAX_SHAPESCONSTRAINTS {
         state^.point_system^.constraints[index].do_apply = false
     }
 }
@@ -544,7 +544,7 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
     context = state^.saved_context
     index := state^.compass.joint2_id
     pivotIndex := state^.compass.pivot_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
@@ -569,7 +569,7 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 @(export)
 get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
     index := state^.compass.joint2_id
-    if index >= 0 && index < MAX_KINEPOINTS {
+    if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
     return {0, 0, 0}

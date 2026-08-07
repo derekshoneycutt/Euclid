@@ -1,4 +1,4 @@
-package kine
+package shapes
 
 // The major system calls for the shape system are for creating the immediate draw cache.
 // This just builds the cache into the existing point system.
@@ -12,38 +12,38 @@ import rl "vendor:raylib"
 
 DRAW_CACHE_SORT_FLAT_EPSILON :: 1e-5
 
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
-MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+MAX_SHAPESCONSTRAINTS :: core.MAX_SHAPESCONSTRAINTS
 
 Vector3 :: core.Vector3
-Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
-Kine_Shape_Point :: core.Kine_Shape_Point
+Shapes_Point_Type :: core.Shapes_Point_Type
+Shapes_Point :: core.Shapes_Point
 
-Kine_Constraint_Kind :: core.Kine_Constraint_Kind
-Kine_Constraint :: core.Kine_Constraint
-Kine_Point_System :: core.Kine_Point_System
+Shapes_Constraint_Kind :: core.Shapes_Constraint_Kind
+Shapes_Constraint :: core.Shapes_Constraint
+Shapes_Point_System :: core.Shapes_Point_System
 
-Kine_Shape_Compass :: core.Kine_Shape_Compass
-Kine_Shape_Pen :: core.Kine_Shape_Pen
-Kine_Shape_Line :: core.Kine_Shape_Line
-Kine_Shape_Circle :: core.Kine_Shape_Circle
-Kine_Shape_Filled_Circle :: core.Kine_Shape_Filled_Circle
-Kine_Shape_Triangle :: core.Kine_Shape_Triangle
-Kine_Shape_Square :: core.Kine_Shape_Square
-Kine_Shape_Pentagon :: core.Kine_Shape_Pentagon
+Shapes_Compass :: core.Shapes_Compass
+Shapes_Pen :: core.Shapes_Pen
+Shapes_Line :: core.Shapes_Line
+Shapes_Circle :: core.Shapes_Circle
+Shapes_Filled_Circle :: core.Shapes_Filled_Circle
+Shapes_Triangle :: core.Shapes_Triangle
+Shapes_Square :: core.Shapes_Square
+Shapes_Pentagon :: core.Shapes_Pentagon
 
-Kine_Draw_Base :: core.Kine_Draw_Base
-Kine_Label_Draw :: core.Kine_Label_Draw
-Kine_Point_Draw :: core.Kine_Point_Draw
-Kine_Line_Draw :: core.Kine_Line_Draw
-Kine_Circle_Draw :: core.Kine_Circle_Draw
-Kine_Filled_Circle_Draw :: core.Kine_Filled_Circle_Draw
-Kine_Polygon_Draw :: core.Kine_Polygon_Draw
-Kine_Polygon_Ring_Node :: core.Kine_Polygon_Ring_Node
-Kine_Polygon_Triangle :: core.Kine_Polygon_Triangle
-Kine_Pen_Draw :: core.Kine_Pen_Draw
-Kine_Compass_Draw :: core.Kine_Compass_Draw
-Kine_Draw_Cache_Item :: core.Kine_Draw_Cache_Item
+Shapes_Draw_Base :: core.Shapes_Draw_Base
+Shapes_Label_Draw :: core.Shapes_Label_Draw
+Shapes_Point_Draw :: core.Shapes_Point_Draw
+Shapes_Line_Draw :: core.Shapes_Line_Draw
+Shapes_Circle_Draw :: core.Shapes_Circle_Draw
+Shapes_Filled_Circle_Draw :: core.Shapes_Filled_Circle_Draw
+Shapes_Polygon_Draw :: core.Shapes_Polygon_Draw
+Shapes_Polygon_Ring_Node :: core.Shapes_Polygon_Ring_Node
+Shapes_Polygon_Triangle :: core.Shapes_Polygon_Triangle
+Shapes_Pen_Draw :: core.Shapes_Pen_Draw
+Shapes_Compass_Draw :: core.Shapes_Compass_Draw
+Shapes_Draw_Cache_Item :: core.Shapes_Draw_Cache_Item
 
 //   Snapshot current point positions into per-point previous_position for interpolation.
 //
@@ -52,8 +52,8 @@ Kine_Draw_Cache_Item :: core.Kine_Draw_Cache_Item
 //
 // Returns:
 //   - none.
-kine_update_last_cache_vectors :: proc(
-    point_system: ^Kine_Point_System) {
+update_last_cache_vectors :: proc(
+    point_system: ^Shapes_Point_System) {
 
     for i in 0..<point_system^.next_point_index {
         point_system^.points[i].previous_position = point_system^.points[i].position
@@ -67,8 +67,8 @@ kine_update_last_cache_vectors :: proc(
 //
 // Returns:
 //   - none.
-kine_freeze_system_indices :: proc(
-    point_system: ^Kine_Point_System) {
+freeze_system_indices :: proc(
+    point_system: ^Shapes_Point_System) {
 
     point_system^.anim_points_start = point_system^.next_point_index
     point_system^.anim_constraints_start = point_system^.next_constraint_index
@@ -82,18 +82,18 @@ kine_freeze_system_indices :: proc(
 //
 // Returns:
 //   - none.
-kine_clear_animation_data :: proc(
-    point_system: ^Kine_Point_System,
+clear_animation_data :: proc(
+    point_system: ^Shapes_Point_System,
     particle_system: ^core.Particle_System,
     iso_scale: ^core.Iso_Scale = nil) {
 
-    particles.emit_kine_clear_burst(particle_system, point_system, iso_scale)
+    particles.emit_shapes_clear_burst(particle_system, point_system, iso_scale)
 
-    for i in point_system^.anim_points_start..<MAX_KINEPOINTS {
+    for i in point_system^.anim_points_start..<MAX_SHAPESPOINTS {
         point_system^.points[i] = {}
         point_system^.points[i].do_draw = false
     }
-    for i in point_system^.anim_constraints_start..<MAX_KINECONSTRAINTS {
+    for i in point_system^.anim_constraints_start..<MAX_SHAPESCONSTRAINTS {
         point_system^.constraints[i] = {}
         point_system^.constraints[i].do_apply = false
     }
@@ -110,11 +110,11 @@ kine_clear_animation_data :: proc(
 //
 // Returns:
 //   - none.
-build_kine_draw_cache :: proc(
-    point_system: ^Kine_Point_System,
+build_draw_cache :: proc(
+    point_system: ^Shapes_Point_System,
     alpha: f32) {
 
-    kine_draw_cache_reset(point_system)
+    draw_cache_reset(point_system)
 
     for index in 0..<point_system^.next_point_index {
         src := &point_system^.points[index]
@@ -125,14 +125,14 @@ build_kine_draw_cache :: proc(
         cache_push_draw_item(point_system, index, src, alpha)
     }
 
-    sort_kine_draw_cache_low(point_system)
+    sort_draw_cache_low(point_system)
 }
 
 
 
 //   Reset draw-cache counters and tool draw flags before cache rebuild.
-kine_draw_cache_reset :: proc(
-    point_system: ^Kine_Point_System) {
+draw_cache_reset :: proc(
+    point_system: ^Shapes_Point_System) {
 
     point_system^.draw_cache.item_count = 0
     point_system^.draw_cache.polygon_vertex_count = 0
@@ -158,8 +158,8 @@ draw_cache_visual_depth :: #force_inline proc(point: Vector3) -> f32 {
 
 //   Compute one polygon centroid and whether all cached polygon vertices are flat.
 draw_cache_polygon_centroid_and_flatness :: proc(
-    point_system: ^Kine_Point_System,
-    poly: ^Kine_Polygon_Draw) -> (Vector3, bool) {
+    point_system: ^Shapes_Point_System,
+    poly: ^Shapes_Polygon_Draw) -> (Vector3, bool) {
 
     if poly^.vertex_count <= 0 {
         return {}, false
@@ -182,14 +182,14 @@ draw_cache_polygon_centroid_and_flatness :: proc(
 }
 
 //   Return representative depth and flatness for one cached line item.
-draw_cache_line_depth_and_flatness :: #force_inline proc(line: Kine_Line_Draw) -> (f32, bool) {
+draw_cache_line_depth_and_flatness :: #force_inline proc(line: Shapes_Line_Draw) -> (f32, bool) {
     midpoint := (line.point1 + line.point2) * 0.5
     flat := draw_cache_point_is_flat(line.point1) && draw_cache_point_is_flat(line.point2)
     return draw_cache_visual_depth(midpoint), flat
 }
 
 //   Return representative depth and flatness for one cached circle item.
-draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Kine_Circle_Draw) -> (f32, bool) {
+draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Shapes_Circle_Draw) -> (f32, bool) {
     flat := draw_cache_point_is_flat(circle.center) &&
         draw_cache_point_is_flat(circle.start) &&
         draw_cache_point_is_flat(circle.end)
@@ -197,7 +197,7 @@ draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Kine_Circle_D
 }
 
 //   Return representative depth and flatness for one cached filled-circle item.
-draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Kine_Filled_Circle_Draw) -> (f32, bool) {
+draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Shapes_Filled_Circle_Draw) -> (f32, bool) {
     flat := draw_cache_point_is_flat(circle.center) &&
         draw_cache_point_is_flat(circle.start) &&
         draw_cache_point_is_flat(circle.end)
@@ -205,14 +205,14 @@ draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Kine_Fi
 }
 
 //   Return representative depth and flatness for one cached pen item.
-draw_cache_pen_depth_and_flatness :: #force_inline proc(pen: Kine_Pen_Draw) -> (f32, bool) {
+draw_cache_pen_depth_and_flatness :: #force_inline proc(pen: Shapes_Pen_Draw) -> (f32, bool) {
     midpoint := (pen.joint1 + pen.joint2) * 0.5
     flat := draw_cache_point_is_flat(pen.joint1) && draw_cache_point_is_flat(pen.joint2)
     return draw_cache_visual_depth(midpoint), flat
 }
 
 //   Return representative depth and flatness for one cached compass item.
-draw_cache_compass_depth_and_flatness :: #force_inline proc(compass: Kine_Compass_Draw) -> (f32, bool) {
+draw_cache_compass_depth_and_flatness :: #force_inline proc(compass: Shapes_Compass_Draw) -> (f32, bool) {
     centroid := (compass.joint1 + compass.pivot + compass.joint2) / 3.0
     flat := draw_cache_point_is_flat(compass.joint1) &&
         draw_cache_point_is_flat(compass.pivot) &&
@@ -226,20 +226,20 @@ draw_cache_compass_depth_and_flatness :: #force_inline proc(compass: Kine_Compas
 //   - Flat items are later kept in authored creation order when compared to
 //     other flat items.
 draw_cache_item_depth_and_flatness :: proc(
-    point_system: ^Kine_Point_System,
-    item: ^Kine_Draw_Cache_Item) -> (f32, bool) {
+    point_system: ^Shapes_Point_System,
+    item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
     switch &typed in item {
-    case Kine_Label_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
-    case Kine_Point_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
-    case Kine_Line_Draw: return draw_cache_line_depth_and_flatness(typed)
-    case Kine_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
-    case Kine_Filled_Circle_Draw: return draw_cache_filledcircle_depth_and_flatness(typed)
-    case Kine_Polygon_Draw:
+    case Shapes_Label_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
+    case Shapes_Point_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
+    case Shapes_Line_Draw: return draw_cache_line_depth_and_flatness(typed)
+    case Shapes_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
+    case Shapes_Filled_Circle_Draw: return draw_cache_filledcircle_depth_and_flatness(typed)
+    case Shapes_Polygon_Draw:
         centroid, flat := draw_cache_polygon_centroid_and_flatness(point_system, &typed)
         return draw_cache_visual_depth(centroid), flat
-    case Kine_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
-    case Kine_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
+    case Shapes_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
+    case Shapes_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
     case:
         return 0, false
     }
@@ -274,14 +274,14 @@ draw_cache_item_should_precede :: #force_inline proc(
 //   - Applies only whole-primitive painter ordering; it does not split
 //     primitives or solve exact visibility.
 //   - Fully flat `z = 0` items keep their authored creation order.
-sort_kine_draw_cache_low :: proc(point_system: ^Kine_Point_System) {
+sort_draw_cache_low :: proc(point_system: ^Shapes_Point_System) {
     item_count := point_system^.draw_cache.item_count
     if item_count <= 1 {
         return
     }
 
-    depths: [MAX_KINEPOINTS]f32
-    flats: [MAX_KINEPOINTS]bool
+    depths: [MAX_SHAPESPOINTS]f32
+    flats: [MAX_SHAPESPOINTS]bool
 
     for i in 0..<item_count {
         depths[i], flats[i] = draw_cache_item_depth_and_flatness(
@@ -322,11 +322,11 @@ sort_kine_draw_cache_low :: proc(point_system: ^Kine_Point_System) {
 // Notes:
 //   - Falls back to current position when previous vector is unavailable.
 lerped_point_position :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     index: int,
     alpha: f32) -> (Vector3, bool) {
 
-    if index < 0 || index >= MAX_KINEPOINTS {
+    if index < 0 || index >= MAX_SHAPESPOINTS {
         return {}, false
     }
 
@@ -345,8 +345,8 @@ lerped_point_position :: proc(
 // Notes:
 //   - src.child_point_head is used as the first child index.
 lerped_child_positions :: proc(
-    point_system: ^Kine_Point_System,
-    src: ^Kine_Shape_Point,
+    point_system: ^Shapes_Point_System,
+    src: ^Shapes_Point,
     alpha: f32,
     out: []Vector3) -> bool {
 
@@ -363,7 +363,7 @@ lerped_child_positions :: proc(
         out[i] = point
 
         if i + 1 < len(out) {
-            if child_index < 0 || child_index >= MAX_KINEPOINTS {
+            if child_index < 0 || child_index >= MAX_SHAPESPOINTS {
                 return false
             }
             child_index = point_system^.points[child_index].next_child_point
@@ -375,7 +375,7 @@ lerped_child_positions :: proc(
 
 //   Reserve and return the next draw-cache item slot.
 draw_cache_next_item_slot :: #force_inline proc(
-    point_system: ^Kine_Point_System) -> (^Kine_Draw_Cache_Item, bool) {
+    point_system: ^Shapes_Point_System) -> (^Shapes_Draw_Cache_Item, bool) {
 
     if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
         return nil, false
@@ -388,7 +388,7 @@ draw_cache_next_item_slot :: #force_inline proc(
 
 //   Reserve a contiguous polygon vertex range in the draw-cache pool.
 draw_cache_reserve_polygon_vertices :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     count: int) -> (int, bool) {
 
     if count <= 0 {
@@ -406,7 +406,7 @@ draw_cache_reserve_polygon_vertices :: #force_inline proc(
 
 //   Reserve a contiguous polygon triangle range in the draw-cache pool.
 draw_cache_reserve_polygon_triangles :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     count: int) -> (int, bool) {
 
     if count <= 0 {
@@ -425,12 +425,12 @@ draw_cache_reserve_polygon_triangles :: #force_inline proc(
 //   Build the common draw-base metadata shared by cached draw item variants.
 make_draw_base :: #force_inline proc(
     source_index: int,
-    src: ^Kine_Shape_Point) -> Kine_Draw_Base {
+    src: ^Shapes_Point) -> Shapes_Draw_Base {
 
     color := src^.color.? or_else rl.WHITE
     active_color, has_active_color := src^.active_color.?
 
-    return Kine_Draw_Base{
+    return Shapes_Draw_Base{
         kind = src^.kind,
         source_index = source_index,
         brush_size = src^.brush_size,
@@ -481,14 +481,14 @@ point_in_triangle_xy :: #force_inline proc(p, a, b, c: Vector3) -> bool {
 
 //   Append one triangle into the cached polygon triangle index pool.
 emit_polygon_triangle :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     triangle_start: int,
     triangle_count: ^int,
     base_vertex: int,
     a, b, c: int) {
 
     write_index := triangle_start + triangle_count^
-    point_system^.draw_cache.polygon_triangles[write_index] = Kine_Polygon_Triangle{
+    point_system^.draw_cache.polygon_triangles[write_index] = Shapes_Polygon_Triangle{
         base_vertex + a,
         base_vertex + b,
         base_vertex + c,
@@ -498,7 +498,7 @@ emit_polygon_triangle :: #force_inline proc(
 
 //   Initialize an active doubly-linked ring over count polygon vertices.
 init_polygon_ring_nodes :: #force_inline proc(
-    ring: []Kine_Polygon_Ring_Node,
+    ring: []Shapes_Polygon_Ring_Node,
     count: int) {
 
     for i in 0..<count {
@@ -512,13 +512,13 @@ init_polygon_ring_nodes :: #force_inline proc(
             next = 0
         }
 
-        ring[i] = Kine_Polygon_Ring_Node{ prev, next, true }
+        ring[i] = Shapes_Polygon_Ring_Node{ prev, next, true }
     }
 }
 
 //   Return true when node is a valid ear candidate under current winding.
 is_polygon_ear_node :: #force_inline proc(
-    ring: []Kine_Polygon_Ring_Node,
+    ring: []Shapes_Polygon_Ring_Node,
     vertices: []Vector3,
     node, prev, next: int,
     want_ccw: bool) -> bool {
@@ -551,8 +551,8 @@ is_polygon_ear_node :: #force_inline proc(
 
 //   Emit the final triangle from the remaining active 3-node ring.
 emit_polygon_last_ring_triangle :: #force_inline proc(
-    point_system: ^Kine_Point_System,
-    ring: []Kine_Polygon_Ring_Node,
+    point_system: ^Shapes_Point_System,
+    ring: []Shapes_Polygon_Ring_Node,
     count: int,
     node: int,
     want_ccw: bool,
@@ -595,7 +595,7 @@ emit_polygon_last_ring_triangle :: #force_inline proc(
 
 //   Emit fallback fan triangulation for degenerate/non-ear-clippable polygons.
 emit_polygon_fallback_fan :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     count: int,
     want_ccw: bool,
     triangle_start: int,
@@ -627,8 +627,8 @@ emit_polygon_fallback_fan :: #force_inline proc(
 
 //   Run the main ear-removal loop and return remaining active ring node count.
 triangulate_polygon_ear_loop :: #force_inline proc(
-    point_system: ^Kine_Point_System,
-    ring: []Kine_Polygon_Ring_Node,
+    point_system: ^Shapes_Point_System,
+    ring: []Shapes_Polygon_Ring_Node,
     vertices: []Vector3,
     count: int,
     want_ccw: bool,
@@ -673,7 +673,7 @@ triangulate_polygon_ear_loop :: #force_inline proc(
 
 //   Triangulate a polygon into cached triangle indices using ear clipping.
 triangulate_polygon_ear_clip :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     base_vertex: int,
     vertices: []Vector3,
     triangle_start: int) -> int {
@@ -725,7 +725,7 @@ triangulate_polygon_ear_clip :: proc(
 
 //   Reserve vertex and triangle cache ranges for one polygon draw item.
 reserve_polygon_cache_ranges :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     vertex_count: int) -> (int, int, int, bool) {
 
     first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices(
@@ -749,7 +749,7 @@ reserve_polygon_cache_ranges :: #force_inline proc(
 
 //   Roll back previously reserved polygon cache ranges.
 rollback_polygon_cache_ranges :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     vertex_count: int,
     reserved_triangle_count: int) {
 
@@ -759,7 +759,7 @@ rollback_polygon_cache_ranges :: #force_inline proc(
 
 //   Shrink reserved triangle range to the actual emitted triangle count.
 finalize_polygon_triangle_reservation :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     first_triangle: int,
     triangle_count: int) {
 
@@ -769,9 +769,9 @@ finalize_polygon_triangle_reservation :: #force_inline proc(
 
 //   Dispatch one visible point-system shape into its cached draw-item representation.
 cache_push_draw_item :: #force_inline proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     switch src^.kind {
@@ -792,9 +792,9 @@ cache_push_draw_item :: #force_inline proc(
 
 //   Push a cached label draw item into the draw-cache item list.
 cache_push_label :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     p0, has_position := lerped_point_position(point_system, source_index, alpha)
@@ -812,15 +812,15 @@ cache_push_label :: proc(
         return
     }
 
-    point := Kine_Label_Draw{ make_draw_base(source_index, src), p0, label, src^.decoration_kind }
+    point := Shapes_Label_Draw{ make_draw_base(source_index, src), p0, label, src^.decoration_kind }
     slot^ = point
 }
 
 //   Push a cached point draw item into the draw-cache item list.
 cache_push_point :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     p0, ok := lerped_point_position(point_system, source_index, alpha)
@@ -833,15 +833,15 @@ cache_push_point :: proc(
         return
     }
 
-    point := Kine_Point_Draw{ make_draw_base(source_index, src), p0 }
+    point := Shapes_Point_Draw{ make_draw_base(source_index, src), p0 }
     slot^ = point
 }
 
 //   Push a cached line draw item into the draw-cache item list.
 cache_push_line :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     child_points: [2]Vector3
@@ -854,7 +854,7 @@ cache_push_line :: proc(
         return
     }
 
-    point := Kine_Line_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
+    point := Shapes_Line_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
     slot^ = point
 }
 
@@ -863,9 +863,9 @@ cache_push_line :: proc(
 // Notes:
 //   - Honors active_child orientation by swapping start/end when required.
 cache_push_circle :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     center, ok := lerped_point_position(point_system, source_index, alpha)
@@ -890,7 +890,7 @@ cache_push_circle :: proc(
         return
     }
 
-    point := Kine_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
+    point := Shapes_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
     slot^ = point
 }
 
@@ -899,9 +899,9 @@ cache_push_circle :: proc(
 // Notes:
 //   - Honors active_child orientation by swapping start/end when required.
 cache_push_filledcircle :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     center, ok := lerped_point_position(point_system, source_index, alpha)
@@ -926,15 +926,15 @@ cache_push_filledcircle :: proc(
         return
     }
 
-    point := Kine_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
+    point := Shapes_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
     slot^ = point
 }
 
 //   Push a cached polygon draw item into the draw-cache item list.
 cache_push_polygon :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     vertex_count := src^.child_count
@@ -969,7 +969,7 @@ cache_push_polygon :: proc(
         return
     }
 
-    point := Kine_Polygon_Draw{
+    point := Shapes_Polygon_Draw{
         make_draw_base(source_index, src),
         first_vertex,
         vertex_count,
@@ -981,9 +981,9 @@ cache_push_polygon :: proc(
 
 //   Update cached pen tool draw data and pen draw-enable flag.
 cache_push_pen :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     child_points: [2]Vector3
@@ -991,7 +991,7 @@ cache_push_pen :: proc(
         return
     }
 
-    point := Kine_Pen_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
+    point := Shapes_Pen_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
     point_system^.draw_cache.pen = point
     point_system^.draw_cache.draw_pen = src^.do_draw
 
@@ -1005,9 +1005,9 @@ cache_push_pen :: proc(
 
 //   Update cached compass tool draw data and compass draw-enable flag.
 cache_push_compass :: proc(
-    point_system: ^Kine_Point_System,
+    point_system: ^Shapes_Point_System,
     source_index: int,
-    src: ^Kine_Shape_Point,
+    src: ^Shapes_Point,
     alpha: f32) {
 
     child_points: [3]Vector3
@@ -1015,7 +1015,7 @@ cache_push_compass :: proc(
         return
     }
 
-    point := Kine_Compass_Draw{
+    point := Shapes_Compass_Draw{
         make_draw_base(source_index, src),
         child_points[0],
         child_points[1],

@@ -9,7 +9,7 @@ import "../core"
 //
 // Returns:
 //   - Matching label decoration enum value, or .None for unsupported values.
-label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Kine_Label_Decoration_Kind {
+label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Shapes_Label_Decoration_Kind {
     switch kind {
     case BRIDGE_LABEL_DECORATION_PRIME:
         return .Prime

@@ -1,7 +1,7 @@
 package bridge
 
 import "../core"
-import "../kine"
+import "../shapes"
 
 //   Return compile-time capacity limits exposed by the bridge ABI.
 //
@@ -9,7 +9,7 @@ import "../kine"
 //   - Bridge integer value for the requested capability, index, or status code.
 @(export)
 get_constraint_capacity :: proc "c" () -> i32 {
-    return i32(MAX_KINECONSTRAINTS)
+    return i32(MAX_SHAPESCONSTRAINTS)
 }
 
 //   Return the next allocation index in the active runtime system for incremental creation.
@@ -115,12 +115,12 @@ create_constraint :: proc "c" (
     }
 
     nextIndex := state^.point_system^.next_constraint_index
-    if nextIndex < 0 || nextIndex >= MAX_KINECONSTRAINTS {
+    if nextIndex < 0 || nextIndex >= MAX_SHAPESCONSTRAINTS {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
 
-    state^.point_system^.constraints[nextIndex] = core.Kine_Constraint{
-        kind = core.Kine_Constraint_Kind(spec.traits),
+    state^.point_system^.constraints[nextIndex] = core.Shapes_Constraint{
+        kind = core.Shapes_Constraint_Kind(spec.traits),
         on_point = onPoint,
         restriction = spec.restriction,
         bounce = spec.bounce,
@@ -170,7 +170,7 @@ update_constraint :: proc "c" (
         if !is_valid_constraint_kind_value(spec.traits) {
             return BRIDGE_STATUS_INVALID_ARGUMENT
         }
-        constraint^.kind = core.Kine_Constraint_Kind(spec.traits)
+        constraint^.kind = core.Shapes_Constraint_Kind(spec.traits)
     }
     if specMask & CONSTRAINT_SPEC_ONPOINT != 0 {
         onPoint := int(spec.on_point)
@@ -273,7 +273,7 @@ clear_constraint :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> 
 get_total_constraint_error_bridge :: proc "c" (
     state: ^core.Euclid_General_State) -> f32 {
     context = state^.saved_context
-    return kine.get_total_constraint_error(state^.point_system)
+    return shapes.get_total_constraint_error(state^.point_system)
 }
 
 //   Expose constraint error measurements from the solver for Julia-side control logic.
@@ -300,7 +300,7 @@ get_constraint_error_bridge :: proc "c" (
     }
 
     constraint := &state^.point_system^.constraints[idx]
-    outError^ = kine.get_constraint_error(constraint, &state^.point_system^.points)
+    outError^ = shapes.get_constraint_error(constraint, &state^.point_system^.points)
     return BRIDGE_STATUS_OK
 }
 
@@ -327,7 +327,7 @@ apply_constraint_bridge :: proc "c" (
     }
 
     constraint := &state^.point_system^.constraints[idx]
-    kine.apply_constraint(constraint, &state^.point_system^.points)
+    shapes.apply_constraint(constraint, &state^.point_system^.points)
     return BRIDGE_STATUS_OK
 }
 
@@ -349,9 +349,9 @@ apply_all_constraints_bridge :: proc "c" (
     context = state^.saved_context
 
     if reverse != 0 {
-        kine.apply_all_constraints_reverse(state^.point_system)
+        shapes.apply_all_constraints_reverse(state^.point_system)
     } else {
-        kine.apply_all_constraints(state^.point_system)
+        shapes.apply_all_constraints(state^.point_system)
     }
     return BRIDGE_STATUS_OK
 }
@@ -392,7 +392,7 @@ solve_constraints_to_error :: proc "c" (
         iterationLimit = 4096
     }
 
-    initialError := kine.get_total_constraint_error(state^.point_system)
+    initialError := shapes.get_total_constraint_error(state^.point_system)
     if initialError <= allowableError {
         return Bridge_Solve_Result{
             status = BRIDGE_STATUS_OK,
@@ -408,13 +408,13 @@ solve_constraints_to_error :: proc "c" (
     iterations: i32 = 0
     for iterations < iterationLimit && error > allowableError {
         if reverse {
-            kine.apply_all_constraints_reverse(state^.point_system)
+            shapes.apply_all_constraints_reverse(state^.point_system)
         } else {
-            kine.apply_all_constraints(state^.point_system)
+            shapes.apply_all_constraints(state^.point_system)
         }
         reverse = !reverse
         iterations += 1
-        error = kine.get_total_constraint_error(state^.point_system)
+        error = shapes.get_total_constraint_error(state^.point_system)
     }
 
     converged := error <= allowableError

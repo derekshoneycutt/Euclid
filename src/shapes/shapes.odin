@@ -1,4 +1,4 @@
-package kine
+package shapes
 
 // We only create the shapes and their constraints here. It is pretty simple at that.
 
@@ -20,17 +20,17 @@ import rl "vendor:raylib"
 // Returns:
 //   - point: Pointer to the inserted point.
 //   - point_id: Index of the inserted point.
-init_kineshape_label :: proc(
-    system: ^Kine_Point_System,
+init_label :: proc(
+    system: ^Shapes_Point_System,
     label: rune,
-    decoration_kind: core.Kine_Label_Decoration_Kind,
+    decoration_kind: core.Shapes_Label_Decoration_Kind,
     pos : Vector3,
     color: rl.Color,
-    brush_size: f32) -> (^Kine_Shape_Point, int) {
+    brush_size: f32) -> (^Shapes_Point, int) {
 
     point_id := system^.next_point_index
     system^.points[point_id] =
-        Kine_Shape_Point{ .Label, pos, nil, color, nil, brush_size, 0, label, .None, 0, 0, 0, 0, false }
+        Shapes_Point{ .Label, pos, nil, color, nil, brush_size, 0, label, .None, 0, 0, 0, 0, false }
     system^.points[point_id].decoration_kind = decoration_kind
     system^.next_point_index += 1
 
@@ -48,15 +48,15 @@ init_kineshape_label :: proc(
 // Returns:
 //   - point: Pointer to the inserted point.
 //   - point_id: Index of the inserted point.
-init_kineshape_point :: proc(
-    system: ^Kine_Point_System,
+init_point :: proc(
+    system: ^Shapes_Point_System,
     pos : Vector3,
     color: rl.Color,
-    brush_size: f32) -> (^Kine_Shape_Point, int) {
+    brush_size: f32) -> (^Shapes_Point, int) {
 
     point_id := system^.next_point_index
     system^.points[point_id] =
-        Kine_Shape_Point{ .Point, pos, nil, color, nil, brush_size, 0, nil, .None, 0, 0, 0, 0, false }
+        Shapes_Point{ .Point, pos, nil, color, nil, brush_size, 0, nil, .None, 0, 0, 0, 0, false }
     system^.next_point_index += 1
 
     return &system^.points[point_id], point_id
@@ -73,15 +73,15 @@ init_kineshape_point :: proc(
 //
 // Returns:
 //   - line: Line shape indices for host and child points.
-init_kineshape_line :: proc(
-    system: ^Kine_Point_System,
+init_line :: proc(
+    system: ^Shapes_Point_System,
     point1_pos, point2_pos : Vector3,
     color: rl.Color,
-    brush_size: f32) -> Kine_Shape_Line {
+    brush_size: f32) -> Shapes_Line {
 
-    host_point := Kine_Shape_Point{ .Line, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Line, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
+    point1 := Shapes_Point{ .Point, point1_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, point2_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -94,7 +94,7 @@ init_kineshape_line :: proc(
     system^.points[point1_id] = point1
     system^.points[point2_id] = point2
 
-    return Kine_Shape_Line{ host_id, point1_id, point2_id }
+    return Shapes_Line{ host_id, point1_id, point2_id }
 }
 
 //   Create a circle shape host with start/end arc child points.
@@ -110,13 +110,13 @@ init_kineshape_line :: proc(
 //
 // Returns:
 //   - circle: Circle shape indices for host and child points.
-init_kineshape_circle :: proc(
-    system: ^Kine_Point_System,
+init_circle :: proc(
+    system: ^Shapes_Point_System,
     center_pos: Vector3,
     radius: f32,
     start_theta, end_theta: f32,
     color: rl.Color,
-    brush_size: f32) -> Kine_Shape_Circle {
+    brush_size: f32) -> Shapes_Circle {
 
     start_pos := Vector3{
         center_pos.x + radius * f32(math.cos(start_theta)),
@@ -130,9 +130,9 @@ init_kineshape_circle :: proc(
         center_pos.z,
     }
 
-    host_point := Kine_Shape_Point{ .Circle, center_pos, nil, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
-    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Circle, center_pos, nil, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
+    start_point := Shapes_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    end_point := Shapes_Point{ .Point, end_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     start_id := host_id + 1
@@ -146,7 +146,7 @@ init_kineshape_circle :: proc(
     system^.points[start_id] = start_point
     system^.points[end_id] = end_point
 
-    return Kine_Shape_Circle{
+    return Shapes_Circle{
         host_id, start_id, end_id }
 }
 
@@ -163,13 +163,13 @@ init_kineshape_circle :: proc(
 //
 // Returns:
 //   - filled_circle: Filled-circle shape indices for host and child points.
-init_kineshape_filledcircle :: proc(
-    system: ^Kine_Point_System,
+init_filledcircle :: proc(
+    system: ^Shapes_Point_System,
     center_pos: Vector3,
     radius: f32,
     start_theta, end_theta: f32,
     color: rl.Color,
-    brush_size: f32) -> Kine_Shape_Filled_Circle {
+    brush_size: f32) -> Shapes_Filled_Circle {
 
     start_pos := Vector3{
         center_pos.x + radius * f32(math.cos(start_theta)),
@@ -183,9 +183,9 @@ init_kineshape_filledcircle :: proc(
         center_pos.z,
     }
 
-    host_point := Kine_Shape_Point{ .FilledCircle, center_pos, nil, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
-    start_point := Kine_Shape_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    end_point := Kine_Shape_Point{ .Point, end_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .FilledCircle, center_pos, nil, color, nil, brush_size, 0, nil, .None, 1, 2, 0, 0, false }
+    start_point := Shapes_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    end_point := Shapes_Point{ .Point, end_pos, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     start_id := host_id + 1
@@ -199,7 +199,7 @@ init_kineshape_filledcircle :: proc(
     system^.points[start_id] = start_point
     system^.points[end_id] = end_point
 
-    return Kine_Shape_Filled_Circle{
+    return Shapes_Filled_Circle{
         host_id, start_id, end_id }
 }
 
@@ -214,15 +214,15 @@ init_kineshape_filledcircle :: proc(
 //
 // Returns:
 //   - triangle: Triangle shape indices for host and child points.
-init_kineshape_triangle :: proc(
-    system: ^Kine_Point_System,
+init_triangle :: proc(
+    system: ^Shapes_Point_System,
     point1, point2, point3: Vector3,
-    color: rl.Color) -> Kine_Shape_Triangle {
+    color: rl.Color) -> Shapes_Triangle {
 
-    host_point := Kine_Shape_Point{ .Triangle, nil, nil, color, nil, 0, 0, nil, .None, 0, 3, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Triangle, nil, nil, color, nil, 0, 0, nil, .None, 0, 3, 0, 0, false }
+    point1 := Shapes_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Shapes_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -238,7 +238,7 @@ init_kineshape_triangle :: proc(
     system^.points[point2_id] = point2
     system^.points[point3_id] = point3
 
-    return Kine_Shape_Triangle{ host_id, point1_id, point2_id, point3_id }
+    return Shapes_Triangle{ host_id, point1_id, point2_id, point3_id }
 }
 
 //   Create a square shape host plus four child points.
@@ -253,16 +253,16 @@ init_kineshape_triangle :: proc(
 //
 // Returns:
 //   - square: Square shape indices for host and child points.
-init_kineshape_square :: proc(
-    system: ^Kine_Point_System,
+init_square :: proc(
+    system: ^Shapes_Point_System,
     point1, point2, point3, point4: Vector3,
-    color: rl.Color) -> Kine_Shape_Square {
+    color: rl.Color) -> Shapes_Square {
 
-    host_point := Kine_Shape_Point{ .Square, nil, nil, color, nil, 0, 0, nil, .None, 0, 4, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Square, nil, nil, color, nil, 0, 0, nil, .None, 0, 4, 0, 0, false }
+    point1 := Shapes_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Shapes_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point4 := Shapes_Point{ .Point, point4, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -281,7 +281,7 @@ init_kineshape_square :: proc(
     system^.points[point3_id] = point3
     system^.points[point4_id] = point4
 
-    return Kine_Shape_Square{ host_id, point1_id, point2_id, point3_id, point4_id }
+    return Shapes_Square{ host_id, point1_id, point2_id, point3_id, point4_id }
 }
 
 //   Create a pentagon shape host plus five child points.
@@ -297,17 +297,17 @@ init_kineshape_square :: proc(
 //
 // Returns:
 //   - pentagon: Pentagon shape indices for host and child points.
-init_kineshape_pentagon :: proc(
-    system: ^Kine_Point_System,
+init_pentagon :: proc(
+    system: ^Shapes_Point_System,
     point1, point2, point3, point4, point5: Vector3,
-    color: rl.Color) -> Kine_Shape_Pentagon {
+    color: rl.Color) -> Shapes_Pentagon {
 
-    host_point := Kine_Shape_Point{ .Pentagon, nil, nil, color, nil, 0, 0, nil, .None, 0, 5, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point3 := Kine_Shape_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point4 := Kine_Shape_Point{ .Point, point4, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point5 := Kine_Shape_Point{ .Point, point5, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Pentagon, nil, nil, color, nil, 0, 0, nil, .None, 0, 5, 0, 0, false }
+    point1 := Shapes_Point{ .Point, point1, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, point2, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point3 := Shapes_Point{ .Point, point3, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point4 := Shapes_Point{ .Point, point4, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point5 := Shapes_Point{ .Point, point5, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
     point1_id := host_id + 1
@@ -329,7 +329,7 @@ init_kineshape_pentagon :: proc(
     system^.points[point4_id] = point4
     system^.points[point5_id] = point5
 
-    return Kine_Shape_Pentagon{ host_id, point1_id, point2_id, point3_id, point4_id, point5_id }
+    return Shapes_Pentagon{ host_id, point1_id, point2_id, point3_id, point4_id, point5_id }
 }
 
 //   Create a pen tool shape with floor and lock constraints.
@@ -342,15 +342,15 @@ init_kineshape_pentagon :: proc(
 //
 // Returns:
 //   - pen: Pen shape indices for points and related constraints.
-init_kineshape_pen :: proc(
-    system: ^Kine_Point_System,
+init_pen :: proc(
+    system: ^Shapes_Point_System,
     length_value: f32,
     color: rl.Color,
-    brush_size: f32) -> Kine_Shape_Pen {
+    brush_size: f32) -> Shapes_Pen {
 
-    host_point := Kine_Shape_Point{ .Pen, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Pen, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 2, 0, 0, false }
+    point1 := Shapes_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system.next_point_index
     point1_id := host_id + 1
@@ -359,13 +359,13 @@ init_kineshape_pen :: proc(
     host_point.child_point_head = point1_id
     point1.next_child_point = point2_id
 
-    length_constraint := Kine_Constraint{ .Distance, host_id, { length_value, 0, 0 }, 0, 0, 0, 0, true }
+    length_constraint := Shapes_Constraint{ .Distance, host_id, { length_value, 0, 0 }, 0, 0, 0, 0, true }
 
-    point1_floor := Kine_Constraint{ .Floor, point1_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
-    point2_floor := Kine_Constraint{ .Floor, point2_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
+    point1_floor := Shapes_Constraint{ .Floor, point1_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
+    point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
 
-    lock_point1 := Kine_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
-    lock_point2 := Kine_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
+    lock_point1 := Shapes_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
+    lock_point2 := Shapes_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
 
     length_id := system^.next_constraint_index
     system^.next_constraint_index += 5
@@ -380,7 +380,7 @@ init_kineshape_pen :: proc(
     system^.constraints[length_id + 3] = lock_point1
     system^.constraints[length_id + 4] = lock_point2
 
-    return Kine_Shape_Pen{ host_id, point1_id, point2_id,
+    return Shapes_Pen{ host_id, point1_id, point2_id,
         length_id, length_id + 1, length_id + 2, length_id + 3, length_id + 4 }
 }
 
@@ -394,16 +394,16 @@ init_kineshape_pen :: proc(
 //
 // Returns:
 //   - compass: Compass shape indices for points and related constraints.
-init_kineshape_compass :: proc(
-    system: ^Kine_Point_System,
+init_compass :: proc(
+    system: ^Shapes_Point_System,
     limb_length: f32,
     color: rl.Color,
-    brush_size: f32) -> Kine_Shape_Compass {
+    brush_size: f32) -> Shapes_Compass {
 
-    host_point := Kine_Shape_Point{ .Compass, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 3, 0, 0, false }
-    point1 := Kine_Shape_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    pivot := Kine_Shape_Point{ .Point, Vector3{0.01, 0.01, 0.01}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
-    point2 := Kine_Shape_Point{ .Point, Vector3{0.02, 0.02, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    host_point := Shapes_Point{ .Compass, nil, nil, color, nil, brush_size, 0, nil, .None, 0, 3, 0, 0, false }
+    point1 := Shapes_Point{ .Point, Vector3{0, 0, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    pivot := Shapes_Point{ .Point, Vector3{0.01, 0.01, 0.01}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
+    point2 := Shapes_Point{ .Point, Vector3{0.02, 0.02, 0}, nil, nil, nil, 0, 0, nil, .None, 0, 0, 0, 0, false }
 
     host_id := system.next_point_index
     point1_id := host_id + 1
@@ -414,17 +414,17 @@ init_kineshape_compass :: proc(
     point1.next_child_point = host_id + 2
     pivot.next_child_point = host_id + 3
 
-    center_pivot := Kine_Constraint{ .CenterPivot, host_id, { 0, 0, 0 }, 0.01, 0, 0, 0, true }
+    center_pivot := Shapes_Constraint{ .CenterPivot, host_id, { 0, 0, 0 }, 0.01, 0, 0, 0, true }
 
-    limb1_length := Kine_Constraint{ .Distance, host_id, { limb_length, 0, 0 }, 0, 0, 0, 0, true }
-    limb2_length := Kine_Constraint{ .Distance, host_id, { limb_length, 0, 0 }, 0, 0, 0, 1, true }
+    limb1_length := Shapes_Constraint{ .Distance, host_id, { limb_length, 0, 0 }, 0, 0, 0, 0, true }
+    limb2_length := Shapes_Constraint{ .Distance, host_id, { limb_length, 0, 0 }, 0, 0, 0, 1, true }
 
-    point1_floor := Kine_Constraint{ .Floor, point1_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
-    pivot_floor := Kine_Constraint{ .Floor, pivot_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
-    point2_floor := Kine_Constraint{ .Floor, point2_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
+    point1_floor := Shapes_Constraint{ .Floor, point1_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
+    pivot_floor := Shapes_Constraint{ .Floor, pivot_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
+    point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 }, 0, 0, 0, 0, true }
 
-    lock_point1 := Kine_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
-    lock_point2 := Kine_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
+    lock_point1 := Shapes_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
+    lock_point2 := Shapes_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 }, 0, 0, 0, nil, false }
 
     center_pivot_id := system^.next_constraint_index
     system^.next_constraint_index += 8
@@ -443,7 +443,7 @@ init_kineshape_compass :: proc(
     system^.constraints[center_pivot_id + 6] = lock_point1
     system^.constraints[center_pivot_id + 7] = lock_point2
 
-    return Kine_Shape_Compass{ host_id, point1_id, pivot_id, point2_id,
+    return Shapes_Compass{ host_id, point1_id, pivot_id, point2_id,
         center_pivot_id, center_pivot_id + 1, center_pivot_id + 2, center_pivot_id + 3,
         center_pivot_id + 4, center_pivot_id + 5, center_pivot_id + 6, center_pivot_id + 7 }
 }

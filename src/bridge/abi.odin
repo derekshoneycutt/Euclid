@@ -6,7 +6,7 @@ package bridge
 // Otherwise, the rest of Julia module is the Julia code.
 
 // We provide a basic Bridge version and feature flags capability for building onto.
-// Effort was made to wrap most of what the animations might need for now in the Kine
+// Effort was made to wrap most of what the animations might need for now in the Shapes
 // system especially, and also some access to particle system.
 // Doc comments are verbose in the julia companion to this, and methods are largely 1-to-1.
 
@@ -17,8 +17,8 @@ package bridge
 
 import "../core"
 
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
-MAX_KINECONSTRAINTS :: core.MAX_KINECONSTRAINTS
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+MAX_SHAPESCONSTRAINTS :: core.MAX_SHAPESCONSTRAINTS
 
 ANIMATION_RESET_MIN_INTERVAL :: 0.35
 FLOOR_CONTACT_Z_EPSILON :: 0.015
@@ -104,15 +104,15 @@ BRIDGE_DYNVIEW_FONT_FLAG_BOLD :: i32(core.Font_Variant_Flags.Bold)
 BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD :: i32(core.Font_Variant_Flags.ExtraBold)
 BRIDGE_DYNVIEW_FONT_FLAG_BLACK :: i32(core.Font_Variant_Flags.Black)
 
-BRIDGE_LABEL_DECORATION_NONE :: i32(core.Kine_Label_Decoration_Kind.None)
-BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Kine_Label_Decoration_Kind.Prime)
-BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Kine_Label_Decoration_Kind.DoublePrime)
-BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Kine_Label_Decoration_Kind.TriplePrime)
-BRIDGE_LABEL_DECORATION_HAT :: i32(core.Kine_Label_Decoration_Kind.Hat)
-BRIDGE_LABEL_DECORATION_BAR :: i32(core.Kine_Label_Decoration_Kind.Bar)
+BRIDGE_LABEL_DECORATION_NONE :: i32(core.Shapes_Label_Decoration_Kind.None)
+BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Shapes_Label_Decoration_Kind.Prime)
+BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.DoublePrime)
+BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.TriplePrime)
+BRIDGE_LABEL_DECORATION_HAT :: i32(core.Shapes_Label_Decoration_Kind.Hat)
+BRIDGE_LABEL_DECORATION_BAR :: i32(core.Shapes_Label_Decoration_Kind.Bar)
 
-KINE_CONSTRAINT_KIND_MIN :: i32(core.Kine_Constraint_Kind.Distance)
-KINE_CONSTRAINT_KIND_MAX :: i32(core.Kine_Constraint_Kind.CenterPivot)
+SHAPES_CONSTRAINT_KIND_MIN :: i32(core.Shapes_Constraint_Kind.Distance)
+SHAPES_CONSTRAINT_KIND_MAX :: i32(core.Shapes_Constraint_Kind.CenterPivot)
 
 CONSTRAINT_SPEC_TRAITS :: (1 << 0)
 CONSTRAINT_SPEC_ONPOINT :: (1 << 1)

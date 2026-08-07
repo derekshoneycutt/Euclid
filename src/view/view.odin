@@ -8,7 +8,7 @@ import "ui"
 import dynview "ui/dynview"
 import "../core"
 import "../audio"
-import "../kine"
+import "../shapes"
 import julia "../bridge"
 import "../particles"
 import "../files"
@@ -19,16 +19,16 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
 
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Iso_Scale :: core.Iso_Scale
-Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
-Kine_Shape_Point :: core.Kine_Shape_Point
-Kine_Constraint :: core.Kine_Constraint
-Kine_Point_System :: core.Kine_Point_System
+Shapes_Point_Type :: core.Shapes_Point_Type
+Shapes_Point :: core.Shapes_Point
+Shapes_Constraint :: core.Shapes_Constraint
+Shapes_Point_System :: core.Shapes_Point_System
 Particle :: core.Particle
 Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
@@ -146,14 +146,14 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     julia_interface^.pending_animation_reset = false
     julia_interface^.animation_reset_cooldown_remaining = 0
 
-    point_system := new(Kine_Point_System)
+    point_system := new(Shapes_Point_System)
 
-    compass := kine.init_kineshape_compass(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
-    pen := kine.init_kineshape_pen(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
-    kine.kine_freeze_system_indices(point_system)
+    compass := shapes.init_compass(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
+    pen := shapes.init_pen(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
+    shapes.freeze_system_indices(point_system)
 
-    kine.apply_all_constraints_to_error(point_system, ALLOWED_CONSTRAINT_ERROR)
-    kine.kine_update_last_cache_vectors(point_system)
+    shapes.apply_all_constraints_to_error(point_system, ALLOWED_CONSTRAINT_ERROR)
+    shapes.update_last_cache_vectors(point_system)
 
 
     state := new(Euclid_General_State)
@@ -320,18 +320,18 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 
     if state^.ui_runtime.simulation_paused {
         state^.accumulator = 0
-        kine.build_kine_draw_cache(state^.point_system, 0)
+        shapes.build_draw_cache(state^.point_system, 0)
         return 0
     }
 
     state^.accumulator += frame_dt
 
-    kine.kine_update_last_cache_vectors(state^.point_system)
+    shapes.update_last_cache_vectors(state^.point_system)
     step_count := 0
     for state^.accumulator >= FIXED_DT {
         julia.perform_animation_frame(state, FIXED_DT)
         particles.update_particles(state^.particle_system, FIXED_DT)
-        kine.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
+        shapes.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
         view_core.gif_capture_update_fixed_step(state)
 
         state^.accumulator -= FIXED_DT
@@ -343,7 +343,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     }
 
     alpha := state^.accumulator / FIXED_DT
-    kine.build_kine_draw_cache(state^.point_system, alpha)
+    shapes.build_draw_cache(state^.point_system, alpha)
 
     return alpha
 }
@@ -364,12 +364,12 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     draw_drawing_surface(state)
 
-    draw_kine_points_low_cached(state)
+    draw_Shapes_points_low_cached(state)
     render_low_particles(state^.particle_system, state)
-    draw_kine_shapes_shadows_cached(state)
-    draw_kine_points_shadows_cached(state)
+    draw_Shapes_shapes_shadows_cached(state)
+    draw_Shapes_points_shadows_cached(state)
     render_particles(state^.particle_system, state)
-    draw_kine_points_high_merged_cached(state)
+    draw_Shapes_points_high_merged_cached(state)
     render_high_particles(state^.particle_system, state)
 
     state^.iso_scale^.x_offset = base_x_offset

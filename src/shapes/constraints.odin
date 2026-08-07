@@ -1,7 +1,6 @@
-package kine
+package shapes
 
-// Creates and applies constraints for the shape system. This is kinda where that "kine"
-// name isn't completely lost, although this is just a totally stripped out version.
+// Creates and applies constraints for the shape system.
 // It helps keep the pen and compass in appropriate shape through all animation motions
 // without significant pain
 
@@ -10,8 +9,8 @@ import "core:math/linalg"
 
 //   Local resolved constraint targets used by get/apply constraint logic.
 Constraint_Targets :: struct {
-    host: ^Kine_Shape_Point,
-    children: [3]^Kine_Shape_Point,
+    host: ^Shapes_Point,
+    children: [3]^Shapes_Point,
     child_count: int,
 }
 
@@ -23,7 +22,7 @@ Constraint_Targets :: struct {
 // Returns:
 //   - total_error: Accumulated constraint error value.
 get_total_constraint_error :: proc(
-    system: ^Kine_Point_System) -> f32 {
+    system: ^Shapes_Point_System) -> f32 {
 
     total_error: f32 = 0
     for &constraint in system^.constraints {
@@ -40,7 +39,7 @@ get_total_constraint_error :: proc(
 // Returns:
 //   - none.
 apply_all_constraints :: proc(
-    system: ^Kine_Point_System) {
+    system: ^Shapes_Point_System) {
 
     for &constraint in system.constraints {
         apply_constraint(&constraint, &system^.points)
@@ -55,7 +54,7 @@ apply_all_constraints :: proc(
 // Returns:
 //   - none.
 apply_all_constraints_reverse :: proc(
-    system: ^Kine_Point_System) {
+    system: ^Shapes_Point_System) {
 
     #reverse for &constraint in system.constraints {
         apply_constraint(&constraint, &system^.points)
@@ -71,7 +70,7 @@ apply_all_constraints_reverse :: proc(
 // Returns:
 //   - none.
 apply_all_constraints_to_error :: proc(
-    system: ^Kine_Point_System, allow_error : f32) {
+    system: ^Shapes_Point_System, allow_error : f32) {
 
     error := get_total_constraint_error(system)
     reverse := false
@@ -97,8 +96,8 @@ apply_all_constraints_to_error :: proc(
 // Returns:
 //   - error: Constraint error value for the current point state.
 get_constraint_error :: proc(
-    constraint: ^Kine_Constraint,
-    points: ^[MAX_KINEPOINTS]Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    points: ^[MAX_SHAPESPOINTS]Shapes_Point) -> f32 {
 
     if !constraint^.do_apply {
         return 0
@@ -160,8 +159,8 @@ get_constraint_error :: proc(
 // Returns:
 //   - none.
 apply_constraint :: proc(
-    constraint: ^Kine_Constraint,
-    points: ^[MAX_KINEPOINTS]Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    points: ^[MAX_SHAPESPOINTS]Shapes_Point) {
 
     if !constraint^.do_apply {
         return
@@ -219,8 +218,8 @@ apply_constraint :: proc(
 
 //   Compute floor-constraint error for a single point.
 get_constraint_error_floor :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) -> f32 {
 
     position, ok := point^.position.?
     if !ok || position.z >= constraint^.restriction.z {
@@ -232,8 +231,8 @@ get_constraint_error_floor :: proc(
 
 //   Compute snap-to-floor error for a single point with allowance tolerance.
 get_constraint_error_snaptofloor :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) -> f32 {
 
     position, ok := point^.position.?
     if !ok || math.abs(position.z - constraint^.restriction.z) <= constraint^.allowance {
@@ -245,8 +244,8 @@ get_constraint_error_snaptofloor :: proc(
 
 //   Compute snap-point error as distance from point position to restriction target.
 get_constraint_error_snappoint :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) -> f32 {
 
     position, ok := point^.position.?
     if !ok {
@@ -259,8 +258,8 @@ get_constraint_error_snappoint :: proc(
 
 //   Compute distance-constraint error between two points.
 get_constraint_error_distance :: proc(
-    constraint: ^Kine_Constraint,
-    point1, point2: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point1, point2: ^Shapes_Point) -> f32 {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -278,8 +277,8 @@ get_constraint_error_distance :: proc(
 
 //   Compute max-angle constraint error for a three-point angle.
 get_constraint_error_maxangle :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) -> f32 {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -312,8 +311,8 @@ get_constraint_error_maxangle :: proc(
 
 //   Compute min-angle constraint error for a three-point angle.
 get_constraint_error_minangle :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) -> f32 {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -346,8 +345,8 @@ get_constraint_error_minangle :: proc(
 
 //   Compute center-pivot error as pivot distance from the segment midpoint.
 get_constraint_error_centerpivot :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) -> f32 {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) -> f32 {
     
     position1, ok := point1^.position.?
     if !ok {
@@ -371,8 +370,8 @@ get_constraint_error_centerpivot :: proc(
 
 //   Apply floor constraint response to keep a point at or above floor height.
 apply_constraint_floor :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) {
 
     position, ok := point^.position.?
     if !ok || position.z >= constraint^.restriction.z {
@@ -386,8 +385,8 @@ apply_constraint_floor :: proc(
 
 //   Apply snap-to-floor constraint by forcing point height to floor level.
 apply_constraint_snaptofloor :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) {
 
     position, ok := point^.position.?
     if !ok || math.abs(position.z - constraint^.restriction.z) <= constraint^.allowance {
@@ -400,8 +399,8 @@ apply_constraint_snaptofloor :: proc(
 
 //   Apply snap-point constraint by setting point position to restriction target.
 apply_constraint_snappoint :: proc(
-    constraint: ^Kine_Constraint,
-    point: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point: ^Shapes_Point) {
 
     point^.position = constraint^.restriction
 }
@@ -411,8 +410,8 @@ apply_constraint_snappoint :: proc(
 // Notes:
 //   - depend_on > 0 moves point1, == 0 moves both, < 0 moves point2.
 apply_constraint_distance :: proc(
-    constraint: ^Kine_Constraint,
-    point1, point2: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point1, point2: ^Shapes_Point) {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -445,8 +444,8 @@ apply_constraint_distance :: proc(
 
 //   Apply max-angle constraint by rotating one or both limbs toward limit.
 apply_constraint_maxangle :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -508,8 +507,8 @@ rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
 
 //   Apply min-angle constraint by rotating one or both limbs outward to limit.
 apply_constraint_minangle :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) {
 
     position1, ok := point1^.position.?
     if !ok {
@@ -558,8 +557,8 @@ apply_constraint_minangle :: proc(
 
 //   Apply center-pivot constraint by moving pivot to midpoint of outer points.
 apply_constraint_centerpivot :: proc(
-    constraint: ^Kine_Constraint,
-    point1, pivot, point2: ^Kine_Shape_Point) {
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) {
     
     position1, ok := point1^.position.?
     if !ok {
@@ -586,10 +585,10 @@ is_valid_constraint_point_index :: #force_inline proc(index, len_points: int) ->
 
 //   Resolve the first child for a constraint host, including optional child_offset traversal.
 resolve_constraint_first_child :: #force_inline proc(
-    host: ^Kine_Shape_Point,
-    constraint: ^Kine_Constraint,
-    points: ^[MAX_KINEPOINTS]Kine_Shape_Point,
-    len_points: int) -> (^Kine_Shape_Point, bool) {
+    host: ^Shapes_Point,
+    constraint: ^Shapes_Constraint,
+    points: ^[MAX_SHAPESPOINTS]Shapes_Point,
+    len_points: int) -> (^Shapes_Point, bool) {
     if !is_valid_constraint_point_index(host^.child_point_head, len_points) {
         return nil, false
     }
@@ -609,7 +608,7 @@ resolve_constraint_first_child :: #force_inline proc(
 //   Append the next child from the linked child chain into targets when available.
 append_next_constraint_child :: #force_inline proc(
     targets: ^Constraint_Targets,
-    points: ^[MAX_KINEPOINTS]Kine_Shape_Point,
+    points: ^[MAX_SHAPESPOINTS]Shapes_Point,
     len_points: int) -> bool {
     last_child := targets^.children[targets^.child_count - 1]
     if !is_valid_constraint_point_index(last_child^.next_child_point, len_points) {
@@ -627,8 +626,8 @@ append_next_constraint_child :: #force_inline proc(
 //   - Returns ok=false only when constraint.on_point is invalid.
 //   - Missing child links are represented by a lower child_count with ok=true.
 resolve_constraint_targets :: #force_inline proc(
-    constraint: ^Kine_Constraint,
-    points: ^[MAX_KINEPOINTS]Kine_Shape_Point) -> (Constraint_Targets, bool) {
+    constraint: ^Shapes_Constraint,
+    points: ^[MAX_SHAPESPOINTS]Shapes_Point) -> (Constraint_Targets, bool) {
     len_points := len(points^)
     if len_points <= constraint^.on_point {
         return Constraint_Targets{}, false

@@ -11,17 +11,17 @@ LABEL_DUST_Y_OFFSET :: -0.03
 
 //   Return whether a point index is within runtime point capacity bounds.
 is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
-    return index >= 0 && index < MAX_KINEPOINTS
+    return index >= 0 && index < MAX_SHAPESPOINTS
 }
 
 //   Return whether a constraint index is within runtime constraint capacity bounds.
 is_constraint_index_in_bounds :: #force_inline proc(index: int) -> bool {
-    return index >= 0 && index < MAX_KINECONSTRAINTS
+    return index >= 0 && index < MAX_SHAPESCONSTRAINTS
 }
 
 //   Validate that a constraint kind integer maps to a supported single kind value.
 is_valid_constraint_kind_value :: #force_inline proc(kind: i32) -> bool {
-    return kind >= KINE_CONSTRAINT_KIND_MIN && kind <= KINE_CONSTRAINT_KIND_MAX
+    return kind >= SHAPES_CONSTRAINT_KIND_MIN && kind <= SHAPES_CONSTRAINT_KIND_MAX
 }
 
 //   Convert a boolean value to C-ABI friendly u8 representation.
@@ -63,8 +63,8 @@ push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.
 push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.Euclid_General_State) {
     pointIndex1 := state^.compass.joint1_id
     pointIndex2 := state^.compass.joint2_id
-    if pointIndex1 < 0 || pointIndex1 >= MAX_KINEPOINTS ||
-        pointIndex2 < 0 || pointIndex2 >= MAX_KINEPOINTS {
+    if pointIndex1 < 0 || pointIndex1 >= MAX_SHAPESPOINTS ||
+        pointIndex2 < 0 || pointIndex2 >= MAX_SHAPESPOINTS {
         return
     }
 
@@ -223,7 +223,7 @@ push_dust_if_floor_crossing :: proc(
 // Notes:
 //   - Applies a single large push for consistent label-show behavior.
 emit_label_show_dust_push :: #force_inline proc(
-    state: ^core.Euclid_General_State, point: ^core.Kine_Shape_Point) {
+    state: ^core.Euclid_General_State, point: ^core.Shapes_Point) {
     pos, has_pos := point^.position.?
     if !has_pos || point^.kind != .Label || pos.z > 0.05 {
         return
@@ -267,12 +267,12 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
     dt := state^.current_delta_time
 
     pen_active_child := -1
-    if state^.pen.host_id >= 0 && state^.pen.host_id < MAX_KINEPOINTS {
+    if state^.pen.host_id >= 0 && state^.pen.host_id < MAX_SHAPESPOINTS {
         pen_active_child = state^.point_system^.points[state^.pen.host_id].active_child
     }
 
     compass_active_child := -1
-    if state^.compass.host_id >= 0 && state^.compass.host_id < MAX_KINEPOINTS {
+    if state^.compass.host_id >= 0 && state^.compass.host_id < MAX_SHAPESPOINTS {
         compass_active_child = state^.point_system^.points[state^.compass.host_id].active_child
     }
 

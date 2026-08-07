@@ -21,7 +21,7 @@ The overall structure includes 2 programming languages, Odin and Julia.
 
 - **Odin** code provides the application shell, rendering loop, simulation data model,
     memory ownership, and bridge exports. It owns long-lived application state
-    (`Euclid_General_State`), rendering, UI, and systems (kine + particles + gif capture).
+    (`Euclid_General_State`), rendering, UI, and systems (shapes + particles + gif capture).
 - **Julia** code provides animation/content logic loaded from scripts at runtime. It
     registers an animation tree and drives per-animation behavior by calling exported
     Odin-Julia Bridge functions.
@@ -52,7 +52,7 @@ If you are new, read in this order:
 | **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
-| **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/kine/shapes.odin`, `src/kine/constraints.odin`, `src/kine/system.odin` |
+| **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
@@ -287,8 +287,8 @@ Choose the owning module first, then touch that module's highlighted files.
   - Rendering and UI Module (`src/view/elements.odin`, `src/view/ui/ui.odin`,
     `src/view/core/view_core.odin`).
 - **Geometry/constraints behavior**:
-  - Geometry Kernel Module (`src/kine/shapes.odin`,
-    `src/kine/constraints.odin`, `src/kine/system.odin`).
+  - Geometry Kernel Module (`src/shapes/shapes.odin`,
+    `src/shapes/constraints.odin`, `src/shapes/system.odin`).
 - **Julia feature surface / bridge contract**:
   - Bridge and Embedding Module + Bridge Wrapper Module
     (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/julia/odin-julia-bridge.jl`).

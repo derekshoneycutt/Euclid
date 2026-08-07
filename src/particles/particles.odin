@@ -32,13 +32,13 @@ Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Particle :: core.Particle
 Particle_System :: core.Particle_System
-Kine_Point_System :: core.Kine_Point_System
-Kine_Shape_Point :: core.Kine_Shape_Point
-Kine_Shape_Point_Type :: core.Kine_Shape_Point_Type
+Shapes_Point_System :: core.Shapes_Point_System
+Shapes_Point :: core.Shapes_Point
+Shapes_Point_Type :: core.Shapes_Point_Type
 Iso_Scale :: core.Iso_Scale
 
 MAX_PARTICLES :: core.MAX_PARTICLES
-MAX_KINEPOINTS :: core.MAX_KINEPOINTS
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 
 SPAWN_INTERVAL :: 0.012 // seconds
 PARTICLE_LIFE :: 0.75  // seconds
@@ -312,23 +312,23 @@ kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
     }
 }
 
-//   Emit dust burst particles for a specific drawable kine item.
+//   Emit dust burst particles for a specific drawable shapes item.
 //
 // Parameters:
 //   - ps: Particle system receiving emitted dust.
-//   - ks: Kine point system used to resolve geometry for the selected item.
-//   - index: Point index of the drawable kine host item.
+//   - ks: Shapes system used to resolve geometry for the selected item.
+//   - index: Point index of the drawable shapes host item.
 //   - kick_dust: When true, pre-kicks existing dust before emitting new dust.
 //
 // Returns:
 //   - none.
-emit_kine_hide_burst :: proc(
+emit_shapes_hide_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
+    ks: ^Shapes_Point_System,
     index: int,
     kick_dust: bool = true,
     iso_scale: ^Iso_Scale = nil) {
-    if index < 0 || index >= MAX_KINEPOINTS || ps^.use_max_dust_particles < 1 {
+    if index < 0 || index >= MAX_SHAPESPOINTS || ps^.use_max_dust_particles < 1 {
         return
     }
 
@@ -346,22 +346,22 @@ emit_kine_hide_burst :: proc(
     }
 
     col := kp.color.? or_else rl.WHITE
-    if emit_kine_shape_burst(ps, ks, kp, col, true) {
+    if emit_shapes_burst(ps, ks, kp, col, true) {
         return
     }
 }
 
-//   Emit dust bursts across all currently drawable kine items.
+//   Emit dust bursts across all currently drawable shapes items.
 //
 // Parameters:
 //   - ps: Particle system receiving emitted dust.
-//   - ks: Kine point system used to resolve drawable geometry.
+//   - ks: Shapes system used to resolve drawable geometry.
 //
 // Returns:
 //   - none.
-emit_kine_clear_burst :: proc(
+emit_shapes_clear_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
+    ks: ^Shapes_Point_System,
     iso_scale: ^Iso_Scale = nil) {
     if  ps^.use_max_dust_particles < 1 {
         return
@@ -369,7 +369,7 @@ emit_kine_clear_burst :: proc(
 
     kick_existing_dust(ps, iso_scale)
 
-    for i in 0..<MAX_KINEPOINTS {
+    for i in 0..<MAX_SHAPESPOINTS {
         kp := &ks.points[i]
         if !kp.do_draw {
             continue
@@ -381,7 +381,7 @@ emit_kine_clear_burst :: proc(
 
         col := kp.color.? or_else rl.WHITE
 
-        if emit_kine_shape_burst(ps, ks, kp, col, false) {
+        if emit_shapes_burst(ps, ks, kp, col, false) {
             continue
         }
     }
@@ -438,8 +438,8 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 
-//   Check whether a kine shape kind participates in dust burst emission.
-is_burst_drawable_kind :: #force_inline proc(kind: Kine_Shape_Point_Type) -> bool {
+//   Check whether a shapes shape kind participates in dust burst emission.
+is_burst_drawable_kind :: #force_inline proc(kind: Shapes_Point_Type) -> bool {
     return kind == .Label ||
         kind == .Point ||
         kind == .Line ||
@@ -464,14 +464,14 @@ emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
     }
 }
 
-//   Emit burst dust for a single kine draw item.
+//   Emit burst dust for a single shapes draw item.
 //
 // Returns:
 //   - true when caller should abort (hide-burst strict mode), else false.
 emit_circle_kind_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
-    kp: ^Kine_Shape_Point,
+    ks: ^Shapes_Point_System,
+    kp: ^Shapes_Point,
     col: rl.Color,
     sample_count: int,
     abort_on_invalid: bool) -> bool {
@@ -482,12 +482,12 @@ emit_circle_kind_burst :: proc(
     }
 
     start_id := kp.child_point_head
-    if start_id < 0 || start_id >= MAX_KINEPOINTS {
+    if start_id < 0 || start_id >= MAX_SHAPESPOINTS {
         return abort_on_invalid
     }
 
     end_id := ks.points[start_id].next_child_point
-    if end_id < 0 || end_id >= MAX_KINEPOINTS {
+    if end_id < 0 || end_id >= MAX_SHAPESPOINTS {
         return abort_on_invalid
     }
 
@@ -507,7 +507,7 @@ emit_circle_kind_burst :: proc(
 
 //   Emit burst dust for label/point kinds using the host position.
 emit_point_like_kind_burst :: #force_inline proc(
-    ps: ^Particle_System, kp: ^Kine_Shape_Point, col: rl.Color) {
+    ps: ^Particle_System, kp: ^Shapes_Point, col: rl.Color) {
     p, ok := kp.position.?
     if !ok {
         return
@@ -529,18 +529,18 @@ emit_point_like_kind_burst :: #force_inline proc(
 //   - true when caller should abort (hide-burst strict mode), else false.
 emit_line_kind_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
-    kp: ^Kine_Shape_Point,
+    ks: ^Shapes_Point_System,
+    kp: ^Shapes_Point,
     col: rl.Color,
     abort_on_invalid: bool) -> bool {
 
     a_id := kp.child_point_head
-    if a_id < 0 || a_id >= MAX_KINEPOINTS {
+    if a_id < 0 || a_id >= MAX_SHAPESPOINTS {
         return abort_on_invalid
     }
 
     b_id := ks.points[a_id].next_child_point
-    if b_id < 0 || b_id >= MAX_KINEPOINTS {
+    if b_id < 0 || b_id >= MAX_SHAPESPOINTS {
         return abort_on_invalid
     }
 
@@ -556,8 +556,8 @@ emit_line_kind_burst :: proc(
 //   Emit burst dust for polygon edge kinds.
 emit_polygon_kind_burst :: #force_inline proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
-    kp: ^Kine_Shape_Point,
+    ks: ^Shapes_Point_System,
+    kp: ^Shapes_Point,
     col: rl.Color) {
     switch kp.kind {
     case .Triangle:
@@ -571,14 +571,14 @@ emit_polygon_kind_burst :: #force_inline proc(
     }
 }
 
-//   Emit burst dust for a single kine draw item.
+//   Emit burst dust for a single shapes draw item.
 //
 // Returns:
 //   - true when caller should abort (hide-burst strict mode), else false.
-emit_kine_shape_burst :: proc(
+emit_shapes_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
-    kp: ^Kine_Shape_Point,
+    ks: ^Shapes_Point_System,
+    kp: ^Shapes_Point,
     col: rl.Color,
     abort_on_invalid: bool) -> bool {
 
@@ -984,13 +984,13 @@ emit_polygon_fill_dust :: proc(
     }
 }
 
-//   Emit dust along each edge of a polygon resolved from kine child-point links.
+//   Emit dust along each edge of a polygon resolved from shapes child-point links.
 //
 // Notes:
 //   - Supports up to the local fixed vertex buffer size.
 emit_polygon_edge_dust :: proc(
     ps: ^Particle_System,
-    ks: ^Kine_Point_System,
+    ks: ^Shapes_Point_System,
     first_child_id: int,
     vertex_count: int,
     col: rl.Color) {
@@ -998,7 +998,7 @@ emit_polygon_edge_dust :: proc(
         return
     }
 
-    if first_child_id < 0 || first_child_id >= MAX_KINEPOINTS {
+    if first_child_id < 0 || first_child_id >= MAX_SHAPESPOINTS {
         return
     }
 
@@ -1006,7 +1006,7 @@ emit_polygon_edge_dust :: proc(
 
     current_id := first_child_id
     for i in 0..<vertex_count {
-        if current_id < 0 || current_id >= MAX_KINEPOINTS {
+        if current_id < 0 || current_id >= MAX_SHAPESPOINTS {
             return
         }
 

@@ -1,93 +1,93 @@
-package kine_tests
+package shapes_tests
 
 import "core:testing"
 
 import app_core "../../src/core"
-import app_kine "../../src/kine"
+import "../../src/shapes"
 import test_helpers "../helpers"
 
 @(test)
-kine_update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
+update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.T) {
+    system: shapes.Shapes_Point_System
     system.next_point_index = 1
 
-    system.points[0].position = app_kine.Vector3{2, 4, 6}
+    system.points[0].position = shapes.Vector3{2, 4, 6}
 
-    preserved := app_kine.Vector3{9, 9, 9}
-    system.points[1].position = app_kine.Vector3{3, 3, 3}
+    preserved := shapes.Vector3{9, 9, 9}
+    system.points[1].position = shapes.Vector3{3, 3, 3}
     system.points[1].previous_position = preserved
 
-    app_kine.kine_update_last_cache_vectors(&system)
+    shapes.update_last_cache_vectors(&system)
 
-    snapshot := system.points[0].previous_position.? or_else app_kine.Vector3{}
-    test_helpers.expect_vec3_close(t, snapshot, app_kine.Vector3{2, 4, 6},
+    snapshot := system.points[0].previous_position.? or_else shapes.Vector3{}
+    test_helpers.expect_vec3_close(t, snapshot, shapes.Vector3{2, 4, 6},
         "active points should snapshot current position")
 
-    untouched := system.points[1].previous_position.? or_else app_kine.Vector3{}
+    untouched := system.points[1].previous_position.? or_else shapes.Vector3{}
     test_helpers.expect_vec3_close(t, untouched, preserved,
         "points past next_point_index should remain untouched")
 }
 
 @(test)
 lerped_point_position_uses_previous_position_when_present :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    system.points[0].position = app_kine.Vector3{10, 0, 0}
-    system.points[0].previous_position = app_kine.Vector3{2, 0, 0}
+    system: shapes.Shapes_Point_System
+    system.points[0].position = shapes.Vector3{10, 0, 0}
+    system.points[0].previous_position = shapes.Vector3{2, 0, 0}
 
-    point, ok := app_kine.lerped_point_position(&system, 0, 0.25)
+    point, ok := shapes.lerped_point_position(&system, 0, 0.25)
 
     testing.expect(t, ok)
-    test_helpers.expect_vec3_close(t, point, app_kine.Vector3{4, 0, 0},
+    test_helpers.expect_vec3_close(t, point, shapes.Vector3{4, 0, 0},
         "lerped_point_position should blend previous and current")
 }
 
 @(test)
 lerped_point_position_falls_back_to_current_without_previous :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    system.points[0].position = app_kine.Vector3{7, -1, 3}
+    system: shapes.Shapes_Point_System
+    system.points[0].position = shapes.Vector3{7, -1, 3}
 
-    point, ok := app_kine.lerped_point_position(&system, 0, 0.5)
+    point, ok := shapes.lerped_point_position(&system, 0, 0.5)
 
     testing.expect(t, ok)
-    test_helpers.expect_vec3_close(t, point, app_kine.Vector3{7, -1, 3},
+    test_helpers.expect_vec3_close(t, point, shapes.Vector3{7, -1, 3},
         "lerped_point_position should fall back when previous_position is missing")
 }
 
 @(test)
 lerped_child_positions_follows_child_chain_order :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    host := app_kine.Kine_Shape_Point{child_point_head = 1}
+    system: shapes.Shapes_Point_System
+    host := shapes.Shapes_Point{child_point_head = 1}
 
-    system.points[1].position = app_kine.Vector3{1, 0, 0}
-    system.points[1].previous_position = app_kine.Vector3{0, 0, 0}
+    system.points[1].position = shapes.Vector3{1, 0, 0}
+    system.points[1].previous_position = shapes.Vector3{0, 0, 0}
     system.points[1].next_child_point = 2
 
-    system.points[2].position = app_kine.Vector3{3, 0, 0}
-    system.points[2].previous_position = app_kine.Vector3{1, 0, 0}
+    system.points[2].position = shapes.Vector3{3, 0, 0}
+    system.points[2].previous_position = shapes.Vector3{1, 0, 0}
     system.points[2].next_child_point = 3
 
-    system.points[3].position = app_kine.Vector3{5, 0, 0}
-    system.points[3].previous_position = app_kine.Vector3{3, 0, 0}
+    system.points[3].position = shapes.Vector3{5, 0, 0}
+    system.points[3].previous_position = shapes.Vector3{3, 0, 0}
 
-    out: [3]app_kine.Vector3
-    ok := app_kine.lerped_child_positions(&system, &host, 0.5, out[:])
+    out: [3]shapes.Vector3
+    ok := shapes.lerped_child_positions(&system, &host, 0.5, out[:])
 
     testing.expect(t, ok)
-    test_helpers.expect_vec3_close(t, out[0], app_kine.Vector3{0.5, 0, 0}, "child 0 should lerp")
-    test_helpers.expect_vec3_close(t, out[1], app_kine.Vector3{2, 0, 0}, "child 1 should lerp")
-    test_helpers.expect_vec3_close(t, out[2], app_kine.Vector3{4, 0, 0}, "child 2 should lerp")
+    test_helpers.expect_vec3_close(t, out[0], shapes.Vector3{0.5, 0, 0}, "child 0 should lerp")
+    test_helpers.expect_vec3_close(t, out[1], shapes.Vector3{2, 0, 0}, "child 1 should lerp")
+    test_helpers.expect_vec3_close(t, out[2], shapes.Vector3{4, 0, 0}, "child 2 should lerp")
 }
 
 @(test)
 draw_cache_next_item_slot_updates_count_and_capacity :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
+    system: shapes.Shapes_Point_System
 
-    _, ok := app_kine.draw_cache_next_item_slot(&system)
+    _, ok := shapes.draw_cache_next_item_slot(&system)
     testing.expect(t, ok)
     testing.expect_value(t, system.draw_cache.item_count, 1)
 
     system.draw_cache.item_count = len(system.draw_cache.items)
-    _, has_slot := app_kine.draw_cache_next_item_slot(&system)
+    _, has_slot := shapes.draw_cache_next_item_slot(&system)
 
     testing.expect(t, !has_slot)
     testing.expect_value(t, system.draw_cache.item_count, len(system.draw_cache.items))
@@ -95,40 +95,40 @@ draw_cache_next_item_slot_updates_count_and_capacity :: proc(t: ^testing.T) {
 
 @(test)
 lerped_child_positions_returns_false_for_invalid_chain :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    host := app_kine.Kine_Shape_Point{child_point_head = 12}
+    system: shapes.Shapes_Point_System
+    host := shapes.Shapes_Point{child_point_head = 12}
 
-    out: [2]app_kine.Vector3
-    ok := app_kine.lerped_child_positions(&system, &host, 0.5, out[:])
+    out: [2]shapes.Vector3
+    ok := shapes.lerped_child_positions(&system, &host, 0.5, out[:])
 
     testing.expect(t, !ok)
 }
 
 @(test)
 draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
+    system: shapes.Shapes_Point_System
 
-    first, ok := app_kine.draw_cache_reserve_polygon_vertices(&system, 2)
+    first, ok := shapes.draw_cache_reserve_polygon_vertices(&system, 2)
     testing.expect(t, ok)
     testing.expect_value(t, first, 0)
     testing.expect_value(t, system.draw_cache.polygon_vertex_count, 2)
 
-    second, ok2 := app_kine.draw_cache_reserve_polygon_vertices(&system, len(system.draw_cache.polygon_vertices))
+    second, ok2 := shapes.draw_cache_reserve_polygon_vertices(&system, len(system.draw_cache.polygon_vertices))
     testing.expect(t, !ok2)
     testing.expect_value(t, second, 0)
 }
 
 @(test)
 polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^testing.T) {
-    vertices := [3]app_kine.Vector3{{0, 0, 0}, {2, 0, 0}, {1, 2, 0}}
-    testing.expect(t, app_kine.polygon_signed_area_xy(vertices[:]) > 0)
-    testing.expect(t, app_kine.point_in_triangle_xy({1, 1, 0}, vertices[0], vertices[1], vertices[2]))
-    testing.expect(t, app_kine.point_in_triangle_xy({0, 0, 0}, vertices[0], vertices[1], vertices[2]))
+    vertices := [3]shapes.Vector3{{0, 0, 0}, {2, 0, 0}, {1, 2, 0}}
+    testing.expect(t, shapes.polygon_signed_area_xy(vertices[:]) > 0)
+    testing.expect(t, shapes.point_in_triangle_xy({1, 1, 0}, vertices[0], vertices[1], vertices[2]))
+    testing.expect(t, shapes.point_in_triangle_xy({0, 0, 0}, vertices[0], vertices[1], vertices[2]))
 }
 
 @(test)
-kine_clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
+clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
+    system: shapes.Shapes_Point_System
     particle_system := new(app_core.Particle_System)
     defer free(particle_system)
 
@@ -141,7 +141,7 @@ kine_clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
     system.points[1].do_draw = true
     system.constraints[0].do_apply = true
 
-    app_kine.kine_clear_animation_data(&system, particle_system)
+    shapes.clear_animation_data(&system, particle_system)
 
     testing.expect_value(t, system.next_point_index, 1)
     testing.expect_value(t, system.next_constraint_index, 0)
@@ -151,7 +151,7 @@ kine_clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
 
 expect_polygon_triangle_indices_in_range :: proc(
     t: ^testing.T,
-    triangles: []app_kine.Kine_Polygon_Triangle,
+    triangles: []shapes.Shapes_Polygon_Triangle,
     first_vertex, vertex_count: int,
     msg: string) {
 
@@ -167,15 +167,15 @@ expect_polygon_triangle_indices_in_range :: proc(
 }
 
 seed_polygon_host :: proc(
-    system: ^app_kine.Kine_Point_System,
-    kind: app_kine.Kine_Shape_Point_Type,
-    points: []app_kine.Vector3) {
+    system: ^shapes.Shapes_Point_System,
+    kind: shapes.Shapes_Point_Type,
+    points: []shapes.Vector3) {
 
     if len(points) < 3 {
         return
     }
 
-    host := app_kine.Kine_Shape_Point{
+    host := shapes.Shapes_Point{
         kind = kind,
         child_count = len(points),
         child_point_head = 1,
@@ -185,7 +185,7 @@ seed_polygon_host :: proc(
 
     for i in 0..<len(points) {
         child_id := i + 1
-        child := app_kine.Kine_Shape_Point{
+        child := shapes.Shapes_Point{
             kind = .Point,
             position = points[i],
         }
@@ -200,8 +200,8 @@ seed_polygon_host :: proc(
 
 @(test)
 triangulate_polygon_ear_clip_convex_hexagon_emits_n_minus_2 :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    vertices := [6]app_kine.Vector3{
+    system: shapes.Shapes_Point_System
+    vertices := [6]shapes.Vector3{
         {0, 0, 0},
         {2, 0, 0},
         {3, 1, 0},
@@ -210,7 +210,7 @@ triangulate_polygon_ear_clip_convex_hexagon_emits_n_minus_2 :: proc(t: ^testing.
         {-1, 1, 0},
     }
 
-    triangle_count := app_kine.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
+    triangle_count := shapes.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
 
     testing.expect_value(t, triangle_count, 4)
     tris := system.draw_cache.polygon_triangles[:triangle_count]
@@ -220,8 +220,8 @@ triangulate_polygon_ear_clip_convex_hexagon_emits_n_minus_2 :: proc(t: ^testing.
 
 @(test)
 triangulate_polygon_ear_clip_clockwise_hexagon_emits_n_minus_2 :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    vertices := [6]app_kine.Vector3{
+    system: shapes.Shapes_Point_System
+    vertices := [6]shapes.Vector3{
         {-1, 1, 0},
         {0, 2, 0},
         {2, 2, 0},
@@ -230,7 +230,7 @@ triangulate_polygon_ear_clip_clockwise_hexagon_emits_n_minus_2 :: proc(t: ^testi
         {0, 0, 0},
     }
 
-    triangle_count := app_kine.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
+    triangle_count := shapes.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
 
     testing.expect_value(t, triangle_count, 4)
     tris := system.draw_cache.polygon_triangles[:triangle_count]
@@ -240,8 +240,8 @@ triangulate_polygon_ear_clip_clockwise_hexagon_emits_n_minus_2 :: proc(t: ^testi
 
 @(test)
 triangulate_polygon_ear_clip_collinear_uses_fallback_fan :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    vertices := [5]app_kine.Vector3{
+    system: shapes.Shapes_Point_System
+    vertices := [5]shapes.Vector3{
         {0, 0, 0},
         {1, 0, 0},
         {2, 0, 0},
@@ -249,7 +249,7 @@ triangulate_polygon_ear_clip_collinear_uses_fallback_fan :: proc(t: ^testing.T) 
         {4, 0, 0},
     }
 
-    triangle_count := app_kine.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
+    triangle_count := shapes.triangulate_polygon_ear_clip(&system, 0, vertices[:], 0)
 
     testing.expect_value(t, triangle_count, 3)
     tris := system.draw_cache.polygon_triangles[:triangle_count]
@@ -258,15 +258,15 @@ triangulate_polygon_ear_clip_collinear_uses_fallback_fan :: proc(t: ^testing.T) 
 }
 
 @(test)
-kine_draw_cache_reset_clears_polygon_pool_counters :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
+draw_cache_reset_clears_polygon_pool_counters :: proc(t: ^testing.T) {
+    system: shapes.Shapes_Point_System
     system.draw_cache.item_count = 5
     system.draw_cache.polygon_vertex_count = 7
     system.draw_cache.polygon_triangle_count = 9
     system.draw_cache.draw_pen = true
     system.draw_cache.draw_compass = true
 
-    app_kine.kine_draw_cache_reset(&system)
+    shapes.draw_cache_reset(&system)
 
     testing.expect_value(t, system.draw_cache.item_count, 0)
     testing.expect_value(t, system.draw_cache.polygon_vertex_count, 0)
@@ -276,9 +276,9 @@ kine_draw_cache_reset_clears_polygon_pool_counters :: proc(t: ^testing.T) {
 }
 
 @(test)
-build_kine_draw_cache_routes_triangle_kind_to_polygon_cache :: proc(t: ^testing.T) {
-    system: app_kine.Kine_Point_System
-    points := [4]app_kine.Vector3{
+build_draw_cache_routes_triangle_kind_to_polygon_cache :: proc(t: ^testing.T) {
+    system: shapes.Shapes_Point_System
+    points := [4]shapes.Vector3{
         {0, 0, 0},
         {2, 0, 0},
         {2, 1, 0},
@@ -286,7 +286,7 @@ build_kine_draw_cache_routes_triangle_kind_to_polygon_cache :: proc(t: ^testing.
     }
     seed_polygon_host(&system, .Triangle, points[:])
 
-    app_kine.build_kine_draw_cache(&system, 1.0)
+    shapes.build_draw_cache(&system, 1.0)
 
     testing.expect_value(t, system.draw_cache.item_count, 1)
     testing.expect_value(t, system.draw_cache.polygon_vertex_count, 4)

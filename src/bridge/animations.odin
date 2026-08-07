@@ -3,7 +3,7 @@ package bridge
 import "../julialib"
 import "../core"
 import "../files"
-import "../kine"
+import "../shapes"
 
 import "core:encoding/uuid"
 import "core:fmt"
@@ -191,7 +191,7 @@ call_current_animation_loop :: proc(
 //   Switch to a selected animation, cleaning previous state and initializing the new loop.
 //
 // Notes:
-//   - Clears animation-owned kine data and tool visibility before initializing the target animation.
+//   - Clears animation-owned shapes data and tool visibility before initializing the target animation.
 //   - Returns early when the requested index is out of range or a Julia exception occurs.
 change_current_animation_loop :: proc(
     state: ^core.Euclid_General_State, newIndex: int) {
@@ -217,7 +217,7 @@ change_current_animation_loop :: proc(
         }
     }
 
-    kine.kine_clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.anim_metadata) {
@@ -255,7 +255,7 @@ reset_current_animation_loop :: proc(
         return
     }
 
-    kine.kine_clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.anim_metadata) {

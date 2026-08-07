@@ -1,5 +1,5 @@
 """
-Get the maximum number of kine constraints supported by the bridge.
+Get the maximum number of shapes constraints supported by the bridge.
 
 ------
 
@@ -10,7 +10,7 @@ function get_constraint_capacity()
 end
 
 """
-Get the next constraint index in the kine constraint system.
+Get the next constraint index in the shapes constraint system.
 
 ------
 

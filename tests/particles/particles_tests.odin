@@ -251,17 +251,17 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
 }
 
 @(test)
-emit_kine_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
+emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
     defer free(ps)
     ps^.use_max_dust_particles = 4
 
-    ks: app_core.Kine_Point_System
+    ks: app_core.Shapes_Point_System
     ks.points[0].do_draw = true
     ks.points[0].kind = .Point
     ks.points[0].position = app_core.Vector3{1, 2, 0}
 
-    app_particles.emit_kine_hide_burst(ps, &ks, 0, false)
+    app_particles.emit_shapes_hide_burst(ps, &ks, 0, false)
 
     testing.expect(t, ps^.low_particles.alive[0])
     testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] || ps^.low_particles.alive[3])

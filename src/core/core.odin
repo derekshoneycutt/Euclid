@@ -14,11 +14,11 @@ import rl "vendor:raylib"
 MAX_LOW_PARTICLES :: 8192//4096
 MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
-MAX_KINEPOINTS :: 256
-MAX_KINECONSTRAINTS :: 256
+MAX_SHAPESPOINTS :: 256
+MAX_SHAPESCONSTRAINTS :: 256
 MAX_JULIA_INTERFACES :: 512
-MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_KINEPOINTS
-MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_KINEPOINTS
+MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_SHAPESPOINTS
+MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_SHAPESPOINTS
 
 DUST_GRID_CELL_SIZE :: 0.02
 DUST_GRID_DIM :: 50
@@ -104,7 +104,7 @@ Euclid_Julia_Interface :: struct {
 
 
 
-Kine_Shape_Point_Type :: enum {
+Shapes_Point_Type :: enum {
     Label,
     Point,
     Line,
@@ -117,7 +117,7 @@ Kine_Shape_Point_Type :: enum {
     Compass,
 }
 
-Kine_Label_Decoration_Kind :: enum {
+Shapes_Label_Decoration_Kind :: enum {
     None,
     Prime,
     DoublePrime,
@@ -126,8 +126,8 @@ Kine_Label_Decoration_Kind :: enum {
     Bar,
 }
 
-Kine_Shape_Point :: struct {
-    kind : Kine_Shape_Point_Type,
+Shapes_Point :: struct {
+    kind : Shapes_Point_Type,
 
     position : Maybe(Vector3),
     previous_position : Maybe(Vector3),
@@ -136,7 +136,7 @@ Kine_Shape_Point :: struct {
     brush_size : f32,
     offset : f32,
     label : Maybe(rune),
-    decoration_kind : Kine_Label_Decoration_Kind,
+    decoration_kind : Shapes_Label_Decoration_Kind,
 
     active_child: int,
     child_count : int,
@@ -146,7 +146,7 @@ Kine_Shape_Point :: struct {
     do_draw : bool,
 }
 
-Kine_Constraint_Kind :: enum {
+Shapes_Constraint_Kind :: enum {
     Distance,
     Floor,
     SnapToFloor,
@@ -156,8 +156,8 @@ Kine_Constraint_Kind :: enum {
     CenterPivot,
 }
 
-Kine_Constraint :: struct {
-    kind : Kine_Constraint_Kind,
+Shapes_Constraint :: struct {
+    kind : Shapes_Constraint_Kind,
 
     on_point : int,
     restriction : Vector3,
@@ -169,7 +169,7 @@ Kine_Constraint :: struct {
     do_apply : bool,
 }
 
-Kine_Shape_Compass :: struct {
+Shapes_Compass :: struct {
     host_id : int,
     joint1_id : int,
     pivot_id : int,
@@ -185,7 +185,7 @@ Kine_Shape_Compass :: struct {
     lock_point2_id : int,
 }
 
-Kine_Shape_Pen :: struct {
+Shapes_Pen :: struct {
     host_id : int,
     joint1_id : int,
     joint2_id : int,
@@ -197,32 +197,32 @@ Kine_Shape_Pen :: struct {
     lock_point2_id : int,
 }
 
-Kine_Shape_Line :: struct {
+Shapes_Line :: struct {
     host_id : int,
     joint1_id : int,
     joint2_id : int,
 }
 
-Kine_Shape_Circle :: struct {
+Shapes_Circle :: struct {
     host_id : int,
     start_id : int,
     end_id : int,
 }
 
-Kine_Shape_Filled_Circle :: struct {
+Shapes_Filled_Circle :: struct {
     host_id : int,
     start_id : int,
     end_id : int,
 }
 
-Kine_Shape_Triangle :: struct {
+Shapes_Triangle :: struct {
     host_id : int,
     joint1_id : int,
     joint2_id : int,
     joint3_id : int,
 }
 
-Kine_Shape_Square :: struct {
+Shapes_Square :: struct {
     host_id : int,
     joint1_id : int,
     joint2_id : int,
@@ -230,7 +230,7 @@ Kine_Shape_Square :: struct {
     joint4_id : int,
 }
 
-Kine_Shape_Pentagon :: struct {
+Shapes_Pentagon :: struct {
     host_id : int,
     joint1_id : int,
     joint2_id : int,
@@ -239,8 +239,8 @@ Kine_Shape_Pentagon :: struct {
     joint5_id : int,
 }
 
-Kine_Draw_Base :: struct {
-    kind: Kine_Shape_Point_Type,
+Shapes_Draw_Base :: struct {
+    kind: Shapes_Point_Type,
     source_index: int,
     brush_size: f32,
     color: rl.Color,
@@ -249,105 +249,105 @@ Kine_Draw_Base :: struct {
     active_child: int,
 }
 
-Kine_Label_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Label_Draw :: struct {
+    using base: Shapes_Draw_Base,
     point1: Vector3,
     label: rune,
-    decoration_kind: Kine_Label_Decoration_Kind,
+    decoration_kind: Shapes_Label_Decoration_Kind,
 }
 
-Kine_Point_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Point_Draw :: struct {
+    using base: Shapes_Draw_Base,
     point1: Vector3,
 }
 
-Kine_Line_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Line_Draw :: struct {
+    using base: Shapes_Draw_Base,
     point1: Vector3,
     point2: Vector3,
 }
 
-Kine_Circle_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Circle_Draw :: struct {
+    using base: Shapes_Draw_Base,
     center: Vector3,
     start: Vector3,
     end: Vector3,
     offset: f32,
 }
 
-Kine_Filled_Circle_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Filled_Circle_Draw :: struct {
+    using base: Shapes_Draw_Base,
     center: Vector3,
     start: Vector3,
     end: Vector3,
     offset: f32,
 }
 
-Kine_Polygon_Ring_Node :: struct {
+Shapes_Polygon_Ring_Node :: struct {
     prev: int,
     next: int,
     active: bool,
 }
 
-Kine_Polygon_Triangle :: struct {
+Shapes_Polygon_Triangle :: struct {
     a: int,
     b: int,
     c: int,
 }
 
-Kine_Polygon_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Polygon_Draw :: struct {
+    using base: Shapes_Draw_Base,
     first_vertex: int,
     vertex_count: int,
     first_triangle: int,
     triangle_count: int,
 }
 
-Kine_Pen_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Pen_Draw :: struct {
+    using base: Shapes_Draw_Base,
     joint1: Vector3,
     joint2: Vector3,
 }
 
-Kine_Compass_Draw :: struct {
-    using base: Kine_Draw_Base,
+Shapes_Compass_Draw :: struct {
+    using base: Shapes_Draw_Base,
     joint1: Vector3,
     pivot: Vector3,
     joint2: Vector3,
 }
 
-Kine_Draw_Cache_Item :: union {
-    Kine_Label_Draw,
-    Kine_Point_Draw,
-    Kine_Line_Draw,
-    Kine_Circle_Draw,
-    Kine_Filled_Circle_Draw,
-    Kine_Polygon_Draw,
-    Kine_Pen_Draw,
-    Kine_Compass_Draw,
+Shapes_Draw_Cache_Item :: union {
+    Shapes_Label_Draw,
+    Shapes_Point_Draw,
+    Shapes_Line_Draw,
+    Shapes_Circle_Draw,
+    Shapes_Filled_Circle_Draw,
+    Shapes_Polygon_Draw,
+    Shapes_Pen_Draw,
+    Shapes_Compass_Draw,
 }
 
-Kine_Draw_Cache :: struct {
-    items: [MAX_KINEPOINTS]Kine_Draw_Cache_Item,
+Shapes_Draw_Cache :: struct {
+    items: [MAX_SHAPESPOINTS]Shapes_Draw_Cache_Item,
     item_count: int,
 
     polygon_vertices: [MAX_DRAW_CACHE_POLYGON_VERTICES]Vector3,
     polygon_vertex_count: int,
-    polygon_triangles: [MAX_DRAW_CACHE_POLYGON_TRIANGLES]Kine_Polygon_Triangle,
+    polygon_triangles: [MAX_DRAW_CACHE_POLYGON_TRIANGLES]Shapes_Polygon_Triangle,
     polygon_triangle_count: int,
-    polygon_ring_nodes: [MAX_DRAW_CACHE_POLYGON_VERTICES]Kine_Polygon_Ring_Node,
+    polygon_ring_nodes: [MAX_DRAW_CACHE_POLYGON_VERTICES]Shapes_Polygon_Ring_Node,
 
-    pen: Kine_Pen_Draw,
+    pen: Shapes_Pen_Draw,
     draw_pen: bool,
-    compass: Kine_Compass_Draw,
+    compass: Shapes_Compass_Draw,
     draw_compass: bool,
 }
 
-Kine_Point_System :: struct {
-    draw_cache : Kine_Draw_Cache,
+Shapes_Point_System :: struct {
+    draw_cache : Shapes_Draw_Cache,
 
-    points : [MAX_KINEPOINTS]Kine_Shape_Point,
-    constraints : [MAX_KINECONSTRAINTS]Kine_Constraint,
+    points : [MAX_SHAPESPOINTS]Shapes_Point,
+    constraints : [MAX_SHAPESCONSTRAINTS]Shapes_Constraint,
     next_point_index : int,
     next_constraint_index : int,
 
@@ -974,12 +974,12 @@ Euclid_General_State :: struct {
     draw_surface : ^Euclid_Drawing_Surface,
 
     julia_interface : ^Euclid_Julia_Interface,
-    point_system : ^Kine_Point_System,
+    point_system : ^Shapes_Point_System,
     particle_system : ^Particle_System,
     chalk_audio: Chalk_Audio_Runtime,
     drawing_sound_enabled: bool,
-    compass : Kine_Shape_Compass,
-    pen : Kine_Shape_Pen,
+    compass : Shapes_Compass,
+    pen : Shapes_Pen,
 
     stroke_3d: Stroke3D_Render_State,
     dust_render: Dust_Render_State,
