@@ -47,8 +47,8 @@ Core Content:
   - [ ] Definitions
     - [X] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
       - [X] Closure
-      - [ ] Identity
-      - [ ] Inverse
+      - [X] Identity
+      - [X] Inverse
     - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [ ] Associativity
       - [ ] Commutative (Abelian)
