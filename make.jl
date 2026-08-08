@@ -8,6 +8,7 @@ Usage: ./make.jl [options]
 Options:
     --build, -b         Build the project.
     --assets, -a        Build assets.pkg.
+    --sysimage, -s      Build a custom Julia sysimage beside the application.
     --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
@@ -20,18 +21,20 @@ Options:
 Notes:
     - If no options are provided, the default is --build --assets.
     - That is, --build and --assets are essentially non-altering flags, included for visibility.
-    - Short options can be combined, e.g. -rva or -bnx.
+    - Short options can be combined, e.g. -rvas or -bnx.
 """
 end
 
 
 using Dates
+using Libdl
 using UUIDs
 
 struct Args
     run::Bool
     build::Bool
     assets::Bool
+    sysimage::Bool
     clean::Bool
     test::Bool
     vet::Bool
@@ -57,6 +60,7 @@ const SRC_DIR = joinpath(SCRIPT_DIR, "src")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
+const JULIA_SYSIMAGE_PATH = joinpath(BIN_DIR, "euclid-sysimage." * Libdl.dlext)
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_RUNNER = joinpath(SRC_DIR, "julia", "test", "runtests.jl")
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
@@ -153,6 +157,8 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
         args[:build] = true
     elseif flag == 'a'
         args[:assets] = true
+    elseif flag == 's'
+        args[:sysimage] = true
     elseif flag == 'c'
         args[:clean] = true
     elseif flag == 't'
@@ -189,6 +195,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         :run => false,
         :build => false,
         :assets => false,
+        :sysimage => false,
         :clean => false,
         :test => false,
         :vet => false,
@@ -203,6 +210,8 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
             parsed[:build] = true
         elseif arg == "--assets" || arg == "-a"
             parsed[:assets] = true
+        elseif arg == "--sysimage" || arg == "-s"
+            parsed[:sysimage] = true
         elseif arg == "--clean" || arg == "-c"
             parsed[:clean] = true
         elseif arg == "--test" || arg == "-t"
@@ -234,6 +243,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         parsed[:run],
         parsed[:build],
         parsed[:assets],
+        parsed[:sysimage],
         parsed[:clean],
         parsed[:test],
         parsed[:vet],
@@ -468,7 +478,11 @@ function collect_julia_packages(julia_project_dir::String)
         return JuliaPackageDep[]
     end
 
-    snippet = "using Pkg; deps = collect(values(Pkg.dependencies())); direct = filter(d -> d.is_direct_dep, deps); sort!(direct, by = d -> lowercase(d.name)); for d in direct; version = isnothing(d.version) ? \"stdlib\" : string(d.version); println(d.name, \"|\", version); end"
+    snippet = "using Pkg; deps = collect(values(Pkg.dependencies())); " *
+        "direct = filter(d -> d.is_direct_dep, deps); " *
+        "sort!(direct, by = d -> lowercase(d.name)); " *
+        "for d in direct; version = isnothing(d.version) ? \"stdlib\" : string(d.version); " *
+        "println(d.name, \"|\", version); end"
     result = run_command(
         Cmd([JULIA_EXE, "--project=" * julia_project_dir, "-e", snippet]),
         capture_output=true)
@@ -813,6 +827,34 @@ format=tar.gz
     end
 end
 
+"""Build a custom Julia sysimage containing Euclid definitions and pure compiler workloads."""
+function build_julia_sysimage()
+    println("Building Julia sysimage...")
+    mkpath(BIN_DIR)
+
+    build_script = joinpath(SRC_DIR, "julia", "sysimage_build.jl")
+    result = run_command(Cmd([
+        JULIA_EXE,
+        "--project=" * JULIA_TEST_PROJECT,
+        build_script,
+        JULIA_SYSIMAGE_PATH,
+    ]); cwd=SCRIPT_DIR)
+    println("Julia sysimage build exited $(result.exit_code)")
+    if result.exit_code != 0 || !isfile(JULIA_SYSIMAGE_PATH)
+        error("Julia sysimage build failed.")
+    end
+
+    println("Wrote $JULIA_SYSIMAGE_PATH")
+end
+
+"""Remove an old custom sysimage when this build did not explicitly regenerate it."""
+function remove_stale_julia_sysimage()
+    if isfile(JULIA_SYSIMAGE_PATH)
+        rm(JULIA_SYSIMAGE_PATH; force=true)
+        println("Removed stale $JULIA_SYSIMAGE_PATH")
+    end
+end
+
 """Resolve Julia linker flags and optional runtime bindir data for the current platform."""
 function resolve_julia_linker_flags(do_build::Bool)
     if !do_build
@@ -907,6 +949,7 @@ function clean_build_files()
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),
+        JULIA_SYSIMAGE_PATH,
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
         joinpath(BIN_DIR, ".julia_import_libs"),
@@ -940,7 +983,8 @@ end
 
 """Return true when any build/run action flag was explicitly requested."""
 explicit_action_requested(args::Args) =
-    args.run || args.build || args.assets || args.vet || args.test || args.no_build || args.no_assets
+    args.run || args.build || args.assets || args.sysimage || args.vet || args.test ||
+    args.no_build || args.no_assets
 
 """Resolve effective build, vet, and asset steps from CLI argument combinations."""
 function resolve_build_plan(args::Args)
@@ -1003,11 +1047,16 @@ function execute_build_plan(
     do_build::Bool,
     do_vet::Bool,
     do_assets::Bool,
+    build_sysimage::Bool,
     run_tests::Bool,
     run_after_build::Bool,
     run_args::Vector{String})
     julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
     odin_build_result = nothing
+
+    if (do_build || do_assets) && !build_sysimage
+        remove_stale_julia_sysimage()
+    end
 
     if do_build
         odin_build_result = build_odin(do_vet, julia_flags)
@@ -1019,6 +1068,10 @@ function execute_build_plan(
 
     if do_assets
         build_assets(do_build)
+    end
+
+    if build_sysimage
+        build_julia_sysimage()
     end
 
     if run_tests
@@ -1064,6 +1117,7 @@ function main()
             do_build,
             do_vet,
             do_assets,
+            args.sysimage,
             run_tests,
             run_after_build,
             run_args)

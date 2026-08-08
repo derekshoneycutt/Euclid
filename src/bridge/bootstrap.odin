@@ -6,8 +6,34 @@ import "../files"
 
 import "base:runtime"
 import "core:fmt"
+import "core:os"
+import "core:path/filepath"
 import "core:strings"
 import vmem "core:mem/virtual"
+
+when ODIN_OS == .Windows {
+    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dll"
+} else when ODIN_OS == .Darwin {
+    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dylib"
+} else {
+    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.so"
+}
+
+//   Resolve the optional custom Julia sysimage beside the Euclid executable.
+resolve_julia_sysimage_path :: proc() -> (string, bool) {
+    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
+    if exe_err != nil || len(exe_dir) == 0 {
+        return "", false
+    }
+
+    image_path, path_err := filepath.join(
+        []string{exe_dir, JULIA_SYSIMAGE_FILENAME}, context.temp_allocator)
+    if path_err != nil || !os.exists(image_path) {
+        return "", false
+    }
+
+    return image_path, true
+}
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
 //
@@ -15,7 +41,14 @@ import vmem "core:mem/virtual"
 //   - Intended to be called once during application startup before Julia bridge calls.
 //   - Exits immediately if packaged script include fails.
 initiate_julia :: proc() {
-    julialib.jl_init()
+    image_path, has_image := resolve_julia_sysimage_path()
+    if has_image {
+        fmt.println("Starting Julia with custom sysimage: ", image_path)
+        image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
+        julialib.jl_init_with_image_file(nil, image_path_c)
+    } else {
+        julialib.jl_init()
+    }
 
     _ = include_packaged_script(true)
 }

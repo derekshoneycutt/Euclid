@@ -208,6 +208,11 @@ if vsync is on (the default). Additionally, you can toggle SIMD use for use in i
 projection, which is on by default. The SIMD has little effect either way on most modern
 computers, to be honest.
 
+The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
+LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
+executable. Build and run it with `julia make.jl -sr`. Ordinary build or asset commands
+remove an existing sysimage to prevent stale baked code from being used.
+
 Additionally, there are some startup options that can affect application performance.
 
 ```text
@@ -257,6 +262,7 @@ Usage: ./make.jl [options]
 Options:
     --build, -b         Build the project.
     --assets, -a        Build assets.pkg.
+    --sysimage, -s      Build a custom Julia sysimage beside the application.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
@@ -268,7 +274,7 @@ Options:
 Notes:
     - If no options are provided, the default is --build --assets.
     - That is, --build and --assets are essentially non-altering flags, included for visibility.
-    - Short options can be combined, e.g. -rva or -bnx.
+    - Short options can be combined, e.g. -rvas or -bnx.
 ```
 
 ### Q: Where Should I Start If I Want In The Code?
@@ -302,6 +308,10 @@ EuclidApp will automatically notice the updated package file, unpack it, and rel
 the Julia code, restarting the current animation according to the new code. If the current
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
+
+Animation content remains dynamically loaded when using a sysimage. Changes to baked core
+modules such as the bridge wrappers, LaTeX compiler, geometry helpers, animation helpers,
+or Scratchpad require rebuilding the sysimage and restarting EuclidApp.
 
 ### Q: What is all this output in the make vet output?
 

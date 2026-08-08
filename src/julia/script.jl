@@ -1,14 +1,16 @@
 # Main Julia script body
 # This just loads all the system helpers and animation files, and registers in init for Odin
 
-using LaTeXStrings
+if !isdefined(Main, :EUCLID_SYSIMAGE_CORE_LOADED)
+    using LaTeXStrings
 
-include("./odin-julia-bridge.jl")
-include("./latex.jl")
-include("./geometry.jl")
-include("./animations.jl")
-include("./scratchpad.jl")
-include("./euclidrepl.jl")
+    include("./odin-julia-bridge.jl")
+    include("./latex.jl")
+    include("./geometry.jl")
+    include("./animations.jl")
+    include("./scratchpad.jl")
+    include("./euclidrepl.jl")
+end
 
 include("./nullanimation.jl")
 
@@ -19,6 +21,7 @@ include("./algebra/algebra.jl")
 
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid})
+    registration_started = time_ns()
     OdinJuliaBridge.set_null_animations(
         state_ptr, NullAnimation.get_view_text, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean)
@@ -29,9 +32,18 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     init_euclid_scripts_proclus(state_ptr)
     init_euclid_scripts_hilbert(state_ptr)
     init_euclid_scripts_algebra(state_ptr)
+    println("Julia startup: content registration completed in ",
+        round((time_ns() - registration_started) / 1_000_000; digits=2), " ms")
 
+    latex_started = time_ns()
     EuclidLatex.prime_latex!(state_ptr)
+    println("Julia startup: LaTeX priming completed in ",
+        round((time_ns() - latex_started) / 1_000_000; digits=2), " ms")
+
+    scratchpad_started = time_ns()
     Scratchpad.prime_repl!(state_ptr)
+    println("Julia startup: Scratchpad priming completed in ",
+        round((time_ns() - scratchpad_started) / 1_000_000; digits=2), " ms")
 
 end
 
