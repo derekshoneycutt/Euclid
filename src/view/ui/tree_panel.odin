@@ -6,8 +6,8 @@ import view_core "../core"
 import rl "vendor:raylib"
 
 Tree_Hit :: struct {
-    SelectedID: int,
-    ToggledID:  int,
+    SelectedNode: ^core.Euclid_Julia_Animation_Interface,
+    ToggledNode: ^core.Euclid_Julia_Animation_Interface,
 }
 
 //   Render the right-side tree panel and route toolbar interactions.
@@ -15,6 +15,7 @@ draw_tree_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     mouse_input: Mouse_Input_State) {
+
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
 
@@ -81,36 +82,81 @@ draw_tree_view :: proc(
         &state^.ui_runtime.tree_scroll_y, state.font)
 }
 
+//   Build a stable per-frame widget id for a node based on its pointer value.
+tree_node_press_id :: #force_inline proc(
+    node: ^core.Euclid_Julia_Animation_Interface) -> int {
+
+    if node == nil {
+        return -1
+    }
+
+    return int(uintptr(node) & uintptr(0x7fffffff))
+}
+
 //   Mark one animation selected and clear selection on others.
-set_selected_animation :: proc(ji: ^core.Euclid_Julia_Interface, selected_id: int) {
-    if selected_id < 0 || selected_id >= ji.next_animation_index {
+set_selected_animation :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    selected: ^core.Euclid_Julia_Animation_Interface) {
+
+    if ji == nil || selected == nil {
         return
     }
 
-    for i in 0..<ji.next_animation_index {
-        ji.animations[i].is_selected = (i == selected_id)
+    for node := ji.animation_head; node != nil; node = node.next_in_registry {
+        node.is_selected = (node == selected)
     }
-    ji.selected_animation_index = selected_id
+    ji.selected_animation = selected
+}
+
+//   Count visible rows recursively with recursion guard limit.
+count_visible_tree_rows_limited :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    remaining: int) -> int {
+
+    if ji == nil || node == nil || remaining <= 0 {
+        return 0
+    }
+
+    count := 1
+    if !node.is_expanded || node.first_child == nil {
+        return count
+    }
+
+    child := node.first_child
+    steps := 0
+    for child != nil && steps < ji.animation_count {
+        count += count_visible_tree_rows_limited(ji, child, remaining - 1)
+        child = child.next_sibling
+        steps += 1
+    }
+
+    return count
 }
 
 //   Count visible rows for all root trees with expansion state.
 count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> int {
+    if ji == nil {
+        return 0
+    }
+
     count := 0
-    for i in 0..<ji.next_animation_index {
-        if ji.animations[i].parent_id < 0 {
-            count += count_visible_tree_rows_limited(ji, i, ji.next_animation_index)
+    for node := ji.animation_head; node != nil; node = node.next_in_registry {
+        if node.parent == nil {
+            count += count_visible_tree_rows_limited(ji, node, ji.animation_count)
         }
     }
+
     return count
 }
 
 //   Merge child tree hit results into a single accumulator.
 merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
-    if src.SelectedID >= 0 {
-        dst.SelectedID = src.SelectedID
+    if src.SelectedNode != nil {
+        dst.SelectedNode = src.SelectedNode
     }
-    if src.ToggledID >= 0 {
-        dst.ToggledID = src.ToggledID
+    if src.ToggledNode != nil {
+        dst.ToggledNode = src.ToggledNode
     }
 }
 
@@ -120,11 +166,11 @@ apply_tree_hit :: proc(
     ui_runtime: ^core.Euclid_UI_Runtime_State,
     hit: Tree_Hit) {
 
-    if hit.ToggledID >= 0 && hit.ToggledID < ji.next_animation_index {
-        ji.animations[hit.ToggledID].is_expanded = !ji.animations[hit.ToggledID].is_expanded
+    if hit.ToggledNode != nil {
+        hit.ToggledNode.is_expanded = !hit.ToggledNode.is_expanded
     }
-    if hit.SelectedID >= 0 {
-        set_selected_animation(ji, hit.SelectedID)
+    if hit.SelectedNode != nil {
+        set_selected_animation(ji, hit.SelectedNode)
         ui_runtime.view_text_scroll_y = 0
         ui_runtime.text_scroll_dragging = false
         ui_runtime.text_scroll_drag_off = 0
@@ -132,6 +178,187 @@ apply_tree_hit :: proc(
         ui_runtime.scratchpad_input_cursor = 0
         ui_runtime.scratchpad_follow_output = false
     }
+}
+
+//   Advance content cursor for skipped offscreen child branches.
+accumulate_offscreen_child_rows :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    first_child: ^core.Euclid_Julia_Animation_Interface,
+    content_y: ^f32,
+    remaining: int) {
+
+    child := first_child
+    steps := 0
+    for child != nil && steps < ji.animation_count {
+        child_rows := count_visible_tree_rows_limited(ji, child, remaining - 1)
+        content_y^ += f32(child_rows) * TREE_ROW_HEIGHT
+        child = child.next_sibling
+        steps += 1
+    }
+}
+
+//   Traverse and draw child node branches with depth tracking.
+walk_draw_child_nodes_limited :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    first_child: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    panel: rl.Rectangle,
+    content_y: ^f32,
+    scroll_y: f32,
+    allow_clicks: bool,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    remaining: int,
+    font: rl.Font) -> Tree_Hit {
+
+    hit := Tree_Hit{}
+
+    child := first_child
+    steps := 0
+    for child != nil && steps < ji.animation_count {
+        child_hit := walk_draw_tree_node_limited(ji, ui_runtime, child, depth + 1, panel,
+            content_y, scroll_y, allow_clicks, mouse_input, scroll_offset,
+            interaction_space_rect, remaining - 1, font)
+        merge_tree_hit(&hit, child_hit)
+        child = child.next_sibling
+        steps += 1
+    }
+
+    return hit
+}
+
+//   Return first child pointer only when node is expanded.
+expanded_first_child :: #force_inline proc(
+    node: ^core.Euclid_Julia_Animation_Interface) -> ^core.Euclid_Julia_Animation_Interface {
+
+    if node == nil || !node.is_expanded {
+        return nil
+    }
+
+    return node.first_child
+}
+
+//   Render one tree row and capture selection/toggle interactions.
+draw_tree_node_row :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    row_rect: rl.Rectangle,
+    allow_clicks: bool,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    hit: ^Tree_Hit,
+    font: rl.Font) {
+
+    if node == nil {
+        return
+    }
+
+    indent_x := row_rect.x + f32(depth) * TREE_INDENT
+    icon_rect := rl.Rectangle{
+        indent_x + TREE_ROW_ICON_OFFSET_X,
+        row_rect.y + TREE_ROW_ICON_OFFSET_Y,
+        TREE_ROW_ICON_SIZE,
+        TREE_ROW_ICON_SIZE,
+    }
+    label_x := int(indent_x + TREE_ROW_LABEL_OFFSET_X)
+
+    list_item_result := draw_list_item(List_Item_Params{
+        id = tree_node_press_id(node),
+        rect = row_rect,
+        can_expand_pos_y = false,
+        selected = node.is_selected,
+        mouse = mouse_input,
+        scroll_offset = scroll_offset,
+        interaction_space_rect = interaction_space_rect,
+        interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
+    }, &ui_runtime.ui_press_owner)
+
+    if node.first_child != nil {
+        expander_result := draw_tree_expander(Tree_Expander_Params{
+            rect = icon_rect,
+            expanded = node.is_expanded,
+            mouse = mouse_input,
+            scroll_offset = scroll_offset,
+            interaction_space_rect = interaction_space_rect,
+            interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
+            toggle_triggered = list_item_result.clicked,
+            color = UI_TEXT_COLOR,
+        })
+        if expander_result.clicked {
+            hit.ToggledNode = node
+        }
+    }
+
+    view_core.ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
+        UI_TEXT_COLOR, font)
+
+    if list_item_result.clicked {
+        hit.SelectedNode = node
+    }
+}
+
+//   Traverse one tree node branch with clipping-aware row handling.
+walk_draw_tree_node_limited :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    panel: rl.Rectangle,
+    content_y: ^f32,
+    scroll_y: f32,
+    allow_clicks: bool,
+    mouse_input: Mouse_Input_State,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    remaining: int,
+    font: rl.Font) -> Tree_Hit {
+
+    hit := Tree_Hit{}
+
+    if remaining <= 0 || node == nil {
+        return hit
+    }
+
+    child_first := expanded_first_child(node)
+
+    row_y_world := content_y^
+    content_y^ += TREE_ROW_HEIGHT
+
+    row_y_screen := panel.y + (row_y_world - scroll_y)
+    row_rect := rl.Rectangle{panel.x, row_y_screen, panel.width, TREE_ROW_HEIGHT}
+
+    if row_rect.y > panel.y + panel.height {
+        if child_first != nil {
+            accumulate_offscreen_child_rows(ji, child_first, content_y, remaining)
+        }
+        return hit
+    }
+
+    if row_rect.y + row_rect.height < panel.y {
+        if child_first != nil {
+            child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
+                panel, content_y, scroll_y, allow_clicks, mouse_input,
+                scroll_offset, interaction_space_rect, remaining, font)
+            merge_tree_hit(&hit, child_hit)
+        }
+        return hit
+    }
+
+    draw_tree_node_row(ui_runtime, node, depth, row_rect, allow_clicks,
+        mouse_input, scroll_offset, interaction_space_rect, &hit, font)
+
+    if child_first != nil {
+        child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
+            panel, content_y, scroll_y, allow_clicks, mouse_input,
+            scroll_offset, interaction_space_rect, remaining, font)
+        merge_tree_hit(&hit, child_hit)
+    }
+
+    return hit
 }
 
 //   Traverse and draw root nodes, aggregating click hits.
@@ -147,241 +374,17 @@ walk_draw_tree_roots :: proc(
     interaction_space_rect: rl.Rectangle,
     font: rl.Font) -> Tree_Hit {
 
-    hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
+    hit := Tree_Hit{}
 
-    for i in 0..<ji.next_animation_index {
-        if ji.animations[i].parent_id >= 0 {
+    for node := ji.animation_head; node != nil; node = node.next_in_registry {
+        if node.parent != nil {
             continue
         }
 
-        root_hit := walk_draw_tree_node_limited(ji, ui_runtime, i, 0, panel, content_y, scroll_y,
-            allow_clicks, mouse_input, scroll_offset, interaction_space_rect,
-            ji.next_animation_index, font)
-        merge_tree_hit(&hit, root_hit)
-    }
-
-    return hit
-}
-
-//   Count visible rows recursively with recursion guard limit.
-count_visible_tree_rows_limited :: proc(
-    ji: ^core.Euclid_Julia_Interface, id: int, remaining: int) -> int {
-
-    if remaining <= 0 {
-        return 0
-    }
-
-    if id < 0 || id >= ji.next_animation_index {
-        return 0
-    }
-
-    count := 1
-    n := &ji.animations[id]
-
-    if !n.is_expanded || n.first_child_id < 0 {
-        return count
-    }
-
-    child := n.first_child_id
-    steps := 0
-    for child >= 0 && steps < ji.next_animation_index {
-        if child >= ji.next_animation_index {
-            break
-        }
-        count += count_visible_tree_rows_limited(ji, child, remaining - 1)
-        child = ji.animations[child].next_sibling
-        steps += 1
-    }
-
-    return count
-}
-
-//   Advance content cursor for skipped offscreen child branches.
-accumulate_offscreen_child_rows :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    first_child: int,
-    content_y: ^f32,
-    remaining: int) {
-
-    child := first_child
-    steps := 0
-    for child >= 0 && steps < ji.next_animation_index {
-        if child >= ji.next_animation_index {
-            break
-        }
-
-        child_rows := count_visible_tree_rows_limited(ji, child, remaining - 1)
-        content_y^ += f32(child_rows) * TREE_ROW_HEIGHT
-        child = ji.animations[child].next_sibling
-        steps += 1
-    }
-}
-
-//   Traverse and draw child node branches with depth tracking.
-walk_draw_child_nodes_limited :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    first_child, depth: int,
-    panel: rl.Rectangle,
-    content_y: ^f32,
-    scroll_y: f32,
-    allow_clicks: bool,
-    mouse_input: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    remaining: int,
-    font: rl.Font) -> Tree_Hit {
-
-    hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
-
-    child := first_child
-    steps := 0
-    for child >= 0 && steps < ji.next_animation_index {
-        if child >= ji.next_animation_index {
-            break
-        }
-
-        child_hit := walk_draw_tree_node_limited(ji, ui_runtime, child, depth + 1, panel,
+        root_hit := walk_draw_tree_node_limited(ji, ui_runtime, node, 0, panel,
             content_y, scroll_y, allow_clicks, mouse_input, scroll_offset,
-            interaction_space_rect, remaining - 1, font)
-        merge_tree_hit(&hit, child_hit)
-        child = ji.animations[child].next_sibling
-        steps += 1
-    }
-
-    return hit
-}
-
-//   Return first child id only when node is expanded.
-expanded_first_child_id :: #force_inline proc(
-    is_expanded: bool, first_child_id: int) -> int {
-
-    if !is_expanded || first_child_id < 0 {
-        return -1
-    }
-    return first_child_id
-}
-
-//   Render one tree row and capture selection/toggle interactions.
-draw_tree_node_row :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    id: int,
-    depth: int,
-    row_rect: rl.Rectangle,
-    allow_clicks: bool,
-    mouse_input: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    hit: ^Tree_Hit,
-    font: rl.Font) {
-
-    node := &ji.animations[id]
-
-    indent_x := row_rect.x + f32(depth) * TREE_INDENT
-    icon_rect := rl.Rectangle{
-        indent_x + TREE_ROW_ICON_OFFSET_X,
-        row_rect.y + TREE_ROW_ICON_OFFSET_Y,
-        TREE_ROW_ICON_SIZE,
-        TREE_ROW_ICON_SIZE,
-    }
-    label_x := int(indent_x + TREE_ROW_LABEL_OFFSET_X)
-
-    list_item_result := draw_list_item(List_Item_Params{
-        id = id,
-        rect = row_rect,
-        can_expand_pos_y = false,
-        selected = node.is_selected,
-        mouse = mouse_input,
-        scroll_offset = scroll_offset,
-        interaction_space_rect = interaction_space_rect,
-        interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
-    }, &ui_runtime.ui_press_owner)
-
-    if node.first_child_id >= 0 {
-        expander_result := draw_tree_expander(Tree_Expander_Params{
-            rect = icon_rect,
-            expanded = node.is_expanded,
-            mouse = mouse_input,
-            scroll_offset = scroll_offset,
-            interaction_space_rect = interaction_space_rect,
-            interaction_enabled = allow_clicks && !ui_runtime.tree_scroll_dragging,
-            toggle_triggered = list_item_result.clicked,
-            color = UI_TEXT_COLOR,
-        })
-        if expander_result.clicked {
-            hit.ToggledID = id
-        }
-    }
-
-    view_core.ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
-        UI_TEXT_COLOR, font)
-
-    if list_item_result.clicked {
-        hit.SelectedID = id
-    }
-}
-
-//   Traverse one tree node branch with clipping-aware row handling.
-walk_draw_tree_node_limited :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    id: int,
-    depth: int,
-    panel: rl.Rectangle,
-    content_y: ^f32,
-    scroll_y: f32,
-    allow_clicks: bool,
-    mouse_input: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    remaining: int,
-    font: rl.Font) -> Tree_Hit {
-
-    hit := Tree_Hit{SelectedID = -1, ToggledID = -1}
-
-    if remaining <= 0 {
-        return hit
-    }
-
-    if id < 0 || id >= ji.next_animation_index {
-        return hit
-    }
-
-    node := &ji.animations[id]
-    child_first := expanded_first_child_id(node.is_expanded, node.first_child_id)
-
-    row_y_world := content_y^
-    content_y^ += TREE_ROW_HEIGHT
-
-    row_y_screen := panel.y + (row_y_world - scroll_y)
-    row_rect := rl.Rectangle{panel.x, row_y_screen, panel.width, TREE_ROW_HEIGHT}
-
-    if row_rect.y > panel.y + panel.height {
-        if child_first >= 0 {
-            accumulate_offscreen_child_rows(ji, child_first, content_y, remaining)
-        }
-        return hit
-    }
-
-    if row_rect.y + row_rect.height < panel.y {
-        if child_first >= 0 {
-            child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
-                panel, content_y, scroll_y, allow_clicks, mouse_input,
-                scroll_offset, interaction_space_rect, remaining, font)
-            merge_tree_hit(&hit, child_hit)
-        }
-        return hit
-    }
-
-    draw_tree_node_row(ji, ui_runtime, id, depth, row_rect, allow_clicks,
-        mouse_input, scroll_offset, interaction_space_rect, &hit, font)
-
-    if child_first >= 0 {
-        child_hit := walk_draw_child_nodes_limited(ji, ui_runtime, child_first, depth,
-            panel, content_y, scroll_y, allow_clicks, mouse_input,
-            scroll_offset, interaction_space_rect, remaining, font)
-        merge_tree_hit(&hit, child_hit)
+            interaction_space_rect, ji.animation_count, font)
+        merge_tree_hit(&hit, root_hit)
     }
 
     return hit

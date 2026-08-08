@@ -33,7 +33,7 @@ Parameters:
 - `name` : The name of the animation to show in the tree
 - `stable_id` : Canonical UUID string used as stable animation identity
 
-Returns the index of the new root animation
+Returns 1 on success and -1 on failure
 """
 function add_root_animation_interface(
     state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, stable_id::String)
@@ -57,17 +57,17 @@ Parameters:
 - `clean` : A function that should be called when the animation is being cleaned and ended
 - `name` : The name of the animation to show in the tree
 - `stable_id` : Canonical UUID string used as stable animation identity
-- `parentId` : The index of the parent animation to place the child under in the tree
+- `parent_stable_id` : Canonical UUID string of the parent animation node
 
-Returns the index of the new child animation
+Returns 1 on success and -1 on failure
 """
 function add_child_animation_interface(
     state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String,
-    stable_id::String, parentId::Integer)
+    stable_id::String, parent_stable_id::String)
 
     @ccall add_child_animation_interface(
         state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
-        name::Cstring, stable_id::Cstring, parentId::Int64)::Int64
+        name::Cstring, stable_id::Cstring, parent_stable_id::Cstring)::Int64
 end
 
 """

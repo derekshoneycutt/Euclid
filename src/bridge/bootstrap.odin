@@ -60,8 +60,8 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
     ret.scratchpad_history_reset_cursor = julialib.jl_get_function(
         main_module, "scratchpad_history_reset_cursor")
     ret.asset_archive_mod_time_unix_nano = 0
-    ret.current_animation_index = -1
-    ret.selected_animation_index = -1
+    ret.current_animation = &ret.null_animation
+    ret.selected_animation = nil
     ret.animation_reset_cooldown_remaining = 0
 
     return ret
@@ -113,9 +113,14 @@ clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
         vmem.arena_free_all(&iface^.animation_name_arena)
     }
 
-    for i in 0..<iface^.next_animation_index {
-        iface^.animations[i].name = ""
-    }
+    iface^.animation_head = nil
+    iface^.animation_tail = nil
+    iface^.animation_count = 0
+    iface^.animation_lookup_entries = nil
+    iface^.animation_lookup_capacity = 0
+    iface^.animation_lookup_count = 0
+    iface^.selected_animation = nil
+    iface^.current_animation = &iface^.null_animation
 }
 
 //   Destroy Julia interface arena resources prior to freeing the interface struct.

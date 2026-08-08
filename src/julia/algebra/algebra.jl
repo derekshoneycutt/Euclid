@@ -8,11 +8,12 @@ Here we explore Algebra for ways that are helpful for understanding geometry and
 end
 
 function init_euclid_scripts_algebra(state_ptr::Ptr{Cvoid})
-    rootId = OdinJuliaBridge.add_root_animation_interface(
+    root_stable_id = OdinJuliaBridge.animation_stable_id_from_key("root:Algebra")
+    OdinJuliaBridge.add_root_animation_interface(
         state_ptr, get_view_text_root_euclid_elements, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
         "Algebra",
-        OdinJuliaBridge.animation_stable_id_from_key("root:Algebra"))
+        root_stable_id)
 
-    EuclidAlgebraGroups.init_euclid_scripts(state_ptr, rootId)
+    EuclidAlgebraGroups.init_euclid_scripts(state_ptr, root_stable_id)
 end

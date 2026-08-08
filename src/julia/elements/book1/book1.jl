@@ -65,17 +65,22 @@ function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
     "Euclid Elements - Book I - Propositions"
 end
 
-function stable_child_id(parent_id::Integer, name::AbstractString)
+function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
-        "child:" * string(parent_id) * ":" * String(name))
+        "child:" * String(parent_stable_id) * ":" * String(name))
 end
 
 function register_child_animation(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::AbstractString, parent_id::Integer)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::AbstractString,
+    parent_stable_id::AbstractString)
+
+    child_stable_id = stable_child_id(parent_stable_id, name)
 
     OdinJuliaBridge.add_child_animation_interface(
         state_ptr, getViewText, init, loop, clean, String(name),
-        stable_child_id(parent_id, name), parent_id)
+        child_stable_id, String(parent_stable_id))
+
+    return child_stable_id
 end
 
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)

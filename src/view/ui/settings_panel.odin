@@ -246,7 +246,7 @@ draw_settings_view :: proc(
     max_particles := core.MAX_LOW_PARTICLES
     animation_entries_added := 0
     if state.julia_interface != nil {
-        animation_entries_added = state.julia_interface.next_animation_index
+        animation_entries_added = state.julia_interface.animation_count
     }
     draw_settings_integer_slider(
         panel,

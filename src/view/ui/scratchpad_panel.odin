@@ -15,12 +15,12 @@ is_scratchpad_selected :: proc(state: ^core.Euclid_General_State) -> bool {
         return false
     }
 
-    selected := state^.julia_interface^.selected_animation_index
-    if selected < 0 || selected >= state^.julia_interface^.next_animation_index {
+    selected := state^.julia_interface^.selected_animation
+    if selected == nil {
         return false
     }
 
-    return state^.julia_interface^.animations[selected].name == julia.SCRATCHPAD_ANIMATION_NAME
+    return selected^.name == julia.SCRATCHPAD_ANIMATION_NAME
 }
 
 //   Read the current scratchpad input text from the fixed-size UI buffer.

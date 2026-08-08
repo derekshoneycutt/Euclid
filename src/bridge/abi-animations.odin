@@ -3,8 +3,6 @@ package bridge
 import "../julialib"
 import "../core"
 
-import "core:strings"
-
 //   Register Julia callbacks that define the null/default animation behavior.
 //
 // Parameters:
@@ -36,7 +34,8 @@ set_null_animations :: proc "c" (
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //
 // Returns:
-//   - Index of the inserted animation interface entry.
+//   - 1 when inserted successfully.
+//   - -1 when validation or insertion fails.
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
@@ -45,34 +44,28 @@ add_root_animation_interface :: proc "c" (
 
     context = state^.saved_context
 
-    parsed_stable_id, ok := parse_animation_stable_id(stable_id, name)
-    if !ok {
+    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
+    if !parsed_ok {
         return -1
     }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, -1) {
-        return -1
-    }
-
-    newIndex := state^.julia_interface^.next_animation_index
-    state^.julia_interface^.next_animation_index += 1
-
-    animation := &state^.julia_interface^.animations[newIndex]
-
-    if !ensure_julia_interface_name_arena(state) {
+    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, "") {
         return -1
     }
 
-    animation^.get_view_text = getViewText
-    animation^.initiate = init
-    animation^.loop = loop
-    animation^.clean = clean
-    animation^.name = strings.clone(string(name), state^.julia_interface^.animation_name_allocator)
-    animation^.stable_id = parsed_stable_id
-    animation^.first_child_id = -1
-    animation^.parent_id = -1
-    animation^.next_sibling = -1
+    _, inserted := add_animation_to_registry(
+        state,
+        getViewText,
+        init,
+        loop,
+        clean,
+        name,
+        parsed_stable_id,
+        nil)
+    if !inserted {
+        return -1
+    }
 
-    return newIndex
+    return 1
 }
 
 //   Register a child animation interface and link it under an existing parent animation.
@@ -85,65 +78,47 @@ add_root_animation_interface :: proc "c" (
 //   - clean: Julia function pointer used to bind animation callback behavior.
 //   - name: Null-terminated animation label string from Julia.
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
-//   - parentId: Parent animation index that receives the new child animation entry.
+//   - parent_stable_id: Parent animation UUID string that receives the new child entry.
 //
 // Returns:
-//   - Index of the inserted child animation when parentId is valid.
-//   - -1 when parentId does not reference a registered animation.
+//   - 1 when inserted successfully.
+//   - -1 when parent_stable_id does not reference a registered animation.
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
     getViewText, init, loop, clean : ^julialib.jl_value_t,
     name, stable_id : cstring,
-    parentId : int) -> int {
-
-    if parentId < 0 || parentId >= state^.julia_interface^.next_animation_index {
-        return -1
-    }
+    parent_stable_id: cstring) -> int {
 
     context = state^.saved_context
 
-    parsed_stable_id, ok := parse_animation_stable_id(stable_id, name)
+    parent, ok := resolve_parent_animation_by_stable_id(state, parent_stable_id)
     if !ok {
         return -1
     }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, parentId) {
+
+    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
+    if !parsed_ok {
+        return -1
+    }
+    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, parent_stable_id) {
         return -1
     }
 
-    newIndex := state^.julia_interface^.next_animation_index
-    state^.julia_interface^.next_animation_index += 1
-
-    parentAnimation := &state^.julia_interface^.animations[parentId]
-    lastChildId := parentAnimation^.first_child_id
-    if lastChildId < 0 {
-        parentAnimation^.first_child_id = newIndex
-    } else {
-        reviewChild := &state^.julia_interface^.animations[lastChildId]
-        for reviewChild^.next_sibling >= 0 {
-            lastChildId = reviewChild^.next_sibling
-            reviewChild = &state^.julia_interface^.animations[lastChildId]
-        }
-        reviewChild^.next_sibling = newIndex
-    }
-
-    animation := &state^.julia_interface^.animations[newIndex]
-
-    if !ensure_julia_interface_name_arena(state) {
+    _, inserted := add_animation_to_registry(
+        state,
+        getViewText,
+        init,
+        loop,
+        clean,
+        name,
+        parsed_stable_id,
+        parent)
+    if !inserted {
         return -1
     }
 
-    animation^.get_view_text = getViewText
-    animation^.initiate = init
-    animation^.loop = loop
-    animation^.clean = clean
-    animation^.name = strings.clone(string(name), state^.julia_interface^.animation_name_allocator)
-    animation^.stable_id = parsed_stable_id
-    animation^.first_child_id = -1
-    animation^.parent_id = parentId
-    animation^.next_sibling = -1
-
-    return newIndex
+    return 1
 }
 
 //   Mark that an animation cycle boundary occurred so host-side systems can consume it once.

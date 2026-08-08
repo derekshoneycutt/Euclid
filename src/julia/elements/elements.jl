@@ -6,11 +6,12 @@ function get_view_text_root_euclid_elements(state_ptr::Ptr{Cvoid})
 end
 
 function init_euclid_scripts_euclid_elements(state_ptr::Ptr{Cvoid})
-    rootId = OdinJuliaBridge.add_root_animation_interface(
+    root_stable_id = OdinJuliaBridge.animation_stable_id_from_key("root:Euclid's Elements")
+    OdinJuliaBridge.add_root_animation_interface(
         state_ptr, get_view_text_root_euclid_elements, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
         "Euclid's Elements",
-        OdinJuliaBridge.animation_stable_id_from_key("root:Euclid's Elements"))
-    ElementsOne.init_euclid_scripts(state_ptr, rootId)
+        root_stable_id)
+    ElementsOne.init_euclid_scripts(state_ptr, root_stable_id)
 
 end

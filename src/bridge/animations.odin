@@ -10,6 +10,9 @@ import "core:fmt"
 import "core:strings"
 
 SCRATCHPAD_ANIMATION_NAME :: "Scratchpad"
+ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
+ANIMATION_LOOKUP_LOAD_FACTOR_NUMERATOR :: 7
+ANIMATION_LOOKUP_LOAD_FACTOR_DENOMINATOR :: 10
 
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
@@ -18,9 +21,7 @@ SCRATCHPAD_ANIMATION_NAME :: "Scratchpad"
 //
 // Notes:
 //   - Julia exceptions are reported and the call returns early without panicking.
-init_euclid_scripts :: proc(
-    state: ^core.Euclid_General_State) {
-
+init_euclid_scripts :: proc(state: ^core.Euclid_General_State) {
     state_value := julialib.jl_box_voidpointer(state)
 
     julialib.jl_call1(state^.julia_interface^.init_scripts, state_value)
@@ -37,7 +38,7 @@ init_euclid_scripts :: proc(
         }
     }
 
-    if state^.julia_interface^.selected_animation_index < 0 {
+    if state^.julia_interface^.selected_animation == nil {
         select_default_animation(state)
     }
 }
@@ -51,9 +52,7 @@ init_euclid_scripts :: proc(
 //
 // Notes:
 //   - Julia exceptions are logged and ignored for this step.
-perform_animation_frame :: proc(
-    state: ^core.Euclid_General_State, dt: f32) {
-
+perform_animation_frame :: proc(state: ^core.Euclid_General_State, dt: f32) {
     update_running_animations(state, dt)
     call_global_euclid_loop(state, dt)
     call_current_animation_loop(state, dt)
@@ -67,9 +66,7 @@ perform_animation_frame :: proc(
 // Returns:
 //   - Cloned text for immediate UI consumption.
 //   - Empty string when callback is unavailable, returns nil, or throws an exception.
-call_current_animation_get_view_text :: proc(
-    state: ^core.Euclid_General_State) -> string {
-
+call_current_animation_get_view_text :: proc(state: ^core.Euclid_General_State) -> string {
     if state^.julia_interface^.current_animation == nil ||
         state^.julia_interface^.current_animation^.get_view_text == nil {
         return ""
@@ -99,9 +96,7 @@ call_current_animation_get_view_text :: proc(
 //
 // Notes:
 //   - Applies animation reset cooldown gating to prevent immediate repeated resets.
-update_running_animations :: proc(
-    state: ^core.Euclid_General_State, dt: f32) {
-
+update_running_animations :: proc(state: ^core.Euclid_General_State, dt: f32) {
     reload_packaged_assets_if_updated(state)
 
     if state^.julia_interface^.animation_reset_cooldown_remaining > 0 {
@@ -112,17 +107,17 @@ update_running_animations :: proc(
     }
 
     switched_animation := false
-    if state^.julia_interface^.selected_animation_index !=
-        state^.julia_interface^.current_animation_index {
-        previous_animation_index := state^.julia_interface^.current_animation_index
-        change_current_animation_loop(state, state^.julia_interface^.selected_animation_index)
+    if state^.julia_interface^.selected_animation !=
+        state^.julia_interface^.current_animation {
+        previous_animation := state^.julia_interface^.current_animation
+        change_current_animation_loop(state, state^.julia_interface^.selected_animation)
         switched_animation =
-            state^.julia_interface^.current_animation_index == state^.julia_interface^.selected_animation_index &&
-            state^.julia_interface^.current_animation_index != previous_animation_index
+            state^.julia_interface^.current_animation == state^.julia_interface^.selected_animation &&
+            state^.julia_interface^.current_animation != previous_animation
     }
 
     if state^.julia_interface^.pending_animation_reset &&
-        state^.julia_interface^.current_animation_index == state^.julia_interface^.selected_animation_index {
+        state^.julia_interface^.current_animation == state^.julia_interface^.selected_animation {
         if switched_animation {
             state^.julia_interface^.pending_animation_reset = false
         } else {
@@ -143,9 +138,7 @@ update_running_animations :: proc(
 //
 // Notes:
 //   - Julia exceptions are logged and ignored for this step.
-call_global_euclid_loop :: proc(
-    state: ^core.Euclid_General_State, dt: f32) {
-
+call_global_euclid_loop :: proc(state: ^core.Euclid_General_State, dt: f32) {
     state_value := julialib.jl_box_voidpointer(state)
     dt_value := julialib.jl_box_float32(dt)
 
@@ -165,9 +158,7 @@ call_global_euclid_loop :: proc(
 // Notes:
 //   - No-op when the current animation has no loop callback.
 //   - Julia exceptions are logged and ignored for this step.
-call_current_animation_loop :: proc(
-    state: ^core.Euclid_General_State, dt: f32) {
-
+call_current_animation_loop :: proc(state: ^core.Euclid_General_State, dt: f32) {
     if state^.julia_interface^.current_animation == nil {
         return
     }
@@ -192,16 +183,12 @@ call_current_animation_loop :: proc(
 //
 // Notes:
 //   - Clears animation-owned shapes data and tool visibility before initializing the target animation.
-//   - Returns early when the requested index is out of range or a Julia exception occurs.
 change_current_animation_loop :: proc(
-    state: ^core.Euclid_General_State, newIndex: int) {
+    state: ^core.Euclid_General_State,
+    new_animation: ^core.Euclid_Julia_Animation_Interface) {
 
-    if newIndex < -1 || newIndex >= state^.julia_interface^.next_animation_index {
-        return
-    }
-
-    animation := &state^.julia_interface^.animations[newIndex]
-    if newIndex < 0 {
+    animation := new_animation
+    if animation == nil {
         animation = &state^.julia_interface^.null_animation
     }
 
@@ -225,24 +212,19 @@ change_current_animation_loop :: proc(
     }
     state^.drawing_sound_enabled = true
 
-    julialib.jl_call1(animation^.initiate, state_value)
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Initiating new animation loop")
-        return
+    if animation^.initiate != nil {
+        julialib.jl_call1(animation^.initiate, state_value)
+        if julialib.jl_exception_occurred() != nil {
+            print_julia_exception("Initiating new animation loop")
+            return
+        }
     }
 
     state^.julia_interface^.current_animation = animation
-    state^.julia_interface^.current_animation_index = newIndex
 }
 
 //   Restart the currently selected animation by running clean then initiate callbacks.
-//
-// Notes:
-//   - No-op when the current animation does not provide a loop callback.
-//   - Reuses the same state reset behavior as animation switching.
-reset_current_animation_loop :: proc(
-    state: ^core.Euclid_General_State) {
-
+reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) {
     if state^.julia_interface^.current_animation^.loop == nil {
         return
     }
@@ -276,22 +258,37 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    target_index := -1
-    for i in 0..<state^.julia_interface^.next_animation_index {
-        if state^.julia_interface^.animations[i].name == SCRATCHPAD_ANIMATION_NAME {
+    ji := state^.julia_interface
+    target: ^core.Euclid_Julia_Animation_Interface
+
+    it := animation_iterator_begin(ji)
+    for {
+        node := animation_iterator_next(&it)
+        if node == nil {
+            break
+        }
+        if node^.name == SCRATCHPAD_ANIMATION_NAME {
             continue
         }
-        target_index = i
+
+        target = node
         break
     }
-    if target_index < 0 {
+
+    if target == nil {
         return
     }
 
-    for i in 0..<state^.julia_interface^.next_animation_index {
-        state^.julia_interface^.animations[i].is_selected = (i == target_index)
+    it = animation_iterator_begin(ji)
+    for {
+        node := animation_iterator_next(&it)
+        if node == nil {
+            break
+        }
+        node^.is_selected = (node == target)
     }
-    state^.julia_interface^.selected_animation_index = target_index
+
+    ji^.selected_animation = target
 }
 
 //   Clear animation registry state and reset interface selection fields to defaults.
@@ -300,29 +297,21 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
 
     state^.julia_interface^.null_animation = {}
     state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
-    state^.julia_interface^.current_animation_index = -1
-    state^.julia_interface^.selected_animation_index = -1
+    state^.julia_interface^.selected_animation = nil
     state^.julia_interface^.pending_animation_reset = false
     state^.julia_interface^.animation_reset_cooldown_remaining = 0
-    state^.julia_interface^.next_animation_index = 0
 }
 
-//   Find an animation index by its registered stable UUID identity.
-//
-// Returns:
-//   - Animation index when found.
-//   - -1 when no matching UUID exists in the current registry.
-find_animation_index_by_stable_id :: proc(
-    state: ^core.Euclid_General_State, stable_id: uuid.Identifier) -> int {
+//   Find an animation pointer by its registered stable UUID identity.
+find_animation_by_stable_id :: proc(
+    state: ^core.Euclid_General_State,
+    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
 
-    for i in 0..<state^.julia_interface^.next_animation_index {
-        animation := state^.julia_interface^.animations[i]
-        if animation.stable_id == stable_id {
-            return i
-        }
+    if state == nil || state^.julia_interface == nil {
+        return nil
     }
 
-    return -1
+    return animation_lookup_find(state^.julia_interface, stable_id)
 }
 
 //   Restore the current animation selection after a successful script reload.
@@ -330,10 +319,10 @@ restore_current_animation_after_reload :: proc(
     state: ^core.Euclid_General_State,
     animation_stable_id: uuid.Identifier) {
 
-    restored_index := find_animation_index_by_stable_id(state, animation_stable_id)
-    if restored_index >= 0 {
-        state^.julia_interface^.selected_animation_index = restored_index
-        change_current_animation_loop(state, restored_index)
+    restored_animation := find_animation_by_stable_id(state, animation_stable_id)
+    if restored_animation != nil {
+        state^.julia_interface^.selected_animation = restored_animation
+        change_current_animation_loop(state, restored_animation)
         return
     }
 
@@ -341,9 +330,6 @@ restore_current_animation_after_reload :: proc(
 }
 
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
-//
-// Notes:
-//   - Preserves the current animation by name when possible after reload.
 reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
     archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
     if !ok {
@@ -368,20 +354,20 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) {
     }
 
     current_animation_stable_id: uuid.Identifier
-    if state^.julia_interface^.current_animation_index >= 0 &&
-        state^.julia_interface^.current_animation_index < state^.julia_interface^.next_animation_index {
-        active_animation := state^.julia_interface^.animations[
-            state^.julia_interface^.current_animation_index]
-        current_animation_stable_id = active_animation.stable_id
+    has_current_animation_stable_id := false
+    active_animation := state^.julia_interface^.current_animation
+    if active_animation != nil && active_animation != &state^.julia_interface^.null_animation {
+        current_animation_stable_id = active_animation^.stable_id
+        has_current_animation_stable_id = true
     }
 
     state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
     refresh_julia_interface_handles(state)
     reset_julia_interface_registry(state)
     init_euclid_scripts(state)
-    restore_current_animation_after_reload(
-        state,
-        current_animation_stable_id)
+    if has_current_animation_stable_id {
+        restore_current_animation_after_reload(state, current_animation_stable_id)
+    }
 
     // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
     state^.ui_runtime.scratchpad_input_len = 0
@@ -399,9 +385,6 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
 }
 
 //   Consume a pending cycle-boundary notification exactly once.
-//
-// Notes:
-//   - Returns true only when a newer generation is observed and consumed.
 consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil {
         return false
@@ -416,14 +399,6 @@ consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> b
 }
 
 //   Parse a bridge-provided animation stable UUID string into typed identity.
-//
-// Parameters:
-//   - stable_id: Null-terminated UUID text from Julia bridge registration call.
-//   - name: Animation display name used only for diagnostics.
-//
-// Returns:
-//   - Parsed UUID identifier when successful.
-//   - false when input is nil or malformed.
 parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier, bool) {
     if stable_id == nil {
         fmt.eprintln("add animation interface failed: nil stable_id for ", string(name))
@@ -445,54 +420,350 @@ parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier,
 }
 
 //   Find an already registered animation by stable UUID identity.
-//
-// Returns:
-//   - Animation index when found.
-//   - -1 when no matching UUID exists in the current registry.
 find_registered_animation_by_stable_id :: proc(
-    state: ^core.Euclid_General_State, stable_id: uuid.Identifier) -> int {
+    state: ^core.Euclid_General_State,
+    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
 
-    for i in 0..<state^.julia_interface^.next_animation_index {
-        if state^.julia_interface^.animations[i].stable_id == stable_id {
-            return i
-        }
-    }
-
-    return -1
+    return find_animation_by_stable_id(state, stable_id)
 }
 
 //   Reject duplicate stable UUID registration before insertion.
-//
-// Parameters:
-//   - name: New animation display name being registered.
-//   - stable_id_text: Original UUID text used for diagnostics.
-//   - stable_id: Parsed UUID identity candidate.
-//   - parent_id: Parent animation index for child registrations, or -1 for root.
-//
-// Returns:
-//   - true when duplicate is detected and caller should abort registration.
 reject_duplicate_stable_id :: proc(
     state: ^core.Euclid_General_State,
     name, stable_id_text: cstring,
     stable_id: uuid.Identifier,
-    parent_id: int) -> bool {
+    parent_stable_id_text: cstring) -> bool {
 
-    existing_index := find_registered_animation_by_stable_id(state, stable_id)
-    if existing_index < 0 {
+    existing_animation := find_registered_animation_by_stable_id(state, stable_id)
+    if existing_animation == nil {
         return false
     }
 
-    existing_name := state^.julia_interface^.animations[existing_index].name
     fmt.eprintln(
         "add animation interface failed: duplicate stable_id '",
         string(stable_id_text),
         "' for ",
         string(name),
-        " conflicts with existing animation index ",
-        existing_index,
-        " name '",
-        existing_name,
-        "' parent_id=",
-        parent_id)
+        " conflicts with existing animation name '",
+        existing_animation^.name,
+        "' parent_stable_id=",
+        string(parent_stable_id_text))
     return true
+}
+
+//   Create a forward-only iterator over the animation registry list.
+animation_iterator_begin :: proc(
+    ji: ^core.Euclid_Julia_Interface) -> core.Euclid_Julia_Animation_Iterator {
+
+    if ji == nil {
+        return {}
+    }
+
+    return core.Euclid_Julia_Animation_Iterator{current = ji^.animation_head}
+}
+
+//   Return the current iterator node and advance to the next registry entry.
+animation_iterator_next :: proc(
+    it: ^core.Euclid_Julia_Animation_Iterator) -> ^core.Euclid_Julia_Animation_Interface {
+
+    if it == nil || it^.current == nil {
+        return nil
+    }
+
+    current := it^.current
+    it^.current = current^.next_in_registry
+    return current
+}
+
+//   Attach a child animation to its parent while preserving sibling order.
+animation_link_child :: proc(
+    parent, child: ^core.Euclid_Julia_Animation_Interface) {
+
+    if parent == nil || child == nil {
+        return
+    }
+
+    child^.parent = parent
+    if parent^.first_child == nil {
+        parent^.first_child = child
+        parent^.last_child = child
+        return
+    }
+
+    sibling := parent^.last_child
+    sibling^.next_sibling = child
+    child^.prev_sibling = sibling
+    parent^.last_child = child
+}
+
+//   Append a new node to the registry's arena-backed insertion order list.
+animation_append_to_registry :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    node: ^core.Euclid_Julia_Animation_Interface) {
+
+    if ji == nil || node == nil {
+        return
+    }
+
+    if ji^.animation_head == nil {
+        ji^.animation_head = node
+        ji^.animation_tail = node
+    } else {
+        node^.prev_in_registry = ji^.animation_tail
+        ji^.animation_tail^.next_in_registry = node
+        ji^.animation_tail = node
+    }
+
+    ji^.animation_count += 1
+}
+
+//  Generate the hash for a stable UUID value
+animation_hash_stable_id :: proc(stable_id: uuid.Identifier) -> u64 {
+    bytes := stable_id
+    hash: u64 = 1469598103934665603
+    for b in bytes {
+        hash = (hash ~ u64(b)) * 1099511628211
+    }
+
+    if hash == 0 {
+        return 1
+    }
+
+    return hash
+}
+
+//   Probe the UUID lookup table for an occupied match or an insertion slot.
+animation_lookup_probe :: proc(
+    entries: []core.Euclid_Julia_Animation_Lookup_Entry,
+    capacity: int,
+    stable_id: uuid.Identifier,
+    for_insert: bool) -> (int, bool) {
+
+    if capacity <= 0 || len(entries) < capacity {
+        return -1, false
+    }
+
+    mask := capacity - 1
+    index := int(animation_hash_stable_id(stable_id) & u64(mask))
+    for _ in 0..<capacity {
+        entry := entries[index]
+        if !entry.is_occupied {
+            if for_insert {
+                return index, false
+            }
+            return -1, false
+        }
+
+        if entry.stable_id == stable_id {
+            return index, true
+        }
+
+        index = (index + 1) & mask
+    }
+
+    return -1, false
+}
+
+//   Allocate a lookup table buffer from the registry arena.
+animation_lookup_allocate :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    new_capacity: int) -> []core.Euclid_Julia_Animation_Lookup_Entry {
+
+    if ji == nil || new_capacity <= 0 || (new_capacity & (new_capacity - 1)) != 0 {
+        return nil
+    }
+
+    new_entries := make([]core.Euclid_Julia_Animation_Lookup_Entry,
+        new_capacity, ji^.animation_name_allocator)
+    if len(new_entries) != new_capacity {
+        return nil
+    }
+
+    return new_entries
+}
+
+//   Grow and rehash the UUID lookup table into a larger arena allocation.
+animation_lookup_grow :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    new_capacity: int) -> bool {
+
+    if ji == nil || new_capacity <= 0 {
+        return false
+    }
+
+    new_entries := animation_lookup_allocate(ji, new_capacity)
+    if len(new_entries) != new_capacity {
+        return false
+    }
+
+    old_entries := ji^.animation_lookup_entries
+    old_capacity := ji^.animation_lookup_capacity
+
+    ji^.animation_lookup_entries = new_entries
+    ji^.animation_lookup_capacity = new_capacity
+    ji^.animation_lookup_count = 0
+
+    if old_capacity <= 0 {
+        return true
+    }
+
+    for i in 0..<old_capacity {
+        entry := old_entries[i]
+        if !entry.is_occupied || entry.animation == nil {
+            continue
+        }
+
+        insert_index, found := animation_lookup_probe(
+            ji^.animation_lookup_entries,
+            ji^.animation_lookup_capacity,
+            entry.stable_id,
+            true)
+        if insert_index < 0 || found {
+            return false
+        }
+
+        ji^.animation_lookup_entries[insert_index] = core.Euclid_Julia_Animation_Lookup_Entry{
+            is_occupied = true,
+            stable_id = entry.stable_id,
+            animation = entry.animation,
+        }
+        ji^.animation_lookup_count += 1
+    }
+
+    return true
+}
+
+//   Ensure the lookup table has enough free space for another inserted animation.
+animation_lookup_ensure_capacity :: proc(ji: ^core.Euclid_Julia_Interface) -> bool {
+    if ji == nil {
+        return false
+    }
+
+    if ji^.animation_lookup_capacity == 0 {
+        return animation_lookup_grow(ji, ANIMATION_LOOKUP_INITIAL_RESERVE)
+    }
+
+    next_count := ji^.animation_lookup_count + 1
+    if next_count * ANIMATION_LOOKUP_LOAD_FACTOR_DENOMINATOR <
+        ji^.animation_lookup_capacity * ANIMATION_LOOKUP_LOAD_FACTOR_NUMERATOR {
+        return true
+    }
+
+    return animation_lookup_grow(ji, ji^.animation_lookup_capacity * 2)
+}
+
+//   Insert a stable UUID to animation pointer mapping into the lookup table.
+animation_lookup_insert :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    stable_id: uuid.Identifier,
+    node: ^core.Euclid_Julia_Animation_Interface) -> bool {
+
+    if ji == nil || node == nil {
+        return false
+    }
+
+    if !animation_lookup_ensure_capacity(ji) {
+        return false
+    }
+
+    insert_index, found := animation_lookup_probe(
+        ji^.animation_lookup_entries,
+        ji^.animation_lookup_capacity,
+        stable_id,
+        true)
+    if insert_index < 0 || found {
+        return false
+    }
+
+    ji^.animation_lookup_entries[insert_index] = core.Euclid_Julia_Animation_Lookup_Entry{
+        is_occupied = true,
+        stable_id = stable_id,
+        animation = node,
+    }
+    ji^.animation_lookup_count += 1
+    return true
+}
+
+//   Resolve a stable UUID to a registry node pointer.
+animation_lookup_find :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
+
+    if ji == nil || ji^.animation_lookup_capacity <= 0 {
+        return nil
+    }
+
+    index, found := animation_lookup_probe(
+        ji^.animation_lookup_entries,
+        ji^.animation_lookup_capacity,
+        stable_id,
+        false)
+    if !found || index < 0 {
+        return nil
+    }
+
+    return ji^.animation_lookup_entries[index].animation
+}
+
+//   Construct and register one animation node using arena storage and UUID lookup.
+add_animation_to_registry :: proc(
+    state: ^core.Euclid_General_State,
+    get_view_text, initiate, loop, clean: ^julialib.jl_value_t,
+    name: cstring,
+    stable_id: uuid.Identifier,
+    parent: ^core.Euclid_Julia_Animation_Interface) -> (^core.Euclid_Julia_Animation_Interface, bool) {
+
+    if state == nil || state^.julia_interface == nil {
+        return nil, false
+    }
+
+    if !ensure_julia_interface_name_arena(state) {
+        return nil, false
+    }
+
+    ji := state^.julia_interface
+    node := new(core.Euclid_Julia_Animation_Interface, ji^.animation_name_allocator)
+    if node == nil {
+        return nil, false
+    }
+
+    node^.get_view_text = get_view_text
+    node^.initiate = initiate
+    node^.loop = loop
+    node^.clean = clean
+    node^.name = strings.clone(string(name), ji^.animation_name_allocator)
+    node^.stable_id = stable_id
+
+    animation_append_to_registry(ji, node)
+    animation_link_child(parent, node)
+
+    if !animation_lookup_insert(ji, stable_id, node) {
+        return nil, false
+    }
+
+    return node, true
+}
+
+//   Resolve a parent animation from the stable UUID text supplied by Julia.
+resolve_parent_animation_by_stable_id :: proc(
+    state: ^core.Euclid_General_State,
+    parent_stable_id_text: cstring) -> (^core.Euclid_Julia_Animation_Interface, bool) {
+
+    if parent_stable_id_text == nil {
+        return nil, false
+    }
+
+    parsed_parent_stable_id, ok := parse_animation_stable_id(
+        parent_stable_id_text,
+        parent_stable_id_text)
+    if !ok {
+        return nil, false
+    }
+
+    parent := find_registered_animation_by_stable_id(state, parsed_parent_stable_id)
+    if parent == nil {
+        return nil, false
+    }
+
+    return parent, true
 }

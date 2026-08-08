@@ -141,8 +141,7 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
 
     julia_interface := julia.retrieve_interface()
     julia_interface^.current_animation = &julia_interface^.null_animation
-    julia_interface^.current_animation_index = -1
-    julia_interface^.selected_animation_index = -1
+    julia_interface^.selected_animation = nil
     julia_interface^.pending_animation_reset = false
     julia_interface^.animation_reset_cooldown_remaining = 0
 

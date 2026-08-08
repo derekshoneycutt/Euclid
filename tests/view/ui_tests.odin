@@ -57,38 +57,45 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
 }
 
 seed_tree_node :: proc(
-    ji: ^app_core.Euclid_Julia_Interface,
-    id: int,
-    parent_id: int,
-    first_child_id: int,
-    next_sibling: int,
+    node: ^app_core.Euclid_Julia_Animation_Interface,
+    parent: ^app_core.Euclid_Julia_Animation_Interface,
+    first_child: ^app_core.Euclid_Julia_Animation_Interface,
+    next_sibling: ^app_core.Euclid_Julia_Animation_Interface,
     expanded: bool) {
-    ji.animations[id].parent_id = parent_id
-    ji.animations[id].first_child_id = first_child_id
-    ji.animations[id].next_sibling = next_sibling
-    ji.animations[id].is_expanded = expanded
+
+    node^.parent = parent
+    node^.first_child = first_child
+    node^.next_sibling = next_sibling
+    node^.is_expanded = expanded
 }
 
 @(test)
 tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     // Verifies visible tree row counting respects node expansion state and first-child expansion helper behavior.
     ji := app_core.Euclid_Julia_Interface{}
-    ji.next_animation_index = 3
+    nodes: [3]app_core.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_tail = &nodes[2]
+    ji.animation_count = 3
+
+    nodes[0].next_in_registry = &nodes[1]
+    nodes[1].next_in_registry = &nodes[2]
 
     // root(0) -> child(1) -> sibling(2)
-    seed_tree_node(&ji, 0, -1, 1, -1, true)
-    seed_tree_node(&ji, 1, 0, -1, 2, false)
-    seed_tree_node(&ji, 2, 0, -1, -1, false)
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
+    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
 
     count_expanded := app_ui.count_visible_tree_rows_all_roots(&ji)
     testing.expect_value(t, count_expanded, 3)
 
-    ji.animations[0].is_expanded = false
+    nodes[0].is_expanded = false
     count_collapsed := app_ui.count_visible_tree_rows_all_roots(&ji)
     testing.expect_value(t, count_collapsed, 1)
 
-    testing.expect_value(t, app_ui.expanded_first_child_id(false, 1), -1)
-    testing.expect_value(t, app_ui.expanded_first_child_id(true, 1), 1)
+    testing.expect_value(t, app_ui.expanded_first_child(&nodes[1]), nil)
+    nodes[0].is_expanded = true
+    testing.expect_value(t, app_ui.expanded_first_child(&nodes[0]), &nodes[1])
 }
 
 @(test)
@@ -168,11 +175,17 @@ input_box_backspace_codepoint_removes_multibyte_cursor :: proc(t: ^testing.T) {
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
     // Verifies row counting guard limits recursive traversal depth to prevent runaway tree walks.
     ji := app_core.Euclid_Julia_Interface{}
-    ji.next_animation_index = 2
-    seed_tree_node(&ji, 0, -1, 1, -1, true)
-    seed_tree_node(&ji, 1, 0, -1, -1, true)
+    nodes: [2]app_core.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_tail = &nodes[1]
+    ji.animation_count = 2
 
-    testing.expect_value(t, app_ui.count_visible_tree_rows_limited(&ji, 0, 1), 1)
+    nodes[0].next_in_registry = &nodes[1]
+
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, nil, true)
+
+    testing.expect_value(t, app_ui.count_visible_tree_rows_limited(&ji, &nodes[0], 1), 1)
 }
 
 @(test)

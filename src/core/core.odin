@@ -17,7 +17,6 @@ MAX_PARTICLES :: 2048
 MAX_METAVALUES :: 256
 MAX_SHAPESPOINTS :: 256
 MAX_SHAPESCONSTRAINTS :: 256
-MAX_JULIA_INTERFACES :: 512
 MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_SHAPESPOINTS
 MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_SHAPESPOINTS
 
@@ -60,9 +59,23 @@ Euclid_Julia_Animation_Interface :: struct {
     is_expanded : bool,
     is_selected : bool,
 
-    first_child_id : int,
-    parent_id : int,
-    next_sibling : int,
+    first_child : ^Euclid_Julia_Animation_Interface,
+    last_child : ^Euclid_Julia_Animation_Interface,
+    parent : ^Euclid_Julia_Animation_Interface,
+    next_sibling : ^Euclid_Julia_Animation_Interface,
+    prev_sibling : ^Euclid_Julia_Animation_Interface,
+    next_in_registry : ^Euclid_Julia_Animation_Interface,
+    prev_in_registry : ^Euclid_Julia_Animation_Interface,
+}
+
+Euclid_Julia_Animation_Lookup_Entry :: struct {
+    is_occupied : bool,
+    stable_id : uuid.Identifier,
+    animation : ^Euclid_Julia_Animation_Interface,
+}
+
+Euclid_Julia_Animation_Iterator :: struct {
+    current : ^Euclid_Julia_Animation_Interface,
 }
 
 Euclid_Julia_Interface :: struct {
@@ -81,13 +94,17 @@ Euclid_Julia_Interface :: struct {
     null_animation : Euclid_Julia_Animation_Interface,
 
     current_animation : ^Euclid_Julia_Animation_Interface,
-    current_animation_index : int,
-    selected_animation_index : int,
+    selected_animation : ^Euclid_Julia_Animation_Interface,
     pending_animation_reset : bool,
     animation_reset_cooldown_remaining : f32,
 
-    animations : [MAX_JULIA_INTERFACES]Euclid_Julia_Animation_Interface,
-    next_animation_index : int,
+    animation_head : ^Euclid_Julia_Animation_Interface,
+    animation_tail : ^Euclid_Julia_Animation_Interface,
+    animation_count : int,
+
+    animation_lookup_entries : []Euclid_Julia_Animation_Lookup_Entry,
+    animation_lookup_capacity : int,
+    animation_lookup_count : int,
 
     animation_name_arena: vmem.Arena,
     animation_name_allocator: runtime.Allocator,

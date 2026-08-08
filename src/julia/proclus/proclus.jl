@@ -9,25 +9,26 @@ Proclus provided an ancient commentary on Book I of Euclid's Elements, including
 end
 
 function init_euclid_scripts_proclus(state_ptr::Ptr{Cvoid})
-    rootId = OdinJuliaBridge.add_root_animation_interface(
+    root_stable_id = OdinJuliaBridge.animation_stable_id_from_key("root:Proclus's Commentary")
+    OdinJuliaBridge.add_root_animation_interface(
         state_ptr, get_view_text_root_proclus, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
         "Proclus's Commentary",
-        OdinJuliaBridge.animation_stable_id_from_key("root:Proclus's Commentary"))
-        book1ProclusIsoscelesId = OdinJuliaBridge.add_child_animation_interface(
+        root_stable_id)
+        _ = OdinJuliaBridge.add_child_animation_interface(
             state_ptr, ElementsOneProclusIsosceles.get_view_text,
             ElementsOneProclusIsosceles.initialize,
             ElementsOneProclusIsosceles.loop, ElementsOneProclusIsosceles.clean,
             "Isosceles Triangle",
             OdinJuliaBridge.animation_stable_id_from_key(
-                "child:" * string(rootId) * ":Isosceles Triangle"),
-            rootId)
-        book1ProclusScaleneId = OdinJuliaBridge.add_child_animation_interface(
+                "child:" * root_stable_id * ":Isosceles Triangle"),
+            root_stable_id)
+        _ = OdinJuliaBridge.add_child_animation_interface(
             state_ptr, ElementsOneProclusScalene.get_view_text,
             ElementsOneProclusScalene.initialize,
             ElementsOneProclusScalene.loop, ElementsOneProclusScalene.clean,
             "Scalene Triangle",
             OdinJuliaBridge.animation_stable_id_from_key(
-                "child:" * string(rootId) * ":Scalene Triangle"),
-            rootId)
+                "child:" * root_stable_id * ":Scalene Triangle"),
+            root_stable_id)
 end
