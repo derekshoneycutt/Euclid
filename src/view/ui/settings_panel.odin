@@ -151,6 +151,41 @@ draw_settings_simd_projection_checkbox :: proc(
     }
 }
 
+//   Render and handle the drawing sound toggle control.
+draw_settings_sound_checkbox :: proc(
+    panel: rl.Rectangle,
+    row_y: f32,
+    mouse_input: Mouse_Input_State,
+    state: ^core.Euclid_General_State,
+    font: rl.Font) {
+
+    box := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y,
+        SETTINGS_CHECKBOX_SIZE,
+        SETTINGS_CHECKBOX_SIZE,
+    }
+
+    checkbox_result := draw_checkbox(Checkbox_Params{
+        id = 4004,
+        rect = box,
+        checked = state.user_drawing_sound_enabled,
+        enabled = true,
+        mouse = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = panel,
+        interaction_enabled = true,
+        label = "Enable Drawing Sound",
+        font = font,
+        label_font_size = TREE_FONT_SIZE,
+        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
+        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+    }, &state.ui_runtime.ui_press_owner)
+    if checkbox_result.toggled {
+        state.user_drawing_sound_enabled = checkbox_result.checked_out
+    }
+}
+
 //   Render full settings panel and wire all settings controls.
 draw_settings_view :: proc(
     state: ^core.Euclid_General_State,
@@ -231,6 +266,19 @@ draw_settings_view :: proc(
     })
     stack_cursor = limit_row.cursor_out
 
+    sound_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = SETTINGS_TOGGLE_ROW_GAP,
+        cursor_in = stack_cursor,
+    })
+    stack_cursor = sound_row.cursor_out
+
     simd_row := stack_panel_place_segment(Stack_Panel_Params{
         origin_x = stack_rect.x,
         origin_y = stack_rect.y,
@@ -262,6 +310,7 @@ draw_settings_view :: proc(
     draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, animation_entries_added, font)
     draw_settings_fps_checkbox(panel, fps_row.segment_rect.y, mouse_input, ui_runtime, font)
     draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)
+    draw_settings_sound_checkbox(panel, sound_row.segment_rect.y, mouse_input, state, font)
     draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y, mouse_input, ui_runtime, font)
 }
 

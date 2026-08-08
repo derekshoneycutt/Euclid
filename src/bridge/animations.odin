@@ -210,7 +210,7 @@ change_current_animation_loop :: proc(
     for i in 0..<len(state^.anim_metadata) {
         state^.anim_metadata[i] = 0.0
     }
-    state^.drawing_sound_enabled = true
+    state^.animation_drawing_sound_enabled = true
 
     if animation^.initiate != nil {
         julialib.jl_call1(animation^.initiate, state_value)
@@ -243,7 +243,7 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) {
     for i in 0..<len(state^.anim_metadata) {
         state^.anim_metadata[i] = 0.0
     }
-    state^.drawing_sound_enabled = true
+    state^.animation_drawing_sound_enabled = true
 
     julialib.jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
     if julialib.jl_exception_occurred() != nil {

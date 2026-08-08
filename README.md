@@ -202,11 +202,11 @@ There are a few!
 
 At the top right of the screen, you can go into the Settings panel. Here, you can reduce
 the maximum number of dust particles that are allowed on the drawing surface, which can
-improve performance. You can also turn the FPS display on/off, as well as turn FPS
-limiting on/off. Turning the FPS limit on/off may have no real effect if vsync is on (the
-default). Additionally, you can toggle SIMD use for use in isometric projection, which
-is on by default. The SIMD has little effect either way on most modern computers, to be
-honest.
+improve performance. You can also turn the FPS display on/off, enable or disable drawing
+sound, and turn FPS limiting on/off. Turning the FPS limit on/off may have no real effect
+if vsync is on (the default). Additionally, you can toggle SIMD use for use in isometric
+projection, which is on by default. The SIMD has little effect either way on most modern
+computers, to be honest.
 
 Additionally, there are some startup options that can affect application performance.
 

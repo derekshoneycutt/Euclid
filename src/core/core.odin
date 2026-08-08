@@ -1028,7 +1028,8 @@ Euclid_General_State :: struct {
     particle_system : ^Particle_System,
     dynview: Dynview_System,
     chalk_audio: Chalk_Audio_Runtime,
-    drawing_sound_enabled: bool,
+    user_drawing_sound_enabled: bool,
+    animation_drawing_sound_enabled: bool,
     compass : Shapes_Compass,
     pen : Shapes_Pen,
 

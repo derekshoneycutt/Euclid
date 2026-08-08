@@ -202,7 +202,7 @@ clear_pen_active :: proc "c" (
 //   - enabled: When true, drawing-sound updates are accepted.
 @(export)
 set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enabled: bool) {
-    state^.drawing_sound_enabled = enabled
+    state^.animation_drawing_sound_enabled = enabled
 }
 
 //   Accumulate drawing-sound activity for the current frame.
@@ -212,7 +212,7 @@ set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enable
 //   - speed: Requested speed; negative values are clamped to zero.
 @(export)
 simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
-    if !state^.drawing_sound_enabled {
+    if !state^.user_drawing_sound_enabled || !state^.animation_drawing_sound_enabled {
         return
     }
 

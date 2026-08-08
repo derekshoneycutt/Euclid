@@ -162,7 +162,8 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     state^.julia_interface = julia_interface
     state^.point_system = point_system
     state^.particle_system = particle_system
-    state^.drawing_sound_enabled = true
+    state^.user_drawing_sound_enabled = true
+    state^.animation_drawing_sound_enabled = true
     state^.compass = compass
     state^.pen = pen
     state^.current_delta_time = FIXED_DT

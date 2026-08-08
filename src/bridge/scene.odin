@@ -242,7 +242,7 @@ set_point_position_with_floor_crossing_dust :: #force_inline proc(
     previous_pos, has_previous := state^.point_system^.points[index].position.?
     state^.point_system^.points[index].position = pos
     if push_dust_if_floor_crossing(state, previous_pos, pos, has_previous) {
-        if state^.drawing_sound_enabled {
+        if state^.user_drawing_sound_enabled && state^.animation_drawing_sound_enabled {
             if index == state^.pen.joint1_id || index == state^.pen.joint2_id ||
                 index == state^.compass.joint1_id || index == state^.compass.joint2_id {
                 audio.trigger_hit_sound(&state^.chalk_audio)
@@ -262,7 +262,8 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
     push_dust_if_floor_contact(state, pos)
 
     is_floor_contact :=
-        state^.drawing_sound_enabled &&
+        state^.user_drawing_sound_enabled &&
+        state^.animation_drawing_sound_enabled &&
         pos.z <= FLOOR_CONTACT_Z_EPSILON && pos.z >= -FLOOR_CONTACT_Z_EPSILON
     dt := state^.current_delta_time
 
