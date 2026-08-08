@@ -30,7 +30,7 @@ label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Shapes_L
 //
 // Notes:
 //   - Preserves the first encountered error code for diagnostic stability.
-dynview_fail :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, code: i32) -> i32 {
+dynview_fail :: #force_inline proc(runtime: ^core.Dynview_System, code: i32) -> i32 {
     runtime^.command_buffer.has_stream_error = true
     if runtime^.compile_cache.last_error_code == 0 {
         runtime^.compile_cache.last_error_code = code
@@ -45,8 +45,8 @@ dynview_fail :: #force_inline proc(runtime: ^core.Ui_Dynview_Runtime, code: i32)
 //   - BRIDGE_STATUS_OK when command is enqueued.
 //   - BRIDGE_STATUS_OUT_OF_CAPACITY when command buffer is full.
 dynview_push_command :: #force_inline proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    command: core.Ui_Dynview_Command) -> i32 {
+    runtime: ^core.Dynview_System,
+    command: core.Dynview_Command) -> i32 {
 
     buffer := &runtime^.command_buffer
     if buffer^.command_count >= len(buffer^.commands) {
@@ -70,7 +70,7 @@ dynview_push_command :: #force_inline proc(
 //   - BRIDGE_STATUS_OK when payload is appended.
 //   - BRIDGE_STATUS_OUT_OF_CAPACITY when byte buffer has insufficient space.
 dynview_append_text_payload :: #force_inline proc(
-    runtime: ^core.Ui_Dynview_Runtime,
+    runtime: ^core.Dynview_System,
     text: string,
     offset_out, count_out: ^int) -> i32 {
 
@@ -97,7 +97,7 @@ dynview_append_text_payload :: #force_inline proc(
 //   - Unsupported bridge kinds fall back to a text run so the importer can keep
 //     making progress instead of failing the whole program.
 dynview_math_command_kind_from_bridge :: #force_inline proc(
-    kind: i32) -> (core.Ui_Dynview_Command_Kind, bool) {
+    kind: i32) -> (core.Dynview_Command_Kind, bool) {
     switch kind {
     case BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN:
         return .TextRun, true
@@ -147,7 +147,7 @@ dynview_math_op_spans_valid :: #force_inline proc(
 //   - The helper reserves the next available program id and reuses the shared
 //     recursive importer to pull the requested subtree into the cache.
 dynview_import_child_program :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     block_id: i32,
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int,
@@ -159,7 +159,7 @@ dynview_import_child_program :: proc(
     if direct_count <= 0 || next_program_id == nil {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if next_program_id^ >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
@@ -182,7 +182,7 @@ dynview_import_child_program :: proc(
 //   - The helper advances the shared cursor and program allocation state for both
 //     children before returning the assigned program ids.
 dynview_import_fraction_children :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     block_id: i32,
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int,
@@ -196,7 +196,7 @@ dynview_import_fraction_children :: proc(
     if numerator_direct_count <= 0 || denominator_direct_count <= 0 {
         return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if next_program_id^ + 1 >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
         return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
@@ -223,7 +223,7 @@ dynview_import_fraction_children :: proc(
 //   - The helper reserves command slots for the requested subtree size and then
 //     walks the bridge ops into the dynview compile cache.
 dynview_import_math_program_from_ops :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     block_id: i32,
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int,
@@ -238,7 +238,7 @@ dynview_import_math_program_from_ops :: proc(
     }
 
     command_start := cache^.math_command_count
-    if command_start + direct_count > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+    if command_start + direct_count > core.DYNVIEW__MAX_MATH_COMMANDS {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
     cache^.math_command_count += direct_count
@@ -319,7 +319,7 @@ dynview_import_math_program_from_ops :: proc(
         case .InlinePieSection:
         }
 
-        cache^.math_commands[command_start + local_index] = core.Ui_Dynview_Command{
+        cache^.math_commands[command_start + local_index] = core.Dynview_Command{
             kind = command_kind,
             block_id = block_id,
             style_id = op.style_id,
@@ -349,7 +349,7 @@ dynview_import_math_program_from_ops :: proc(
         }
     }
 
-    cache^.math_programs[program_id] = core.Ui_Dynview_Math_Program{
+    cache^.math_programs[program_id] = core.Dynview_Math_Program{
         valid = true,
         command_start = command_start,
         command_count = direct_count,
@@ -364,14 +364,14 @@ dynview_import_math_program_from_ops :: proc(
 //     the active dynview runtime without reaching into the state internals.
 dynview_require_runtime :: proc(
     state: ^core.Euclid_General_State,
-    runtime_out: ^^core.Ui_Dynview_Runtime) -> i32 {
+    runtime_out: ^^core.Dynview_System) -> i32 {
 
     if state == nil || runtime_out == nil {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
     context = state^.saved_context
-    runtime_out^ = &state^.ui_runtime.dynview_runtime
+    runtime_out^ = &state^.dynview
     return BRIDGE_STATUS_OK
 }
 
@@ -381,8 +381,8 @@ dynview_require_runtime :: proc(
 //   - The helper exposes the current command buffer while optionally enforcing
 //     that a dynview block is already open before commands are appended.
 dynview_require_buffer :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
-    buffer_out: ^^core.Ui_Dynview_Command_Buffer,
+    runtime: ^core.Dynview_System,
+    buffer_out: ^^core.Dynview_Command_Buffer,
     require_open_block: bool) -> i32 {
 
     if runtime == nil || buffer_out == nil {

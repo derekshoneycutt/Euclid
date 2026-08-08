@@ -1,22 +1,11 @@
 package dynview
 
-import "../../../core"
-import view_core "../../core"
+import "../core"
 
 import rl "vendor:raylib"
 
-Dynview_Compile_State :: struct {
-    open_block: bool,
-    block_id: i32,
-    block_kind: i32,
-    block_row_start: int,
-    block_row_end: int,
-    block_payload_start: int,
-    block_has_copy_payload: bool,
-    current_row: int,
-}
-
-append_compiled_byte :: proc(cache: ^core.Ui_Dynview_Compile_Cache, b: u8) -> i32 {
+//  Append a compiled byte information to the give cache
+append_compiled_byte :: proc(cache: ^core.Dynview_Compile_Cache, b: u8) -> i32 {
     if cache^.compiled_plain_text_len >= len(cache^.compiled_plain_text) {
         return DYNVIEW_STATUS_OUT_OF_CAPACITY
     }
@@ -28,8 +17,8 @@ append_compiled_byte :: proc(cache: ^core.Ui_Dynview_Compile_Cache, b: u8) -> i3
 
 //   Copy one command text slice into compiled plain-text cache with bounds checks.
 append_compiled_text_slice :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     offset, count: int) -> i32 {
 
     if offset < 0 || count < 0 {
@@ -50,7 +39,7 @@ append_compiled_text_slice :: proc(
 }
 
 //   Append one byte to compiled copy payload cache and report capacity errors.
-append_copy_payload_byte :: proc(cache: ^core.Ui_Dynview_Compile_Cache, b: u8) -> i32 {
+append_copy_payload_byte :: proc(cache: ^core.Dynview_Compile_Cache, b: u8) -> i32 {
     if cache^.compiled_copy_payload_len >= len(cache^.compiled_copy_payload) {
         return DYNVIEW_STATUS_OUT_OF_CAPACITY
     }
@@ -62,8 +51,8 @@ append_copy_payload_byte :: proc(cache: ^core.Ui_Dynview_Compile_Cache, b: u8) -
 
 //   Copy one command copy-text slice into compiled copy payload cache.
 append_copy_payload_slice :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     offset, count: int) -> i32 {
 
     if offset < 0 || count < 0 {
@@ -93,9 +82,9 @@ require_open_block :: #force_inline proc(open_block: bool) -> i32 {
 
 //   Apply begin-block ordering rule.
 compile_begin_block :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     if state^.open_block {
         return DYNVIEW_STATUS_ILLEGAL_STATE
@@ -113,7 +102,7 @@ compile_begin_block :: #force_inline proc(
 
 //   Apply end-block ordering rule.
 compile_end_block :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
 
     if !state^.open_block {
@@ -126,7 +115,7 @@ compile_end_block :: #force_inline proc(
         }
 
         payload_len := cache^.compiled_copy_payload_len - state^.block_payload_start
-        cache^.copy_blocks[cache^.copy_block_count] = core.Ui_Dynview_Copy_Block{
+        cache^.copy_blocks[cache^.copy_block_count] = core.Dynview_Copy_Block{
             block_id = state^.block_id,
             block_kind = state^.block_kind,
             row_start = state^.block_row_start,
@@ -143,10 +132,10 @@ compile_end_block :: #force_inline proc(
 
 //   Apply text-run compilation rule.
 compile_text_run :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -159,10 +148,10 @@ compile_text_run :: #force_inline proc(
 
 //   Apply recursive script-wrapper compilation using grouped parent serialization.
 compile_script_attach_recursive :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -232,10 +221,10 @@ compile_script_attach_recursive :: #force_inline proc(
 
 //   Apply display-style large-operator compilation with canonical limits ordering.
 compile_large_op_recursive :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -298,10 +287,10 @@ compile_large_op_recursive :: #force_inline proc(
 
 //   Apply copyable-run compilation rule.
 compile_copyable_text_run :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -322,7 +311,7 @@ compile_copyable_text_run :: #force_inline proc(
 //   Apply inline-line compilation rule.
 compile_inline_line :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -340,7 +329,7 @@ compile_inline_line :: #force_inline proc(
 //   Apply inline-box compilation rule.
 compile_inline_box :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -358,7 +347,7 @@ compile_inline_box :: #force_inline proc(
 //   Apply inline-circle compilation rule.
 compile_inline_circle :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -376,7 +365,7 @@ compile_inline_circle :: #force_inline proc(
 //   Apply inline-filled-box compilation rule.
 compile_inline_filled_box :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -394,7 +383,7 @@ compile_inline_filled_box :: #force_inline proc(
 //   Apply inline-filled-circle compilation rule.
 compile_inline_filled_circle :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -412,7 +401,7 @@ compile_inline_filled_circle :: #force_inline proc(
 //   Apply inline pie-section compilation rule.
 compile_inline_pie_section :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != DYNVIEW_STATUS_OK {
@@ -429,7 +418,7 @@ compile_inline_pie_section :: #force_inline proc(
 
 //   Apply newline-like command rule shared by line-break and divider.
 compile_newline_command :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
 
     status := require_open_block(state^.open_block)
@@ -455,10 +444,10 @@ compile_newline_command :: #force_inline proc(
 
 //   Compile one command into cache and enforce the ordering contract.
 compile_command :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     switch cmd.kind {
     case .BeginBlock:
@@ -509,7 +498,7 @@ compile_command :: #force_inline proc(
 }
 
 //   Validate ordering contract and materialize stream text for host rendering.
-rebuild_compiled_plain_text :: proc(runtime: ^core.Ui_Dynview_Runtime) -> i32 {
+rebuild_compiled_plain_text :: proc(runtime: ^core.Dynview_System) -> i32 {
     cache := &runtime^.compile_cache
     buffer := &runtime^.command_buffer
     cache^.compiled_plain_text_len = 0
@@ -533,7 +522,7 @@ rebuild_compiled_plain_text :: proc(runtime: ^core.Ui_Dynview_Runtime) -> i32 {
 
 //   Rebuild scratchpad copy icon hit targets from compiled copy blocks.
 rebuild_copy_hit_targets :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
+    runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
     scroll_y, text_padding, row_height, icon_size, icon_x_pad: f32) {
 
@@ -589,7 +578,7 @@ rebuild_copy_hit_targets :: proc(
 
         icon_x := panel.x + panel.width - text_padding - icon_size - icon_x_pad
         icon_y := max(panel_top + 1, min(row_top + 2, panel_bottom - icon_size - 1))
-        cache^.copy_hit_targets[cache^.copy_hit_target_count] = core.Ui_Dynview_Copy_Hit_Target{
+        cache^.copy_hit_targets[cache^.copy_hit_target_count] = core.Dynview_Copy_Hit_Target{
             block_id = block.block_id,
             payload_offset = block.payload_offset,
             payload_len = block.payload_len,
@@ -602,7 +591,7 @@ rebuild_copy_hit_targets :: proc(
 }
 
 //   Return compiled copy payload string for one hit target index.
-copy_target_payload :: proc(runtime: ^core.Ui_Dynview_Runtime, target_index: int) -> string {
+copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) -> string {
     if runtime == nil {
         return ""
     }
@@ -624,7 +613,7 @@ copy_target_payload :: proc(runtime: ^core.Ui_Dynview_Runtime, target_index: int
 }
 
 //   Compile command buffer metadata plus plain-text stream projection when needed.
-compile_if_needed :: proc(runtime: ^core.Ui_Dynview_Runtime) {
+compile_if_needed :: proc(runtime: ^core.Dynview_System) {
     if runtime == nil || !runtime^.enabled {
         return
     }
@@ -666,17 +655,12 @@ compile_if_needed :: proc(runtime: ^core.Ui_Dynview_Runtime) {
 
 //   Compile scratchpad stream and return compiled text when validation succeeds.
 compiled_scratchpad_text_or_fallback :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
     font_size, wrap_advance: f32,
     style_revision: u64,
     fallback_text: string) -> string {
 
-    if ui_runtime == nil {
-        return fallback_text
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
     if !runtime^.enabled {
         return fallback_text
     }
@@ -696,15 +680,10 @@ compiled_scratchpad_text_or_fallback :: proc(
 
 //   Recompute copy hit-target cache for the current scratchpad panel and scroll.
 refresh_scratchpad_copy_targets :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
     scroll_y, text_padding, row_height, icon_size, icon_x_pad: f32) {
 
-    if ui_runtime == nil {
-        return
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
     if !runtime^.enabled {
         runtime^.compile_cache.copy_hit_target_count = 0
         return
@@ -713,84 +692,3 @@ refresh_scratchpad_copy_targets :: proc(
     rebuild_copy_hit_targets(runtime,
         panel, scroll_y, text_padding, row_height, icon_size, icon_x_pad)
 }
-
-//   Return style-aware row count when dynview compiled stream is valid.
-scratchpad_styled_rows_or_fallback :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    panel: rl.Rectangle,
-    text_padding, wrap_advance: f32,
-    fallback_text: string) -> int {
-
-    if ui_runtime == nil {
-        return view_core.count_wrapped_text_rows(fallback_text,
-            view_core.chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
-    if !runtime^.enabled || !runtime^.compile_cache.is_valid || runtime^.command_buffer.has_stream_error {
-        return view_core.count_wrapped_text_rows(fallback_text,
-            view_core.chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
-    }
-    if runtime^.command_buffer.command_count <= 0 {
-        return view_core.count_wrapped_text_rows(fallback_text,
-            view_core.chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
-    }
-
-    if !runtime^.compile_cache.layout_is_valid {
-        return view_core.count_wrapped_text_rows(fallback_text,
-            view_core.chars_per_text_row(panel.width - text_padding * 2, wrap_advance))
-    }
-
-    return max(1, runtime^.compile_cache.layout_line_count)
-}
-
-//   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
-draw_scratchpad_styled_or_fallback :: proc(
-    state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    fallback_text: string,
-    panel: rl.Rectangle,
-    scroll_y: f32,
-    font: rl.Font,
-    text_padding, text_row_height, wrap_advance, font_size: f32,
-    fallback_text_color: rl.Color) {
-
-    if ui_runtime == nil {
-        view_core.draw_wrapped_text_content(fallback_text,
-            panel,
-            scroll_y,
-            font,
-            text_padding,
-            text_row_height,
-            fallback_text_color,
-            wrap_advance,
-            font_size)
-        return
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
-    if runtime^.enabled && runtime^.compile_cache.is_valid &&
-        !runtime^.command_buffer.has_stream_error && runtime^.command_buffer.command_count > 0 {
-        if runtime^.compile_cache.layout_is_valid {
-            draw_cached_layout(state,
-                runtime,
-                panel,
-                scroll_y,
-                text_padding,
-                font_size,
-                font)
-            return
-        }
-    }
-
-    view_core.draw_wrapped_text_content(fallback_text,
-        panel,
-        scroll_y,
-        font,
-        text_padding,
-        text_row_height,
-        fallback_text_color,
-        wrap_advance,
-        font_size)
-}
-

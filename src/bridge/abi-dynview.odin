@@ -15,7 +15,7 @@ import rl "vendor:raylib"
 @(export)
 dynview_reset_stream :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -53,7 +53,7 @@ dynview_begin_block :: proc "c" (
     state: ^core.Euclid_General_State, block_kind, block_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -62,7 +62,7 @@ dynview_begin_block :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, false)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -71,7 +71,7 @@ dynview_begin_block :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
     }
 
-    status = dynview_push_command(runtime, core.Ui_Dynview_Command{
+    status = dynview_push_command(runtime, core.Dynview_Command{
         kind = .BeginBlock,
         block_id = block_id,
         style_id = block_kind,
@@ -100,7 +100,7 @@ dynview_text_run :: proc "c" (
     state: ^core.Euclid_General_State, text: cstring, style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -109,7 +109,7 @@ dynview_text_run :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -122,7 +122,7 @@ dynview_text_run :: proc "c" (
         return status
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .TextRun,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -146,7 +146,7 @@ dynview_math_glyph_run :: proc "c" (
     state: ^core.Euclid_General_State, text: cstring, style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -155,7 +155,7 @@ dynview_math_glyph_run :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -168,7 +168,7 @@ dynview_math_glyph_run :: proc "c" (
         return status
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .MathGlyphRun,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -193,7 +193,7 @@ dynview_math_block :: proc "c" (
     style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -202,7 +202,7 @@ dynview_math_block :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -243,7 +243,7 @@ dynview_math_block_from_ops :: proc "c" (
     text_blob: cstring) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -252,7 +252,7 @@ dynview_math_block_from_ops :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -262,15 +262,15 @@ dynview_math_block_from_ops :: proc "c" (
     }
 
     cache := &runtime^.compile_cache
-    if cache^.math_program_count >= core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if cache^.math_program_count >= core.DYNVIEW__MAX_MATH_PROGRAMS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
     extra_programs, extra_commands := dynview_count_recursive_math_capacity(ops, int(op_count))
-    if cache^.math_program_count + 1 + extra_programs > core.UI_DYNVIEW_MAX_MATH_PROGRAMS {
+    if cache^.math_program_count + 1 + extra_programs > core.DYNVIEW__MAX_MATH_PROGRAMS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
-    if cache^.math_command_count + int(op_count) + extra_commands > core.UI_DYNVIEW_MAX_MATH_COMMANDS {
+    if cache^.math_command_count + int(op_count) + extra_commands > core.DYNVIEW__MAX_MATH_COMMANDS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
@@ -307,7 +307,7 @@ dynview_math_block_from_ops :: proc "c" (
     cache^.math_programs[program_id].copy_text_len = plain_count
     cache^.math_program_count = next_child_program_id
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .MathBlock,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -332,7 +332,7 @@ dynview_copyable_text_run :: proc "c" (
     copy_text: cstring) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -341,7 +341,7 @@ dynview_copyable_text_run :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -359,7 +359,7 @@ dynview_copyable_text_run :: proc "c" (
         return status
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .CopyableTextRun,
         block_id = buffer^.stream_open_block_id,
         copy_text_offset = offset,
@@ -385,7 +385,7 @@ dynview_inline_line :: proc "c" (
     style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -394,7 +394,7 @@ dynview_inline_line :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -404,7 +404,7 @@ dynview_inline_line :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineLine,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -432,7 +432,7 @@ dynview_inline_box :: proc "c" (
     style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -441,7 +441,7 @@ dynview_inline_box :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -451,7 +451,7 @@ dynview_inline_box :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineBox,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -479,7 +479,7 @@ dynview_inline_circle :: proc "c" (
     style_id: i32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -488,7 +488,7 @@ dynview_inline_circle :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -498,7 +498,7 @@ dynview_inline_circle :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineCircle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -527,7 +527,7 @@ dynview_inline_line_brush :: proc "c" (
     brush_color: Bridge_Color) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -536,7 +536,7 @@ dynview_inline_line_brush :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -546,7 +546,7 @@ dynview_inline_line_brush :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineLine,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -578,7 +578,7 @@ dynview_inline_box_brush :: proc "c" (
     brush_color: Bridge_Color) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -587,7 +587,7 @@ dynview_inline_box_brush :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -597,7 +597,7 @@ dynview_inline_box_brush :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineBox,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -629,7 +629,7 @@ dynview_inline_circle_brush :: proc "c" (
     brush_color: Bridge_Color) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -638,7 +638,7 @@ dynview_inline_circle_brush :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -648,7 +648,7 @@ dynview_inline_circle_brush :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineCircle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -681,7 +681,7 @@ dynview_inline_filled_box :: proc "c" (
     outline_stroke: f32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -690,7 +690,7 @@ dynview_inline_filled_box :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -700,7 +700,7 @@ dynview_inline_filled_box :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineFilledBox,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -733,7 +733,7 @@ dynview_inline_filled_circle :: proc "c" (
     outline_stroke: f32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -742,7 +742,7 @@ dynview_inline_filled_circle :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -752,7 +752,7 @@ dynview_inline_filled_circle :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlineFilledCircle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -786,7 +786,7 @@ dynview_inline_pie_section :: proc "c" (
     outline_stroke: f32) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -795,7 +795,7 @@ dynview_inline_pie_section :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -805,7 +805,7 @@ dynview_inline_pie_section :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .InlinePieSection,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
@@ -829,7 +829,7 @@ dynview_inline_pie_section :: proc "c" (
 @(export)
 dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -838,13 +838,13 @@ dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
     }
 
-    return dynview_push_command(runtime, core.Ui_Dynview_Command{
+    return dynview_push_command(runtime, core.Dynview_Command{
         kind = .LineBreak,
         block_id = buffer^.stream_open_block_id,
     })
@@ -861,7 +861,7 @@ dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
 @(export)
 dynview_end_block :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    runtime: ^core.Ui_Dynview_Runtime
+    runtime: ^core.Dynview_System
     status := dynview_require_runtime(state, &runtime)
     if status != BRIDGE_STATUS_OK {
         return status
@@ -870,13 +870,13 @@ dynview_end_block :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
         return BRIDGE_STATUS_OK
     }
 
-    buffer: ^core.Ui_Dynview_Command_Buffer
+    buffer: ^core.Dynview_Command_Buffer
     status = dynview_require_buffer(runtime, &buffer, true)
     if status != BRIDGE_STATUS_OK {
         return status
     }
 
-    status = dynview_push_command(runtime, core.Ui_Dynview_Command{
+    status = dynview_push_command(runtime, core.Dynview_Command{
         kind = .EndBlock,
         block_id = buffer^.stream_open_block_id,
     })

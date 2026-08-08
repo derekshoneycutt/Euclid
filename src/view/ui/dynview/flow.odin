@@ -1,7 +1,9 @@
-package dynview
+package ui_dynview
 
 import "../../../core"
+import "../../../dynview"
 import view_core "../../core"
+
 import "core:math"
 
 import rl "vendor:raylib"
@@ -24,7 +26,8 @@ Dynview_Draw_Context :: struct {
     fallback_font: rl.Font,
 }
 
-style_font :: #force_inline proc(draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
+style_font :: #force_inline proc(
+    draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
     if draw_ctx == nil || draw_ctx^.state == nil {
         return draw_ctx^.fallback_font
     }
@@ -39,11 +42,6 @@ style_font :: #force_inline proc(draw_ctx: ^Dynview_Draw_Context, style: Dynview
         view_core.JULIA_MONO_FONT_LOAD_SIZE)
 }
 
-//   Return style-adjusted horizontal advance for one column unit.
-effective_advance :: #force_inline proc(style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
-    return max(1.0, wrap_advance * max(0.5, style.wrap_scale))
-}
-
 //   Advance flow cursor to the next row when no columns remain in current row.
 wrap_if_full :: #force_inline proc(flow: ^Dynview_Flow_State, max_cols: int) {
     if max_cols <= 0 {
@@ -56,89 +54,9 @@ wrap_if_full :: #force_inline proc(flow: ^Dynview_Flow_State, max_cols: int) {
     }
 }
 
-//   Measure inline-line command in columns with bounded minimum/maximum spans.
-inline_line_cols :: #force_inline proc(
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    wrap_advance: f32,
-    max_cols: int) -> int {
-
-    if max_cols <= 0 {
-        return 1
-    }
-
-    length_in_cols := cmd.inline_atom_dimension
-    if length_in_cols <= 0 {
-        length_in_cols = 1
-    }
-
-    // length is expressed in wrap-column units and scaled by style metrics.
-    scaled := f64(length_in_cols * max(0.5, style.wrap_scale))
-    cols := int(math.ceil(scaled))
-    if cols < 1 {
-        cols = 1
-    }
-    if cols > max_cols {
-        cols = max_cols
-    }
-    return cols
-}
-
-//   Measure inline-box command in columns with bounded minimum/maximum spans.
-inline_box_cols :: #force_inline proc(
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    max_cols: int) -> int {
-
-    if max_cols <= 0 {
-        return 1
-    }
-
-    width_in_cols := cmd.inline_atom_dimension
-    if width_in_cols <= 0 {
-        width_in_cols = 1
-    }
-
-    scaled := f64(width_in_cols * max(0.5, style.wrap_scale))
-    cols := int(math.ceil(scaled))
-    if cols < 1 {
-        cols = 1
-    }
-    if cols > max_cols {
-        cols = max_cols
-    }
-    return cols
-}
-
-//   Measure inline-circle command in columns with bounded minimum/maximum spans.
-inline_circle_cols :: #force_inline proc(
-    cmd: core.Ui_Dynview_Command,
-    style: Dynview_Text_Style,
-    max_cols: int) -> int {
-
-    if max_cols <= 0 {
-        return 1
-    }
-
-    diameter_in_cols := cmd.inline_atom_dimension * 2
-    if diameter_in_cols <= 0 {
-        diameter_in_cols = 1
-    }
-
-    scaled := f64(diameter_in_cols * max(0.5, style.wrap_scale))
-    cols := int(math.ceil(scaled))
-    if cols < 1 {
-        cols = 1
-    }
-    if cols > max_cols {
-        cols = max_cols
-    }
-    return cols
-}
-
 //   Resolve draw color using command brush override with style fallback.
 command_draw_color :: #force_inline proc(
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> rl.Color {
 
     if cmd.has_brush_color {
@@ -214,7 +132,7 @@ flow_consume_text_run :: proc(
         return
     }
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -235,9 +153,9 @@ flow_consume_text_run :: proc(
             continue
         }
 
-        line_start, line_end, next_start := view_core.next_wrapped_text_span(text, start, available)
+        line_start, line_end, next_start := dynview.next_wrapped_text_span(text, start, available)
         line_text := text[line_start:line_end]
-        line_len := view_core.text_codepoint_count(line_text)
+        line_len := dynview.text_codepoint_count_span(line_text, 0, len(line_text))
         if line_len <= 0 {
             break
         }
@@ -249,9 +167,9 @@ flow_consume_text_run :: proc(
                 row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
                 line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                    f32(flow^.col) * effective_advance(style, draw_ctx^.wrap_advance)
+                    f32(flow^.col) * dynview.effective_advance(style, draw_ctx^.wrap_advance)
                 if style.alignment == .Center && flow^.col == 0 {
-                    line_w := f32(line_len) * effective_advance(style, draw_ctx^.wrap_advance)
+                    line_w := f32(line_len) * dynview.effective_advance(style, draw_ctx^.wrap_advance)
                     line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
                 }
 
@@ -282,11 +200,11 @@ flow_consume_text_run :: proc(
 //   Consume one inline-line atom in flow layout, optionally drawing it.
 flow_consume_inline_line :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -295,7 +213,7 @@ flow_consume_inline_line :: proc(
         max_cols = 1
     }
 
-    cols := inline_line_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
+    cols := dynview.inline_line_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -307,7 +225,7 @@ flow_consume_inline_line :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             line_w := f32(cols) * effective_advance
             baseline_y := row_y + draw_ctx^.text_row_height * 0.62
@@ -326,11 +244,11 @@ flow_consume_inline_line :: proc(
 //   Consume one inline-box atom in flow layout, optionally drawing it.
 flow_consume_inline_box :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -339,7 +257,7 @@ flow_consume_inline_box :: proc(
         max_cols = 1
     }
 
-    cols := inline_box_cols(cmd, style, max_cols)
+    cols := dynview.inline_box_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -351,7 +269,7 @@ flow_consume_inline_box :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             box_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             box_w := f32(cols) * effective_advance
             raw_h := cmd.inline_box_height * effective_advance
@@ -373,11 +291,11 @@ flow_consume_inline_box :: proc(
 //   Consume one inline-circle atom in flow layout, optionally drawing it.
 flow_consume_inline_circle :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -386,7 +304,7 @@ flow_consume_inline_circle :: proc(
         max_cols = 1
     }
 
-    cols := inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_circle_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -398,7 +316,7 @@ flow_consume_inline_circle :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
@@ -420,11 +338,11 @@ flow_consume_inline_circle :: proc(
 //   Consume one filled inline-box atom in flow layout, optionally drawing it.
 flow_consume_inline_filled_box :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -433,7 +351,7 @@ flow_consume_inline_filled_box :: proc(
         max_cols = 1
     }
 
-    cols := inline_box_cols(cmd, style, max_cols)
+    cols := dynview.inline_box_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -445,7 +363,7 @@ flow_consume_inline_filled_box :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             box_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             box_w := f32(cols) * effective_advance
             raw_h := cmd.inline_box_height * effective_advance
@@ -471,11 +389,11 @@ flow_consume_inline_filled_box :: proc(
 //   Consume one filled inline-circle atom in flow layout, optionally drawing it.
 flow_consume_inline_filled_circle :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -484,7 +402,7 @@ flow_consume_inline_filled_circle :: proc(
         max_cols = 1
     }
 
-    cols := inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_circle_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -496,7 +414,7 @@ flow_consume_inline_filled_circle :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
@@ -522,11 +440,11 @@ flow_consume_inline_filled_circle :: proc(
 //   Consume one inline pie-section atom in flow layout, optionally drawing it.
 flow_consume_inline_pie_section :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := chars_per_row_for_style(
+    max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
         draw_ctx^.wrap_advance,
@@ -535,7 +453,7 @@ flow_consume_inline_pie_section :: proc(
         max_cols = 1
     }
 
-    cols := inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_circle_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -547,7 +465,7 @@ flow_consume_inline_pie_section :: proc(
         if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-            effective_advance := effective_advance(style, draw_ctx^.wrap_advance)
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
@@ -575,97 +493,14 @@ flow_consume_inline_pie_section :: proc(
     wrap_if_full(flow, max_cols)
 }
 
-//   Return max wrapped chars for a style using style-aware wrap scale.
-chars_per_row_for_style :: #force_inline proc(
-    panel_width, text_padding, wrap_advance: f32,
-    style: Dynview_Text_Style) -> int {
-
-    effective_advance := max(1.0, wrap_advance * max(0.5, style.wrap_scale))
-    return view_core.chars_per_text_row(panel_width - text_padding * 2, effective_advance)
-}
-
 //   Compute style-aware row count for one text command payload.
 count_rows_for_run :: #force_inline proc(
     text: string,
     panel_width, text_padding, wrap_advance: f32,
     style: Dynview_Text_Style) -> int {
 
-    max_chars := chars_per_row_for_style(panel_width, text_padding, wrap_advance, style)
-    return view_core.count_wrapped_text_rows(text, max_chars)
-}
-
-//   Extract text slice from one text run command.
-text_for_command :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
-    if cmd.text_offset < 0 || cmd.text_len < 0 {
-        return ""
-    }
-    if cmd.text_offset + cmd.text_len > buffer^.text_bytes_len {
-        return ""
-    }
-    return string(buffer^.text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
-}
-
-//   Extract a text span from the shared dynview byte buffer using explicit offset/length.
-text_span_from_buffer :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    text_offset, text_len: int) -> string {
-
-    if text_offset < 0 || text_len < 0 {
-        return ""
-    }
-    if text_offset + text_len > buffer^.text_bytes_len {
-        return ""
-    }
-    return string(buffer^.text_bytes[text_offset:text_offset + text_len])
-}
-
-//   Build display-style large-operator plain-text fallback using canonical command name.
-large_op_visible_text :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> string {
-
-    switch cmd.large_op_kind {
-    case 1:
-        return "\\sum"
-    case 2:
-        return "\\prod"
-    case 3:
-        return "\\int"
-    case 4:
-        return "\\lim"
-    }
-    return text_for_command(buffer, cmd)
-}
-
-//   Return the first/last layout line indices that contain visible items for block_id.
-layout_item_line_span_for_block :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    block_id: i32) -> (int, int, bool) {
-
-    first_line := -1
-    last_line := -1
-    for i in 0..<cache^.layout_item_count {
-        item := cache^.layout_items[i]
-        if item.block_id != block_id {
-            continue
-        }
-
-        if first_line < 0 || item.line_index < first_line {
-            first_line = item.line_index
-        }
-        if item.line_index > last_line {
-            last_line = item.line_index
-        }
-    }
-
-    if first_line < 0 || last_line < first_line {
-        return 0, 0, false
-    }
-
-    return first_line, last_line, true
+    max_chars := dynview.chars_per_row_for_style(panel_width, text_padding, wrap_advance, style)
+    return dynview.count_wrapped_text_rows(text, max_chars)
 }
 
 //   Draw one styled wrapped text line run with bounded visual traits.
@@ -678,16 +513,98 @@ draw_styled_line :: #force_inline proc(
 
     line_x := panel.x + text_padding
     if style.alignment == .Center {
-        line_w := f32(view_core.text_codepoint_count(text)) * wrap_advance * max(0.5, style.wrap_scale)
+        line_w := f32(dynview.text_codepoint_count_span(text, 0, len(text))) *
+            wrap_advance * max(0.5, style.wrap_scale)
         line_x = panel.x + (panel.width - line_w) * 0.5
     }
 
     view_core.ui_text(text, int(line_x), int(row_y), style.color, font, font_size)
 }
 
+//  Consume a text based command for the given flow
+consume_text_based_command :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    text := dynview.text_for_command(buffer, cmd)
+    flow_consume_text_run(flow, text, style, draw_ctx)
+}
+
+//  Consume a large op command for the given flow
+consume_large_op_command :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    text := dynview.large_op_visible_text(buffer, cmd)
+    flow_consume_text_run(flow, text, style, draw_ctx)
+}
+
+//  Consume a line break for the given flow
+consume_linebreak :: proc(
+    flow: ^Dynview_Flow_State) {
+
+    flow.row += 1
+    flow.col = 0
+}
+
+//  Consume a single command in the current run of the given flow
+consume_flow_command :: proc(
+    runtime: ^core.Dynview_System,
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    // #lizard forgives(cyclomatic_complexity)
+    style := dynview.style_by_id(cmd.style_id)
+    switch cmd.kind {
+    case .TextRun:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .MathGlyphRun:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .MathBlock:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .ScriptAttachRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .FracRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .StretchDelimiterRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .MatrixRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .LargeOpRecursive:
+        consume_large_op_command(cmd, buffer, flow, style, draw_ctx)
+    case .AccentBarRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .RadicalBarRecursive:
+        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
+    case .InlineLine:
+        flow_consume_inline_line(flow, cmd, style, draw_ctx)
+    case .InlineBox:
+        flow_consume_inline_box(flow, cmd, style, draw_ctx)
+    case .InlineCircle:
+        flow_consume_inline_circle(flow, cmd, style, draw_ctx)
+    case .InlineFilledBox:
+        flow_consume_inline_filled_box(flow, cmd, style, draw_ctx)
+    case .InlineFilledCircle:
+        flow_consume_inline_filled_circle(flow, cmd, style, draw_ctx)
+    case .InlinePieSection:
+        flow_consume_inline_pie_section(flow, cmd, style, draw_ctx)
+    case .LineBreak, .Divider:
+        consume_linebreak(flow)
+    case .BeginBlock, .EndBlock, .CopyableTextRun:
+    }
+}
+
 //   Count total style-aware rows from validated dynview command stream.
 count_styled_rows :: proc(
-    runtime: ^core.Ui_Dynview_Runtime,
+    runtime: ^core.Dynview_System,
     panel_width, text_padding, wrap_advance: f32) -> int {
 
     if runtime == nil {
@@ -708,66 +625,7 @@ count_styled_rows :: proc(
     }
     for i in 0..<buffer^.command_count {
         cmd := buffer^.commands[i]
-        switch cmd.kind {
-        case .TextRun:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MathGlyphRun:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MathBlock:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .ScriptAttachRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .FracRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .StretchDelimiterRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MatrixRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .LargeOpRecursive:
-            text := large_op_visible_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .AccentBarRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .RadicalBarRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineLine:
-            flow_consume_inline_line(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineBox:
-            flow_consume_inline_box(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineCircle:
-            flow_consume_inline_circle(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineFilledBox:
-            flow_consume_inline_filled_box(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .InlineFilledCircle:
-            flow_consume_inline_filled_circle(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .InlinePieSection:
-            flow_consume_inline_pie_section(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .LineBreak, .Divider:
-            flow.row += 1
-            flow.col = 0
-        case .BeginBlock, .EndBlock, .CopyableTextRun:
-        }
+        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
     }
 
     if !flow.had_visible && flow.row == 0 {
@@ -779,7 +637,7 @@ count_styled_rows :: proc(
 //   Draw style-aware wrapped dynview text content clipped by caller scissor.
 draw_styled_content :: proc(
     state: ^core.Euclid_General_State,
-    runtime: ^core.Ui_Dynview_Runtime,
+    runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
     scroll_y, text_padding, text_row_height, wrap_advance, font_size: f32,
     font: rl.Font) {
@@ -803,65 +661,6 @@ draw_styled_content :: proc(
     }
     for i in 0..<buffer^.command_count {
         cmd := buffer^.commands[i]
-        switch cmd.kind {
-        case .TextRun:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MathGlyphRun:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MathBlock:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .ScriptAttachRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .FracRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .StretchDelimiterRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .MatrixRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .LargeOpRecursive:
-            text := large_op_visible_text(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .AccentBarRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .RadicalBarRecursive:
-            text := text_for_command(buffer, cmd)
-            flow_consume_text_run(&flow, text, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineLine:
-            flow_consume_inline_line(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineBox:
-            flow_consume_inline_box(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineCircle:
-            flow_consume_inline_circle(&flow, cmd, style_by_id(cmd.style_id), &draw_ctx)
-        case .InlineFilledBox:
-            flow_consume_inline_filled_box(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .InlineFilledCircle:
-            flow_consume_inline_filled_circle(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .InlinePieSection:
-            flow_consume_inline_pie_section(
-                &flow,
-                cmd,
-                style_by_id(cmd.style_id),
-                &draw_ctx)
-        case .LineBreak, .Divider:
-            flow.row += 1
-            flow.col = 0
-        case .BeginBlock, .EndBlock, .CopyableTextRun:
-        }
+        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
     }
 }

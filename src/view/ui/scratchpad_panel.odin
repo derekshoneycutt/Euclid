@@ -1,9 +1,10 @@
 package ui
 
 import "../../core"
+import "../../dynview"
 import julia "../../bridge"
 import view_core "../core"
-import dynview "./dynview"
+import ui_dynview "./dynview"
 
 import rl "vendor:raylib"
 
@@ -211,22 +212,13 @@ draw_scratchpad_output_and_prompt :: proc(
     }
 
     output_text_legacy := julia.call_current_animation_get_view_text(state)
-    output_text := dynview.compiled_scratchpad_text_or_fallback(
-        ui_runtime,
-        output_panel,
-        TREE_FONT_SIZE,
-        TEXT_WRAP_ADVANCE,
-        dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+    output_text := dynview.compiled_scratchpad_text_or_fallback(&state.dynview, output_panel,
+        TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         output_text_legacy)
-    content_h := dynview.scratchpad_content_height_or_fallback(
-        ui_runtime,
-        output_panel,
-        TEXT_PADDING,
-        TEXT_WRAP_ADVANCE,
-        TEXT_ROW_HEIGHT,
-        output_text_legacy)
+    content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview, output_panel,
+        TEXT_PADDING, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT, output_text_legacy)
     max_scroll := max(0.0, content_h - output_panel.height)
-    scroll_step := dynview.scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
+    scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
 
     output_len := len(output_text)
     if output_len != ui_runtime^.scratchpad_last_output_len {
@@ -245,17 +237,10 @@ draw_scratchpad_output_and_prompt :: proc(
         drag_offset_y = ui_runtime.text_scroll_drag_off,
     }
     pre_wheel_scroll := state^.ui_runtime.view_text_scroll_y
-    scratch_scroll_begin := scroll_container_begin(
-        1002,
-        output_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        content_h,
-        mouse_input,
-        rl.Vector2{},
-        output_panel,
-        scroll_step * WHEEL_SCROLL_MULTIPLIER,
-        &ui_runtime^.ui_press_owner,
-        scratch_scroll_state)
+    scratch_scroll_begin := scroll_container_begin(1002, output_panel,
+        state^.ui_runtime.view_text_scroll_y, content_h, mouse_input,
+        rl.Vector2{}, output_panel, scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime^.ui_press_owner, scratch_scroll_state)
     output_panel = scratch_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_begin.scroll_y_out
 
@@ -263,41 +248,23 @@ draw_scratchpad_output_and_prompt :: proc(
         ui_runtime^.scratchpad_follow_output = true
     }
 
-    dynview.refresh_scratchpad_copy_targets(
-        ui_runtime,
-        output_panel,
+    dynview.refresh_scratchpad_copy_targets(&state.dynview, output_panel,
         state^.ui_runtime.view_text_scroll_y,
-        TEXT_PADDING,
-        TEXT_ROW_HEIGHT,
-        DYNVIEW_COPY_ICON_SIZE,
-        DYNVIEW_COPY_ICON_X_PAD)
+        TEXT_PADDING, TEXT_ROW_HEIGHT, DYNVIEW_COPY_ICON_SIZE, DYNVIEW_COPY_ICON_X_PAD)
 
-    view_core.draw_copy_hover_backgrounds(&ui_runtime^.dynview_runtime, mouse)
+    view_core.draw_copy_hover_backgrounds(&state^.dynview, mouse)
 
-    dynview.draw_scratchpad_styled_or_fallback(
-        state,
-        ui_runtime,
-        output_text_legacy,
-        output_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        font,
-        TEXT_PADDING,
-        TEXT_ROW_HEIGHT,
-        TEXT_WRAP_ADVANCE,
-        TREE_FONT_SIZE,
-        UI_TEXT_COLOR)
+    ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime,
+        output_text_legacy, output_panel, state^.ui_runtime.view_text_scroll_y,
+        font, TEXT_PADDING, TEXT_ROW_HEIGHT, TEXT_WRAP_ADVANCE,
+        TREE_FONT_SIZE, UI_TEXT_COLOR)
 
-    _ = view_core.draw_copy_icons(&ui_runtime^.dynview_runtime, output_panel, mouse_input)
+    _ = view_core.draw_copy_icons(&state^.dynview, output_panel, mouse_input)
 
     pre_drag_scroll := state^.ui_runtime.view_text_scroll_y
-    scratch_scroll_end := scroll_container_end(
-        scratch_scroll_begin.scroll_ref,
-        content_h,
-        state^.ui_runtime.view_text_scroll_y,
-        mouse_input,
-        rl.Vector2{},
-        output_panel,
-        &ui_runtime^.ui_press_owner)
+    scratch_scroll_end := scroll_container_end(scratch_scroll_begin.scroll_ref,
+        content_h, state^.ui_runtime.view_text_scroll_y, mouse_input,
+        rl.Vector2{}, output_panel, &ui_runtime^.ui_press_owner)
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = scratch_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = scratch_scroll_end.state_out.drag_offset_y
@@ -343,15 +310,11 @@ draw_scratchpad_output_and_prompt :: proc(
     ui_runtime^.scratchpad_input_cursor = input_result.caret_col_out
     ui_runtime^.scratchpad_input_viewport_col_start = input_result.viewport_col_start_out
 
-    apply_scratchpad_history_navigation(
-        state,
-        ui_runtime,
+    apply_scratchpad_history_navigation(state, ui_runtime,
         input_result.history_previous && !input_result.moved_up,
         input_result.history_next && !input_result.moved_down)
 
-    completion_applied := apply_scratchpad_completion(
-        state,
-        ui_runtime,
+    completion_applied := apply_scratchpad_completion(state, ui_runtime,
         input_result.tab_pressed)
 
     if input_result.changed || input_result.paste_applied || completion_applied {

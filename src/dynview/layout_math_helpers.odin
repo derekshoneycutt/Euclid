@@ -1,10 +1,13 @@
 package dynview
 
-import "../../../core"
+import "../core"
 
-import rl "vendor:raylib"
+Dynview_Matrix_Column_Alignment :: core.Dynview_Matrix_Column_Alignment
 
-Dynview_Matrix_Column_Alignment :: core.Ui_Dynview_Matrix_Column_Alignment
+//   Return style-adjusted horizontal advance for one column unit.
+effective_advance :: #force_inline proc(style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
+    return max(1.0, wrap_advance * max(0.5, style.wrap_scale))
+}
 
 //   Return style-aware ascent/descent estimates from active font size.
 style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
@@ -119,8 +122,8 @@ parse_positive_int :: #force_inline proc(text: string) -> (int, bool) {
 
 //   Read matrix row/column metadata from command text fields.
 matrix_dims_from_command :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command) -> (int, int, bool) {
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command) -> (int, int, bool) {
 
     rows_text := text_span_from_buffer(
         buffer,
@@ -137,8 +140,8 @@ matrix_dims_from_command :: #force_inline proc(
 
 //   Decode strict array alignment metadata; return all-center on any invalid shape.
 decode_matrix_column_alignments :: #force_inline proc(
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     cols: int) -> ([16]Dynview_Matrix_Column_Alignment, bool) {
 
     alignments: [16]Dynview_Matrix_Column_Alignment
@@ -287,39 +290,6 @@ delimiter_base_width_factor :: #force_inline proc(family: Dynview_Delimiter_Fami
     case .None:
     }
     return 0
-}
-
-//   Draw one sampled cubic segment in normalized delimiter coordinates.
-draw_normalized_cubic_segment :: #force_inline proc(
-    draw_x, top_y, width, height, thickness: f32,
-    right_side: bool,
-    p0, p1, p2, p3: rl.Vector2,
-    color: rl.Color,
-    segment_count: int) {
-
-    if segment_count <= 0 {
-        return
-    }
-
-    x0_norm := p0.x
-    if right_side {
-        x0_norm = 1.0 - x0_norm
-    }
-    prev := rl.Vector2{draw_x + width * x0_norm, top_y + height * p0.y}
-
-    for i in 1..=segment_count {
-        t := f32(i) / f32(segment_count)
-        u := 1.0 - t
-        x_norm := u * u * u * p0.x + 3.0 * u * u * t * p1.x + 3.0 * u * t * t * p2.x + t * t * t * p3.x
-        y_norm := u * u * u * p0.y + 3.0 * u * u * t * p1.y + 3.0 * u * t * t * p2.y + t * t * t * p3.y
-        if right_side {
-            x_norm = 1.0 - x_norm
-        }
-
-        current := rl.Vector2{draw_x + width * x_norm, top_y + height * y_norm}
-        rl.DrawLineEx(prev, current, thickness, color)
-        prev = current
-    }
 }
 
 //   Return scaled delimiter width from one child content-height target.

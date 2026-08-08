@@ -1,15 +1,10 @@
 package dynview
 
-import "../../../core"
+import "../core"
 
 import rl "vendor:raylib"
 
-set_enabled :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, enabled: bool) {
-    if ui_runtime == nil {
-        return
-    }
-
-    runtime := &ui_runtime^.dynview_runtime
+set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
     if runtime^.enabled == enabled {
         return
     }
@@ -23,7 +18,7 @@ set_enabled :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, enabled: bool) {
 }
 
 //   Mark compile cache invalid and accumulate invalidation reasons.
-invalidate :: proc(runtime: ^core.Ui_Dynview_Runtime, mask: u32) {
+invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
     if runtime == nil {
         return
     }
@@ -33,7 +28,7 @@ invalidate :: proc(runtime: ^core.Ui_Dynview_Runtime, mask: u32) {
 }
 
 //   Reset per-frame command storage while advancing stream revision.
-reset_command_buffer :: proc(runtime: ^core.Ui_Dynview_Runtime) {
+reset_command_buffer :: proc(runtime: ^core.Dynview_System) {
     if runtime == nil {
         return
     }
@@ -51,7 +46,7 @@ reset_command_buffer :: proc(runtime: ^core.Ui_Dynview_Runtime) {
 }
 
 //   Mark stream invalid and preserve first error code for diagnostics/fallback.
-mark_stream_error :: proc(runtime: ^core.Ui_Dynview_Runtime, code: i32) {
+mark_stream_error :: proc(runtime: ^core.Dynview_System, code: i32) {
     if runtime == nil {
         return
     }
@@ -73,7 +68,7 @@ hash_text :: proc(text: string) -> u64 {
 }
 
 //   Track text content keys and invalidate when text identity changes.
-track_content :: proc(runtime: ^core.Ui_Dynview_Runtime, text: string) {
+track_content :: proc(runtime: ^core.Dynview_System, text: string) {
     if runtime == nil {
         return
     }
@@ -91,7 +86,7 @@ track_content :: proc(runtime: ^core.Ui_Dynview_Runtime, text: string) {
 }
 
 //   Track panel dimensions and invalidate when layout bounds change.
-track_panel :: proc(runtime: ^core.Ui_Dynview_Runtime, panel: rl.Rectangle) {
+track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
     if runtime == nil {
         return
     }
@@ -107,7 +102,7 @@ track_panel :: proc(runtime: ^core.Ui_Dynview_Runtime, panel: rl.Rectangle) {
 }
 
 //   Track font/wrap metrics and invalidate when text layout metrics shift.
-track_font :: proc(runtime: ^core.Ui_Dynview_Runtime, font_size, wrap_advance: f32) {
+track_font :: proc(runtime: ^core.Dynview_System, font_size, wrap_advance: f32) {
     if runtime == nil {
         return
     }
@@ -123,7 +118,7 @@ track_font :: proc(runtime: ^core.Ui_Dynview_Runtime, font_size, wrap_advance: f
 }
 
 //   Track style schema version and invalidate when style mapping changes.
-track_style :: proc(runtime: ^core.Ui_Dynview_Runtime, style_revision: u64) {
+track_style :: proc(runtime: ^core.Dynview_System, style_revision: u64) {
     if runtime == nil {
         return
     }

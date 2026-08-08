@@ -1,47 +1,8 @@
 package dynview
 
-import "../../../core"
-import view_core "../../core"
+import "../core"
 
 import rl "vendor:raylib"
-
-// Style schema revision used for cache invalidation when style mapping changes.
-DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 3
-
-DYNVIEW_STYLE_DEFAULT :: 0
-DYNVIEW_STYLE_PROMPT :: 1
-DYNVIEW_STYLE_OUTPUT :: 2
-DYNVIEW_STYLE_ERROR :: 3
-DYNVIEW_STYLE_BOLD :: 10
-DYNVIEW_STYLE_ITALIC :: 11
-DYNVIEW_STYLE_CENTER :: 12
-DYNVIEW_STYLE_MEDIUM :: 13
-DYNVIEW_STYLE_SEMIBOLD :: 14
-DYNVIEW_STYLE_EXTRABOLD :: 15
-DYNVIEW_STYLE_BLACK :: 16
-DYNVIEW_STYLE_INLINE_ATOM :: 20
-
-DYNVIEW_STYLE_CUSTOM_FONT :: (1 << 24)
-DYNVIEW_STYLE_CUSTOM_FONT_MASK :: 0xFF
-
-Dynview_Text_Alignment :: enum {
-    Left,
-    Center,
-}
-
-Dynview_Text_Style :: struct {
-    color: rl.Color,
-    alignment: Dynview_Text_Alignment,
-    bold: bool,
-    italic: bool,
-    font_flags: core.Font_Variant_Flags,
-    indent_cols: int,
-    paragraph_spacing_before: f32,
-    paragraph_spacing_after: f32,
-    line_height_multiplier: f32,
-    force_line_start: bool,
-    wrap_scale: f32,
-}
 
 //   Resolve a style id using custom font flags encoded in the style id bits.
 style_from_custom_font_flags :: #force_inline proc(style_id: i32) -> (Dynview_Text_Style, bool) {
@@ -56,8 +17,8 @@ style_from_custom_font_flags :: #force_inline proc(style_id: i32) -> (Dynview_Te
         flags = .Regular
     }
 
-    weight := view_core.font_resolve_weight_from_flags(flags)
-    italic := view_core.font_has_flag(flags, .Italic)
+    weight := core.font_resolve_weight_from_flags(flags)
+    italic := core.font_has_flag(flags, .Italic)
 
     _ = weight
     wrap_scale: f32 = 1.0

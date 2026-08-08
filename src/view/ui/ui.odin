@@ -3,7 +3,7 @@ package ui
 // Shared UI constants and basic drawing helpers for panel modules.
 
 import view_core "../core"
-import dynview "./dynview"
+import "../../dynview"
 import "../../core"
 import "core:fmt"
 

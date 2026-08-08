@@ -1,11 +1,8 @@
 package dynview
 
-import "../../../core"
-import view_core "../../core"
+import "../core"
 
-import rl "vendor:raylib"
-
-layout_reset_cache :: proc(cache: ^core.Ui_Dynview_Compile_Cache) {
+layout_reset_cache :: proc(cache: ^core.Dynview_Compile_Cache) {
     cache^.layout_line_count = 0
     cache^.layout_item_count = 0
     cache^.layout_total_height = 0
@@ -15,8 +12,8 @@ layout_reset_cache :: proc(cache: ^core.Ui_Dynview_Compile_Cache) {
 
 //   Return one precomputed math program slot when the command references a valid id.
 math_program_from_command :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command) -> (^core.Ui_Dynview_Math_Program, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command) -> (^core.Dynview_Math_Program, bool) {
 
     program_id := int(cmd.math_program_id)
     if cache == nil || program_id < 0 || program_id >= cache^.math_program_count {
@@ -33,8 +30,8 @@ math_program_from_command :: #force_inline proc(
 
 //   Return one precomputed child math program slot from a math-command reference.
 math_program_from_id :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    program_id: i32) -> (^core.Ui_Dynview_Math_Program, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    program_id: i32) -> (^core.Dynview_Math_Program, bool) {
 
     index := int(program_id)
     if cache == nil || index < 0 || index >= cache^.math_program_count {
@@ -51,29 +48,29 @@ math_program_from_id :: #force_inline proc(
 
 //   Return one secondary child math program from a command reference.
 secondary_math_program_from_command :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command) -> (^core.Ui_Dynview_Math_Program, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command) -> (^core.Dynview_Math_Program, bool) {
 
     return math_program_from_id(cache, cmd.secondary_math_program_id)
 }
 
 //   Build one layout-like item for a text or math-glyph child command inside a math block.
 math_program_text_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> core.Ui_Dynview_Layout_Item {
+    font_size: f32) -> core.Dynview_Layout_Item {
 
     text := text_for_command(buffer, cmd)
-    cols := max(1, view_core.text_codepoint_count(text))
+    cols := max(1, text_codepoint_count_span(text, 0, len(text)))
     ascent, descent := style_ascent_descent(style, font_size)
-    kind := core.Ui_Dynview_Layout_Item_Kind.TextRun
+    kind := core.Dynview_Layout_Item_Kind.TextRun
     if cmd.kind == .MathGlyphRun {
         kind = .MathGlyphRun
     }
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = kind,
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
@@ -87,14 +84,14 @@ math_program_text_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive script wrapper around a child math program.
 math_program_recursive_script_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     child_program, ok := math_program_from_id(cache, cmd.math_program_id)
     if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     sup_text := text_span_from_buffer(
@@ -106,8 +103,8 @@ math_program_recursive_script_item :: #force_inline proc(
         cmd.script_sub_text_offset,
         cmd.script_sub_text_len)
 
-    sup_cols := view_core.text_codepoint_count(sup_text)
-    sub_cols := view_core.text_codepoint_count(sub_text)
+    sup_cols := text_codepoint_count_span(sup_text, 0, len(sup_text))
+    sub_cols := text_codepoint_count_span(sub_text, 0, len(sub_text))
     script_cols := max(sup_cols, sub_cols)
 
     script_style := style_by_id(cmd.script_style_id)
@@ -137,7 +134,7 @@ math_program_recursive_script_item :: #force_inline proc(
         draw_width += gap_px + script_width
     }
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .ScriptAttachRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -161,11 +158,11 @@ math_program_recursive_script_item :: #force_inline proc(
 
 //   Build one layout-like item for a display-style large operator with stacked limits.
 math_program_large_op_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> core.Ui_Dynview_Layout_Item {
+    font_size: f32) -> core.Dynview_Layout_Item {
 
     base_text := text_for_command(buffer, cmd)
     sup_text := text_span_from_buffer(
@@ -177,9 +174,9 @@ math_program_large_op_item :: #force_inline proc(
         cmd.script_sub_text_offset,
         cmd.script_sub_text_len)
 
-    glyph_cols := max(1, view_core.text_codepoint_count(base_text))
-    sup_cols := view_core.text_codepoint_count(sup_text)
-    sub_cols := view_core.text_codepoint_count(sub_text)
+    glyph_cols := max(1, text_codepoint_count_span(base_text, 0, len(base_text)))
+    sup_cols := text_codepoint_count_span(sup_text, 0, len(sup_text))
+    sub_cols := text_codepoint_count_span(sub_text, 0, len(sub_text))
 
     glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
     glyph_font_size := max(1.0, font_size * glyph_scale)
@@ -216,7 +213,7 @@ math_program_large_op_item :: #force_inline proc(
     }
 
     draw_width := max(glyph_width, max(sup_width, sub_width))
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .LargeOpRecursive,
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
@@ -240,20 +237,20 @@ math_program_large_op_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive fraction with centered numerator and denominator.
 math_program_recursive_fraction_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     numerator_program, ok := math_program_from_command(cache, cmd)
     if !ok || !measure_math_program(cache, buffer, numerator_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     denominator_program, ok_den := secondary_math_program_from_command(cache, cmd)
     if !ok_den || !measure_math_program(cache, buffer, denominator_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     base_advance := effective_advance(style, cache^.last_wrap_advance)
@@ -268,7 +265,7 @@ math_program_recursive_fraction_item :: #force_inline proc(
     descent := denominator_program^.ascent + denominator_program^.descent + divider_gap + divider_half
     visual_pad := max(0.6, divider_thickness * 0.5)
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .FracRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -286,11 +283,11 @@ math_program_recursive_fraction_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.
 math_program_recursive_stretch_delimiter_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     content_width: f32 = 0
     content_ascent, content_descent := style_ascent_descent(style, font_size)
@@ -300,7 +297,7 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     if cmd.math_program_id > 0 {
         child_program, ok := math_program_from_command(cache, cmd)
         if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
-            return core.Ui_Dynview_Layout_Item{}, false
+            return core.Dynview_Layout_Item{}, false
         }
         content_width = child_program^.draw_width
         content_ascent = child_program^.ascent
@@ -326,7 +323,7 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
         cmd.radical_mode)
 
     draw_width := max(content_width + left_width + right_width + side_padding * 2.0, base_advance)
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .StretchDelimiterRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -343,25 +340,25 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive matrix with row-major child cells.
 math_program_recursive_matrix_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     rows, cols, dims_ok := matrix_dims_from_command(buffer, cmd)
     if !dims_ok || rows > 16 || cols > 16 {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     cell_program, ok := math_program_from_command(cache, cmd)
     if !ok || !measure_math_program(cache, buffer, cell_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     cell_count := rows * cols
     if cell_program^.command_count != cell_count {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     col_widths: [16]f32
@@ -376,7 +373,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
             cell_cmd := cache^.math_commands[cmd_index]
             cell_item, cell_ok := math_program_item(cache, buffer, cell_cmd, font_size)
             if !cell_ok {
-                return core.Ui_Dynview_Layout_Item{}, false
+                return core.Dynview_Layout_Item{}, false
             }
 
             col_widths[col] = max(col_widths[col], cell_item.draw_width)
@@ -409,7 +406,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
 
     ascent := total_height * 0.5
     descent := total_height - ascent
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .MatrixRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -428,14 +425,14 @@ math_program_recursive_matrix_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive accent wrapper around a child math program.
 math_program_recursive_accent_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     child_program, ok := math_program_from_id(cache, cmd.math_program_id)
     if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     bar_thickness := max(1.0, cmd.accent_thickness * font_size)
@@ -449,7 +446,7 @@ math_program_recursive_accent_item :: #force_inline proc(
         descent = max(descent, child_program^.descent + bar_offset + bar_half)
     }
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .AccentBarRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -468,22 +465,22 @@ math_program_recursive_accent_item :: #force_inline proc(
 
 //   Build one layout-like item for a recursive radical wrapper around a child math program.
 math_program_recursive_radical_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     child_program, ok := math_program_from_id(cache, cmd.math_program_id)
     if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
-        return core.Ui_Dynview_Layout_Item{}, false
+        return core.Dynview_Layout_Item{}, false
     }
 
     index_text := text_span_from_buffer(
         buffer,
         cmd.radical_index_text_offset,
         cmd.radical_index_text_len)
-    index_cols := view_core.text_codepoint_count(index_text)
+    index_cols := text_codepoint_count_span(index_text, 0, len(index_text))
 
     script_style := style_by_id(cmd.script_style_id)
     script_scale := max(0.2, cmd.script_scale)
@@ -523,7 +520,7 @@ math_program_recursive_radical_item :: #force_inline proc(
     draw_width := lead_width + child_program^.draw_width + front_padding + back_padding
     accent_pad := accent_script_clearance(font_size, script_scale, false)
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .RadicalBarRecursive,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -548,10 +545,10 @@ math_program_recursive_radical_item :: #force_inline proc(
 
 //   Build one layout-like child item for the command kinds supported inside math blocks.
 math_program_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    cmd: core.Ui_Dynview_Command,
-    font_size: f32) -> (core.Ui_Dynview_Layout_Item, bool) {
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
     style := style_by_id(cmd.style_id)
     switch cmd.kind {
@@ -576,53 +573,14 @@ math_program_item :: #force_inline proc(
         .InlinePieSection:
     }
 
-    return core.Ui_Dynview_Layout_Item{}, false
-}
-
-//   Draw one measured child math program with a shared baseline.
-draw_math_program_at :: proc(
-    state: ^core.Euclid_General_State,
-    runtime: ^core.Ui_Dynview_Runtime,
-    panel: rl.Rectangle,
-    font: rl.Font,
-    font_size: f32,
-    program: core.Ui_Dynview_Math_Program,
-    draw_x, baseline_y: f32) {
-
-    child_x := draw_x
-    command_end := program.command_start + program.command_count
-    for command_index in program.command_start..<command_end {
-        cmd := runtime^.compile_cache.math_commands[command_index]
-        child_item, ok := math_program_item(
-            &runtime^.compile_cache,
-            &runtime^.command_buffer,
-            cmd,
-            font_size)
-        if !ok {
-            continue
-        }
-
-        child_y := baseline_y - child_item.ascent
-        child_style := style_by_id(child_item.style_id)
-        draw_cached_text_item(
-            state,
-            runtime,
-            panel,
-            font,
-            font_size,
-            child_style,
-            child_item,
-            child_x,
-            child_y)
-        child_x += child_item.draw_width
-    }
+    return core.Dynview_Layout_Item{}, false
 }
 
 //   Measure one flat child-command math program and cache its deterministic outer metrics.
 measure_math_program :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    program: ^core.Ui_Dynview_Math_Program,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    program: ^core.Dynview_Math_Program,
     font_size: f32) -> bool {
 
     if cache == nil || buffer == nil || program == nil || !program^.valid {

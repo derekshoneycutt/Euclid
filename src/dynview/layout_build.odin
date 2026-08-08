@@ -1,7 +1,8 @@
 package dynview
 
-import "../../../core"
-import view_core "../../core"
+import "../core"
+
+import "core:math"
 
 import rl "vendor:raylib"
 
@@ -18,7 +19,7 @@ layout_seed_line_accumulator :: #force_inline proc(
 
 //   Return wrapped column capacity for one style in active panel.
 layout_max_cols :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     style: Dynview_Text_Style) -> int {
 
     max_cols := chars_per_row_for_style(
@@ -31,7 +32,7 @@ layout_max_cols :: #force_inline proc(
 
 //   Enforce style-level line-start behavior before placing content.
 layout_prepare_style_placement :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     style: Dynview_Text_Style,
@@ -54,10 +55,10 @@ layout_prepare_style_placement :: #force_inline proc(
 
 //   Reserve a new layout item slot and append a prepared item.
 layout_push_item :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    item: core.Ui_Dynview_Layout_Item) -> i32 {
+    item: core.Dynview_Layout_Item) -> i32 {
 
     if cache^.layout_item_count >= len(cache^.layout_items) {
         return DYNVIEW_STATUS_OUT_OF_CAPACITY
@@ -82,7 +83,7 @@ layout_push_item :: proc(
 
 //   Apply per-item vertical offsets from finalized baseline metrics.
 layout_apply_item_offsets :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     start_index, item_count: int,
     line_height: f32) {
 
@@ -95,7 +96,7 @@ layout_apply_item_offsets :: proc(
 
 //   Advance state after one line finalization.
 layout_advance_after_line :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     line_height, base_ascent, base_descent: f32) {
@@ -109,7 +110,7 @@ layout_advance_after_line :: #force_inline proc(
 
 //   Finalize one layout line and compute y-offsets from per-item ascent/descent.
 layout_finalize_line :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     base_ascent, base_descent: f32) -> i32 {
@@ -135,7 +136,7 @@ layout_finalize_line :: proc(
 
 //   Finalize current line when wrapping a multi-line item is required.
 layout_finalize_for_wrap :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     ascent, descent: f32) -> i32 {
@@ -149,13 +150,13 @@ layout_finalize_for_wrap :: #force_inline proc(
 
 //   Build a text-run layout item for one wrapped line segment.
 text_run_item :: #force_inline proc(
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     wrap_advance: f32,
     line_start, line_byte_len, line_col_span: int,
-    ascent, descent: f32) -> core.Ui_Dynview_Layout_Item {
+    ascent, descent: f32) -> core.Dynview_Layout_Item {
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .TextRun,
         style_id = cmd.style_id,
         col_span = line_col_span,
@@ -169,10 +170,10 @@ text_run_item :: #force_inline proc(
 
 //   Consume one wrapped text segment and optionally force a line break.
 layout_push_wrapped_text_segment :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     line_start, line_byte_len, line_col_span: int,
     should_break: bool,
@@ -202,10 +203,10 @@ layout_push_wrapped_text_segment :: proc(
 
 //   Lay out one wrapped text command and return the last line touched.
 layout_consume_text_run :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     text: string,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
@@ -245,8 +246,8 @@ layout_consume_text_run :: proc(
             continue
         }
 
-        line_start, line_end, next_start := view_core.next_wrapped_text_span(text, start, available)
-        line_col_span := view_core.text_codepoint_count_span(text, line_start, line_end)
+        line_start, line_end, next_start := next_wrapped_text_span(text, start, available)
+        line_col_span := text_codepoint_count_span(text, line_start, line_end)
         line_byte_len := line_end - line_start
         if line_col_span <= 0 || line_byte_len <= 0 {
             break
@@ -284,11 +285,11 @@ layout_consume_text_run :: proc(
 
 //   Lay out one premeasured recursive math block as an atomic non-wrapping inline item.
 layout_consume_math_block :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -334,7 +335,7 @@ layout_consume_math_block :: proc(
         return status, -1
     }
 
-    item := core.Ui_Dynview_Layout_Item{
+    item := core.Dynview_Layout_Item{
         kind = .MathBlock,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
@@ -375,7 +376,7 @@ inline_line_metrics :: #force_inline proc(
 
 //   Finalize line before placing one inline item if current row overflows.
 layout_wrap_before_inline :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     max_cols, cols: int,
@@ -390,7 +391,7 @@ layout_wrap_before_inline :: #force_inline proc(
 
 //   Finalize line after placing one inline item when row reaches capacity.
 layout_finalize_after_inline_if_full :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     max_cols: int,
@@ -410,10 +411,10 @@ layout_finalize_after_inline_if_full :: #force_inline proc(
 
 //   Lay out one inline-line command and return the line touched.
 layout_consume_inline_line :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -445,7 +446,7 @@ layout_consume_inline_line :: proc(
 
     thickness := max(1.0, cmd.inline_atom_stroke)
     ascent, descent, draw_height := inline_line_metrics(thickness, text_ascent, text_descent)
-    item := core.Ui_Dynview_Layout_Item{
+    item := core.Dynview_Layout_Item{
         kind = .InlineLine,
         style_id = cmd.style_id,
         col_span = cols,
@@ -475,11 +476,11 @@ layout_consume_inline_line :: proc(
 
 //   Build a box inline item anchored around the text baseline zone.
 inline_box_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     cols: int,
-    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     effective_advance := effective_advance(style, cache^.last_wrap_advance)
     content_height := text_ascent + text_descent
@@ -487,7 +488,7 @@ inline_box_item :: #force_inline proc(
     box_height := max(2.0, min(content_height, requested))
     center := (text_descent - text_ascent) * 0.5
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .InlineBox,
         style_id = cmd.style_id,
         col_span = cols,
@@ -508,10 +509,10 @@ inline_box_item :: #force_inline proc(
 
 //   Lay out one inline-box command and return the line touched.
 layout_consume_inline_box :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -558,18 +559,18 @@ layout_consume_inline_box :: proc(
 
 //   Build a circle inline item centered in the text baseline zone.
 inline_circle_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     cols: int,
-    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     effective_advance := effective_advance(style, cache^.last_wrap_advance)
     atom_width := f32(cols) * effective_advance
     radius := max(2.0, min(atom_width * 0.5, (text_ascent + text_descent) * 0.5))
     center := (text_descent - text_ascent) * 0.5
 
-    return core.Ui_Dynview_Layout_Item{
+    return core.Dynview_Layout_Item{
         kind = .InlineCircle,
         style_id = cmd.style_id,
         col_span = cols,
@@ -589,10 +590,10 @@ inline_circle_item :: #force_inline proc(
 
 //   Lay out one inline-circle command and return the line touched.
 layout_consume_inline_circle :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -639,11 +640,11 @@ layout_consume_inline_circle :: proc(
 
 //   Build a filled-box inline item using the same geometry as outline boxes.
 inline_filled_box_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     cols: int,
-    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     item := inline_box_item(cache, cmd, style, cols, text_ascent, text_descent)
     item.kind = .InlineFilledBox
@@ -652,10 +653,10 @@ inline_filled_box_item :: #force_inline proc(
 
 //   Lay out one inline-filled-box command and return the line touched.
 layout_consume_inline_filled_box :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -702,11 +703,11 @@ layout_consume_inline_filled_box :: proc(
 
 //   Build a filled-circle inline item using the same geometry as outline circles.
 inline_filled_circle_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     cols: int,
-    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
     item.kind = .InlineFilledCircle
@@ -715,10 +716,10 @@ inline_filled_circle_item :: #force_inline proc(
 
 //   Lay out one inline-filled-circle command and return the line touched.
 layout_consume_inline_filled_circle :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -765,11 +766,11 @@ layout_consume_inline_filled_circle :: proc(
 
 //   Build a filled pie-section item using circle-equivalent geometry.
 inline_pie_section_item :: #force_inline proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    cmd: core.Ui_Dynview_Command,
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     cols: int,
-    text_ascent, text_descent: f32) -> core.Ui_Dynview_Layout_Item {
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
     item.kind = .InlinePieSection
@@ -781,10 +782,10 @@ inline_pie_section_item :: #force_inline proc(
 
 //   Lay out one inline pie-section command and return the line touched.
 layout_consume_inline_pie_section :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
+    cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
@@ -830,10 +831,10 @@ layout_consume_inline_pie_section :: proc(
 }
 
 //   Fill a one-line layout cache for an empty command stream.
-layout_set_empty_default :: proc(cache: ^core.Ui_Dynview_Compile_Cache) {
+layout_set_empty_default :: proc(cache: ^core.Dynview_Compile_Cache) {
     cache^.layout_is_valid = true
     cache^.layout_line_count = 1
-    cache^.layout_lines[0] = core.Ui_Dynview_Layout_Line{
+    cache^.layout_lines[0] = core.Dynview_Layout_Line{
         y_offset = 0,
         line_height = max(1.0, cache^.last_font_size),
         baseline = max(1.0, cache^.last_font_size * 0.8),
@@ -846,8 +847,8 @@ layout_set_empty_default :: proc(cache: ^core.Ui_Dynview_Compile_Cache) {
 
 //   Seed layout context from cached panel/font metrics.
 layout_build_context :: proc(
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator) -> Dynview_Layout_Build_Context {
 
@@ -900,7 +901,7 @@ layout_apply_block_spacing :: #force_inline proc(
 //   Update copy-span tracking for block lifecycle commands.
 layout_handle_block_markers :: proc(
     ctx: ^Dynview_Layout_Build_Context,
-    cmd: core.Ui_Dynview_Command) -> i32 {
+    cmd: core.Dynview_Command) -> i32 {
 
     if cmd.kind == .BeginBlock {
         new_format := block_format_for_kind(cmd.style_id)
@@ -935,7 +936,7 @@ layout_handle_block_markers :: proc(
 //   Consume one visible text-like command using normal wrapped text flow.
 layout_consume_text_like_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
     text := text_for_command(ctx^.buffer, cmd)
@@ -947,7 +948,7 @@ layout_consume_text_like_command :: #force_inline proc(
 //   Consume one visible math-structure command using the matching layout helper.
 layout_consume_structured_math_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
     switch cmd.kind {
@@ -986,7 +987,7 @@ layout_consume_structured_math_command :: #force_inline proc(
 //   Consume one visible inline-shape command using the matching layout helper.
 layout_consume_inline_shape_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
     switch cmd.kind {
@@ -1027,7 +1028,7 @@ layout_consume_inline_shape_command :: #force_inline proc(
 //   Consume one visible dynview command and update copy-row span.
 layout_consume_visible_command :: proc(
     ctx: ^Dynview_Layout_Build_Context,
-    cmd: core.Ui_Dynview_Command,
+    cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
     effective_style := style_with_block_format(style, ctx^.state^.active_block_format)
@@ -1057,7 +1058,7 @@ layout_consume_visible_command :: proc(
 //   Resolve inline draw color using per-item brush override with style fallback.
 inline_draw_color :: #force_inline proc(
     style: Dynview_Text_Style,
-    item: core.Ui_Dynview_Layout_Item) -> rl.Color {
+    item: core.Dynview_Layout_Item) -> rl.Color {
 
     if item.has_brush_color {
         return item.brush_color
@@ -1090,7 +1091,7 @@ layout_finalize_metrics :: proc(ctx: ^Dynview_Layout_Build_Context) -> i32 {
 }
 
 //   Build deterministic line/item layout cache from current validated command stream.
-rebuild_layout_cache :: proc(runtime: ^core.Ui_Dynview_Runtime) -> i32 {
+rebuild_layout_cache :: proc(runtime: ^core.Dynview_System) -> i32 {
     if runtime == nil {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
@@ -1125,4 +1126,166 @@ rebuild_layout_cache :: proc(runtime: ^core.Ui_Dynview_Runtime) -> i32 {
     return layout_finalize_metrics(&ctx)
 }
 
-//   Return true when one layout line is outside the visible panel bounds.
+//   Return the first/last layout line indices that contain visible items for block_id.
+layout_item_line_span_for_block :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    block_id: i32) -> (int, int, bool) {
+
+    first_line := -1
+    last_line := -1
+    for i in 0..<cache^.layout_item_count {
+        item := cache^.layout_items[i]
+        if item.block_id != block_id {
+            continue
+        }
+
+        if first_line < 0 || item.line_index < first_line {
+            first_line = item.line_index
+        }
+        if item.line_index > last_line {
+            last_line = item.line_index
+        }
+    }
+
+    if first_line < 0 || last_line < first_line {
+        return 0, 0, false
+    }
+
+    return first_line, last_line, true
+}
+
+//   Extract a text span from the shared dynview byte buffer using explicit offset/length.
+text_span_from_buffer :: #force_inline proc(
+    buffer: ^core.Dynview_Command_Buffer,
+    text_offset, text_len: int) -> string {
+
+    if text_offset < 0 || text_len < 0 {
+        return ""
+    }
+    if text_offset + text_len > buffer^.text_bytes_len {
+        return ""
+    }
+    return string(buffer^.text_bytes[text_offset:text_offset + text_len])
+}
+
+//   Build display-style large-operator plain-text fallback using canonical command name.
+large_op_visible_text :: #force_inline proc(
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command) -> string {
+
+    switch cmd.large_op_kind {
+    case 1:
+        return "\\sum"
+    case 2:
+        return "\\prod"
+    case 3:
+        return "\\int"
+    case 4:
+        return "\\lim"
+    }
+    return text_for_command(buffer, cmd)
+}
+
+//   Extract text slice from one text run command.
+text_for_command :: #force_inline proc(
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command) -> string {
+
+    if cmd.text_offset < 0 || cmd.text_len < 0 {
+        return ""
+    }
+    if cmd.text_offset + cmd.text_len > buffer^.text_bytes_len {
+        return ""
+    }
+    return string(buffer^.text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
+}
+
+//   Return max wrapped chars for a style using style-aware wrap scale.
+chars_per_row_for_style :: #force_inline proc(
+    panel_width, text_padding, wrap_advance: f32,
+    style: Dynview_Text_Style) -> int {
+
+    effective_advance := max(1.0, wrap_advance * max(0.5, style.wrap_scale))
+    return chars_per_text_row(panel_width - text_padding * 2, effective_advance)
+}
+
+
+//   Measure inline-line command in columns with bounded minimum/maximum spans.
+inline_line_cols :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    wrap_advance: f32,
+    max_cols: int) -> int {
+
+    if max_cols <= 0 {
+        return 1
+    }
+
+    length_in_cols := cmd.inline_atom_dimension
+    if length_in_cols <= 0 {
+        length_in_cols = 1
+    }
+
+    // length is expressed in wrap-column units and scaled by style metrics.
+    scaled := f64(length_in_cols * max(0.5, style.wrap_scale))
+    cols := int(math.ceil(scaled))
+    if cols < 1 {
+        cols = 1
+    }
+    if cols > max_cols {
+        cols = max_cols
+    }
+    return cols
+}
+
+//   Measure inline-box command in columns with bounded minimum/maximum spans.
+inline_box_cols :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    max_cols: int) -> int {
+
+    if max_cols <= 0 {
+        return 1
+    }
+
+    width_in_cols := cmd.inline_atom_dimension
+    if width_in_cols <= 0 {
+        width_in_cols = 1
+    }
+
+    scaled := f64(width_in_cols * max(0.5, style.wrap_scale))
+    cols := int(math.ceil(scaled))
+    if cols < 1 {
+        cols = 1
+    }
+    if cols > max_cols {
+        cols = max_cols
+    }
+    return cols
+}
+
+//   Measure inline-circle command in columns with bounded minimum/maximum spans.
+inline_circle_cols :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    max_cols: int) -> int {
+
+    if max_cols <= 0 {
+        return 1
+    }
+
+    diameter_in_cols := cmd.inline_atom_dimension * 2
+    if diameter_in_cols <= 0 {
+        diameter_in_cols = 1
+    }
+
+    scaled := f64(diameter_in_cols * max(0.5, style.wrap_scale))
+    cols := int(math.ceil(scaled))
+    if cols < 1 {
+        cols = 1
+    }
+    if cols > max_cols {
+        cols = max_cols
+    }
+    return cols
+}

@@ -29,13 +29,13 @@ DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 
 TOOL_LENGTH :: 0.35
 
-UI_DYNVIEW_MAX_COMMANDS :: 1024
-UI_DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
-UI_DYNVIEW_MAX_LAYOUT_LINES :: 4096
-UI_DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
-UI_DYNVIEW_MAX_MATH_PROGRAMS :: 256
-UI_DYNVIEW_MAX_MATH_NODES :: 4096
-UI_DYNVIEW_MAX_MATH_COMMANDS :: 4096
+DYNVIEW__MAX_COMMANDS :: 1024
+DYNVIEW__MAX_TEXT_BYTES :: 32 * 1024
+DYNVIEW__MAX_LAYOUT_LINES :: 4096
+DYNVIEW__MAX_LAYOUT_ITEMS :: 8192
+DYNVIEW__MAX_MATH_PROGRAMS :: 256
+DYNVIEW__MAX_MATH_NODES :: 4096
+DYNVIEW__MAX_MATH_COMMANDS :: 4096
 
 FONT_VARIANT_SLOT_COUNT :: 14
 
@@ -437,6 +437,336 @@ Iso_Scale :: struct {
 
 
 
+/****
+    Dynview is just dynamic view, not original lol. It is a dynamic text construction,
+    including limited LaTeX style support
+*/
+
+
+
+Font_Weight :: enum {
+    Light,
+    Regular,
+    Medium,
+    SemiBold,
+    Bold,
+    ExtraBold,
+    Black,
+}
+
+Font_Variant_Flags :: enum u32 {
+    None = 0,
+    Italic = 1 << 0,
+    Light = 1 << 1,
+    Regular = 1 << 2,
+    Medium = 1 << 3,
+    SemiBold = 1 << 4,
+    Bold = 1 << 5,
+    ExtraBold = 1 << 6,
+    Black = 1 << 7,
+}
+
+Dynview_Text_Alignment :: enum {
+    Left,
+    Center,
+}
+
+Dynview_Text_Style :: struct {
+    color: rl.Color,
+    alignment: Dynview_Text_Alignment,
+    bold: bool,
+    italic: bool,
+    font_flags: Font_Variant_Flags,
+    indent_cols: int,
+    paragraph_spacing_before: f32,
+    paragraph_spacing_after: f32,
+    line_height_multiplier: f32,
+    force_line_start: bool,
+    wrap_scale: f32,
+}
+
+Dynview_Matrix_Column_Alignment :: enum i32 {
+    Left = 0,
+    Center = 1,
+    Right = 2,
+}
+
+Dynview_Command_Kind :: enum {
+    BeginBlock,
+    EndBlock,
+    TextRun,
+    MathGlyphRun,
+    MathBlock,
+    ScriptAttachRecursive,
+    FracRecursive,
+    StretchDelimiterRecursive,
+    MatrixRecursive,
+    LargeOpRecursive,
+    AccentBarRecursive,
+    RadicalBarRecursive,
+    CopyableTextRun,
+    LineBreak,
+    Divider,
+    InlineLine,
+    InlineBox,
+    InlineCircle,
+    InlineFilledBox,
+    InlineFilledCircle,
+    InlinePieSection,
+}
+
+Dynview_Command :: struct {
+    kind: Dynview_Command_Kind,
+    block_id: i32,
+    style_id: i32,
+    math_program_id: i32,
+    secondary_math_program_id: i32,
+    text_offset: int,
+    text_len: int,
+    script_base_text_offset: int,
+    script_base_text_len: int,
+    script_sup_text_offset: int,
+    script_sup_text_len: int,
+    script_sub_text_offset: int,
+    script_sub_text_len: int,
+    script_style_id: i32,
+    script_scale: f32,
+    script_sup_raise: f32,
+    script_sub_drop: f32,
+    script_gap: f32,
+    accent_mode: i32,
+    radical_mode: i32,
+    large_op_kind: i32,
+    radical_index_text_offset: int,
+    radical_index_text_len: int,
+    accent_style_id: i32,
+    accent_thickness: f32,
+    accent_offset: f32,
+    copy_text_offset: int,
+    copy_text_len: int,
+    inline_atom_dimension: f32,
+    inline_atom_stroke: f32,
+    inline_box_height: f32,
+    has_brush_color: bool,
+    brush_color: rl.Color,
+    inline_outline_stroke: f32,
+    pie_start_angle_degrees: f32,
+    pie_end_angle_degrees: f32,
+}
+
+Dynview_Copy_Block :: struct {
+    block_id: i32,
+    block_kind: i32,
+    row_start: int,
+    row_end: int,
+    payload_offset: int,
+    payload_len: int,
+}
+
+Dynview_Copy_Hit_Target :: struct {
+    block_id: i32,
+    payload_offset: int,
+    payload_len: int,
+    rect: rl.Rectangle,
+    hover_rect: rl.Rectangle,
+}
+
+Dynview_Layout_Item_Kind :: enum {
+    TextRun,
+    MathGlyphRun,
+    MathBlock,
+    ScriptAttachRecursive,
+    FracRecursive,
+    StretchDelimiterRecursive,
+    MatrixRecursive,
+    LargeOpRecursive,
+    AccentBarRecursive,
+    RadicalBarRecursive,
+    InlineLine,
+    InlineBox,
+    InlineCircle,
+    InlineFilledBox,
+    InlineFilledCircle,
+    InlinePieSection,
+}
+
+Dynview_Layout_Item :: struct {
+    kind: Dynview_Layout_Item_Kind,
+    block_id: i32,
+    style_id: i32,
+    math_program_id: i32,
+    secondary_math_program_id: i32,
+    line_index: int,
+    col_start: int,
+    col_span: int,
+    text_offset: int,
+    text_len: int,
+    script_sup_text_offset: int,
+    script_sup_text_len: int,
+    script_sub_text_offset: int,
+    script_sub_text_len: int,
+    script_style_id: i32,
+    script_scale: f32,
+    script_sup_raise: f32,
+    script_sub_drop: f32,
+    script_gap: f32,
+    accent_mode: i32,
+    radical_mode: i32,
+    large_op_kind: i32,
+    radical_index_text_offset: int,
+    radical_index_text_len: int,
+    accent_style_id: i32,
+    accent_thickness: f32,
+    accent_offset: f32,
+    inline_atom_dimension: f32,
+    inline_atom_stroke: f32,
+    inline_box_height: f32,
+    has_brush_color: bool,
+    brush_color: rl.Color,
+    inline_outline_stroke: f32,
+    pie_start_angle_degrees: f32,
+    pie_end_angle_degrees: f32,
+    x_offset: f32,
+    y_offset: f32,
+    draw_width: f32,
+    draw_height: f32,
+    ascent: f32,
+    descent: f32,
+    visual_padding_top: f32,
+    visual_padding_bottom: f32,
+}
+
+Dynview_Math_Node_Kind :: enum {
+    None,
+    Sequence,
+    GlyphRun,
+    Script,
+    Radical,
+    Fraction,
+    StretchDelimiter,
+}
+
+Dynview_Math_Node :: struct {
+    kind: Dynview_Math_Node_Kind,
+    style_id: i32,
+    text_offset: int,
+    text_len: int,
+    first_child: int,
+    child_count: int,
+    base_child: int,
+    superscript_child: int,
+    subscript_child: int,
+    radicand_child: int,
+    index_child: int,
+    numerator_child: int,
+    denominator_child: int,
+    x_offset: f32,
+    y_offset: f32,
+    draw_width: f32,
+    ascent: f32,
+    descent: f32,
+}
+
+Dynview_Math_Program :: struct {
+    valid: bool,
+    root_node_index: int,
+    node_start: int,
+    node_count: int,
+    command_start: int,
+    command_count: int,
+    copy_text_offset: int,
+    copy_text_len: int,
+    draw_width: f32,
+    ascent: f32,
+    descent: f32,
+    visual_padding_top: f32,
+    visual_padding_bottom: f32,
+}
+
+Dynview_Layout_Line :: struct {
+    item_start: int,
+    item_count: int,
+    y_offset: f32,
+    line_height: f32,
+    baseline: f32,
+    max_ascent: f32,
+    max_descent: f32,
+}
+
+Dynview_Command_Buffer :: struct {
+    revision: u64,
+    command_count: int,
+    text_bytes_len: int,
+    has_stream_error: bool,
+    stream_open_block: bool,
+    stream_open_block_id: i32,
+
+    commands: [DYNVIEW__MAX_COMMANDS]Dynview_Command,
+    text_bytes: [DYNVIEW__MAX_TEXT_BYTES]u8,
+}
+
+Dynview_Compile_Cache :: struct {
+    compiled_revision: u64,
+    compiled_command_count: int,
+    compiled_text_bytes_len: int,
+    compiled_plain_text_len: int,
+    compiled_copy_payload_len: int,
+    copy_block_count: int,
+    copy_hit_target_count: int,
+    layout_line_count: int,
+    layout_item_count: int,
+    math_program_count: int,
+    math_command_count: int,
+    math_node_count: int,
+    layout_is_valid: bool,
+    is_valid: bool,
+
+    layout_total_height: f32,
+    layout_average_line_height: f32,
+
+    last_content_hash: u64,
+    last_content_len: int,
+    last_panel_width: f32,
+    last_panel_height: f32,
+    last_font_size: f32,
+    last_wrap_advance: f32,
+    last_style_revision: u64,
+
+    last_invalidation_mask: u32,
+    last_error_code: i32,
+
+    compiled_plain_text: [DYNVIEW__MAX_TEXT_BYTES]u8,
+    compiled_copy_payload: [DYNVIEW__MAX_TEXT_BYTES]u8,
+    copy_blocks: [DYNVIEW__MAX_COMMANDS]Dynview_Copy_Block,
+    copy_hit_targets: [DYNVIEW__MAX_COMMANDS]Dynview_Copy_Hit_Target,
+    layout_lines: [DYNVIEW__MAX_LAYOUT_LINES]Dynview_Layout_Line,
+    layout_items: [DYNVIEW__MAX_LAYOUT_ITEMS]Dynview_Layout_Item,
+    math_programs: [DYNVIEW__MAX_MATH_PROGRAMS]Dynview_Math_Program,
+    math_commands: [DYNVIEW__MAX_MATH_COMMANDS]Dynview_Command,
+    math_nodes: [DYNVIEW__MAX_MATH_NODES]Dynview_Math_Node,
+}
+
+Dynview_System :: struct {
+    enabled: bool,
+    pending_invalidation_mask: u32,
+
+    copy_icon_hover_active: bool,
+    copy_icon_hover_block_id: i32,
+    copy_icon_hover_t: f32,
+
+    copy_icon_press_active: bool,
+    copy_icon_press_block_id: i32,
+    copy_icon_press_t: f32,
+
+    copy_icon_linger_active: bool,
+    copy_icon_linger_block_id: i32,
+    copy_icon_linger_remaining: f32,
+
+    command_buffer: Dynview_Command_Buffer,
+    compile_cache: Dynview_Compile_Cache,
+}
+
+
 
 /****
     The UI state information controls scaling and view-based primitives, including UI control
@@ -516,28 +846,6 @@ Gif_Capture_Session :: struct {
     active: bool,
 }
 
-Font_Weight :: enum {
-    Light,
-    Regular,
-    Medium,
-    SemiBold,
-    Bold,
-    ExtraBold,
-    Black,
-}
-
-Font_Variant_Flags :: enum u32 {
-    None = 0,
-    Italic = 1 << 0,
-    Light = 1 << 1,
-    Regular = 1 << 2,
-    Medium = 1 << 3,
-    SemiBold = 1 << 4,
-    Bold = 1 << 5,
-    ExtraBold = 1 << 6,
-    Black = 1 << 7,
-}
-
 Euclid_Font_Variant_Slot :: struct {
     loaded: bool,
     missing_warned: bool,
@@ -560,288 +868,6 @@ Ui_Regions :: struct {
     settings_rect: rl.Rectangle,
     gif_rect: rl.Rectangle,
     scratchpad_rect: rl.Rectangle,
-}
-
-
-Ui_Dynview_Matrix_Column_Alignment :: enum i32 {
-    Left = 0,
-    Center = 1,
-    Right = 2,
-}
-
-Ui_Dynview_Command_Kind :: enum {
-    BeginBlock,
-    EndBlock,
-    TextRun,
-    MathGlyphRun,
-    MathBlock,
-    ScriptAttachRecursive,
-    FracRecursive,
-    StretchDelimiterRecursive,
-    MatrixRecursive,
-    LargeOpRecursive,
-    AccentBarRecursive,
-    RadicalBarRecursive,
-    CopyableTextRun,
-    LineBreak,
-    Divider,
-    InlineLine,
-    InlineBox,
-    InlineCircle,
-    InlineFilledBox,
-    InlineFilledCircle,
-    InlinePieSection,
-}
-
-Ui_Dynview_Command :: struct {
-    kind: Ui_Dynview_Command_Kind,
-    block_id: i32,
-    style_id: i32,
-    math_program_id: i32,
-    secondary_math_program_id: i32,
-    text_offset: int,
-    text_len: int,
-    script_base_text_offset: int,
-    script_base_text_len: int,
-    script_sup_text_offset: int,
-    script_sup_text_len: int,
-    script_sub_text_offset: int,
-    script_sub_text_len: int,
-    script_style_id: i32,
-    script_scale: f32,
-    script_sup_raise: f32,
-    script_sub_drop: f32,
-    script_gap: f32,
-    accent_mode: i32,
-    radical_mode: i32,
-    large_op_kind: i32,
-    radical_index_text_offset: int,
-    radical_index_text_len: int,
-    accent_style_id: i32,
-    accent_thickness: f32,
-    accent_offset: f32,
-    copy_text_offset: int,
-    copy_text_len: int,
-    inline_atom_dimension: f32,
-    inline_atom_stroke: f32,
-    inline_box_height: f32,
-    has_brush_color: bool,
-    brush_color: rl.Color,
-    inline_outline_stroke: f32,
-    pie_start_angle_degrees: f32,
-    pie_end_angle_degrees: f32,
-}
-
-Ui_Dynview_Copy_Block :: struct {
-    block_id: i32,
-    block_kind: i32,
-    row_start: int,
-    row_end: int,
-    payload_offset: int,
-    payload_len: int,
-}
-
-Ui_Dynview_Copy_Hit_Target :: struct {
-    block_id: i32,
-    payload_offset: int,
-    payload_len: int,
-    rect: rl.Rectangle,
-    hover_rect: rl.Rectangle,
-}
-
-Ui_Dynview_Layout_Item_Kind :: enum {
-    TextRun,
-    MathGlyphRun,
-    MathBlock,
-    ScriptAttachRecursive,
-    FracRecursive,
-    StretchDelimiterRecursive,
-    MatrixRecursive,
-    LargeOpRecursive,
-    AccentBarRecursive,
-    RadicalBarRecursive,
-    InlineLine,
-    InlineBox,
-    InlineCircle,
-    InlineFilledBox,
-    InlineFilledCircle,
-    InlinePieSection,
-}
-
-Ui_Dynview_Layout_Item :: struct {
-    kind: Ui_Dynview_Layout_Item_Kind,
-    block_id: i32,
-    style_id: i32,
-    math_program_id: i32,
-    secondary_math_program_id: i32,
-    line_index: int,
-    col_start: int,
-    col_span: int,
-    text_offset: int,
-    text_len: int,
-    script_sup_text_offset: int,
-    script_sup_text_len: int,
-    script_sub_text_offset: int,
-    script_sub_text_len: int,
-    script_style_id: i32,
-    script_scale: f32,
-    script_sup_raise: f32,
-    script_sub_drop: f32,
-    script_gap: f32,
-    accent_mode: i32,
-    radical_mode: i32,
-    large_op_kind: i32,
-    radical_index_text_offset: int,
-    radical_index_text_len: int,
-    accent_style_id: i32,
-    accent_thickness: f32,
-    accent_offset: f32,
-    inline_atom_dimension: f32,
-    inline_atom_stroke: f32,
-    inline_box_height: f32,
-    has_brush_color: bool,
-    brush_color: rl.Color,
-    inline_outline_stroke: f32,
-    pie_start_angle_degrees: f32,
-    pie_end_angle_degrees: f32,
-    x_offset: f32,
-    y_offset: f32,
-    draw_width: f32,
-    draw_height: f32,
-    ascent: f32,
-    descent: f32,
-    visual_padding_top: f32,
-    visual_padding_bottom: f32,
-}
-
-Ui_Dynview_Math_Node_Kind :: enum {
-    None,
-    Sequence,
-    GlyphRun,
-    Script,
-    Radical,
-    Fraction,
-    StretchDelimiter,
-}
-
-Ui_Dynview_Math_Node :: struct {
-    kind: Ui_Dynview_Math_Node_Kind,
-    style_id: i32,
-    text_offset: int,
-    text_len: int,
-    first_child: int,
-    child_count: int,
-    base_child: int,
-    superscript_child: int,
-    subscript_child: int,
-    radicand_child: int,
-    index_child: int,
-    numerator_child: int,
-    denominator_child: int,
-    x_offset: f32,
-    y_offset: f32,
-    draw_width: f32,
-    ascent: f32,
-    descent: f32,
-}
-
-Ui_Dynview_Math_Program :: struct {
-    valid: bool,
-    root_node_index: int,
-    node_start: int,
-    node_count: int,
-    command_start: int,
-    command_count: int,
-    copy_text_offset: int,
-    copy_text_len: int,
-    draw_width: f32,
-    ascent: f32,
-    descent: f32,
-    visual_padding_top: f32,
-    visual_padding_bottom: f32,
-}
-
-Ui_Dynview_Layout_Line :: struct {
-    item_start: int,
-    item_count: int,
-    y_offset: f32,
-    line_height: f32,
-    baseline: f32,
-    max_ascent: f32,
-    max_descent: f32,
-}
-
-Ui_Dynview_Command_Buffer :: struct {
-    revision: u64,
-    command_count: int,
-    text_bytes_len: int,
-    has_stream_error: bool,
-    stream_open_block: bool,
-    stream_open_block_id: i32,
-
-    commands: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Command,
-    text_bytes: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
-}
-
-Ui_Dynview_Compile_Cache :: struct {
-    compiled_revision: u64,
-    compiled_command_count: int,
-    compiled_text_bytes_len: int,
-    compiled_plain_text_len: int,
-    compiled_copy_payload_len: int,
-    copy_block_count: int,
-    copy_hit_target_count: int,
-    layout_line_count: int,
-    layout_item_count: int,
-    math_program_count: int,
-    math_command_count: int,
-    math_node_count: int,
-    layout_is_valid: bool,
-    is_valid: bool,
-
-    layout_total_height: f32,
-    layout_average_line_height: f32,
-
-    last_content_hash: u64,
-    last_content_len: int,
-    last_panel_width: f32,
-    last_panel_height: f32,
-    last_font_size: f32,
-    last_wrap_advance: f32,
-    last_style_revision: u64,
-
-    last_invalidation_mask: u32,
-    last_error_code: i32,
-
-    compiled_plain_text: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
-    compiled_copy_payload: [UI_DYNVIEW_MAX_TEXT_BYTES]u8,
-    copy_blocks: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Block,
-    copy_hit_targets: [UI_DYNVIEW_MAX_COMMANDS]Ui_Dynview_Copy_Hit_Target,
-    layout_lines: [UI_DYNVIEW_MAX_LAYOUT_LINES]Ui_Dynview_Layout_Line,
-    layout_items: [UI_DYNVIEW_MAX_LAYOUT_ITEMS]Ui_Dynview_Layout_Item,
-    math_programs: [UI_DYNVIEW_MAX_MATH_PROGRAMS]Ui_Dynview_Math_Program,
-    math_commands: [UI_DYNVIEW_MAX_MATH_COMMANDS]Ui_Dynview_Command,
-    math_nodes: [UI_DYNVIEW_MAX_MATH_NODES]Ui_Dynview_Math_Node,
-}
-
-Ui_Dynview_Runtime :: struct {
-    enabled: bool,
-    pending_invalidation_mask: u32,
-
-    copy_icon_hover_active: bool,
-    copy_icon_hover_block_id: i32,
-    copy_icon_hover_t: f32,
-
-    copy_icon_press_active: bool,
-    copy_icon_press_block_id: i32,
-    copy_icon_press_t: f32,
-
-    copy_icon_linger_active: bool,
-    copy_icon_linger_block_id: i32,
-    copy_icon_linger_remaining: f32,
-
-    command_buffer: Ui_Dynview_Command_Buffer,
-    compile_cache: Ui_Dynview_Compile_Cache,
 }
 
 Ui_Press_Owner_Kind :: enum {
@@ -906,8 +932,6 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input_viewport_col_start: int,
     scratchpad_last_output_len: int,
     scratchpad_follow_output: bool,
-
-    dynview_runtime: Ui_Dynview_Runtime,
 
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
@@ -976,6 +1000,7 @@ Euclid_General_State :: struct {
     julia_interface : ^Euclid_Julia_Interface,
     point_system : ^Shapes_Point_System,
     particle_system : ^Particle_System,
+    dynview: Dynview_System,
     chalk_audio: Chalk_Audio_Runtime,
     drawing_sound_enabled: bool,
     compass : Shapes_Compass,

@@ -1,92 +1,107 @@
-package dynview
+package ui_dynview
 
 import "../../../core"
+import "../../../dynview"
 import view_core "../../core"
 
-DYNVIEW_INVALIDATE_CONTENT :: (1 << 0)
-DYNVIEW_INVALIDATE_PANEL :: (1 << 1)
-DYNVIEW_INVALIDATE_FONT :: (1 << 2)
-DYNVIEW_INVALIDATE_STYLE :: (1 << 3)
+import rl "vendor:raylib"
 
-DYNVIEW_ENABLED_DEFAULT :: true
-
-DYNVIEW_STATUS_OK :: 0
-DYNVIEW_STATUS_INVALID_ARGUMENT :: 2
-DYNVIEW_STATUS_OUT_OF_CAPACITY :: 5
-DYNVIEW_STATUS_ILLEGAL_STATE :: 6
-
-TEXT_PADDING :: 8
-
-LARGE_OP_KIND_NONE :: 0
-LARGE_OP_KIND_SUM :: 1
-LARGE_OP_KIND_PROD :: 2
-LARGE_OP_KIND_INT :: 3
-LARGE_OP_KIND_LIM :: 4
-
-DELIMITER_KIND_NONE :: 0
-DELIMITER_KIND_LEFT_PAREN :: 1
-DELIMITER_KIND_RIGHT_PAREN :: 2
-DELIMITER_KIND_LEFT_BRACKET :: 3
-DELIMITER_KIND_RIGHT_BRACKET :: 4
-DELIMITER_KIND_LEFT_BRACE :: 5
-DELIMITER_KIND_RIGHT_BRACE :: 6
-DELIMITER_KIND_VERT :: 7
-DELIMITER_KIND_DOUBLE_VERT :: 8
-DELIMITER_KIND_LEFT_CEIL :: 9
-DELIMITER_KIND_RIGHT_CEIL :: 10
-DELIMITER_KIND_LEFT_FLOOR :: 11
-DELIMITER_KIND_RIGHT_FLOOR :: 12
-DELIMITER_KIND_LEFT_ANGLE :: 13
-DELIMITER_KIND_RIGHT_ANGLE :: 14
 
 Mouse_Input_State :: view_core.Mouse_Input_State
 
 UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
 UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
 
-Dynview_Layout_Line_Accumulator :: struct {
-    item_start: int,
-    item_count: int,
-    max_ascent: f32,
-    max_descent: f32,
+
+Dynview_Text_Alignment :: core.Dynview_Text_Alignment
+Dynview_Text_Style :: core.Dynview_Text_Style
+
+
+//   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
+draw_scratchpad_styled_or_fallback :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    fallback_text: string,
+    panel: rl.Rectangle,
+    scroll_y: f32,
+    font: rl.Font,
+    text_padding, text_row_height, wrap_advance, font_size: f32,
+    fallback_text_color: rl.Color) {
+
+    if ui_runtime == nil {
+        view_core.draw_wrapped_text_content(fallback_text,
+            panel,
+            scroll_y,
+            font,
+            text_padding,
+            text_row_height,
+            fallback_text_color,
+            wrap_advance,
+            font_size)
+        return
+    }
+
+    runtime := &state^.dynview
+    if runtime^.enabled && runtime^.compile_cache.is_valid &&
+        !runtime^.command_buffer.has_stream_error && runtime^.command_buffer.command_count > 0 {
+        if runtime^.compile_cache.layout_is_valid {
+            draw_cached_layout(state,
+                runtime,
+                panel,
+                scroll_y,
+                text_padding,
+                font_size,
+                font)
+            return
+        }
+    }
+
+    view_core.draw_wrapped_text_content(fallback_text,
+        panel,
+        scroll_y,
+        font,
+        text_padding,
+        text_row_height,
+        fallback_text_color,
+        wrap_advance,
+        font_size)
 }
 
-Dynview_Block_Format :: struct {
-    alignment: Dynview_Text_Alignment,
-    indent_cols: int,
-    paragraph_spacing_before: f32,
-    paragraph_spacing_after: f32,
-    line_height_multiplier: f32,
-}
-
-Dynview_Layout_State :: struct {
-    line_index: int,
-    col: int,
-    y_offset: f32,
-    line_gap: f32,
-    active_block_id: i32,
-    active_block_kind: i32,
-    active_block_format: Dynview_Block_Format,
-}
-
-Dynview_Layout_Build_Context :: struct {
-    cache: ^core.Ui_Dynview_Compile_Cache,
-    buffer: ^core.Ui_Dynview_Command_Buffer,
-    state: ^Dynview_Layout_State,
-    acc: ^Dynview_Layout_Line_Accumulator,
+//   Draw one measured child math program with a shared baseline.
+draw_math_program_at :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Dynview_System,
+    panel: rl.Rectangle,
+    font: rl.Font,
     font_size: f32,
-    base_ascent: f32,
-    base_descent: f32,
-}
+    program: core.Dynview_Math_Program,
+    draw_x, baseline_y: f32) {
 
-Dynview_Delimiter_Family :: enum {
-    None,
-    Paren,
-    Bracket,
-    Brace,
-    Vert,
-    DoubleVert,
-    Ceil,
-    Floor,
-    Angle,
+    child_x := draw_x
+    command_end := program.command_start + program.command_count
+    for command_index in program.command_start..<command_end {
+        cmd := runtime^.compile_cache.math_commands[command_index]
+        child_item, ok := dynview.math_program_item(
+            &runtime^.compile_cache,
+            &runtime^.command_buffer,
+            cmd,
+            font_size)
+        if !ok {
+            continue
+        }
+
+        child_y := baseline_y - child_item.ascent
+        child_style := dynview.style_by_id(child_item.style_id)
+        draw_cached_text_item(
+            state,
+            runtime,
+            panel,
+            font,
+            font_size,
+            child_style,
+            child_item,
+            child_x,
+            child_y)
+        child_x += child_item.draw_width
+    }
 }

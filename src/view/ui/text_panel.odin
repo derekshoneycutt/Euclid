@@ -1,9 +1,10 @@
 package ui
 
 import "../../core"
+import "../../dynview"
 import julia "../../bridge"
 import view_core "../core"
-import dynview "./dynview"
+import ui_dynview "./dynview"
 
 import rl "vendor:raylib"
 
@@ -32,74 +33,41 @@ draw_view_text_panel :: proc(
         return
     }
 
-    dynview.reset_command_buffer(&ui_runtime^.dynview_runtime)
+    dynview.reset_command_buffer(&state^.dynview)
     view_text := julia.call_current_animation_get_view_text(state)
-    _ = dynview.compiled_scratchpad_text_or_fallback(
-        ui_runtime,
-        text_panel,
-        TREE_FONT_SIZE,
-        TEXT_WRAP_ADVANCE,
-        dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
+    _ = dynview.compiled_scratchpad_text_or_fallback(&state.dynview, text_panel,
+        TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         view_text)
 
-    content_h := dynview.scratchpad_content_height_or_fallback(
-        ui_runtime,
-        text_panel,
-        TEXT_PADDING,
-        TEXT_WRAP_ADVANCE,
-        TEXT_ROW_HEIGHT,
-        view_text)
-    scroll_step := dynview.scratchpad_scroll_step_or_fallback(ui_runtime, TEXT_ROW_HEIGHT)
+    content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview, text_panel,
+        TEXT_PADDING, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT, view_text)
+    scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
     text_scroll_state := Scroll_Container_State{
         is_dragging_thumb = ui_runtime.text_scroll_dragging,
         drag_offset_y = ui_runtime.text_scroll_drag_off,
     }
-    text_scroll_begin := scroll_container_begin(
-        1001,
-        text_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        content_h,
-        mouse_input,
-        rl.Vector2{},
-        text_panel,
-        scroll_step * WHEEL_SCROLL_MULTIPLIER,
-        &ui_runtime^.ui_press_owner,
-        text_scroll_state)
+    text_scroll_begin := scroll_container_begin(1001, text_panel,
+        state^.ui_runtime.view_text_scroll_y, content_h, mouse_input,
+        rl.Vector2{}, text_panel, scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime^.ui_press_owner, text_scroll_state)
     text_panel = text_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = text_scroll_begin.scroll_y_out
 
-    dynview.refresh_scratchpad_copy_targets(
-        ui_runtime,
-        text_panel,
+    dynview.refresh_scratchpad_copy_targets(&state.dynview, text_panel,
         state^.ui_runtime.view_text_scroll_y,
-        TEXT_PADDING,
-        TEXT_ROW_HEIGHT,
-        DYNVIEW_COPY_ICON_SIZE,
-        DYNVIEW_COPY_ICON_X_PAD)
+        TEXT_PADDING, TEXT_ROW_HEIGHT,
+        DYNVIEW_COPY_ICON_SIZE, DYNVIEW_COPY_ICON_X_PAD)
 
-    dynview.draw_scratchpad_styled_or_fallback(
-        state,
-        ui_runtime,
-        view_text,
-        text_panel,
+    ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime, view_text, text_panel,
         state^.ui_runtime.view_text_scroll_y,
-        state.font,
-        TEXT_PADDING,
-        TEXT_ROW_HEIGHT,
-        TEXT_WRAP_ADVANCE,
-        TREE_FONT_SIZE,
-        UI_TEXT_COLOR)
+        state.font, TEXT_PADDING, TEXT_ROW_HEIGHT, TEXT_WRAP_ADVANCE,
+        TREE_FONT_SIZE, UI_TEXT_COLOR)
 
-    _ = view_core.draw_copy_icons(&ui_runtime^.dynview_runtime, text_panel, mouse_input)
+    _ = view_core.draw_copy_icons(&state^.dynview, text_panel, mouse_input)
 
-    text_scroll_end := scroll_container_end(
-        text_scroll_begin.scroll_ref,
-        content_h,
-        state^.ui_runtime.view_text_scroll_y,
-        mouse_input,
-        rl.Vector2{},
-        text_panel,
-        &ui_runtime^.ui_press_owner)
+    text_scroll_end := scroll_container_end(text_scroll_begin.scroll_ref, content_h,
+        state^.ui_runtime.view_text_scroll_y, mouse_input, rl.Vector2{},
+        text_panel, &ui_runtime^.ui_press_owner)
     state^.ui_runtime.view_text_scroll_y = text_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = text_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = text_scroll_end.state_out.drag_offset_y
