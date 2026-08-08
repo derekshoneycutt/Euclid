@@ -311,6 +311,10 @@ get_point_view :: proc "c" (
 
     if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
+        query_snapshot := active_animation_query_snapshot(state)
+        if query_snapshot != nil {
+            point = query_snapshot^.points[index]
+        }
         type: int = 0
         switch point.kind {
         case .Label:
@@ -403,6 +407,9 @@ get_point_view :: proc "c" (
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
 show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
+    if capture_point_command(state, .Show_Point, index) {
+        return
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         context = state^.saved_context
         point := &state^.point_system^.points[index]
@@ -418,6 +425,9 @@ show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
 hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
+    if capture_point_command(state, .Hide_Point, index) {
+        return
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         context = state^.saved_context
         particles.emit_shapes_hide_burst(
@@ -438,6 +448,9 @@ hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
 //   - count: Number of entries available in the provided array.
 @(export)
 hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32, count: i32) {
+    if capture_hide_point_batch_command(state, indices, count) {
+        return
+    }
     if count <= 0 {
         return
     }
@@ -466,6 +479,9 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
 @(export)
 set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, pos: core.Vector3) {
     context = state^.saved_context
+    if capture_point_position_command(state, index, pos) {
+        return
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_crossing_dust(state, index, pos)
     }
@@ -479,6 +495,9 @@ set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, p
 //   - brushSize: Stroke thickness for rendered point/shape geometry.
 @(export)
 set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brushSize: f32) {
+    if capture_point_brush_command(state, index, brushSize) {
+        return
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].brush_size = brushSize
     }
@@ -492,6 +511,9 @@ set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brus
 //   - color: RGBA color payload in bridge format.
 @(export)
 set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, color: Bridge_Color) {
+    if capture_point_color_command(state, index, color) {
+        return
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].color = rlColor
@@ -594,6 +616,9 @@ set_point_position_status :: proc "c" (
     pointIndex := int(index)
     if !is_point_index_in_bounds(pointIndex) {
         return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if capture_point_position_command(state, pointIndex, pos) {
+        return BRIDGE_STATUS_OK
     }
 
     set_point_position_with_floor_crossing_dust(state, pointIndex, pos)
@@ -752,6 +777,9 @@ set_point_offset :: proc "c" (
     pointIndex := int(index)
     if !is_point_index_in_bounds(pointIndex) {
         return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if capture_point_scalar_command(state, .Set_Point_Offset, pointIndex, offset) {
+        return BRIDGE_STATUS_OK
     }
 
     state^.point_system^.points[pointIndex].offset = offset

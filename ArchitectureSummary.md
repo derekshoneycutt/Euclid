@@ -117,10 +117,13 @@ Dynview now has 2 parallel surfaces every frame:
 - Plain fallback text (`get_view_text`) for guaranteed readability.
 - Structured command stream for styled text, inline atoms, and recursive math blocks.
 
-Story of one frame:
+Snapshot and display flow:
 
-1. Julia returns fallback text and may emit dynview commands.
-1. Odin validates and compiles command buffers to cached plain/copy/layout state.
+1. The Julia worker produces fallback text and dynview commands in a bounded
+  worker-owned staging runtime.
+1. The worker publishes a complete animation-tagged semantic snapshot.
+1. Odin validates and imports populated spans at a frame boundary.
+1. Odin compiles command buffers to cached plain/copy/layout state.
 1. If compile/layout is valid, Odin renders dynview output.
 1. If any stream stage fails, Odin falls back to plain text with no host crash.
 
@@ -128,8 +131,8 @@ Story of one frame:
 
 | Ownership | Odin | Julia |
 | --- | --- | --- |
-| Runtime/UI state | Owns buffer/cache/layout/draw and copy-hit targets | Reads nothing directly |
-| Text intent | Consumes structured commands | Produces fallback + optional stream |
+| Runtime/UI state | Owns front buffer/cache/layout/draw and copy-hit targets | Reads nothing directly |
+| Text intent | Validates and consumes immutable snapshots | Produces fallback + optional stream in worker staging |
 | Failure semantics | Invalid stream marks cache invalid and falls back | Must treat non-OK bridge status as stop-and-fallback |
 
 ---
@@ -200,38 +203,74 @@ host-side deterministic metrics and fallback safety.
 
 ```mermaid
 sequenceDiagram
-  participant O as Odin Host
+  participant D as Display Thread
+  participant W as Julia Worker
   participant B as Bridge API
   participant J as Julia Runtime
 
-  O->>J: include("julia/script.jl")
-  O->>J: resolve init_euclid_scripts/global_euclid_loop
+  D->>W: Initialize request
+  W->>J: initialize + include("julia/script.jl")
+  W->>J: resolve init_euclid_scripts/global_euclid_loop
   J->>B: register animation tree
-  B->>O: mutate host registry/state
+  B->>D: mutate quarantined startup state
+  W-->>D: Ready event
 
   loop Per frame
-    O->>J: perform_animation_frame(state_ptr)
-    J->>J: run global loop + current animation
-    J->>B: create/mutate points, constraints, tools, particles
-    B->>O: apply state mutations
+    D->>W: nonblocking coalesced animation tick
+    W->>J: run global + selected animation loops
+    J->>B: read immutable query snapshot
+    J->>B: capture mutations in scene-command batch
+    W-->>D: complete tick event
+    D->>D: commit batch at fixed-step boundary
+    D->>D: solve constraints before next snapshot
+    D->>W: nonblocking view snapshot request
+    W->>J: get_view_text(state_ptr)
+    J->>B: emit into worker dynview staging
+    W-->>D: complete view snapshot event
+    D->>D: validate, import, compile, layout, draw
   end
 
   alt Asset package changed
-    O->>J: reload script.jl
-    O->>O: refresh handles + rebuild registry
-    O->>O: restore current animation by name
+    W->>J: include candidate script.jl
+    W->>W: build staged handles + registry
+    W->>W: restore current animation by stable ID
+    W->>D: publish generation or retain previous generation
   else No change
-    O->>J: continue normal frame loop
+    W->>J: continue normal frame loop
   end
 ```
 
 ### Ownership And Rules
 
 - Odin owns application state, memory, rendering, and final frame orchestration.
+- One persistent worker thread owns Julia initialization, every Julia C API
+  operation, callback handles, and Julia shutdown.
+- Startup uses bounded typed channels and nonblocking event draining so the
+  display continues rendering while Julia initializes and registers content.
+- Scratchpad submission, completion, history, cursor reset, and save-history
+  operations use bounded copied requests with correlated, generation-checked
+  replies. View-text generation publishes bounded immutable semantic snapshots;
+  panel drawing does not call Julia. Every selected animation loop captures its
+  recurring mutations in a bounded ordered scene-command batch whose vocabulary
+  covers the current animation catalogue. The display thread validates the
+  entire batch and commits it atomically at a fixed-step boundary. Canonical
+  constraints settle worker-commanded tool geometry before rendering. Animation
+  ticks are nonblocking, bounded to one pending request, and coalesce elapsed
+  fixed-step time up to 250 ms. Tick queries use worker-slot snapshots rather
+  than canonical scene state. Selection and reset invalidate stale results;
+  lifecycle transitions remain rare serialized compatibility tasks because
+  initialization creates stable IDs and rebuilds canonical scene state.
+- Reload builds a fresh interface catalogue on the owner thread and publishes
+  it only after callback validation, registration, and stable-ID restoration.
+  Failure retains the previous interface generation and suppresses repeated
+  retries for the same broken package revision.
+- Worker completion events carry explicit success and request identity.
+  Display-owned diagnostics retain failed request, queue saturation, reload
+  stage, lifecycle state, and runtime generation without consulting Julia.
 - Julia owns animation/content logic and drives changes only through bridge APIs.
 - Bridge failures should be surfaced clearly; no silent state corruption paths.
-- Some bridge entrypoints restore Odin runtime context
-  (`context = state^.SavedContext`) before allocation-sensitive work.
+- Bridge entrypoints restore the Julia worker's saved Odin runtime context
+  (`context = state^.saved_context`) before allocation-sensitive work.
 
 ---
 

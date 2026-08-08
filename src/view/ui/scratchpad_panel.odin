@@ -89,41 +89,27 @@ scratchpad_parse_completion_payload :: proc(payload: string) -> (int, int, strin
     return replace_start, replace_end, replacement, true
 }
 
-//   Apply one generic scratchpad completion request to the input buffer.
-apply_scratchpad_completion :: proc(
+//   Submit one generic completion request without blocking the display thread.
+request_scratchpad_completion :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_UI_Runtime_State,
-    tab_pressed: bool) -> bool {
+    tab_pressed: bool) {
 
     if !tab_pressed || state == nil || ui_runtime == nil {
-        return false
+        return
     }
 
     input_text := scratchpad_input_text(ui_runtime)
     if len(input_text) <= 0 {
-        return false
+        return
     }
 
-    payload := julia.scratchpad_complete_input(
-        state,
-        input_text,
-        ui_runtime^.scratchpad_input_cursor)
-    replace_start, replace_end, replacement, ok := scratchpad_parse_completion_payload(payload)
-    if !ok {
-        return false
+    request_id, sent := julia.try_submit_scratchpad_async(
+        state, .Complete, input_text, ui_runtime^.scratchpad_input_cursor,
+        ui_runtime^.scratchpad_input_generation)
+    if sent {
+        ui_runtime^.scratchpad_latest_completion_request_id = request_id
     }
-
-    if replace_start > ui_runtime^.scratchpad_input_len || replace_end > ui_runtime^.scratchpad_input_len {
-        return false
-    }
-
-    return input_box_replace_byte_range(
-        ui_runtime^.scratchpad_input[:],
-        &ui_runtime^.scratchpad_input_len,
-        &ui_runtime^.scratchpad_input_cursor,
-        replace_start,
-        replace_end,
-        replacement)
 }
 
 //   Apply scratchpad history up/down navigation to the current input buffer.
@@ -135,21 +121,13 @@ apply_scratchpad_history_navigation :: proc(
     history_next: bool) {
 
     if history_previous {
-        input_box_replace_text(
-            ui_runtime^.scratchpad_input[:],
-            &ui_runtime^.scratchpad_input_len,
-            &ui_runtime^.scratchpad_input_cursor,
-            julia.scratchpad_history_previous(state))
-        ui_runtime^.scratchpad_input_viewport_col_start = 0
+        _, _ = julia.try_submit_scratchpad_async(
+            state, .History_Previous, input_generation = ui_runtime^.scratchpad_input_generation)
     }
 
     if history_next {
-        input_box_replace_text(
-            ui_runtime^.scratchpad_input[:],
-            &ui_runtime^.scratchpad_input_len,
-            &ui_runtime^.scratchpad_input_cursor,
-            julia.scratchpad_history_next(state))
-        ui_runtime^.scratchpad_input_viewport_col_start = 0
+        _, _ = julia.try_submit_scratchpad_async(
+            state, .History_Next, input_generation = ui_runtime^.scratchpad_input_generation)
     }
 }
 
@@ -167,30 +145,119 @@ submit_scratchpad_input_if_ready :: proc(
     if len(input_text) == 0 {
         return
     }
+    if ui_runtime^.scratchpad_pending_submit_request_id != 0 {
+        return
+    }
 
     ui_runtime^.scratchpad_follow_output = true
+    request_id, sent := julia.try_submit_scratchpad_async(
+        state, .Submit, input_text,
+        input_generation = ui_runtime^.scratchpad_input_generation)
+    if sent {
+        ui_runtime^.scratchpad_pending_submit_request_id = request_id
+    }
+}
 
-    status := julia.scratchpad_classify_input(state, input_text)
-    if status == julia.SCRATCHPAD_PARSE_INCOMPLETE {
-        // Newline is intentionally injected to support multiline completion flow.
-        input_box_insert_at_caret(
+//   Apply all completed Scratchpad replies at a display-frame boundary.
+apply_scratchpad_async_results :: proc(
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+
+    for {
+        slot, ok := julia.poll_scratchpad_async_result(state)
+        if !ok {
+            flush_scratchpad_history_reset(state, ui_runtime)
+            return
+        }
+        apply_scratchpad_async_result(ui_runtime, slot)
+        julia.release_scratchpad_async_result(slot)
+    }
+}
+
+//   Retry a required history reset until bounded worker storage accepts it.
+flush_scratchpad_history_reset :: proc(
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+
+    if !ui_runtime^.scratchpad_history_reset_pending {
+        return
+    }
+    _, sent := julia.try_submit_scratchpad_async(
+        state, .History_Reset,
+        input_generation = ui_runtime^.scratchpad_input_generation)
+    if sent {
+        ui_runtime^.scratchpad_history_reset_pending = false
+    }
+}
+
+//   Apply one current-generation reply and ignore stale UI mutations.
+apply_scratchpad_async_result :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    slot: ^julia.Scratchpad_Async_Slot) {
+
+    if slot^.kind == .Submit &&
+        slot^.request_id == ui_runtime^.scratchpad_pending_submit_request_id {
+        ui_runtime^.scratchpad_pending_submit_request_id = 0
+    }
+    if slot^.input_generation != ui_runtime^.scratchpad_input_generation {
+        return
+    }
+
+    switch slot^.kind {
+    case .Submit:
+        apply_scratchpad_submit_result(ui_runtime, slot)
+    case .Complete:
+        apply_scratchpad_completion_result(ui_runtime, slot)
+    case .History_Previous, .History_Next:
+        input_box_replace_text(
             ui_runtime^.scratchpad_input[:],
             &ui_runtime^.scratchpad_input_len,
             &ui_runtime^.scratchpad_input_cursor,
-            '\n')
-        _ = julia.scratchpad_history_reset_cursor(state)
+            julia.scratchpad_async_result_text(slot))
+        ui_runtime^.scratchpad_input_viewport_col_start = 0
+    case .History_Reset, .Save_History:
+    }
+}
+
+//   Preserve incomplete/error input and clear only an accepted complete submit.
+apply_scratchpad_submit_result :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    slot: ^julia.Scratchpad_Async_Slot) {
+
+    if slot^.parse_result == julia.SCRATCHPAD_PARSE_INCOMPLETE {
+        previous_len := ui_runtime^.scratchpad_input_len
+        input_box_insert_at_caret(
+            ui_runtime^.scratchpad_input[:], &ui_runtime^.scratchpad_input_len,
+            &ui_runtime^.scratchpad_input_cursor, '\n')
+        if ui_runtime^.scratchpad_input_len != previous_len {
+            ui_runtime^.scratchpad_input_generation += 1
+        }
         return
     }
-
-    if status != julia.SCRATCHPAD_PARSE_COMPLETE {
-        return
-    }
-
-    if julia.scratchpad_queue_input(state, input_text) {
+    if slot^.parse_result == julia.SCRATCHPAD_PARSE_COMPLETE && slot^.succeeded {
         ui_runtime^.scratchpad_input_len = 0
         ui_runtime^.scratchpad_input_cursor = 0
         ui_runtime^.scratchpad_input_viewport_col_start = 0
-        _ = julia.scratchpad_history_reset_cursor(state)
+        ui_runtime^.scratchpad_input_generation += 1
+    }
+}
+
+//   Apply only the newest completion request for the current input generation.
+apply_scratchpad_completion_result :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    slot: ^julia.Scratchpad_Async_Slot) {
+
+    if slot^.request_id != ui_runtime^.scratchpad_latest_completion_request_id {
+        return
+    }
+    payload := julia.scratchpad_async_result_text(slot)
+    replace_start, replace_end, replacement, ok := scratchpad_parse_completion_payload(payload)
+    if !ok || replace_start > ui_runtime^.scratchpad_input_len ||
+        replace_end > ui_runtime^.scratchpad_input_len {
+        return
+    }
+    if input_box_replace_byte_range(
+        ui_runtime^.scratchpad_input[:], &ui_runtime^.scratchpad_input_len,
+        &ui_runtime^.scratchpad_input_cursor, replace_start, replace_end, replacement) {
+        ui_runtime^.scratchpad_input_generation += 1
     }
 }
 
@@ -211,7 +278,7 @@ draw_scratchpad_output_and_prompt :: proc(
         output_panel.height = TEXT_ROW_HEIGHT
     }
 
-    output_text_legacy := julia.call_current_animation_get_view_text(state)
+    output_text_legacy := julia.current_view_snapshot_text(state)
     output_text := dynview.compiled_scratchpad_text_or_fallback(&state.dynview, output_panel,
         TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         output_text_legacy)
@@ -310,16 +377,17 @@ draw_scratchpad_output_and_prompt :: proc(
     ui_runtime^.scratchpad_input_cursor = input_result.caret_col_out
     ui_runtime^.scratchpad_input_viewport_col_start = input_result.viewport_col_start_out
 
+    if input_result.changed || input_result.paste_applied {
+        ui_runtime^.scratchpad_input_generation += 1
+        ui_runtime^.scratchpad_history_reset_pending = true
+        flush_scratchpad_history_reset(state, ui_runtime)
+    }
+
     apply_scratchpad_history_navigation(state, ui_runtime,
         input_result.history_previous && !input_result.moved_up,
         input_result.history_next && !input_result.moved_down)
 
-    completion_applied := apply_scratchpad_completion(state, ui_runtime,
-        input_result.tab_pressed)
-
-    if input_result.changed || input_result.paste_applied || completion_applied {
-        _ = julia.scratchpad_history_reset_cursor(state)
-    }
+    request_scratchpad_completion(state, ui_runtime, input_result.tab_pressed)
 
     submit_scratchpad_input_if_ready(state, ui_runtime, input_result.submit_pressed)
 

@@ -13,6 +13,7 @@ import julia "../bridge"
 import "../particles"
 import "../files"
 
+import "base:runtime"
 import "core:fmt"
 import "core:math/linalg"
 import "core:strings"
@@ -77,6 +78,8 @@ STARTUP_SPINNER_OFFSETS :: [8]rl.Vector2{
 }
 STARTUP_TRACK_COLOR :: rl.Color{86, 55, 66, 255}
 STARTUP_PROGRESS_COLOR :: rl.Color{175, 150, 150, 255}
+JULIA_UNRESPONSIVE_SECONDS :: 10.0
+JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
 
 //   Draw one dependency-free startup frame using raylib's built-in font.
@@ -127,6 +130,38 @@ finish_startup_worker :: proc(worker: ^thread.Thread, label: string, progress: f
     thread.destroy(worker)
 }
 
+//   Draw startup frames until the requested Julia worker event is available.
+finish_julia_startup_request :: proc(
+    service: ^julia.Julia_Runtime_Service, request_id: u64,
+    expected_kind: julia.Julia_Event_Kind, label: string, progress: f32) -> bool {
+
+    started_at := rl.GetTime()
+    reported_unresponsive := false
+    for {
+        event, ok := julia.try_receive_julia_event(service)
+        if ok && event.request_id == request_id && event.kind == expected_kind {
+            if !event.succeeded {
+                fmt.eprintln("Julia startup operation failed; request id: ", request_id)
+            }
+            return event.succeeded
+        }
+        display_label := label
+        if rl.GetTime() - started_at >= JULIA_UNRESPONSIVE_SECONDS {
+            display_label = "Julia is not responding"
+            if !reported_unresponsive {
+                fmt.eprintln("Julia startup operation is not responding; request id: ", request_id)
+                reported_unresponsive = true
+            }
+        }
+        draw_startup_frame(display_label, progress)
+        if rl.WindowShouldClose() {
+            fmt.eprintln("Window closed before Julia startup completed; terminating process.")
+            runtime.exit(0)
+        }
+        free_all(context.temp_allocator)
+    }
+}
+
 //   Prepare packaged assets while keeping the startup window responsive.
 prepare_assets_with_loading :: proc(progress: f32) {
     worker := thread.create_and_start(prepare_assets_worker)
@@ -166,14 +201,18 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
     open_window(settings)
     defer rl.CloseWindow()
 
-    state := initialize_application_with_loading(settings)
+    state, julia_service := initialize_application_with_loading(settings)
+    defer shutdown_julia_runtime(julia_service)
     defer free_animations_state(state)
     defer shutdown_window_resources(state)
 
     free_all(context.temp_allocator)
 
     for !rl.WindowShouldClose() {
+        ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
+        julia.publish_available_view_snapshot(state)
         alpha := accumulate_and_update_systems(state)
+        julia.try_request_view_snapshot(state)
         audio.update_chalk_runtime(&state^.chalk_audio)
 
         rl.BeginDrawing()
@@ -192,8 +231,10 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
     }
 }
 
-//   Initialize blocking application phases after the startup window is visible.
-initialize_application_with_loading :: proc(settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
+//   Initialize application phases while the startup window remains responsive.
+initialize_application_with_loading :: proc(
+    settings: ^Euclid_Run_Settings) -> (^Euclid_General_State, ^julia.Julia_Runtime_Service) {
+
     startup_started_at := rl.GetTime()
     started_at := begin_startup_phase("Preparing assets", 0.15)
     prepare_assets_with_loading(0.15)
@@ -202,11 +243,26 @@ initialize_application_with_loading :: proc(settings: ^Euclid_Run_Settings) -> ^
     started_at = begin_startup_phase("Starting Julia", 0.35)
     font_preparation := view_core.Baseline_Font_Preparation{}
     font_worker := thread.create_and_start_with_data(rawptr(&font_preparation), prepare_fonts_worker)
-    julia.initiate_julia()
+    julia_service, service_err := julia.create_julia_runtime_service()
+    assert(service_err == .None && julia_service != nil, "failed to create Julia runtime service")
+    initialize_id, initialize_sent := julia.try_submit_julia_request(julia_service, .Initialize)
+    if !initialize_sent || !finish_julia_startup_request(
+        julia_service, initialize_id, .Initialized, "Starting Julia", 0.35) {
+        fmt.eprintln("Julia initialization failed; terminating process.")
+        runtime.exit(1)
+    }
     end_startup_phase("Starting Julia", started_at)
 
     started_at = begin_startup_phase("Loading content", 0.65)
-    state := initiate_animations_state()
+    state := initiate_animations_state(julia_service)
+    content_id, content_sent := julia.try_submit_julia_request(
+        julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
+    if !content_sent || !finish_julia_startup_request(
+        julia_service, content_id, .Invoke_Complete, "Loading content", 0.65) {
+        fmt.eprintln("Julia content initialization failed; terminating process.")
+        runtime.exit(1)
+    }
+    julia.mark_julia_runtime_ready(julia_service)
     end_startup_phase("Loading content", started_at)
 
     started_at = begin_startup_phase("Loading fonts and graphics", 0.85)
@@ -215,7 +271,7 @@ initialize_application_with_loading :: proc(settings: ^Euclid_Run_Settings) -> ^
     end_startup_phase("Loading fonts and graphics", started_at)
     draw_startup_frame("Ready", 1.0)
     end_startup_phase("Total startup", startup_started_at)
-    return state
+    return state, julia_service
 }
 
 
@@ -225,7 +281,8 @@ initialize_application_with_loading :: proc(settings: ^Euclid_Run_Settings) -> ^
 //
 // Notes:
 //   - Allocates long-lived runtime state and returns ownership to caller.
-initiate_animations_state :: proc() -> ^Euclid_General_State {
+initiate_animations_state :: proc(
+    julia_service: ^julia.Julia_Runtime_Service) -> ^Euclid_General_State {
     iso_scale := new(Iso_Scale)
     iso_scale^.scale = ISO_SCALE_VALUE
     iso_scale^.x_offset = ISO_X_OFFSET
@@ -246,12 +303,6 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     particle_system := new(Particle_System)
     particle_system^.use_max_dust_particles = core.MAX_LOW_PARTICLES
 
-    julia_interface := julia.retrieve_interface()
-    julia_interface^.current_animation = &julia_interface^.null_animation
-    julia_interface^.selected_animation = nil
-    julia_interface^.pending_animation_reset = false
-    julia_interface^.animation_reset_cooldown_remaining = 0
-
     point_system := new(Shapes_Point_System)
 
     compass := shapes.init_compass(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
@@ -264,9 +315,9 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
 
     state := new(Euclid_General_State)
     state^.saved_context = context
+    state^.julia_runtime_service = rawptr(julia_service)
     state^.iso_scale = iso_scale
     state^.draw_surface = drawing_surface
-    state^.julia_interface = julia_interface
     state^.point_system = point_system
     state^.particle_system = particle_system
     state^.user_drawing_sound_enabled = true
@@ -286,9 +337,35 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
     view_core.screenshake_clear(state^.iso_scale)
 
 
-    julia.init_euclid_scripts(state)
-
     return state
+}
+
+//   Ask the Julia owner thread to tear down Julia, then release the service.
+shutdown_julia_runtime :: proc(service: ^julia.Julia_Runtime_Service) {
+    started_at := rl.GetTime()
+    shutdown_id: u64
+    sent := false
+    for !sent {
+        shutdown_id, sent = julia.try_submit_julia_request(service, .Shutdown)
+        _, _ = julia.try_receive_julia_event(service)
+        if rl.GetTime() - started_at >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+            fmt.eprintln("Julia shutdown request queue remained saturated; terminating process.")
+            runtime.exit(1)
+        }
+        thread.yield()
+    }
+    for {
+        event, ok := julia.try_receive_julia_event(service)
+        if ok && event.request_id == shutdown_id && event.kind == .Shutdown_Complete {
+            break
+        }
+        if rl.GetTime() - started_at >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+            fmt.eprintln("Julia shutdown timed out; terminating process.")
+            runtime.exit(1)
+        }
+        thread.yield()
+    }
+    julia.destroy_julia_runtime_service(service)
 }
 
 //   Release runtime state allocations and finalize Julia/GIF runtime resources.
@@ -443,7 +520,9 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     shapes.update_last_cache_vectors(state^.point_system)
     step_count := 0
     for state^.accumulator >= FIXED_DT {
-        julia.perform_animation_frame(state, FIXED_DT)
+        // Never expose worker-commanded tool dimensions before constraints normalize them.
+        julia.publish_available_animation_tick(state)
+        julia.schedule_animation_tick(state, FIXED_DT)
         particles.update_particles(state^.particle_system, FIXED_DT)
         shapes.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
         view_core.gif_capture_update_fixed_step(state)

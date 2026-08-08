@@ -127,6 +127,10 @@ add_child_animation_interface :: proc "c" (
 //   - state: Global runtime state passed from the host application.
 @(export)
 notify_animation_cycle_boundary :: proc "c" (state: ^core.Euclid_General_State) {
+    _, captured := append_scene_command(state, .Notify_Animation_Cycle_Boundary)
+    if captured {
+        return
+    }
     context = state^.saved_context
     notify_animation_cycle_boundary_local(state)
 }

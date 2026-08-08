@@ -40,7 +40,7 @@ resolve_julia_sysimage_path :: proc() -> (string, bool) {
 // Notes:
 //   - Intended to be called once during application startup before Julia bridge calls.
 //   - Exits immediately if packaged script include fails.
-initiate_julia :: proc() {
+initiate_julia :: proc() -> bool {
     image_path, has_image := resolve_julia_sysimage_path()
     if has_image {
         fmt.println("Starting Julia with custom sysimage: ", image_path)
@@ -50,7 +50,7 @@ initiate_julia :: proc() {
         julialib.jl_init()
     }
 
-    _ = include_packaged_script(true)
+    return include_packaged_script(false)
 }
 
 //   Shut down the Julia runtime and flush Julia-side teardown hooks.
@@ -100,6 +100,15 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
     return ret
 }
 
+//   Report whether the required Julia callbacks were resolved for an interface generation.
+julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
+    return iface != nil && iface^.init_scripts != nil && iface^.global_loop != nil &&
+        iface^.scratchpad_classify_input != nil && iface^.scratchpad_complete_backslash != nil &&
+        iface^.scratchpad_complete_input != nil && iface^.scratchpad_queue_input != nil &&
+        iface^.scratchpad_save_history_to_file != nil && iface^.scratchpad_history_previous != nil &&
+        iface^.scratchpad_history_next != nil && iface^.scratchpad_history_reset_cursor != nil
+}
+
 //   Ensure the animation-name arena allocator exists for bridge registry storage.
 //
 // Parameters:
@@ -141,7 +150,15 @@ clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    iface := state^.julia_interface
+    clean_julia_interface_instance(state^.julia_interface)
+}
+
+//   Clear one interface registry while retaining its arena for reuse.
+clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+    if iface == nil {
+        return
+    }
+
     if iface^.animation_name_arena_initialized {
         vmem.arena_free_all(&iface^.animation_name_arena)
     }
@@ -165,8 +182,16 @@ destroy_julia_interface_resources :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    iface := state^.julia_interface
-    clean_julia_interfaces(state)
+    destroy_julia_interface_instance(state^.julia_interface)
+}
+
+//   Destroy registry allocations owned by one retired interface generation.
+destroy_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+    if iface == nil {
+        return
+    }
+
+    clean_julia_interface_instance(iface)
     if iface^.animation_name_arena_initialized {
         vmem.arena_destroy(&iface^.animation_name_arena)
     }
@@ -267,29 +292,6 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     }
 
     return call_include_packaged_script(include_fn, script_path, exit_on_failure)
-}
-
-//   Refresh cached Julia callback handles after script reload.
-refresh_julia_interface_handles :: proc(state: ^core.Euclid_General_State) {
-    main_module := resolve_main_module()
-    if main_module == nil {
-        return
-    }
-
-    state^.julia_interface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
-    state^.julia_interface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    state^.julia_interface^.scratchpad_classify_input = julialib.jl_get_function(
-        main_module, "scratchpad_classify_input")
-    state^.julia_interface^.scratchpad_queue_input = julialib.jl_get_function(
-        main_module, "scratchpad_queue_input")
-    state^.julia_interface^.scratchpad_save_history_to_file = julialib.jl_get_function(
-        main_module, "scratchpad_save_history_to_file")
-    state^.julia_interface^.scratchpad_history_previous = julialib.jl_get_function(
-        main_module, "scratchpad_history_previous")
-    state^.julia_interface^.scratchpad_history_next = julialib.jl_get_function(
-        main_module, "scratchpad_history_next")
-    state^.julia_interface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
-        main_module, "scratchpad_history_reset_cursor")
 }
 
 //   Print Julia exception type/message details for a named bridge context.

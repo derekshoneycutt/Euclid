@@ -956,6 +956,10 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input_len: int,
     scratchpad_input_cursor: int,
     scratchpad_input_viewport_col_start: int,
+    scratchpad_input_generation: u64,
+    scratchpad_pending_submit_request_id: u64,
+    scratchpad_latest_completion_request_id: u64,
+    scratchpad_history_reset_pending: bool,
     scratchpad_last_output_len: int,
     scratchpad_follow_output: bool,
 
@@ -1018,6 +1022,10 @@ Chalk_Audio_Runtime :: struct {
 
 Euclid_General_State :: struct {
     saved_context : runtime.Context,
+    julia_runtime_service: rawptr,
+    dynview_emit_target: ^Dynview_System,
+    scene_command_batch_target: rawptr,
+    animation_query_snapshot_target: rawptr,
 
     iso_scale : ^Iso_Scale,
 

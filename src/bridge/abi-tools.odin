@@ -145,6 +145,9 @@ validate_Shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
 //   - state: Global runtime state passed from the host application.
 @(export)
 show_pen :: proc "c" (state: ^core.Euclid_General_State) {
+    if capture_point_command(state, .Show_Pen, state^.pen.host_id) {
+        return
+    }
     index := state^.pen.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = true
@@ -157,6 +160,9 @@ show_pen :: proc "c" (state: ^core.Euclid_General_State) {
 //   - state: Global runtime state passed from the host application.
 @(export)
 hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
+    if capture_point_command(state, .Hide_Pen, state^.pen.host_id) {
+        return
+    }
     index := state^.pen.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = false
@@ -173,6 +179,9 @@ hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
 set_pen_active :: proc "c" (
     state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
 
+    if capture_active_command(state, .Set_Pen_Active, active, color) {
+        return
+    }
     index := state^.pen.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
@@ -202,6 +211,9 @@ clear_pen_active :: proc "c" (
 //   - enabled: When true, drawing-sound updates are accepted.
 @(export)
 set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enabled: bool) {
+    if capture_flag_command(state, .Set_Drawing_Sound_Enabled, enabled) {
+        return
+    }
     state^.animation_drawing_sound_enabled = enabled
 }
 
@@ -212,6 +224,9 @@ set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enable
 //   - speed: Requested speed; negative values are clamped to zero.
 @(export)
 simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
+    if capture_scalar_command(state, .Simulate_Drawing_Sound, speed) {
+        return
+    }
     if !state^.user_drawing_sound_enabled || !state^.animation_drawing_sound_enabled {
         return
     }
@@ -234,6 +249,9 @@ simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f3
 //   - pos: Target world-space position for joint1 and its lock restriction.
 @(export)
 lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+    if capture_position_command(state, .Lock_Pen_Joint1, pos) {
+        return
+    }
     context = state^.saved_context
     index := state^.pen.joint1_id
     constraintIndex := state^.pen.lock_point1_id
@@ -281,7 +299,15 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 //   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
 @(export)
 get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
-    index := state^.pen.joint1_id
+    pen := state^.pen
+    query_snapshot := active_animation_query_snapshot(state)
+    if query_snapshot != nil {
+        pen = query_snapshot^.pen
+    }
+    index := pen.joint1_id
+    if query_snapshot != nil && index >= 0 && index < MAX_SHAPESPOINTS {
+        return query_snapshot^.points[index].position.? or_else {0, 0, 0}
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
@@ -326,6 +352,9 @@ unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - pos: Target world-space position for joint2.
 @(export)
 move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+    if capture_position_command(state, .Move_Pen_Joint2, pos) {
+        return
+    }
     context = state^.saved_context
     index := state^.pen.joint2_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
@@ -342,7 +371,15 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 //   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
 @(export)
 get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
-    index := state^.pen.joint2_id
+    pen := state^.pen
+    query_snapshot := active_animation_query_snapshot(state)
+    if query_snapshot != nil {
+        pen = query_snapshot^.pen
+    }
+    index := pen.joint2_id
+    if query_snapshot != nil && index >= 0 && index < MAX_SHAPESPOINTS {
+        return query_snapshot^.points[index].position.? or_else {0, 0, 0}
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
@@ -355,6 +392,9 @@ get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
 //   - state: Global runtime state passed from the host application.
 @(export)
 show_compass :: proc "c" (state: ^core.Euclid_General_State) {
+    if capture_point_command(state, .Show_Compass, state^.compass.host_id) {
+        return
+    }
     index := state^.compass.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = true
@@ -367,6 +407,9 @@ show_compass :: proc "c" (state: ^core.Euclid_General_State) {
 //   - state: Global runtime state passed from the host application.
 @(export)
 hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
+    if capture_point_command(state, .Hide_Compass, state^.compass.host_id) {
+        return
+    }
     index := state^.compass.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         state^.point_system^.points[index].do_draw = false
@@ -383,6 +426,9 @@ hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
 set_compass_active :: proc "c" (
     state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
 
+    if capture_active_command(state, .Set_Compass_Active, active, color) {
+        return
+    }
     index := state^.compass.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
@@ -413,6 +459,9 @@ clear_compass_active :: proc "c" (
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    if capture_position_flag_command(state, .Lock_Compass_Joint1, pos, sweep) {
+        return
+    }
     context = state^.saved_context
     pointIndex := state^.compass.joint1_id
     pivotIndex := state^.compass.pivot_id
@@ -483,7 +532,15 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 //   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
 @(export)
 get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
-    index := state^.compass.joint1_id
+    compass := state^.compass
+    query_snapshot := active_animation_query_snapshot(state)
+    if query_snapshot != nil {
+        compass = query_snapshot^.compass
+    }
+    index := compass.joint1_id
+    if query_snapshot != nil && index >= 0 && index < MAX_SHAPESPOINTS {
+        return query_snapshot^.points[index].position.? or_else {0, 0, 0}
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
@@ -498,6 +555,9 @@ get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> c
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    if capture_position_flag_command(state, .Lock_Compass_Joint2, pos, sweep) {
+        return
+    }
     context = state^.saved_context
     pointIndex := state^.compass.joint2_id
     pivotIndex := state^.compass.pivot_id
@@ -568,7 +628,15 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 //   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
 @(export)
 get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
-    index := state^.compass.joint2_id
+    compass := state^.compass
+    query_snapshot := active_animation_query_snapshot(state)
+    if query_snapshot != nil {
+        compass = query_snapshot^.compass
+    }
+    index := compass.joint2_id
+    if query_snapshot != nil && index >= 0 && index < MAX_SHAPESPOINTS {
+        return query_snapshot^.points[index].position.? or_else {0, 0, 0}
+    }
     if index >= 0 && index < MAX_SHAPESPOINTS {
         return state^.point_system^.points[index].position.? or_else {0, 0, 0}
     }
@@ -583,6 +651,9 @@ get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> c
 //   - metadata: Value to store when pos is in range.
 @(export)
 set_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int, metadata: f32) {
+    if capture_animation_meta_command(state, pos, metadata) {
+        return
+    }
     if pos >= 0 && pos < len(state^.anim_metadata) {
         state^.anim_metadata[pos] = metadata
     }
@@ -598,7 +669,11 @@ set_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int, met
 //   - Metadata value when pos is in range, otherwise 0.
 @(export)
 get_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int) -> f32 {
-    if pos >= 0 && pos <= len(state^.anim_metadata) {
+    query_snapshot := active_animation_query_snapshot(state)
+    if query_snapshot != nil && pos >= 0 && pos < len(query_snapshot^.metadata) {
+        return query_snapshot^.metadata[pos]
+    }
+    if pos >= 0 && pos < len(state^.anim_metadata) {
         return state^.anim_metadata[pos]
     }
     return 0
@@ -614,6 +689,9 @@ get_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int) -> 
 emit_trailing_particle :: proc "c" (
     state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
 
+    if capture_particle_command(state, .Emit_Trailing_Particle, pos, color) {
+        return
+    }
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
@@ -630,6 +708,9 @@ emit_trailing_particle :: proc "c" (
 emit_flicker_particle :: proc "c" (
     state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
 
+    if capture_particle_command(state, .Emit_Flicker_Particle, pos, color) {
+        return
+    }
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_flicker_particles(state^.particle_system, pos.x, pos.y, pos.z, rlColor, 10)

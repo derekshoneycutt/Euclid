@@ -9,13 +9,154 @@ SCRATCHPAD_PARSE_ERROR :: i32(0)
 SCRATCHPAD_PARSE_INCOMPLETE :: i32(1)
 SCRATCHPAD_PARSE_COMPLETE :: i32(2)
 
+//   Submit one copied Scratchpad operation without blocking the display thread.
+try_submit_scratchpad_async :: proc(
+    state: ^core.Euclid_General_State, kind: Scratchpad_Async_Kind,
+    text: string = "", caret_byte: int = 0,
+    input_generation: u64 = 0) -> (u64, bool) {
+
+    if state == nil || state^.julia_runtime_service == nil {
+        return 0, false
+    }
+    if len(text) > SCRATCHPAD_ASYNC_TEXT_CAPACITY {
+        return 0, false
+    }
+
+    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    slot_index := reserve_scratchpad_async_slot(service)
+    if slot_index < 0 {
+        return 0, false
+    }
+
+    slot := &service^.scratchpad_slots[slot_index]
+    slot^ = Scratchpad_Async_Slot{
+        state = .Pending,
+        kind = kind,
+        input_generation = input_generation,
+        host_state = state,
+        caret_byte = caret_byte,
+        input_len = len(text),
+    }
+    copy(slot^.input[:], transmute([]u8)text)
+
+    request_id, sent := try_submit_julia_request(
+        service, .Scratchpad, scratchpad_async_task, rawptr(slot), i32(slot_index))
+    if !sent {
+        slot^.state = .Free
+        return 0, false
+    }
+    slot^.request_id = request_id
+    return request_id, true
+}
+
+//   Pop one completed Scratchpad result in worker completion order.
+poll_scratchpad_async_result :: proc(
+    state: ^core.Euclid_General_State) -> (^Scratchpad_Async_Slot, bool) {
+
+    if state == nil || state^.julia_runtime_service == nil {
+        return nil, false
+    }
+    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    for {
+        _, ok := try_receive_julia_event(service)
+        if !ok {
+            break
+        }
+    }
+    if service^.completed_scratchpad_count <= 0 {
+        return nil, false
+    }
+
+    slot_index := service^.completed_scratchpad_slots[service^.completed_scratchpad_head]
+    service^.completed_scratchpad_head =
+        (service^.completed_scratchpad_head + 1) % SCRATCHPAD_ASYNC_SLOT_COUNT
+    service^.completed_scratchpad_count -= 1
+    slot := &service^.scratchpad_slots[slot_index]
+    assert(slot^.state == .Complete)
+    return slot, true
+}
+
+//   Return one consumed Scratchpad result slot to bounded service storage.
+release_scratchpad_async_result :: proc(slot: ^Scratchpad_Async_Slot) {
+    if slot != nil {
+        slot^.state = .Free
+    }
+}
+
+//   Return the completed result text stored inline in one async slot.
+scratchpad_async_result_text :: proc(slot: ^Scratchpad_Async_Slot) -> string {
+    if slot == nil || slot^.result_len <= 0 {
+        return ""
+    }
+    return string(slot^.result[:slot^.result_len])
+}
+
+//   Reserve one free display-owned slot for a copied request payload.
+reserve_scratchpad_async_slot :: proc(service: ^Julia_Runtime_Service) -> int {
+    for &slot, slot_index in service^.scratchpad_slots {
+        if slot.state == .Free {
+            return slot_index
+        }
+    }
+    return -1
+}
+
+//   Execute one copied Scratchpad request on the Julia owner thread.
+scratchpad_async_task :: proc(data: rawptr) -> bool {
+    slot := cast(^Scratchpad_Async_Slot)data
+    assert_julia_runtime_owner(slot^.host_state)
+    context = slot^.host_state^.saved_context
+    input := string(slot^.input[:slot^.input_len])
+    switch slot^.kind {
+    case .Submit:
+        execute_scratchpad_submit(slot, input)
+    case .Complete:
+        result := scratchpad_complete_input_direct(slot^.host_state, input, slot^.caret_byte)
+        store_scratchpad_async_result(slot, result)
+    case .History_Previous:
+        result := scratchpad_history_previous_direct(slot^.host_state)
+        store_scratchpad_async_result(slot, result)
+    case .History_Next:
+        result := scratchpad_history_next_direct(slot^.host_state)
+        store_scratchpad_async_result(slot, result)
+    case .History_Reset:
+        slot^.succeeded = scratchpad_history_reset_cursor_direct(slot^.host_state)
+    case .Save_History:
+        slot^.succeeded = scratchpad_save_history_to_file_direct(slot^.host_state, input)
+    }
+    slot^.state = .Complete
+    return true
+}
+
+//   Classify and optionally queue one committed input snapshot.
+execute_scratchpad_submit :: proc(slot: ^Scratchpad_Async_Slot, input: string) {
+    slot^.parse_result = scratchpad_classify_input_direct(slot^.host_state, input)
+    if slot^.parse_result == SCRATCHPAD_PARSE_INCOMPLETE {
+        slot^.succeeded = scratchpad_history_reset_cursor_direct(slot^.host_state)
+        return
+    }
+    if slot^.parse_result != SCRATCHPAD_PARSE_COMPLETE {
+        return
+    }
+    slot^.succeeded = scratchpad_queue_input_direct(slot^.host_state, input)
+    if slot^.succeeded {
+        _ = scratchpad_history_reset_cursor_direct(slot^.host_state)
+    }
+}
+
+//   Copy a worker result into fixed slot storage before worker temp reset.
+store_scratchpad_async_result :: proc(slot: ^Scratchpad_Async_Slot, result: string) {
+    slot^.result_len = min(len(result), len(slot^.result))
+    copy(slot^.result[:slot^.result_len], transmute([]u8)result[:slot^.result_len])
+}
+
 //   Classify scratchpad text as parse-error/incomplete/complete.
 //
 // Returns:
 //   - SCRATCHPAD_PARSE_ERROR when input has syntax errors.
 //   - SCRATCHPAD_PARSE_INCOMPLETE when input is a valid prefix.
 //   - SCRATCHPAD_PARSE_COMPLETE when input is complete.
-scratchpad_classify_input :: proc(
+scratchpad_classify_input_direct :: proc(
     state: ^core.Euclid_General_State, text: string) -> i32 {
 
     if state == nil || state^.julia_interface == nil {
@@ -44,7 +185,7 @@ scratchpad_classify_input :: proc(
 // Returns:
 //   - Replacement text when Julia REPL backslash completion resolves a single match.
 //   - Empty string when no completion should be applied.
-scratchpad_complete_backslash :: proc(
+scratchpad_complete_backslash_direct :: proc(
     state: ^core.Euclid_General_State, token: string) -> string {
 
     if state == nil || state^.julia_interface == nil {
@@ -73,7 +214,7 @@ scratchpad_complete_backslash :: proc(
 // Returns:
 //   - Encoded completion payload when Julia resolves an applicable replacement.
 //   - Empty string when no completion should be applied.
-scratchpad_complete_input :: proc(
+scratchpad_complete_input_direct :: proc(
     state: ^core.Euclid_General_State,
     text: string,
     caret_byte: int) -> string {
@@ -105,7 +246,7 @@ scratchpad_complete_input :: proc(
 // Returns:
 //   - true when queued successfully.
 //   - false when queueing fails.
-scratchpad_queue_input :: proc(
+scratchpad_queue_input_direct :: proc(
     state: ^core.Euclid_General_State, text: string) -> bool {
 
     if state == nil || state^.julia_interface == nil {
@@ -134,7 +275,7 @@ scratchpad_queue_input :: proc(
 // Returns:
 //   - true when history is written successfully.
 //   - false when bridge callback is unavailable or writing fails.
-scratchpad_save_history_to_file :: proc(
+scratchpad_save_history_to_file_direct :: proc(
     state: ^core.Euclid_General_State, path: string) -> bool {
 
     if state == nil || state^.julia_interface == nil {
@@ -163,7 +304,7 @@ scratchpad_save_history_to_file :: proc(
 // Notes:
 //   - The helper forwards the request through the registered Julia callback and
 //     returns the resolved suggestion text for the UI to display.
-scratchpad_history_previous :: proc(state: ^core.Euclid_General_State) -> string {
+scratchpad_history_previous_direct :: proc(state: ^core.Euclid_General_State) -> string {
     if state == nil || state^.julia_interface == nil {
         return ""
     }
@@ -188,7 +329,7 @@ scratchpad_history_previous :: proc(state: ^core.Euclid_General_State) -> string
 // Notes:
 //   - The helper forwards the request through the registered Julia callback and
 //     returns the next suggested input text when the history cursor advances.
-scratchpad_history_next :: proc(state: ^core.Euclid_General_State) -> string {
+scratchpad_history_next_direct :: proc(state: ^core.Euclid_General_State) -> string {
     if state == nil || state^.julia_interface == nil {
         return ""
     }
@@ -212,7 +353,7 @@ scratchpad_history_next :: proc(state: ^core.Euclid_General_State) -> string {
 // Notes:
 //   - The helper forwards the reset request to Julia and reports whether the
 //     callback completed successfully.
-scratchpad_history_reset_cursor :: proc(state: ^core.Euclid_General_State) -> bool {
+scratchpad_history_reset_cursor_direct :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_interface == nil {
         return false
     }

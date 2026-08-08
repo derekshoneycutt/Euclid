@@ -2,7 +2,6 @@ package main
 
 import "core"
 import "files"
-import julia "bridge"
 import "view"
 
 import "core:fmt"
@@ -19,7 +18,6 @@ main :: proc() {
 
     view.run_window_loop(&settings)
 
-    julia.end_julia()
     files.cleanup_packaged_assets_dir()
     free_all(context.temp_allocator)
     

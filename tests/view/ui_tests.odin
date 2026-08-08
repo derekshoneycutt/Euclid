@@ -3,6 +3,7 @@ package view_tests
 import "core:testing"
 
 import app_core "../../src/core"
+import app_bridge "../../src/bridge"
 import app_ui "../../src/view/ui"
 
 import rl "vendor:raylib"
@@ -154,6 +155,81 @@ scratchpad_parse_non_negative_int_rejects_non_digits :: proc(t: ^testing.T) {
     // Confirms non-digit characters invalidate scratchpad non-negative integer parsing.
     _, ok := app_ui.scratchpad_parse_non_negative_int("12x")
     testing.expect(t, !ok)
+}
+
+seed_scratchpad_async_result :: proc(
+    slot: ^app_bridge.Scratchpad_Async_Slot, text: string) {
+
+    slot^.result_len = len(text)
+    copy(slot^.result[:slot^.result_len], transmute([]u8)text)
+}
+
+@(test)
+scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    app_ui.input_box_replace_text(
+        ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
+        &ui_runtime.scratchpad_input_cursor, "new input")
+    ui_runtime.scratchpad_input_generation = 2
+    ui_runtime.scratchpad_pending_submit_request_id = 9
+    slot := app_bridge.Scratchpad_Async_Slot{
+        kind = .Submit,
+        request_id = 9,
+        input_generation = 1,
+        parse_result = app_bridge.SCRATCHPAD_PARSE_COMPLETE,
+        succeeded = true,
+    }
+
+    app_ui.apply_scratchpad_async_result(&ui_runtime, &slot)
+
+    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+        "new input")
+    testing.expect_value(t, ui_runtime.scratchpad_pending_submit_request_id, u64(0))
+}
+
+@(test)
+scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    app_ui.input_box_replace_text(
+        ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
+        &ui_runtime.scratchpad_input_cursor, "begin")
+    ui_runtime.scratchpad_input_generation = 4
+    slot := app_bridge.Scratchpad_Async_Slot{
+        kind = .Submit,
+        input_generation = 4,
+        parse_result = app_bridge.SCRATCHPAD_PARSE_INCOMPLETE,
+    }
+
+    app_ui.apply_scratchpad_async_result(&ui_runtime, &slot)
+
+    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+        "begin\n")
+    testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(5))
+}
+
+@(test)
+scratchpad_completion_requires_latest_request :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    app_ui.input_box_replace_text(
+        ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
+        &ui_runtime.scratchpad_input_cursor, "EuclidRep")
+    ui_runtime.scratchpad_input_generation = 3
+    ui_runtime.scratchpad_latest_completion_request_id = 12
+    stale_slot := app_bridge.Scratchpad_Async_Slot{
+        kind = .Complete, request_id = 11, input_generation = 3}
+    seed_scratchpad_async_result(&stale_slot, "0\n9\nEuclidREPL")
+    latest_slot := app_bridge.Scratchpad_Async_Slot{
+        kind = .Complete, request_id = 12, input_generation = 3}
+    seed_scratchpad_async_result(&latest_slot, "0\n9\nEuclidREPL")
+
+    app_ui.apply_scratchpad_async_result(&ui_runtime, &stale_slot)
+    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+        "EuclidRep")
+
+    app_ui.apply_scratchpad_async_result(&ui_runtime, &latest_slot)
+    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+        "EuclidREPL")
+    testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(4))
 }
 
 @(test)

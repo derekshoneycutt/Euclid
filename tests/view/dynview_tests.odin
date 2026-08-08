@@ -2,8 +2,279 @@ package view_tests
 
 import "core:testing"
 
+import app_bridge "../../src/bridge"
 import app_core "../../src/core"
 import app_dynview "../../src/dynview"
+
+@(test)
+scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = animation
+    state^.point_system = point_system
+    point_system^.next_point_index = 2
+    batch := app_bridge.Scene_Command_Batch{animation = animation}
+
+    state^.scene_command_batch_target = rawptr(&batch)
+    testing.expect(t, app_bridge.capture_point_position_command(
+        state, 0, app_core.Vector3{1, 2, 3}))
+    testing.expect(t, app_bridge.capture_point_position_command(
+        state, 1, app_core.Vector3{4, 5, 6}))
+    state^.scene_command_batch_target = nil
+
+    testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
+    position_0, ok_0 := point_system^.points[0].position.?
+    position_1, ok_1 := point_system^.points[1].position.?
+    testing.expect(t, ok_0 && position_0 == app_core.Vector3{1, 2, 3})
+    testing.expect(t, ok_1 && position_1 == app_core.Vector3{4, 5, 6})
+}
+
+@(test)
+scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = animation
+    state^.point_system = point_system
+    point_system^.next_point_index = 1
+    point_system^.points[0].position = app_core.Vector3{9, 9, 9}
+    batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
+    batch.commands[0] = app_bridge.Scene_Command{
+        kind = .Set_Point_Position, point_index = 0, position = {1, 2, 3}}
+    batch.commands[1] = app_bridge.Scene_Command{
+        kind = .Set_Point_Position, point_index = 1, position = {4, 5, 6}}
+
+    testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
+    position := point_system^.points[0].position.? or_else app_core.Vector3{}
+    testing.expect(t, position == app_core.Vector3{9, 9, 9})
+}
+
+@(test)
+scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    current := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(current)
+    stale := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(stale)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = current
+    state^.point_system = point_system
+
+    overflowed := app_bridge.Scene_Command_Batch{animation = current, overflowed = true}
+    stale_batch := app_bridge.Scene_Command_Batch{animation = stale}
+    testing.expect(t, !app_bridge.validate_scene_command_batch(state, &overflowed))
+    testing.expect(t, !app_bridge.validate_scene_command_batch(state, &stale_batch))
+}
+
+@(test)
+scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = animation
+    state^.point_system = point_system
+    point_system^.next_point_index = 1
+    point_system^.points[0].offset = 1
+    batch: app_bridge.Scene_Command_Batch
+
+    app_bridge.begin_scene_command_batch(state, &batch)
+    testing.expect(t, app_bridge.capture_point_scalar_command(
+        state, .Set_Point_Offset, 0, 2))
+    testing.expect_value(t, point_system^.points[0].offset, f32(1))
+    app_bridge.end_scene_command_batch(state)
+
+    testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, point_system^.points[0].offset, f32(2))
+}
+
+@(test)
+scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = animation
+    state^.point_system = point_system
+    point_system^.next_point_index = 1
+    point_system^.points[0].position = app_core.Vector3{9, 9, 9}
+    state^.compass.joint1_id = 1
+    batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
+    batch.commands[0] = app_bridge.Scene_Command{
+        kind = .Set_Point_Position, point_index = 0, position = {1, 2, 3}}
+    batch.commands[1] = app_bridge.Scene_Command{kind = .Lock_Compass_Joint1}
+
+    testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
+    position := point_system^.points[0].position.? or_else app_core.Vector3{}
+    testing.expect(t, position == app_core.Vector3{9, 9, 9})
+}
+
+@(test)
+animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    point_system := new(app_core.Shapes_Point_System)
+    defer free(point_system)
+    state^.point_system = point_system
+    state^.pen.joint1_id = 0
+    state^.anim_metadata[3] = 7
+    point_system^.points[0].position = app_core.Vector3{1, 2, 3}
+    snapshot: app_bridge.Animation_Query_Snapshot
+    app_bridge.capture_animation_query_snapshot(state, &snapshot)
+
+    state^.anim_metadata[3] = 11
+    point_system^.points[0].position = app_core.Vector3{4, 5, 6}
+    state^.animation_query_snapshot_target = rawptr(&snapshot)
+    testing.expect_value(t, app_bridge.get_animation_meta(state, 3), f32(7))
+    testing.expect(t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
+    point_view := app_bridge.get_point_view(state, 0)
+    testing.expect(t, point_view.has_position && point_view.position == app_core.Vector3{1, 2, 3})
+    state^.animation_query_snapshot_target = nil
+}
+
+@(test)
+animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    state^.julia_interface = interface
+    interface^.current_animation = animation
+    interface^.selected_animation = animation
+    service^.animation_generation = 4
+    service^.animation_last_committed_sequence = 8
+    slot := app_bridge.Animation_Tick_Slot{
+        generation = 4, sequence = 9, animation = animation}
+
+    testing.expect(t, app_bridge.animation_tick_matches_current(state, service, &slot))
+    slot.generation = 3
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
+    slot.generation = 4
+    slot.sequence = 8
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
+    slot.sequence = 9
+    interface^.pending_animation_reset = true
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
+}
+
+@(test)
+animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+
+    for _ in 0..<100 {
+        app_bridge.coalesce_animation_tick(service, f32(1.0 / 60.0))
+    }
+
+    testing.expect_value(t, service^.animation_accumulated_dt,
+        app_bridge.MAX_ACCUMULATED_ANIMATION_DT)
+    testing.expect_value(t, service^.animation_ticks_coalesced, u64(100))
+}
+
+@(test)
+julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.active_request_id = 8
+    service^.active_request_kind = .Animation_Tick
+    event := app_bridge.Julia_Event{
+        kind = .Invoke_Complete,
+        request_kind = .Invoke,
+        request_id = 7,
+        succeeded = false,
+    }
+
+    app_bridge.accept_julia_event(service, event)
+
+    testing.expect_value(t, service^.failed_request_count, u64(1))
+    testing.expect_value(t, service^.last_failed_request_id, u64(7))
+    testing.expect(t, service^.last_failed_request_kind == .Invoke)
+    testing.expect_value(t, service^.active_request_id, u64(8))
+}
+
+@(test)
+julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.lifecycle = .Shutdown_Requested
+    event := app_bridge.Julia_Event{
+        kind = .Shutdown_Complete,
+        request_kind = .Shutdown,
+        request_id = 4,
+        succeeded = false,
+    }
+
+    app_bridge.accept_julia_event(service, event)
+
+    testing.expect(t, service^.lifecycle == .Failed)
+}
+
+@(test)
+julia_runtime_diagnostics_report_failure_and_saturation :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.lifecycle = .Ready
+    service^.failed_request_count = 3
+    service^.last_failed_request_id = 12
+    service^.last_failed_request_kind = .Animation_Tick
+    service^.request_saturation_count = 5
+    service^.reload_state = .Failed
+    service^.runtime_generation = 9
+
+    diagnostics := app_bridge.julia_runtime_diagnostics(service)
+
+    testing.expect(t, diagnostics.lifecycle == .Ready)
+    testing.expect_value(t, diagnostics.failed_request_count, u64(3))
+    testing.expect_value(t, diagnostics.last_failed_request_id, u64(12))
+    testing.expect(t, diagnostics.last_failed_request_kind == .Animation_Tick)
+    testing.expect_value(t, diagnostics.request_saturation_count, u64(5))
+    testing.expect(t, diagnostics.reload_state == .Failed)
+    testing.expect_value(t, diagnostics.runtime_generation, u64(9))
+}
+
+@(test)
+julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+
+    app_bridge.mark_julia_reload_failed(service, 1234)
+
+    testing.expect(t, service^.reload_state == .Failed)
+    testing.expect_value(t, service^.reload_failed_mtime_unix_nano, i64(1234))
+    testing.expect_value(t, service^.runtime_generation, u64(0))
+}
 
 @(test)
 text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
@@ -39,6 +310,120 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
         u32(app_core.Font_Variant_Flags.Black))
     resolved_heavier := app_core.font_resolve_weight_from_flags(heavier)
     testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
+}
+
+@(test)
+view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
+    snapshot := new(app_bridge.View_Snapshot)
+    defer free(snapshot)
+    runtime := new(app_core.Dynview_System)
+    defer free(runtime)
+
+    snapshot^.command_buffer.command_count = 1
+    snapshot^.command_buffer.commands[0].kind = .MathBlock
+    snapshot^.math_program_count = 1
+    snapshot^.math_programs[0] = app_core.Dynview_Math_Program{
+        valid = true,
+        root_node_index = 0,
+        node_count = 1,
+    }
+    snapshot^.math_node_count = 1
+    snapshot^.math_nodes[0].kind = .GlyphRun
+    snapshot^.math_command_count = 1
+    snapshot^.math_commands[0].kind = .MathGlyphRun
+    runtime^.compile_cache.is_valid = true
+    runtime^.compile_cache.layout_is_valid = true
+
+    app_bridge.copy_view_snapshot_to_runtime(snapshot, runtime)
+
+    testing.expect_value(t, runtime^.command_buffer.command_count, 1)
+    testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
+    testing.expect(t, runtime^.compile_cache.math_programs[0].valid)
+    testing.expect_value(t, runtime^.compile_cache.math_nodes[0].kind,
+        app_core.Dynview_Math_Node_Kind.GlyphRun)
+    testing.expect_value(t, runtime^.compile_cache.math_commands[0].kind,
+        app_core.Dynview_Command_Kind.MathGlyphRun)
+    testing.expect(t, !runtime^.compile_cache.is_valid)
+    testing.expect(t, !runtime^.compile_cache.layout_is_valid)
+}
+
+@(test)
+view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
+    snapshot := new(app_bridge.View_Snapshot)
+    defer free(snapshot)
+
+    testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
+    snapshot^.command_buffer.stream_open_block = true
+    testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+    snapshot^.command_buffer.stream_open_block = false
+    snapshot^.command_buffer.has_stream_error = true
+    testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+}
+
+@(test)
+completed_view_snapshot_is_found_without_event_index :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.view_snapshots[0].state = .Published
+    service^.view_snapshots[0].generation = 10
+    service^.view_snapshots[1].state = .Complete
+    service^.view_snapshots[1].generation = 11
+
+    completed_index := app_bridge.newest_completed_view_snapshot_index(service)
+    app_bridge.release_superseded_completed_view_snapshots(service, completed_index)
+
+    testing.expect_value(t, completed_index, 1)
+    testing.expect_value(t, service^.view_snapshots[0].state,
+        app_bridge.View_Snapshot_Slot_State.Published)
+    testing.expect_value(t, service^.view_snapshots[1].state,
+        app_bridge.View_Snapshot_Slot_State.Complete)
+}
+
+@(test)
+newest_completed_view_snapshot_supersedes_older_completion :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.view_snapshots[0].state = .Complete
+    service^.view_snapshots[0].generation = 10
+    service^.view_snapshots[1].state = .Complete
+    service^.view_snapshots[1].generation = 11
+
+    completed_index := app_bridge.newest_completed_view_snapshot_index(service)
+    app_bridge.release_superseded_completed_view_snapshots(service, completed_index)
+
+    testing.expect_value(t, completed_index, 1)
+    testing.expect_value(t, service^.view_snapshots[0].state,
+        app_bridge.View_Snapshot_Slot_State.Free)
+    testing.expect_value(t, service^.view_snapshots[1].state,
+        app_bridge.View_Snapshot_Slot_State.Complete)
+}
+
+@(test)
+stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    previous_animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(previous_animation)
+    current_animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(current_animation)
+
+    service^.published_view_snapshot_index = 0
+    service^.view_snapshots[0].state = .Published
+    service^.view_snapshots[0].animation = previous_animation
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = current_animation
+    state^.dynview.command_buffer.command_count = 1
+
+    app_bridge.clear_stale_published_view(state, service)
+
+    testing.expect_value(t, service^.published_view_snapshot_index, -1)
+    testing.expect_value(t, service^.view_snapshots[0].state,
+        app_bridge.View_Snapshot_Slot_State.Free)
+    testing.expect_value(t, state^.dynview.command_buffer.command_count, 0)
 }
 
 @(test)

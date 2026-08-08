@@ -33,8 +33,7 @@ draw_view_text_panel :: proc(
         return
     }
 
-    dynview.reset_command_buffer(&state^.dynview)
-    view_text := julia.call_current_animation_get_view_text(state)
+    view_text := julia.current_view_snapshot_text(state)
     _ = dynview.compiled_scratchpad_text_or_fallback(&state.dynview, text_panel,
         TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
         view_text)

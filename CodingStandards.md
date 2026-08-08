@@ -80,6 +80,15 @@ Before marking work complete, verify all items below:
 - Mutating operations must be clearly named.
 - Boundary errors must be surfaced predictably.
 - Do not hide failures behind silent fallbacks unless explicitly documented.
+- Every Julia C API call MUST execute on the persistent Julia owner thread.
+  Externally reachable worker tasks MUST assert owner identity before calling
+  Julia or a helper that calls Julia.
+- Cross-thread requests and events MUST use bounded service-owned storage or
+  self-contained copied payloads. Their owner, recycler, generation identity,
+  and saturation behavior MUST be explicit.
+- Worker completion MUST report success or failure with request identity.
+  Required lifecycle messages MUST retry with a bounded terminal policy rather
+  than being silently dropped.
 
 ## Odin Rules (Required)
 
