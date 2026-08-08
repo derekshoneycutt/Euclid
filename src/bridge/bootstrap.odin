@@ -61,43 +61,64 @@ end_julia :: proc() {
     julialib.jl_atexit_hook(0)
 }
 
-//   Allocate and initialize the host-side Julia interface handle table.
+//   Reset and resolve one state-owned Julia interface generation slot.
+// The slot address remains stable for the host-state lifetime. Its registry arena is
+// retained across reuse and cleared before resolving callbacks for a new generation.
 //
-// Returns:
-//   - Pointer to a newly allocated interface struct with resolved core Julia callbacks when available.
-//   - A valid allocation is returned even if Main cannot be resolved; callback slots remain unset in that case.
-retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
-    ret := new(core.Euclid_Julia_Interface)
+// Parameters:
+//   - iface: Inactive state-owned generation slot to prepare.
+prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) {
+    if iface == nil {
+        return
+    }
+
+    arena := iface^.animation_registry_arena
+    allocator := iface^.animation_registry_allocator
+    arena_initialized := iface^.animation_registry_arena_initialized
+    if arena_initialized {
+        vmem.arena_free_all(&arena)
+    }
+    iface^ = {}
+    iface^.animation_registry_arena = arena
+    iface^.animation_registry_allocator = allocator
+    iface^.animation_registry_arena_initialized = arena_initialized
+    iface^.current_animation = &iface^.null_animation
 
     main_module := resolve_main_module()
     if main_module == nil {
-        return ret
+        return
     }
 
-    ret.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
-    ret.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    ret.scratchpad_classify_input = julialib.jl_get_function(
+    iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
+    iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
+    iface^.scratchpad_classify_input = julialib.jl_get_function(
         main_module, "scratchpad_classify_input")
-    ret.scratchpad_complete_backslash = julialib.jl_get_function(
+    iface^.scratchpad_complete_backslash = julialib.jl_get_function(
         main_module, "scratchpad_complete_backslash")
-    ret.scratchpad_complete_input = julialib.jl_get_function(
+    iface^.scratchpad_complete_input = julialib.jl_get_function(
         main_module, "scratchpad_complete_input")
-    ret.scratchpad_queue_input = julialib.jl_get_function(
+    iface^.scratchpad_queue_input = julialib.jl_get_function(
         main_module, "scratchpad_queue_input")
-    ret.scratchpad_save_history_to_file = julialib.jl_get_function(
+    iface^.scratchpad_save_history_to_file = julialib.jl_get_function(
         main_module, "scratchpad_save_history_to_file")
-    ret.scratchpad_history_previous = julialib.jl_get_function(
+    iface^.scratchpad_history_previous = julialib.jl_get_function(
         main_module, "scratchpad_history_previous")
-    ret.scratchpad_history_next = julialib.jl_get_function(
+    iface^.scratchpad_history_next = julialib.jl_get_function(
         main_module, "scratchpad_history_next")
-    ret.scratchpad_history_reset_cursor = julialib.jl_get_function(
+    iface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
         main_module, "scratchpad_history_reset_cursor")
-    ret.asset_archive_mod_time_unix_nano = 0
-    ret.current_animation = &ret.null_animation
-    ret.selected_animation = nil
-    ret.animation_reset_cooldown_remaining = 0
+}
 
-    return ret
+//   Return the inactive state-owned interface generation slot for staged registration.
+julia_interface_staging_slot :: proc(
+    state: ^core.Euclid_General_State) -> (^core.Euclid_Julia_Interface, int) {
+
+    if state == nil || state^.julia_interface_active_slot < 0 ||
+        state^.julia_interface_active_slot >= len(state^.julia_interface_slots) {
+        return nil, -1
+    }
+    slot_index := (state^.julia_interface_active_slot + 1) % len(state^.julia_interface_slots)
+    return &state^.julia_interface_slots[slot_index], slot_index
 }
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
@@ -109,42 +130,42 @@ julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bo
         iface^.scratchpad_history_next != nil && iface^.scratchpad_history_reset_cursor != nil
 }
 
-//   Ensure the animation-name arena allocator exists for bridge registry storage.
+//   Ensure the animation registry arena allocator exists for bridge storage.
 //
 // Parameters:
 //   - state: Global runtime state containing the Julia interface.
 //
 // Returns:
 //   - ok: true when name arena allocator is ready for use.
-ensure_julia_interface_name_arena :: proc(state: ^core.Euclid_General_State) -> bool {
+ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_interface == nil {
         return false
     }
 
     iface := state^.julia_interface
-    if iface^.animation_name_arena_initialized {
+    if iface^.animation_registry_arena_initialized {
         return true
     }
 
-    err := vmem.arena_init_growing(&iface^.animation_name_arena)
+    err := vmem.arena_init_growing(&iface^.animation_registry_arena)
     if err != nil {
-        iface^.animation_name_allocator = {}
-        iface^.animation_name_arena_initialized = false
+        iface^.animation_registry_allocator = {}
+        iface^.animation_registry_arena_initialized = false
         return false
     }
 
-    iface^.animation_name_allocator = vmem.arena_allocator(&iface^.animation_name_arena)
-    iface^.animation_name_arena_initialized = true
+    iface^.animation_registry_allocator = vmem.arena_allocator(&iface^.animation_registry_arena)
+    iface^.animation_registry_arena_initialized = true
     return true
 }
 
-//   Release animation-name arena allocations registered in the Julia interface table.
+//   Release registry arena allocations owned by one Julia interface generation.
 //
 // Parameters:
 //   - state: Global runtime state whose Julia interface registry is being cleared.
 //
 // Notes:
-//   - This resets the animation-name arena for reuse on hot reload.
+//   - This resets the generation registry arena for reuse on hot reload.
 clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
     if state == nil || state^.julia_interface == nil {
         return
@@ -159,8 +180,8 @@ clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
         return
     }
 
-    if iface^.animation_name_arena_initialized {
-        vmem.arena_free_all(&iface^.animation_name_arena)
+    if iface^.animation_registry_arena_initialized {
+        vmem.arena_free_all(&iface^.animation_registry_arena)
     }
 
     iface^.animation_head = nil
@@ -178,11 +199,14 @@ clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
 // Parameters:
 //   - state: Global runtime state whose Julia interface allocators should be destroyed.
 destroy_julia_interface_resources :: proc(state: ^core.Euclid_General_State) {
-    if state == nil || state^.julia_interface == nil {
+    if state == nil {
         return
     }
 
-    destroy_julia_interface_instance(state^.julia_interface)
+    for _, slot_index in state^.julia_interface_slots {
+        destroy_julia_interface_instance(&state^.julia_interface_slots[slot_index])
+    }
+    state^.julia_interface = nil
 }
 
 //   Destroy registry allocations owned by one retired interface generation.
@@ -192,12 +216,12 @@ destroy_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
     }
 
     clean_julia_interface_instance(iface)
-    if iface^.animation_name_arena_initialized {
-        vmem.arena_destroy(&iface^.animation_name_arena)
+    if iface^.animation_registry_arena_initialized {
+        vmem.arena_destroy(&iface^.animation_registry_arena)
     }
 
-    iface^.animation_name_allocator = {}
-    iface^.animation_name_arena_initialized = false
+    iface^.animation_registry_allocator = {}
+    iface^.animation_registry_arena_initialized = false
 }
 
 //   Resolve Julia Main module handle used for bridge function lookup.

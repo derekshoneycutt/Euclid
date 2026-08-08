@@ -7,6 +7,46 @@ import app_core "../../src/core"
 import app_dynview "../../src/dynview"
 
 @(test)
+julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    state^.julia_interface_active_slot = 0
+    state^.julia_interface = &state^.julia_interface_slots[0]
+
+    staging, staging_index := app_bridge.julia_interface_staging_slot(state)
+    testing.expect_value(t, staging_index, 1)
+    testing.expect(t, staging == &state^.julia_interface_slots[1])
+
+    state^.julia_interface_active_slot = staging_index
+    state^.julia_interface = staging
+    next_staging, next_staging_index := app_bridge.julia_interface_staging_slot(state)
+    testing.expect_value(t, next_staging_index, 0)
+    testing.expect(t, next_staging == &state^.julia_interface_slots[0])
+}
+
+@(test)
+view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    animation := &state^.julia_interface_slots[0].null_animation
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    state^.julia_interface^.current_animation = animation
+    service^.runtime_generation = 2
+    snapshot := new(app_bridge.View_Snapshot)
+    defer free(snapshot)
+    snapshot^ = app_bridge.View_Snapshot{
+        runtime_generation = 0,
+        animation = animation,
+    }
+
+    testing.expect(t, !app_bridge.view_snapshot_matches_current(state, service, snapshot))
+    snapshot^.runtime_generation = service^.runtime_generation
+    testing.expect(t, app_bridge.view_snapshot_matches_current(state, service, snapshot))
+}
+
+@(test)
 scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
     defer free(state)

@@ -201,10 +201,10 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
     defer rl.CloseWindow()
 
     state, julia_service := initialize_application_with_loading(settings)
-    defer shutdown_julia_runtime(julia_service)
     defer free_animations_state(state)
-    defer destroy_simulation_executor(state^.simulation_executor)
     defer shutdown_window_resources(state)
+    defer destroy_simulation_executor(state^.simulation_executor)
+    defer shutdown_julia_runtime(julia_service)
 
     free_all(context.temp_allocator)
 
@@ -317,6 +317,8 @@ initiate_animations_state :: proc(
     state := new(Euclid_General_State)
     state^.saved_context = context
     state^.julia_runtime_service = julia_service
+    state^.julia_interface_active_slot = 0
+    state^.julia_interface = &state^.julia_interface_slots[0]
     state^.iso_scale = iso_scale
     state^.draw_surface = drawing_surface
     state^.point_system = point_system
@@ -377,7 +379,6 @@ shutdown_julia_runtime :: proc(service: ^julia.Julia_Runtime_Service) {
 free_animations_state :: proc(state : ^Euclid_General_State) {
     view_core.gif_capture_destroy_session(&state^.gif_capture)
     julia.destroy_julia_interface_resources(state)
-    free(state^.julia_interface)
     free(state^.particle_system)
     free(state^.point_system)
     free(state^.draw_surface)

@@ -1,49 +1,132 @@
 # LaTeX Support
 
-This document describes the LaTeX features currently supported by the Julia parser and dynview math replay pipeline, and the recommended way to use them in animation view text.
+This document describes the LaTeX subset supported by the Julia parser and
+Dynview replay pipeline. The implementation supports both standalone math and
+mixed document fragments containing styled prose, inline or display math, line
+breaks, and Euclid inline shapes.
 
-## Recommended Usage Pattern
+## Table Of Contents
 
-Use `EuclidLatex.replay_emit_math_block!` for broad inline math rendering in dynview.
+1. [Recommended Usage](#recommended-usage)
+1. [Modes And Classification](#modes-and-classification)
+1. [Document Mode](#document-mode)
+1. [Math Mode](#math-mode)
+1. [Character Support](#character-support)
+1. [Matrix Support](#matrix-support)
+1. [Delimiter Support](#delimiter-support)
+1. [Cache And Invalidation](#cache-and-invalidation)
+1. [Fallback And Failure Behavior](#fallback-and-failure-behavior)
+1. [Practical Authoring Tips](#practical-authoring-tips)
+1. [Known Limitations](#known-limitations)
+1. [Summary](#summary)
 
-1. Keep a plain fallback string in `get_view_text`.
-2. Open a dynview block with `dynview_reset_stream` and `dynview_begin_block`.
-3. Emit ordinary text runs as needed.
-4. Emit LaTeX math with `replay_emit_math_block!`.
-5. Close with `dynview_end_block`.
-6. On any status failure, return fallback text.
+## Recommended Usage
 
-Minimal pattern:
+Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It
+classifies the source as math or document mode, emits the supplied fallback as
+the copy payload, builds one complete Dynview stream, and always returns the
+fallback string expected by `get_view_text`.
 
 ```julia
-fallback = "Some plain fallback text"
+const DefinitionLatexDocument = raw"""\textbf{Definition 1.}
 
-if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-   OdinJuliaBridge.dynview_begin_block(
-       state_ptr,
-       OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-       Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
+A point is that which has no part. The symbol $A_1$ marks a point.
 
-if !EuclidLatex.replay_emit_math_block!(
+\euclidpoint[color=plum1,size=1]
+"""
+
+const DefinitionFallback = "Definition 1. A point is that which has no part."
+
+function get_view_text(state_ptr)
+    EuclidLatex.emit_latex_view_text!(
         state_ptr,
-        "\\sum_{i=1}^{n} a_i + \\frac{x^2}{y} + \\left(\\sqrt{z}\\right)")
-    return fallback
+        DefinitionLatexDocument,
+        DefinitionFallback)
 end
-
-if OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
-
-return fallback
 ```
 
-## Supported LaTeX
+Use `replay_emit_math_block!` when a Dynview block is already open and only one
+math expression needs to be inserted. It emits one recursive, non-wrapping math
+block and returns `false` on bridge failure.
 
-The current implementation supports these major groups:
+Use `emit_latex_dynview!` for a standalone math-only Dynview block when the
+caller does not need to mix prose or shapes.
 
-- Unicode substitution commands for many Greek letters, operators, relations, arrows, and set symbols.
+## Modes And Classification
+
+`classify_latex_mode` selects one of two modes:
+
+| Mode | Intended source | Main API |
+| --- | --- | --- |
+| Math | One standalone expression | `replay_emit_math_block!`, `emit_latex_dynview!` |
+| Document | Prose mixed with styling, math, breaks, or shapes | `emit_latex_view_text!` |
+
+A fragment enclosed entirely by `$...$`, `$$...$$`, `\(...\)`, or `\[...\]`
+is classified as math. Otherwise, document markers such as `\textbf`,
+`\textit`, `\emph`, `\newline`, `\\`, `\euclid...`, or embedded math
+delimiters select document mode. Plain unmarked source is treated as math for
+backward compatibility.
+
+`emit_latex_view_text!` strips a complete outer math delimiter before compiling
+math mode. In document mode it parses the full source into typed document runs;
+partial document parsing is not accepted.
+
+## Document Mode
+
+Document mode supports a deliberately small LaTeX-like prose language:
+
+- Plain Unicode text.
+- `\textbf{...}` for bold text.
+- `\textit{...}` and `\emph{...}` for italic text.
+- Nested style commands; flags accumulate, so bold italic text is supported.
+- Inline math with `$...$` or `\(...\)`.
+- Display math with `$$...$$` or `\[...\]`.
+- Forced line breaks with `\\` or `\newline`.
+- Paragraph breaks from a blank source line.
+- Inline Euclid shapes through `\euclidpoint`, `\euclidline`,
+  `\euclidcircle`, and `\euclidbox`.
+
+A single source newline in prose normalizes to one space. A blank line emits a
+paragraph break. Display math receives surrounding line breaks unless adjacent
+document runs already provide them.
+
+### Inline Euclid Shapes
+
+Shape commands accept an optional comma-separated bracket payload. Keys cannot
+be duplicated, dimensions must be finite and positive, booleans are strictly
+`true` or `false`, and colors must resolve through the bridge color vocabulary.
+
+- `\euclidpoint`: options are `color` and `size`. The default is `size=1`,
+    and points are always filled.
+- `\euclidline`: options are `color`, `length`, and `thickness`. Defaults are
+    `length=3` and `thickness=1`.
+- `\euclidcircle`: options are `color`, `size`, `thickness`, and `filled`.
+    Defaults are `size=1`, `thickness=1`, and `filled=false`.
+- `\euclidbox`: options are `color`, `width`, `height`, `thickness`, and
+    `filled`. Defaults are `width=2`, `height=1`, `thickness=1`, and
+    `filled=false`.
+
+The shorthand option `filled` is equivalent to `filled=true`.
+
+Examples:
+
+```julia
+raw"\euclidpoint[color=steelblue,size=1]"
+raw"\euclidline[color=steelblue,length=4,thickness=2]"
+raw"\euclidcircle[color=khaki3,size=2,filled]"
+raw"\euclidbox[width=3,height=2,thickness=1,filled=false]"
+```
+
+Document mode does not implement general LaTeX commands or environments.
+Unknown commands, malformed delimiters, invalid shape options, or unmatched
+style braces cause document parsing to fail and structured output to fall back.
+
+## Math Mode
+
+Math mode supports these major groups:
+
+- Unicode substitution commands for many Greek letters, operators, relations,
+  arrows, and set symbols.
 - Upright text operators like `\sin`, `\cos`, `\log`, `\lim`, `\max`.
 - `\text{...}` and `\mathrm{...}` for non-italic text inside math.
 - Scripts: `^` and `_` including grouped forms.
@@ -52,44 +135,56 @@ The current implementation supports these major groups:
 - Accent bars: `\overline{...}` and `\underline{...}`.
 - Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
 - Large operators with limits: `\sum`, `\prod`, `\int`, `\lim`.
-- Matrix blocks: `\begin{matrix} ... \end{matrix}` and `\begin{array}{...} ... \end{array}` with `&` column separators and `\\` row separators.
-- Matrix wrapper environments composed through stretch delimiters: `bmatrix`, `pmatrix`, `vmatrix`.
+- Matrix blocks: `\begin{matrix} ... \end{matrix}` and
+    `\begin{array}{...} ... \end{array}` with `&` column separators and `\\`
+    row separators.
+- Matrix wrapper environments composed through stretch delimiters: `bmatrix`,
+    `pmatrix`, and `vmatrix`.
 
 ## Character Support
 
-Character handling is currently practical and intentionally limited. Command support is a fixed map in `src/julia/latex.jl` (`UNICODE_COMMAND_MAP` and `MATHBB_UPPERCASE_MAP`), not general TeX compatibility.
+Character handling is practical and intentionally limited. Command support is
+a fixed map in `src/julia/latex.jl`: `UNICODE_COMMAND_MAP` and
+`MATHBB_UPPERCASE_MAP`. It is not general TeX compatibility.
 
-| Input Type | Support Level | Examples | Notes |
-| --- | --- | --- | --- |
-| ASCII letters/digits/punctuation | Supported | `a`, `x_1`, `+`, `(`, `)` | Best default for authored math source. |
-| Structural control characters | Supported | `\`, `{`, `}`, `[`, `]`, `^`, `_`, `&` | These are parser-significant for commands, grouping, scripts, and matrices. |
-| LaTeX command substitutions | Supported (fixed list only) | `\alpha`, `\leq`, `\mathbb{R}` | Only mapped commands are supported; unknown commands are not auto-implemented. |
-| `\text{...}` plain text content | Supported | `\text{Area}`, `\text{TEMP TEST}` | Use for upright words inside math mode. |
-| Raw Unicode math symbols typed directly | Limited / best-effort | `α`, `≤`, `∑` | May render as plain glyphs, but command forms are more reliable for parser/style behavior. |
-| Arbitrary TeX-special characters/environments | Not generally supported | `#`, `%`, unknown `\begin{...}` envs | Outside current command/environment coverage unless explicitly listed in this document. |
+- ASCII letters, digits, and punctuation are the best default for authored
+    math source. Examples include `a`, `x_1`, `+`, `(`, and `)`.
+- `\`, `{`, `}`, `[`, `]`, `^`, `_`, and `&` are parser-significant structural
+    characters.
+- Fixed command substitutions such as `\alpha`, `\leq`, and `\mathbb{R}` are
+    supported only when listed below.
+- `\text{...}` supports upright plain text inside math mode.
+- Raw Unicode math symbols such as `α`, `≤`, and `∑` render best effort. Command
+    forms are more reliable for parser and style behavior.
+- Arbitrary TeX-special characters and unlisted environments are unsupported.
 
 Practical rule: if a symbol matters, prefer its LaTeX command form over raw character entry.
 
 ### Greek Letter Command Coverage (Current Fixed Set)
 
-| Category | Supported Commands |
-| --- | --- |
-| Lowercase Greek | `\alpha`, `\beta`, `\gamma`, `\delta`, `\epsilon`, `\varepsilon`, `\zeta`, `\eta`, `\theta`, `\vartheta`, `\iota`, `\kappa`, `\varkappa`, `\lambda`, `\mu`, `\nu`, `\xi`, `\pi`, `\rho`, `\varrho`, `\sigma`, `\varsigma`, `\tau`, `\upsilon`, `\phi`, `\varphi`, `\chi`, `\psi`, `\omega` |
-| Uppercase Greek | `\Gamma`, `\Delta`, `\Theta`, `\Lambda`, `\Xi`, `\Pi`, `\Sigma`, `\Upsilon`, `\Phi`, `\Psi`, `\Omega` |
-| Hebrew-style symbols | `\aleph`, `\beth`, `\gimel`, `\daleth` |
+- Lowercase Greek: `\alpha`, `\beta`, `\gamma`, `\delta`, `\epsilon`,
+  `\varepsilon`, `\zeta`, `\eta`, `\theta`, `\vartheta`, `\iota`, `\kappa`,
+  `\varkappa`, `\lambda`, `\mu`, `\nu`, `\xi`, `\pi`, `\rho`, `\varrho`,
+  `\sigma`, `\varsigma`, `\tau`, `\upsilon`, `\phi`, `\varphi`, `\chi`,
+  `\psi`, `\omega`.
+- Uppercase Greek: `\Gamma`, `\Delta`, `\Theta`, `\Lambda`, `\Xi`, `\Pi`,
+  `\Sigma`, `\Upsilon`, `\Phi`, `\Psi`, `\Omega`.
+- Hebrew-style symbols: `\aleph`, `\beth`, `\gimel`, `\daleth`.
 
 ### Math Symbol Command Coverage (Current Fixed Set)
 
-| Category | Supported Commands |
-| --- | --- |
-| Arithmetic/operators | `\pm`, `\times`, `\div`, `\cdot` |
-| Calculus/analysis | `\infty`, `\partial`, `\nabla`, `\propto` |
-| Logic/quantifiers | `\forall`, `\exists`, `\neg`, `\land`, `\lor` |
-| Set relations/ops | `\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\cup`, `\cap` |
-| Relations | `\leq`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv` |
-| Arrows | `\to`, `\leftarrow`, `\Rightarrow`, `\Leftarrow`, `\iff`, `\mapsto` |
-| Additional symbols | `\dots`, `\rtimes`, `\;` (mapped to one normal space) |
-| Delimiter glyph commands | `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`, `\Vert`, `\backslash`, `\{`, `\}` |
+- Arithmetic/operators: `\pm`, `\times`, `\div`, `\cdot`.
+- Calculus/analysis: `\infty`, `\partial`, `\nabla`, `\propto`.
+- Logic/quantifiers: `\forall`, `\exists`, `\neg`, `\land`, `\lor`.
+- Set relations/operations: `\in`, `\notin`, `\subset`, `\subseteq`,
+    `\supset`, `\supseteq`, `\cup`, `\cap`.
+- Relations: `\leq`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv`.
+- Arrows: `\to`, `\leftarrow`, `\Rightarrow`, `\Leftarrow`, `\iff`,
+    `\mapsto`.
+- Additional symbols: `\dots`, `\rtimes`, and `\;`, which maps to one normal
+    space.
+- Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
+    `\Vert`, `\backslash`, `\{`, `\}`.
 
 ### `\mathbb` Coverage
 
@@ -100,19 +195,23 @@ Practical rule: if a symbol matters, prefer its LaTeX command form over raw char
 
 If a Greek letter or symbol command is not in the tables above, treat it as unsupported for now.
 
-## Matrix Notes
+## Matrix Support
 
-Matrix support is currently MVP-level:
+Matrix mode supports rectangular grids and recursive math within cells:
 
 - Supported: `\begin{matrix}...\end{matrix}`.
-- Supported: `\begin{array}{...}...\end{array}` with validated `l/c/r` preamble and strict shape checks.
-- Supported inside cells: other structured math primitives (fractions, radicals, scripts, etc.).
-- Supported by composition rewrite: `\begin{bmatrix}...\end{bmatrix}`, `\begin{pmatrix}...\end{pmatrix}`, `\begin{vmatrix}...\end{vmatrix}`.
-- Canonical output for wrappers is normalized to composed stretch-delimiter form: `\left[...\right]`, `\left(...\right)`, `\left|...\right|` around `\begin{matrix}...\end{matrix}`.
+- Supported: `\begin{array}{...}...\end{array}` with a validated `l/c/r`
+    preamble and strict shape checks.
+- Supported inside cells: other structured math primitives such as fractions,
+    radicals, and scripts.
+- Composition wrappers: `bmatrix`, `pmatrix`, and `vmatrix`.
+- Canonical wrapper output becomes `\left[...\right]`, `\left(...\right)`, or
+    `\left|...\right|` around a `matrix` environment.
 
-Rows must be rectangular. If matrix shape is malformed, parser recovery falls back safely rather than crashing the frame path.
+Rows must be rectangular. Malformed matrix shape falls back safely rather than
+crashing the frame path.
 
-## Delimiter Notes
+## Delimiter Support
 
 `\left ... \right` is fully structural and can wrap nested constructs like fractions, radicals, and matrices.
 
@@ -142,20 +241,61 @@ Available cache APIs:
 
 In normal animation usage, calling `replay_emit_math_block!` is sufficient and cache behavior is automatic.
 
+The current cache applies to math parsing and compiled math programs. Document
+runs are parsed per `emit_latex_view_text!` call; embedded math expressions then
+reuse the math cache.
+
+## Fallback And Failure Behavior
+
+Fallback text is part of the API contract, not an exceptional afterthought.
+`emit_latex_view_text!` writes the supplied fallback as the Dynview copy payload
+and returns that same string whether structured emission succeeds or fails.
+
+Document mode fails closed: unsupported commands, malformed style groups,
+unclosed math delimiters, empty math fragments, and invalid Euclid shape options
+abort structured emission. Math mode uses parser recovery for unsupported or
+malformed constructs where possible. In either case, the host keeps rendering
+readable fallback text rather than exposing a partial stream.
+
+Bridge status failures also stop emission. Authors should never make the
+structured stream the only source of user-visible meaning.
+
 ## Practical Authoring Tips
 
 - Prefer one semantic LaTeX expression over manually spaced pseudo-layout text.
 - Keep fallback text readable on its own.
+- Use `emit_latex_view_text!` for complete view documents instead of manually
+    opening and closing a Dynview block.
+- Use raw Julia strings for document source when practical so LaTeX backslashes
+    remain readable.
 - Keep LaTeX strings stable across frames when possible to maximize cache reuse.
 - Use `\text{...}` for words or labels that should not be italicized.
+- Use `\textbf`, `\textit`, and `\emph` only in document mode; use `\text` or
+    `\mathrm` for upright text inside math.
 - Use grouped scripts (`x^{n+1}`, `a_{ij}`) for clarity.
 
 ## Known Limitations
 
-- No full TeX environment coverage beyond current command set.
-- Matrix wrapper environments are currently implemented by parser-level composition rewrite, not dedicated standalone AST node types.
-- Recovery is designed to preserve rendering continuity, not to provide full TeX-grade diagnostics yet.
+- This is not a TeX engine. Macros, packages, declarations, sections, lists,
+    tables, equation environments, alignment environments, and general
+    `\begin{...}` document environments are unsupported.
+- Document styling is limited to nested bold and italic spans. There is no
+    document-level font size, color, heading, or alignment syntax.
+- Math delimiters in document mode use direct closer search; nested delimiter
+    escaping is not general TeX-compatible parsing.
+- Matrix support is limited to rectangular `matrix`, validated `array`, and the
+    `bmatrix`, `pmatrix`, and `vmatrix` wrappers.
+- `\mathbb` supports uppercase Latin letters only.
+- Raw Unicode math is best effort; command forms provide more reliable semantic
+    styling.
+- Parser recovery prioritizes rendering continuity rather than TeX-grade error
+    diagnostics.
 
 ## Summary
 
-For animation view text, `replay_emit_math_block!` is the right default for broad LaTeX support. It already covers scripts, fractions, radicals, large operators, stretch delimiters, and matrix blocks in one consistent replay path.
+For complete animation view text, use `emit_latex_view_text!` with a readable
+fallback. Use `replay_emit_math_block!` for math inserted into an already open
+Dynview block. Together, document mode and math mode cover styled prose,
+inline/display math, Euclid shapes, scripts, fractions, radicals, large
+operators, stretch delimiters, and matrix blocks through one bounded snapshot
+and replay pipeline.

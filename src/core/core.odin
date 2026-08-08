@@ -92,6 +92,8 @@ Euclid_Julia_Animation_Iterator :: struct {
     current : ^Euclid_Julia_Animation_Interface,
 }
 
+JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
+
 Euclid_Julia_Interface :: struct {
     init_scripts : ^julialib.jl_value_t,
     global_loop : ^julialib.jl_value_t,
@@ -120,9 +122,9 @@ Euclid_Julia_Interface :: struct {
     animation_lookup_capacity : int,
     animation_lookup_count : int,
 
-    animation_name_arena: vmem.Arena,
-    animation_name_allocator: runtime.Allocator,
-    animation_name_arena_initialized: bool,
+    animation_registry_arena: vmem.Arena,
+    animation_registry_allocator: runtime.Allocator,
+    animation_registry_arena_initialized: bool,
 }
 
 
@@ -1136,6 +1138,7 @@ View_Snapshot :: struct {
     state: View_Snapshot_Slot_State,
     request_id: u64,
     generation: u64,
+    runtime_generation: u64,
     host_state: ^Euclid_General_State,
     animation: ^Euclid_Julia_Animation_Interface,
     fallback_text_len: int,
@@ -1292,6 +1295,8 @@ Euclid_General_State :: struct {
 
     draw_surface : ^Euclid_Drawing_Surface,
 
+    julia_interface_slots: [JULIA_INTERFACE_GENERATION_SLOT_COUNT]Euclid_Julia_Interface,
+    julia_interface_active_slot: int,
     julia_interface : ^Euclid_Julia_Interface,
     point_system : ^Shapes_Point_System,
     particle_system : ^Particle_System,

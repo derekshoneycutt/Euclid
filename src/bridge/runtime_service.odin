@@ -256,6 +256,7 @@ try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
         state = .Pending,
         request_id = service^.next_request_id,
         generation = service^.view_snapshot_generation,
+        runtime_generation = service^.runtime_generation,
         host_state = state,
     }
     request_id, sent := try_submit_julia_request(
@@ -293,8 +294,7 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
     slot := &service^.view_snapshots[slot_index]
     assert(slot^.state == .Complete)
     release_superseded_completed_view_snapshots(service, slot_index)
-    if state^.julia_interface == nil ||
-        slot^.animation != state^.julia_interface^.current_animation ||
+    if !view_snapshot_matches_current(state, service, slot) ||
         !view_snapshot_is_valid(slot) {
         slot^.state = .Free
         clear_stale_published_view(state, service)
@@ -350,12 +350,24 @@ clear_stale_published_view :: proc(
         return
     }
     published := &service^.view_snapshots[published_index]
-    if published^.animation == state^.julia_interface^.current_animation {
+    if view_snapshot_matches_current(state, service, published) {
         return
     }
     published^.state = .Free
     service^.published_view_snapshot_index = -1
     reset_view_snapshot_staging(&state^.dynview)
+}
+
+//   Match one view snapshot against the active interface generation and animation.
+// Runtime generation prevents recycled double-buffer addresses from validating stale work.
+view_snapshot_matches_current :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service,
+    slot: ^View_Snapshot) -> bool {
+
+    return state != nil && service != nil && slot != nil && state^.julia_interface != nil &&
+        slot^.runtime_generation == service^.runtime_generation &&
+        slot^.animation == state^.julia_interface^.current_animation
 }
 
 //   Validate all semantic bounds and require a closed, error-free command stream.
@@ -389,7 +401,7 @@ current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string 
         return ""
     }
     slot := &service^.view_snapshots[slot_index]
-    if slot^.animation != state^.julia_interface^.current_animation {
+    if !view_snapshot_matches_current(state, service, slot) {
         return ""
     }
     return string(slot^.fallback_text[:slot^.fallback_text_len])
@@ -689,11 +701,16 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
     state := cast(^core.Euclid_General_State)data
     assert_julia_runtime_owner(state)
     state^.saved_context = context
-    state^.julia_interface = retrieve_interface()
+    prepare_julia_interface_generation(state^.julia_interface)
     if !julia_interface_handles_valid(state^.julia_interface) {
+        clean_julia_interface_instance(state^.julia_interface)
         return false
     }
-    return init_euclid_scripts(state)
+    if !init_euclid_scripts(state) {
+        clean_julia_interface_instance(state^.julia_interface)
+        return false
+    }
+    return true
 }
 
 //   Own Julia lifecycle and serialized task execution until shutdown.

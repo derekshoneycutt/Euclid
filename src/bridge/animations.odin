@@ -476,9 +476,10 @@ stage_julia_interface_reload :: proc(
     if service != nil {
         service^.reload_state = .Registering
     }
-    staged_interface := retrieve_interface()
+    staged_interface, staged_slot := julia_interface_staging_slot(state)
+    prepare_julia_interface_generation(staged_interface)
     if !julia_interface_handles_valid(staged_interface) {
-        free(staged_interface)
+        clean_julia_interface_instance(staged_interface)
         mark_julia_reload_failed(service, archive_mtime)
         return false
     }
@@ -494,7 +495,7 @@ stage_julia_interface_reload :: proc(
             state, previous_interface, staged_interface, service, archive_mtime)
         return false
     }
-    publish_julia_interface_reload(state, previous_interface, service)
+    publish_julia_interface_reload(state, previous_interface, staged_slot, service)
     return true
 }
 
@@ -504,8 +505,7 @@ rollback_julia_interface_reload :: proc(
     previous_interface, staged_interface: ^core.Euclid_Julia_Interface,
     service: ^Julia_Runtime_Service, archive_mtime: i64) {
 
-    destroy_julia_interface_instance(staged_interface)
-    free(staged_interface)
+    clean_julia_interface_instance(staged_interface)
     state^.julia_interface = previous_interface
     _ = reset_current_animation_loop(state)
     mark_julia_reload_failed(service, archive_mtime)
@@ -515,13 +515,14 @@ rollback_julia_interface_reload :: proc(
 publish_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State,
     previous_interface: ^core.Euclid_Julia_Interface,
+    staged_slot: int,
     service: ^Julia_Runtime_Service) {
 
     if service != nil {
         service^.reload_state = .Publishing
     }
-    destroy_julia_interface_instance(previous_interface)
-    free(previous_interface)
+    clean_julia_interface_instance(previous_interface)
+    state^.julia_interface_active_slot = staged_slot
 
     // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
     state^.ui_runtime.scratchpad_input_len = 0
@@ -742,7 +743,7 @@ animation_lookup_allocate :: proc(
     }
 
     new_entries := make([]core.Euclid_Julia_Animation_Lookup_Entry,
-        new_capacity, ji^.animation_name_allocator)
+        new_capacity, ji^.animation_registry_allocator)
     if len(new_entries) != new_capacity {
         return nil
     }
@@ -885,12 +886,12 @@ add_animation_to_registry :: proc(
         return nil, false
     }
 
-    if !ensure_julia_interface_name_arena(state) {
+    if !ensure_julia_interface_registry_arena(state) {
         return nil, false
     }
 
     ji := state^.julia_interface
-    node := new(core.Euclid_Julia_Animation_Interface, ji^.animation_name_allocator)
+    node := new(core.Euclid_Julia_Animation_Interface, ji^.animation_registry_allocator)
     if node == nil {
         return nil, false
     }
@@ -899,7 +900,7 @@ add_animation_to_registry :: proc(
     node^.initiate = initiate
     node^.loop = loop
     node^.clean = clean
-    node^.name = strings.clone(string(name), ji^.animation_name_allocator)
+    node^.name = strings.clone(string(name), ji^.animation_registry_allocator)
     node^.stable_id = stable_id
 
     animation_append_to_registry(ji, node)

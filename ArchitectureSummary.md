@@ -275,37 +275,22 @@ synchronization rules; no subsystem may treat the workers as interchangeable.
   workers must not call Julia or thread-affine raylib window, audio, or
   rendering APIs.
 
-### Julia Requests And Publication
+### Julia Owner Thread
 
-The display and Julia threads communicate through bounded typed request and
-event channels backed by service-owned fixed slots:
+The display and Julia threads communicate through bounded typed channels and
+service-owned fixed slots. Scratchpad work uses copied request/reply slots,
+view output uses complete semantic snapshots, and animation callbacks read
+immutable query snapshots while producing transactional scene-command batches.
+The display validates and publishes completed results at explicit frame or
+fixed-step boundaries.
 
-1. The display thread submits work without blocking during normal frame flow.
-1. The Julia owner executes the request and writes the complete result into its
-   assigned service slot.
-1. The worker publishes a correlated completion event containing request
-   identity and success state.
-1. The display thread drains events, validates the completed slot against the
-   current generation and animation identity, and publishes only valid results.
-1. Consumed or superseded slots are recycled in place.
+Selection, reset, and reload use a narrow synchronous lifecycle barrier after
+asynchronous animation work quiesces. Julia initialization, callback execution,
+reload, exception inspection, and shutdown always remain on the owner thread.
 
-Animation ticks are bounded to one pending request. Additional fixed-step time
-is coalesced up to 250 ms while that request is in flight. Before submission,
-the display thread copies canonical query values into the worker slot. Julia
-reads that immutable snapshot and captures mutations in a bounded ordered
-scene-command batch instead of touching canonical scene state concurrently.
-The display thread commits a complete valid batch atomically at a fixed-step
-boundary; overflowed, stale, or invalid batches do not partially commit.
-
-View-text generation follows the same publication model. The Julia owner writes
-fallback text and semantic dynview data into worker staging, then publishes a
-complete animation-tagged snapshot. Panel drawing consumes display-owned data
-and never calls Julia.
-
-Scratchpad operations use bounded copied requests and correlated,
-generation-checked replies. Rare compatibility and lifecycle operations may
-block for their correlated completion, but they still execute on the Julia
-owner thread and accept unrelated completion events while waiting.
+See [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for the complete
+request/event model, slot lifecycles, backpressure, publication rules, reload
+state machine, diagnostics, shutdown policy, and current constraints.
 
 ### Fixed-Step Simulation
 
@@ -343,23 +328,11 @@ display thread.
 
 ### Lifecycle And Failure Rules
 
-- Startup keeps the display responsive while the Julia owner initializes and
-  registers content. Normal Julia work begins only after registration and
-  priming publish the Ready lifecycle state.
-- Reload builds a candidate interface catalogue on the Julia owner thread and
-  publishes it only after callback validation, registration, and stable-ID
-  restoration. Failure retains the previous generation and suppresses repeated
-  retries for the same broken package revision.
-- Selection, reset, and reload generation changes invalidate stale animation
-  and view results before publication.
-- Display-owned diagnostics retain request failures, queue saturation, reload
-  stage, lifecycle state, pacing counters, and runtime generation without
-  consulting Julia.
-- Bridge entrypoints restore the Julia worker's saved Odin runtime context
-  (`context = state^.saved_context`) before allocation-sensitive work.
-- Shutdown joins and destroys the simulation pool before freeing canonical
-  simulation state. Julia shutdown completes on its owner thread before the
-  runtime service and channels are destroyed.
+- Normal Julia work begins only after startup registration publishes `Ready`.
+- Selection, reset, and reload invalidate stale asynchronous results; failed
+  reloads retain the previous valid interface generation.
+- Julia shutdown completes on its owner thread before service destruction.
+  The simulation pool is also joined before canonical state is freed.
 
 ---
 
@@ -372,6 +345,8 @@ This policy is strict by design.
 - Default rule: no growing host allocations in steady per-frame paths.
 - Long-lived host state must be allocated at startup and reused.
 - When a maximum size is known, preallocate and mutate in place.
+- Julia interface generations use two inline host-state slots. Reload prepares
+  the inactive slot and never allocates or frees an interface struct.
 - Fixed-step and per-frame task payloads and pool completion storage are
   allocated at startup and reused for every batch.
 - New per-frame heap growth requires explicit justification in review.
@@ -385,7 +360,7 @@ This policy is strict by design.
    - Julia owns script/runtime objects.
    - Odin owns host state and must stay deterministic on the host side.
 1. Dedicated virtual arenas for lifecycle-scoped subsystems.
-   - Examples: GIF encoder working memory and bridge animation-name storage.
+  - Examples: GIF encoder working memory and Julia animation registries.
    - Requirement: `arena_free_all` on logical reset/reload and `arena_destroy`
     on subsystem/application teardown.
 1. Event-driven allocations outside steady frame loops.
@@ -397,7 +372,11 @@ This policy is strict by design.
 ### Current Arena Notes
 
 - GIF encoder internals are arena-backed for session-local working memory.
-- Bridge animation names are arena-backed and reset as a batch on hot reload.
+- Each of the two Julia interface slots retains one growing registry arena.
+  Animation nodes, copied names, and UUID lookup tables share that arena.
+- Reload clears the inactive arena before staging. Rollback clears that same
+  arena; publication clears the retired arena. Both arenas are destroyed only
+  after the Julia owner thread has stopped during application teardown.
 
 ### Not Allowed Without Explicit Approval
 
