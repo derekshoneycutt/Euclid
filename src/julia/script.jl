@@ -30,6 +30,9 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     init_euclid_scripts_hilbert(state_ptr)
     init_euclid_scripts_algebra(state_ptr)
 
+    EuclidLatex.prime_latex!(state_ptr)
+    Scratchpad.prime_repl!(state_ptr)
+
 end
 
 function scratchpad_classify_input(state_ptr::Ptr{Cvoid}, text::AbstractString)

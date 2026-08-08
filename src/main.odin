@@ -17,10 +17,6 @@ main :: proc() {
 
     fmt.println("Initiating Euclid...")
 
-    files.ensure_packaged_assets_unpacked_root()
-
-    julia.initiate_julia()
-
     view.run_window_loop(&settings)
 
     julia.end_julia()

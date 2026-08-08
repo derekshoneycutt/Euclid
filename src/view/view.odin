@@ -16,6 +16,7 @@ import "../files"
 import "core:fmt"
 import "core:math/linalg"
 import "core:strings"
+import "core:thread"
 
 import rl "vendor:raylib"
 
@@ -70,6 +71,85 @@ SURFACE_COLOR :: view_core.SURFACE_COLOR
 SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
 SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 
+STARTUP_SPINNER_OFFSETS :: [8]rl.Vector2{
+    {0, -18}, {13, -13}, {18, 0}, {13, 13},
+    {0, 18}, {-13, 13}, {-18, 0}, {-13, -13},
+}
+STARTUP_TRACK_COLOR :: rl.Color{86, 55, 66, 255}
+STARTUP_PROGRESS_COLOR :: rl.Color{175, 150, 150, 255}
+
+
+//   Draw one dependency-free startup frame using raylib's built-in font.
+draw_startup_frame :: proc(label: string, progress: f32) {
+    font := rl.GetFontDefault()
+    title := strings.clone_to_cstring("Euclid's Elements", context.temp_allocator)
+    phase := strings.clone_to_cstring(label, context.temp_allocator)
+    center := rl.Vector2{WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 24}
+    active_dot := int(rl.GetTime() * 8) % len(STARTUP_SPINNER_OFFSETS)
+
+    rl.BeginDrawing()
+    rl.ClearBackground(BACKGROUND_COLOR)
+    rl.DrawTextEx(font, title, rl.Vector2{WINDOW_WIDTH / 2 - 117, 245}, 28, 1, UI_TEXT_COLOR)
+    for offset, index in STARTUP_SPINNER_OFFSETS {
+        color := STARTUP_TRACK_COLOR
+        if index == active_dot {
+            color = STARTUP_PROGRESS_COLOR
+        }
+        rl.DrawCircleV(center + offset, 4, color)
+    }
+    rl.DrawTextEx(font, phase, rl.Vector2{WINDOW_WIDTH / 2 - 100, 345}, 18, 0, UI_TEXT_COLOR)
+    rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280, 4}, STARTUP_TRACK_COLOR)
+    rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4}, STARTUP_PROGRESS_COLOR)
+    rl.EndDrawing()
+}
+
+//   Prepare packaged assets on the startup worker's independent temp allocator.
+prepare_assets_worker :: proc() {
+    files.ensure_packaged_assets_unpacked_root()
+}
+
+//   Prepare baseline font glyphs and atlases without touching GPU resources.
+prepare_fonts_worker :: proc(data: rawptr) {
+    preparation := cast(^view_core.Baseline_Font_Preparation)data
+    view_core.font_runtime_prepare_baseline(preparation, view_core.JULIA_MONO_FONT_LOAD_SIZE)
+}
+
+//   Keep drawing and pumping window events until one startup worker is ready.
+finish_startup_worker :: proc(worker: ^thread.Thread, label: string, progress: f32) {
+    if worker == nil {
+        return
+    }
+    for !thread.is_done(worker) {
+        draw_startup_frame(label, progress)
+        _ = rl.WindowShouldClose()
+        free_all(context.temp_allocator)
+    }
+    thread.destroy(worker)
+}
+
+//   Prepare packaged assets while keeping the startup window responsive.
+prepare_assets_with_loading :: proc(progress: f32) {
+    worker := thread.create_and_start(prepare_assets_worker)
+    if worker == nil {
+        files.ensure_packaged_assets_unpacked_root()
+        return
+    }
+    finish_startup_worker(worker, "Preparing assets", progress)
+}
+
+//   Display and begin timing one blocking startup phase.
+begin_startup_phase :: proc(label: string, progress: f32) -> f64 {
+    draw_startup_frame(label, progress)
+    fmt.println("Startup: ", label, "...")
+    return rl.GetTime()
+}
+
+//   Log elapsed wall time for one completed startup phase.
+end_startup_phase :: proc(label: string, started_at: f64) {
+    elapsed_ms := int((rl.GetTime() - started_at) * 1000)
+    fmt.println("Startup: ", label, " completed in ", elapsed_ms, " ms")
+}
+
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -83,11 +163,12 @@ SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 // Returns:
 //   - none.
 run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
-    state := initiate_animations_state()
-    defer free_animations_state(state)
+    open_window(settings)
+    defer rl.CloseWindow()
 
-    initiate_window(state, settings)
-    defer close_window(state)
+    state := initialize_application_with_loading(settings)
+    defer free_animations_state(state)
+    defer shutdown_window_resources(state)
 
     free_all(context.temp_allocator)
 
@@ -109,6 +190,32 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
 
         free_all(context.temp_allocator)
     }
+}
+
+//   Initialize blocking application phases after the startup window is visible.
+initialize_application_with_loading :: proc(settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
+    startup_started_at := rl.GetTime()
+    started_at := begin_startup_phase("Preparing assets", 0.15)
+    prepare_assets_with_loading(0.15)
+    end_startup_phase("Preparing assets", started_at)
+
+    started_at = begin_startup_phase("Starting Julia", 0.35)
+    font_preparation := view_core.Baseline_Font_Preparation{}
+    font_worker := thread.create_and_start_with_data(rawptr(&font_preparation), prepare_fonts_worker)
+    julia.initiate_julia()
+    end_startup_phase("Starting Julia", started_at)
+
+    started_at = begin_startup_phase("Loading content", 0.65)
+    state := initiate_animations_state()
+    end_startup_phase("Loading content", started_at)
+
+    started_at = begin_startup_phase("Loading fonts and graphics", 0.85)
+    finish_startup_worker(font_worker, "Loading fonts and graphics", 0.85)
+    initialize_window_resources(state, settings, &font_preparation)
+    end_startup_phase("Loading fonts and graphics", started_at)
+    draw_startup_frame("Ready", 1.0)
+    end_startup_phase("Total startup", startup_started_at)
+    return state
 }
 
 
@@ -199,11 +306,11 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     free(state)
 }
 
-//   Initialize window, shader/font resources, and GUI style settings.
+//   Open the startup window without requiring packaged assets or application state.
 //
 // Notes:
-//   - Should be paired with close_window on shutdown.
-initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
+//   - Should be paired with rl.CloseWindow on shutdown.
+open_window :: proc(settings: ^Euclid_Run_Settings) {
     if settings.do_antialiasing && settings.do_vsync {
         rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI})
     } else if settings.do_antialiasing {
@@ -215,6 +322,14 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
     }
 
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+    rl.SetTargetFPS(LIMIT_FPS)
+}
+
+//   Initialize audio, icon, shader, and font resources after application state exists.
+initialize_window_resources :: proc(
+    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings,
+    font_preparation: ^view_core.Baseline_Font_Preparation) {
+
     rl.InitAudioDevice()
     if !rl.IsAudioDeviceReady() {
         fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
@@ -239,16 +354,16 @@ initiate_window :: proc(state : ^Euclid_General_State, settings: ^Euclid_Run_Set
     init_stroke3d_shader(state)
 
     font_size: i32 = view_core.JULIA_MONO_FONT_LOAD_SIZE
-    if !view_core.font_runtime_init_with_regular(state, font_size) {
+    if !view_core.font_runtime_init_from_preparation(state, font_preparation, font_size) {
         fmt.eprintln("warning: failed to preload baseline JuliaMono fonts (Regular/Bold/RegularItalic); text rendering may fallback")
     }
 }
 
-//   Shutdown render resources, unload font/shader, and close the window.
+//   Shutdown state-dependent render and audio resources before closing the window.
 //
 // Notes:
-//   - Intended as the shutdown pair for initiate_window.
-close_window :: proc(state : ^Euclid_General_State) {
+//   - Intended as the shutdown pair for initialize_window_resources.
+shutdown_window_resources :: proc(state : ^Euclid_General_State) {
     audio.shutdown_chalk_runtime(&state^.chalk_audio)
     if rl.IsAudioDeviceReady() {
         rl.CloseAudioDevice()
@@ -256,7 +371,6 @@ close_window :: proc(state : ^Euclid_General_State) {
     shutdown_particle_render_resources(state)
     shutdown_stroke3d_shader(state)
     view_core.font_runtime_unload_all(state)
-    rl.CloseWindow()
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.

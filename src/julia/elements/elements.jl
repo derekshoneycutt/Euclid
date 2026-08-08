@@ -2,7 +2,10 @@
 include("./book1/book1.jl")
 
 function get_view_text_root_euclid_elements(state_ptr::Ptr{Cvoid})
-    "Welcome to Euclid's Elements!"
+    latex = raw"""\textbf{Welcom to Euclid's Elements!}"""
+    fallback = "Welcome to Euclid's Elements!"
+
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function init_euclid_scripts_euclid_elements(state_ptr::Ptr{Cvoid})

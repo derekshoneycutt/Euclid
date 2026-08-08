@@ -47,10 +47,6 @@ const PhaseReflectThird = 9f0
 const PhaseReflectFourth = 10f0
 const PhasePauseAfterFourth = 11f0
 
-const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
-const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
-const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-
 const ClosureFallbackText = raw"""Closure
 
 Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
@@ -60,6 +56,18 @@ In this example, composing reflections still produces one of the same allowed mo
 1. One reflection maps the figure to its mirror image, still in the same state space.
 2. Two reflections across the same axis return to the original state.
 3. Any allowed composition remains one of the 2 allowed motions: e or r.
+
+So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
+
+const ClosureLatexDocument = raw"""\textbf{Closure}
+
+Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
+
+In this example, composing reflections still produces one of the same allowed motions:
+
+1. One reflection maps the figure to its mirror image, still in the same state space.\newline
+2. Two reflections across the same axis return to the original state.\newline
+3. Any allowed composition remains one of the 2 allowed motions: $e$ or $r$.
 
 So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
 
@@ -91,76 +99,7 @@ const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = ClosureFallbackText
-
-    if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Closure", DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "In this example, composing reflections still produces one of the same allowed motions:",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "1. One reflection maps the figure to its mirror image, still in the same state space.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "2. Two reflections across the same axis return to the original state.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "3. Any allowed composition remains one of the 2 allowed motions: ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " or ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "r") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    fallback
+    EuclidLatex.emit_latex_view_text!(state_ptr, ClosureLatexDocument, ClosureFallbackText)
 end
 
 function set_reflection_pose!(

@@ -48,6 +48,18 @@ SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 TREE_FONT_SIZE :: 16
 
 JULIA_MONO_GLYPH_COUNT :: 0x2C00 - 0x20
+BASELINE_FONT_VARIANT_COUNT :: 3
+FONT_GLYPH_PADDING :: 4
+
+Prepared_Font :: struct {
+	font: rl.Font,
+	atlas: rl.Image,
+	ready: bool,
+}
+
+Baseline_Font_Preparation :: struct {
+	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
+}
 
 MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
@@ -132,6 +144,114 @@ font_variant_slot_index :: #force_inline proc(weight: core.Font_Weight, italic: 
 		return base + 1
 	}
 	return base
+}
+
+//   Decode baseline JuliaMono glyphs and build their CPU-side atlases.
+//
+// Notes:
+//   - Safe to call before GPU finalization; preparation owns all returned memory.
+//   - Pair with font_runtime_init_from_preparation to transfer or release that memory.
+font_runtime_prepare_baseline :: proc(preparation: ^Baseline_Font_Preparation, font_size: i32) {
+	font_prepare_variant(&preparation^.variants[0], .Regular, false, font_size)
+	font_prepare_variant(&preparation^.variants[1], .Bold, false, font_size)
+	font_prepare_variant(&preparation^.variants[2], .Regular, true, font_size)
+}
+
+//   Upload prepared baseline atlases and install fonts into runtime slots.
+//
+// Notes:
+//   - Must run on the display thread with an active graphics context.
+//   - Missing prepared variants fall back to the existing synchronous loader.
+font_runtime_init_from_preparation :: proc(
+	state: ^core.Euclid_General_State, preparation: ^Baseline_Font_Preparation,
+	font_size: i32) -> bool {
+	regular_slot := font_variant_slot_index(.Regular, false)
+	bold_slot := font_variant_slot_index(.Bold, false)
+	italic_slot := font_variant_slot_index(.Regular, true)
+
+	font_finalize_variant(state, &preparation^.variants[0], regular_slot)
+	font_finalize_variant(state, &preparation^.variants[1], bold_slot)
+	font_finalize_variant(state, &preparation^.variants[2], italic_slot)
+	return font_runtime_init_with_regular(state, font_size)
+}
+
+//   Decode one JuliaMono variant and retain all RAM needed for later GPU upload.
+font_prepare_variant :: proc(
+	prepared: ^Prepared_Font, weight: core.Font_Weight,
+	italic: bool, font_size: i32) {
+	filename := font_variant_filename(weight, italic)
+	font_path := files.packaged_asset_path(filename, context.temp_allocator)
+	if len(font_path) == 0 {
+		return
+	}
+
+	font_file := strings.clone_to_cstring(font_path, context.temp_allocator)
+	data_size: i32
+	font_data := rl.LoadFileData(font_file, &data_size)
+	if font_data == nil {
+		return
+	}
+	defer rl.UnloadFileData(font_data)
+
+	font := rl.Font{baseSize = font_size, glyphPadding = FONT_GLYPH_PADDING}
+	font.glyphs = rl.LoadFontData(
+		rawptr(font_data), data_size, font_size, nil, JULIA_MONO_GLYPH_COUNT,
+		.DEFAULT, &font.glyphCount)
+	if font.glyphs == nil || font.glyphCount == 0 {
+		font_discard_prepared_data(font, rl.Image{})
+		return
+	}
+
+	atlas := rl.GenImageFontAtlas(
+		font.glyphs, &font.recs, font.glyphCount, font.baseSize,
+		font.glyphPadding, 0)
+	if atlas.data == nil {
+		font_discard_prepared_data(font, atlas)
+		return
+	}
+
+	for index in 0..<font.glyphCount {
+		rl.UnloadImage(font.glyphs[index].image)
+		font.glyphs[index].image = rl.ImageFromImage(atlas, font.recs[index])
+	}
+	prepared^ = Prepared_Font{font = font, atlas = atlas, ready = true}
+}
+
+//   Upload one prepared atlas and transfer its RAM ownership to the runtime font slot.
+font_finalize_variant :: proc(
+	state: ^core.Euclid_General_State, prepared: ^Prepared_Font,
+	slot_index: int) {
+	if !prepared^.ready {
+		return
+	}
+
+	prepared^.font.texture = rl.LoadTextureFromImage(prepared^.atlas)
+	rl.UnloadImage(prepared^.atlas)
+	prepared^.atlas = rl.Image{}
+	if prepared^.font.texture.id == 0 {
+		font_discard_prepared_data(prepared^.font, prepared^.atlas)
+		prepared^ = Prepared_Font{}
+		return
+	}
+
+	rl.SetTextureFilter(prepared^.font.texture, .POINT)
+	slot := &state^.font_runtime.variants[slot_index]
+	slot^.font = prepared^.font
+	slot^.loaded = true
+	prepared^ = Prepared_Font{}
+}
+
+//   Release prepared font RAM that was not transferred to a runtime font slot.
+font_discard_prepared_data :: proc(font: rl.Font, atlas: rl.Image) {
+	if atlas.data != nil {
+		rl.UnloadImage(atlas)
+	}
+	if font.glyphs != nil {
+		rl.UnloadFontData(font.glyphs, font.glyphCount)
+	}
+	if font.recs != nil {
+		rl.MemFree(rawptr(font.recs))
+	}
 }
 
 //   Load one variant and return true when raylib reports a valid texture handle.

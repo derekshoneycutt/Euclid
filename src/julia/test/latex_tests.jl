@@ -8,6 +8,71 @@ end
 using .EuclidLatex
 using Test
 
+@testset "latex mode classification" begin
+    @test EuclidLatex.classify_latex_mode("\\frac{1}{2}") == :math
+    @test EuclidLatex.classify_latex_mode("\$\\alpha + 1\$") == :math
+    @test EuclidLatex.classify_latex_mode("Value: \$x^2\$") == :document
+    @test EuclidLatex.classify_latex_mode("\\textbf{Definition}") == :document
+end
+
+@testset "document mode parsing" begin
+    runs = EuclidLatex.parse_latex_document(
+        "\\textbf{Title} Plain \\textit{italic} and \$x^2\$.")
+    @test runs !== nothing
+    @test any(run -> run.kind == :math_inline && run.text == "x^2", runs)
+    @test any(run -> run.kind == :text && run.text == "Title" &&
+        run.font_flags == EuclidLatex.DOCUMENT_STYLE_REGULAR |
+            EuclidLatex.DOCUMENT_STYLE_BOLD, runs)
+    @test any(run -> run.kind == :text && run.text == "italic" &&
+        run.font_flags == EuclidLatex.DOCUMENT_STYLE_REGULAR |
+            EuclidLatex.DOCUMENT_STYLE_ITALIC, runs)
+
+    nested = EuclidLatex.parse_latex_document("\\textbf{bold \\emph{and italic}}")
+    @test nested !== nothing
+    @test nested[end].font_flags == EuclidLatex.DOCUMENT_STYLE_REGULAR |
+        EuclidLatex.DOCUMENT_STYLE_BOLD | EuclidLatex.DOCUMENT_STYLE_ITALIC
+    multiline = EuclidLatex.parse_latex_document(
+        "\\textbf{Heading}\n\nBody\n\n\$\$x + y\$\$\n\n\\textbf{Proof:} done.")
+    @test multiline !== nothing
+    @test count(run -> run.kind == :math_display, multiline) == 1
+    delimited = EuclidLatex.parse_latex_document(
+        "inline \\(x\\) then display \\[y\\]")
+    @test delimited !== nothing
+    @test [run.kind for run in delimited if startswith(String(run.kind), "math_")] ==
+        [:math_inline, :math_display]
+    slash_break = EuclidLatex.parse_latex_document("first\\\\\n    second")
+    @test slash_break !== nothing
+    @test [(run.kind, run.text) for run in slash_break] ==
+        [(:text, "first"), (:line_break, ""), (:text, "second")]
+    newline_break = EuclidLatex.parse_latex_document("first\\newline\n    second")
+    @test newline_break !== nothing
+    @test [(run.kind, run.text) for run in newline_break] ==
+        [(:text, "first"), (:line_break, ""), (:text, "second")]
+    paragraph_after_break = EuclidLatex.parse_latex_document("first\\\\\n\nsecond")
+    @test paragraph_after_break !== nothing
+    @test [(run.kind, run.text) for run in paragraph_after_break] ==
+        [(:text, "first"), (:line_break, ""), (:line_break, ""), (:text, "second")]
+    @test EuclidLatex.classify_latex_mode("first\\newline second") == :document
+    shapes = EuclidLatex.parse_latex_document(
+        "\\euclidpoint[color=steelblue,size=1] \\euclidline[length=4,thickness=2] " *
+        "\\euclidcircle[color=khaki3,size=2,filled] " *
+        "\\euclidbox[width=3,height=2,thickness=1,filled=false]")
+    @test shapes !== nothing
+    @test [run.shape.kind for run in shapes if run.kind == :shape] ==
+        [:point, :line, :circle, :box]
+    @test [run.shape.filled for run in shapes if run.kind == :shape] ==
+        [true, false, true, false]
+    @test EuclidLatex.classify_latex_mode("x \\euclidpoint y") == :document
+    @test EuclidLatex.parse_latex_document("\\euclidpoint[color=not-a-color]") === nothing
+    @test EuclidLatex.parse_latex_document("\\euclidline[size=2]") === nothing
+    @test EuclidLatex.parse_latex_document("\\euclidcircle[size=0]") === nothing
+    @test EuclidLatex.parse_latex_document("\\euclidbox[filled=maybe]") === nothing
+    @test EuclidLatex.parse_latex_document("\\euclidpointless") === nothing
+    @test EuclidLatex.parse_latex_document("broken \$math") === nothing
+    @test EuclidLatex.parse_latex_document("\\section{unsupported}") === nothing
+    @test EuclidLatex.parse_latex_document(EuclidLatex.LATEX_PRIME_DOCUMENT) !== nothing
+end
+
 @testset "unicode and text operators" begin
     EuclidLatex.clear_cache!()
 

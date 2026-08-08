@@ -45,10 +45,6 @@ const PhaseReflectFirst = 6f0
 const PhaseReflectSecond = 7f0
 const PhasePauseAfterDoubleReflect = 8f0
 
-const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
-const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
-const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-
 const IdentityFallbackText = raw"""Identity
 
 Identity means there is a motion that changes nothing at all.
@@ -60,6 +56,18 @@ In this model, that is the do-nothing motion e.
 3. The visual cue r ∘ r = e also reinforces that returning to start is a valid identity outcome.
 
 Formally, this means e ∘ a = a ∘ e = a for every allowed motion a."""
+
+const IdentityLatexDocument = raw"""\textbf{Identity}
+
+Identity means there is a motion that changes nothing at all.
+
+In this model, that is the do-nothing motion $e$.
+
+1. $e \circ r = r$: doing nothing before reflection changes nothing.\newline
+2. $r \circ e = r$: doing nothing after reflection changes nothing.\newline
+3. The visual cue $r \circ r = e$ also reinforces that returning to start is a valid identity outcome.
+
+Formally, this means $e \circ a = a \circ e = a$ for every allowed motion $a$."""
 
 function reflect_about_axis_x_half(point::Vector{Float32})
     Float32[1f0 - point[1], point[2], point[3]]
@@ -89,73 +97,7 @@ const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = IdentityFallbackText
-
-    if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Identity", DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "Identity means there is a motion that changes nothing at all.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "In this model, that is the do-nothing motion ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "1.\\; e \\circ r = r") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ": doing nothing before reflection changes nothing.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "2.\\; r \\circ e = r") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ": doing nothing after reflection changes nothing.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "3. The visual cue ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "r \\circ r = e") ||
-        OdinJuliaBridge.dynview_text_run(
-            state_ptr,
-            " also reinforces that returning to start is a valid identity outcome.",
-            DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Formally, this means ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e \\circ a = a \\circ e = a") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " for every allowed motion ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "a") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    fallback
+    EuclidLatex.emit_latex_view_text!(state_ptr, IdentityLatexDocument, IdentityFallbackText)
 end
 
 function set_reflection_pose!(

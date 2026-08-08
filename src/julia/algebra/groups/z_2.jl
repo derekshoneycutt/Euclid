@@ -47,17 +47,17 @@ const PhaseReflectTwiceFirst = 8f0
 const PhaseReflectTwiceSecond = 9f0
 const PhasePauseAfterTwice = 10f0
 
-const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
-const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
-
-const Z2FallbackText = raw"""Z_2
+const Z2FallbackText = raw"""The two-element symmetry group
 
 Start with the simplest nontrivial geometry: given an equilateral triangle, either do nothing to the triangle, or reflect it across one fixed axis.
 
 The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
 
-Formally, Z_2 = {0,1} under addition mod 2. Let r be the reflection across the fixed axis and e the identity motion. Then e o e = e, e o r = r, r o e = r, and r o r = e.
+Z_2 = {0,1}
+
+This is the group under addition mod 2. Let r be reflection across the fixed axis and e the identity motion.
+
+e o e = e, e o r = r, r o e = r, and r o r = e.
 
 Brief proof it is a group:
 
@@ -65,6 +65,27 @@ Brief proof it is a group:
 2. Associativity: composition of reflections is associative.
 3. Identity: e does nothing.
 4. Inverses: e^{-1} = e and r^{-1} = r.
+
+So this is the 2-element symmetry group of the triangle, and the two motions commute."""
+
+const Z2LatexDocument = raw"""\textbf{The two-element symmetry group}
+
+Start with the simplest nontrivial geometry: given an equilateral triangle, either \textit{do nothing} to the triangle, or reflect it across one fixed axis.
+
+The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
+
+$\mathbb{Z}_2 = \{0,1\}$
+
+This is the group under addition mod 2. Let r be reflection across the fixed axis and e the identity motion.
+
+$e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$
+
+\textbf{Brief proof it is a group:}
+
+\textbf{1. Closure:} composing e and r always gives e or r.\\
+\textbf{2. Associativity:} composition of reflections is associative.\\
+\textbf{3. Identity:} e does nothing.\\
+\textbf{4. Inverses:} e and r are their own inverses.
 
 So this is the 2-element symmetry group of the triangle, and the two motions commute."""
 
@@ -98,109 +119,7 @@ const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = Z2FallbackText
-
-    if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "\\mathbb{Z}_2") ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "Start with the simplest nontrivial geometry: given an equilateral triangle, either do nothing to the triangle, or reflect it across one fixed axis.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Formally, ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "\\mathbb{Z}_2 = \\{0,1\\}") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " under addition mod ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "2") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ". Let ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "r") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " be reflection across the fixed axis and ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " the identity motion.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "e \\circ e = e, \\; e \\circ r = r, \\; r \\circ e = r, \\; r \\circ r = e") ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Brief proof it is a group:", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "1. Closure: composing e and r always gives e or r.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "2. Associativity: composition of reflections is associative.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "3. Identity: e does nothing.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "4. Inverses: ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e^{-1} = e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " and ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "r^{-1} = r") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ".", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(
-        state_ptr,
-        "So this is the 2-element symmetry group of the triangle, and the two motions commute.",
-        DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    return fallback
+    EuclidLatex.emit_latex_view_text!(state_ptr, Z2LatexDocument, Z2FallbackText)
 end
 
 function set_reflection_pose!(

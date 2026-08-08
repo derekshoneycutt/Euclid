@@ -47,10 +47,6 @@ const PhasePauseBetweenReflections = 7f0
 const PhaseReflectSecond = 8f0
 const PhasePauseAfterSecondReflection = 9f0
 
-const DynviewBlockOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT
-const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
-const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-
 const InverseFallbackText = raw"""Inverse
 
 An inverse is the motion that undoes a given motion. In Z_2, every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.
@@ -59,6 +55,16 @@ For an element a in a group, an inverse a^{-1} is an element such that a o a^{-1
 
 1. e^{-1} = e: doing nothing undoes itself.
 2. r^{-1} = r: one reflection undoes itself because reflecting twice gives back the original figure."""
+
+const InverseLatexDocument = raw"""\textbf{Inverse}
+
+An inverse is the motion that undoes a given motion. In $\mathbb{Z}_2$, every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.
+
+For an element $a$ in a group, an inverse $a^{-1}$ is an element such that
+$a \circ a^{-1} = a^{-1} \circ a = e$, where $e$ is the identity.
+
+1. $e^{-1} = e$: doing nothing undoes itself.\newline
+2. $r^{-1} = r$: one reflection undoes itself because reflecting twice gives back the original figure."""
 
 function reflect_about_axis_x_half(point::Vector{Float32})
     Float32[1f0 - point[1], point[2], point[3]]
@@ -88,64 +94,7 @@ const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = InverseFallbackText
-
-    if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_begin_block(state_ptr, DynviewBlockOutput, Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "Inverse", DynviewStyleBold) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "An inverse is the motion that undoes a given motion. In ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "\\mathbb{Z}_2") ||
-        OdinJuliaBridge.dynview_text_run(
-            state_ptr,
-            ", every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.",
-            DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if OdinJuliaBridge.dynview_text_run(state_ptr, "For an element ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "a") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " in a group, an inverse ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "a^{-1}") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " is an element such that ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "a \\circ a^{-1} = a^{-1} \\circ a = e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ", where ", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        !EuclidLatex.replay_emit_math_block!(state_ptr, "e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, " is the identity.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "1.\\; e^{-1} = e") ||
-        OdinJuliaBridge.dynview_text_run(state_ptr, ": doing nothing undoes itself.", DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_line_break(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    if !EuclidLatex.replay_emit_math_block!(state_ptr, "2.\\; r^{-1} = r") ||
-        OdinJuliaBridge.dynview_text_run(
-            state_ptr,
-            ": one reflection undoes itself because reflecting twice gives back the original figure.",
-            DynviewStyleOutput) != OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return fallback
-    end
-
-    fallback
+    EuclidLatex.emit_latex_view_text!(state_ptr, InverseLatexDocument, InverseFallbackText)
 end
 
 function set_reflection_pose!(

@@ -2,6 +2,7 @@ module ElementsOneDefinitionLine
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -28,11 +29,16 @@ const PhaseDescend = 0f0
 const PhaseDrawLine = 1f0
 const PhaseEndLift = 2f0
 
-
-function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Line
+const DefinitionViewText = """Euclid Elements - Book I - Definition: Line
 
 A line is breadthless length."""
+
+const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition: Line}
+
+A line \euclidline[color=steelblue,length=3,thickness=4] is breadthless length."""
+
+function get_view_text(state_ptr::Ptr{Cvoid})
+    EuclidLatex.emit_latex_view_text!(state_ptr, DefinitionLatexDocument, DefinitionViewText)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

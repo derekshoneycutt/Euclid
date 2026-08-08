@@ -4,7 +4,7 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using REPL
 
-export init_euclid_scripts_scratchpad, get_view_text, initialize, clean, loop,
+export init_euclid_scripts_scratchpad, prime_repl!, get_view_text, initialize, clean, loop,
     classify_input, complete_backslash, complete_input, queue_input, register_frame_hook, remove_frame_hook,
     clear_frame_hooks, list_frame_hooks, save_history_to_file,
     history_previous, history_next, history_reset_cursor
@@ -191,6 +191,24 @@ function create_runtime_module(session_id::Int)
     return runtime
 end
 
+"""Create an empty scratchpad session bound to the supplied host state."""
+function create_session(state_ptr::Ptr{Cvoid}, session_id::Int)
+    runtime = create_runtime_module(session_id)
+    session = ScratchpadSession(
+        session_id,
+        runtime,
+        String[],
+        String[],
+        ScratchpadOutputEntry[],
+        String[],
+        ScratchpadFrameHook[],
+        ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        1,
+        1)
+    Core.eval(runtime, :(state_ptr = $state_ptr))
+    return session
+end
+
 """Append one history line while enforcing the configured history retention cap."""
 function append_history_line!(session::ScratchpadSession, line::String)
     push!(session.history, line)
@@ -289,21 +307,8 @@ function reset_session!(state_ptr::Ptr{Cvoid})
     next_session_id_ref[] = session_id + 1
     reset_count_ref[] += 1
 
-    runtime = create_runtime_module(session_id)
-    session = ScratchpadSession(
-        session_id,
-        runtime,
-        String[],
-        String[],
-        ScratchpadOutputEntry[],
-        String[],
-        ScratchpadFrameHook[],
-        ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-        1,
-        1)
+    session = create_session(state_ptr, session_id)
     session_ref[] = session
-
-    Core.eval(runtime, :(state_ptr = $state_ptr))
     return session
 end
 
@@ -1627,10 +1632,27 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     return join(session.output, "\n")
 end
 
+"""Prime Scratchpad parsing, completion, evaluation, formatting, and dynview emission."""
+function prime_repl!(state_ptr::Ptr{Cvoid})
+    warm_session = create_session(state_ptr, -1)
+    session_ref[] = warm_session
+    try
+        queue_input(state_ptr, "sum(1:3)") || return false
+        complete_backslash(state_ptr, "\\alpha") == "α" || return false
+        isempty(complete_input(state_ptr, "EuclidRep", 9)) && return false
+        loop(state_ptr, 0f0)
+        isempty(get_view_text(state_ptr)) && return false
+        status = OdinJuliaBridge.dynview_reset_stream(state_ptr)
+        return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+    finally
+        session_ref[] = create_session(state_ptr, next_session_id_ref[])
+    end
+end
+
 """Initialize scratchpad session lifecycle and seed startup help text."""
 function initialize(state_ptr::Ptr{Cvoid})
     initialize_count_ref[] += 1
-    session = reset_session!(state_ptr)
+    session = ensure_session!(state_ptr)
     append_help_lines!(session)
 end
 

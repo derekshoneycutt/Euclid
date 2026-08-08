@@ -28,17 +28,7 @@ end
 
 function new_session(; id::Int=TEST_SESSION_ID_REF[])
     TEST_SESSION_ID_REF[] = id + 1
-    return Scratchpad.ScratchpadSession(
-        id,
-        Scratchpad.create_runtime_module(id),
-        String[],
-        String[],
-    Scratchpad.ScratchpadOutputEntry[],
-        String[],
-        Scratchpad.ScratchpadFrameHook[],
-        new_metrics(),
-        1,
-        1)
+    return Scratchpad.create_session(TEST_STATE_PTR, id)
 end
 
 struct ScratchpadLatexResultMock
@@ -75,6 +65,15 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
 
     status_error, _ = Scratchpad.classify_parse("x = )")
     @test status_error == Scratchpad.ParseError
+end
+
+@testset "create_session" begin
+    session = Scratchpad.create_session(TEST_STATE_PTR, 10_001)
+    @test session.id == 10_001
+    @test isempty(session.queue)
+    @test isempty(session.output)
+    @test isempty(session.history)
+    @test Core.eval(session.runtime, :state_ptr) == TEST_STATE_PTR
 end
 
 @testset "parse_error_message" begin
