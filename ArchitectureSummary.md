@@ -9,6 +9,7 @@
 1. [Dynview Text Engine (Hybrid-Immediate Rendering)](#dynview-text-engine-hybrid-immediate-rendering)
 1. [Dynamic LaTeX Pipeline (Julia Parse + Odin Layout)](#dynamic-latex-pipeline-julia-parse--odin-layout)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
+1. [Threading Strategy](#threading-strategy)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
 1. [Practical Contributor Guide](#practical-contributor-guide)
@@ -243,34 +244,122 @@ sequenceDiagram
 ### Ownership And Rules
 
 - Odin owns application state, memory, rendering, and final frame orchestration.
-- One persistent worker thread owns Julia initialization, every Julia C API
-  operation, callback handles, and Julia shutdown.
-- Startup uses bounded typed channels and nonblocking event draining so the
-  display continues rendering while Julia initializes and registers content.
-- Scratchpad submission, completion, history, cursor reset, and save-history
-  operations use bounded copied requests with correlated, generation-checked
-  replies. View-text generation publishes bounded immutable semantic snapshots;
-  panel drawing does not call Julia. Every selected animation loop captures its
-  recurring mutations in a bounded ordered scene-command batch whose vocabulary
-  covers the current animation catalogue. The display thread validates the
-  entire batch and commits it atomically at a fixed-step boundary. Canonical
-  constraints settle worker-commanded tool geometry before rendering. Animation
-  ticks are nonblocking, bounded to one pending request, and coalesce elapsed
-  fixed-step time up to 250 ms. Tick queries use worker-slot snapshots rather
-  than canonical scene state. Selection and reset invalidate stale results;
-  lifecycle transitions remain rare serialized compatibility tasks because
-  initialization creates stable IDs and rebuilds canonical scene state.
-- Reload builds a fresh interface catalogue on the owner thread and publishes
-  it only after callback validation, registration, and stable-ID restoration.
-  Failure retains the previous interface generation and suppresses repeated
-  retries for the same broken package revision.
-- Worker completion events carry explicit success and request identity.
-  Display-owned diagnostics retain failed request, queue saturation, reload
-  stage, lifecycle state, and runtime generation without consulting Julia.
 - Julia owns animation/content logic and drives changes only through bridge APIs.
-- Bridge failures should be surfaced clearly; no silent state corruption paths.
+- Core owns the typed runtime-service, snapshot, scene-command, and simulation
+  executor data shapes referenced by `Euclid_General_State`. Bridge and view
+  modules own the behavior that operates on those structures.
+- The bridge is a strict API boundary. Odin exports and Julia wrappers must
+  remain symmetric, and failures must be surfaced without partially mutating
+  canonical host state.
+- Runtime state uses concrete subsystem pointers. Do not erase subsystem types
+  behind `rawptr` fields in `Euclid_General_State`.
+
+---
+
+## Threading Strategy
+
+EuclidApp uses one display thread, one persistent Julia owner thread, and a
+persistent simulation worker pool. These roles have separate ownership and
+synchronization rules; no subsystem may treat the workers as interchangeable.
+
+### Thread Roles
+
+- The **display thread** owns window events, raylib rendering, UI state,
+  canonical scene state, fixed-step orchestration, and final publication of
+  worker results.
+- The **Julia owner thread** exclusively owns Julia initialization, every Julia
+  C API operation, callback handles, script reload, and Julia shutdown. Bridge
+  tasks that call Julia must assert this owner identity.
+- The **simulation pool** contains a persistent CPU-count set of workers reused
+  for independent fixed-step systems and per-frame cache preparation. These
+  workers must not call Julia or thread-affine raylib window, audio, or
+  rendering APIs.
+
+### Julia Requests And Publication
+
+The display and Julia threads communicate through bounded typed request and
+event channels backed by service-owned fixed slots:
+
+1. The display thread submits work without blocking during normal frame flow.
+1. The Julia owner executes the request and writes the complete result into its
+   assigned service slot.
+1. The worker publishes a correlated completion event containing request
+   identity and success state.
+1. The display thread drains events, validates the completed slot against the
+   current generation and animation identity, and publishes only valid results.
+1. Consumed or superseded slots are recycled in place.
+
+Animation ticks are bounded to one pending request. Additional fixed-step time
+is coalesced up to 250 ms while that request is in flight. Before submission,
+the display thread copies canonical query values into the worker slot. Julia
+reads that immutable snapshot and captures mutations in a bounded ordered
+scene-command batch instead of touching canonical scene state concurrently.
+The display thread commits a complete valid batch atomically at a fixed-step
+boundary; overflowed, stale, or invalid batches do not partially commit.
+
+View-text generation follows the same publication model. The Julia owner writes
+fallback text and semantic dynview data into worker staging, then publishes a
+complete animation-tagged snapshot. Panel drawing consumes display-owned data
+and never calls Julia.
+
+Scratchpad operations use bounded copied requests and correlated,
+generation-checked replies. Rare compatibility and lifecycle operations may
+block for their correlated completion, but they still execute on the Julia
+owner thread and accept unrelated completion events while waiting.
+
+### Fixed-Step Simulation
+
+Each fixed step preserves this ordering:
+
+1. Publish an available Julia animation batch.
+1. Schedule the next nonblocking Julia animation tick.
+1. Submit particle update and constraint solve tasks to the simulation pool.
+1. Join the complete simulation batch.
+1. Continue with GIF capture and any remaining fixed steps.
+
+Particle workers exclusively mutate `Particle_System`; constraint workers
+exclusively mutate `Shapes_Point_System`. Their task payloads and pool
+completion storage are allocated at startup and reused. The display thread does
+not continue until both tasks complete, so canonical constraints always settle
+worker-commanded geometry before any dependent capture or rendering work.
+
+### Per-Frame Preparation
+
+After all fixed steps complete, the display thread opens a second pool window:
+
+1. Compute and publish the frame's UI regions and exact text-panel geometry.
+1. Track Dynview panel, font, and style inputs to determine whether its cache is
+  invalidated.
+1. Submit shape draw-cache construction every frame.
+1. Submit Dynview compile and layout construction only when invalidated.
+1. Join every submitted task before beginning raylib drawing.
+
+Shape preparation reads settled point state and exclusively writes
+`Shapes_Point_System.draw_cache`. Dynview preparation exclusively writes the
+Dynview compile and layout caches. The tasks may run concurrently because
+their ownership does not overlap. Panel drawing consumes the joined caches;
+scroll state, copy-hit targets, and other interaction state remain on the
+display thread.
+
+### Lifecycle And Failure Rules
+
+- Startup keeps the display responsive while the Julia owner initializes and
+  registers content. Normal Julia work begins only after registration and
+  priming publish the Ready lifecycle state.
+- Reload builds a candidate interface catalogue on the Julia owner thread and
+  publishes it only after callback validation, registration, and stable-ID
+  restoration. Failure retains the previous generation and suppresses repeated
+  retries for the same broken package revision.
+- Selection, reset, and reload generation changes invalidate stale animation
+  and view results before publication.
+- Display-owned diagnostics retain request failures, queue saturation, reload
+  stage, lifecycle state, pacing counters, and runtime generation without
+  consulting Julia.
 - Bridge entrypoints restore the Julia worker's saved Odin runtime context
   (`context = state^.saved_context`) before allocation-sensitive work.
+- Shutdown joins and destroys the simulation pool before freeing canonical
+  simulation state. Julia shutdown completes on its owner thread before the
+  runtime service and channels are destroyed.
 
 ---
 
@@ -283,6 +372,8 @@ This policy is strict by design.
 - Default rule: no growing host allocations in steady per-frame paths.
 - Long-lived host state must be allocated at startup and reused.
 - When a maximum size is known, preallocate and mutate in place.
+- Fixed-step and per-frame task payloads and pool completion storage are
+  allocated at startup and reused for every batch.
 - New per-frame heap growth requires explicit justification in review.
 
 ### Allowed Exceptions

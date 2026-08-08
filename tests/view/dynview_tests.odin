@@ -22,7 +22,7 @@ scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
     point_system^.next_point_index = 2
     batch := app_bridge.Scene_Command_Batch{animation = animation}
 
-    state^.scene_command_batch_target = rawptr(&batch)
+    state^.scene_command_batch_target = &batch
     testing.expect(t, app_bridge.capture_point_position_command(
         state, 0, app_core.Vector3{1, 2, 3}))
     testing.expect(t, app_bridge.capture_point_position_command(
@@ -152,7 +152,7 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
 
     state^.anim_metadata[3] = 11
     point_system^.points[0].position = app_core.Vector3{4, 5, 6}
-    state^.animation_query_snapshot_target = rawptr(&snapshot)
+    state^.animation_query_snapshot_target = &snapshot
     testing.expect_value(t, app_bridge.get_animation_meta(state, 3), f32(7))
     testing.expect(t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
     point_view := app_bridge.get_point_view(state, 0)

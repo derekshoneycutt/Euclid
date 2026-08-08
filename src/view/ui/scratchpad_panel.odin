@@ -23,6 +23,14 @@ is_scratchpad_selected :: proc(state: ^core.Euclid_General_State) -> bool {
     return selected^.name == julia.SCRATCHPAD_ANIMATION_NAME
 }
 
+//   Compute the Scratchpad output viewport above its fixed prompt row.
+scratchpad_output_panel :: proc(text_panel: rl.Rectangle) -> rl.Rectangle {
+    prompt_band_h: f32 = TEXT_ROW_HEIGHT + TEXT_PADDING
+    output_panel := text_panel
+    output_panel.height = max(TEXT_ROW_HEIGHT, text_panel.height - prompt_band_h)
+    return output_panel
+}
+
 //   Read the current scratchpad input text from the fixed-size UI buffer.
 scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> string {
     if ui_runtime == nil || ui_runtime^.scratchpad_input_len <= 0 {
@@ -270,18 +278,10 @@ draw_scratchpad_output_and_prompt :: proc(
     font: rl.Font,
     mouse_input: Mouse_Input_State) {
 
-    prompt_band_h: f32 = TEXT_ROW_HEIGHT + TEXT_PADDING
-    output_panel := text_panel
-    output_panel.height = text_panel.height - prompt_band_h
-
-    if output_panel.height < TEXT_ROW_HEIGHT {
-        output_panel.height = TEXT_ROW_HEIGHT
-    }
+    output_panel := scratchpad_output_panel(text_panel)
 
     output_text_legacy := julia.current_view_snapshot_text(state)
-    output_text := dynview.compiled_scratchpad_text_or_fallback(&state.dynview, output_panel,
-        TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
-        output_text_legacy)
+    output_text := dynview.scratchpad_text_or_fallback(&state.dynview, output_text_legacy)
     content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview, output_panel,
         TEXT_PADDING, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT, output_text_legacy)
     max_scroll := max(0.0, content_h - output_panel.height)

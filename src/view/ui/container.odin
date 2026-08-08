@@ -24,12 +24,8 @@ container_fill_color :: #force_inline proc(fill_variant: Container_Fill_Variant)
     return BACKGROUND_COLOR
 }
 
-//   Draw a container fill+border and return clamped outer/inner geometry.
-draw_container_with_border :: proc(
-    rect: rl.Rectangle,
-    fill_variant: Container_Fill_Variant,
-    border_thickness: f32) -> Container_Draw_Result {
-
+//   Return clamped outer and inner geometry without drawing the container.
+container_geometry :: proc(rect: rl.Rectangle, border_thickness: f32) -> Container_Draw_Result {
     drawn_rect := clamp_non_negative_rect(rect)
     border := max(0.0, border_thickness)
 
@@ -40,16 +36,28 @@ draw_container_with_border :: proc(
         drawn_rect.height - border * 2,
     }
     inner_rect = clamp_non_negative_rect(inner_rect)
+    return Container_Draw_Result{
+        drawn_rect = drawn_rect,
+        inner_rect = inner_rect,
+    }
+}
+
+//   Draw a container fill+border and return clamped outer/inner geometry.
+draw_container_with_border :: proc(
+    rect: rl.Rectangle,
+    fill_variant: Container_Fill_Variant,
+    border_thickness: f32) -> Container_Draw_Result {
+
+    geometry := container_geometry(rect, border_thickness)
+    drawn_rect := geometry.drawn_rect
+    border := max(0.0, border_thickness)
 
     rl.DrawRectangleRec(drawn_rect, container_fill_color(fill_variant))
     if border > 0 {
         rl.DrawRectangleLinesEx(drawn_rect, border, UI_BORDER_COLOR)
     }
 
-    return Container_Draw_Result{
-        drawn_rect = drawn_rect,
-        inner_rect = inner_rect,
-    }
+    return geometry
 }
 
 //   Draw a container using the standard 1px border thickness.

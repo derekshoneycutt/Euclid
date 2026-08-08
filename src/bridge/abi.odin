@@ -123,12 +123,7 @@ CONSTRAINT_SPEC_DEPENDON :: (1 << 5)
 CONSTRAINT_SPEC_CHILDOFFSET :: (1 << 6)
 CONSTRAINT_SPEC_DOAPPLY :: (1 << 7)
 
-Bridge_Color :: struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
+Bridge_Color :: core.Bridge_Color
 
 Bridge_Dynview_Math_Op :: struct {
     kind: i32,

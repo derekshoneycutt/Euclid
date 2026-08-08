@@ -618,14 +618,12 @@ compile_if_needed :: proc(runtime: ^core.Dynview_System) {
         return
     }
 
-    cache := &runtime^.compile_cache
-    buffer := &runtime^.command_buffer
-    should_compile := !cache^.is_valid || runtime^.pending_invalidation_mask != 0
-    should_compile = should_compile || cache^.compiled_revision != buffer^.revision
-    if !should_compile {
+    if !compile_is_needed(runtime) {
         return
     }
 
+    cache := &runtime^.compile_cache
+    buffer := &runtime^.command_buffer
     cache^.last_error_code = DYNVIEW_STATUS_OK
     status := rebuild_compiled_plain_text(runtime)
     cache^.compiled_revision = buffer^.revision
@@ -653,6 +651,32 @@ compile_if_needed :: proc(runtime: ^core.Dynview_System) {
     cache^.is_valid = true
 }
 
+//   Return whether the current command stream or layout inputs require compilation.
+compile_is_needed :: proc(runtime: ^core.Dynview_System) -> bool {
+    if runtime == nil || !runtime^.enabled {
+        return false
+    }
+
+    cache := &runtime^.compile_cache
+    buffer := &runtime^.command_buffer
+    return !cache^.is_valid || runtime^.pending_invalidation_mask != 0 ||
+        cache^.compiled_revision != buffer^.revision
+}
+
+//   Return compiled text when validation succeeds without mutating compile state.
+scratchpad_text_or_fallback :: proc(
+    runtime: ^core.Dynview_System,
+    fallback_text: string) -> string {
+
+    if runtime == nil || !runtime^.enabled || !runtime^.compile_cache.is_valid ||
+        runtime^.command_buffer.has_stream_error {
+        return fallback_text
+    }
+
+    text_len := runtime^.compile_cache.compiled_plain_text_len
+    return string(runtime^.compile_cache.compiled_plain_text[:text_len])
+}
+
 //   Compile scratchpad stream and return compiled text when validation succeeds.
 compiled_scratchpad_text_or_fallback :: proc(
     runtime: ^core.Dynview_System,
@@ -669,13 +693,7 @@ compiled_scratchpad_text_or_fallback :: proc(
     track_font(runtime, font_size, wrap_advance)
     track_style(runtime, style_revision)
     compile_if_needed(runtime)
-
-    if !runtime^.compile_cache.is_valid || runtime^.command_buffer.has_stream_error {
-        return fallback_text
-    }
-
-    text_len := runtime^.compile_cache.compiled_plain_text_len
-    return string(runtime^.compile_cache.compiled_plain_text[:text_len])
+    return scratchpad_text_or_fallback(runtime, fallback_text)
 }
 
 //   Recompute copy hit-target cache for the current scratchpad panel and scroll.

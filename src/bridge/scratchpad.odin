@@ -22,7 +22,7 @@ try_submit_scratchpad_async :: proc(
         return 0, false
     }
 
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     slot_index := reserve_scratchpad_async_slot(service)
     if slot_index < 0 {
         return 0, false
@@ -56,7 +56,7 @@ poll_scratchpad_async_result :: proc(
     if state == nil || state^.julia_runtime_service == nil {
         return nil, false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     for {
         _, ok := try_receive_julia_event(service)
         if !ok {

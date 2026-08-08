@@ -2,62 +2,24 @@ package bridge
 
 import "../core"
 
-SCENE_COMMAND_BATCH_CAPACITY :: 64
-SCENE_COMMAND_POINT_BATCH_CAPACITY :: 8
+// Scene commands isolate asynchronous Julia callbacks from canonical display state.
+// The Julia owner thread writes one bounded batch while the display thread reads an
+// immutable query snapshot. The display thread validates the entire completed batch
+// before applying any command, so invalid or overflowed batches cannot partially commit.
 
-Scene_Command_Kind :: enum u8 {
-    Set_Point_Position,
-    Set_Point_Color,
-    Set_Point_Brush,
-    Set_Point_Offset,
-    Show_Point,
-    Hide_Point,
-    Hide_Point_Batch,
-    Lock_Pen_Joint1,
-    Move_Pen_Joint2,
-    Set_Pen_Active,
-    Show_Pen,
-    Hide_Pen,
-    Hide_Compass,
-    Show_Compass,
-    Set_Compass_Active,
-    Lock_Compass_Joint1,
-    Lock_Compass_Joint2,
-    Set_Animation_Meta,
-    Set_Drawing_Sound_Enabled,
-    Simulate_Drawing_Sound,
-    Emit_Trailing_Particle,
-    Emit_Flicker_Particle,
-    Notify_Animation_Cycle_Boundary,
-}
+SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
+SCENE_COMMAND_POINT_BATCH_CAPACITY :: core.SCENE_COMMAND_POINT_BATCH_CAPACITY
 
-Scene_Command :: struct {
-    kind: Scene_Command_Kind,
-    point_index: int,
-    position: core.Vector3,
-    color: Bridge_Color,
-    scalar: f32,
-    integer: int,
-    flag: bool,
-    point_count: int,
-    point_indices: [SCENE_COMMAND_POINT_BATCH_CAPACITY]i32,
-}
+// Core owns these data shapes because they are referenced by Euclid_General_State.
+// Bridge owns their capture, validation, and commit behavior.
+Scene_Command_Kind :: core.Scene_Command_Kind
+Scene_Command :: core.Scene_Command
+Scene_Command_Batch :: core.Scene_Command_Batch
+Animation_Query_Snapshot :: core.Animation_Query_Snapshot
 
-Scene_Command_Batch :: struct {
-    animation: ^core.Euclid_Julia_Animation_Interface,
-    command_count: int,
-    overflowed: bool,
-    commands: [SCENE_COMMAND_BATCH_CAPACITY]Scene_Command,
-}
-
-Animation_Query_Snapshot :: struct {
-    points: [core.MAX_SHAPESPOINTS]core.Shapes_Point,
-    metadata: [core.MAX_METAVALUES]f32,
-    pen: core.Shapes_Pen,
-    compass: core.Shapes_Compass,
-}
-
-//   Copy canonical query state before one asynchronous animation tick.
+//   Copy the canonical values a Julia animation may query during one asynchronous tick.
+// The snapshot remains worker-owned until that tick completes; callbacks must not read
+// concurrently mutating point-system or animation metadata through another path.
 capture_animation_query_snapshot :: proc(
     state: ^core.Euclid_General_State, snapshot: ^Animation_Query_Snapshot) {
 
@@ -67,33 +29,39 @@ capture_animation_query_snapshot :: proc(
     snapshot^.compass = state^.compass
 }
 
-//   Return worker-owned immutable query data while an asynchronous tick runs.
+//   Return the worker-owned immutable query snapshot active for the current callback.
+// Returns nil outside scene capture; callers must preserve that distinction rather than
+// falling back to canonical display state.
 active_animation_query_snapshot :: proc "contextless" (
     state: ^core.Euclid_General_State) -> ^Animation_Query_Snapshot {
 
-    return cast(^Animation_Query_Snapshot)state^.animation_query_snapshot_target
+    return state^.animation_query_snapshot_target
 }
 
-//   Begin worker-side capture for one animation callback.
+//   Reset and attach one worker-owned command batch for the current animation callback.
+// The target remains active until end_scene_command_batch and must not outlive its slot.
 begin_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
 
     batch^ = Scene_Command_Batch{animation = state^.julia_interface^.current_animation}
-    state^.scene_command_batch_target = rawptr(batch)
+    state^.scene_command_batch_target = batch
 }
 
-//   End worker-side capture without applying canonical scene mutations.
+//   Detach the worker batch after callback capture without mutating canonical scene state.
 end_scene_command_batch :: proc(state: ^core.Euclid_General_State) {
     state^.scene_command_batch_target = nil
 }
 
+//   Reserve and initialize one command in the active bounded batch.
+// Returns captured=true when capture mode handled the operation, including overflow.
+// Overflow marks the whole batch invalid and deliberately suppresses direct mutation.
 append_scene_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind) -> (^Scene_Command, bool) {
 
     if state^.scene_command_batch_target == nil {
         return nil, false
     }
-    batch := cast(^Scene_Command_Batch)state^.scene_command_batch_target
+    batch := state^.scene_command_batch_target
     if batch^.command_count >= len(batch^.commands) {
         batch^.overflowed = true
         return nil, true
@@ -104,7 +72,7 @@ append_scene_command :: proc "contextless" (
     return command, true
 }
 
-//   Append one point-position intent to the active bounded batch.
+//   Capture a point-position mutation when an asynchronous scene batch is active.
 capture_point_position_command :: proc "contextless" (
     state: ^core.Euclid_General_State, index: int, position: core.Vector3) -> bool {
 
@@ -116,6 +84,7 @@ capture_point_position_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a point-color mutation while preserving the bridge color payload exactly.
 capture_point_color_command :: proc "contextless" (
     state: ^core.Euclid_General_State, index: int, color: Bridge_Color) -> bool {
 
@@ -127,6 +96,7 @@ capture_point_color_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a point brush-size mutation for later display-thread validation and commit.
 capture_point_brush_command :: proc "contextless" (
     state: ^core.Euclid_General_State, index: int, brush_size: f32) -> bool {
 
@@ -138,6 +108,7 @@ capture_point_brush_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a point-indexed scalar command such as a child offset mutation.
 capture_point_scalar_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
     index: int, scalar: f32) -> bool {
@@ -150,6 +121,7 @@ capture_point_scalar_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a point-indexed command that carries no payload beyond its target index.
 capture_point_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind, index: int) -> bool {
 
@@ -160,6 +132,8 @@ capture_point_command :: proc "contextless" (
     return captured
 }
 
+//   Copy a bounded point-index list into one hide command.
+// Invalid counts mark the complete batch overflowed so commit remains transactional.
 capture_hide_point_batch_command :: proc "contextless" (
     state: ^core.Euclid_General_State, indices: [^]i32, count: i32) -> bool {
 
@@ -171,7 +145,7 @@ capture_hide_point_batch_command :: proc "contextless" (
         return true
     }
     if count < 0 || int(count) > len(command^.point_indices) {
-        batch := cast(^Scene_Command_Batch)state^.scene_command_batch_target
+        batch := state^.scene_command_batch_target
         batch^.overflowed = true
         return true
     }
@@ -182,6 +156,7 @@ capture_hide_point_batch_command :: proc "contextless" (
     return true
 }
 
+//   Capture a position payload for a tool movement or lock command.
 capture_position_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind, position: core.Vector3) -> bool {
 
@@ -192,6 +167,7 @@ capture_position_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a position and boolean option used by compass lock commands.
 capture_position_flag_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
     position: core.Vector3, flag: bool) -> bool {
@@ -204,6 +180,7 @@ capture_position_flag_command :: proc "contextless" (
     return captured
 }
 
+//   Capture tool activation state and its associated display color.
 capture_active_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
     active: int, color: Bridge_Color) -> bool {
@@ -216,6 +193,7 @@ capture_active_command :: proc "contextless" (
     return captured
 }
 
+//   Capture one indexed animation metadata write for ordered commit with scene changes.
 capture_animation_meta_command :: proc "contextless" (
     state: ^core.Euclid_General_State, position: int, metadata: f32) -> bool {
 
@@ -227,6 +205,7 @@ capture_animation_meta_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a scalar-only scene command such as simulated drawing-sound intensity.
 capture_scalar_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind, scalar: f32) -> bool {
 
@@ -237,6 +216,7 @@ capture_scalar_command :: proc "contextless" (
     return captured
 }
 
+//   Capture a boolean-only scene command such as drawing-sound enablement.
 capture_flag_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind, flag: bool) -> bool {
 
@@ -247,6 +227,7 @@ capture_flag_command :: proc "contextless" (
     return captured
 }
 
+//   Capture one particle emission with the position and color observed by Julia.
 capture_particle_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
     position: core.Vector3, color: Bridge_Color) -> bool {
@@ -259,6 +240,7 @@ capture_particle_command :: proc "contextless" (
     return captured
 }
 
+//   Check a command point index against the initialized canonical point span.
 valid_scene_point_index :: #force_inline proc(
     state: ^core.Euclid_General_State, index: int) -> bool {
 
@@ -266,6 +248,8 @@ valid_scene_point_index :: #force_inline proc(
 }
 
 //   Validate a complete batch against current canonical state without mutation.
+// Validation also rejects stale animation identity, truncated point lists, invalid tool
+// dependencies, and any prior capture overflow. Commit must remain all-or-nothing.
 validate_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
@@ -340,7 +324,9 @@ validate_scene_command_batch :: proc(
     return true
 }
 
-//   Apply a previously validated batch in command order.
+//   Validate and apply one completed batch in original callback order.
+// This procedure runs on the display thread at the fixed-step boundary; commands may
+// invoke canonical helpers that emit particles or update audio and tool state.
 commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 

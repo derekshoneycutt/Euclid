@@ -8,6 +8,18 @@ import ui_dynview "./dynview"
 
 import rl "vendor:raylib"
 
+//   Compute the bordered text viewport used by normal and Scratchpad views.
+view_text_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
+    panel_geometry := container_geometry(panel, 1)
+    text_panel := rl.Rectangle{
+        panel_geometry.inner_rect.x + 5,
+        panel_geometry.inner_rect.y + 5,
+        panel_geometry.inner_rect.width - 10,
+        panel_geometry.inner_rect.height - 10,
+    }
+    return container_geometry(text_panel, 1).drawn_rect
+}
+
 //   Render wrapped animation view text with scroll handling.
 draw_view_text_panel :: proc(
     state: ^core.Euclid_General_State,
@@ -18,14 +30,8 @@ draw_view_text_panel :: proc(
     }
 
     ui_runtime := &state.ui_runtime
-    panel_container := draw_container(panel, .Dark_Red)
-
-    text_panel := rl.Rectangle{
-        panel_container.inner_rect.x + 5,
-        panel_container.inner_rect.y + 5,
-        panel_container.inner_rect.width - 10,
-        panel_container.inner_rect.height - 10,
-    }
+    _ = draw_container(panel, .Dark_Red)
+    text_panel := view_text_content_panel(panel)
     text_panel = draw_container(text_panel, .Grey).drawn_rect
 
     if is_scratchpad_selected(state) {
@@ -34,10 +40,6 @@ draw_view_text_panel :: proc(
     }
 
     view_text := julia.current_view_snapshot_text(state)
-    _ = dynview.compiled_scratchpad_text_or_fallback(&state.dynview, text_panel,
-        TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT,
-        view_text)
-
     content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview, text_panel,
         TEXT_PADDING, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT, view_text)
     scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)

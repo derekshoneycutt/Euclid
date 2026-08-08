@@ -73,7 +73,7 @@ schedule_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) {
 
 //   Run selection, reset, or reload only after asynchronous work is quiescent.
 synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bool {
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     if service == nil || service^.animation_tick_pending {
         return false
     }
@@ -108,7 +108,7 @@ generate_animation_tick_task :: proc(data: rawptr) -> bool {
     state := slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
-    state^.animation_query_snapshot_target = rawptr(&slot^.query_snapshot)
+    state^.animation_query_snapshot_target = &slot^.query_snapshot
     begin_scene_command_batch(state, &slot^.scene_batch)
     call_global_euclid_loop(state, slot^.dt)
     callback_succeeded := call_current_animation_loop(state, slot^.dt)
@@ -142,7 +142,7 @@ animation_lifecycle_update_needed :: proc(state: ^core.Euclid_General_State) -> 
     if !ok {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     return ji^.asset_archive_mod_time_unix_nano == 0 ||
         archive_mtime != ji^.asset_archive_mod_time_unix_nano &&
         (service == nil || archive_mtime != service^.reload_failed_mtime_unix_nano)
@@ -432,7 +432,7 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
         return true
     }
 
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     if service != nil && archive_mtime == service^.reload_failed_mtime_unix_nano {
         return true
     }
@@ -471,7 +471,7 @@ stage_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State, archive_mtime: i64,
     stable_id: uuid.Identifier, has_stable_id: bool) -> bool {
 
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     previous_interface := state^.julia_interface
     if service != nil {
         service^.reload_state = .Registering

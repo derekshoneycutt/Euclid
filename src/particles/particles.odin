@@ -199,7 +199,7 @@ push_dust_away_from_xy_index :: proc(
         nx = dx * inv_dist
         ny = dy * inv_dist
     } else {
-        theta := random_f32_range(f32(0.0), f32(2.0 * math.PI))
+        theta := random_f32_range(ps, f32(0.0), f32(2.0 * math.PI))
         nx = f32(math.cos(theta))
         ny = f32(math.sin(theta))
     }
@@ -274,15 +274,15 @@ push_dust_away_from_xy_large :: proc (ps: ^Particle_System, x, y: f32) {
 //   - none.
 kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
     // Dust only fades when it is kicked by a new clear burst.
-    ps.low_particles[i].age += random_f32_range(DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
+    ps.low_particles[i].age += random_f32_range(ps, DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
 
-    ps.low_particles.vel_x[i] += random_f32_range(
+    ps.low_particles.vel_x[i] += random_f32_range(ps,
         -DUST_EXISTING_XY_KICK,
         DUST_EXISTING_XY_KICK)
-    ps.low_particles.vel_y[i] += random_f32_range(
+    ps.low_particles.vel_y[i] += random_f32_range(ps,
         -DUST_EXISTING_XY_KICK,
         DUST_EXISTING_XY_KICK)
-    ps.low_particles.vel_z[i] += random_f32_range(
+    ps.low_particles.vel_z[i] += random_f32_range(ps,
         DUST_EXISTING_UP_KICK_MIN,
         DUST_EXISTING_UP_KICK_MAX)
 
@@ -637,10 +637,29 @@ integrate_particle_positions_soa_batch :: proc(
     }
 }
 
-//   Generate a random float in the inclusive [min_v, max_v] range.
-random_f32_range :: proc(min_v, max_v: f32) -> f32 {
-    t := f32(rl.GetRandomValue(0, 10000)) / 10000.0
+//   Advance deterministic particle-system random state.
+particle_random_u32 :: proc(ps: ^Particle_System) -> u32 {
+    state := ps^.rng_state
+    if state == 0 {
+        state = 0x9e3779b97f4a7c15
+    }
+    state = state ~ (state >> 12)
+    state = state ~ (state << 25)
+    state = state ~ (state >> 27)
+    ps^.rng_state = state
+    return u32((state * 0x2545f4914f6cdd1d) >> 32)
+}
+
+//   Generate a deterministic float in the inclusive [min_v, max_v] range.
+random_f32_range :: proc(ps: ^Particle_System, min_v, max_v: f32) -> f32 {
+    t := f32(particle_random_u32(ps) & 0x00ffffff) / 16777215.0
     return math.lerp(min_v, max_v, t)
+}
+
+//   Generate a deterministic integer in the inclusive [min_v, max_v] range.
+random_i32_range :: proc(ps: ^Particle_System, min_v, max_v: i32) -> i32 {
+    span := u32(max_v - min_v) + 1
+    return min_v + i32(particle_random_u32(ps) % span)
 }
 
 //   Reset particle-system runtime counters and mark all particle slots as dead.
@@ -733,15 +752,15 @@ spawn_ember_particle :: proc(
     }
 
     // Tiny spawn jitter so Ember particles are less uniform.
-    jitter_x := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
-    jitter_y := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
+    jitter_x := (f32(random_i32_range(ps, -1000, 1000)) / 1000.0) * JITTER_PIXELS
+    jitter_y := (f32(random_i32_range(ps, -1000, 1000)) / 1000.0) * JITTER_PIXELS
     ps.particles.pos_x[index] = tip_x + jitter_x
     ps.particles.pos_y[index] = tip_y + jitter_y
     ps.particles.pos_z[index] = tip_z
 
     ps.particles.age[index] = 0
 
-    life_scale := f32(rl.GetRandomValue(LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
+    life_scale := f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
     ps.particles.life[index] = PARTICLE_LIFE * life_scale
 
     ps.particles.size[index] = PARTICLE_SIZE_START
@@ -768,16 +787,19 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
         return
     }
 
-    angle := random_f32_range(0.0, 6.2831855)
-    radius := random_f32_range(0.0, FLICKER_SPAWN_RADIUS)
+    angle := random_f32_range(ps, 0.0, 6.2831855)
+    radius := random_f32_range(ps, 0.0, FLICKER_SPAWN_RADIUS)
 
     ps.high_particles.pos_x[index] = origin.x + f32(math.cos(angle)) * radius
     ps.high_particles.pos_y[index] = origin.y + f32(math.sin(angle)) * radius
     ps.high_particles.pos_z[index] = origin.z
 
-    ps.high_particles.vel_x[index] = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
-    ps.high_particles.vel_y[index] = random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
-    ps.high_particles.vel_z[index] = random_f32_range(FLICKER_UP_SPEED_MIN, FLICKER_UP_SPEED_MAX)
+    ps.high_particles.vel_x[index] = random_f32_range(
+        ps, -FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
+    ps.high_particles.vel_y[index] = random_f32_range(
+        ps, -FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP)
+    ps.high_particles.vel_z[index] = random_f32_range(
+        ps, FLICKER_UP_SPEED_MIN, FLICKER_UP_SPEED_MAX)
 
     ps.high_particles.color[index] = color
     ps.high_particles.size[index] = 1.0
@@ -785,7 +807,7 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
     ps.high_particles.ember_size_end[index] = 0.0
     ps.high_particles.ember_white_at_birth[index] = 0.0
     ps.high_particles.age[index] = 0
-    ps.high_particles.life[index] = random_f32_range(FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
+    ps.high_particles.life[index] = random_f32_range(ps, FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
     ps.high_particles.lit_frames[index] = 0
     ps.high_particles.alive[index] = true
 
@@ -800,15 +822,15 @@ spawn_burnout_ember_particle :: proc(
         return
     }
 
-    jitter_x := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
-    jitter_y := (f32(rl.GetRandomValue(-1000, 1000)) / 1000.0) * JITTER_PIXELS
+    jitter_x := (f32(random_i32_range(ps, -1000, 1000)) / 1000.0) * JITTER_PIXELS
+    jitter_y := (f32(random_i32_range(ps, -1000, 1000)) / 1000.0) * JITTER_PIXELS
 
     ps.particles.pos_x[index] = tip_x + jitter_x
     ps.particles.pos_y[index] = tip_y + jitter_y
     ps.particles.pos_z[index] = tip_z
 
     ps.particles.age[index] = 0
-    life_scale := f32(rl.GetRandomValue(LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
+    life_scale := f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
     ps.particles.life[index] = BURNOUT_LIFE * life_scale
 
     ps.particles.size[index] = BURNOUT_SIZE_START
@@ -857,17 +879,17 @@ clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
 spawn_dust_particle_index :: proc(ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
-    ps.low_particles[i].life = random_f32_range(DUST_LIFE_MIN, DUST_LIFE_MAX)
+    ps.low_particles[i].life = random_f32_range(ps, DUST_LIFE_MIN, DUST_LIFE_MAX)
 
-    ps.low_particles.pos_x[i] = origin.x + random_f32_range(-0.0022, 0.0022)
-    ps.low_particles.pos_y[i] = origin.y + random_f32_range(-0.0022, 0.0022)
+    ps.low_particles.pos_x[i] = origin.x + random_f32_range(ps, -0.0022, 0.0022)
+    ps.low_particles.pos_y[i] = origin.y + random_f32_range(ps, -0.0022, 0.0022)
     ps.low_particles.pos_z[i] = origin.z
 
-    ps.low_particles.vel_x[i] = random_f32_range(DUST_VX_MIN, DUST_VX_MAX)
-    ps.low_particles.vel_y[i] = random_f32_range(DUST_VY_MIN, DUST_VY_MAX)
-    ps.low_particles.vel_z[i] = random_f32_range(DUST_VZ_MIN, DUST_VZ_MAX)
+    ps.low_particles.vel_x[i] = random_f32_range(ps, DUST_VX_MIN, DUST_VX_MAX)
+    ps.low_particles.vel_y[i] = random_f32_range(ps, DUST_VY_MIN, DUST_VY_MAX)
+    ps.low_particles.vel_z[i] = random_f32_range(ps, DUST_VZ_MIN, DUST_VZ_MAX)
 
-    ps.low_particles[i].size = random_f32_range(DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
+    ps.low_particles[i].size = random_f32_range(ps, DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
     ps.low_particles[i].ember_size_start = 0.0
     ps.low_particles[i].ember_size_end = 0.0
     ps.low_particles[i].ember_white_at_birth = 0.0
@@ -916,9 +938,9 @@ triangle_area_3d :: #force_inline proc(a, b, c: Vector3) -> f32 {
 }
 
 //   Sample one random point in a triangle using barycentric folding.
-sample_triangle_point :: proc(a, b, c: Vector3) -> Vector3 {
-    u := random_f32_range(0.0, 1.0)
-    v := random_f32_range(0.0, 1.0)
+sample_triangle_point :: proc(ps: ^Particle_System, a, b, c: Vector3) -> Vector3 {
+    u := random_f32_range(ps, 0.0, 1.0)
+    v := random_f32_range(ps, 0.0, 1.0)
 
     if u + v > 1.0 {
         u = 1.0 - u
@@ -964,7 +986,7 @@ emit_polygon_fill_dust :: proc(
         CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES)
 
     for _ in 0..<fill_count {
-        pick := random_f32_range(0.0, total_area)
+        pick := random_f32_range(ps, 0.0, total_area)
         accum: f32
         tri_index := tri_count - 1
 
@@ -977,7 +999,7 @@ emit_polygon_fill_dust :: proc(
         }
 
         sample := sample_triangle_point(
-            vertices[0],
+            ps, vertices[0],
             vertices[tri_index + 1],
             vertices[tri_index + 2])
         spawn_dust_particle(ps, sample, col)
@@ -1258,15 +1280,17 @@ update_high_flicker_particle_index :: proc(ps: ^Particle_System, i: int, dt: f32
 
 //   Update one high-layer flicker particle position, drift, and lit-frame state.
 update_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int) {
-    ps.high_particles.vel_x[i] += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
-    ps.high_particles.vel_y[i] += random_f32_range(-FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+    ps.high_particles.vel_x[i] += random_f32_range(
+        ps, -FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
+    ps.high_particles.vel_y[i] += random_f32_range(
+        ps, -FLICKER_XY_DRIFT_STEP, FLICKER_XY_DRIFT_STEP) * 0.25
 
     if ps.high_particles.lit_frames[i] > 0 {
         ps.high_particles.lit_frames[i] -= 1
     } else {
-        if random_f32_range(0.0, 1.0) < FLICKER_CHANCE_PER_STEP {
+        if random_f32_range(ps, 0.0, 1.0) < FLICKER_CHANCE_PER_STEP {
             ps.high_particles.lit_frames[i] =
-                i16(rl.GetRandomValue(FLICKER_LIT_FRAMES_MIN, FLICKER_LIT_FRAMES_MAX))
+            i16(random_i32_range(ps, FLICKER_LIT_FRAMES_MIN, FLICKER_LIT_FRAMES_MAX))
         }
     }
 }

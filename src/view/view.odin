@@ -10,7 +10,6 @@ import "../core"
 import "../audio"
 import "../shapes"
 import julia "../bridge"
-import "../particles"
 import "../files"
 
 import "base:runtime"
@@ -204,6 +203,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
     state, julia_service := initialize_application_with_loading(settings)
     defer shutdown_julia_runtime(julia_service)
     defer free_animations_state(state)
+    defer destroy_simulation_executor(state^.simulation_executor)
     defer shutdown_window_resources(state)
 
     free_all(context.temp_allocator)
@@ -212,6 +212,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) {
         ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
         julia.publish_available_view_snapshot(state)
         alpha := accumulate_and_update_systems(state)
+        run_parallel_frame_preparation(state, alpha)
         julia.try_request_view_snapshot(state)
         audio.update_chalk_runtime(&state^.chalk_audio)
 
@@ -315,7 +316,7 @@ initiate_animations_state :: proc(
 
     state := new(Euclid_General_State)
     state^.saved_context = context
-    state^.julia_runtime_service = rawptr(julia_service)
+    state^.julia_runtime_service = julia_service
     state^.iso_scale = iso_scale
     state^.draw_surface = drawing_surface
     state^.point_system = point_system
@@ -335,6 +336,7 @@ initiate_animations_state :: proc(
     state^.ui_runtime.gif_capture_phase = .Idle
     view_core.clear_gif_status_note(&state^.ui_runtime)
     view_core.screenshake_clear(state^.iso_scale)
+    state^.simulation_executor = create_simulation_executor(state)
 
 
     return state
@@ -511,7 +513,6 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 
     if state^.ui_runtime.simulation_paused {
         state^.accumulator = 0
-        shapes.build_draw_cache(state^.point_system, 0)
         return 0
     }
 
@@ -523,8 +524,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
         julia.publish_available_animation_tick(state)
         julia.schedule_animation_tick(state, FIXED_DT)
-        particles.update_particles(state^.particle_system, FIXED_DT)
-        shapes.apply_all_constraints_to_error(state^.point_system, ALLOWED_CONSTRAINT_ERROR)
+        run_parallel_simulation_step(state^.simulation_executor, FIXED_DT)
         view_core.gif_capture_update_fixed_step(state)
 
         state^.accumulator -= FIXED_DT
@@ -536,8 +536,6 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     }
 
     alpha := state^.accumulator / FIXED_DT
-    shapes.build_draw_cache(state^.point_system, alpha)
-
     return alpha
 }
 

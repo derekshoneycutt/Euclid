@@ -117,14 +117,28 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     return clamped
 }
 
-//   Render all UI panels in baseline layout.
-draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
+//   Prepare frame geometry and report whether Dynview cache construction is required.
+prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
     regions := compute_ui_regions(state^.ui_runtime.current_layout_mode)
     if !validate_ui_regions(regions) {
         fmt.println("[ui] Warning: invalid regions; using baseline fallback")
         regions = compute_ui_regions(.Baseline)
     }
     state^.ui_runtime.ui_regions = regions
+
+    text_panel := view_text_content_panel(regions.text_rect)
+    if is_scratchpad_selected(state) {
+        text_panel = scratchpad_output_panel(text_panel)
+    }
+    dynview.track_panel(&state^.dynview, text_panel)
+    dynview.track_font(&state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE)
+    dynview.track_style(&state^.dynview, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
+    return dynview.compile_is_needed(&state^.dynview)
+}
+
+//   Render all UI panels in baseline layout.
+draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
+    regions := state^.ui_runtime.ui_regions
     mouse_input := view_core.capture_mouse_input_state()
 
     bottom_bar := rl.Rectangle{

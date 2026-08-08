@@ -7,51 +7,38 @@ import "core:sync/chan"
 import "core:thread"
 import "core:time"
 
-JULIA_REQUEST_CAPACITY :: 16
-JULIA_EVENT_CAPACITY :: 16
-SCRATCHPAD_ASYNC_SLOT_COUNT :: 16
-SCRATCHPAD_ASYNC_TEXT_CAPACITY :: 4096
-VIEW_SNAPSHOT_SLOT_COUNT :: 2
-VIEW_SNAPSHOT_TEXT_CAPACITY :: core.DYNVIEW__MAX_TEXT_BYTES
-ANIMATION_TICK_SLOT_COUNT :: 2
+// Julia_Runtime_Service is a single-owner command processor around the embedded Julia
+// runtime. The display thread submits bounded requests and consumes typed events; only
+// the persistent worker may call Julia. Snapshot and tick slots retain payloads outside
+// the channels so event draining never determines whether completed data survives.
+
+JULIA_REQUEST_CAPACITY :: core.JULIA_REQUEST_CAPACITY
+JULIA_EVENT_CAPACITY :: core.JULIA_EVENT_CAPACITY
+SCRATCHPAD_ASYNC_SLOT_COUNT :: core.SCRATCHPAD_ASYNC_SLOT_COUNT
+SCRATCHPAD_ASYNC_TEXT_CAPACITY :: core.SCRATCHPAD_ASYNC_TEXT_CAPACITY
+VIEW_SNAPSHOT_SLOT_COUNT :: core.VIEW_SNAPSHOT_SLOT_COUNT
+VIEW_SNAPSHOT_TEXT_CAPACITY :: core.VIEW_SNAPSHOT_TEXT_CAPACITY
+ANIMATION_TICK_SLOT_COUNT :: core.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
 
-Julia_Request_Kind :: enum {
-    Initialize,
-    Invoke,
-    Scratchpad,
-    View_Snapshot,
-    Animation_Tick,
-    Shutdown,
-}
+// Core owns service storage because Euclid_General_State holds a concrete service pointer.
+// This package owns queue policy, worker behavior, publication, and lifecycle transitions.
+Julia_Request_Kind :: core.Julia_Request_Kind
+Julia_Event_Kind :: core.Julia_Event_Kind
+Animation_Tick_Slot_State :: core.Animation_Tick_Slot_State
+Animation_Tick_Slot :: core.Animation_Tick_Slot
 
-Julia_Event_Kind :: enum {
-    Initialized,
-    Invoke_Complete,
-    Scratchpad_Complete,
-    View_Snapshot_Complete,
-    Animation_Tick_Complete,
-    Shutdown_Complete,
-}
-
-Animation_Tick_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-}
-
-Animation_Tick_Slot :: struct {
-    state: Animation_Tick_Slot_State,
-    request_id: u64,
-    generation: u64,
-    sequence: u64,
-    host_state: ^core.Euclid_General_State,
-    animation: ^core.Euclid_Julia_Animation_Interface,
-    dt: f32,
-    submitted_at: time.Tick,
-    query_snapshot: Animation_Query_Snapshot,
-    scene_batch: Scene_Command_Batch,
-}
+View_Snapshot_Slot_State :: core.View_Snapshot_Slot_State
+View_Snapshot :: core.View_Snapshot
+Scratchpad_Async_Kind :: core.Scratchpad_Async_Kind
+Scratchpad_Async_Slot_State :: core.Scratchpad_Async_Slot_State
+Scratchpad_Async_Slot :: core.Scratchpad_Async_Slot
+Julia_Lifecycle_State :: core.Julia_Lifecycle_State
+Julia_Reload_State :: core.Julia_Reload_State
+Julia_Task_Proc :: core.Julia_Task_Proc
+Julia_Request :: core.Julia_Request
+Julia_Event :: core.Julia_Event
+Julia_Runtime_Service :: core.Julia_Runtime_Service
 
 Animation_Tick_Diagnostics :: struct {
     queue_depth: u64,
@@ -66,137 +53,8 @@ Animation_Tick_Diagnostics :: struct {
     max_latency_ms: f64,
 }
 
-View_Snapshot_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-    Published,
-}
-
-View_Snapshot :: struct {
-    state: View_Snapshot_Slot_State,
-    request_id: u64,
-    generation: u64,
-    host_state: ^core.Euclid_General_State,
-    animation: ^core.Euclid_Julia_Animation_Interface,
-    fallback_text_len: int,
-    fallback_text: [VIEW_SNAPSHOT_TEXT_CAPACITY]u8,
-    command_buffer: core.Dynview_Command_Buffer,
-    math_program_count: int,
-    math_command_count: int,
-    math_node_count: int,
-    math_programs: [core.DYNVIEW__MAX_MATH_PROGRAMS]core.Dynview_Math_Program,
-    math_commands: [core.DYNVIEW__MAX_MATH_COMMANDS]core.Dynview_Command,
-    math_nodes: [core.DYNVIEW__MAX_MATH_NODES]core.Dynview_Math_Node,
-}
-
-Scratchpad_Async_Kind :: enum {
-    Submit,
-    Complete,
-    History_Previous,
-    History_Next,
-    History_Reset,
-    Save_History,
-}
-
-Scratchpad_Async_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-}
-
-Scratchpad_Async_Slot :: struct {
-    state: Scratchpad_Async_Slot_State,
-    kind: Scratchpad_Async_Kind,
-    request_id: u64,
-    input_generation: u64,
-    host_state: ^core.Euclid_General_State,
-    caret_byte: int,
-    input_len: int,
-    input: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    result_len: int,
-    result: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    parse_result: i32,
-    succeeded: bool,
-}
-
-Julia_Lifecycle_State :: enum {
-    Not_Started,
-    Starting,
-    Ready,
-    Shutdown_Requested,
-    Failed,
-    Stopped,
-}
-
-Julia_Reload_State :: enum {
-    Idle,
-    Quiescing,
-    Including,
-    Registering,
-    Publishing,
-    Failed,
-}
-
-Julia_Task_Proc :: #type proc(data: rawptr) -> bool
-
-Julia_Request :: struct {
-    kind: Julia_Request_Kind,
-    request_id: u64,
-    task: Julia_Task_Proc,
-    data: rawptr,
-    slot_index: i32,
-}
-
-Julia_Event :: struct {
-    kind: Julia_Event_Kind,
-    request_kind: Julia_Request_Kind,
-    request_id: u64,
-    slot_index: i32,
-    succeeded: bool,
-}
-
-Julia_Runtime_Service :: struct {
-    worker: ^thread.Thread,
-    requests: chan.Chan(Julia_Request),
-    events: chan.Chan(Julia_Event),
-    next_request_id: u64,
-    owner_thread_id: int,
-    lifecycle: Julia_Lifecycle_State,
-    active_request_id: u64,
-    active_request_kind: Julia_Request_Kind,
-    failed_request_count: u64,
-    last_failed_request_id: u64,
-    last_failed_request_kind: Julia_Request_Kind,
-    request_saturation_count: u64,
-    reload_state: Julia_Reload_State,
-    runtime_generation: u64,
-    reload_failed_mtime_unix_nano: i64,
-    scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
-    completed_scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]i32,
-    completed_scratchpad_head: int,
-    completed_scratchpad_count: int,
-    dynview_staging: ^core.Dynview_System,
-    view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
-    view_snapshot_generation: u64,
-    view_snapshot_pending: bool,
-    published_view_snapshot_index: int,
-    animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
-    animation_generation: u64,
-    animation_tick_sequence: u64,
-    animation_last_committed_sequence: u64,
-    animation_tick_pending: bool,
-    animation_accumulated_dt: f32,
-    animation_ticks_submitted: u64,
-    animation_ticks_committed: u64,
-    animation_ticks_coalesced: u64,
-    animation_ticks_stale: u64,
-    animation_ticks_dropped: u64,
-    animation_queue_high_water: u64,
-    animation_last_latency_ms: f64,
-    animation_max_latency_ms: f64,
-}
-
+// Display-safe service diagnostics contain copied scalar state only. They never expose
+// worker-owned Julia handles or require a Julia call to inspect service health.
 Julia_Runtime_Diagnostics :: struct {
     lifecycle: Julia_Lifecycle_State,
     active_request_id: u64,
@@ -210,13 +68,15 @@ Julia_Runtime_Diagnostics :: struct {
 }
 
 //   Return display-safe asynchronous animation pacing diagnostics.
+// Queue depth is represented by the single replaceable in-flight tick; accumulated time
+// and fixed slot contents remain implementation details of the service.
 animation_tick_diagnostics :: proc(
     state: ^core.Euclid_General_State) -> Animation_Tick_Diagnostics {
 
     if state == nil || state^.julia_runtime_service == nil {
         return {}
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     return Animation_Tick_Diagnostics{
         queue_depth = u64(service^.animation_tick_pending ? 1 : 0),
         queue_high_water = service^.animation_queue_high_water,
@@ -232,6 +92,8 @@ animation_tick_diagnostics :: proc(
 }
 
 //   Preserve bounded elapsed time while one replaceable tick is in flight.
+// The cap prevents a delayed worker from replaying an unbounded simulation interval when
+// it next accepts a tick.
 coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
     service^.animation_accumulated_dt = min(
         service^.animation_accumulated_dt + dt, MAX_ACCUMULATED_ANIMATION_DT)
@@ -239,11 +101,13 @@ coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
 }
 
 //   Submit one bounded animation tick without blocking the display thread.
+// The display thread snapshots query state before submission. On saturation, the slot is
+// recycled and elapsed time is retained for the next request instead of partially lost.
 try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -> bool {
     if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     if service^.animation_tick_pending {
         coalesce_animation_tick(service, dt)
         return false
@@ -286,11 +150,13 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
 }
 
 //   Commit one completed generation-matched animation batch at a frame boundary.
+// Event draining updates service metadata, while completed slot storage remains authoritative.
+// Every completed slot is recycled after selecting and attempting the newest valid batch.
 publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     for {
         _, ok := try_receive_julia_event(service)
         if !ok {
@@ -318,6 +184,8 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
 }
 
 //   Match one result against current lifecycle generation and selection identity.
+// This prevents callbacks started before reset, reload, or selection changes from mutating
+// the newly active canonical scene.
 animation_tick_matches_current :: proc(
     state: ^core.Euclid_General_State,
     service: ^Julia_Runtime_Service,
@@ -331,6 +199,7 @@ animation_tick_matches_current :: proc(
 }
 
 //   Reserve free fixed storage for one worker-produced animation result.
+// Slots are service-owned and recycled in place; no animation-tick allocation is permitted.
 reserve_animation_tick_slot :: proc(service: ^Julia_Runtime_Service) -> int {
     for &slot, slot_index in service^.animation_tick_slots {
         if slot.state == .Free {
@@ -341,6 +210,8 @@ reserve_animation_tick_slot :: proc(service: ^Julia_Runtime_Service) -> int {
 }
 
 //   Find the newest worker completion without relying on event payload retention.
+// Older completed sequences may be superseded because only the latest canonical intent is
+// useful at the next fixed-step publication boundary.
 newest_completed_animation_tick_index :: proc(service: ^Julia_Runtime_Service) -> int {
     newest_index := -1
     newest_sequence: u64
@@ -354,6 +225,7 @@ newest_completed_animation_tick_index :: proc(service: ^Julia_Runtime_Service) -
 }
 
 //   Release all consumed or superseded animation completion slots.
+// Pending slots remain worker-owned and must not be recycled by the display thread.
 release_completed_animation_ticks :: proc(service: ^Julia_Runtime_Service) {
     for &slot in service^.animation_tick_slots {
         if slot.state == .Complete {
@@ -363,11 +235,13 @@ release_completed_animation_ticks :: proc(service: ^Julia_Runtime_Service) {
 }
 
 //   Submit one replaceable view generation request without blocking display.
+// A published slot remains reserved until a newer valid generation replaces it, while a
+// pending request suppresses duplicate work.
 try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_runtime_service == nil {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     if service^.view_snapshot_pending {
         return false
     }
@@ -397,11 +271,13 @@ try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
 }
 
 //   Publish the latest complete semantic snapshot into display-owned dynview.
+// Publication copies validated semantic spans, then recycles the previous published slot.
+// Invalid or stale generations clear selection-incompatible display content.
 publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_runtime_service == nil {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     for {
         _, ok := try_receive_julia_event(service)
         if !ok {
@@ -434,7 +310,8 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
     return true
 }
 
-//   Find the newest completed slot without relying on lossy event metadata.
+//   Find the newest completed slot without relying on event ordering or retention.
+// Slot generation is authoritative because completion events only trigger display metadata.
 newest_completed_view_snapshot_index :: proc(service: ^Julia_Runtime_Service) -> int {
     newest_index := -1
     newest_generation: u64
@@ -451,6 +328,7 @@ newest_completed_view_snapshot_index :: proc(service: ^Julia_Runtime_Service) ->
 }
 
 //   Release older complete generations after selecting the newest publication.
+// Pending and currently published slots retain their ownership states unchanged.
 release_superseded_completed_view_snapshots :: proc(
     service: ^Julia_Runtime_Service, newest_index: int) {
 
@@ -462,6 +340,8 @@ release_superseded_completed_view_snapshots :: proc(
 }
 
 //   Keep previous semantic commands from appearing under a new selection.
+// The old slot and display staging are released together so fallback and semantic content
+// cannot refer to different animations.
 clear_stale_published_view :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service) {
 
@@ -479,6 +359,7 @@ clear_stale_published_view :: proc(
 }
 
 //   Validate all semantic bounds and require a closed, error-free command stream.
+// Counts are checked before any slice construction or copy into display-owned storage.
 view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
     return slot^.fallback_text_len >= 0 &&
         slot^.fallback_text_len <= len(slot^.fallback_text) &&
@@ -497,11 +378,12 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
 }
 
 //   Return fallback text only when it belongs to the active animation.
+// The returned string aliases service-owned published slot storage until replacement.
 current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string {
     if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
         return ""
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     slot_index := service^.published_view_snapshot_index
     if slot_index < 0 {
         return ""
@@ -514,6 +396,8 @@ current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string 
 }
 
 //   Return a free snapshot slot that is neither pending nor displayed.
+// Published slots are intentionally unavailable even after their semantic data is copied,
+// because fallback text still aliases the slot.
 reserve_view_snapshot :: proc(service: ^Julia_Runtime_Service) -> int {
     for &slot, slot_index in service^.view_snapshots {
         if slot.state == .Free {
@@ -524,11 +408,13 @@ reserve_view_snapshot :: proc(service: ^Julia_Runtime_Service) -> int {
 }
 
 //   Generate fallback and semantic dynview data into worker staging.
+// Runs only on the Julia owner thread. The completed slot contains self-owned copies of all
+// populated spans and can be published without consulting Julia.
 generate_view_snapshot_task :: proc(data: rawptr) -> bool {
     slot := cast(^View_Snapshot)data
     state := slot^.host_state
     assert_julia_runtime_owner(state)
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     staging := service^.dynview_staging
     reset_view_snapshot_staging(staging)
 
@@ -555,6 +441,7 @@ generate_view_snapshot_task :: proc(data: rawptr) -> bool {
 }
 
 //   Reset worker-only semantic emission storage for one generation.
+// Capacity remains allocated; only populated lengths, errors, and cache validity are reset.
 reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
     staging^.command_buffer.command_count = 0
     staging^.command_buffer.text_bytes_len = 0
@@ -570,6 +457,7 @@ reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
 }
 
 //   Install populated semantic spans and invalidate display compilation caches.
+// The display thread recompiles and lays out the imported revision before drawing it.
 copy_view_snapshot_to_runtime :: proc(
     slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
 
@@ -590,6 +478,7 @@ copy_view_snapshot_to_runtime :: proc(
 }
 
 //   Return display-owned lifecycle, failure, and backpressure diagnostics.
+// This is a scalar snapshot and does not synchronize with or invoke the Julia owner thread.
 julia_runtime_diagnostics :: proc(service: ^Julia_Runtime_Service) -> Julia_Runtime_Diagnostics {
     if service == nil {
         return {}
@@ -607,7 +496,9 @@ julia_runtime_diagnostics :: proc(service: ^Julia_Runtime_Service) -> Julia_Runt
     }
 }
 
-//   Create the bounded channels and persistent worker that own Julia work.
+//   Create the bounded channels, staging storage, and persistent Julia owner worker.
+// On partial failure, resources are released in reverse construction order. The caller owns
+// the returned service and must stop Julia before destroy_julia_runtime_service.
 create_julia_runtime_service :: proc() -> (^Julia_Runtime_Service, runtime.Allocator_Error) {
     service := new(Julia_Runtime_Service)
     requests, request_err := chan.create(
@@ -645,6 +536,7 @@ create_julia_runtime_service :: proc() -> (^Julia_Runtime_Service, runtime.Alloc
 }
 
 //   Receive one available worker event without blocking the display thread.
+// Successful receives also apply lifecycle and slot-completion metadata exactly once.
 try_receive_julia_event :: proc(service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
     if service == nil {
         return {}, false
@@ -657,6 +549,8 @@ try_receive_julia_event :: proc(service: ^Julia_Runtime_Service) -> (Julia_Event
 }
 
 //   Submit one lifecycle or compatibility request without blocking the caller.
+// Request IDs advance only after successful queue insertion. Saturation is observable through
+// diagnostics and leaves caller-owned task payloads untouched for retry or cleanup.
 try_submit_julia_request :: proc(
     service: ^Julia_Runtime_Service, kind: Julia_Request_Kind,
     task: Julia_Task_Proc = nil, data: rawptr = nil,
@@ -692,7 +586,9 @@ try_submit_julia_request :: proc(
     return request_id, true
 }
 
-//   Apply one worker event to display-owned lifecycle metadata.
+//   Apply one worker event to display-owned lifecycle and completion metadata.
+// Scratchpad completions enter a bounded FIFO; view and animation events release their
+// single-pending submission guards while payload slots retain the completed data.
 accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
     if !event.succeeded {
         service^.failed_request_count += 1
@@ -726,27 +622,31 @@ accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) 
 }
 
 //   Publish readiness after startup registration and priming have completed.
+// Initialization alone is insufficient: the display may submit normal work only after this.
 mark_julia_runtime_ready :: proc(service: ^Julia_Runtime_Service) {
     assert(service != nil && service^.lifecycle == .Starting)
     service^.lifecycle = .Ready
 }
 
 //   Assert that Julia work is executing on the persistent owner thread.
+// Call this at externally reachable task boundaries before invoking Julia or Julia-backed helpers.
 assert_julia_runtime_owner :: proc(state: ^core.Euclid_General_State) {
     assert(state != nil && state^.julia_runtime_service != nil)
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     assert(os.get_current_thread_id() == service^.owner_thread_id,
         "Julia C API operation executed outside the Julia owner thread")
 }
 
 //   Run one temporary serialized bridge operation on the Julia owner thread.
+// Calls made by the owner execute directly; all others block while consuming events until the
+// correlated completion arrives. Unrelated events are still accepted during that wait.
 invoke_julia_compatibility_task :: proc(
     state: ^core.Euclid_General_State, task: Julia_Task_Proc, data: rawptr) -> bool {
 
     if state == nil || state^.julia_runtime_service == nil || task == nil {
         return false
     }
-    service := cast(^Julia_Runtime_Service)state^.julia_runtime_service
+    service := state^.julia_runtime_service
     if os.get_current_thread_id() == service^.owner_thread_id {
         return task(data)
     }
@@ -767,7 +667,9 @@ invoke_julia_compatibility_task :: proc(
     }
 }
 
-//   Join the stopped worker and release service-owned channels and storage.
+//   Join the stopped worker and release service-owned channels and staging storage.
+// The shutdown request must already have completed; destroying a live worker would violate
+// Julia ownership and may leave queued payloads unprocessed.
 destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     if service == nil {
         return
@@ -782,6 +684,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
 }
 
 //   Resolve Julia callbacks and register content into unpublished host state.
+// This owner-thread task publishes no Ready lifecycle state; startup priming controls that step.
 initialize_julia_state_task :: proc(data: rawptr) -> bool {
     state := cast(^core.Euclid_General_State)data
     assert_julia_runtime_owner(state)
@@ -793,7 +696,9 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
     return init_euclid_scripts(state)
 }
 
-//   Own Julia lifecycle and compatibility task execution until shutdown.
+//   Own Julia lifecycle and serialized task execution until shutdown.
+// Every request produces one correlated event. After each non-shutdown request, the worker
+// restores its saved Odin context and clears temporary allocations before receiving more work.
 julia_runtime_worker :: proc(data: rawptr) {
     service := cast(^Julia_Runtime_Service)data
     worker_context := context
