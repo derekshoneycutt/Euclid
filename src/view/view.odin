@@ -77,21 +77,18 @@ STARTUP_SPINNER_OFFSETS :: [8]rl.Vector2{
 }
 STARTUP_TRACK_COLOR :: rl.Color{86, 55, 66, 255}
 STARTUP_PROGRESS_COLOR :: rl.Color{175, 150, 150, 255}
+STARTUP_WARNING_TEXT :: cstring("Julia is not responding")
 JULIA_UNRESPONSIVE_SECONDS :: 10.0
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
 
-//   Draw one dependency-free startup frame using raylib's built-in font.
-draw_startup_frame :: proc(label: string, progress: f32) {
-    font := rl.GetFontDefault()
-    title := strings.clone_to_cstring("Euclid's Elements", context.temp_allocator)
-    phase := strings.clone_to_cstring(label, context.temp_allocator)
+//   Draw one dependency-free startup frame with spinner and progress bar.
+draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
     center := rl.Vector2{WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 24}
     active_dot := int(rl.GetTime() * 8) % len(STARTUP_SPINNER_OFFSETS)
 
     rl.BeginDrawing()
     rl.ClearBackground(BACKGROUND_COLOR)
-    rl.DrawTextEx(font, title, rl.Vector2{WINDOW_WIDTH / 2 - 117, 245}, 28, 1, UI_TEXT_COLOR)
     for offset, index in STARTUP_SPINNER_OFFSETS {
         color := STARTUP_TRACK_COLOR
         if index == active_dot {
@@ -99,9 +96,15 @@ draw_startup_frame :: proc(label: string, progress: f32) {
         }
         rl.DrawCircleV(center + offset, 4, color)
     }
-    rl.DrawTextEx(font, phase, rl.Vector2{WINDOW_WIDTH / 2 - 100, 345}, 18, 0, UI_TEXT_COLOR)
     rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280, 4}, STARTUP_TRACK_COLOR)
     rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4}, STARTUP_PROGRESS_COLOR)
+    if show_julia_warning {
+        font := rl.GetFontDefault()
+        font_size: f32 = 18
+        text_width := rl.MeasureTextEx(font, STARTUP_WARNING_TEXT, font_size, 0).x
+        text_position := rl.Vector2{WINDOW_WIDTH / 2 - text_width / 2, 402}
+        rl.DrawTextEx(font, STARTUP_WARNING_TEXT, text_position, font_size, 0, UI_TEXT_COLOR)
+    }
     rl.EndDrawing()
 }
 
@@ -117,12 +120,12 @@ prepare_fonts_worker :: proc(data: rawptr) {
 }
 
 //   Keep drawing and pumping window events until one startup worker is ready.
-finish_startup_worker :: proc(worker: ^thread.Thread, label: string, progress: f32) {
+finish_startup_worker :: proc(worker: ^thread.Thread, progress: f32) {
     if worker == nil {
         return
     }
     for !thread.is_done(worker) {
-        draw_startup_frame(label, progress)
+        draw_startup_frame(progress)
         _ = rl.WindowShouldClose()
         free_all(context.temp_allocator)
     }
@@ -132,7 +135,7 @@ finish_startup_worker :: proc(worker: ^thread.Thread, label: string, progress: f
 //   Draw startup frames until the requested Julia worker event is available.
 finish_julia_startup_request :: proc(
     service: ^julia.Julia_Runtime_Service, request_id: u64,
-    expected_kind: julia.Julia_Event_Kind, label: string, progress: f32) -> bool {
+    expected_kind: julia.Julia_Event_Kind, progress: f32) -> bool {
 
     started_at := rl.GetTime()
     reported_unresponsive := false
@@ -144,15 +147,13 @@ finish_julia_startup_request :: proc(
             }
             return event.succeeded
         }
-        display_label := label
         if rl.GetTime() - started_at >= JULIA_UNRESPONSIVE_SECONDS {
-            display_label = "Julia is not responding"
             if !reported_unresponsive {
                 fmt.eprintln("Julia startup operation is not responding; request id: ", request_id)
                 reported_unresponsive = true
             }
         }
-        draw_startup_frame(display_label, progress)
+        draw_startup_frame(progress, reported_unresponsive)
         if rl.WindowShouldClose() {
             fmt.eprintln("Window closed before Julia startup completed; terminating process.")
             runtime.exit(0)
@@ -168,12 +169,12 @@ prepare_assets_with_loading :: proc(progress: f32) {
         files.ensure_packaged_assets_unpacked_root()
         return
     }
-    finish_startup_worker(worker, "Preparing assets", progress)
+    finish_startup_worker(worker, progress)
 }
 
 //   Display and begin timing one blocking startup phase.
 begin_startup_phase :: proc(label: string, progress: f32) -> f64 {
-    draw_startup_frame(label, progress)
+    draw_startup_frame(progress)
     fmt.println("Startup: ", label, "...")
     return rl.GetTime()
 }
@@ -248,7 +249,7 @@ initialize_application_with_loading :: proc(
     assert(service_err == .None && julia_service != nil, "failed to create Julia runtime service")
     initialize_id, initialize_sent := julia.try_submit_julia_request(julia_service, .Initialize)
     if !initialize_sent || !finish_julia_startup_request(
-        julia_service, initialize_id, .Initialized, "Starting Julia", 0.35) {
+        julia_service, initialize_id, .Initialized, 0.35) {
         fmt.eprintln("Julia initialization failed; terminating process.")
         runtime.exit(1)
     }
@@ -259,7 +260,7 @@ initialize_application_with_loading :: proc(
     content_id, content_sent := julia.try_submit_julia_request(
         julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
     if !content_sent || !finish_julia_startup_request(
-        julia_service, content_id, .Invoke_Complete, "Loading content", 0.65) {
+        julia_service, content_id, .Invoke_Complete, 0.65) {
         fmt.eprintln("Julia content initialization failed; terminating process.")
         runtime.exit(1)
     }
@@ -267,10 +268,10 @@ initialize_application_with_loading :: proc(
     end_startup_phase("Loading content", started_at)
 
     started_at = begin_startup_phase("Loading fonts and graphics", 0.85)
-    finish_startup_worker(font_worker, "Loading fonts and graphics", 0.85)
+    finish_startup_worker(font_worker, 0.85)
     initialize_window_resources(state, settings, &font_preparation)
     end_startup_phase("Loading fonts and graphics", started_at)
-    draw_startup_frame("Ready", 1.0)
+    draw_startup_frame(1.0)
     end_startup_phase("Total startup", startup_started_at)
     return state, julia_service
 }

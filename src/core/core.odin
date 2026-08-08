@@ -58,9 +58,236 @@ SCENE_COMMAND_POINT_BATCH_CAPACITY :: 8
 
 
 /****
-    Starting with the Julia Animation tree structures
+    Starting with the Julia Animation tree and runtime structures
 */
 
+Bridge_Color :: struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
+
+Scene_Command_Kind :: enum u8 {
+    Set_Point_Position,
+    Set_Point_Color,
+    Set_Point_Brush,
+    Set_Point_Offset,
+    Show_Point,
+    Hide_Point,
+    Hide_Point_Batch,
+    Lock_Pen_Joint1,
+    Move_Pen_Joint2,
+    Set_Pen_Active,
+    Show_Pen,
+    Hide_Pen,
+    Hide_Compass,
+    Show_Compass,
+    Set_Compass_Active,
+    Lock_Compass_Joint1,
+    Lock_Compass_Joint2,
+    Set_Animation_Meta,
+    Set_Drawing_Sound_Enabled,
+    Simulate_Drawing_Sound,
+    Emit_Trailing_Particle,
+    Emit_Flicker_Particle,
+    Notify_Animation_Cycle_Boundary,
+}
+
+Scene_Command :: struct {
+    kind: Scene_Command_Kind,
+    point_index: int,
+    position: Vector3,
+    color: Bridge_Color,
+    scalar: f32,
+    integer: int,
+    flag: bool,
+    point_count: int,
+    point_indices: [SCENE_COMMAND_POINT_BATCH_CAPACITY]i32,
+}
+
+Scene_Command_Batch :: struct {
+    animation: ^Euclid_Julia_Animation_Interface,
+    command_count: int,
+    overflowed: bool,
+    commands: [SCENE_COMMAND_BATCH_CAPACITY]Scene_Command,
+}
+
+Animation_Query_Snapshot :: struct {
+    points: [MAX_SHAPESPOINTS]Shapes_Point,
+    metadata: [MAX_METAVALUES]f32,
+    pen: Shapes_Pen,
+    compass: Shapes_Compass,
+}
+
+Julia_Request_Kind :: enum {
+    Initialize,
+    Invoke,
+    Scratchpad,
+    View_Snapshot,
+    Animation_Tick,
+    Shutdown,
+}
+
+Julia_Event_Kind :: enum {
+    Initialized,
+    Invoke_Complete,
+    Scratchpad_Complete,
+    View_Snapshot_Complete,
+    Animation_Tick_Complete,
+    Shutdown_Complete,
+}
+
+Animation_Tick_Slot_State :: enum u8 {
+    Free,
+    Pending,
+    Complete,
+}
+
+Animation_Tick_Slot :: struct {
+    state: Animation_Tick_Slot_State,
+    request_id: u64,
+    generation: u64,
+    sequence: u64,
+    host_state: ^Euclid_General_State,
+    animation: ^Euclid_Julia_Animation_Interface,
+    dt: f32,
+    submitted_at: time.Tick,
+    query_snapshot: Animation_Query_Snapshot,
+    scene_batch: Scene_Command_Batch,
+}
+
+View_Snapshot_Slot_State :: enum u8 {
+    Free,
+    Pending,
+    Complete,
+    Published,
+}
+
+View_Snapshot :: struct {
+    state: View_Snapshot_Slot_State,
+    request_id: u64,
+    generation: u64,
+    runtime_generation: u64,
+    host_state: ^Euclid_General_State,
+    animation: ^Euclid_Julia_Animation_Interface,
+    fallback_text_len: int,
+    fallback_text: [VIEW_SNAPSHOT_TEXT_CAPACITY]u8,
+    command_buffer: Dynview_Command_Buffer,
+    math_program_count: int,
+    math_command_count: int,
+    math_node_count: int,
+    math_programs: [DYNVIEW__MAX_MATH_PROGRAMS]Dynview_Math_Program,
+    math_commands: [DYNVIEW__MAX_MATH_COMMANDS]Dynview_Command,
+    math_nodes: [DYNVIEW__MAX_MATH_NODES]Dynview_Math_Node,
+}
+
+Scratchpad_Async_Kind :: enum {
+    Submit,
+    Complete,
+    History_Previous,
+    History_Next,
+    History_Reset,
+    Save_History,
+}
+
+Scratchpad_Async_Slot_State :: enum u8 {
+    Free,
+    Pending,
+    Complete,
+}
+
+Scratchpad_Async_Slot :: struct {
+    state: Scratchpad_Async_Slot_State,
+    kind: Scratchpad_Async_Kind,
+    request_id: u64,
+    input_generation: u64,
+    host_state: ^Euclid_General_State,
+    caret_byte: int,
+    input_len: int,
+    input: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
+    result_len: int,
+    result: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
+    parse_result: i32,
+    succeeded: bool,
+}
+
+Julia_Lifecycle_State :: enum {
+    Not_Started,
+    Starting,
+    Ready,
+    Shutdown_Requested,
+    Failed,
+    Stopped,
+}
+
+Julia_Reload_State :: enum {
+    Idle,
+    Quiescing,
+    Including,
+    Registering,
+    Publishing,
+    Failed,
+}
+
+Julia_Task_Proc :: #type proc(data: rawptr) -> bool
+
+Julia_Request :: struct {
+    kind: Julia_Request_Kind,
+    request_id: u64,
+    task: Julia_Task_Proc,
+    data: rawptr,
+    slot_index: i32,
+}
+
+Julia_Event :: struct {
+    kind: Julia_Event_Kind,
+    request_kind: Julia_Request_Kind,
+    request_id: u64,
+    slot_index: i32,
+    succeeded: bool,
+}
+
+Julia_Runtime_Service :: struct {
+    worker: ^thread.Thread,
+    requests: chan.Chan(Julia_Request),
+    events: chan.Chan(Julia_Event),
+    next_request_id: u64,
+    owner_thread_id: int,
+    lifecycle: Julia_Lifecycle_State,
+    active_request_id: u64,
+    active_request_kind: Julia_Request_Kind,
+    failed_request_count: u64,
+    last_failed_request_id: u64,
+    last_failed_request_kind: Julia_Request_Kind,
+    request_saturation_count: u64,
+    reload_state: Julia_Reload_State,
+    runtime_generation: u64,
+    reload_failed_mtime_unix_nano: i64,
+    scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
+    completed_scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]i32,
+    completed_scratchpad_head: int,
+    completed_scratchpad_count: int,
+    dynview_staging: ^Dynview_System,
+    view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
+    view_snapshot_generation: u64,
+    view_snapshot_pending: bool,
+    published_view_snapshot_index: int,
+    animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
+    animation_last_committed_sequence: u64,
+    animation_tick_pending: bool,
+    animation_accumulated_dt: f32,
+    animation_ticks_submitted: u64,
+    animation_ticks_committed: u64,
+    animation_ticks_coalesced: u64,
+    animation_ticks_stale: u64,
+    animation_ticks_dropped: u64,
+    animation_queue_high_water: u64,
+    animation_last_latency_ms: f64,
+    animation_max_latency_ms: f64,
+}
 
 Euclid_Julia_Animation_Interface :: struct {
     get_view_text : ^julialib.jl_value_t,
@@ -1031,233 +1258,6 @@ Chalk_Audio_Runtime :: struct {
 }
 
 
-Bridge_Color :: struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
-
-Scene_Command_Kind :: enum u8 {
-    Set_Point_Position,
-    Set_Point_Color,
-    Set_Point_Brush,
-    Set_Point_Offset,
-    Show_Point,
-    Hide_Point,
-    Hide_Point_Batch,
-    Lock_Pen_Joint1,
-    Move_Pen_Joint2,
-    Set_Pen_Active,
-    Show_Pen,
-    Hide_Pen,
-    Hide_Compass,
-    Show_Compass,
-    Set_Compass_Active,
-    Lock_Compass_Joint1,
-    Lock_Compass_Joint2,
-    Set_Animation_Meta,
-    Set_Drawing_Sound_Enabled,
-    Simulate_Drawing_Sound,
-    Emit_Trailing_Particle,
-    Emit_Flicker_Particle,
-    Notify_Animation_Cycle_Boundary,
-}
-
-Scene_Command :: struct {
-    kind: Scene_Command_Kind,
-    point_index: int,
-    position: Vector3,
-    color: Bridge_Color,
-    scalar: f32,
-    integer: int,
-    flag: bool,
-    point_count: int,
-    point_indices: [SCENE_COMMAND_POINT_BATCH_CAPACITY]i32,
-}
-
-Scene_Command_Batch :: struct {
-    animation: ^Euclid_Julia_Animation_Interface,
-    command_count: int,
-    overflowed: bool,
-    commands: [SCENE_COMMAND_BATCH_CAPACITY]Scene_Command,
-}
-
-Animation_Query_Snapshot :: struct {
-    points: [MAX_SHAPESPOINTS]Shapes_Point,
-    metadata: [MAX_METAVALUES]f32,
-    pen: Shapes_Pen,
-    compass: Shapes_Compass,
-}
-
-Julia_Request_Kind :: enum {
-    Initialize,
-    Invoke,
-    Scratchpad,
-    View_Snapshot,
-    Animation_Tick,
-    Shutdown,
-}
-
-Julia_Event_Kind :: enum {
-    Initialized,
-    Invoke_Complete,
-    Scratchpad_Complete,
-    View_Snapshot_Complete,
-    Animation_Tick_Complete,
-    Shutdown_Complete,
-}
-
-Animation_Tick_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-}
-
-Animation_Tick_Slot :: struct {
-    state: Animation_Tick_Slot_State,
-    request_id: u64,
-    generation: u64,
-    sequence: u64,
-    host_state: ^Euclid_General_State,
-    animation: ^Euclid_Julia_Animation_Interface,
-    dt: f32,
-    submitted_at: time.Tick,
-    query_snapshot: Animation_Query_Snapshot,
-    scene_batch: Scene_Command_Batch,
-}
-
-View_Snapshot_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-    Published,
-}
-
-View_Snapshot :: struct {
-    state: View_Snapshot_Slot_State,
-    request_id: u64,
-    generation: u64,
-    runtime_generation: u64,
-    host_state: ^Euclid_General_State,
-    animation: ^Euclid_Julia_Animation_Interface,
-    fallback_text_len: int,
-    fallback_text: [VIEW_SNAPSHOT_TEXT_CAPACITY]u8,
-    command_buffer: Dynview_Command_Buffer,
-    math_program_count: int,
-    math_command_count: int,
-    math_node_count: int,
-    math_programs: [DYNVIEW__MAX_MATH_PROGRAMS]Dynview_Math_Program,
-    math_commands: [DYNVIEW__MAX_MATH_COMMANDS]Dynview_Command,
-    math_nodes: [DYNVIEW__MAX_MATH_NODES]Dynview_Math_Node,
-}
-
-Scratchpad_Async_Kind :: enum {
-    Submit,
-    Complete,
-    History_Previous,
-    History_Next,
-    History_Reset,
-    Save_History,
-}
-
-Scratchpad_Async_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-}
-
-Scratchpad_Async_Slot :: struct {
-    state: Scratchpad_Async_Slot_State,
-    kind: Scratchpad_Async_Kind,
-    request_id: u64,
-    input_generation: u64,
-    host_state: ^Euclid_General_State,
-    caret_byte: int,
-    input_len: int,
-    input: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    result_len: int,
-    result: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    parse_result: i32,
-    succeeded: bool,
-}
-
-Julia_Lifecycle_State :: enum {
-    Not_Started,
-    Starting,
-    Ready,
-    Shutdown_Requested,
-    Failed,
-    Stopped,
-}
-
-Julia_Reload_State :: enum {
-    Idle,
-    Quiescing,
-    Including,
-    Registering,
-    Publishing,
-    Failed,
-}
-
-Julia_Task_Proc :: #type proc(data: rawptr) -> bool
-
-Julia_Request :: struct {
-    kind: Julia_Request_Kind,
-    request_id: u64,
-    task: Julia_Task_Proc,
-    data: rawptr,
-    slot_index: i32,
-}
-
-Julia_Event :: struct {
-    kind: Julia_Event_Kind,
-    request_kind: Julia_Request_Kind,
-    request_id: u64,
-    slot_index: i32,
-    succeeded: bool,
-}
-
-Julia_Runtime_Service :: struct {
-    worker: ^thread.Thread,
-    requests: chan.Chan(Julia_Request),
-    events: chan.Chan(Julia_Event),
-    next_request_id: u64,
-    owner_thread_id: int,
-    lifecycle: Julia_Lifecycle_State,
-    active_request_id: u64,
-    active_request_kind: Julia_Request_Kind,
-    failed_request_count: u64,
-    last_failed_request_id: u64,
-    last_failed_request_kind: Julia_Request_Kind,
-    request_saturation_count: u64,
-    reload_state: Julia_Reload_State,
-    runtime_generation: u64,
-    reload_failed_mtime_unix_nano: i64,
-    scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
-    completed_scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]i32,
-    completed_scratchpad_head: int,
-    completed_scratchpad_count: int,
-    dynview_staging: ^Dynview_System,
-    view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
-    view_snapshot_generation: u64,
-    view_snapshot_pending: bool,
-    published_view_snapshot_index: int,
-    animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
-    animation_generation: u64,
-    animation_tick_sequence: u64,
-    animation_last_committed_sequence: u64,
-    animation_tick_pending: bool,
-    animation_accumulated_dt: f32,
-    animation_ticks_submitted: u64,
-    animation_ticks_committed: u64,
-    animation_ticks_coalesced: u64,
-    animation_ticks_stale: u64,
-    animation_ticks_dropped: u64,
-    animation_queue_high_water: u64,
-    animation_last_latency_ms: f64,
-    animation_max_latency_ms: f64,
-}
 
 Simulation_Task_Data :: struct {
     state: ^Euclid_General_State,
@@ -1285,34 +1285,39 @@ Simulation_Executor :: struct {
 
 Euclid_General_State :: struct {
     saved_context : runtime.Context,
-    julia_runtime_service: ^Julia_Runtime_Service,
-    simulation_executor: ^Simulation_Executor,
-    dynview_emit_target: ^Dynview_System,
-    scene_command_batch_target: ^Scene_Command_Batch,
-    animation_query_snapshot_target: ^Animation_Query_Snapshot,
 
     iso_scale : ^Iso_Scale,
 
     draw_surface : ^Euclid_Drawing_Surface,
 
+    julia_runtime_service: ^Julia_Runtime_Service,
     julia_interface_slots: [JULIA_INTERFACE_GENERATION_SLOT_COUNT]Euclid_Julia_Interface,
     julia_interface_active_slot: int,
     julia_interface : ^Euclid_Julia_Interface,
+
     point_system : ^Shapes_Point_System,
-    particle_system : ^Particle_System,
-    dynview: Dynview_System,
-    chalk_audio: Chalk_Audio_Runtime,
-    user_drawing_sound_enabled: bool,
-    animation_drawing_sound_enabled: bool,
     compass : Shapes_Compass,
     pen : Shapes_Pen,
 
+    particle_system : ^Particle_System,
+
+    dynview: Dynview_System,
+    dynview_emit_target: ^Dynview_System,
+
+    chalk_audio: Chalk_Audio_Runtime,
+    user_drawing_sound_enabled: bool,
+    animation_drawing_sound_enabled: bool,
+    
     stroke_3d: Stroke3D_Render_State,
     dust_render: Dust_Render_State,
     ui_runtime: Euclid_UI_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font_runtime: Euclid_Font_Runtime,
     font: rl.Font,
+
+    simulation_executor: ^Simulation_Executor,
+    scene_command_batch_target: ^Scene_Command_Batch,
+    animation_query_snapshot_target: ^Animation_Query_Snapshot,
 
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,

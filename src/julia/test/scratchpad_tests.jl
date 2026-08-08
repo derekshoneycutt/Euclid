@@ -120,17 +120,73 @@ end
     end
 end
 
-@testset "format_exception_text" begin
+@testset "native exception stack formatting" begin
+    runtime = Module(:ScratchpadExceptionFormattingTest)
     formatted = try
         1 + "a"
         ""
-    catch e
-        Scratchpad.format_exception_text(e, catch_backtrace())
+    catch
+        Scratchpad.format_current_exception_text(runtime)
     end
 
+    @test startswith(formatted, "ERROR: MethodError")
     @test occursin("MethodError", formatted)
+    @test occursin("Closest candidates are:", formatted)
     @test occursin("Stacktrace:", formatted)
     @test occursin("+", formatted)
+    @test !occursin("\e[", formatted)
+    _, style_id = Scratchpad.dynview_ids_for_line(formatted)
+    @test style_id == Scratchpad.DynviewStyleError
+
+    oversized = repeat("α", Scratchpad.MaxExceptionOutputBytes)
+    truncated = Scratchpad.truncate_exception_output(oversized)
+    @test ncodeunits(truncated) <= Scratchpad.MaxExceptionOutputBytes
+    @test endswith(truncated, Scratchpad.ExceptionOutputTruncated)
+    @test isvalid(truncated)
+end
+
+@testset "new runtime method candidates" begin
+    runtime = Module(:ScratchpadRuntimeMethodCandidateTest)
+    Core.eval(runtime, :(f(x, y) = x + y))
+
+    formatted = try
+        Core.eval(runtime, :(f(2)))
+        ""
+    catch
+        Scratchpad.format_current_exception_text(runtime)
+    end
+
+    @test startswith(formatted, "ERROR: MethodError: no method matching f(::Int64)")
+    @test occursin("The function `f` exists", formatted)
+    @test occursin("Closest candidates are:", formatted)
+    @test occursin("f(::Any, !Matched::Any)", formatted)
+end
+
+@testset "evaluate newly defined function mismatch" begin
+    with_test_session() do session
+        session.metrics.queue_dequeued = 1
+        Scratchpad.evaluate_queued_input!(session, TEST_STATE_PTR, "f(x, y) = x + y")
+        session.metrics.queue_dequeued = 2
+        Scratchpad.evaluate_queued_input!(session, TEST_STATE_PTR, "f(2)")
+
+        output = join(session.output, "\n")
+        @test session.metrics.eval_errors == 1
+        @test occursin("ERROR: MethodError: no method matching f(::Int64)", output)
+        @test occursin("The function `f` exists", output)
+        @test occursin("Closest candidates are:", output)
+        @test occursin("f(::Any, !Matched::Any)", output)
+        @test occursin("@ Main.$(nameof(session.runtime)) REPL[1]:1", output)
+        @test occursin("@ REPL[2]:1", output)
+        @test !occursin("eval(m::Module", output)
+        @test !occursin("evaluate_queued_input!", output)
+        @test any(==("Closest candidates are:"), session.output)
+        @test any(==("Stacktrace:"), session.output)
+        error_start = findfirst(entry -> startswith(entry.line, "ERROR:"), session.output_entries)
+        @test error_start !== nothing
+        @test all(entry -> entry.style_id == Scratchpad.DynviewStyleError,
+            session.output_entries[error_start:lastindex(session.output_entries)])
+        @test all(entry -> !occursin('\n', entry.line), session.output_entries)
+    end
 end
 
 @testset "latex result formatting helpers" begin
@@ -138,10 +194,10 @@ end
     @test Scratchpad.normalize_latex_result_source("\$\$\\frac{1}{2}\$\$") == "\\frac{1}{2}"
     @test Scratchpad.normalize_latex_result_source("  \\beta  ") == "\\beta"
 
-    latex_source = Scratchpad.format_result_latex_source(ScratchpadLatexResultMock())
+    latex_source = Scratchpad.format_result_latex_source(ScratchpadLatexResultMock(), Main)
     @test latex_source == "\\frac{1}{2}"
 
-    plain_source = Scratchpad.format_result_latex_source(ScratchpadPlainResultMock())
+    plain_source = Scratchpad.format_result_latex_source(ScratchpadPlainResultMock(), Main)
     @test plain_source === nothing
 end
 

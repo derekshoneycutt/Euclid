@@ -82,10 +82,10 @@ $e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$
 
 \textbf{Brief proof it is a group:}
 
-\textbf{1. Closure:} composing e and r always gives e or r.\\
+\textbf{1. Closure:} composing $e$ and $r$ always gives $e$ or $r$.\\
 \textbf{2. Associativity:} composition of reflections is associative.\\
-\textbf{3. Identity:} e does nothing.\\
-\textbf{4. Inverses:} e and r are their own inverses.
+\textbf{3. Identity:} $e$ does nothing.\\
+\textbf{4. Inverses:} $e$ and $r$ are their own inverses.
 
 So this is the 2-element symmetry group of the triangle, and the two motions commute."""
 

@@ -65,6 +65,8 @@ const MaxQueueLines = 64
 const SlowEvalWarnNs = Int(250_000_000)
 const SlowHookWarnNs = Int(250_000_000)
 const MaxConsecutiveHookFailures = 3
+const MaxExceptionOutputBytes = 16 * 1024
+const ExceptionOutputTruncated = "\n[Scratchpad exception output truncated]"
 const DynviewStyleInput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_PROMPT
 const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 const DynviewStyleError = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ERROR
@@ -812,12 +814,17 @@ function append_help_lines!(session::ScratchpadSession)
 end
 
 """Render a result value using text/plain when possible for REPL-style display."""
-function format_result_value(value)
+function format_result_value(value, runtime::Module)
+    io = IOBuffer()
+    context = IOContext(io, :color => false, :limit => true, :module => runtime)
     try
-        return sprint(show, MIME("text/plain"), value)
+        Base.invokelatest(show, context, MIME("text/plain"), value)
     catch
-        return sprint(show, value)
+        truncate(io, 0)
+        seekstart(io)
+        Base.invokelatest(show, context, value)
     end
+    return String(take!(io))
 end
 
 """Remove one pair of surrounding `\$...\$` or `\$\$...\$\$` delimiters when present."""
@@ -835,21 +842,24 @@ function normalize_latex_result_source(latex_source::AbstractString)
 end
 
 """Render a result value using `text/latex` MIME when supported, else return `nothing`."""
-function format_result_latex_source(value)
-    latex_source = try
-        sprint(show, MIME("text/latex"), value)
+function format_result_latex_source(value, runtime::Module)
+    io = IOBuffer()
+    context = IOContext(io, :color => false, :limit => true, :module => runtime)
+    try
+        Base.invokelatest(show, context, MIME("text/latex"), value)
     catch
         return nothing
     end
 
+    latex_source = String(take!(io))
     normalized = normalize_latex_result_source(latex_source)
     return isempty(normalized) ? nothing : normalized
 end
 
 """Append one eval-result output using LaTeX rendering when available."""
 function append_eval_result_output!(session::ScratchpadSession, result)
-    plain_text = format_result_value(result)
-    latex_source = format_result_latex_source(result)
+    plain_text = format_result_value(result, session.runtime)
+    latex_source = format_result_latex_source(result, session.runtime)
     if latex_source === nothing
         append_output_line!(session, "=> " * plain_text)
         return
@@ -858,30 +868,61 @@ function append_eval_result_output!(session::ScratchpadSession, result)
     append_latex_result_line!(session, latex_source, plain_text)
 end
 
-"""Format an exception with a bounded stack trace for scratchpad output."""
-function format_exception_text(e, bt)
-    message = sprint(showerror, e)
-    if bt === nothing
-        return message
+"""Truncate UTF-8 text to a byte budget and append an explicit marker."""
+function truncate_exception_output(text::AbstractString)
+    normalized = String(text)
+    if ncodeunits(normalized) <= MaxExceptionOutputBytes
+        return normalized
     end
 
-    frames = stacktrace(bt)
-    if isempty(frames)
-        return message
-    end
-
-    lines = String[message, "Stacktrace:"]
-    limit = min(length(frames), 6)
-    for frame in frames[1:limit]
-        push!(lines, "  " * sprint(show, frame))
-    end
-
-    if length(frames) > limit
-        push!(lines, "  ... $(length(frames) - limit) more frames")
-    end
-
-    return join(lines, "\n")
+    content_limit = MaxExceptionOutputBytes - ncodeunits(ExceptionOutputTruncated)
+    first_excluded = thisind(normalized, content_limit + 1)
+    last_included = prevind(normalized, first_excluded)
+    return normalized[firstindex(normalized):last_included] * ExceptionOutputTruncated
 end
+
+"""Remove host evaluation frames while preserving user and called-library frames."""
+function trim_scratchpad_backtrace(backtrace)
+    if !(backtrace isa AbstractVector)
+        return backtrace
+    end
+
+    boundary = findfirst(backtrace) do frame
+        frame.func === :eval && endswith(String(frame.file), "boot.jl")
+    end
+    if boundary === nothing
+        return backtrace
+    end
+    return backtrace[firstindex(backtrace):(boundary - 1)]
+end
+
+"""Apply Julia's REPL scrubber and remove Scratchpad's host evaluation tail."""
+function scrub_scratchpad_exception_stack(exception_stack)
+    scrubbed = Base.scrub_repl_backtrace(exception_stack)
+    return Base.ExceptionStack(Any[
+        (; item.exception, backtrace=trim_scratchpad_backtrace(item.backtrace)) for item in scrubbed
+    ])
+end
+
+"""Format a scrubbed Julia exception stack using the native REPL presentation."""
+function format_exception_stack(exception_stack, runtime::Module)
+    scrubbed = scrub_scratchpad_exception_stack(exception_stack)
+    io = IOBuffer()
+    limit_flag = Ref(false)
+    context = IOContext(
+        io,
+        :color => false,
+        :module => runtime,
+        :stacktrace_types_limited => limit_flag)
+    Base.invokelatest(Base.display_error, context, scrubbed)
+    if limit_flag[]
+        println(io, "Some type information was truncated. Use `show(err)` to see complete types.")
+    end
+    return truncate_exception_output(chomp(String(take!(io))))
+end
+
+"""Capture and format the exception stack active in the current catch block."""
+format_current_exception_text(runtime::Module) = format_exception_stack(current_exceptions(), runtime)
 
 """Echo submitted input into output using prompt-style prefixes for multiline input."""
 function append_input_echo!(session::ScratchpadSession, text::String)
@@ -911,6 +952,21 @@ function append_output_block!(session::ScratchpadSession, text::AbstractString)
     end
 end
 
+"""Append a multiline exception as independently laid-out error lines."""
+function append_error_block!(session::ScratchpadSession, text::AbstractString)
+    if isempty(text)
+        return
+    end
+
+    for line in split(String(text), '\n'; keepempty=true)
+        append_output_entry!(session, ScratchpadOutputEntry(
+            String(line),
+            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+            DynviewStyleError,
+            ""))
+    end
+end
+
 """Return true when a line is part of prompt-style input echo output."""
 is_input_echo_line(line::AbstractString) = startswith(line, "> ") || startswith(line, "| ")
 
@@ -923,7 +979,8 @@ function dynview_ids_for_line(line::AbstractString)
         return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT, DynviewStyleInput
     end
 
-    if startswith(line, "Error:") || startswith(line, "help error:") || startswith(line, "Blocked ")
+    if startswith(line, "ERROR:") || startswith(line, "Error:") || startswith(line, "help error:") ||
+            startswith(line, "Blocked ")
         return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleError
     end
 
@@ -1536,6 +1593,12 @@ function handle_parse_status!(session::ScratchpadSession, status, parsed)
     return false
 end
 
+"""Return the Julia REPL-style source label for the current queued input."""
+function repl_input_filename(session::ScratchpadSession)
+    input_number = max(session.metrics.queue_dequeued, 1)
+    return "REPL[$(input_number)]"
+end
+
 """Evaluate one queued input line, including local commands, help mode, and safe eval."""
 function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, text::String)
     stripped = strip(text)
@@ -1569,15 +1632,16 @@ function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid
     runtime = session.runtime
     Core.eval(runtime, :(state_ptr = $state_ptr))
 
-    scoped = apply_softscope(runtime, parsed)
+    repl_parsed = Base.parse_input_line(text; filename=repl_input_filename(session))
+    scoped = apply_softscope(runtime, repl_parsed)
     try
         result = Core.eval(runtime, scoped)
         if result !== nothing
             append_eval_result_output!(session, result)
         end
-    catch e
+    catch
         session.metrics.eval_errors += 1
-        append_output_line!(session, "Error: " * format_exception_text(e, catch_backtrace()))
+        append_error_block!(session, format_current_exception_text(runtime))
     end
 end
 
@@ -1603,14 +1667,14 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
             hook.fn(state_ptr, dt32)
             hook.consecutive_failures = 0
             maybe_warn_slow_hook!(session, hook, time_ns() - hook_started_at)
-        catch e
+        catch
             hook.failures += 1
             hook.consecutive_failures += 1
             session.metrics.hook_errors += 1
-            append_output_line!(
+            append_error_block!(
                 session,
-                "Frame $(frame_hook_label(hook.id, hook.label)) failed: " *
-                format_exception_text(e, catch_backtrace()))
+                "Frame $(frame_hook_label(hook.id, hook.label)) failed:\n" *
+                format_current_exception_text(session.runtime))
             if hook.consecutive_failures >= MaxConsecutiveHookFailures
                 hook.enabled = false
                 append_output_line!(
@@ -1679,8 +1743,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
         end
 
         run_frame_hooks!(session, state_ptr, dt)
-    catch e
-        append_output_line!(session, "Error: " * format_exception_text(e, catch_backtrace()))
+    catch
+        append_error_block!(session, format_current_exception_text(session.runtime))
     end
 end
 

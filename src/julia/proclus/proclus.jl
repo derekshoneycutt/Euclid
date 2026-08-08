@@ -3,9 +3,14 @@ include("./proclus_01_isosceles.jl")
 include("./proclus_02_scalene.jl")
 
 function get_view_text_root_proclus(state_ptr::Ptr{Cvoid})
-    """Proclus's Commentary
+    fallback = """Proclus's Commentary
     
 Proclus provided an ancient commentary on Book I of Euclid's Elements, including additional constructions and analyses. Some will be included here."""
+    latex = raw"""\textbf{Proclus's Commentary}
+    
+Proclus provided an ancient commentary on Book I of \textit{Euclid's Elements}, including additional constructions and analyses. Some will be included here."""
+
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function init_euclid_scripts_proclus(state_ptr::Ptr{Cvoid})
