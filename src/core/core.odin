@@ -8,6 +8,7 @@ package core
 import "../julialib"
 import "base:runtime"
 import "core:encoding/uuid"
+import vmem "core:mem/virtual"
 
 import rl "vendor:raylib"
 
@@ -87,6 +88,10 @@ Euclid_Julia_Interface :: struct {
 
     animations : [MAX_JULIA_INTERFACES]Euclid_Julia_Animation_Interface,
     next_animation_index : int,
+
+    animation_name_arena: vmem.Arena,
+    animation_name_allocator: runtime.Allocator,
+    animation_name_arena_initialized: bool,
 }
 
 
@@ -839,6 +844,10 @@ Gif_Encode_State :: struct {
     use_bgra: bool,
 
     frames_submitted: int,
+
+    arena: vmem.Arena,
+    arena_allocator: runtime.Allocator,
+    arena_initialized: bool,
 }
 
 Gif_Capture_Session :: struct {

@@ -189,8 +189,8 @@ initiate_animations_state :: proc() -> ^Euclid_General_State {
 // Notes:
 //   - Must be paired with initiate_animations_state to release owned allocations.
 free_animations_state :: proc(state : ^Euclid_General_State) {
-    view_core.gif_capture_abort_session(&state^.gif_capture)
-    julia.clean_julia_interfaces(state)
+    view_core.gif_capture_destroy_session(&state^.gif_capture)
+    julia.destroy_julia_interface_resources(state)
     free(state^.julia_interface)
     free(state^.particle_system)
     free(state^.point_system)

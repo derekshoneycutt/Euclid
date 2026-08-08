@@ -1,11 +1,12 @@
 package files
 
-// This just encodes gif files. We use the standard allocator in the current context, freeing
-// when aborted or ended.
+// This just encodes gif files. Internal encoder memory is session-local and owned by a
+// dedicated virtual arena on Gif_Encode_State.
 
 import "../core"
 
 import "core:mem"
+import vmem "core:mem/virtual"
 
 GIF_LZW_TABLE_CAPACITY :: 4096
 GIF_LZW_STRIDE :: 256
@@ -91,19 +92,23 @@ gif_encode_begin :: proc(state: ^Gif_Encode_State, width, height: int) -> bool {
 
     gif_encode_free_state(state)
 
+    if !gif_encode_ensure_arena(state) {
+        return false
+    }
+
     state.width = width
     state.height = height
     state.alpha_threshold = 0
     state.use_bgra = false
     state.frames_submitted = 0
 
-    state.lzw_mem = make([]i16, GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE)
-    state.tlb_mem = make([]u8, GIF_MAX_TABLE_BYTES)
-    state.used_mem = make([]u8, GIF_MAX_TABLE_BYTES)
+    state.lzw_mem = make([]i16, GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE, state.arena_allocator)
+    state.tlb_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
+    state.used_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
 
     pixel_count := width * height
-    state.previous_frame.pixels = make([]u32, pixel_count)
-    state.current_frame.pixels = make([]u32, pixel_count)
+    state.previous_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
+    state.current_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
 
     if len(state.lzw_mem) == 0 || len(state.tlb_mem) == 0 || len(state.used_mem) == 0 ||
        len(state.previous_frame.pixels) == 0 || len(state.current_frame.pixels) == 0 {
@@ -111,7 +116,7 @@ gif_encode_begin :: proc(state: ^Gif_Encode_State, width, height: int) -> bool {
         return false
     }
 
-    header, ok := gif_encode_new_buffer(GIF_HEADER_SIZE)
+    header, ok := gif_encode_new_buffer(state, GIF_HEADER_SIZE)
     if !ok || header == nil {
         gif_encode_free_state(state)
         return false
@@ -196,6 +201,7 @@ gif_encode_frame :: proc(
 //
 // Notes:
 //   - This call clears encoder state regardless of success.
+//   - data value in returned structure is allocated on the context's main allocator and must be freed manually.
 gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
     if state.list_head == nil {
         return GifEncodeResult{}
@@ -246,6 +252,26 @@ gif_encode_free :: proc(result: ^GifEncodeResult) {
     result^ = {}
 }
 
+//   Release arena resources owned by Gif_Encode_State.
+//
+// Parameters:
+//   - state: Encoder state whose dedicated arena should be destroyed.
+//
+// Returns:
+//   - none.
+gif_encode_destroy_state :: proc(state: ^Gif_Encode_State) {
+    if state == nil {
+        return
+    }
+
+    gif_encode_free_state(state)
+    if state.arena_initialized {
+        vmem.arena_destroy(&state.arena)
+    }
+
+    state^ = {}
+}
+
 
 
 //   Compute the number of bits required to represent a positive integer.
@@ -263,19 +289,40 @@ gif_encode_bit_log :: #force_inline proc(i: int) -> int {
     return out
 }
 
+//   Ensure state has an initialized virtual arena and allocator handle.
+gif_encode_ensure_arena :: proc(state: ^Gif_Encode_State) -> bool {
+    if state.arena_initialized {
+        return true
+    }
+
+    err := vmem.arena_init_growing(&state.arena)
+    if err != nil {
+        state.arena_allocator = {}
+        state.arena_initialized = false
+        return false
+    }
+
+    state.arena_allocator = vmem.arena_allocator(&state.arena)
+    state.arena_initialized = true
+    return true
+}
+
 //   Allocate a new linked-list buffer node for encoded GIF data.
 //
 // Notes:
 //   - Caller owns the returned node and must free it with gif_encode_free_buffer.
-gif_encode_new_buffer :: proc(size: int) -> (^Gif_Encode_Buffer, bool) {
-    n := new(Gif_Encode_Buffer)
+gif_encode_new_buffer :: proc(state: ^Gif_Encode_State, size: int) -> (^Gif_Encode_Buffer, bool) {
+    if !state.arena_initialized {
+        return nil, false
+    }
+
+    n := new(Gif_Encode_Buffer, state.arena_allocator)
     if n == nil {
         return nil, false
     }
 
-    n.data = make([]u8, size)
+    n.data = make([]u8, size, state.arena_allocator)
     if len(n.data) != size {
-        free(n)
         return nil, false
     }
 
@@ -289,10 +336,9 @@ gif_encode_free_buffer :: proc(node: ^Gif_Encode_Buffer) {
     if node == nil {
         return
     }
-    if len(node.data) > 0 {
-        delete(node.data)
-    }
-    free(node)
+    node.data = nil
+    node.next = nil
+    node.size = 0
 }
 
 //   Append a buffer node to the encoder output list.
@@ -329,20 +375,29 @@ gif_encode_pop_head_buffer :: proc(state: ^Gif_Encode_State) -> ^Gif_Encode_Buff
 // Notes:
 //   - After this call, state is zeroed and no previous buffers remain valid.
 gif_encode_free_state :: proc(state: ^Gif_Encode_State) {
-    delete(state.previous_frame.pixels)
-    delete(state.current_frame.pixels)
-    delete(state.lzw_mem)
-    delete(state.tlb_mem)
-    delete(state.used_mem)
-
-    n := state.list_head
-    for n != nil {
-        next := n.next
-        gif_encode_free_buffer(n)
-        n = next
+    if state == nil {
+        return
     }
 
-    state^ = {}
+    if state.arena_initialized {
+        vmem.arena_free_all(&state.arena)
+    }
+
+    state.previous_frame = {}
+    state.current_frame = {}
+
+    state.lzw_mem = nil
+    state.tlb_mem = nil
+    state.used_mem = nil
+
+    state.list_head = nil
+    state.list_tail = nil
+
+    state.width = 0
+    state.height = 0
+    state.alpha_threshold = 0
+    state.use_bgra = false
+    state.frames_submitted = 0
 }
 
 //   Reset LZW table memory and initialize active table metadata.
@@ -652,7 +707,7 @@ gif_encode_begin_lzw_bitstream :: proc(
     bs: ^Gif_Encode_Bitstream_State) -> bool {
 
     bitstream_capacity := state.width * state.height * 2 + 4096
-    buf := make([]u8, bitstream_capacity)
+    buf := make([]u8, bitstream_capacity, state.arena_allocator)
     if len(buf) == 0 {
         return false
     }
@@ -672,8 +727,6 @@ gif_encode_begin_lzw_bitstream :: proc(
     clear_width := gif_encode_bit_log(lzw.length - 1)
     if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
         &bs.bit_count, bs.clear_code, clear_width) {
-
-        delete(bs.buffer)
         return false
     }
 
@@ -844,7 +897,6 @@ gif_encode_lzw_to_bitstream :: proc(
 
     ok := gif_encode_lzw_walk_pixels(state, frame, table_size, frames_compatible, &writer)
     if !ok {
-        delete(writer.buffer)
         return false
     }
 
@@ -955,7 +1007,7 @@ gif_encode_build_frame_chunk :: proc(
         (stream_len + sub_blocks) +
         1
 
-    node, ok := gif_encode_new_buffer(frame_chunk_size)
+    node, ok := gif_encode_new_buffer(state, frame_chunk_size)
     if !ok || node == nil {
         return nil, false
     }
@@ -1014,8 +1066,6 @@ gif_encode_compress_frame :: proc(
         &bitstream, &stream_len) {
         return nil, false
     }
-    defer delete(bitstream)
-
     node, ok := gif_encode_build_frame_chunk(state, table, table_size, table_bits,
         palette.has_transparent_pixels, bitstream, stream_len, centiseconds)
     if !ok || node == nil {

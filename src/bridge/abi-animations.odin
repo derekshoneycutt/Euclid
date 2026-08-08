@@ -58,11 +58,15 @@ add_root_animation_interface :: proc "c" (
 
     animation := &state^.julia_interface^.animations[newIndex]
 
+    if !ensure_julia_interface_name_arena(state) {
+        return -1
+    }
+
     animation^.get_view_text = getViewText
     animation^.initiate = init
     animation^.loop = loop
     animation^.clean = clean
-    animation^.name = strings.clone(string(name))
+    animation^.name = strings.clone(string(name), state^.julia_interface^.animation_name_allocator)
     animation^.stable_id = parsed_stable_id
     animation^.first_child_id = -1
     animation^.parent_id = -1
@@ -125,11 +129,15 @@ add_child_animation_interface :: proc "c" (
 
     animation := &state^.julia_interface^.animations[newIndex]
 
+    if !ensure_julia_interface_name_arena(state) {
+        return -1
+    }
+
     animation^.get_view_text = getViewText
     animation^.initiate = init
     animation^.loop = loop
     animation^.clean = clean
-    animation^.name = strings.clone(string(name))
+    animation^.name = strings.clone(string(name), state^.julia_interface^.animation_name_allocator)
     animation^.stable_id = parsed_stable_id
     animation^.first_child_id = -1
     animation^.parent_id = parentId

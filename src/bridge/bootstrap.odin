@@ -7,6 +7,7 @@ import "../files"
 import "base:runtime"
 import "core:fmt"
 import "core:strings"
+import vmem "core:mem/virtual"
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
 //
@@ -66,18 +67,74 @@ retrieve_interface :: proc() -> ^core.Euclid_Julia_Interface {
     return ret
 }
 
-//   Release owned animation-name strings registered in the Julia interface table.
+//   Ensure the animation-name arena allocator exists for bridge registry storage.
+//
+// Parameters:
+//   - state: Global runtime state containing the Julia interface.
+//
+// Returns:
+//   - ok: true when name arena allocator is ready for use.
+ensure_julia_interface_name_arena :: proc(state: ^core.Euclid_General_State) -> bool {
+    if state == nil || state^.julia_interface == nil {
+        return false
+    }
+
+    iface := state^.julia_interface
+    if iface^.animation_name_arena_initialized {
+        return true
+    }
+
+    err := vmem.arena_init_growing(&iface^.animation_name_arena)
+    if err != nil {
+        iface^.animation_name_allocator = {}
+        iface^.animation_name_arena_initialized = false
+        return false
+    }
+
+    iface^.animation_name_allocator = vmem.arena_allocator(&iface^.animation_name_arena)
+    iface^.animation_name_arena_initialized = true
+    return true
+}
+
+//   Release animation-name arena allocations registered in the Julia interface table.
 //
 // Parameters:
 //   - state: Global runtime state whose Julia interface registry is being cleared.
 //
 // Notes:
-//   - This frees only cloned name storage; it does not free the interface struct itself.
+//   - This resets the animation-name arena for reuse on hot reload.
 clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
-    for i in 0..<state^.julia_interface^.next_animation_index {
-        animation := state^.julia_interface^.animations[i]
-        delete(animation.name)
+    if state == nil || state^.julia_interface == nil {
+        return
     }
+
+    iface := state^.julia_interface
+    if iface^.animation_name_arena_initialized {
+        vmem.arena_free_all(&iface^.animation_name_arena)
+    }
+
+    for i in 0..<iface^.next_animation_index {
+        iface^.animations[i].name = ""
+    }
+}
+
+//   Destroy Julia interface arena resources prior to freeing the interface struct.
+//
+// Parameters:
+//   - state: Global runtime state whose Julia interface allocators should be destroyed.
+destroy_julia_interface_resources :: proc(state: ^core.Euclid_General_State) {
+    if state == nil || state^.julia_interface == nil {
+        return
+    }
+
+    iface := state^.julia_interface
+    clean_julia_interfaces(state)
+    if iface^.animation_name_arena_initialized {
+        vmem.arena_destroy(&iface^.animation_name_arena)
+    }
+
+    iface^.animation_name_allocator = {}
+    iface^.animation_name_arena_initialized = false
 }
 
 //   Resolve Julia Main module handle used for bridge function lookup.

@@ -196,6 +196,23 @@ gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
     session.active = false
 }
 
+//   Destroy GIF capture session resources, including encoder arena state.
+//
+// Parameters:
+//   - session: Capture session to teardown before app shutdown.
+//
+// Returns:
+//   - none.
+gif_capture_destroy_session :: proc(session: ^Gif_Capture_Session) {
+    if session == nil {
+        return
+    }
+
+    gif_capture_abort_session(session)
+    files.gif_encode_destroy_state(&session.encoder)
+    session.active = false
+}
+
 
 
 

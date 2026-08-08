@@ -39,6 +39,7 @@ If you are new, read in this order:
 
 1. Host lifecycle path (`src/main.odin`, `src/view/view.odin`).
 1. Host/runtime boundary (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin`, `src/julia/odin-julia-bridge.jl`).
+1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`).
 1. Julia runtime entry (`src/julia/script.jl`).
 1. Then continue by module using the maps below, touching only each module's
    highlighted files first.
@@ -52,6 +53,7 @@ If you are new, read in this order:
 | **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
+| **Odin** | Dynview Runtime | Text/math command compilation, layout planning, and draw-ready dynview caches. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
@@ -136,7 +138,8 @@ Story of one frame:
 
 Dynamic LaTeX support is now a first-class dynview path, not a special case.
 The parser and compiler live in `src/julia/latex.jl`; host import, measure,
-and draw live in dynview/bridge Odin modules.
+and draw live in `src/dynview/**` with bridge import boundaries in
+`src/bridge/dynview.odin`.
 
 ### Parsing Algorithm (Julia)
 
@@ -248,12 +251,23 @@ This policy is strict by design.
 1. Frame-scoped scratch memory from the temp allocator.
    - Example: temporary UI/text conversion buffers.
    - Requirement: reclaimed by frame reset (`free_all(context.temp_allocator)`).
-1. Event-driven allocations outside steady frame loops.
-   - Example: asset reload, registry rebuild, GIF capture session buffers.
-   - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
 1. Julia runtime GC-managed allocations.
    - Julia owns script/runtime objects.
    - Odin owns host state and must stay deterministic on the host side.
+1. Dedicated virtual arenas for lifecycle-scoped subsystems.
+   - Examples: GIF encoder working memory and bridge animation-name storage.
+   - Requirement: `arena_free_all` on logical reset/reload and `arena_destroy`
+    on subsystem/application teardown.
+1. Event-driven allocations outside steady frame loops.
+   - Current approved cases are intentionally narrow:
+     1. Final contiguous GIF output buffer returned by encoder end with documented allocation.
+     1. Asset-unpack decompression staging allocation released immediately when unpack completes.
+   - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
+
+### Current Arena Notes
+
+- GIF encoder internals are arena-backed for session-local working memory.
+- Bridge animation names are arena-backed and reset as a batch on hot reload.
 
 ### Not Allowed Without Explicit Approval
 
@@ -286,6 +300,10 @@ Choose the owning module first, then touch that module's highlighted files.
 - **Rendering/UI behavior**:
   - Rendering and UI Module (`src/view/elements.odin`, `src/view/ui/ui.odin`,
     `src/view/core/view_core.odin`).
+- **Dynview text/math behavior**:
+  - Dynview Runtime Module (`src/dynview/dynview.odin`,
+    `src/dynview/compile.odin`, `src/dynview/layout_build.odin`,
+    `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`).
 - **Geometry/constraints behavior**:
   - Geometry Kernel Module (`src/shapes/shapes.odin`,
     `src/shapes/constraints.odin`, `src/shapes/system.odin`).
@@ -316,6 +334,8 @@ make animations "fit in".
 - The app is **host-driven**: Odin controls lifecycle, simulation pacing, rendering, and core state.
 - Julia is **content-driven**: scripts define what animation behavior runs and what geometry/tools are manipulated.
 - The bridge is the contract: keep Odin exports and Julia wrappers aligned.
+- Host memory strategy is lifecycle-scoped: startup allocations, temp scratch,
+  and dedicated arenas for targeted subsystems.
 - Dynview is now a dual-path text system: fallback plain text plus validated structured streams.
 - LaTeX is parsed and compiled in Julia (`src/julia/latex.jl`) and laid out/rendered in Odin dynview.
 - Assets are packaged and loaded at runtime, enabling script/content iteration without redesigning host architecture.
