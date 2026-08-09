@@ -813,6 +813,48 @@ function append_help_lines!(session::ScratchpadSession)
     end
 end
 
+"""Return the release date reported by the active Julia runtime, when available."""
+function julia_release_date()
+    if !isdefined(Base, :GIT_VERSION_INFO)
+        return nothing
+    end
+
+    version_info = Base.GIT_VERSION_INFO
+    if !hasproperty(version_info, :date_string)
+        return nothing
+    end
+
+    date_match = match(r"\d{4}-\d{2}-\d{2}", String(version_info.date_string))
+    return date_match === nothing ? nothing : date_match.match
+end
+
+"""Return the startup banner version line for the active Julia runtime."""
+function julia_version_banner_line()
+    release_date = julia_release_date()
+    if release_date === nothing
+        return "  | | |_| | | | (_| |  |  Version $(VERSION)"
+    end
+
+    return "  | | |_| | | | (_| |  |  Version $(VERSION) ($(release_date))"
+end
+
+"""Append the Julia runtime banner shown when Scratchpad opens."""
+function append_startup_banner!(session::ScratchpadSession)
+    lines = [
+        "               _",
+        "   _       _ _(_)_     |  Documentation: https://docs.julialang.org",
+        "  (_)     | (_) (_)    |",
+        "   _ _   _| |_  __ _   |  Type \":help\" for help.",
+        "  | | | | | | |/ _` |  |",
+        julia_version_banner_line(),
+        " _/ |\\__'_|_|_|\\__'_|  |  Official https://julialang.org release",
+        "|__/                   |",
+    ]
+    for line in lines
+        append_output_line!(session, line)
+    end
+end
+
 """Render a result value using text/plain when possible for REPL-style display."""
 function format_result_value(value, runtime::Module)
     io = IOBuffer()
@@ -1713,11 +1755,11 @@ function prime_repl!(state_ptr::Ptr{Cvoid})
     end
 end
 
-"""Initialize scratchpad session lifecycle and seed startup help text."""
+"""Initialize scratchpad session lifecycle and seed the Julia runtime banner."""
 function initialize(state_ptr::Ptr{Cvoid})
     initialize_count_ref[] += 1
     session = ensure_session!(state_ptr)
-    append_help_lines!(session)
+    append_startup_banner!(session)
 end
 
 """Clean scratchpad lifecycle state when animation unloads."""

@@ -76,6 +76,29 @@ end
     @test Core.eval(session.runtime, :state_ptr) == TEST_STATE_PTR
 end
 
+@testset "startup banner" begin
+    session = new_session()
+    Scratchpad.append_startup_banner!(session)
+
+    release_date = Scratchpad.julia_release_date()
+    @test release_date !== nothing
+    @test occursin(r"^\d{4}-\d{2}-\d{2}$", release_date)
+    @test session.output == [
+        "               _",
+        "   _       _ _(_)_     |  Documentation: https://docs.julialang.org",
+        "  (_)     | (_) (_)    |",
+        "   _ _   _| |_  __ _   |  Type \":help\" for help.",
+        "  | | | | | | |/ _` |  |",
+        "  | | |_| | | | (_| |  |  Version $(VERSION) ($(release_date))",
+        " _/ |\\__'_|_|_|\\__'_|  |  Official https://julialang.org release",
+        "|__/                   |",
+    ]
+
+    Scratchpad.append_help_lines!(session)
+    @test "Julia REPL Scratchpad" in session.output
+    @test "  :help        show this help" in session.output
+end
+
 @testset "parse_error_message" begin
     @test Scratchpad.parse_error_message(Expr(:error, "oops")) == "Parse error: oops"
     @test Scratchpad.parse_error_message(:not_an_expr) == "Parse error"
