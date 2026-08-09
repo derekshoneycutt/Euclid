@@ -70,6 +70,8 @@ const ExceptionOutputTruncated = "\n[Scratchpad exception output truncated]"
 const DynviewStyleInput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_PROMPT
 const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 const DynviewStyleError = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ERROR
+const ReplPrompt = "julia> "
+const ReplContinuation = " " ^ length(ReplPrompt)
 
 const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
 const next_session_id_ref = Ref(1)
@@ -970,16 +972,28 @@ format_current_exception_text(runtime::Module) = format_exception_stack(current_
 function append_input_echo!(session::ScratchpadSession, text::String)
     lines = split(text, '\n')
     if isempty(lines)
-        append_output_line!(session, ">")
+        append_output_entry!(session, ScratchpadOutputEntry(
+            rstrip(ReplPrompt),
+            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
+            DynviewStyleInput,
+            ""))
         return
     end
 
-    append_output_line!(session, "> " * first(lines))
+    append_output_entry!(session, ScratchpadOutputEntry(
+        ReplPrompt * first(lines),
+        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
+        DynviewStyleInput,
+        ""))
     for i in eachindex(lines)
         if i == firstindex(lines)
             continue
         end
-        append_output_line!(session, "| " * lines[i])
+        append_output_entry!(session, ScratchpadOutputEntry(
+            ReplContinuation * lines[i],
+            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
+            DynviewStyleInput,
+            ""))
     end
 end
 
@@ -1009,18 +1023,11 @@ function append_error_block!(session::ScratchpadSession, text::AbstractString)
     end
 end
 
-"""Return true when a line is part of prompt-style input echo output."""
-is_input_echo_line(line::AbstractString) = startswith(line, "> ") || startswith(line, "| ")
-
 """Return true when a host bridge status code represents success."""
 is_bridge_status_ok(code::Integer) = Int32(code) == OdinJuliaBridge.BRIDGE_STATUS_OK
 
 """Map one output line into block/style ids for dynview emission."""
 function dynview_ids_for_line(line::AbstractString)
-    if is_input_echo_line(line)
-        return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT, DynviewStyleInput
-    end
-
     if startswith(line, "ERROR:") || startswith(line, "Error:") || startswith(line, "help error:") ||
             startswith(line, "Blocked ")
         return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleError

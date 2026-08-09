@@ -45,7 +45,6 @@ style_by_id :: #force_inline proc(style_id: i32) -> Dynview_Text_Style {
         return Dynview_Text_Style{
             color = rl.Color{186, 198, 228, 255},
             font_flags = .Regular,
-            indent_cols = 1,
             wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }

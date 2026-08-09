@@ -1218,7 +1218,7 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_latest_completion_request_id: u64,
     scratchpad_history_reset_pending: bool,
     scratchpad_last_output_len: int,
-    scratchpad_follow_output: bool,
+    scratchpad_bottom_pinned: bool,
 
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,

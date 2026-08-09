@@ -527,7 +527,7 @@ publish_julia_interface_reload :: proc(
     // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
     state^.ui_runtime.scratchpad_input_len = 0
     state^.ui_runtime.scratchpad_input_cursor = 0
-    state^.ui_runtime.scratchpad_follow_output = false
+    state^.ui_runtime.scratchpad_bottom_pinned = true
     if service != nil {
         service^.runtime_generation += 1
         service^.reload_failed_mtime_unix_nano = 0

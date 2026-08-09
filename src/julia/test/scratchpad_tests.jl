@@ -99,6 +99,22 @@ end
     @test "  :help        show this help" in session.output
 end
 
+@testset "terminal prompt echo" begin
+    session = Scratchpad.create_session(TEST_STATE_PTR, 10_002)
+
+    Scratchpad.append_input_echo!(session, "begin\n    x = 1\nend")
+
+    @test session.output == [
+        "julia> begin",
+        "           x = 1",
+        "       end",
+    ]
+    @test all(entry -> entry.block_kind == OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
+        session.output_entries)
+    @test all(entry -> entry.style_id == Scratchpad.DynviewStyleInput,
+        session.output_entries)
+end
+
 @testset "parse_error_message" begin
     @test Scratchpad.parse_error_message(Expr(:error, "oops")) == "Parse error: oops"
     @test Scratchpad.parse_error_message(:not_an_expr) == "Parse error"

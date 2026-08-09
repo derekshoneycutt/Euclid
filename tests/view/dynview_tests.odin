@@ -7,6 +7,15 @@ import app_core "../../src/core"
 import app_dynview "../../src/dynview"
 
 @(test)
+scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
+    prompt_style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_PROMPT)
+    input_block := app_dynview.block_format_for_kind(app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
+    merged := app_dynview.style_with_block_format(prompt_style, input_block)
+
+    testing.expect_value(t, merged.indent_cols, 0)
+}
+
+@(test)
 julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
     defer free(state)

@@ -141,6 +141,35 @@ input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
 }
 
 @(test)
+terminal_input_layout_wraps_multiline_utf8_caret :: proc(t: ^testing.T) {
+    text := "abcd\nαβγδε"
+    buffer := transmute([]u8)text
+
+    first_wrap := app_ui.terminal_input_position(buffer, len(text), 4, 4)
+    second_line_caret := app_ui.terminal_input_position(buffer, len(text), len(text), 4)
+
+    testing.expect_value(t, first_wrap, app_ui.Terminal_Input_Position{1, 0})
+    testing.expect_value(t, second_line_caret, app_ui.Terminal_Input_Position{2, 1})
+    testing.expect_value(t, app_ui.terminal_input_row_count(buffer, len(text), len(text), 4), 3)
+}
+
+@(test)
+terminal_input_cell_maps_to_utf8_byte_caret :: proc(t: ^testing.T) {
+    text := "abcd\nαβγδε"
+    buffer := transmute([]u8)text
+
+    caret := app_ui.terminal_input_byte_offset_at(buffer, len(text), 4, 2, 1)
+
+    testing.expect_value(t, caret, len(text))
+}
+
+@(test)
+scratchpad_bottom_detection_uses_terminal_epsilon :: proc(t: ^testing.T) {
+    testing.expect(t, app_ui.scratchpad_scroll_is_at_bottom(99.6, 100))
+    testing.expect(t, !app_ui.scratchpad_scroll_is_at_bottom(99.0, 100))
+}
+
+@(test)
 scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
     // Verifies completion payload parsing extracts start, end, and replacement text from the wire format.
     start, ending, replacement, ok := app_ui.scratchpad_parse_completion_payload("2\n5\npoint!")

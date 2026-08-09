@@ -127,9 +127,6 @@ prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
     state^.ui_runtime.ui_regions = regions
 
     text_panel := view_text_content_panel(regions.text_rect)
-    if is_scratchpad_selected(state) {
-        text_panel = scratchpad_output_panel(text_panel)
-    }
     dynview.track_panel(&state^.dynview, text_panel)
     dynview.track_font(&state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE)
     dynview.track_style(&state^.dynview, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
