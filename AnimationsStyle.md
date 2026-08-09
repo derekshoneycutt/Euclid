@@ -7,6 +7,22 @@ point, line, and plane primitives.
 This is kind of a preliminary approach to the style language for the animations. As further
 points arise with further animation work, this is expected to mature.
 
+## Table Of Contents
+
+1. [Core Goals](#core-goals)
+1. [Inspiration](#inspiration)
+1. [Standard Palette](#standard-palette)
+1. [Color Relationships](#color-relationships)
+1. [Motion Conventions](#motion-conventions)
+1. [Coordinate Space And Z Conventions](#coordinate-space-and-z-conventions)
+1. [Isometric Projection And Right-Hand Rule](#isometric-projection-and-right-hand-rule)
+1. [Draw Order And Layering Constraints](#draw-order-and-layering-constraints)
+1. [Plane And Surface Treatment](#plane-and-surface-treatment)
+1. [Point Labels](#point-labels)
+1. [Reset Behavior](#reset-behavior)
+1. [View Text Authoring](#view-text-authoring)
+1. [Practical Review Check](#practical-review-check)
+
 ## Core Goals
 
 - Keep motion readable.
@@ -26,19 +42,18 @@ his work, and in fact are using the Heath translation in text.
 Use these colors as the main animation palette unless a script has a specific,
 documented reason to deviate:
 
-- `steelblue`
-- `palevioletred1`
-- `khaki3`
-- `grey60`
-- `plum1`: the standard color for point labels.
-- `lightgreen` : the standard color for congruence relationship highlighting.
-- `firebrick` : the standard color for when something absurd is being drawn.
+| Color | Role | Guidance |
+| --- | --- | --- |
+| `steelblue` | Core geometry | Assign by relationship and scene balance. |
+| `palevioletred1` | Core geometry | Contrast directly related simultaneous objects. |
+| `khaki3` | Core geometry | Use as a peer of the other working colors. |
+| `grey60` | Core geometry | Use as a peer, not only as a neutral fallback. |
+| `plum1` | Point labels | Default label color. |
+| `lightgreen` | Congruence | Standard relationship-highlight color. |
+| `firebrick` | Absurdity | Use when intentionally drawing an absurd consequence. |
 
-These four colors are the shared working palette. They are reused across lines,
-circles, planes, and points based on the number of objects on screen and how
-those objects interact.
-
-`plum1` stays the default for labels.
+The first four colors form the shared working palette for lines, circles, planes, and points. Assign
+them according to object relationships and the balance of the complete scene, not fixed object types.
 
 ## Color Relationships
 
@@ -57,6 +72,25 @@ those objects interact.
 
 ## Motion Conventions
 
+A typical construction follows this visual rhythm:
+
+```mermaid
+flowchart LR
+  A[Known start state]
+  B[Tool descent]
+  C[Travel]
+  D[Establish geometry]
+  E[Emphasize relation]
+  F[Tool rise]
+  G[Readable hold]
+  H[Reset]
+
+  A --> B --> C --> D --> E --> F --> G --> H
+```
+
+Omit phases that do not serve the construction, but preserve a readable start, meaningful action,
+and legible finish.
+
 - Start with pen descent when the animation is about drawing.
 - Use `animate_pen_arcmove` for travel between distinct construction points.
 - Use `animate_draw_point` when the point itself is being established.
@@ -71,20 +105,19 @@ those objects interact.
 
 ## Coordinate Space and Z Conventions
 
-- The drawing surface is normalized in x/y: use `x` and `y` in `[0.0, 1.0]` for
-  ordinary on-surface animation work.
-- Treat `z = 0.0` as the drawing surface contact plane for points, lines,
-  circles, and other on-surface primitives.
-- Positive `z` is "up" (off the surface) and is the standard direction for pen
-  and compass lift/travel motion.
-- Pen/compass descent phases should end at `z = 0.0`; rise phases should target
-  a positive top height (commonly around `1.4` in existing scripts).
-- Plane primitives should follow an intentional `z` profile:
-  - Flat/on-surface plane demonstrations should keep plane vertices at `z = 0.0`.
-  - Perspective/emphasis plane demonstrations may use positive `z` offsets for
-    elevated vertices.
-  - Avoid negative `z` for standard plane demonstrations unless a script has a
-    specific, documented reason.
+| Coordinate | Meaning | Standard use |
+| --- | --- | --- |
+| `x`, `y` | Normalized drawing surface | Use `[0.0, 1.0]` for ordinary surface work. |
+| `z = 0.0` | Surface contact plane | Points, lines, circles, and descent endpoints. |
+| `z > 0.0` | Height above surface | Tool lift/travel and intentional elevated geometry. |
+| `z < 0.0` | Below surface | Avoid unless a script documents a specific need. |
+
+Pen and compass rise phases should target a positive top height, commonly around `1.4` in existing
+scripts. Plane primitives require an intentional profile:
+
+- Flat or on-surface demonstrations keep plane vertices at `z = 0.0`.
+- Perspective or emphasis demonstrations may use positive `z` offsets for elevated vertices.
+- Negative `z` is not the default way to communicate depth.
 
 ## Isometric Projection and Right-Hand Rule
 
@@ -116,13 +149,15 @@ with that order in mind.
 
 Current frame order is:
 
-1. Drawing surface.
-1. Low cached geometry (labels/points/lines/circles/polygons).
-1. Low particles.
-1. Tool shadows (pen/compass).
-1. Mid particles.
-1. High cached tools (active tool dots + pen/compass strokes).
-1. High particles.
+| Order | Layer | Typical content |
+| --- | --- | --- |
+| 1 | Drawing surface | Persistent background surface. |
+| 2 | Low cached geometry | Labels, points, lines, circles, and polygons. |
+| 3 | Low particles | Effects behind tool shadows and high geometry. |
+| 4 | Tool shadows | Pen and compass shadows. |
+| 5 | Mid particles | Effects between shadows and active tools. |
+| 6 | High cached tools | Active tool dots plus pen and compass strokes. |
+| 7 | High particles | Effects above tools. |
 
 Important implications:
 
@@ -202,6 +237,24 @@ parse, bridge, capacity, compile, or layout failure falls back to the returned
 plain string. Structured output is therefore an enhancement, never the only
 source of meaning.
 
+```mermaid
+flowchart TD
+  A[Author structured source and complete fallback]
+  B[emit_latex_view_text!]
+  C[Plain fallback and copy payload]
+  D[Structured Dynview stream]
+  E{Parse, bridge, compile, and layout valid?}
+  F[Render structured text]
+  G[Render complete fallback]
+
+  A --> B
+  B --> C
+  B --> D --> E
+  E -->|Yes| F
+  E -->|No| G
+  C --> G
+```
+
 ### Preferred Authoring API
 
 Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It:
@@ -233,22 +286,17 @@ stable across frames so math parsing and compiled-program caches can be reused.
 
 ### Choosing Document Or Math Mode
 
-Use document mode for the normal animation text surface. It supports:
+| Mode | Use when | Supported content |
+| --- | --- | --- |
+| Document | Normal animation text surface | Prose, styles, inline/display math, breaks, shapes. |
+| Math | Complete source is one expression | Scripts, fractions, radicals, operators, matrices. |
 
-- Unicode prose;
-- `\textbf{...}`, `\textit{...}`, and `\emph{...}`;
-- inline math with `$...$` or `\(...\)`;
-- display math with `$$...$$` or `\[...\]`;
-- paragraph breaks from blank lines;
-- forced breaks with `\\` or `\newline`;
-- embedded `\euclidpoint`, `\euclidline`, `\euclidcircle`, and
-  `\euclidbox` atoms.
+Document mode supports Unicode prose; `\textbf{...}`, `\textit{...}`, and `\emph{...}`; inline math
+with `$...$` or `\(...\)`; display math with `$$...$$` or `\[...\]`; blank-line paragraphs; forced
+breaks with `\\` or `\newline`; and embedded Euclid shapes.
 
-Use math mode when the complete source is one mathematical expression. Math
-mode supports scripts, fractions, radicals, accent bars, large operators,
-stretch delimiters, and supported matrices. Prefer commands such as `\alpha`,
-`\leq`, and `\mathbb{R}` over raw mathematical Unicode when the symbol is
-important to parser or style behavior.
+In math mode, prefer commands such as `\alpha`, `\leq`, and `\mathbb{R}` over raw mathematical
+Unicode when the symbol is important to parser or style behavior.
 
 Use `\text{...}` or `\mathrm{...}` for upright words inside math. Document
 styles such as `\textbf` do not replace math-mode text commands.
@@ -278,10 +326,12 @@ geometry, and do not prove that the corresponding world object exists.
 
 Supported document commands and options are:
 
-- `\euclidpoint`: `color`, `size`.
-- `\euclidline`: `color`, `length`, `thickness`.
-- `\euclidcircle`: `color`, `size`, `thickness`, `filled`.
-- `\euclidbox`: `color`, `width`, `height`, `thickness`, `filled`.
+| Command | Options | Intended symbol |
+| --- | --- | --- |
+| `\euclidpoint` | `color`, `size` | Point marker. |
+| `\euclidline` | `color`, `length`, `thickness` | Line or segment. |
+| `\euclidcircle` | `color`, `size`, `thickness`, `filled` | Circle or filled locus marker. |
+| `\euclidbox` | `color`, `width`, `height`, `thickness`, `filled` | Box or region marker. |
 
 The shorthand option `filled` means `filled=true`. Dimensions must be finite
 and positive, booleans must be `true` or `false`, and colors must resolve
@@ -334,12 +384,15 @@ the structured stream instead of displaying a partial document.
 
 ### Specialized LaTeX APIs
 
-Use `EuclidLatex.replay_emit_math_block!` when a Dynview block is already open
-and one recursive math expression must be inserted. It returns `false` on
-bridge failure.
+| API | Use |
+| --- | --- |
+| `emit_latex_view_text!` | Complete document/math view text with authored fallback. |
+| `replay_emit_math_block!` | Insert one recursive expression into an open Dynview block. |
+| `emit_latex_dynview!` | Emit a standalone math-only block. |
+| Direct Dynview bridge calls | Last resort for composition the high-level APIs cannot express. |
 
-Use `EuclidLatex.emit_latex_dynview!` for a standalone math-only block when the
-caller does not need document prose or embedded shapes.
+`replay_emit_math_block!` returns `false` on bridge failure. `emit_latex_dynview!` is appropriate only
+when the caller does not need document prose or embedded shapes.
 
 Do not manually parse LaTeX or approximate structured math with spaced text.
 
