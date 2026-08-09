@@ -78,7 +78,8 @@ Before marking work complete, verify all items below:
 - Functions stay within size/complexity limits or include justification.
 - Return shapes use one value or, when genuinely clearer, a two-item tuple.
 - No Odin or Julia closing parenthesis begins its own continuation line.
-- Comments/docs explain intent and side effects, not obvious syntax.
+- Every named Odin procedure and Julia function has a useful doc comment or docstring.
+- Doc comments explain contracts, intent, and side effects rather than narrating syntax.
 - Public API names, mutation signals, argument order, and type constraints match language conventions.
 - Canonical validation occurs at boundaries; internal code does not repeatedly normalize bad input.
 
@@ -346,15 +347,24 @@ meaningful boundary.
 ### Comments and Function Placement
 
 - Public/cross-file functions should appear near the top of a file.
-- Public/cross-file functions need useful doc comments:
-  - purpose,
-  - key params/returns,
-  - side effects/usage notes.
-- Local helper functions should include concise summary comments when
-  non-obvious.
+- Every named procedure MUST have a doc comment directly above its declaration, including local and
+  file-private helpers.
+- Every reusable named type, enum, procedure group, and package-level subsystem contract MUST have a
+  doc comment.
+- A concise one-sentence comment is sufficient for a simple helper, but omission is not.
 - Keep helpers near the owning operation when they are not part of the package-facing surface.
 - Document invariants, ownership, units, valid ranges, and failure semantics that types do not show.
 - Do not narrate assignments, loops, or conditionals that are already clear from the code.
+
+```odin
+// Return the published scene batch when its generation is current.
+resolve_scene_batch :: proc(state: ^Euclid_General_State, generation: u64) -> (Scene_Command_Batch, bool) {
+    // ...
+}
+```
+
+Use normal Odin documentation comments immediately before the declaration. Do not separate the
+comment from its declaration with unrelated constants, attributes, or implementation notes.
 
 ### Resource Management
 
@@ -391,6 +401,31 @@ entry = resolve_entry(
   runtime_module,
   callback_symbol)
 ```
+
+### Docstrings
+
+- Every named function MUST have a Julia docstring attached directly to its binding.
+- Every module and reusable named type MUST have a docstring.
+- A concise one-sentence docstring is sufficient for a simple private helper, but omission is not.
+- Multiple methods MAY share one canonical function docstring when they implement the same semantic
+  contract. A method with distinct constraints, side effects, ownership, or failure behavior needs
+  its own documentation.
+- Anonymous functions and one-off callback literals do not require independent docstrings; document
+  the named operation or value that owns their behavior.
+- Generated methods MAY be documented at their generator when the generated contract is uniform and
+  the generated bindings remain discoverable.
+
+```julia
+"""Return the current callback binding, or `nothing` when the symbol is undefined."""
+function resolve_entry(
+  module_ref::Module,
+  symbol::Symbol)::Union{Nothing,Function}
+  return isdefined(module_ref, symbol) ? getfield(module_ref, symbol) : nothing
+end
+```
+
+Use Julia docstrings, not detached `#` comments, for named API documentation so `Docs` metadata and
+the future generated Code reference can discover it.
 
 ### Naming and API Semantics
 
@@ -533,12 +568,26 @@ Choose the representation that makes comparison or flow easiest to verify:
 - A diagram supplements the normative text; it does not become the only statement of a requirement.
 - Prefer one strong example over several nearly identical examples.
 
-### Code Documentation
+### Doc Comments And Docstrings (Required)
 
-- Document exported, cross-file, bridge, lifecycle, ownership, and non-obvious public operations.
+Doc comments are mandatory source code, not optional polish. They are the canonical prose for the
+future generated Code reference and part of the declaration's review contract.
+
+| Declaration | Requirement |
+| --- | --- |
+| Named Odin procedure | Doc comment required, including private helpers. |
+| Named Julia function | Docstring required, including private helpers. |
+| Package/module | Document its responsibility and boundary. |
+| Reusable type or enum | Document meaning, invariants, and ownership where applicable. |
+| Bridge declaration/wrapper | Document ABI inputs, outputs, mutation, ownership, and failure. |
+| Constant | Document when units, sentinel meaning, limits, or policy are not obvious. |
+| Anonymous local callback | No separate docstring; document the named owning operation. |
+
 - Begin with a useful summary of behavior, not the declaration restated in English.
 - Record side effects, units, valid ranges, ownership transfer, thread affinity, and failure semantics
   when they are part of the contract.
+- Describe parameters and return values when names and types do not make their roles obvious.
+- Keep documentation attached to the declaration so language tooling and Wiki extraction can find it.
 - Keep implementation commentary near the invariant or unusual decision it explains.
 - Remove stale comments in the same change that makes them stale.
 - Do not preserve duplicate prose in several files. Keep one canonical explanation and link to it.
