@@ -9,6 +9,7 @@ there are some things that do need to start early.
 
 Core Content:
 
+- [ ] All existing animations use LaTeX rendering
 - [ ] Euclid Elements, Book 1 "the intro core, pythagorus"
   - [X] Definitions
   - [X] Postulates
@@ -113,18 +114,54 @@ General features:
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
 - [X] Drawing Sounds (Initial procedural)
-- [ ] Alternative tree for connected view vs book view -- Nice to have --
 
 Final tasks:
 
-- [ ] Complete unit tests
-- [ ] Animation editing (2-3 weeks)
-- [ ] Final cleanup/tightening
+- [ ] Versioned structured semantic trace and checkpoint snapshot system behind runtime flag (default off)
+  - [ ] Configurable JSONL event output
+  - [ ] Runtime, animation, geometry, tool, and particle event schemas
+  - [ ] Deterministic state snapshots at test checkpoints
+  - [ ] Stable identities, simulation timestamps, and runtime generations
+  - [ ] Bounded thread-safe collection and overflow reporting
+- [ ] Final optimizations
+  - [X] Dedicated Julia thread for Julia module isolation
+  - [X] Basic worker threadpool optimizations
+  - [X] Julia sysimage compilation and support
+- [ ] Integration and end-to-end test infrastructure
+  - [ ] Serial integration executable using embedded Julia
+  - [ ] Embedded-runtime integration test suite
+  - [ ] Extensible animation scenario harness
+  - [ ] Deterministic animation test controls and observation API
+  - [ ] Semantic animation test suite
+  - [ ] Representative visual animation regression suite
+  - [ ] Running-application end-to-end harness
+  - [ ] End-to-end application test suite
+  - [ ] Add integration and end-to-end phases to `make.jl -t`
+- [ ] Runtime hardening
+  - [ ] Julia/Odin boundary ownership and lifecycle audit
+  - [ ] Bridge ABI validation and malformed-input tests
+  - [ ] Shutdown, reload, cancellation, and failure-path coverage
+  - [ ] Long-running soak tests
+  - [ ] Performance budgets
+- [ ] Release validation
+  - [ ] Rendering regression suite
+  - [ ] Cross-platform resource fallback validation
+  - [ ] User-facing error and recovery review
+  - [ ] Release-mode smoke tests
+  - [ ] Dependency, license, and runtime-closure audit
+- [ ] Surface cleanup
+  - [ ] Freeze and document supported Julia APIs
+  - [ ] Remove dead APIs, debug paths, compatibility code, and unused assets
+  - [ ] Final bounded review
+- [ ] Final editing and review (2-3 weeks)
+  - [ ] Animation and content editing
+  - [ ] Principal code review against documented architecture and standards
+  - [ ] Resolve review findings
 - [ ] Package construction
   - [ ] Linux
   - [ ] Windows
   - [ ] MacOS
-- [ ] CI Builds
+  - [ ] CI Builds
 
 ## v2
 
@@ -165,6 +202,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Shearing
 - Window sizing and portrait mode
 - Revisit sounds? Maybe
+- Alternative tree for connected view vs book view
 
 ## Brainstorming
 
