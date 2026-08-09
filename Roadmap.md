@@ -123,17 +123,7 @@ Final tasks:
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
-- [ ] Generated Code Wiki
-  - [ ] Define language-neutral documentation symbol model
-  - [ ] Odin `odin doc` package discovery, invocation, and output parser
-  - [ ] Julia documentation extractor
-  - [ ] Deterministic GitHub-flavored Markdown renderer and indexes
-  - [ ] Hierarchical home pages, package indexes, and `_Sidebar.md`
-  - [ ] Cross-language bridge symbol mapping
-  - [ ] Source links and authored-document references
-  - [ ] Stale-output and broken-link validation
-  - [ ] Integrate generation/check mode into `make.jl`
-  - [ ] Publish generated directory to the GitHub Wiki repository
+- [X] Generated Code Wiki
 - [ ] Versioned structured semantic trace and checkpoint snapshot system behind runtime flag (default off)
   - [ ] Configurable JSONL event output
   - [ ] Runtime, animation, geometry, tool, and particle event schemas
