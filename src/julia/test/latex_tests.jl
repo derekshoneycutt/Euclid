@@ -135,6 +135,31 @@ end
     spacing_plain = EuclidLatex.latex_to_plain_text("a\\;b")
     @test spacing_plain == "a b"
 
+    greek_plain = EuclidLatex.latex_to_plain_text("\\varpi \\digamma")
+    @test greek_plain == "ϖ ϝ"
+
+    operator_plain = EuclidLatex.latex_to_plain_text(
+        "\\mp \\ast \\star \\bullet \\oplus \\otimes \\setminus \\sqcap \\amalg")
+    @test operator_plain == "∓ ∗ ⋆ ∙ ⊕ ⊗ ∖ ⊓ ⨿"
+
+    relation_plain = EuclidLatex.latex_to_plain_text(
+        "\\ll \\prec \\preceq \\sim \\simeq \\cong \\parallel \\perp \\models \\sqsubseteq \\ni")
+    @test relation_plain == "≪ ≺ ≼ ∼ ≃ ≅ ∥ ⊥ ⊨ ⊑ ∋"
+
+    logic_plain = EuclidLatex.latex_to_plain_text(
+        "\\emptyset \\complement \\therefore \\because \\top \\bot")
+    @test logic_plain == "∅ ∁ ∴ ∵ ⊤ ⊥"
+
+    arrow_plain = EuclidLatex.latex_to_plain_text(
+        "\\rightarrow \\leftrightarrow \\uparrow \\Uparrow \\longrightarrow " *
+        "\\hookrightarrow \\leftharpoonup \\rightleftharpoons \\leadsto")
+    @test arrow_plain == "→ ↔ ↑ ⇑ ⟶ ↪ ↼ ⇌ ⇝"
+
+    notation_plain = EuclidLatex.latex_to_plain_text(
+        "\\prime \\hbar \\ell \\Re \\Im \\wp \\angle \\triangle \\Box " *
+        "\\Diamond \\clubsuit \\flat \\checkmark \\oint \\iint")
+    @test notation_plain == "′ ℏ ℓ ℜ ℑ ℘ ∠ △ □ ◇ ♣ ♭ ✓ ∮ ∬"
+
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
     @test length(program) == 2
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN

@@ -356,10 +356,18 @@ end
 @testset "latex result formatting helpers" begin
     @test Scratchpad.normalize_latex_result_source("\$\\alpha\$") == "\\alpha"
     @test Scratchpad.normalize_latex_result_source("\$\$\\frac{1}{2}\$\$") == "\\frac{1}{2}"
+    @test Scratchpad.normalize_latex_result_source("\$\$\\alpha\$") == "\\alpha"
+    @test Scratchpad.normalize_latex_result_source("\$\\alpha\$\$") == "\\alpha"
+    @test Scratchpad.normalize_latex_result_source("\$\$\$\\alpha\$\$\$") == "\\alpha"
+    @test Scratchpad.normalize_latex_result_source("x\$y") == "x\$y"
     @test Scratchpad.normalize_latex_result_source("  \\beta  ") == "\\beta"
 
     latex_source = Scratchpad.format_result_latex_source(ScratchpadLatexResultMock(), Main)
     @test latex_source == "\\frac{1}{2}"
+
+    runtime = Scratchpad.create_runtime_module(4_001)
+    malformed_latex = Main.LaTeXStrings.LaTeXString("\$\$\\alpha\$")
+    @test Scratchpad.format_result_latex_source(malformed_latex, runtime) == "\\alpha"
 
     plain_source = Scratchpad.format_result_latex_source(ScratchpadPlainResultMock(), Main)
     @test plain_source === nothing

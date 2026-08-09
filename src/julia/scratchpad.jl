@@ -976,15 +976,11 @@ function format_result_value(value, runtime::Module)
     return String(take!(io))
 end
 
-"""Remove one pair of surrounding `\$...\$` or `\$\$...\$\$` delimiters when present."""
+"""Remove surrounding dollar-delimiter runs from one `text/latex` result."""
 function normalize_latex_result_source(latex_source::AbstractString)
     source = strip(String(latex_source))
-    if length(source) >= 4 && startswith(source, "\$\$") && endswith(source, "\$\$")
-        return strip(source[3:end-2])
-    end
-
     if length(source) >= 2 && startswith(source, "\$") && endswith(source, "\$")
-        return strip(source[2:end-1])
+        return strip(strip(source, '\$'))
     end
 
     return source

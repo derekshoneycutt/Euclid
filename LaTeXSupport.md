@@ -191,23 +191,52 @@ Practical rule: if a symbol matters, prefer its LaTeX command form over raw char
   `\varepsilon`, `\zeta`, `\eta`, `\theta`, `\vartheta`, `\iota`, `\kappa`,
   `\varkappa`, `\lambda`, `\mu`, `\nu`, `\xi`, `\pi`, `\rho`, `\varrho`,
   `\sigma`, `\varsigma`, `\tau`, `\upsilon`, `\phi`, `\varphi`, `\chi`,
-  `\psi`, `\omega`.
+    `\psi`, `\omega`, `\varpi`, and `\digamma`.
 - Uppercase Greek: `\Gamma`, `\Delta`, `\Theta`, `\Lambda`, `\Xi`, `\Pi`,
   `\Sigma`, `\Upsilon`, `\Phi`, `\Psi`, `\Omega`.
 - Hebrew-style symbols: `\aleph`, `\beth`, `\gimel`, `\daleth`.
 
 ### Math Symbol Command Coverage (Current Fixed Set)
 
-- Arithmetic/operators: `\pm`, `\times`, `\div`, `\cdot`.
-- Calculus/analysis: `\infty`, `\partial`, `\nabla`, `\propto`.
-- Logic/quantifiers: `\forall`, `\exists`, `\neg`, `\land`, `\lor`.
-- Set relations/operations: `\in`, `\notin`, `\subset`, `\subseteq`,
-    `\supset`, `\supseteq`, `\cup`, `\cap`.
-- Relations: `\leq`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv`.
-- Arrows: `\to`, `\leftarrow`, `\Rightarrow`, `\Leftarrow`, `\iff`,
-    `\mapsto`.
-- Additional symbols: `\dots`, `\rtimes`, and `\;`, which maps to one normal
-    space.
+- Basic operators: `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\ast`, `\star`,
+    `\bullet`, `\circ`, `\diamond`, `\rtimes`, `\setminus`, and `\wr`.
+- Circled and square operators: `\oplus`, `\ominus`, `\otimes`, `\oslash`,
+    `\odot`, `\bigcirc`, `\sqcap`, `\sqcup`, and `\uplus`.
+- Triangle operators: `\bigtriangleup`, `\bigtriangledown`, `\triangleleft`,
+    `\triangleright`, `\lhd`, `\rhd`, `\unlhd`, and `\unrhd`.
+- Additional operators: `\dagger`, `\ddagger`, and `\amalg`.
+- Calculus and analysis: `\infty`, `\partial`, `\nabla`, `\propto`, `\oint`,
+    `\iint`, `\iiint`, and `\coprod`.
+- Logic and quantifiers: `\forall`, `\exists`, `\nexists`, `\neg`, `\land`,
+    `\lor`, `\wedge`, `\vee`, `\therefore`, `\because`, `\top`, and `\bot`.
+- Set membership: `\in`, `\notin`, `\ni`, `\owns`, and `\notni`.
+- Set relations: `\subset`, `\subseteq`, `\subsetneq`, `\nsubseteq`,
+    `\supset`, `\supseteq`, `\supsetneq`, `\nsupseteq`, `\sqsubset`,
+    `\sqsubseteq`, `\sqsupset`, and `\sqsupseteq`.
+- Set operations: `\cup`, `\cap`, `\emptyset`, `\varnothing`, and
+    `\complement`.
+- Ordering and equality: `\le`, `\leq`, `\ge`, `\geq`, `\ll`, `\gg`, `\ne`,
+    `\neq`, `\approx`, `\equiv`, `\prec`, `\succ`, `\preceq`, and `\succeq`.
+- Relatedness: `\sim`, `\simeq`, `\cong`, `\asymp`, `\doteq`, `\parallel`,
+    `\nparallel`, `\mid`, `\nmid`, `\perp`, `\models`, `\vdash`, `\dashv`,
+    `\bowtie`, `\smile`, and `\frown`.
+- Basic arrows: `\to`, `\rightarrow`, `\leftarrow`, `\leftrightarrow`,
+    `\uparrow`, `\downarrow`, `\updownarrow`, `\Rightarrow`, `\Leftarrow`,
+    `\Leftrightarrow`, `\iff`, `\Uparrow`, `\Downarrow`, and `\Updownarrow`.
+- Long and hooked arrows: `\longleftarrow`, `\longrightarrow`,
+    `\longleftrightarrow`, `\Longleftarrow`, `\Longrightarrow`,
+    `\Longleftrightarrow`, `\hookleftarrow`, `\hookrightarrow`, and `\mapsto`.
+- Directional and harpoon arrows: `\nearrow`, `\searrow`, `\swarrow`,
+    `\nwarrow`, `\leftharpoonup`, `\leftharpoondown`, `\rightharpoonup`,
+    `\rightharpoondown`, `\rightleftharpoons`, `\leftrightharpoons`, and
+    `\leadsto`.
+- Dots: `\dots`, `\ldots`, `\cdots`, `\vdots`, and `\ddots`.
+- Letterlike and geometric symbols: `\prime`, `\hbar`, `\ell`, `\Re`, `\Im`,
+    `\wp`, `\mho`, `\angle`, `\measuredangle`, `\sphericalangle`, `\triangle`,
+    `\Box`, `\square`, `\Diamond`, `\lozenge`, and `\surd`.
+- Suits, music, and marks: `\clubsuit`, `\diamondsuit`, `\heartsuit`,
+    `\spadesuit`, `\flat`, `\natural`, `\sharp`, `\checkmark`, and `\degree`.
+- Spacing: `\;` maps to one normal space.
 - Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
     `\Vert`, `\backslash`, `\{`, `\}`.
 
