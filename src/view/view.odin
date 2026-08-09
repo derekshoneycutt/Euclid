@@ -257,7 +257,7 @@ initialize_application_with_loading :: proc(
     end_startup_phase("Starting Julia", started_at)
 
     started_at = begin_startup_phase("Loading content", 0.65)
-    state := initiate_animations_state(julia_service)
+    state := initiate_animations_state(julia_service, settings)
     content_id, content_sent := julia.try_submit_julia_request(
         julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
     if !content_sent || !finish_julia_startup_request(
@@ -285,7 +285,8 @@ initialize_application_with_loading :: proc(
 // Notes:
 //   - Allocates long-lived runtime state and returns ownership to caller.
 initiate_animations_state :: proc(
-    julia_service: ^julia.Julia_Runtime_Service) -> ^Euclid_General_State {
+    julia_service: ^julia.Julia_Runtime_Service,
+    settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
     iso_scale := new(Iso_Scale)
     iso_scale^.scale = ISO_SCALE_VALUE
     iso_scale^.x_offset = ISO_X_OFFSET
@@ -304,7 +305,7 @@ initiate_animations_state :: proc(
     drawing_surface^.edge_size = SURFACE_EDGE_SIZE
 
     particle_system := new(Particle_System)
-    particle_system^.use_max_dust_particles = core.MAX_LOW_PARTICLES
+    particle_system^.use_max_dust_particles = settings^.dust_particle_max
 
     point_system := new(Shapes_Point_System)
 
@@ -331,10 +332,12 @@ initiate_animations_state :: proc(
     state^.pen = pen
     state^.current_delta_time = FIXED_DT
     state^.accumulator = 0
-    state^.ui_runtime.limit_fps = true
+    state^.ui_runtime.limit_fps = settings^.limit_fps
     state^.ui_runtime.simulation_paused = false
-    state^.ui_runtime.use_simd_batch_projection = view_core.simd_batch_projection_available()
-    state^.ui_runtime.use_gpu_dust_instancing = rlgl.GetVersion() >= .OPENGL_33
+    state^.ui_runtime.use_simd_batch_projection =
+        settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
+    state^.ui_runtime.use_gpu_dust_instancing =
+        settings^.use_gpu_dust_instancing && rlgl.GetVersion() >= .OPENGL_33
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2

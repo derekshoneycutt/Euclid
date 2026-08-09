@@ -120,6 +120,12 @@ warning is work to understand, even when the current report classifies it as non
 - Keep the happy path visually prominent; validate or reject exceptional states at boundaries.
 - Name values for their domain meaning, not their temporary implementation role.
 
+### Command-Line Short Flags
+
+For paired command-line options, lowercase short flags MUST enable the option and the corresponding
+uppercase flag MUST disable it, such as `-a`/`-A`. Combined short groups are allowed and are applied
+left to right, so the last occurrence wins. Unpaired actions such as help or clean remain lowercase.
+
 ### Line Length
 
 - 90 chars: warning threshold.

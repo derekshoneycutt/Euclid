@@ -1345,4 +1345,8 @@ Euclid_Run_Settings :: struct {
     do_run : bool,
     do_antialiasing : bool,
     do_vsync : bool,
+    dust_particle_max: int,
+    limit_fps: bool,
+    use_simd_batch_projection: bool,
+    use_gpu_dust_instancing: bool,
 }

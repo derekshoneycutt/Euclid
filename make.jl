@@ -6,22 +6,22 @@ function show_help()
 Usage: ./make.jl [options]
 
 Options:
-    --build, -b         Build the project.
-    --assets, -a        Build assets.pkg.
+    --build, -b         Build the project. (default)
+    --no-build, -B      Skip any build, including vet builds.
+    --assets, -a        Build assets.pkg. (default)
+    --no-assets, -A     Skip assets.pkg build.
     --sysimage, -s      Build a custom Julia sysimage beside the application.
     --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
-    --no-build, -n      Skip any build (overrides --build and --vet).
-    --no-assets, -x     Skip assets.pkg build (overrides --assets).
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
 
 Notes:
     - If no options are provided, the default is --build --assets.
-    - That is, --build and --assets are essentially non-altering flags, included for visibility.
-    - Short options can be combined, e.g. -rvas or -bnx.
+    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
+    - Short options can be combined, e.g. -rvas or -Ba.
 """
 end
 
@@ -155,8 +155,17 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
         args[:run] = true
     elseif flag == 'b'
         args[:build] = true
+        args[:no_build] = false
+    elseif flag == 'B'
+        args[:build] = false
+        args[:vet] = false
+        args[:no_build] = true
     elseif flag == 'a'
         args[:assets] = true
+        args[:no_assets] = false
+    elseif flag == 'A'
+        args[:assets] = false
+        args[:no_assets] = true
     elseif flag == 's'
         args[:sysimage] = true
     elseif flag == 'c'
@@ -165,10 +174,7 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
         args[:test] = true
     elseif flag == 'v'
         args[:vet] = true
-    elseif flag == 'n'
-        args[:no_build] = true
-    elseif flag == 'x'
-        args[:no_assets] = true
+        args[:no_build] = false
     elseif flag == 'h'
         args[:help] = true
     else
@@ -208,8 +214,10 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
             parsed[:run] = true
         elseif arg == "--build" || arg == "-b"
             parsed[:build] = true
+            parsed[:no_build] = false
         elseif arg == "--assets" || arg == "-a"
             parsed[:assets] = true
+            parsed[:no_assets] = false
         elseif arg == "--sysimage" || arg == "-s"
             parsed[:sysimage] = true
         elseif arg == "--clean" || arg == "-c"
@@ -218,9 +226,13 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
             parsed[:test] = true
         elseif arg == "--vet" || arg == "-v"
             parsed[:vet] = true
-        elseif arg == "--no-build" || arg == "-n"
+            parsed[:no_build] = false
+        elseif arg == "--no-build" || arg == "-B"
+            parsed[:build] = false
+            parsed[:vet] = false
             parsed[:no_build] = true
-        elseif arg == "--no-assets" || arg == "-x"
+        elseif arg == "--no-assets" || arg == "-A"
+            parsed[:assets] = false
             parsed[:no_assets] = true
         elseif arg == "--help" || arg == "-h"
             parsed[:help] = true

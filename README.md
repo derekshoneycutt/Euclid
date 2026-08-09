@@ -221,11 +221,20 @@ Additionally, there are some startup options that can affect application perform
 Usage: ./euclid [options]
 
 Options:
-  --vsync              Enable VSYNC. (default)
-  --no-vsync           Disable VSYNC.
-  --antialiasing       Enable anti-aliasing. (default)
-  --no-antialiasing    Disable anti-aliasing.
-  --help               Show this help text.
+  -v, --vsync              Enable VSYNC. (default)
+  -V, --no-vsync           Disable VSYNC.
+  -a, --antialiasing       Enable anti-aliasing. (default)
+  -A, --no-antialiasing    Disable anti-aliasing.
+  --dust-particle-max=N    Set maximum dust particles, 0-8192. (default: 8192)
+  -f, --limit-fps          Limit rendering to 60 FPS. (default)
+  -F, --no-limit-fps       Disable the 60 FPS limit.
+  -s, --simd               Enable SIMD projection when available. (default)
+  -S, --no-simd            Disable SIMD projection.
+  -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)
+  -G, --no-gpu-dust-instancing Disable GPU dust instancing.
+  -h, --help               Show this help text.
+
+Short options can be combined, for example: -vasg or -VAFSG
 ```
 
 ### Q: Why 2 languages?
@@ -262,21 +271,21 @@ is not enough.
 Usage: ./make.jl [options]
 
 Options:
-    --build, -b         Build the project.
-    --assets, -a        Build assets.pkg.
+    --build, -b         Build the project. (default)
+    --no-build, -B      Skip any build, including vet builds.
+    --assets, -a        Build assets.pkg. (default)
+    --no-assets, -A     Skip assets.pkg build.
     --sysimage, -s      Build a custom Julia sysimage beside the application.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
-    --no-build, -n      Skip any build (overrides --build and --vet).
-    --no-assets, -x     Skip assets.pkg build (overrides --assets).
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
 
 Notes:
     - If no options are provided, the default is --build --assets.
-    - That is, --build and --assets are essentially non-altering flags, included for visibility.
-    - Short options can be combined, e.g. -rvas or -bnx.
+    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
+    - Short options can be combined, e.g. -rvas or -Ba.
 ```
 
 ### Q: Where Should I Start If I Want In The Code?
@@ -303,7 +312,7 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-julia make.jl -na
+julia make.jl -Ba
 ```
 
 Euclid will automatically notice the updated package file, unpack it, and reload all
