@@ -9,9 +9,7 @@ Key behavior:
 - new draws preempt active draw and finalize interrupted shape visibility,
 - drawn geometry persists until scratchpad session reset/restart.
 
-Public functions: `euclidcolors`, `hide!`, `point!`, `line!`, `circle!`, `highlight_pen!`, `highlight_compass!`, `translate_points!`, `rotate_points!`, `rotate_points_x!`, `rotate_points_y!`, `rotate_points_z!`, `reflect2d_points!`, `reflect2d_points_x_axis!`, `reflect2d_points_y_axis!`, `reflect2d_points_diag_pos!`, `reflect2d_points_diag_neg!`, `stop!`, `clear!`, and `status`.
-
-Use `?point!`, `?line!`, and `?circle!` for API details.
+Use `?point!`, `?line!`, and `?circle!` in the Scratchpad for API details.
 """
 module EuclidRepl
 

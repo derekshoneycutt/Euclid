@@ -70,6 +70,9 @@ end
 
         rendered = render_julia_module_page(package)
         @test occursin("# Julia Module `SampleModule`", rendered)
+        @test occursin("## Public API", rendered)
+        @test occursin("[`greet`](#symbol-julia-SampleModule-function-greet)", rendered)
+        @test !occursin("[`sample`](#symbol-julia-SampleModule-macro-sample)", rendered)
         @test occursin("## Functions", rendered)
         @test occursin("greet(value::String)", rendered)
         @test occursin("[Source](../../../../src/julia/sample.jl#L9)", rendered)
@@ -89,6 +92,10 @@ end
     @test latex.display_name == "EuclidLatex"
     @test any(symbol -> symbol.name == "parse_latex" &&
         symbol.visibility == :public, latex.symbols)
+    rendered_latex = render_julia_module_page(latex)
+    @test occursin("[`parse_latex`](#symbol-julia-EuclidLatex-function-parse-latex)",
+        rendered_latex)
+    @test occursin("### `PARSER_GRAMMAR_VERSION`", rendered_latex)
 
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")
     @test bridge.display_name == "OdinJuliaBridge"
