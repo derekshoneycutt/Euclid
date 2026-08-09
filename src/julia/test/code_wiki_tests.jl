@@ -116,4 +116,5 @@ end
     extracted = CodeWiki.extract_default_wiki_packages(repository_root)
     odin_packages = filter(item -> item.language == :odin, extracted)
     @test sort([package.source_root for package in odin_packages]) == packages
+    @test "julia:EuclidLatex" in [package.stable_id for package in extracted]
 end

@@ -395,6 +395,7 @@ const PROTOTYPE_JULIA_MODULE_FILES = [
     "src/julia/animations.jl",
     "src/julia/euclidrepl.jl",
     "src/julia/geometry.jl",
+    "src/julia/latex.jl",
     "src/julia/odin-julia-bridge.jl",
 ]
 

@@ -85,6 +85,11 @@ end
     @test occursin("Shared geometric intersection helpers", geometry.doc_markdown)
     @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 3
 
+    latex = extract_julia_module(config, "src/julia/latex.jl")
+    @test latex.display_name == "EuclidLatex"
+    @test any(symbol -> symbol.name == "parse_latex" &&
+        symbol.visibility == :public, latex.symbols)
+
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")
     @test bridge.display_name == "OdinJuliaBridge"
     @test length(bridge.source_files) == 7

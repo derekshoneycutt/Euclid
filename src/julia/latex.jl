@@ -1,3 +1,9 @@
+"""
+Parse supported LaTeX into deterministic dynview programs and plain-text fallbacks.
+
+EuclidLatex owns tokenization, recursive parsing, normalization, compilation, and bounded parse
+caching. Rendering remains host-owned and is reached through the Odin-Julia bridge.
+"""
 module EuclidLatex
 
 using ..OdinJuliaBridge
