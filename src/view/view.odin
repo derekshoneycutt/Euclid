@@ -19,6 +19,7 @@ import "core:strings"
 import "core:thread"
 
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
@@ -333,6 +334,7 @@ initiate_animations_state :: proc(
     state^.ui_runtime.limit_fps = true
     state^.ui_runtime.simulation_paused = false
     state^.ui_runtime.use_simd_batch_projection = view_core.simd_batch_projection_available()
+    state^.ui_runtime.use_gpu_dust_instancing = rlgl.GetVersion() >= .OPENGL_33
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2

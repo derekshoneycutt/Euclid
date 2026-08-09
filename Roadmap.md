@@ -117,6 +117,11 @@ General features:
 
 Final tasks:
 
+- [X] Final optimizations
+  - [X] Dedicated Julia thread for Julia module isolation
+  - [X] Basic worker threadpool optimizations
+  - [X] Julia sysimage compilation and support
+  - [X] Shader-based particle drawing
 - [ ] Generated Code Wiki
   - [ ] Define language-neutral documentation symbol model
   - [ ] Odin `odin doc` package discovery, invocation, and output parser
@@ -134,10 +139,6 @@ Final tasks:
   - [ ] Deterministic state snapshots at test checkpoints
   - [ ] Stable identities, simulation timestamps, and runtime generations
   - [ ] Bounded thread-safe collection and overflow reporting
-- [ ] Final optimizations
-  - [X] Dedicated Julia thread for Julia module isolation
-  - [X] Basic worker threadpool optimizations
-  - [X] Julia sysimage compilation and support
 - [ ] Integration and end-to-end test infrastructure
   - [ ] Serial integration executable using embedded Julia
   - [ ] Embedded-runtime integration test suite

@@ -206,7 +206,9 @@ improve performance. You can also turn the FPS display on/off, enable or disable
 sound, and turn FPS limiting on/off. Turning the FPS limit on/off may have no real effect
 if vsync is on (the default). Additionally, you can toggle SIMD use for use in isometric
 projection, which is on by default. The SIMD has little effect either way on most modern
-computers, to be honest.
+computers, to be honest, especially given LLVM may make this optimization in either case.
+The single biggest performance tweak is the default-enabled GPU Dust Instancing, which
+will draw the dust particles with the GPU and O(1) on the CPU to instance the data.
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the

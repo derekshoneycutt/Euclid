@@ -6,6 +6,7 @@ import view_core "../core"
 import "core:fmt"
 
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 //   Render particle render-count statistics and Julia animation-entry counts in settings view.
 draw_settings_particle_stats :: proc(
@@ -151,6 +152,50 @@ draw_settings_simd_projection_checkbox :: proc(
     }
 }
 
+//   Render and handle the GPU dust instancing toggle control.
+draw_settings_gpu_dust_checkbox :: proc(
+    panel: rl.Rectangle,
+    row_y: f32,
+    mouse_input: Mouse_Input_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    font: rl.Font) {
+
+    box := rl.Rectangle{
+        panel.x + SETTINGS_PANEL_INSET,
+        row_y,
+        SETTINGS_CHECKBOX_SIZE,
+        SETTINGS_CHECKBOX_SIZE,
+    }
+
+    is_available := rlgl.GetVersion() >= .OPENGL_33
+    label := "GPU Dust Instancing"
+    if !is_available {
+        label = "GPU Dust Instancing (Unavailable)"
+    }
+
+    checkbox_result := draw_checkbox(Checkbox_Params{
+        id = 4005,
+        rect = box,
+        checked = ui_runtime.use_gpu_dust_instancing,
+        enabled = is_available,
+        mouse = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = panel,
+        interaction_enabled = true,
+        label = label,
+        font = font,
+        label_font_size = TREE_FONT_SIZE,
+        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
+        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+    }, &ui_runtime.ui_press_owner)
+    if checkbox_result.toggled {
+        ui_runtime.use_gpu_dust_instancing = checkbox_result.checked_out
+    }
+    if !is_available {
+        ui_runtime.use_gpu_dust_instancing = false
+    }
+}
+
 //   Render and handle the drawing sound toggle control.
 draw_settings_sound_checkbox :: proc(
     panel: rl.Rectangle,
@@ -287,6 +332,19 @@ draw_settings_view :: proc(
         rect = stack_rect,
         can_expand = false,
         segment_size_is_set = true,
+        segment_size = SETTINGS_TOGGLE_ROW_GAP,
+        cursor_in = stack_cursor,
+    })
+    stack_cursor = simd_row.cursor_out
+
+    gpu_dust_row := stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = stack_rect.x,
+        origin_y = stack_rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = stack_rect,
+        can_expand = false,
+        segment_size_is_set = true,
         segment_size = 0,
         cursor_in = stack_cursor,
     })
@@ -312,5 +370,11 @@ draw_settings_view :: proc(
     draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)
     draw_settings_sound_checkbox(panel, sound_row.segment_rect.y, mouse_input, state, font)
     draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y, mouse_input, ui_runtime, font)
+    draw_settings_gpu_dust_checkbox(
+        panel,
+        gpu_dust_row.segment_rect.y,
+        mouse_input,
+        ui_runtime,
+        font)
 }
 

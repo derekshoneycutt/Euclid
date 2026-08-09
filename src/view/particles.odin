@@ -3,16 +3,43 @@ package view
 // Just drawing whatever particles are currently alive. Pretty simple, tbh
 
 import "../core"
+import "../files"
 import view_core "core"
 
+import "core:c"
+import "core:fmt"
 import "core:math"
+import "core:strings"
 
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 DUST_TEXTURE_SIZE :: 64
 DUST_TEXTURE_SOFT_EDGE_START :: 0.58
+DUST_VERTEX_POSITION_LOCATION :: 0
+DUST_VERTEX_TEXCOORD_LOCATION :: 1
+DUST_INSTANCE_GEOMETRY_LOCATION :: 2
+DUST_INSTANCE_COLOR_LOCATION :: 3
+
+DUST_QUAD_POSITIONS := [12]f32{
+    -0.5, -0.5,
+    -0.5,  0.5,
+     0.5,  0.5,
+    -0.5, -0.5,
+     0.5,  0.5,
+     0.5, -0.5,
+}
+
+DUST_QUAD_TEXCOORDS := [12]f32{
+    0.0, 0.0,
+    0.0, 1.0,
+    1.0, 1.0,
+    0.0, 0.0,
+    1.0, 1.0,
+    1.0, 0.0,
+}
 
 //   Render alive low-layer particles and update low-layer render counters.
 //
@@ -23,6 +50,15 @@ DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 // Returns:
 //   - none.
 render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
+    ensure_dust_texture(state)
+    if !state^.dust_render.ready {
+        return
+    }
+
+    if state^.ui_runtime.use_gpu_dust_instancing {
+        ensure_dust_instancing(state)
+    }
+
     iso_scale := state^.iso_scale^
 
     screens: [MAX_LOW_PARTICLES]Vector2
@@ -34,14 +70,110 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
         iso_scale,
         state^.ui_runtime.use_simd_batch_projection)
 
-    count_rendered : int = 0
-    for i in 0..<projected_count {
+    count_rendered := stage_low_particle_instances(ps, state, screens[:projected_count])
+    if state^.ui_runtime.use_gpu_dust_instancing &&
+        state^.dust_render.instancing_ready &&
+        draw_low_particle_instances(state, count_rendered) {
+        ps.last_render_low = count_rendered
+        return
+    }
+
+    draw_low_particles_immediate(ps, state, screens[:projected_count])
+    ps.last_render_low = count_rendered
+}
+
+//   Compact live low particles into fixed GPU instance staging arrays.
+stage_low_particle_instances :: proc(
+    ps: ^Particle_System,
+    state: ^Euclid_General_State,
+    screens: []Vector2) -> int {
+    dust_render := &state^.dust_render
+    count := 0
+
+    for screen, i in screens {
         if !ps.low_particles.alive[i] {
             continue
         }
-        count_rendered += 1
 
-        screen := screens[i]
+        t := math.clamp(ps.low_particles.age[i] / ps.low_particles.life[i], 0.0, 1.0)
+        alpha := 1.0 - t
+        dust_color := ps.low_particles.color[i]
+        diameter := max(ps.low_particles.size[i] * 2.0, 1.0)
+
+        dust_render^.instance_geometry[count] = {screen.x, screen.y, diameter}
+        dust_render^.instance_colors[count] = {
+            f32(dust_color.r) / 255.0,
+            f32(dust_color.g) / 255.0,
+            f32(dust_color.b) / 255.0,
+            math.clamp(alpha * 210.0 / 255.0, 0.0, 1.0),
+        }
+        count += 1
+    }
+
+    return count
+}
+
+//   Draw staged dust instances in one GPU draw call.
+draw_low_particle_instances :: proc(state: ^Euclid_General_State, count: int) -> bool {
+    if count == 0 {
+        return true
+    }
+
+    dust_render := &state^.dust_render
+    geometry_size := count * size_of(dust_render^.instance_geometry[0])
+    color_size := count * size_of(dust_render^.instance_colors[0])
+
+    rlgl.DrawRenderBatchActive()
+    rlgl.UpdateVertexBuffer(
+        dust_render^.instance_geometry_vbo_id,
+        &dust_render^.instance_geometry[0][0],
+        c.int(geometry_size),
+        0)
+    rlgl.UpdateVertexBuffer(
+        dust_render^.instance_color_vbo_id,
+        &dust_render^.instance_colors[0][0],
+        c.int(color_size),
+        0)
+
+    if !rlgl.EnableVertexArray(dust_render^.vao_id) {
+        return false
+    }
+
+    viewport := [2]f32{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+    texture_slot := i32(0)
+    rlgl.EnableShader(dust_render^.shader.id)
+    rlgl.SetUniform(
+        dust_render^.viewport_location,
+        &viewport[0],
+        c.int(rl.ShaderUniformDataType.VEC2),
+        1)
+    rlgl.SetUniform(
+        dust_render^.texture_location,
+        &texture_slot,
+        c.int(rl.ShaderUniformDataType.SAMPLER2D),
+        1)
+    rlgl.ActiveTextureSlot(0)
+    rlgl.EnableTexture(dust_render^.texture.id)
+    rlgl.DrawVertexArrayInstanced(0, 6, c.int(count))
+    rlgl.DisableTexture()
+    rlgl.DisableShader()
+    rlgl.DisableVertexArray()
+    return true
+}
+
+//   Render staged low particles through the original immediate-mode path.
+draw_low_particles_immediate :: proc(
+    ps: ^Particle_System,
+    state: ^Euclid_General_State,
+    screens: []Vector2) {
+    dust_render := &state^.dust_render
+    rlgl.SetTexture(dust_render^.texture.id)
+    rlgl.Begin(rlgl.QUADS)
+
+    for screen, i in screens {
+        if !ps.low_particles.alive[i] {
+            continue
+        }
 
         t := math.clamp(ps.low_particles.age[i] / ps.low_particles.life[i], 0.0, 1.0)
         alpha := 1.0 - t
@@ -49,23 +181,26 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 
         dust_color := ps.low_particles.color[i]
 
-        col := rl.Color{
-            dust_color.r,
-            dust_color.g,
-            dust_color.b,
-            a}
-
-        if draw_particle_quad(state, screen, ps.low_particles.size[i] * 2.0, col) {
-            continue
+        diameter := ps.low_particles.size[i] * 2.0
+        if diameter < 1.0 {
+            diameter = 1.0
         }
+        radius := diameter * 0.5
 
-        if ps.low_particles.size[i] <= 1 {
-            rl.DrawPixelV(screen, col)
-        } else {
-            rl.DrawCircleV(screen, ps.low_particles.size[i], col)
-        }
+        rlgl.Color4ub(dust_color.r, dust_color.g, dust_color.b, a)
+
+        rlgl.TexCoord2f(0.0, 0.0)
+        rlgl.Vertex2f(screen.x - radius, screen.y - radius)
+        rlgl.TexCoord2f(0.0, 1.0)
+        rlgl.Vertex2f(screen.x - radius, screen.y + radius)
+        rlgl.TexCoord2f(1.0, 1.0)
+        rlgl.Vertex2f(screen.x + radius, screen.y + radius)
+        rlgl.TexCoord2f(1.0, 0.0)
+        rlgl.Vertex2f(screen.x + radius, screen.y - radius)
     }
-    ps.last_render_low = count_rendered
+
+    rlgl.End()
+    rlgl.SetTexture(0)
 }
 
 //   Render alive mid-layer particles and update mid-layer render counters.
@@ -77,6 +212,11 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 // Returns:
 //   - none.
 render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
+    ensure_dust_texture(state)
+    if !state^.dust_render.ready {
+        return
+    }
+
     iso_scale := state^.iso_scale^
 
     screens: [MAX_PARTICLES]Vector2
@@ -145,12 +285,135 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
 // Returns:
 //   - none.
 shutdown_particle_render_resources :: proc(state: ^Euclid_General_State) {
-    if !state^.dust_render.ready {
+    dust_render := &state^.dust_render
+    release_dust_instancing_resources(dust_render)
+    dust_render^.instancing_attempted = false
+
+    if dust_render^.ready {
+        rl.UnloadTexture(dust_render^.texture)
+        dust_render^.ready = false
+    }
+}
+
+//   Release all complete or partially initialized dust instancing resources.
+release_dust_instancing_resources :: proc(dust_render: ^core.Dust_Render_State) {
+    if dust_render^.instance_color_vbo_id != 0 {
+        rlgl.UnloadVertexBuffer(dust_render^.instance_color_vbo_id)
+        dust_render^.instance_color_vbo_id = 0
+    }
+    if dust_render^.instance_geometry_vbo_id != 0 {
+        rlgl.UnloadVertexBuffer(dust_render^.instance_geometry_vbo_id)
+        dust_render^.instance_geometry_vbo_id = 0
+    }
+    if dust_render^.quad_texcoords_vbo_id != 0 {
+        rlgl.UnloadVertexBuffer(dust_render^.quad_texcoords_vbo_id)
+        dust_render^.quad_texcoords_vbo_id = 0
+    }
+    if dust_render^.quad_positions_vbo_id != 0 {
+        rlgl.UnloadVertexBuffer(dust_render^.quad_positions_vbo_id)
+        dust_render^.quad_positions_vbo_id = 0
+    }
+    if dust_render^.vao_id != 0 {
+        rlgl.UnloadVertexArray(dust_render^.vao_id)
+        dust_render^.vao_id = 0
+    }
+    if dust_render^.shader.id != 0 {
+        rl.UnloadShader(dust_render^.shader)
+        dust_render^.shader = {}
+    }
+    dust_render^.instancing_ready = false
+}
+
+//   Lazily create shader and buffer resources for screen-space dust instancing.
+ensure_dust_instancing :: proc(state: ^Euclid_General_State) {
+    dust_render := &state^.dust_render
+    if dust_render^.instancing_ready || dust_render^.instancing_attempted {
+        return
+    }
+    dust_render^.instancing_attempted = true
+
+    if rlgl.GetVersion() < .OPENGL_33 {
+        fmt.println("dust instancing requires OpenGL 3.3; using immediate rendering")
         return
     }
 
-    rl.UnloadTexture(state^.dust_render.texture)
-    state^.dust_render.ready = false
+    if !load_dust_instancing_shader(dust_render) {
+        release_dust_instancing_resources(dust_render)
+        return
+    }
+    if !load_dust_instancing_buffers(dust_render) {
+        release_dust_instancing_resources(dust_render)
+        return
+    }
+
+    dust_render^.instancing_ready = true
+}
+
+//   Load the packaged dust shader and resolve its required uniforms.
+load_dust_instancing_shader :: proc(dust_render: ^core.Dust_Render_State) -> bool {
+    vertex_path := files.packaged_asset_path("shaders/dust_instanced.vs", context.temp_allocator)
+    fragment_path := files.packaged_asset_path("shaders/dust_instanced.fs", context.temp_allocator)
+    if len(vertex_path) == 0 || len(fragment_path) == 0 {
+        fmt.println("dust shader paths could not be resolved; using immediate rendering")
+        return false
+    }
+
+    vertex_cstr := strings.clone_to_cstring(vertex_path, context.temp_allocator)
+    fragment_cstr := strings.clone_to_cstring(fragment_path, context.temp_allocator)
+    dust_render^.shader = rl.LoadShader(vertex_cstr, fragment_cstr)
+    if dust_render^.shader.id == 0 {
+        fmt.println("dust shader failed to load; using immediate rendering")
+        return false
+    }
+
+    dust_render^.viewport_location = rl.GetShaderLocation(dust_render^.shader, "uViewport")
+    dust_render^.texture_location = rl.GetShaderLocation(dust_render^.shader, "texture0")
+    if dust_render^.viewport_location < 0 || dust_render^.texture_location < 0 {
+        fmt.println("dust shader is missing required uniforms; using immediate rendering")
+        return false
+    }
+    return true
+}
+
+//   Create the static quad and reusable dynamic instance buffers.
+load_dust_instancing_buffers :: proc(dust_render: ^core.Dust_Render_State) -> bool {
+    dust_render^.vao_id = rlgl.LoadVertexArray()
+    if dust_render^.vao_id == 0 || !rlgl.EnableVertexArray(dust_render^.vao_id) {
+        fmt.println("dust vertex array could not be created; using immediate rendering")
+        return false
+    }
+
+    dust_render^.quad_positions_vbo_id = rlgl.LoadVertexBuffer(
+        &DUST_QUAD_POSITIONS[0], c.int(size_of(DUST_QUAD_POSITIONS)), false)
+    rlgl.SetVertexAttribute(DUST_VERTEX_POSITION_LOCATION, 2, rlgl.FLOAT, false, 0, 0)
+    rlgl.EnableVertexAttribute(DUST_VERTEX_POSITION_LOCATION)
+
+    dust_render^.quad_texcoords_vbo_id = rlgl.LoadVertexBuffer(
+        &DUST_QUAD_TEXCOORDS[0], c.int(size_of(DUST_QUAD_TEXCOORDS)), false)
+    rlgl.SetVertexAttribute(DUST_VERTEX_TEXCOORD_LOCATION, 2, rlgl.FLOAT, false, 0, 0)
+    rlgl.EnableVertexAttribute(DUST_VERTEX_TEXCOORD_LOCATION)
+
+    dust_render^.instance_geometry_vbo_id = rlgl.LoadVertexBuffer(
+        &dust_render^.instance_geometry[0][0],
+        c.int(size_of(dust_render^.instance_geometry)),
+        true)
+    rlgl.SetVertexAttribute(DUST_INSTANCE_GEOMETRY_LOCATION, 3, rlgl.FLOAT, false, 0, 0)
+    rlgl.EnableVertexAttribute(DUST_INSTANCE_GEOMETRY_LOCATION)
+    rlgl.SetVertexAttributeDivisor(DUST_INSTANCE_GEOMETRY_LOCATION, 1)
+
+    dust_render^.instance_color_vbo_id = rlgl.LoadVertexBuffer(
+        &dust_render^.instance_colors[0][0],
+        c.int(size_of(dust_render^.instance_colors)),
+        true)
+    rlgl.SetVertexAttribute(DUST_INSTANCE_COLOR_LOCATION, 4, rlgl.FLOAT, false, 0, 0)
+    rlgl.EnableVertexAttribute(DUST_INSTANCE_COLOR_LOCATION)
+    rlgl.SetVertexAttributeDivisor(DUST_INSTANCE_COLOR_LOCATION, 1)
+
+    rlgl.DisableVertexArray()
+    return dust_render^.quad_positions_vbo_id != 0 &&
+        dust_render^.quad_texcoords_vbo_id != 0 &&
+        dust_render^.instance_geometry_vbo_id != 0 &&
+        dust_render^.instance_color_vbo_id != 0
 }
 
 
@@ -217,11 +480,6 @@ draw_particle_quad :: proc(
     screen: Vector2,
     diameter: f32,
     col: rl.Color) -> bool {
-    ensure_dust_texture(state)
-    if !state^.dust_render.ready {
-        return false
-    }
-
     use_diameter := diameter
     if use_diameter < 1.0 {
         use_diameter = 1.0

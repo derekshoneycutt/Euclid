@@ -1056,6 +1056,18 @@ Stroke3D_Render_State :: struct {
 Dust_Render_State :: struct {
     texture: rl.Texture2D,
     ready: bool,
+    instancing_attempted: bool,
+    instancing_ready: bool,
+    shader: rl.Shader,
+    vao_id: u32,
+    quad_positions_vbo_id: u32,
+    quad_texcoords_vbo_id: u32,
+    instance_geometry_vbo_id: u32,
+    instance_color_vbo_id: u32,
+    viewport_location: i32,
+    texture_location: i32,
+    instance_geometry: [MAX_LOW_PARTICLES][3]f32,
+    instance_colors: [MAX_LOW_PARTICLES][4]f32,
 }
 
 Gif_Capture_Phase :: enum {
@@ -1177,6 +1189,7 @@ Euclid_UI_Runtime_State :: struct {
     display_fps : bool,
     simulation_paused: bool,
     use_simd_batch_projection : bool,
+    use_gpu_dust_instancing: bool,
     fps_avg_bucket_seconds : [60]f32,
     fps_avg_bucket_frames : [60]int,
     fps_avg_bucket_cursor : int,
