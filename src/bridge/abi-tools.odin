@@ -38,7 +38,7 @@ get_compass_view :: proc "c" (state: ^core.Euclid_General_State) -> core.Shapes_
 // Returns:
 //   - Animation point-start index.
 @(export)
-get_Shapes_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+get_shapes_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     return i32(state^.point_system^.anim_points_start)
 }
 
@@ -50,7 +50,7 @@ get_Shapes_anim_points_start :: proc "c" (state: ^core.Euclid_General_State) -> 
 // Returns:
 //   - Animation constraint-start index.
 @(export)
-get_Shapes_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+get_shapes_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     return i32(state^.point_system^.anim_constraints_start)
 }
 
@@ -62,7 +62,7 @@ get_Shapes_anim_constraints_start :: proc "c" (state: ^core.Euclid_General_State
 // Returns:
 //   - BRIDGE_STATUS_OK after boundary indices are captured.
 @(export)
-freeze_Shapes_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+freeze_shapes_animation_boundary :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
     shapes.freeze_system_indices(state^.point_system)
     return BRIDGE_STATUS_OK
@@ -76,7 +76,7 @@ freeze_Shapes_animation_boundary :: proc "c" (state: ^core.Euclid_General_State)
 // Returns:
 //   - BRIDGE_STATUS_OK after animation data is cleared.
 @(export)
-clear_Shapes_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+clear_shapes_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
     shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
     return BRIDGE_STATUS_OK
@@ -87,7 +87,7 @@ clear_Shapes_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i
 // Returns:
 //   - Maximum number of shapes points.
 @(export)
-get_max_Shapes_points :: proc "c" () -> i32 {
+get_max_shapes_points :: proc "c" () -> i32 {
     return i32(MAX_SHAPESPOINTS)
 }
 
@@ -96,7 +96,7 @@ get_max_Shapes_points :: proc "c" () -> i32 {
 // Returns:
 //   - Maximum number of shapes constraints.
 @(export)
-get_max_Shapes_constraints :: proc "c" () -> i32 {
+get_max_shapes_constraints :: proc "c" () -> i32 {
     return i32(MAX_SHAPESCONSTRAINTS)
 }
 
@@ -110,7 +110,7 @@ get_max_Shapes_constraints :: proc "c" () -> i32 {
 //   - BRIDGE_STATUS_INVALID_GRAPH when a child chain fails validation.
 //   - BRIDGE_STATUS_INVALID_CONSTRAINT when enabled constraints reference invalid indices.
 @(export)
-validate_Shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+validate_shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
 
     for i in 0..<MAX_SHAPESPOINTS {
@@ -177,8 +177,9 @@ hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
 //   - color: RGBA highlight color payload in bridge format.
 @(export)
 set_pen_active :: proc "c" (
-    state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
 
+    active := int(active_abi)
     if capture_active_command(state, .Set_Pen_Active, active, color) {
         return
     }
@@ -424,8 +425,9 @@ hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
 //   - color: RGBA highlight color payload in bridge format.
 @(export)
 set_compass_active :: proc "c" (
-    state: ^core.Euclid_General_State, active: int, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
 
+    active := int(active_abi)
     if capture_active_command(state, .Set_Compass_Active, active, color) {
         return
     }
@@ -650,7 +652,9 @@ get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> c
 //   - pos: Metadata slot index.
 //   - metadata: Value to store when pos is in range.
 @(export)
-set_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int, metadata: f32) {
+set_animation_meta :: proc "c" (
+    state: ^core.Euclid_General_State, pos_abi: i32, metadata: f32) {
+    pos := int(pos_abi)
     if capture_animation_meta_command(state, pos, metadata) {
         return
     }
@@ -668,7 +672,10 @@ set_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int, met
 // Returns:
 //   - Metadata value when pos is in range, otherwise 0.
 @(export)
-get_animation_meta :: proc "c" (state: ^core.Euclid_General_State, pos: int) -> f32 {
+get_animation_meta :: proc "c" (
+    state: ^core.Euclid_General_State, pos_abi: i32) -> f32 {
+
+    pos := int(pos_abi)
     query_snapshot := active_animation_query_snapshot(state)
     if query_snapshot != nil && pos >= 0 && pos < len(query_snapshot^.metadata) {
         return query_snapshot^.metadata[pos]

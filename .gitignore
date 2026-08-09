@@ -6,6 +6,13 @@
 AGENTS.md
 staging_*.md
 
+# CI-generated Wiki publication artifact. Authored Guides remain tracked.
+/docs/wiki/Code/
+/docs/wiki/Content/Home.md
+/docs/wiki/Guides/Home.md
+/docs/wiki/Home.md
+/docs/wiki/_Sidebar.md
+
 # User-specific files
 *.rsuser
 *.suo

@@ -73,7 +73,7 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
 
 @(test)
 is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
-    unpack_dir, ok := prepare_sandbox_dir("euclid_phase4_unpack_ready")
+    unpack_dir, ok := prepare_sandbox_dir("euclid_unpack_ready")
     defer delete(unpack_dir)
     defer _ = os.remove_all(unpack_dir)
     testing.expect(t, ok)
@@ -86,7 +86,7 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
 
 @(test)
 should_continue_unpack_matrix :: proc(t: ^testing.T) {
-    sandbox, ok := prepare_sandbox_dir("euclid_phase4_should_continue")
+    sandbox, ok := prepare_sandbox_dir("euclid_unpack_should_continue")
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
     testing.expect(t, ok)
@@ -125,7 +125,7 @@ should_continue_unpack_matrix :: proc(t: ^testing.T) {
 
 @(test)
 prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
-    sandbox, ok := prepare_sandbox_dir("euclid_phase4_prepare_unpack")
+    sandbox, ok := prepare_sandbox_dir("euclid_prepare_unpack")
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
     testing.expect(t, ok)
@@ -149,7 +149,7 @@ resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
     testing.expect(t, !ok)
     testing.expect_value(t, output_dir, "")
 
-    base_dir, base_ok := prepare_sandbox_dir("euclid_phase4_gif_output")
+    base_dir, base_ok := prepare_sandbox_dir("euclid_gif_output")
     defer delete(base_dir)
     defer _ = os.remove_all(base_dir)
     testing.expect(t, base_ok)

@@ -15,6 +15,8 @@ Options:
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
+    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
+    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
 
@@ -38,6 +40,8 @@ struct Args
     clean::Bool
     test::Bool
     vet::Bool
+    wiki::Bool
+    check_wiki::Bool
     no_build::Bool
     no_assets::Bool
     help::Bool
@@ -65,6 +69,8 @@ const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_RUNNER = joinpath(SRC_DIR, "julia", "test", "runtests.jl")
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const ODIN_TEST_ROOT = joinpath(SCRIPT_DIR, "tests")
+const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
+const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 
 
 """Return true when running on Windows."""
@@ -175,6 +181,10 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
     elseif flag == 'v'
         args[:vet] = true
         args[:no_build] = false
+    elseif flag == 'w'
+        args[:wiki] = true
+    elseif flag == 'W'
+        args[:check_wiki] = true
     elseif flag == 'h'
         args[:help] = true
     else
@@ -205,6 +215,8 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         :clean => false,
         :test => false,
         :vet => false,
+        :wiki => false,
+        :check_wiki => false,
         :no_build => false,
         :no_assets => false,
         :help => false)
@@ -227,6 +239,10 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         elseif arg == "--vet" || arg == "-v"
             parsed[:vet] = true
             parsed[:no_build] = false
+        elseif arg == "--wiki" || arg == "-w"
+            parsed[:wiki] = true
+        elseif arg == "--check-wiki" || arg == "-W"
+            parsed[:check_wiki] = true
         elseif arg == "--no-build" || arg == "-B"
             parsed[:build] = false
             parsed[:vet] = false
@@ -259,6 +275,8 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         parsed[:clean],
         parsed[:test],
         parsed[:vet],
+        parsed[:wiki],
+        parsed[:check_wiki],
         parsed[:no_build],
         parsed[:no_assets],
         parsed[:help]), run_args
@@ -973,6 +991,7 @@ function clean_build_files()
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
         joinpath(BIN_DIR, ".julia_import_libs"),
+        WIKI_ARTIFACT_DIR,
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
 
@@ -1004,7 +1023,7 @@ end
 """Return true when any build/run action flag was explicitly requested."""
 explicit_action_requested(args::Args) =
     args.run || args.build || args.assets || args.sysimage || args.vet || args.test ||
-    args.no_build || args.no_assets
+    args.wiki || args.check_wiki || args.no_build || args.no_assets
 
 """Resolve effective build, vet, and asset steps from CLI argument combinations."""
 function resolve_build_plan(args::Args)
@@ -1038,12 +1057,21 @@ function resolve_build_plan(args::Args)
         do_assets = false
     end
 
+    wiki_only = (args.wiki || args.check_wiki) && !args.run && !args.build &&
+        !args.assets && !args.sysimage && !args.vet && !args.test
+    if wiki_only
+        do_build = false
+        do_assets = false
+    end
+
     return do_build, do_vet, do_assets
 end
 
 """Verify required external tooling exists for the selected build steps."""
-function ensure_required_commands(do_build::Bool, do_assets::Bool)
-    if do_build
+function ensure_required_commands(
+    do_build::Bool, do_assets::Bool, run_tests::Bool, run_wiki::Bool)
+
+    if do_build || run_tests || run_wiki
         require_command("odin", "Please install Odin to continue.")
     end
 
@@ -1057,9 +1085,65 @@ function ensure_required_commands(do_build::Bool, do_assets::Bool)
             "Install gendef (for example via Strawberry Perl or MSYS2) to generate import libraries.")
     end
 
-    if isdir(ODIN_TEST_ROOT)
-        require_command("odin", "Please install Odin to run Odin tests.")
+end
+
+"""Return the GitHub source prefix pinned to the generated artifact's commit."""
+function wiki_source_link_prefix()
+    repository = get(ENV, "GITHUB_REPOSITORY", "derekshoneycutt/Euclid")
+    revision = get(ENV, "GITHUB_SHA", "")
+    if isempty(revision)
+        result = run_command(Cmd(["git", "rev-parse", "HEAD"]); capture_output=true)
+        result.exit_code == 0 || error("Could not resolve the Wiki source revision.")
+        revision = strip(result.stdout)
     end
+    isempty(revision) && error("Wiki source revision is empty.")
+    return "https://github.com/$repository/blob/$revision/"
+end
+
+"""Run the Wiki generator for one explicit artifact directory."""
+function generate_wiki(output_root::String)
+    mkpath(dirname(output_root))
+    command = addenv(Cmd([
+        JULIA_EXE,
+        "--project=" * JULIA_TEST_PROJECT,
+        WIKI_GENERATOR,
+    ]),
+        "EUCLID_WIKI_OUTPUT_ROOT" => output_root,
+        "EUCLID_WIKI_SOURCE_PREFIX" => wiki_source_link_prefix())
+    result = run_command(command; cwd=SCRIPT_DIR)
+    result.exit_code == 0 || error("Wiki generation failed.")
+end
+
+"""Read one generated tree into a deterministic repository-relative byte map."""
+function wiki_tree_snapshot(root::String)
+    isdir(root) || error("Wiki artifact is missing: $(relpath(root, SCRIPT_DIR))")
+    snapshot = Dict{String,Vector{UInt8}}()
+    for (directory, _, names) in walkdir(root), name in sort(names)
+        path = joinpath(directory, name)
+        relative = replace(relpath(path, root), '\\' => '/')
+        snapshot[relative] = read(path)
+    end
+    return snapshot
+end
+
+"""Generate or non-destructively validate the publishable Wiki artifact."""
+function run_wiki_action(check_only::Bool)
+    if !check_only
+        println("Generating Wiki artifact...")
+        generate_wiki(WIKI_ARTIFACT_DIR)
+        println("Wrote $(relpath(WIKI_ARTIFACT_DIR, SCRIPT_DIR))")
+        return
+    end
+
+    expected = wiki_tree_snapshot(WIKI_ARTIFACT_DIR)
+    mktempdir(BIN_DIR) do directory
+        candidate_root = joinpath(directory, "wiki")
+        generate_wiki(candidate_root)
+        candidate = wiki_tree_snapshot(candidate_root)
+        expected == candidate || error(
+            "Wiki artifact is stale. Run `julia make.jl -w` and review the generated artifact.")
+    end
+    println("Wiki artifact is current and deterministic.")
 end
 
 """Execute the finalized build plan, vet checks, assets build, and optional run step."""
@@ -1135,7 +1219,9 @@ function main()
     do_build, do_vet, do_assets = resolve_build_plan(args)
 
     try
-        ensure_required_commands(do_build, do_assets)
+        args.wiki && args.check_wiki && error("Choose either --wiki or --check-wiki, not both.")
+        ensure_required_commands(
+            do_build, do_assets, run_tests, args.wiki || args.check_wiki)
         execute_build_plan(
             do_build,
             do_vet,
@@ -1144,6 +1230,9 @@ function main()
             run_tests,
             run_after_build,
             run_args)
+        if args.wiki || args.check_wiki
+            run_wiki_action(args.check_wiki)
+        end
         return 0
     catch err
         println(stderr, sprint(showerror, err))

@@ -1,0 +1,123 @@
+name: Wiki
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wiki.yml"
+      - "docs/wiki/Guides/**"
+      - "make.jl"
+      - "src/**"
+      - "tools/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/wiki.yml"
+      - "docs/wiki/Guides/**"
+      - "make.jl"
+      - "src/**"
+      - "tools/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Wiki artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - name: Cache Julia packages
+        uses: julia-actions/cache@v2
+
+      - name: Set up Odin
+        uses: laytan/setup-odin@v2
+        with:
+          token: ${{ github.token }}
+          release: dev-2026-08
+
+      - name: Instantiate Julia environment
+        run: julia --project=src/julia -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Test Wiki tooling
+        run: |
+          julia --project=src/julia -e '
+            include("src/julia/test/code_wiki_tests.jl")
+            include("src/julia/test/code_wiki_julia_tests.jl")
+            include("src/julia/test/code_wiki_navigation_tests.jl")
+            include("src/julia/test/code_wiki_bridge_tests.jl")'
+
+      - name: Generate Wiki artifact
+        run: julia make.jl -w
+
+      - name: Check Wiki artifact
+        run: julia make.jl -W
+
+      - name: Upload Wiki artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: euclid-wiki-${{ github.sha }}
+          path: bin/wiki
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Wiki
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out publication tooling
+        uses: actions/checkout@v4
+
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - name: Instantiate Julia environment
+        run: julia --project=src/julia -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Download validated Wiki artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: euclid-wiki-${{ github.sha }}
+          path: bin/wiki
+
+      - name: Check out GitHub Wiki
+        env:
+          WIKI_TOKEN: ${{ github.token }}
+        run: |
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" bin/wiki-repository
+
+      - name: Synchronize managed Wiki paths
+        run: julia --project=src/julia tools/publish_wiki.jl bin/wiki bin/wiki-repository
+
+      - name: Commit and push changed Wiki pages
+        working-directory: bin/wiki-repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "Wiki is already current."
+            exit 0
+          fi
+          git commit -m "Publish Wiki for ${GITHUB_SHA::12}"
+          git push origin HEAD

@@ -913,7 +913,7 @@ end
 """Return fallback atom used when environment parsing fails."""
 matrix_parse_fallback() = latex_atom_run("\\begin", :math)
 
-"""Return true when one environment name is matrix-like and supported in phase 1."""
+"""Return true when one environment name is matrix-like and supported."""
 is_matrix_like_environment(env_name::String) =
     env_name == "matrix" || env_name == "array" || env_name == "bmatrix" || env_name == "pmatrix" || env_name == "vmatrix"
 

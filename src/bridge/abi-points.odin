@@ -307,8 +307,9 @@ create_new_pentagon :: proc "c" (
 @(export)
 get_point_view :: proc "c" (
     state: ^core.Euclid_General_State,
-    index: int) -> Bridge_Point_View {
+    index_abi: i32) -> Bridge_Point_View {
 
+    index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
         query_snapshot := active_animation_query_snapshot(state)
@@ -406,7 +407,8 @@ get_point_view :: proc "c" (
 //   - state: Global runtime state passed from the host application.
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
-show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
+show_point :: proc "c" (state: ^core.Euclid_General_State, index_abi: i32) {
+    index := int(index_abi)
     if capture_point_command(state, .Show_Point, index) {
         return
     }
@@ -424,7 +426,8 @@ show_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
 //   - state: Global runtime state passed from the host application.
 //   - index: Target point or constraint index for this bridge operation.
 @(export)
-hide_point :: proc "c" (state: ^core.Euclid_General_State, index: int) {
+hide_point :: proc "c" (state: ^core.Euclid_General_State, index_abi: i32) {
+    index := int(index_abi)
     if capture_point_command(state, .Hide_Point, index) {
         return
     }
@@ -477,7 +480,9 @@ hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32
 //   - index: Target point or constraint index for this bridge operation.
 //   - pos: 3D position used for shape/tool placement in world space.
 @(export)
-set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, pos: core.Vector3) {
+set_point_position :: proc "c" (
+    state: ^core.Euclid_General_State, index_abi: i32, pos: core.Vector3) {
+    index := int(index_abi)
     context = state^.saved_context
     if capture_point_position_command(state, index, pos) {
         return
@@ -494,7 +499,9 @@ set_point_position :: proc "c" (state: ^core.Euclid_General_State, index: int, p
 //   - index: Target point or constraint index for this bridge operation.
 //   - brushSize: Stroke thickness for rendered point/shape geometry.
 @(export)
-set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brushSize: f32) {
+set_point_brush :: proc "c" (
+    state: ^core.Euclid_General_State, index_abi: i32, brushSize: f32) {
+    index := int(index_abi)
     if capture_point_brush_command(state, index, brushSize) {
         return
     }
@@ -510,7 +517,9 @@ set_point_brush :: proc "c" (state: ^core.Euclid_General_State, index: int, brus
 //   - index: Target point or constraint index for this bridge operation.
 //   - color: RGBA color payload in bridge format.
 @(export)
-set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, color: Bridge_Color) {
+set_point_color :: proc "c" (
+    state: ^core.Euclid_General_State, index_abi: i32, color: Bridge_Color) {
+    index := int(index_abi)
     if capture_point_color_command(state, index, color) {
         return
     }
@@ -527,7 +536,9 @@ set_point_color :: proc "c" (state: ^core.Euclid_General_State, index: int, colo
 //   - index: Target point or constraint index for this bridge operation.
 //   - color: RGBA color payload in bridge format.
 @(export)
-set_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: int, color: Bridge_Color) {
+set_point_active_color :: proc "c" (
+    state: ^core.Euclid_General_State, index_abi: i32, color: Bridge_Color) {
+    index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
         rlColor := rl.Color{ color.r, color.g, color.b, color.a }
         state^.point_system^.points[index].active_color = rlColor

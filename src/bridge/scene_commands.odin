@@ -340,15 +340,15 @@ commit_scene_command_batch :: proc(
             set_point_position_with_floor_crossing_dust(
                 state, command^.point_index, command^.position)
         case .Set_Point_Color:
-            set_point_color(state, command^.point_index, command^.color)
+            set_point_color(state, i32(command^.point_index), command^.color)
         case .Set_Point_Brush:
-            set_point_brush(state, command^.point_index, command^.scalar)
+            set_point_brush(state, i32(command^.point_index), command^.scalar)
         case .Set_Point_Offset:
             _ = set_point_offset(state, i32(command^.point_index), command^.scalar)
         case .Show_Point:
-            show_point(state, command^.point_index)
+            show_point(state, i32(command^.point_index))
         case .Hide_Point:
-            hide_point(state, command^.point_index)
+            hide_point(state, i32(command^.point_index))
         case .Hide_Point_Batch:
             hide_point_batch(
                 state, &command^.point_indices[0], i32(command^.point_count))
@@ -357,7 +357,7 @@ commit_scene_command_batch :: proc(
         case .Move_Pen_Joint2:
             move_pen_joint2(state, command^.position)
         case .Set_Pen_Active:
-            set_pen_active(state, command^.integer, command^.color)
+            set_pen_active(state, i32(command^.integer), command^.color)
         case .Show_Pen:
             show_pen(state)
         case .Hide_Pen:
@@ -367,13 +367,13 @@ commit_scene_command_batch :: proc(
         case .Show_Compass:
             show_compass(state)
         case .Set_Compass_Active:
-            set_compass_active(state, command^.integer, command^.color)
+            set_compass_active(state, i32(command^.integer), command^.color)
         case .Lock_Compass_Joint1:
             lock_compass_joint1(state, command^.position, command^.flag)
         case .Lock_Compass_Joint2:
             lock_compass_joint2(state, command^.position, command^.flag)
         case .Set_Animation_Meta:
-            set_animation_meta(state, command^.integer, command^.scalar)
+            set_animation_meta(state, i32(command^.integer), command^.scalar)
         case .Set_Drawing_Sound_Enabled:
             set_drawing_sound_enabled(state, command^.flag)
         case .Simulate_Drawing_Sound:

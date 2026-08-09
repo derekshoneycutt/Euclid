@@ -1,23 +1,39 @@
 using Test
 
 @testset "EuclidApp Julia Tests" begin
-    @testset "Phase 1 - Geometry" begin
+    @testset "Geometry" begin
         include("geometry_tests.jl")
     end
 
-    @testset "Phase 2 - Scratchpad" begin
+    @testset "Scratchpad" begin
         include("scratchpad_tests.jl")
     end
 
-    @testset "Phase 2.5 - LaTeX" begin
+    @testset "LaTeX" begin
         include("latex_tests.jl")
     end
 
-    @testset "Phase 3 - EuclidRepl" begin
+    @testset "EuclidRepl" begin
         include("euclidrepl_tests.jl")
     end
 
-    @testset "Phase 5 - Bridge Helpers" begin
+    @testset "Bridge Helpers" begin
         include("bridge_helpers_tests.jl")
+    end
+
+    @testset "Code Wiki Odin" begin
+        include("code_wiki_tests.jl")
+    end
+
+    @testset "Code Wiki Julia" begin
+        include("code_wiki_julia_tests.jl")
+    end
+
+    @testset "Code Wiki Navigation" begin
+        include("code_wiki_navigation_tests.jl")
+    end
+
+    @testset "Code Wiki Bridge" begin
+        include("code_wiki_bridge_tests.jl")
     end
 end

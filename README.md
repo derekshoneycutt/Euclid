@@ -11,6 +11,7 @@ The code and documentation of this project is CC0 licensed.
 The core application is coded in Odin, with Raylib used for rendering.
 
 1. [Building from Source](#building-from-source)
+1. [Documentation](#documentation)
 1. [Questions?](#questions)
     1. [Q: Why?](#q-why)
     1. [Q: What's the utility?](#q-whats-the-utility)
@@ -42,6 +43,18 @@ cd Euclid
 julia make.jl
 # To run immediately: julia make.jl -r
 ```
+
+## Documentation
+
+- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki): published project documentation.
+- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home): generated Odin and
+  Julia APIs.
+- [Guides](docs/wiki/Guides/ArchitectureSummary.md): canonical authored architecture, coding,
+  animation, and syntax documentation.
+
+Generate the complete publishable Wiki artifact locally with `julia make.jl -w`. The artifact is
+written to ignored `bin/wiki/`. Run `julia make.jl -W` to compare it against a fresh generation
+without modifying the retained artifact.
 
 ### Windows requires a few more additions before this will work
 
@@ -187,7 +200,7 @@ hope to find in a more thorough LaTeX rendering engine. This is basically a work
 progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
 shame about it, but we're just gonna sit in that and learn.
 
-Check out [LaTeX Support](LaTeXSupport.md) for exactly what we do support today.
+Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support today.
 
 The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
 For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
@@ -292,9 +305,9 @@ Notes:
 
 I have added an initial architecture summary and coding standards that can be your guides.
 
-- [Architecture Summary](ArchitectureSummary.md): describes the several modules, boundaries,
+- [Architecture Summary](docs/wiki/Guides/ArchitectureSummary.md): describes the several modules, boundaries,
   etc., and how they fit together. Includes important code files to start with.
-- [Coding Standards](CodingStandards.md): describes how any new code should be written
+- [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code should be written
 
 The project was initially quite messy, without a standard and with all the artifacts of
 exploring and learning a new-to-me language, as well as me not really being a traditional

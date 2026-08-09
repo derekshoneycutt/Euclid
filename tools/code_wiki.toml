@@ -1,0 +1,127 @@
+wiki_root = "docs/wiki"
+shared_output_paths = ["Home.md", "_Sidebar.md"]
+shared_output_owner = "wiki_compositor"
+bridge_exceptions = []
+
+[[sections]]
+id = "code"
+display_name = "Code"
+description = "Generated Odin and Julia API reference."
+source_policy = "generated from source documentation"
+owner = "code_wiki"
+managed_output_paths = ["Code"]
+navigation_order = 10
+landing_page = "Code/Home.md"
+stale_boundary = "Code"
+publish = true
+
+[[sections]]
+id = "content"
+display_name = "Content"
+description = "Euclid propositions and animation catalogues."
+source_policy = "reserved authored content"
+owner = "wiki_compositor"
+managed_output_paths = ["Content/Home.md"]
+navigation_order = 20
+landing_page = "Content/Home.md"
+stale_boundary = "Content/Home.md"
+publish = true
+
+[[sections]]
+id = "guides"
+display_name = "Guides"
+description = "Authored architecture, coding, animation, and syntax guides."
+source_policy = "canonical authored Markdown"
+owner = "wiki_compositor"
+managed_output_paths = ["Guides/Home.md"]
+navigation_order = 30
+landing_page = "Guides/Home.md"
+stale_boundary = "Guides/Home.md"
+publish = true
+
+[[guides]]
+title = "Animation Style"
+path = "Guides/AnimationsStyle.md"
+summary = "Animation lifecycle, visual style, and view-text conventions."
+navigation_order = 10
+owner = "guide_authors"
+
+[[guides]]
+title = "Architecture Summary"
+path = "Guides/ArchitectureSummary.md"
+summary = "System boundaries, ownership, and subsystem architecture."
+navigation_order = 20
+owner = "guide_authors"
+
+[[guides]]
+title = "Coding Standards"
+path = "Guides/CodingStandards.md"
+summary = "Mandatory Odin, Julia, testing, and maintainability conventions."
+navigation_order = 30
+owner = "guide_authors"
+
+[[guides]]
+title = "Julia Thread Architecture"
+path = "Guides/JuliaThreadArchitecture.md"
+summary = "Embedded Julia ownership, command flow, and thread lifecycle."
+navigation_order = 40
+owner = "guide_authors"
+
+[[guides]]
+title = "LaTeX Support"
+path = "Guides/LaTeXSupport.md"
+summary = "Supported document and math syntax, output, and fallback behavior."
+navigation_order = 50
+owner = "guide_authors"
+
+[[guides]]
+title = "Wiki Composition"
+path = "Guides/WikiComposition.md"
+summary = "Wiki namespace ownership, producer outputs, and Content catalogue extension contract."
+navigation_order = 60
+owner = "guide_authors"
+
+[[guide_relations]]
+package_id = "odin:src:core"
+guide_paths = [
+	"Guides/ArchitectureSummary.md#allocation-strategy-init-first-with-explicit-exceptions",
+	"Guides/CodingStandards.md#global-rules",
+]
+symbol_prefixes = []
+
+[[guide_relations]]
+package_id = "julia:EuclidAnimations"
+guide_paths = [
+	"Guides/AnimationsStyle.md#motion-conventions",
+	"Guides/CodingStandards.md#julia-rules-required",
+]
+symbol_prefixes = ["animate_", "reflected_", "transform_"]
+
+[[guide_relations]]
+package_id = "julia:EuclidGeometry"
+guide_paths = [
+	"Guides/ArchitectureSummary.md#module-map-odin--julia",
+	"Guides/CodingStandards.md#julia-rules-required",
+]
+symbol_prefixes = []
+
+[[guide_relations]]
+package_id = "julia:EuclidRepl"
+guide_paths = [
+	"Guides/AnimationsStyle.md#motion-conventions",
+	"Guides/ArchitectureSummary.md#scratchpad-architecture-interactive-runtime-surface",
+]
+symbol_prefixes = ["circle!", "highlight_", "line!", "point!", "reflect", "rotate", "translate"]
+
+[[guide_relations]]
+package_id = "julia:OdinJuliaBridge"
+guide_paths = [
+	"Guides/ArchitectureSummary.md#odin-julia-bridge-how-the-boundary-works",
+	"Guides/JuliaThreadArchitecture.md#correctness-invariants",
+]
+symbol_prefixes = ["add_", "dynview_", "notify_", "set_null_"]
+
+[[guide_relations]]
+package_id = "julia:OdinJuliaBridge"
+guide_paths = ["Guides/LaTeXSupport.md#recommended-usage"]
+symbol_prefixes = ["dynview_"]
