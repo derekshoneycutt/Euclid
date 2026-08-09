@@ -8,7 +8,7 @@ managed file is written.
 
 Canonical authored Guides live under `docs/wiki/Guides/`. Generated pages are CI artifacts rather
 than tracked repository files. Local and CI generation assembles the complete publishable Wiki in
-ignored `bin/wiki/`; GitHub Actions uploads that directory for review and publishes the same bytes
+ignored `bin/wiki/`; GitHub Actions uploads that structured directory for review and publishes it
 to the GitHub Wiki from protected `main` builds.
 
 ## Ownership Model
@@ -85,8 +85,11 @@ The Wiki workflow generates and checks `bin/wiki/` for pull requests and relevan
 uploads it as a review artifact. Publication runs only for `main` pushes after artifact validation.
 
 The publisher checks out the separate GitHub Wiki Git repository and synchronizes only manifest
-claims. Directory claims such as `Code/` are replaced so stale generated pages disappear. Exact-file
-claims and unrelated Wiki paths are preserved. The job commits only when the Wiki checkout changes.
+claims. GitHub Wiki pages use a flat namespace, so structured artifact paths are published as unique
+names such as `Code-Bridge.md`, and local Markdown links are rewritten to rendered Wiki routes.
+Directory claims such as `Code/` replace their corresponding flat namespace so stale generated pages
+disappear. Exact-file claims and unrelated Wiki paths are preserved. The job commits only when the
+Wiki checkout changes.
 
 The workflow uses the repository `GITHUB_TOKEN` with job-scoped `contents: write` permission. If
 repository policy does not permit Wiki Git pushes with that token, replace the checkout credential

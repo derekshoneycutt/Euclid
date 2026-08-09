@@ -141,20 +141,29 @@ end
             "Guides/Architecture.md"]
             output = joinpath(artifact, path)
             mkpath(dirname(output))
-            write(output, "published $path\n")
+            write(output, "# $path\n")
         end
+        write(joinpath(artifact, "Home.md"),
+            "# Euclid\n\n[Code](Code/Home.md)\n[Architecture](Guides/Architecture.md)\n")
+        write(joinpath(artifact, "Code", "Home.md"),
+            "# Code\n\n[Architecture](../Guides/Architecture.md#system-design)\n")
         mkpath(joinpath(destination, "Code"))
         mkpath(joinpath(destination, "Guides"))
         write(joinpath(destination, "Code", "stale.md"), "stale\n")
+        write(joinpath(destination, "Code-Stale.md"), "stale\n")
         write(joinpath(destination, "Guides", "Unmanaged.md"), "preserve\n")
         write(joinpath(destination, "Community.md"), "preserve\n")
 
         published = sync_wiki_artifact(manifest, artifact, destination)
 
-        @test "Code" in published
+        @test published == ["Code.md", "Guides-Architecture.md", "Guides.md",
+            "Home.md", "_Sidebar.md"]
         @test !ispath(joinpath(destination, "Code", "stale.md"))
-        @test read(joinpath(destination, "Code", "Home.md"), String) ==
-            "published Code/Home.md\n"
+        @test !ispath(joinpath(destination, "Code-Stale.md"))
+        @test read(joinpath(destination, "Home.md"), String) ==
+            "# Euclid\n\n[Code](Code)\n[Architecture](Guides-Architecture)\n"
+        @test read(joinpath(destination, "Code.md"), String) ==
+            "# Code\n\n[Architecture](Guides-Architecture#system-design)\n"
         @test isfile(joinpath(destination, "Guides", "Unmanaged.md"))
         @test isfile(joinpath(destination, "Community.md"))
     end

@@ -578,19 +578,81 @@ function published_wiki_paths(manifest::WikiManifest)
     return sort!(unique!(paths))
 end
 
-"""Replace only manifest-managed paths in a checked-out GitHub Wiki tree."""
+"""Return all Markdown files selected for publication by manifest path claims."""
+function published_wiki_files(manifest::WikiManifest, artifact_root::String)
+    files = String[]
+    for path in published_wiki_paths(manifest)
+        ispath(joinpath(artifact_root, path)) ||
+            error("Wiki artifact is missing managed path: $path")
+        append!(files, files_under_wiki_boundary(artifact_root, path))
+    end
+    return sort!(unique!(files))
+end
+
+"""Map one structured artifact path to a unique GitHub Wiki page path."""
+function github_wiki_page_path(path::String)
+    directory = dirname(path)
+    stem = splitext(basename(path))[1]
+    parts = isempty(directory) || directory == "." ? String[] : split(directory, '/')
+    stem == "Home" && !isempty(parts) || push!(parts, stem)
+    return join(parts, "-") * ".md"
+end
+
+"""Rewrite artifact-local Markdown links for GitHub Wiki page routing."""
+function rewrite_github_wiki_links(
+    markdown::String, source_path::String, page_paths::Dict{String,String})
+
+    pattern = r"(!?\[[^\]]*\]\()([^\s)]+)((?:\s+[^)]*)?\))"
+    return replace(markdown, pattern => matched_text -> begin
+        matched = match(pattern, matched_text)
+        matched === nothing && error("Matched Wiki link could not be parsed.")
+        target = matched.captures[2]
+        occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) && return matched.match
+        parts = split(target, '#'; limit=2)
+        relative_target = first(parts)
+        isempty(relative_target) && return matched.match
+        resolved = normalize_repo_path(normpath(joinpath(dirname(source_path), relative_target)))
+        haskey(page_paths, resolved) || return matched.match
+        fragment = length(parts) == 2 ? "#" * last(parts) : ""
+        page = splitext(page_paths[resolved])[1]
+        return matched.captures[1] * page * fragment * matched.captures[3]
+    end)
+end
+
+"""Remove stale files from directory-backed flat publication namespaces."""
+function remove_stale_github_wiki_pages!(
+    manifest::WikiManifest, destination_root::String, expected::Set{String})
+
+    for section in manifest.sections, claim in section.managed_output_paths
+        endswith(lowercase(claim), ".md") && continue
+        prefix = replace(claim, '/' => '-')
+        for name in readdir(destination_root)
+            managed = name == prefix * ".md" || startswith(name, prefix * "-")
+            managed && name ∉ expected && rm(joinpath(destination_root, name); force=true)
+        end
+    end
+end
+
+"""Replace only manifest-managed pages in a checked-out GitHub Wiki tree."""
 function sync_wiki_artifact(
     manifest::WikiManifest, artifact_root::String, destination_root::String)
 
     isdir(artifact_root) || error("Wiki artifact directory does not exist: $artifact_root")
     mkpath(destination_root)
-    for relative_path in published_wiki_paths(manifest)
-        source = joinpath(artifact_root, relative_path)
-        destination = joinpath(destination_root, relative_path)
-        ispath(source) || error("Wiki artifact is missing managed path: $relative_path")
+    source_paths = published_wiki_files(manifest, artifact_root)
+    page_paths = Dict(path => github_wiki_page_path(path) for path in source_paths)
+    length(unique(values(page_paths))) == length(page_paths) ||
+        error("GitHub Wiki page names collide after flattening.")
+    expected = Set(values(page_paths))
+    for claim in published_wiki_paths(manifest)
+        destination = joinpath(destination_root, claim)
         ispath(destination) && rm(destination; recursive=true, force=true)
-        mkpath(dirname(destination))
-        cp(source, destination; force=true)
     end
-    return published_wiki_paths(manifest)
+    remove_stale_github_wiki_pages!(manifest, destination_root, expected)
+    for source_path in source_paths
+        content = read(joinpath(artifact_root, source_path), String)
+        destination = joinpath(destination_root, page_paths[source_path])
+        write(destination, rewrite_github_wiki_links(content, source_path, page_paths))
+    end
+    return sort!(collect(expected))
 end
