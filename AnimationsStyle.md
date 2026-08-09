@@ -189,95 +189,187 @@ Tool crossing guidance for 3D plane barriers:
   is meant to be read by the viewer.
 - Avoid abrupt resets immediately after the last visible motion.
 
-## View Text Structure (Dynview + Fallback)
+## View Text Authoring
 
-Animation text is now authored with a dual-path contract:
+Animation view text has two coordinated outputs:
 
-- `get_view_text(state_ptr)` SHOULD always return a plain fallback string.
-- If the script wants styled/inline content, it MAY also emit a dynview stream
-  through `OdinJuliaBridge` calls.
-- The host prefers dynview output only when the emitted stream is valid; if
-  stream emission fails or no valid stream is available, the returned string is
-  rendered as fallback.
+- A complete plain fallback string returned by `get_view_text(state_ptr)`.
+- An optional structured Dynview stream containing styled prose, math, and
+  embedded explanatory shapes.
 
-Practical guidance for animation scripts:
+The host uses structured output only when the complete stream is valid. A
+parse, bridge, capacity, compile, or layout failure falls back to the returned
+plain string. Structured output is therefore an enhancement, never the only
+source of meaning.
 
-- Keep fallback text complete and readable on its own.
-- Treat dynview as an enhancement layer, not as the only source of truth.
-- For dynview emission, use strict ordering: reset stream, begin block, emit
-  content, end block.
-- On any bridge status failure while emitting dynview content, stop emission
-  and rely on the fallback string.
+### Preferred Authoring API
 
-### Dynview API Quick Reference
+Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It:
 
-All APIs below are in `OdinJuliaBridge`.
-
-Required stream lifecycle calls:
-
-- `dynview_reset_stream(state_ptr)`
-- `dynview_begin_block(state_ptr, block_kind, block_id)`
-- one or more content calls
-- `dynview_end_block(state_ptr)`
-
-Common content calls:
-
-- `dynview_text_run(state_ptr, text, style_id)`
-- `dynview_line_break(state_ptr)`
-- `dynview_copyable_text_run(state_ptr, copy_text)`
-  for explicit copy payloads
-- `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`
-- `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`
-- `dynview_inline_circle(state_ptr, radius_cols, stroke_px, style_id)`
-
-Block/style constants used most often:
-
-- `BRIDGE_DYNVIEW_BLOCK_OUTPUT`
-- `BRIDGE_DYNVIEW_BLOCK_INPUT`
-- `BRIDGE_DYNVIEW_STYLE_OUTPUT`
-- `BRIDGE_DYNVIEW_STYLE_PROMPT`
-- `BRIDGE_DYNVIEW_STYLE_ERROR`
-- `BRIDGE_DYNVIEW_STYLE_BOLD`
-- `BRIDGE_DYNVIEW_STYLE_INLINE_ATOM`
-
-Status handling:
-
-- Every API above returns a `BRIDGE_STATUS_*` integer.
-- `BRIDGE_STATUS_OK` means success.
-- Any non-OK status should abort dynview emission for this frame and fall back
-  to the plain returned string.
-
-Minimal emission pattern:
+- classifies the source as document or math mode;
+- parses and emits one complete Dynview stream;
+- installs the supplied fallback as the copy payload;
+- returns the same fallback expected by `get_view_text`;
+- stops structured emission safely when parsing or bridge replay fails.
 
 ```julia
-fallback = "...full plain text..."
+const DefinitionLatexDocument = raw"""\textbf{Definition 1.}
 
-if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
-if OdinJuliaBridge.dynview_begin_block(
-    state_ptr,
-    OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-    Int32(1)) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
+A point \euclidpoint[color=plum1,size=1] is that which has no part.
+The symbol $A_1$ identifies a particular point."""
 
-if OdinJuliaBridge.dynview_text_run(
-    state_ptr,
-    "Some line",
-    OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
+const DefinitionFallback = """Definition 1.
 
-if OdinJuliaBridge.dynview_end_block(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
-    return fallback
-end
+A point is that which has no part. The symbol A_1 identifies a particular point."""
 
-return fallback
+function get_view_text(state_ptr)
+    EuclidLatex.emit_latex_view_text!(
+        state_ptr, DefinitionLatexDocument, DefinitionFallback)
+end
 ```
 
-This keeps old/simple animations working with plain text while allowing newer
-definitions/theorems to opt into richer host-side layout and inline atoms.
+Use raw Julia strings for LaTeX source when practical. Keep source constants
+stable across frames so math parsing and compiled-program caches can be reused.
+
+### Choosing Document Or Math Mode
+
+Use document mode for the normal animation text surface. It supports:
+
+- Unicode prose;
+- `\textbf{...}`, `\textit{...}`, and `\emph{...}`;
+- inline math with `$...$` or `\(...\)`;
+- display math with `$$...$$` or `\[...\]`;
+- paragraph breaks from blank lines;
+- forced breaks with `\\` or `\newline`;
+- embedded `\euclidpoint`, `\euclidline`, `\euclidcircle`, and
+  `\euclidbox` atoms.
+
+Use math mode when the complete source is one mathematical expression. Math
+mode supports scripts, fractions, radicals, accent bars, large operators,
+stretch delimiters, and supported matrices. Prefer commands such as `\alpha`,
+`\leq`, and `\mathbb{R}` over raw mathematical Unicode when the symbol is
+important to parser or style behavior.
+
+Use `\text{...}` or `\mathrm{...}` for upright words inside math. Document
+styles such as `\textbf` do not replace math-mode text commands.
+
+This is a bounded LaTeX-like language, not a TeX engine. Do not author macros,
+packages, general environments, tables, lists, sections, or alignment layouts.
+Consult [LaTeXSupport.md](LaTeXSupport.md) for the exact supported grammar.
+
+### Text Hierarchy And Density
+
+- Use bold for a short definition, proposition, axiom, or section lead.
+- Use italic or emphasis for a local term, not an entire long paragraph.
+- Prefer one or two readable paragraphs over manually aligned pseudo-columns.
+- Use display math only when the expression deserves its own visual line.
+- Keep inline math short enough to read within surrounding prose.
+- Let Dynview wrap ordinary text; do not insert source newlines to control line
+  width. A single document-source newline normalizes to a space.
+- Use a blank source line for a semantic paragraph break.
+- Avoid repeating the entire construction in prose while the animation already
+  communicates it visually. Text should state the idea, relation, or conclusion.
+
+### Embedded Euclid Shapes
+
+Embedded Euclid shapes are inline explanatory symbols in view text. They are
+not references to world-space points or shapes, do not move with animation
+geometry, and do not prove that the corresponding world object exists.
+
+Supported document commands and options are:
+
+- `\euclidpoint`: `color`, `size`.
+- `\euclidline`: `color`, `length`, `thickness`.
+- `\euclidcircle`: `color`, `size`, `thickness`, `filled`.
+- `\euclidbox`: `color`, `width`, `height`, `thickness`, `filled`.
+
+The shorthand option `filled` means `filled=true`. Dimensions must be finite
+and positive, booleans must be `true` or `false`, and colors must resolve
+through the bridge color vocabulary.
+
+```julia
+const ConstructionLatexDocument = raw"""The point
+\euclidpoint[color=plum1,size=1] marks $A$. Draw
+\euclidline[color=steelblue,length=4,thickness=2] from $A$ to $B$, then use
+\euclidcircle[color=khaki3,size=2,thickness=1] to show the locus."""
+```
+
+Authoring rules for embedded shapes:
+
+- Use a shape when its silhouette or color carries immediate semantic meaning.
+- Match its color to the corresponding role in the animated construction.
+- Keep the standard animation palette; do not introduce decorative colors in
+  text that have no matching role in the scene.
+- Place the shape next to the noun or relation it explains.
+- Keep dimensions modest so the atom participates in the line rather than
+  dominating it.
+- Use filled circles and boxes only when fill itself distinguishes the object.
+- Do not reproduce a full diagram in prose from many inline atoms.
+- Do not use an embedded shape as the only representation of required meaning.
+  The fallback must name or describe it in words.
+
+The shape command belongs in document mode. For a custom low-level Dynview
+stream, use the corresponding `dynview_inline_*` bridge APIs.
+
+### Fallback And Copy Semantics
+
+Fallback text is authored content, not generated error text. It must remain
+complete and readable when structured output is unavailable.
+
+- Preserve all definitions, claims, labels, and mathematical conclusions.
+- Replace embedded shapes with concise nouns or descriptions.
+- Represent important formulas with readable Unicode or plain notation.
+- Preserve paragraph structure where it affects comprehension.
+- Never expose raw LaTeX commands in the fallback.
+- Review both the structured rendering and plain fallback before accepting an
+  animation.
+
+`emit_latex_view_text!` uses the supplied fallback as the copy payload. Copying
+structured text should therefore yield coherent plain content rather than a
+sequence of visual implementation fragments.
+
+Document mode fails closed. Unsupported commands, malformed style groups,
+unclosed math delimiters, empty math fragments, or invalid shape options abort
+the structured stream instead of displaying a partial document.
+
+### Specialized LaTeX APIs
+
+Use `EuclidLatex.replay_emit_math_block!` when a Dynview block is already open
+and one recursive math expression must be inserted. It returns `false` on
+bridge failure.
+
+Use `EuclidLatex.emit_latex_dynview!` for a standalone math-only block when the
+caller does not need document prose or embedded shapes.
+
+Do not manually parse LaTeX or approximate structured math with spaced text.
+
+### Low-Level Dynview Escape Hatch
+
+Use direct `OdinJuliaBridge` Dynview calls only when the high-level document and
+math APIs cannot express the required composition. Typical low-level content
+calls are:
+
+- `dynview_text_run(state_ptr, text, style_id)`;
+- `dynview_line_break(state_ptr)`;
+- `dynview_copyable_text_run(state_ptr, copy_text)`;
+- `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`;
+- `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`;
+- `dynview_inline_circle(state_ptr, radius_cols, stroke_px, style_id)`.
+
+A manual stream must strictly follow this lifecycle:
+
+1. `dynview_reset_stream(state_ptr)`.
+1. `dynview_begin_block(state_ptr, block_kind, block_id)`.
+1. Emit a complete copy payload and visible content.
+1. `dynview_end_block(state_ptr)`.
+
+Every bridge call returns a `BRIDGE_STATUS_*` value. Stop on the first non-OK
+status and return the complete fallback. Never continue writing a partially
+failed stream.
+
+Low-level atoms use layout-relative column or pixel units, not world-space
+coordinates. They are text-layout content and must follow the same semantic,
+color, density, and fallback rules as document-mode shapes.
 
 ## Practical Review Check
 
@@ -287,3 +379,8 @@ Before adding a new animation, ask:
 1. Which object should visually dominate?
 1. Are any same-time shapes accidentally sharing a color?
 1. Does the motion sequence read as construction instead of teleportation?
+1. Does view text state the geometric idea without narrating every visible action?
+1. Does each embedded shape match a meaningful object or role in the scene?
+1. Is every formula written with supported LaTeX rather than approximate spacing?
+1. Does the plain fallback preserve every claim represented by styles, math, or shapes?
+1. Have both structured Dynview output and fallback text been reviewed?
