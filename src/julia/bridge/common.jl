@@ -251,6 +251,7 @@ const BRIDGE_DYNVIEW_STYLE_MEDIUM = Int32(13)
 const BRIDGE_DYNVIEW_STYLE_SEMIBOLD = Int32(14)
 const BRIDGE_DYNVIEW_STYLE_EXTRABOLD = Int32(15)
 const BRIDGE_DYNVIEW_STYLE_BLACK = Int32(16)
+const BRIDGE_DYNVIEW_STYLE_UNDERLINE = Int32(17)
 const BRIDGE_DYNVIEW_STYLE_INLINE_ATOM = Int32(20)
 const BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT = Int32(1 << 24)
 const BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE = Int32(1)
@@ -331,9 +332,27 @@ function bridge_color(c::Colorant)
         UInt8(round(Int, rgba.b * 255.0)),
         UInt8(round(Int, rgba.alpha * 255.0)))
 end
+
+"""Return one named Julia logo color, or `nothing` for other color names."""
+function julia_palette_color(name::AbstractString)
+    if name == "julia_blue"
+        return BridgeColor(0x40, 0x63, 0xd8, 0xff)
+    elseif name == "julia_green"
+        return BridgeColor(0x38, 0x98, 0x26, 0xff)
+    elseif name == "julia_purple"
+        return BridgeColor(0x95, 0x58, 0xb2, 0xff)
+    elseif name == "julia_red"
+        return BridgeColor(0xcb, 0x3c, 0x33, 0xff)
+    end
+    return nothing
+end
+
 function bridge_color(name::Symbol)
-    bridge_color(parse(Colorant, String(name)))
+    text = String(name)
+    palette_color = julia_palette_color(text)
+    return palette_color === nothing ? bridge_color(parse(Colorant, text)) : palette_color
 end
 function bridge_color(name::AbstractString)
-    bridge_color(parse(Colorant, name))
+    palette_color = julia_palette_color(name)
+    return palette_color === nothing ? bridge_color(parse(Colorant, name)) : palette_color
 end

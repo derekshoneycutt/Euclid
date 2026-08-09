@@ -17,6 +17,15 @@ using Test
     steel_from_string = OdinJuliaBridge.bridge_color("steelblue")
     @test steel_from_symbol == steel_from_string
 
+    @test OdinJuliaBridge.bridge_color(:julia_blue) ==
+        OdinJuliaBridge.BridgeColor(0x40, 0x63, 0xd8, 0xff)
+    @test OdinJuliaBridge.bridge_color("julia_green") ==
+        OdinJuliaBridge.BridgeColor(0x38, 0x98, 0x26, 0xff)
+    @test OdinJuliaBridge.bridge_color(:julia_purple) ==
+        OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
+    @test OdinJuliaBridge.bridge_color("julia_red") ==
+        OdinJuliaBridge.BridgeColor(0xcb, 0x3c, 0x33, 0xff)
+
     half_alpha = OdinJuliaBridge.bridge_color(RGBA(1.0, 0.0, 0.0, 0.5))
     @test half_alpha.r == 0xff
     @test half_alpha.g == 0x00

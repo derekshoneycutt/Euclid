@@ -742,6 +742,7 @@ Dynview_Text_Style :: struct {
     alignment: Dynview_Text_Alignment,
     bold: bool,
     italic: bool,
+    underline: bool,
     font_flags: Font_Variant_Flags,
     indent_cols: int,
     paragraph_spacing_before: f32,

@@ -96,6 +96,7 @@ General features:
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
   - [X] LaTeX output
+  - [X] Improved Scratchpad console-like REPL
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -199,7 +200,6 @@ After v1 is complete, the following is suggestions to evaluate next.
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support (more math; document mode)
-- Improved Scratchpad console-like REPL
 - Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support
 - Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording! ... replay_recording!)

@@ -78,6 +78,7 @@ Document mode supports a deliberately small LaTeX-like prose language:
 - Plain Unicode text.
 - `\textbf{...}` for bold text.
 - `\textit{...}` and `\emph{...}` for italic text.
+- `\textcolor{color}{...}` for inline prose color.
 - Nested style commands; flags accumulate, so bold italic text is supported.
 - Inline math with `$...$` or `\(...\)`.
 - Display math with `$$...$$` or `\[...\]`.
@@ -89,6 +90,30 @@ Document mode supports a deliberately small LaTeX-like prose language:
 A single source newline in prose normalizes to one space. A blank line emits a
 paragraph break. Display math receives surrounding line breaks unless adjacent
 document runs already provide them.
+
+### Inline Text Colors
+
+`\textcolor{color}{...}` applies a brush color to nested document text while
+preserving bold and italic font flags. Color names resolve in this order:
+
+1. Common LaTeX names: `black`, `blue`, `brown`, `cyan`, `darkgray`, `gray`,
+    `green`, `lightgray`, `lime`, `magenta`, `olive`, `orange`, `pink`,
+    `purple`, `red`, `teal`, `violet`, `white`, and `yellow`.
+1. Euclid's Julia palette: `julia_blue`, `julia_red`, `julia_green`, and
+    `julia_purple`.
+1. Color names accepted by Colors.jl, such as `steelblue`.
+1. The enclosing document color when the name is unresolved; at the root this
+    means the caller's normal Dynview text color.
+
+Color wrappers may be nested with each other and with `\textbf`, `\textit`,
+or `\emph`. This basic support colors prose text runs; embedded math and inline
+Euclid shapes retain their own rendering color rules.
+
+```julia
+raw"Normal \textcolor{red}{red and \textbf{bold red}} normal"
+raw"\textcolor{julia_blue}{Julia blue}"
+raw"\textcolor{steelblue}{Colors.jl named color}"
+```
 
 ### Inline Euclid Shapes
 

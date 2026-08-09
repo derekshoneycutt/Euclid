@@ -301,6 +301,12 @@ Unicode when the symbol is important to parser or style behavior.
 Use `\text{...}` or `\mathrm{...}` for upright words inside math. Document
 styles such as `\textbf` do not replace math-mode text commands.
 
+Use `\textcolor{color}{...}` for a short semantic emphasis in document prose.
+Prefer the standard LaTeX names, `julia_blue`, `julia_red`, `julia_green`, or
+`julia_purple`, or an established Colors.jl name already used by the scene.
+Unknown names inherit the enclosing document color. Do not use text color as
+the only carrier of meaning.
+
 This is a bounded LaTeX-like language, not a TeX engine. Do not author macros,
 packages, general environments, tables, lists, sections, or alignment layouts.
 Consult [LaTeXSupport.md](LaTeXSupport.md) for the exact supported grammar.

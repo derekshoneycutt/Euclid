@@ -354,13 +354,10 @@ block_format_for_kind :: #force_inline proc(block_kind: i32) -> Dynview_Block_Fo
     switch block_kind {
     case 1: // BRIDGE_DYNVIEW_BLOCK_INPUT
         return Dynview_Block_Format{
-            paragraph_spacing_before = 2,
-            paragraph_spacing_after = 2,
             line_height_multiplier = 1.0,
         }
     case 2: // BRIDGE_DYNVIEW_BLOCK_OUTPUT
         return Dynview_Block_Format{
-            paragraph_spacing_after = 1,
             line_height_multiplier = 1.0,
         }
     }

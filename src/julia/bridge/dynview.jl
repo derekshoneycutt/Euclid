@@ -32,6 +32,48 @@ function dynview_text_run(state_ptr::Ptr{Cvoid}, text::AbstractString, style_id:
 end
 
 """
+Emit a visible text run with an explicit brush color override.
+
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_text_run_brush(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    style_id::Integer,
+    brush_color::BridgeColor)
+
+    @ccall dynview_text_run_brush(
+        state_ptr::Ptr{Cvoid},
+        text::Cstring,
+        Int32(style_id)::Int32,
+        brush_color::BridgeColor)::Int32
+end
+function dynview_text_run_brush(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    style_id::Integer,
+    brush_color::Colorant)
+
+    dynview_text_run_brush(state_ptr, text, style_id, bridge_color(brush_color))
+end
+function dynview_text_run_brush(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    style_id::Integer,
+    brush_color::Symbol)
+
+    dynview_text_run_brush(state_ptr, text, style_id, bridge_color(brush_color))
+end
+function dynview_text_run_brush(
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString,
+    style_id::Integer,
+    brush_color::AbstractString)
+
+    dynview_text_run_brush(state_ptr, text, style_id, bridge_color(brush_color))
+end
+
+"""
 Emit a visible math-glyph run inside the currently open host dynview block.
 
 Returns a BRIDGE_STATUS_* code.

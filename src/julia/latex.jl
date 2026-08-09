@@ -48,6 +48,26 @@ const LATEX_MODE_DOCUMENT = :document
 const DOCUMENT_STYLE_REGULAR = OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR
 const DOCUMENT_STYLE_BOLD = OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_BOLD
 const DOCUMENT_STYLE_ITALIC = OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_ITALIC
+const DOCUMENT_LATEX_COLORS = Dict(
+    "black" => OdinJuliaBridge.BridgeColor(0x00, 0x00, 0x00, 0xff),
+    "blue" => OdinJuliaBridge.BridgeColor(0x00, 0x00, 0xff, 0xff),
+    "brown" => OdinJuliaBridge.BridgeColor(0xbf, 0x80, 0x40, 0xff),
+    "cyan" => OdinJuliaBridge.BridgeColor(0x00, 0xff, 0xff, 0xff),
+    "darkgray" => OdinJuliaBridge.BridgeColor(0x40, 0x40, 0x40, 0xff),
+    "gray" => OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff),
+    "green" => OdinJuliaBridge.BridgeColor(0x00, 0xff, 0x00, 0xff),
+    "lightgray" => OdinJuliaBridge.BridgeColor(0xbf, 0xbf, 0xbf, 0xff),
+    "lime" => OdinJuliaBridge.BridgeColor(0xbf, 0xff, 0x00, 0xff),
+    "magenta" => OdinJuliaBridge.BridgeColor(0xff, 0x00, 0xff, 0xff),
+    "olive" => OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x00, 0xff),
+    "orange" => OdinJuliaBridge.BridgeColor(0xff, 0x80, 0x00, 0xff),
+    "pink" => OdinJuliaBridge.BridgeColor(0xff, 0xbf, 0xbf, 0xff),
+    "purple" => OdinJuliaBridge.BridgeColor(0xbf, 0x00, 0x40, 0xff),
+    "red" => OdinJuliaBridge.BridgeColor(0xff, 0x00, 0x00, 0xff),
+    "teal" => OdinJuliaBridge.BridgeColor(0x00, 0x80, 0x80, 0xff),
+    "violet" => OdinJuliaBridge.BridgeColor(0x80, 0x00, 0x80, 0xff),
+    "white" => OdinJuliaBridge.BridgeColor(0xff, 0xff, 0xff, 0xff),
+    "yellow" => OdinJuliaBridge.BridgeColor(0xff, 0xff, 0x00, 0xff))
 
 const LATEX_PRIME_DOCUMENT = raw"""\textbf{Euclid} \textit{document} $x_1^2 \in \mathbb{R}$
 
@@ -286,10 +306,18 @@ struct LatexDocumentRun
     text::String
     font_flags::Int32
     shape::Union{Nothing,LatexDocumentShape}
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
 LatexDocumentRun(kind::Symbol, text::String, font_flags::Int32) =
-    LatexDocumentRun(kind, text, font_flags, nothing)
+    LatexDocumentRun(kind, text, font_flags, nothing, nothing)
+
+LatexDocumentRun(
+    kind::Symbol,
+    text::String,
+    font_flags::Int32,
+    shape::Union{Nothing,LatexDocumentShape}) =
+    LatexDocumentRun(kind, text, font_flags, shape, nothing)
 
 mutable struct LatexDocumentParser
     source::String
@@ -1837,8 +1865,8 @@ function classify_latex_mode(source::AbstractString)
     end
 
     document_markers = (
-        "\\textbf{", "\\textit{", "\\emph{", "\\newline", "\\euclid", "\\\\",
-        "\$", "\\(", "\\[")
+        "\\textbf{", "\\textit{", "\\emph{", "\\textcolor{", "\\newline",
+        "\\euclid", "\\\\", "\$", "\\(", "\\[")
     return any(marker -> occursin(marker, text), document_markers) ?
         LATEX_MODE_DOCUMENT : LATEX_MODE_MATH
 end
@@ -1851,16 +1879,22 @@ function whole_math_source(source::String)
     return ok && parser.index > lastindex(source) ? math_source : nothing
 end
 
-"""Append text while merging adjacent document runs with the same style."""
-function push_document_text!(runs::Vector{LatexDocumentRun}, text::String, font_flags::Int32)
+"""Append text while merging adjacent document runs with the same style and color."""
+function push_document_text!(
+    runs::Vector{LatexDocumentRun},
+    text::String,
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
     if isempty(text)
         return nothing
     end
-    if !isempty(runs) && runs[end].kind == :text && runs[end].font_flags == font_flags
-        runs[end] = LatexDocumentRun(:text, runs[end].text * text, font_flags)
+    if !isempty(runs) && runs[end].kind == :text &&
+            runs[end].font_flags == font_flags && runs[end].color == color
+        runs[end] = LatexDocumentRun(:text, runs[end].text * text, font_flags, nothing, color)
         return nothing
     end
-    push!(runs, LatexDocumentRun(:text, text, font_flags))
+    push!(runs, LatexDocumentRun(:text, text, font_flags, nothing, color))
     return nothing
 end
 
@@ -1886,6 +1920,32 @@ function document_style_command(parser::LatexDocumentParser, font_flags::Int32)
         return "\\emph{", font_flags | DOCUMENT_STYLE_ITALIC
     end
     return "", font_flags
+end
+
+"""Resolve a document text color by LaTeX, Julia palette, then Colors.jl vocabulary."""
+function resolve_document_text_color(
+    name::AbstractString,
+    inherited::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
+    normalized = lowercase(String(strip(name)))
+    haskey(DOCUMENT_LATEX_COLORS, normalized) && return DOCUMENT_LATEX_COLORS[normalized]
+    try
+        return OdinJuliaBridge.bridge_color(normalized)
+    catch
+        return inherited
+    end
+end
+
+"""Consume one required braced textcolor name at the parser cursor."""
+function consume_document_color_name!(parser::LatexDocumentParser)
+    parser.index > lastindex(parser.source) && return "", false
+    parser.source[parser.index] == '{' || return "", false
+    start = nextind(parser.source, parser.index)
+    close_index = findnext('}', parser.source, start)
+    close_index === nothing && return "", false
+    name = start == close_index ? "" : parser.source[start:prevind(parser.source, close_index)]
+    parser.index = nextind(parser.source, close_index)
+    return String(name), !isempty(strip(name))
 end
 
 """Return delimiters and document run kind for math at the parser cursor."""
@@ -1923,7 +1983,12 @@ function consume_document_math!(parser::LatexDocumentParser)
 end
 
 """Consume document whitespace beginning with a source newline."""
-function consume_document_newlines!(parser::LatexDocumentParser, runs::Vector{LatexDocumentRun}, font_flags::Int32)
+function consume_document_newlines!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
     newline_count = 0
     while parser.index <= lastindex(parser.source) && isspace(parser.source[parser.index])
         if parser.source[parser.index] == '\n'
@@ -1936,13 +2001,18 @@ function consume_document_newlines!(parser::LatexDocumentParser, runs::Vector{La
         push_document_line_break!(runs)
         push_document_line_break!(runs)
     else
-        push_document_text!(runs, " ", font_flags)
+        push_document_text!(runs, " ", font_flags, color)
     end
     return nothing
 end
 
 """Consume plain document text up to the next syntax character."""
-function consume_document_text!(parser::LatexDocumentParser, runs::Vector{LatexDocumentRun}, font_flags::Int32)
+function consume_document_text!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
     start = parser.index
     while parser.index <= lastindex(parser.source)
         c = parser.source[parser.index]
@@ -1951,7 +2021,8 @@ function consume_document_text!(parser::LatexDocumentParser, runs::Vector{LatexD
         end
         parser.index = nextind(parser.source, parser.index)
     end
-    push_document_text!(runs, parser.source[start:prevind(parser.source, parser.index)], font_flags)
+    push_document_text!(
+        runs, parser.source[start:prevind(parser.source, parser.index)], font_flags, color)
     return nothing
 end
 
@@ -1960,11 +2031,31 @@ function consume_document_style!(
     parser::LatexDocumentParser,
     runs::Vector{LatexDocumentRun},
     command::String,
-    child_flags::Int32)
+    child_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
     parser.index += ncodeunits(command)
-    children, ok = parse_document_sequence!(parser, child_flags, true)
+    children, ok = parse_document_sequence!(parser, child_flags, color, true)
     ok || return false
+    append!(runs, children)
+    return true
+end
+
+"""Consume a textcolor command while inheriting unresolved names from context."""
+function consume_document_textcolor!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    font_flags::Int32,
+    inherited::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
+    parser.index += ncodeunits("\\textcolor")
+    color_name, ok = consume_document_color_name!(parser)
+    ok || return false
+    parser.index <= lastindex(parser.source) && parser.source[parser.index] == '{' || return false
+    parser.index = nextind(parser.source, parser.index)
+    color = resolve_document_text_color(color_name, inherited)
+    children, children_ok = parse_document_sequence!(parser, font_flags, color, true)
+    children_ok || return false
     append!(runs, children)
     return true
 end
@@ -2104,7 +2195,8 @@ function consume_document_shape!(
     runs::Vector{LatexDocumentRun},
     command::String,
     kind::Symbol,
-    font_flags::Int32)
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
     parser.index += ncodeunits(command)
     option_text, ok = consume_document_shape_options!(parser)
@@ -2113,7 +2205,7 @@ function consume_document_shape!(
     options === nothing && return false
     shape = document_shape_payload(kind, options)
     shape === nothing && return false
-    push!(runs, LatexDocumentRun(:shape, "", font_flags, shape))
+    push!(runs, LatexDocumentRun(:shape, "", font_flags, shape, color))
     return true
 end
 
@@ -2151,41 +2243,74 @@ function consume_document_forced_break!(
     return true
 end
 
-"""Parse and append one document run at the current cursor."""
-function consume_document_run!(parser::LatexDocumentParser, runs::Vector{LatexDocumentRun}, font_flags::Int32)
-    command, child_flags = document_style_command(parser, font_flags)
-    !isempty(command) && return consume_document_style!(parser, runs, command, child_flags)
-    shape_command, shape_kind = document_shape_command(parser)
-    !isempty(shape_command) && return consume_document_shape!(
-        parser, runs, shape_command, shape_kind, font_flags)
-    if document_math_starts_at_cursor(parser)
-        math_source, run_kind, ok = consume_document_math!(parser)
-        if !ok || isempty(strip(math_source))
-            return false
-        end
-        push!(runs, LatexDocumentRun(run_kind, String(strip(math_source)), DOCUMENT_STYLE_REGULAR))
-        return true
-    end
+"""Consume one inline or display math fragment into a document run."""
+function consume_document_math_run!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
-    c = parser.source[parser.index]
-    c == '\n' && (consume_document_newlines!(parser, runs, font_flags); return true)
-    tail = SubString(parser.source, parser.index)
-    startswith(tail, "\\\\") && return consume_document_forced_break!(parser, runs, "\\\\")
-    startswith(tail, "\\newline") && return consume_document_forced_break!(parser, runs, "\\newline")
-    c == '\\' && return false
-    consume_document_text!(parser, runs, font_flags)
+    math_source, run_kind, ok = consume_document_math!(parser)
+    if !ok || isempty(strip(math_source))
+        return false
+    end
+    push!(runs, LatexDocumentRun(
+        run_kind, String(strip(math_source)), DOCUMENT_STYLE_REGULAR, nothing, color))
     return true
 end
 
+"""Consume document prose, newlines, or one forced line-break command."""
+function consume_document_prose_or_break!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
+    c = parser.source[parser.index]
+    c == '\n' && (consume_document_newlines!(parser, runs, font_flags, color); return true)
+    tail = SubString(parser.source, parser.index)
+    startswith(tail, "\\\\") && return consume_document_forced_break!(parser, runs, "\\\\")
+    startswith(tail, "\\newline") &&
+        return consume_document_forced_break!(parser, runs, "\\newline")
+    c == '\\' && return false
+    consume_document_text!(parser, runs, font_flags, color)
+    return true
+end
+
+"""Parse and append one document run at the current cursor."""
+function consume_document_run!(
+    parser::LatexDocumentParser,
+    runs::Vector{LatexDocumentRun},
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
+    startswith(SubString(parser.source, parser.index), "\\textcolor{") &&
+        return consume_document_textcolor!(parser, runs, font_flags, color)
+    command, child_flags = document_style_command(parser, font_flags)
+    !isempty(command) && return consume_document_style!(
+        parser, runs, command, child_flags, color)
+    shape_command, shape_kind = document_shape_command(parser)
+    !isempty(shape_command) && return consume_document_shape!(
+        parser, runs, shape_command, shape_kind, font_flags, color)
+    document_math_starts_at_cursor(parser) &&
+        return consume_document_math_run!(parser, runs, color)
+    return consume_document_prose_or_break!(parser, runs, font_flags, color)
+end
+
 """Parse document runs recursively until source end or one closing brace."""
-function parse_document_sequence!(parser::LatexDocumentParser, font_flags::Int32, stop_on_rbrace::Bool)
+function parse_document_sequence!(
+    parser::LatexDocumentParser,
+    font_flags::Int32,
+    color::Union{Nothing,OdinJuliaBridge.BridgeColor},
+    stop_on_rbrace::Bool)
+
     runs = LatexDocumentRun[]
     while parser.index <= lastindex(parser.source)
         if parser.source[parser.index] == '}'
             parser.index = nextind(parser.source, parser.index)
             return runs, stop_on_rbrace
         end
-        consume_document_run!(parser, runs, font_flags) || return LatexDocumentRun[], false
+        consume_document_run!(parser, runs, font_flags, color) ||
+            return LatexDocumentRun[], false
     end
     return runs, !stop_on_rbrace
 end
@@ -2197,7 +2322,7 @@ function parse_latex_document(source::AbstractString)
         return LatexDocumentRun[]
     end
     parser = LatexDocumentParser(text, firstindex(text))
-    runs, ok = parse_document_sequence!(parser, DOCUMENT_STYLE_REGULAR, false)
+    runs, ok = parse_document_sequence!(parser, DOCUMENT_STYLE_REGULAR, nothing, false)
     return ok ? runs : nothing
 end
 
@@ -2281,8 +2406,10 @@ end
 function replay_document_run!(state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentRun}, i::Int, text_style::Integer)
     run = runs[i]
     if run.kind == :text
-        status = OdinJuliaBridge.dynview_text_run(
-            state_ptr, run.text, document_run_style_id(run, text_style))
+        style_id = document_run_style_id(run, text_style)
+        status = run.color === nothing ?
+            OdinJuliaBridge.dynview_text_run(state_ptr, run.text, style_id) :
+            OdinJuliaBridge.dynview_text_run_brush(state_ptr, run.text, style_id, run.color)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     end
     if run.kind == :line_break

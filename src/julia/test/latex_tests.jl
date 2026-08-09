@@ -73,6 +73,50 @@ end
     @test EuclidLatex.parse_latex_document(EuclidLatex.LATEX_PRIME_DOCUMENT) !== nothing
 end
 
+@testset "document text colors" begin
+    @test EuclidLatex.classify_latex_mode("\\textcolor{red}{alert}") == :document
+
+    common = EuclidLatex.parse_latex_document("\\textcolor{green}{common}")
+    @test common !== nothing
+    @test only(common).color == OdinJuliaBridge.BridgeColor(0x00, 0xff, 0x00, 0xff)
+
+    julia_palette = EuclidLatex.parse_latex_document(
+        "\\textcolor{julia_blue}{blue} \\textcolor{julia_red}{red} " *
+        "\\textcolor{julia_green}{green} \\textcolor{julia_purple}{purple}")
+    @test julia_palette !== nothing
+    colored_runs = [run for run in julia_palette if run.color !== nothing]
+    @test [run.color for run in colored_runs] == [
+        OdinJuliaBridge.bridge_color(:julia_blue),
+        OdinJuliaBridge.bridge_color(:julia_red),
+        OdinJuliaBridge.bridge_color(:julia_green),
+        OdinJuliaBridge.bridge_color(:julia_purple),
+    ]
+
+    colors_symbol = EuclidLatex.parse_latex_document(
+        "\\textcolor{steelblue}{Colors.jl}")
+    @test colors_symbol !== nothing
+    @test only(colors_symbol).color == OdinJuliaBridge.bridge_color(:steelblue)
+
+    nested = EuclidLatex.parse_latex_document(
+        "\\textcolor{julia_blue}{outer \\textbf{bold} " *
+        "\\textcolor{not_a_color}{inherited}} default")
+    @test nested !== nothing
+    inherited_color = OdinJuliaBridge.bridge_color(:julia_blue)
+    @test all(run -> run.color == inherited_color, nested[1:3])
+    @test nested[2].font_flags == EuclidLatex.DOCUMENT_STYLE_REGULAR |
+        EuclidLatex.DOCUMENT_STYLE_BOLD
+    @test nested[end].color === nothing
+
+    unknown_root = EuclidLatex.parse_latex_document(
+        "\\textcolor{not_a_color}{context default}")
+    @test unknown_root !== nothing
+    @test only(unknown_root).color === nothing
+
+    @test EuclidLatex.parse_latex_document("\\textcolor{}{empty}") === nothing
+    @test EuclidLatex.parse_latex_document("\\textcolor{red}missing") === nothing
+    @test EuclidLatex.parse_latex_document("\\textcolor{red}{unclosed") === nothing
+end
+
 @testset "unicode and text operators" begin
     EuclidLatex.clear_cache!()
 

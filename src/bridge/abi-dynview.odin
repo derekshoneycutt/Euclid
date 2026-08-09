@@ -131,6 +131,58 @@ dynview_text_run :: proc "c" (
     })
 }
 
+//   Append one visible text run with an explicit brush color override.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - text: UTF-8 text payload to append to the current block.
+//   - style_id: Style id assigned to the emitted text run.
+//   - brush_color: Brush color override for the text run.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+//   - BRIDGE_STATUS_ILLEGAL_STATE when no block is open.
+@(export)
+dynview_text_run_brush :: proc "c" (
+    state: ^core.Euclid_General_State,
+    text: cstring,
+    style_id: i32,
+    brush_color: Bridge_Color) -> i32 {
+
+    context = state^.saved_context
+    runtime: ^core.Dynview_System
+    status := dynview_require_runtime(state, &runtime)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if runtime == nil || !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer: ^core.Dynview_Command_Buffer
+    status = dynview_require_buffer(runtime, &buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    offset := 0
+    count := 0
+    status = dynview_append_text_payload(runtime, string(text), &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    return dynview_push_command(runtime, core.Dynview_Command{
+        kind = .TextRun,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        text_offset = offset,
+        text_len = count,
+        has_brush_color = true,
+        brush_color = rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
+    })
+}
+
 //   Append one visible math-glyph run to the current dynview block.
 //
 // Parameters:

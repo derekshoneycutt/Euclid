@@ -117,6 +117,14 @@ style_by_id :: #force_inline proc(style_id: i32) -> Dynview_Text_Style {
             wrap_scale = 1.0,
             line_height_multiplier = 1.0,
         }
+    case DYNVIEW_STYLE_UNDERLINE:
+        return Dynview_Text_Style{
+            color = UI_TEXT_COLOR,
+            underline = true,
+            font_flags = .Regular,
+            wrap_scale = 1.0,
+            line_height_multiplier = 1.0,
+        }
     case DYNVIEW_STYLE_INLINE_ATOM:
         return Dynview_Text_Style{
             color = rl.Color{170, 190, 218, 255},

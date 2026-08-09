@@ -35,11 +35,29 @@ mutable struct ScratchpadFrameHook
     consecutive_failures::Int
 end
 
+struct ScratchpadOutputSegment
+    text::String
+    style_id::Int32
+    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
 struct ScratchpadOutputEntry
     line::String
     block_kind::Int32
     style_id::Int32
     latex_source::String
+    segments::Vector{ScratchpadOutputSegment}
+end
+
+"""Construct an output entry without optional inline segments."""
+function ScratchpadOutputEntry(
+    line::String,
+    block_kind::Int32,
+    style_id::Int32,
+    latex_source::String)
+
+    ScratchpadOutputEntry(
+        line, block_kind, style_id, latex_source, ScratchpadOutputSegment[])
 end
 
 mutable struct ScratchpadSession
@@ -70,8 +88,23 @@ const ExceptionOutputTruncated = "\n[Scratchpad exception output truncated]"
 const DynviewStyleInput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_PROMPT
 const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
 const DynviewStyleError = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ERROR
+const DynviewStylePromptBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
+const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
+const DynviewStyleItalic = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC
+const DynviewStyleUnderline = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE
 const ReplPrompt = "julia> "
 const ReplContinuation = " " ^ length(ReplPrompt)
+const ReplPromptColor = OdinJuliaBridge.bridge_color(:julia_green)
+const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
+const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
+const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
+
+mutable struct NativeErrorStyle
+    bold::Bool
+    italic::Bool
+    underline::Bool
+    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
 
 const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
 const next_session_id_ref = Ref(1)
@@ -262,7 +295,7 @@ function blocked_input_reason(text::AbstractString)
     return nothing
 end
 
-"""Record eval timing and emit a warning when eval exceeds the slow threshold."""
+"""Record eval timing and log a console warning when eval exceeds the slow threshold."""
 function maybe_warn_slow_eval!(session::ScratchpadSession, elapsed_ns::Integer)
     session.metrics.last_eval_ns = elapsed_ns
     if elapsed_ns <= SlowEvalWarnNs
@@ -271,10 +304,10 @@ function maybe_warn_slow_eval!(session::ScratchpadSession, elapsed_ns::Integer)
 
     session.metrics.slow_eval_warnings += 1
     elapsed_ms = round(elapsed_ns / 1_000_000; digits=2)
-    append_output_line!(session, "Warning: eval took $(elapsed_ms) ms")
+    @warn "Scratchpad eval took $(elapsed_ms) ms"
 end
 
-"""Record hook timing and emit a warning when a hook exceeds the slow threshold."""
+"""Record hook timing and log a console warning when a hook exceeds the slow threshold."""
 function maybe_warn_slow_hook!(session::ScratchpadSession, hook::ScratchpadFrameHook, elapsed_ns::Integer)
     session.metrics.last_hook_ns = elapsed_ns
     if elapsed_ns <= SlowHookWarnNs
@@ -283,7 +316,7 @@ function maybe_warn_slow_hook!(session::ScratchpadSession, hook::ScratchpadFrame
 
     session.metrics.slow_hook_warnings += 1
     elapsed_ms = round(elapsed_ns / 1_000_000; digits=2)
-    append_output_line!(session, "Warning: $(frame_hook_label(hook.id, hook.label)) took $(elapsed_ms) ms")
+    @warn "Scratchpad $(frame_hook_label(hook.id, hook.label)) took $(elapsed_ms) ms"
 end
 
 """Build a formatted summary of current scratchpad runtime metrics."""
@@ -346,9 +379,29 @@ function append_output_line!(session::ScratchpadSession, line::AbstractString)
     append_output_entry!(session, ScratchpadOutputEntry(text, block_kind, style_id, ""))
 end
 
+"""Build one regular-weight output segment with an optional named brush color."""
+function output_segment(text::AbstractString, color_name::Union{Nothing,Symbol}=nothing)
+    brush_color = color_name === nothing ? nothing : OdinJuliaBridge.bridge_color(color_name)
+    return ScratchpadOutputSegment(String(text), DynviewStyleOutput, brush_color)
+end
+
+"""Append one output line composed from independently colored text segments."""
+function append_segmented_output_line!(
+    session::ScratchpadSession,
+    segments::Vector{ScratchpadOutputSegment})
+
+    line = join(segment.text for segment in segments)
+    append_output_entry!(session, ScratchpadOutputEntry(
+        line,
+        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+        DynviewStyleOutput,
+        "",
+        segments))
+end
+
 """Append one eval-result output line that should render as inline formatted LaTeX."""
 function append_latex_result_line!(session::ScratchpadSession, latex_source::AbstractString, plain_text::AbstractString)
-    line = "=> " * String(plain_text)
+    line = String(plain_text)
     append_output_entry!(session, ScratchpadOutputEntry(
         line,
         OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
@@ -842,10 +895,26 @@ end
 
 """Append the Julia runtime banner shown when Scratchpad opens."""
 function append_startup_banner!(session::ScratchpadSession)
+    append_segmented_output_line!(session, [
+        output_segment("               _", :julia_green),
+    ])
+    append_segmented_output_line!(session, [
+        output_segment("   _", :julia_blue),
+        output_segment("       _ "),
+        output_segment("_", :julia_red),
+        output_segment("(_)", :julia_green),
+        output_segment("_", :julia_purple),
+        output_segment("     |  Documentation: https://docs.julialang.org"),
+    ])
+    append_segmented_output_line!(session, [
+        output_segment("  (_)", :julia_blue),
+        output_segment("     | "),
+        output_segment("(_)", :julia_red),
+        output_segment(" "),
+        output_segment("(_)", :julia_purple),
+        output_segment("    |"),
+    ])
     lines = [
-        "               _",
-        "   _       _ _(_)_     |  Documentation: https://docs.julialang.org",
-        "  (_)     | (_) (_)    |",
         "   _ _   _| |_  __ _   |  Type \":help\" for help.",
         "  | | | | | | |/ _` |  |",
         julia_version_banner_line(),
@@ -905,7 +974,7 @@ function append_eval_result_output!(session::ScratchpadSession, result)
     plain_text = format_result_value(result, session.runtime)
     latex_source = format_result_latex_source(result, session.runtime)
     if latex_source === nothing
-        append_output_line!(session, "=> " * plain_text)
+        append_output_line!(session, plain_text)
         return
     end
 
@@ -949,13 +1018,13 @@ function scrub_scratchpad_exception_stack(exception_stack)
 end
 
 """Format a scrubbed Julia exception stack using the native REPL presentation."""
-function format_exception_stack(exception_stack, runtime::Module)
+function format_exception_stack(exception_stack, runtime::Module; color::Bool=false)
     scrubbed = scrub_scratchpad_exception_stack(exception_stack)
     io = IOBuffer()
     limit_flag = Ref(false)
     context = IOContext(
         io,
-        :color => false,
+        :color => color,
         :module => runtime,
         :stacktrace_types_limited => limit_flag)
     Base.invokelatest(Base.display_error, context, scrubbed)
@@ -966,34 +1035,39 @@ function format_exception_stack(exception_stack, runtime::Module)
 end
 
 """Capture and format the exception stack active in the current catch block."""
-format_current_exception_text(runtime::Module) = format_exception_stack(current_exceptions(), runtime)
+format_current_exception_text(runtime::Module; color::Bool=false) =
+    format_exception_stack(current_exceptions(), runtime; color=color)
 
-"""Echo submitted input into output using prompt-style prefixes for multiline input."""
-function append_input_echo!(session::ScratchpadSession, text::String)
-    lines = split(text, '\n')
-    if isempty(lines)
-        append_output_entry!(session, ScratchpadOutputEntry(
-            rstrip(ReplPrompt),
-            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
-            DynviewStyleInput,
-            ""))
-        return
+"""Append one submitted input line with explicit prompt and input colors."""
+function append_input_echo_line!(
+    session::ScratchpadSession,
+    text::AbstractString,
+    first_line::Bool)
+
+    prefix = first_line ? ReplPrompt : ReplContinuation
+    segments = ScratchpadOutputSegment[]
+    if first_line
+        push!(segments, ScratchpadOutputSegment(
+            ReplPrompt, DynviewStylePromptBold, ReplPromptColor))
+    else
+        push!(segments, ScratchpadOutputSegment(
+            ReplContinuation, DynviewStyleOutput, nothing))
     end
-
+    push!(segments, ScratchpadOutputSegment(
+        String(text), DynviewStyleOutput, nothing))
     append_output_entry!(session, ScratchpadOutputEntry(
-        ReplPrompt * first(lines),
+        prefix * String(text),
         OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
         DynviewStyleInput,
-        ""))
+        "",
+        segments))
+end
+
+"""Echo submitted input with a green prompt and normal command text."""
+function append_input_echo!(session::ScratchpadSession, text::String)
+    lines = split(text, '\n')
     for i in eachindex(lines)
-        if i == firstindex(lines)
-            continue
-        end
-        append_output_entry!(session, ScratchpadOutputEntry(
-            ReplContinuation * lines[i],
-            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
-            DynviewStyleInput,
-            ""))
+        append_input_echo_line!(session, lines[i], i == firstindex(lines))
     end
 end
 
@@ -1020,6 +1094,127 @@ function append_error_block!(session::ScratchpadSession, text::AbstractString)
             OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
             DynviewStyleError,
             ""))
+    end
+end
+
+"""Resolve the Dynview style represented by native error formatter state."""
+function native_error_style_id(style::NativeErrorStyle)
+    if style.underline
+        return DynviewStyleUnderline
+    elseif style.bold
+        return DynviewStyleBold
+    elseif style.italic
+        return DynviewStyleItalic
+    end
+    return DynviewStyleOutput
+end
+
+"""Apply one supported native SGR font-trait code."""
+function apply_native_error_trait_sgr!(style::NativeErrorStyle, code::Int)
+    if code == 1
+        style.bold = true
+    elseif code == 3
+        style.italic = true
+    elseif code == 4
+        style.underline = true
+    elseif code == 22
+        style.bold = false
+    elseif code == 23
+        style.italic = false
+    elseif code == 24
+        style.underline = false
+    end
+end
+
+"""Apply one supported native SGR foreground-color code."""
+function apply_native_error_color_sgr!(style::NativeErrorStyle, code::Int)
+    if code == 35
+        style.brush_color = NativeErrorMagenta
+    elseif code == 39
+        style.brush_color = nothing
+    elseif code == 90
+        style.brush_color = NativeErrorGray
+    elseif code == 91
+        style.brush_color = NativeErrorRed
+    end
+end
+
+"""Apply one supported Julia error formatter SGR code."""
+function apply_native_error_sgr!(style::NativeErrorStyle, code::Int)
+    if code == 0
+        style.bold = false
+        style.italic = false
+        style.underline = false
+        style.brush_color = nothing
+        return
+    end
+
+    apply_native_error_trait_sgr!(style, code)
+    apply_native_error_color_sgr!(style, code)
+end
+
+"""Append one sanitized native formatter text run using the current SGR state."""
+function append_native_error_run!(
+    segments::Vector{ScratchpadOutputSegment},
+    text::AbstractString,
+    style::NativeErrorStyle)
+
+    sanitized = replace(String(text), r"\e(?:\[[0-9;]*)?" => "")
+    if isempty(sanitized)
+        return
+    end
+    push!(segments, ScratchpadOutputSegment(
+        sanitized, native_error_style_id(style), style.brush_color))
+end
+
+"""Parse Julia's bounded native error SGR stream into styled text runs."""
+function parse_native_error_segments(text::AbstractString)
+    source = String(text)
+    segments = ScratchpadOutputSegment[]
+    style = NativeErrorStyle(false, false, false, nothing)
+    cursor = firstindex(source)
+
+    for sgr_match in eachmatch(r"\e\[([0-9;]*)m", source)
+        if cursor < sgr_match.offset
+            append_native_error_run!(
+                segments, SubString(source, cursor, prevind(source, sgr_match.offset)), style)
+        end
+        codes_text = something(sgr_match.captures[1], "")
+        codes = isempty(codes_text) ? (0,) : something.(tryparse.(Int, split(codes_text, ';')), -1)
+        for code in codes
+            apply_native_error_sgr!(style, code)
+        end
+        cursor = sgr_match.offset + ncodeunits(sgr_match.match)
+    end
+
+    if cursor <= ncodeunits(source)
+        append_native_error_run!(segments, SubString(source, cursor), style)
+    end
+    return segments
+end
+
+"""Append ANSI-free output lines from Julia's native styled error stream."""
+function append_native_error_block!(session::ScratchpadSession, text::AbstractString)
+    if isempty(text)
+        return
+    end
+
+    lines = [ScratchpadOutputSegment[]]
+    for segment in parse_native_error_segments(text)
+        parts = split(segment.text, '\n'; keepempty=true)
+        for (index, part) in enumerate(parts)
+            if !isempty(part)
+                push!(lines[end], ScratchpadOutputSegment(
+                    String(part), segment.style_id, segment.brush_color))
+            end
+            if index < length(parts)
+                push!(lines, ScratchpadOutputSegment[])
+            end
+        end
+    end
+
+    for segments in lines
+        append_segmented_output_line!(session, segments)
     end
 end
 
@@ -1052,12 +1247,34 @@ function dynview_switch_block!(state_ptr::Ptr{Cvoid}, open_block::Bool, current_
     return true, true, next_kind, block_id + Int32(1)
 end
 
-"""Emit one line and optional line-break into the active dynview block."""
-function dynview_emit_line!(state_ptr::Ptr{Cvoid}, line::AbstractString, style_id::Int32, add_line_break::Bool)
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, line, style_id))
-        return false
+"""Emit one optional-color text segment into the active dynview block."""
+function dynview_emit_segment!(state_ptr::Ptr{Cvoid}, segment::ScratchpadOutputSegment)
+    status = segment.brush_color === nothing ?
+        OdinJuliaBridge.dynview_text_run(state_ptr, segment.text, segment.style_id) :
+        OdinJuliaBridge.dynview_text_run_brush(
+            state_ptr, segment.text, segment.style_id, segment.brush_color)
+    return is_bridge_status_ok(status)
+end
+
+"""Emit one plain or segmented line and its copy payload into the active block."""
+function dynview_emit_line!(
+    state_ptr::Ptr{Cvoid},
+    entry::ScratchpadOutputEntry,
+    add_line_break::Bool)
+
+    if isempty(entry.segments)
+        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(
+            state_ptr, entry.line, entry.style_id))
+            return false
+        end
+    else
+        for segment in entry.segments
+            if !dynview_emit_segment!(state_ptr, segment)
+                return false
+            end
+        end
     end
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, line))
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, entry.line))
         return false
     end
     if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
@@ -1066,16 +1283,7 @@ function dynview_emit_line!(state_ptr::Ptr{Cvoid}, line::AbstractString, style_i
     return true
 end
 
-"""Return line text after a leading REPL result prefix when present."""
-function line_after_result_prefix(line::AbstractString)
-    text = String(line)
-    if startswith(text, "=> ")
-        return text[4:end]
-    end
-    return text
-end
-
-"""Emit one LaTeX result line while preserving `=>` prefix and plain-text fallback."""
+"""Emit one LaTeX result line with a plain-text fallback."""
 function dynview_emit_latex_result_line!(
     state_ptr::Ptr{Cvoid},
     entry::ScratchpadOutputEntry,
@@ -1085,9 +1293,6 @@ function dynview_emit_latex_result_line!(
     if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, line))
         return false
     end
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, "=> ", entry.style_id))
-        return false
-    end
 
     rendered = EuclidLatex.replay_emit_math_block!(
         state_ptr,
@@ -1095,8 +1300,8 @@ function dynview_emit_latex_result_line!(
         text_style=entry.style_id)
 
     if !rendered
-        fallback_text = line_after_result_prefix(line)
-        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(state_ptr, fallback_text, entry.style_id))
+        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(
+            state_ptr, line, entry.style_id))
             return false
         end
     end
@@ -1130,7 +1335,7 @@ function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadS
         end
 
         if isempty(entry.latex_source)
-            if !dynview_emit_line!(state_ptr, entry.line, entry.style_id, i != last_line_index)
+            if !dynview_emit_line!(state_ptr, entry, i != last_line_index)
                 return false
             end
             continue
@@ -1651,13 +1856,14 @@ end
 """Evaluate one queued input line, including local commands, help mode, and safe eval."""
 function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, text::String)
     stripped = strip(text)
+    dispatched = stripped == "?" ? ":help" : stripped
     append_input_echo!(session, text)
 
-    if handle_help_query!(session, stripped)
+    if handle_help_query!(session, dispatched)
         return
     end
 
-    if handle_local_command!(state_ptr, stripped)
+    if handle_local_command!(state_ptr, dispatched)
         return
     end
 
@@ -1690,7 +1896,7 @@ function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid
         end
     catch
         session.metrics.eval_errors += 1
-        append_error_block!(session, format_current_exception_text(runtime))
+        append_native_error_block!(session, format_current_exception_text(runtime; color=true))
     end
 end
 
@@ -1720,10 +1926,10 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
             hook.failures += 1
             hook.consecutive_failures += 1
             session.metrics.hook_errors += 1
-            append_error_block!(
+            append_native_error_block!(
                 session,
                 "Frame $(frame_hook_label(hook.id, hook.label)) failed:\n" *
-                format_current_exception_text(session.runtime))
+                format_current_exception_text(session.runtime; color=true))
             if hook.consecutive_failures >= MaxConsecutiveHookFailures
                 hook.enabled = false
                 append_output_line!(
@@ -1793,7 +1999,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
 
         run_frame_hooks!(session, state_ptr, dt)
     catch
-        append_error_block!(session, format_current_exception_text(session.runtime))
+        append_native_error_block!(
+            session, format_current_exception_text(session.runtime; color=true))
     end
 end
 

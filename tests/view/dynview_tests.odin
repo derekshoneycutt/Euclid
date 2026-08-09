@@ -10,9 +10,25 @@ import app_dynview "../../src/dynview"
 scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
     prompt_style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_PROMPT)
     input_block := app_dynview.block_format_for_kind(app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
+    output_block := app_dynview.block_format_for_kind(app_bridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT)
     merged := app_dynview.style_with_block_format(prompt_style, input_block)
 
     testing.expect_value(t, merged.indent_cols, 0)
+    testing.expect_value(t, input_block.paragraph_spacing_before, f32(0))
+    testing.expect_value(t, input_block.paragraph_spacing_after, f32(0))
+    testing.expect_value(t, output_block.paragraph_spacing_before, f32(0))
+    testing.expect_value(t, output_block.paragraph_spacing_after, f32(0))
+}
+
+@(test)
+scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
+    testing.expect_value(t,
+        app_bridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE,
+        app_dynview.DYNVIEW_STYLE_UNDERLINE)
+
+    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_UNDERLINE)
+    testing.expect(t, style.underline)
+    testing.expect_value(t, style.font_flags, app_core.Font_Variant_Flags.Regular)
 }
 
 @(test)
@@ -557,7 +573,11 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
 
     state := app_dynview.Dynview_Layout_State{}
     acc := app_dynview.Dynview_Layout_Line_Accumulator{}
-    cmd := app_core.Dynview_Command{style_id = app_dynview.DYNVIEW_STYLE_OUTPUT}
+    cmd := app_core.Dynview_Command{
+        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        has_brush_color = true,
+        brush_color = {64, 99, 216, 255},
+    }
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
 
     status, last_line := app_dynview.layout_consume_text_run(
@@ -573,6 +593,12 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     testing.expect(t, cache.layout_item_count > 0)
     testing.expect(t, cache.layout_line_count > 0)
     testing.expect(t, last_line >= 0)
+    for item_index in 0..<cache.layout_item_count {
+        testing.expect(t, cache.layout_items[item_index].has_brush_color)
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.r, u8(64))
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.g, u8(99))
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.b, u8(216))
+    }
 }
 
 @(test)

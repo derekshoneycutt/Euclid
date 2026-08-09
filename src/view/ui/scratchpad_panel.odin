@@ -393,7 +393,7 @@ draw_scratchpad_output_and_prompt :: proc(
         interaction_space_rect = terminal_panel,
         interaction_enabled = true,
         font = font,
-        font_color = UI_TEXT_COLOR,
+        font_color = rl.Color{255, 255, 255, 255},
         font_size = TREE_FONT_SIZE,
         char_advance = TEXT_WRAP_ADVANCE,
         prompt_prefix = SCRATCHPAD_PROMPT,
@@ -429,6 +429,8 @@ draw_scratchpad_output_and_prompt :: proc(
             state, terminal_panel, ui_runtime, font, output_text_legacy,
             state^.ui_runtime.view_text_scroll_y)
     }
+    prompt_font := view_core.font_runtime_resolve(
+        state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
 
     draw_input_box(Input_Box_Draw_Params{
         rect = layout.input_rect,
@@ -448,6 +450,8 @@ draw_scratchpad_output_and_prompt :: proc(
         terminal_mode = true,
         terminal_row_height = TEXT_ROW_HEIGHT,
         terminal_background_color = UI_COMPONENT_BACKGROUND_COLOR,
+        terminal_prompt_color = rl.Color{56, 152, 38, 255},
+        terminal_prompt_font = prompt_font,
     })
 
     pre_drag_scroll := state^.ui_runtime.view_text_scroll_y

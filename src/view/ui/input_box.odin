@@ -82,6 +82,8 @@ Input_Box_Draw_Params :: struct {
     terminal_mode: bool,
     terminal_row_height: f32,
     terminal_background_color: rl.Color,
+    terminal_prompt_color: rl.Color,
+    terminal_prompt_font: rl.Font,
 }
 
 Terminal_Input_Position :: struct {
@@ -1061,10 +1063,11 @@ draw_terminal_input_box :: proc(params: Input_Box_Draw_Params) {
     content_x := drawn_rect.x + prefix_width
     columns := input_box_visible_cols(drawn_rect.width - prefix_width, params.char_advance)
     display_color := params.enabled ? params.font_color : rl.Color{110, 110, 110, 255}
+    prompt_color := params.enabled ? params.terminal_prompt_color : rl.Color{110, 110, 110, 255}
 
     if len(params.prompt_prefix) > 0 {
         view_core.ui_text(params.prompt_prefix, int(drawn_rect.x), int(drawn_rect.y),
-            display_color, params.font, params.font_size)
+            prompt_color, params.terminal_prompt_font, params.font_size)
     }
     draw_terminal_input_rows(params, content_x, columns, display_color)
     draw_terminal_input_cursor(params, content_x, columns, display_color)

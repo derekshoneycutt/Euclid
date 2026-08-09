@@ -1123,6 +1123,7 @@ draw_cached_text_item :: proc(
     text := string(runtime^.command_buffer.text_bytes[item.text_offset:text_end])
     resolved_font := resolve_font_for_style(state, style, font)
     draw_x := text_item_draw_x(panel, style, item, item_x)
+    text_color := item.has_brush_color ? item.brush_color : style.color
 
     switch item.kind {
     case .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive,
@@ -1132,7 +1133,17 @@ draw_cached_text_item :: proc(
     case .MathBlock:
         draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun:
-        view_core.ui_text(text, int(draw_x), int(item_y), style.color, resolved_font, font_size)
+        view_core.ui_text(text, int(draw_x), int(item_y), text_color, resolved_font, font_size)
+        if style.underline {
+            underline_width := f32(item.col_span) * dynview.effective_advance(
+                style, runtime^.compile_cache.last_wrap_advance)
+            underline_y := item_y + font_size + 1
+            rl.DrawLineEx(
+                rl.Vector2{draw_x, underline_y},
+                rl.Vector2{draw_x + underline_width, underline_y},
+                1,
+                text_color)
+        }
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle, .InlinePieSection:
     }
 }

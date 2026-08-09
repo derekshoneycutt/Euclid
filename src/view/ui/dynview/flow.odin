@@ -179,6 +179,16 @@ flow_consume_text_run :: proc(
                     style.color,
                     style_font(draw_ctx, style),
                     draw_ctx^.font_size)
+                if style.underline {
+                    underline_y := row_y + draw_ctx^.font_size + 1
+                    underline_width := f32(line_len) *
+                        dynview.effective_advance(style, draw_ctx^.wrap_advance)
+                    rl.DrawLineEx(
+                        rl.Vector2{line_x, underline_y},
+                        rl.Vector2{line_x + underline_width, underline_y},
+                        1,
+                        style.color)
+                }
             }
         }
 
@@ -530,7 +540,11 @@ consume_text_based_command :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     text := dynview.text_for_command(buffer, cmd)
-    flow_consume_text_run(flow, text, style, draw_ctx)
+    text_style := style
+    if cmd.has_brush_color {
+        text_style.color = cmd.brush_color
+    }
+    flow_consume_text_run(flow, text, text_style, draw_ctx)
 }
 
 //  Consume a large op command for the given flow

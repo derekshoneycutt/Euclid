@@ -162,6 +162,8 @@ text_run_item :: #force_inline proc(
         col_span = line_col_span,
         text_offset = cmd.text_offset + line_start,
         text_len = line_byte_len,
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
         draw_height = ascent + descent,
         ascent = ascent,
         descent = descent,
