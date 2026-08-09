@@ -44,6 +44,13 @@ julia make.jl
 # To run immediately: julia make.jl -r
 ```
 
+### Windows requires a few more additions before this will work
+
+- `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
+- `gendef` : used in the script to bridge the fact that Julia is not built with
+  the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
+  Strawberry Perl or MSYS2.
+
 ## Documentation
 
 - [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki): published project documentation.
@@ -55,13 +62,6 @@ julia make.jl
 Generate the complete publishable Wiki artifact locally with `julia make.jl -w`. The artifact is
 written to ignored `bin/wiki/`. Run `julia make.jl -W` to compare it against a fresh generation
 without modifying the retained artifact.
-
-### Windows requires a few more additions before this will work
-
-- `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
-- `gendef` : used in the script to bridge the fact that Julia is not built with
-  the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
-  Strawberry Perl or MSYS2.
 
 ## Questions?
 
