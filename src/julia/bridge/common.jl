@@ -1,3 +1,61 @@
+"""
+Cache addresses of Odin bridge functions exported by the Euclid executable.
+
+A normal Julia JIT session can resolve bare `@ccall` names from the host process,
+but code restored from a PackageCompiler sysimage cannot do so reliably on Windows.
+Host exports remain at fixed addresses for the lifetime of the process.
+"""
+const HOST_SYMBOL_CACHE = Dict{Symbol, Ptr{Cvoid}}()
+
+"""
+Resolve an Odin bridge function exported by the Euclid executable.
+
+Windows sysimage code must call bridge functions through explicit pointers because
+the functions belong to the host executable rather than a DLL in Julia's loader path.
+Resolved addresses are cached in `HOST_SYMBOL_CACHE`.
+"""
+function host_symbol(name::Symbol)
+    get!(HOST_SYMBOL_CACHE, name) do
+        # A null module name asks Windows for the module containing the process entry
+        # point: euclid.exe. This must not be replaced with a libjulia module handle.
+        module_handle = Base.@ccall "kernel32".GetModuleHandleW(
+            C_NULL::Ptr{UInt16})::Ptr{Cvoid}
+        module_handle == C_NULL && error("could not resolve Euclid executable module")
+
+        pointer = Base.@ccall "kernel32".GetProcAddress(
+            module_handle::Ptr{Cvoid}, String(name)::Cstring)::Ptr{Cvoid}
+        pointer == C_NULL && error("could not resolve Euclid host symbol: $name")
+        pointer
+    end
+end
+
+"""
+Call an Odin bridge export using Julia's typed `@ccall` syntax.
+
+This module-local macro intentionally shadows `Base.@ccall` for the bridge wrapper
+files. On Windows it rewrites the bare function name to a pointer resolved from the
+Euclid executable, allowing calls compiled into a PackageCompiler sysimage to work.
+Other platforms retain Julia's normal process-wide symbol lookup behavior.
+"""
+macro ccall(expression)
+    if !Sys.iswindows()
+        return esc(:(Base.@ccall $expression))
+    end
+
+    call_expression = expression.args[1]
+    function_name = call_expression.args[1]
+    function_name isa Symbol || error("Euclid bridge calls require a bare host symbol")
+
+    # Base.@ccall represents a function-pointer callee as an interpolated AST node.
+    # GlobalRef keeps the resolver bound to OdinJuliaBridge when this expansion is
+    # compiled into a sysimage and later restored into an embedded Julia runtime.
+    rewritten_call = copy(call_expression)
+    resolver = GlobalRef(@__MODULE__, :host_symbol)
+    rewritten_call.args[1] = Expr(:$, :($resolver($(QuoteNode(function_name)))))
+    rewritten = Expr(:(::), rewritten_call, expression.args[2])
+    return esc(:(Base.@ccall $rewritten))
+end
+
 struct BridgeDynviewMathOp
     kind::Int32
     style_id::Int32

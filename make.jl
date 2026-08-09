@@ -699,6 +699,9 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
 
     out_flag = is_windows() ? "-out:../bin/euclid.exe" : "-out:../bin/euclid"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
+    if is_windows()
+        julia_linker_flags = string(julia_linker_flags, " /STACK:8388608")
+    end
     if !isempty(julia_linker_flags)
         push!(cmd_parts, "-extra-linker-flags:$julia_linker_flags")
     end
@@ -855,6 +858,16 @@ function remove_stale_julia_sysimage()
     end
 end
 
+"""Resolve Julia's runtime directory for Windows DLL loading."""
+function resolve_julia_bindir()
+    julia_bindir_result = run_command(
+        Cmd([JULIA_EXE, "-e", "print(Sys.BINDIR)"]); capture_output=true)
+    if julia_bindir_result.exit_code != 0 || isempty(strip(julia_bindir_result.stdout))
+        error("Error: Could not resolve Julia Sys.BINDIR.")
+    end
+    return strip(julia_bindir_result.stdout)
+end
+
 """Resolve Julia linker flags and optional runtime bindir data for the current platform."""
 function resolve_julia_linker_flags(do_build::Bool)
     if !do_build
@@ -876,12 +889,7 @@ function resolve_julia_linker_flags(do_build::Bool)
         return join(split(flags_result.stdout), " "), nothing
     end
 
-    julia_bindir_result = run_command(Cmd([JULIA_EXE, "-e", "print(Sys.BINDIR)"]); capture_output=true)
-    if julia_bindir_result.exit_code != 0 || isempty(strip(julia_bindir_result.stdout))
-        error("Error: Could not resolve Julia Sys.BINDIR.")
-    end
-
-    julia_bindir = strip(julia_bindir_result.stdout)
+    julia_bindir = resolve_julia_bindir()
     libjulia_dll = joinpath(julia_bindir, "libjulia.dll")
     libopenlibm_dll = joinpath(julia_bindir, "libopenlibm.dll")
     if !isfile(libjulia_dll)
@@ -1052,6 +1060,9 @@ function execute_build_plan(
     run_after_build::Bool,
     run_args::Vector{String})
     julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
+    if run_after_build && is_windows() && julia_bindir === nothing
+        julia_bindir = resolve_julia_bindir()
+    end
     odin_build_result = nothing
 
     if (do_build || do_assets) && !build_sysimage
