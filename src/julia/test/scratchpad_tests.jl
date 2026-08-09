@@ -109,8 +109,8 @@ end
         "               _",
         "   _       _ _(_)_     |  Documentation: https://docs.julialang.org",
         "  (_)     | (_) (_)    |",
-        "   _ _   _| |_  __ _   |  Type \":help\" for help.",
-        "  | | | | | | |/ _` |  |",
+        "   _ _   _| |_  __ _   |  Type \"?\" for Julia help mode,",
+        "  | | | | | | |/ _` |  |  \":help\" for Scratchpad commands.",
         "  | | |_| | | | (_| |  |  Version $(VERSION) ($(release_date))",
         " _/ |\\__'_|_|_|\\__'_|  |  Official https://julialang.org release",
         "|__/                   |",
@@ -138,7 +138,8 @@ end
 
     Scratchpad.append_help_lines!(session)
     @test "Julia REPL Scratchpad" in session.output
-    @test "  :help        show this help" in session.output
+    @test "  ?            enter Julia help mode" in session.output
+    @test "  :help        show Scratchpad commands" in session.output
 end
 
 @testset "terminal prompt echo" begin
@@ -202,9 +203,38 @@ end
 
             @test startswith(session.output[1], "julia> ?")
             @test "Julia REPL Scratchpad" in session.output
-            @test "  :help        show this help" in session.output
+            @test "  :help        show Scratchpad commands" in session.output
             @test !any(startswith("help error:"), session.output)
             @test session.metrics.local_commands == 1
+        end
+    end
+end
+
+@testset "native persistent help mode" begin
+    with_test_session() do session
+        @test Scratchpad.classify_input(
+            TEST_STATE_PTR, "not valid Julia )", Scratchpad.InputModeHelp) ==
+            Scratchpad.ParseComplete
+
+        Scratchpad.evaluate_queued_input!(
+            session, TEST_STATE_PTR, "string", Scratchpad.InputModeHelp)
+        output = join(session.output, "\n")
+        @test startswith(session.output[1], "help?> string")
+        @test occursin("search: string", output)
+        @test occursin("Create a string from any values", output)
+        @test !occursin("help error:", output)
+    end
+
+    for (query, expected) in (
+        ("@time", "A macro to execute an expression"),
+        ("begin", "begin...end denotes a block"),
+        ("\"allocation\"", "Base.@allocated"),
+        ("?print", "Write to io"))
+
+        with_test_session() do session
+            Scratchpad.evaluate_queued_input!(
+                session, TEST_STATE_PTR, query, Scratchpad.InputModeHelp)
+            @test occursin(expected, join(session.output, "\n"))
         end
     end
 end
@@ -356,18 +386,23 @@ end
         @test Scratchpad.history_previous(TEST_STATE_PTR) == ""
         @test Scratchpad.history_next(TEST_STATE_PTR) == ""
 
-        append!(session.history, ["alpha", "beta", "gamma"])
+        append!(session.history, [
+            Scratchpad.ScratchpadInputEntry("alpha", Scratchpad.InputModeJulia),
+            Scratchpad.ScratchpadInputEntry("beta", Scratchpad.InputModeHelp),
+            Scratchpad.ScratchpadInputEntry("gamma", Scratchpad.InputModeJulia),
+        ])
         session.history_cursor = length(session.history) + 1
 
-        @test Scratchpad.history_previous(TEST_STATE_PTR) == "gamma"
-        @test Scratchpad.history_previous(TEST_STATE_PTR) == "beta"
-        @test Scratchpad.history_previous(TEST_STATE_PTR) == "alpha"
-        @test Scratchpad.history_previous(TEST_STATE_PTR) == "alpha"
+        @test Scratchpad.history_previous(
+            TEST_STATE_PTR, Scratchpad.InputModeHelp) == "0\ngamma"
+        @test Scratchpad.history_previous(TEST_STATE_PTR) == "1\nbeta"
+        @test Scratchpad.history_previous(TEST_STATE_PTR) == "0\nalpha"
+        @test Scratchpad.history_previous(TEST_STATE_PTR) == "0\nalpha"
 
-        @test Scratchpad.history_next(TEST_STATE_PTR) == "beta"
-        @test Scratchpad.history_next(TEST_STATE_PTR) == "gamma"
-        @test Scratchpad.history_next(TEST_STATE_PTR) == ""
-        @test Scratchpad.history_next(TEST_STATE_PTR) == ""
+        @test Scratchpad.history_next(TEST_STATE_PTR) == "1\nbeta"
+        @test Scratchpad.history_next(TEST_STATE_PTR) == "0\ngamma"
+        @test Scratchpad.history_next(TEST_STATE_PTR) == "1\n"
+        @test Scratchpad.history_next(TEST_STATE_PTR) == "1\n"
 
         @test Scratchpad.history_reset_cursor(TEST_STATE_PTR)
         @test session.history_cursor == length(session.history) + 1
@@ -383,8 +418,9 @@ end
     end
 
     @test length(session.queue) == Scratchpad.MaxQueueLines
-    @test first(session.queue) == "line-3"
-    @test last(session.queue) == "line-$(total)"
+    @test first(session.queue).text == "line-3"
+    @test first(session.queue).mode == Scratchpad.InputModeJulia
+    @test last(session.queue).text == "line-$(total)"
     @test session.metrics.queue_dropped == 2
     @test session.metrics.queue_enqueued == total
     @test session.metrics.queue_high_water == Scratchpad.MaxQueueLines

@@ -13,6 +13,7 @@ SCRATCHPAD_PARSE_COMPLETE :: i32(2)
 try_submit_scratchpad_async :: proc(
     state: ^core.Euclid_General_State, kind: Scratchpad_Async_Kind,
     text: string = "", caret_byte: int = 0,
+    input_mode: Scratchpad_Input_Mode = .Julia,
     input_generation: u64 = 0) -> (u64, bool) {
 
     if state == nil || state^.julia_runtime_service == nil {
@@ -33,6 +34,7 @@ try_submit_scratchpad_async :: proc(
         state = .Pending,
         kind = kind,
         input_generation = input_generation,
+        input_mode = input_mode,
         host_state = state,
         caret_byte = caret_byte,
         input_len = len(text),
@@ -111,10 +113,11 @@ scratchpad_async_task :: proc(data: rawptr) -> bool {
     case .Submit:
         execute_scratchpad_submit(slot, input)
     case .Complete:
-        result := scratchpad_complete_input_direct(slot^.host_state, input, slot^.caret_byte)
+        result := scratchpad_complete_input_direct(
+            slot^.host_state, input, slot^.caret_byte, slot^.input_mode)
         store_scratchpad_async_result(slot, result)
     case .History_Previous:
-        result := scratchpad_history_previous_direct(slot^.host_state)
+        result := scratchpad_history_previous_direct(slot^.host_state, slot^.input_mode)
         store_scratchpad_async_result(slot, result)
     case .History_Next:
         result := scratchpad_history_next_direct(slot^.host_state)
@@ -130,7 +133,8 @@ scratchpad_async_task :: proc(data: rawptr) -> bool {
 
 //   Classify and optionally queue one committed input snapshot.
 execute_scratchpad_submit :: proc(slot: ^Scratchpad_Async_Slot, input: string) {
-    slot^.parse_result = scratchpad_classify_input_direct(slot^.host_state, input)
+    slot^.parse_result = scratchpad_classify_input_direct(
+        slot^.host_state, input, slot^.input_mode)
     if slot^.parse_result == SCRATCHPAD_PARSE_INCOMPLETE {
         slot^.succeeded = scratchpad_history_reset_cursor_direct(slot^.host_state)
         return
@@ -138,7 +142,8 @@ execute_scratchpad_submit :: proc(slot: ^Scratchpad_Async_Slot, input: string) {
     if slot^.parse_result != SCRATCHPAD_PARSE_COMPLETE {
         return
     }
-    slot^.succeeded = scratchpad_queue_input_direct(slot^.host_state, input)
+    slot^.succeeded = scratchpad_queue_input_direct(
+        slot^.host_state, input, slot^.input_mode)
     if slot^.succeeded {
         _ = scratchpad_history_reset_cursor_direct(slot^.host_state)
     }
@@ -157,7 +162,9 @@ store_scratchpad_async_result :: proc(slot: ^Scratchpad_Async_Slot, result: stri
 //   - SCRATCHPAD_PARSE_INCOMPLETE when input is a valid prefix.
 //   - SCRATCHPAD_PARSE_COMPLETE when input is complete.
 scratchpad_classify_input_direct :: proc(
-    state: ^core.Euclid_General_State, text: string) -> i32 {
+    state: ^core.Euclid_General_State,
+    text: string,
+    input_mode: Scratchpad_Input_Mode) -> i32 {
 
     if state == nil || state^.julia_interface == nil {
         return SCRATCHPAD_PARSE_ERROR
@@ -169,8 +176,9 @@ scratchpad_classify_input_direct :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_classify_input,
-        state_value, text_value)
+    mode_value := julialib.jl_box_int32(i32(input_mode))
+    result := julialib.jl_call3(state^.julia_interface^.scratchpad_classify_input,
+        state_value, text_value, mode_value)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_classify_input")
@@ -217,7 +225,8 @@ scratchpad_complete_backslash_direct :: proc(
 scratchpad_complete_input_direct :: proc(
     state: ^core.Euclid_General_State,
     text: string,
-    caret_byte: int) -> string {
+    caret_byte: int,
+    input_mode: Scratchpad_Input_Mode) -> string {
 
     if state == nil || state^.julia_interface == nil {
         return ""
@@ -230,8 +239,9 @@ scratchpad_complete_input_direct :: proc(
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
     caret_value := julialib.jl_box_int64(i64(caret_byte))
-    args: [3]^julialib.jl_value_t = {state_value, text_value, caret_value}
-    result := julialib.jl_call(state^.julia_interface^.scratchpad_complete_input, &args[0], 3)
+    mode_value := julialib.jl_box_int32(i32(input_mode))
+    args: [4]^julialib.jl_value_t = {state_value, text_value, caret_value, mode_value}
+    result := julialib.jl_call(state^.julia_interface^.scratchpad_complete_input, &args[0], 4)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_complete_input")
@@ -247,7 +257,9 @@ scratchpad_complete_input_direct :: proc(
 //   - true when queued successfully.
 //   - false when queueing fails.
 scratchpad_queue_input_direct :: proc(
-    state: ^core.Euclid_General_State, text: string) -> bool {
+    state: ^core.Euclid_General_State,
+    text: string,
+    input_mode: Scratchpad_Input_Mode) -> bool {
 
     if state == nil || state^.julia_interface == nil {
         return false
@@ -259,8 +271,9 @@ scratchpad_queue_input_direct :: proc(
     state_value := julialib.jl_box_voidpointer(state)
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_queue_input,
-        state_value, text_value)
+    mode_value := julialib.jl_box_int32(i32(input_mode))
+    result := julialib.jl_call3(state^.julia_interface^.scratchpad_queue_input,
+        state_value, text_value, mode_value)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_queue_input")
@@ -304,7 +317,9 @@ scratchpad_save_history_to_file_direct :: proc(
 // Notes:
 //   - The helper forwards the request through the registered Julia callback and
 //     returns the resolved suggestion text for the UI to display.
-scratchpad_history_previous_direct :: proc(state: ^core.Euclid_General_State) -> string {
+scratchpad_history_previous_direct :: proc(
+    state: ^core.Euclid_General_State,
+    input_mode: Scratchpad_Input_Mode) -> string {
     if state == nil || state^.julia_interface == nil {
         return ""
     }
@@ -313,8 +328,9 @@ scratchpad_history_previous_direct :: proc(state: ^core.Euclid_General_State) ->
     }
 
     state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(
-        state^.julia_interface^.scratchpad_history_previous, state_value)
+    mode_value := julialib.jl_box_int32(i32(input_mode))
+    result := julialib.jl_call2(
+        state^.julia_interface^.scratchpad_history_previous, state_value, mode_value)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_previous")

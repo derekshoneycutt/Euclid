@@ -9,8 +9,14 @@ import ui_dynview "./dynview"
 import "core:strings"
 import rl "vendor:raylib"
 
-SCRATCHPAD_PROMPT :: "julia> "
+SCRATCHPAD_JULIA_PROMPT :: "julia> "
+SCRATCHPAD_HELP_PROMPT :: "help?> "
 SCRATCHPAD_SCROLL_BOTTOM_EPSILON :: 0.5
+
+//   Return the live terminal prompt for the active Scratchpad editor mode.
+scratchpad_prompt :: #force_inline proc(mode: core.Scratchpad_Input_Mode) -> string {
+    return mode == .Help ? SCRATCHPAD_HELP_PROMPT : SCRATCHPAD_JULIA_PROMPT
+}
 
 Scratchpad_Terminal_Layout :: struct {
     transcript_height: f32,
@@ -100,6 +106,21 @@ scratchpad_parse_completion_payload :: proc(payload: string) -> (int, int, strin
     return replace_start, replace_end, replacement, true
 }
 
+//   Decode a mode-tagged history payload encoded as `mode\ntext`.
+scratchpad_parse_history_payload :: proc(
+    payload: string) -> (core.Scratchpad_Input_Mode, string, bool) {
+
+    newline := strings.index_byte(payload, '\n')
+    if newline < 0 {
+        return .Julia, "", false
+    }
+    mode_value, ok := scratchpad_parse_non_negative_int(payload[:newline])
+    if !ok || mode_value > int(core.Scratchpad_Input_Mode.Help) {
+        return .Julia, "", false
+    }
+    return core.Scratchpad_Input_Mode(mode_value), payload[newline + 1:], true
+}
+
 //   Submit one generic completion request without blocking the display thread.
 request_scratchpad_completion :: proc(
     state: ^core.Euclid_General_State,
@@ -117,6 +138,7 @@ request_scratchpad_completion :: proc(
 
     request_id, sent := julia.try_submit_scratchpad_async(
         state, .Complete, input_text, ui_runtime^.scratchpad_input_cursor,
+        ui_runtime^.scratchpad_input_mode,
         ui_runtime^.scratchpad_input_generation)
     if sent {
         ui_runtime^.scratchpad_latest_completion_request_id = request_id
@@ -129,8 +151,13 @@ scratchpad_scroll_is_at_bottom :: #force_inline proc(scroll_y, max_scroll: f32) 
 }
 
 //   Measure prompt-aligned columns available to terminal input text.
-scratchpad_input_columns :: proc(panel: rl.Rectangle, font: rl.Font) -> int {
-    prompt_cstr := strings.clone_to_cstring(SCRATCHPAD_PROMPT, context.temp_allocator)
+scratchpad_input_columns :: proc(
+    panel: rl.Rectangle,
+    font: rl.Font,
+    mode: core.Scratchpad_Input_Mode) -> int {
+
+    prompt := scratchpad_prompt(mode)
+    prompt_cstr := strings.clone_to_cstring(prompt, context.temp_allocator)
     prompt_width := rl.MeasureTextEx(font, prompt_cstr, TREE_FONT_SIZE, 0).x
     input_width := max(0.0, panel.width - TEXT_PADDING * 2 - prompt_width)
     return input_box_visible_cols(input_width, TEXT_WRAP_ADVANCE)
@@ -151,7 +178,7 @@ scratchpad_terminal_layout :: proc(
             &state^.dynview, panel, TEXT_PADDING, TEXT_WRAP_ADVANCE,
             TEXT_ROW_HEIGHT, fallback_text)
     }
-    columns := scratchpad_input_columns(panel, font)
+    columns := scratchpad_input_columns(panel, font, ui_runtime^.scratchpad_input_mode)
     input_rows := terminal_input_row_count(
         ui_runtime^.scratchpad_input[:], ui_runtime^.scratchpad_input_len,
         ui_runtime^.scratchpad_input_cursor, columns)
@@ -181,12 +208,16 @@ apply_scratchpad_history_navigation :: proc(
 
     if history_previous {
         _, _ = julia.try_submit_scratchpad_async(
-            state, .History_Previous, input_generation = ui_runtime^.scratchpad_input_generation)
+            state, .History_Previous,
+            input_mode = ui_runtime^.scratchpad_input_mode,
+            input_generation = ui_runtime^.scratchpad_input_generation)
     }
 
     if history_next {
         _, _ = julia.try_submit_scratchpad_async(
-            state, .History_Next, input_generation = ui_runtime^.scratchpad_input_generation)
+            state, .History_Next,
+            input_mode = ui_runtime^.scratchpad_input_mode,
+            input_generation = ui_runtime^.scratchpad_input_generation)
     }
 }
 
@@ -211,6 +242,7 @@ submit_scratchpad_input_if_ready :: proc(
     ui_runtime^.scratchpad_bottom_pinned = true
     request_id, sent := julia.try_submit_scratchpad_async(
         state, .Submit, input_text,
+        input_mode = ui_runtime^.scratchpad_input_mode,
         input_generation = ui_runtime^.scratchpad_input_generation)
     if sent {
         ui_runtime^.scratchpad_pending_submit_request_id = request_id
@@ -266,12 +298,17 @@ apply_scratchpad_async_result :: proc(
     case .Complete:
         apply_scratchpad_completion_result(ui_runtime, slot)
     case .History_Previous, .History_Next:
-        input_box_replace_text(
-            ui_runtime^.scratchpad_input[:],
-            &ui_runtime^.scratchpad_input_len,
-            &ui_runtime^.scratchpad_input_cursor,
+        mode, text, ok := scratchpad_parse_history_payload(
             julia.scratchpad_async_result_text(slot))
-        ui_runtime^.scratchpad_input_viewport_col_start = 0
+        if ok {
+            input_box_replace_text(
+                ui_runtime^.scratchpad_input[:],
+                &ui_runtime^.scratchpad_input_len,
+                &ui_runtime^.scratchpad_input_cursor,
+                text)
+            ui_runtime^.scratchpad_input_mode = mode
+            ui_runtime^.scratchpad_input_viewport_col_start = 0
+        }
     case .History_Reset, .Save_History:
     }
 }
@@ -318,6 +355,32 @@ apply_scratchpad_completion_result :: proc(
         &ui_runtime^.scratchpad_input_cursor, replace_start, replace_end, replacement) {
         ui_runtime^.scratchpad_input_generation += 1
     }
+}
+
+//   Apply Julia/Help prompt transitions after one input frame.
+apply_scratchpad_mode_transition :: proc(
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    input_result: Input_Box_Result,
+    previous_len, previous_cursor: int) -> bool {
+
+    if ui_runtime^.scratchpad_input_mode == .Help && previous_len == 0 &&
+        input_result.backspace_pressed {
+        ui_runtime^.scratchpad_input_mode = .Julia
+        return true
+    }
+    if ui_runtime^.scratchpad_input_mode != .Julia || previous_cursor != 0 ||
+        input_result.paste_applied || ui_runtime^.scratchpad_input_len <= 0 ||
+        ui_runtime^.scratchpad_input[0] != '?' {
+        return false
+    }
+
+    _ = input_box_replace_byte_range(
+        ui_runtime^.scratchpad_input[:],
+        &ui_runtime^.scratchpad_input_len,
+        &ui_runtime^.scratchpad_input_cursor,
+        0, 1, "")
+    ui_runtime^.scratchpad_input_mode = .Help
+    return true
 }
 
 
@@ -379,6 +442,9 @@ draw_scratchpad_output_and_prompt :: proc(
 
     _ = view_core.draw_copy_icons(&state^.dynview, terminal_panel, mouse_input)
 
+    previous_input_len := ui_runtime^.scratchpad_input_len
+    previous_input_cursor := ui_runtime^.scratchpad_input_cursor
+    live_prompt := scratchpad_prompt(ui_runtime^.scratchpad_input_mode)
     input_result := handle_input_box(Input_Box_Params{
         id = 5001,
         rect = layout.input_rect,
@@ -396,7 +462,7 @@ draw_scratchpad_output_and_prompt :: proc(
         font_color = rl.Color{255, 255, 255, 255},
         font_size = TREE_FONT_SIZE,
         char_advance = TEXT_WRAP_ADVANCE,
-        prompt_prefix = SCRATCHPAD_PROMPT,
+        prompt_prefix = live_prompt,
         caret_blink_half_period_seconds = SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS,
         terminal_mode = true,
         terminal_row_height = TEXT_ROW_HEIGHT,
@@ -406,7 +472,9 @@ draw_scratchpad_output_and_prompt :: proc(
     ui_runtime^.scratchpad_input_cursor = input_result.caret_col_out
     ui_runtime^.scratchpad_input_viewport_col_start = input_result.viewport_col_start_out
 
-    if input_result.changed || input_result.paste_applied {
+    mode_changed := apply_scratchpad_mode_transition(
+        ui_runtime, input_result, previous_input_len, previous_input_cursor)
+    if input_result.changed || input_result.paste_applied || mode_changed {
         ui_runtime^.scratchpad_input_generation += 1
         ui_runtime^.scratchpad_history_reset_pending = true
         flush_scratchpad_history_reset(state, ui_runtime)
@@ -431,6 +499,11 @@ draw_scratchpad_output_and_prompt :: proc(
     }
     prompt_font := view_core.font_runtime_resolve(
         state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
+    live_prompt = scratchpad_prompt(ui_runtime^.scratchpad_input_mode)
+    prompt_color := rl.Color{56, 152, 38, 255}
+    if ui_runtime^.scratchpad_input_mode == .Help {
+        prompt_color = rl.Color{217, 180, 74, 255}
+    }
 
     draw_input_box(Input_Box_Draw_Params{
         rect = layout.input_rect,
@@ -445,12 +518,12 @@ draw_scratchpad_output_and_prompt :: proc(
         font_color = UI_TEXT_COLOR,
         font_size = TREE_FONT_SIZE,
         char_advance = TEXT_WRAP_ADVANCE,
-        prompt_prefix = SCRATCHPAD_PROMPT,
+        prompt_prefix = live_prompt,
         caret_blink_half_period_seconds = SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS,
         terminal_mode = true,
         terminal_row_height = TEXT_ROW_HEIGHT,
         terminal_background_color = UI_COMPONENT_BACKGROUND_COLOR,
-        terminal_prompt_color = rl.Color{56, 152, 38, 255},
+        terminal_prompt_color = prompt_color,
         terminal_prompt_font = prompt_font,
     })
 

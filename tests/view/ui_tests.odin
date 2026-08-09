@@ -186,6 +186,70 @@ scratchpad_parse_non_negative_int_rejects_non_digits :: proc(t: ^testing.T) {
     testing.expect(t, !ok)
 }
 
+@(test)
+scratchpad_prompt_tracks_input_mode :: proc(t: ^testing.T) {
+    testing.expect_value(t, app_ui.scratchpad_prompt(.Julia), "julia> ")
+    testing.expect_value(t, app_ui.scratchpad_prompt(.Help), "help?> ")
+}
+
+@(test)
+scratchpad_history_payload_restores_mode_and_text :: proc(t: ^testing.T) {
+    mode, text, ok := app_ui.scratchpad_parse_history_payload("1\n@time")
+    testing.expect(t, ok)
+    testing.expect_value(t, mode, app_core.Scratchpad_Input_Mode.Help)
+    testing.expect_value(t, text, "@time")
+
+    _, _, missing_separator_ok := app_ui.scratchpad_parse_history_payload("1@time")
+    testing.expect(t, !missing_separator_ok)
+    _, _, unknown_mode_ok := app_ui.scratchpad_parse_history_payload("2\n@time")
+    testing.expect(t, !unknown_mode_ok)
+}
+
+@(test)
+scratchpad_question_mark_enters_help_mode :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    app_ui.input_box_replace_text(
+        ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
+        &ui_runtime.scratchpad_input_cursor, "?")
+
+    changed := app_ui.apply_scratchpad_mode_transition(
+        &ui_runtime, app_ui.Input_Box_Result{}, 0, 0)
+
+    testing.expect(t, changed)
+    testing.expect_value(t, ui_runtime.scratchpad_input_mode,
+        app_core.Scratchpad_Input_Mode.Help)
+    testing.expect_value(t, ui_runtime.scratchpad_input_len, 0)
+    testing.expect_value(t, ui_runtime.scratchpad_input_cursor, 0)
+}
+
+@(test)
+scratchpad_pasted_question_mark_stays_in_julia_mode :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    app_ui.input_box_replace_text(
+        ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
+        &ui_runtime.scratchpad_input_cursor, "?")
+
+    changed := app_ui.apply_scratchpad_mode_transition(
+        &ui_runtime, app_ui.Input_Box_Result{paste_applied = true}, 0, 0)
+
+    testing.expect(t, !changed)
+    testing.expect_value(t, ui_runtime.scratchpad_input_mode,
+        app_core.Scratchpad_Input_Mode.Julia)
+    testing.expect_value(t, ui_runtime.scratchpad_input_len, 1)
+}
+
+@(test)
+scratchpad_empty_backspace_exits_help_mode :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_UI_Runtime_State{scratchpad_input_mode = .Help}
+
+    changed := app_ui.apply_scratchpad_mode_transition(
+        &ui_runtime, app_ui.Input_Box_Result{backspace_pressed = true}, 0, 0)
+
+    testing.expect(t, changed)
+    testing.expect_value(t, ui_runtime.scratchpad_input_mode,
+        app_core.Scratchpad_Input_Mode.Julia)
+}
+
 seed_scratchpad_async_result :: proc(
     slot: ^app_bridge.Scratchpad_Async_Slot, text: string) {
 

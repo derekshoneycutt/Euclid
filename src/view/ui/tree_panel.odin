@@ -176,6 +176,7 @@ apply_tree_hit :: proc(
         ui_runtime.text_scroll_drag_off = 0
         ui_runtime.scratchpad_input_len = 0
         ui_runtime.scratchpad_input_cursor = 0
+        ui_runtime.scratchpad_input_mode = .Julia
         ui_runtime.scratchpad_bottom_pinned = true
     }
 }

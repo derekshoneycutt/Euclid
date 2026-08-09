@@ -49,6 +49,11 @@ struct ScratchpadOutputEntry
     segments::Vector{ScratchpadOutputSegment}
 end
 
+struct ScratchpadInputEntry
+    text::String
+    mode::Int32
+end
+
 """Construct an output entry without optional inline segments."""
 function ScratchpadOutputEntry(
     line::String,
@@ -63,13 +68,14 @@ end
 mutable struct ScratchpadSession
     id::Int
     runtime::Module
-    queue::Vector{String}
+    queue::Vector{ScratchpadInputEntry}
     output::Vector{String}
     output_entries::Vector{ScratchpadOutputEntry}
-    history::Vector{String}
+    history::Vector{ScratchpadInputEntry}
     hooks::Vector{ScratchpadFrameHook}
     metrics::ScratchpadMetrics
     history_cursor::Int
+    history_origin_mode::Int32
     next_hook_id::Int
 end
 
@@ -77,6 +83,8 @@ const ScratchpadName = "Scratchpad"
 const ParseError = Int32(0)
 const ParseIncomplete = Int32(1)
 const ParseComplete = Int32(2)
+const InputModeJulia = Int32(0)
+const InputModeHelp = Int32(1)
 const MaxOutputLines = 400
 const MaxHistoryLines = 400
 const MaxQueueLines = 64
@@ -95,6 +103,8 @@ const DynviewStyleUnderline = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE
 const ReplPrompt = "julia> "
 const ReplContinuation = " " ^ length(ReplPrompt)
 const ReplPromptColor = OdinJuliaBridge.bridge_color(:julia_green)
+const HelpPrompt = "help?> "
+const HelpPromptColor = OdinJuliaBridge.BridgeColor(0xd9, 0xb4, 0x4a, 0xff)
 const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
@@ -234,21 +244,24 @@ function create_session(state_ptr::Ptr{Cvoid}, session_id::Int)
     session = ScratchpadSession(
         session_id,
         runtime,
-        String[],
-        String[],
+        ScratchpadInputEntry[],
+        ScratchpadInputEntry[],
         ScratchpadOutputEntry[],
         String[],
         ScratchpadFrameHook[],
         ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         1,
+        InputModeJulia,
         1)
     Core.eval(runtime, :(state_ptr = $state_ptr))
     return session
 end
 
-"""Append one history line while enforcing the configured history retention cap."""
-function append_history_line!(session::ScratchpadSession, line::String)
-    push!(session.history, line)
+"""Append one mode-tagged history line while enforcing the retention cap."""
+function append_history_line!(
+    session::ScratchpadSession, line::String, input_mode::Int32=InputModeJulia)
+
+    push!(session.history, ScratchpadInputEntry(line, input_mode))
     extra = length(session.history) - MaxHistoryLines
     if extra > 0
         session.metrics.history_trimmed += extra
@@ -256,14 +269,16 @@ function append_history_line!(session::ScratchpadSession, line::String)
     end
 end
 
-"""Push text into the execution queue and track queue metrics/cap behavior."""
-function queue_line!(session::ScratchpadSession, text::String)
+"""Push one mode-tagged entry into the execution queue and track cap behavior."""
+function queue_line!(
+    session::ScratchpadSession, text::String, input_mode::Int32=InputModeJulia)
+
     if length(session.queue) >= MaxQueueLines
         session.metrics.queue_dropped += 1
         _ = popfirst!(session.queue)
     end
 
-    push!(session.queue, text)
+    push!(session.queue, ScratchpadInputEntry(text, input_mode))
     session.metrics.queue_enqueued += 1
     session.metrics.queue_high_water = max(session.metrics.queue_high_water, length(session.queue))
 end
@@ -444,8 +459,14 @@ function parse_error_message(parsed)
 end
 
 """Classify user input parse state and append parse errors to output when present."""
-function classify_input(state_ptr::Ptr{Cvoid}, text::String)
+function classify_input(
+    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia)
+
     session = ensure_session!(state_ptr)
+
+    if input_mode == InputModeHelp
+        return ParseComplete
+    end
 
     stripped = strip(text)
     if !isempty(stripped) && first(stripped) == '?'
@@ -568,13 +589,19 @@ function completion_replacement_text(text::String, completion_range, values::Vec
 end
 
 """Resolve a generic scratchpad completion request from full input text and caret byte offset."""
-function complete_input(state_ptr::Ptr{Cvoid}, text::String, caret_byte::Int)
+function complete_input(
+    state_ptr::Ptr{Cvoid},
+    text::String,
+    caret_byte::Int,
+    input_mode::Int32=InputModeJulia)
+
     session = ensure_session!(state_ptr)
     if isempty(text) || caret_byte <= 0
         return ""
     end
 
     clamped_caret = clamp(caret_byte, 1, ncodeunits(text))
+    _ = input_mode
     completions, completion_range, success = REPL.REPLCompletions.completions(
         text,
         clamped_caret,
@@ -719,16 +746,22 @@ end
 """
 Return the previous entry from scratchpad history.
 """
-function history_previous(state_ptr::Ptr{Cvoid})
+function history_previous(
+    state_ptr::Ptr{Cvoid}, input_mode::Int32=InputModeJulia)
+
     session = ensure_session!(state_ptr)
     if isempty(session.history)
         return ""
     end
 
+    if session.history_cursor == length(session.history) + 1
+        session.history_origin_mode = input_mode
+    end
     if session.history_cursor > 1
         session.history_cursor -= 1
     end
-    return session.history[session.history_cursor]
+    entry = session.history[session.history_cursor]
+    return string(entry.mode) * "\n" * entry.text
 end
 
 """
@@ -747,10 +780,11 @@ function history_next(state_ptr::Ptr{Cvoid})
         session.history_cursor += 1
     end
     if session.history_cursor == max_cursor
-        return ""
+        return string(session.history_origin_mode) * "\n"
     end
 
-    return session.history[session.history_cursor]
+    entry = session.history[session.history_cursor]
+    return string(entry.mode) * "\n" * entry.text
 end
 
 """
@@ -775,8 +809,8 @@ function save_history_to_file(state_ptr::Ptr{Cvoid}, path)
 
     try
         open(file_path, "w") do io
-            for line in session.history
-                write(io, line)
+            for entry in session.history
+                write(io, entry.text)
                 write(io, "\n")
             end
         end
@@ -799,20 +833,22 @@ Queue one complete scratchpad input entry for one-per-frame execution.
 
 Returns `true` if queued, `false` when parse state is not complete.
 """
-function queue_input(state_ptr::Ptr{Cvoid}, text::String)
+function queue_input(
+    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia)
+
     session = ensure_session!(state_ptr)
 
     stripped = strip(text)
-    if isempty(stripped) || first(stripped) != '?'
+    if input_mode == InputModeJulia && (isempty(stripped) || first(stripped) != '?')
         status, _ = classify_parse(text)
         if status != ParseComplete
             return false
         end
     end
 
-    append_history_line!(session, text)
+    append_history_line!(session, text, input_mode)
     session.history_cursor = length(session.history) + 1
-    queue_line!(session, text)
+    queue_line!(session, text, input_mode)
     return true
 end
 
@@ -849,7 +885,8 @@ function append_help_lines!(session::ScratchpadSession)
     append_output_line!(session, "Enter Julia code, just like the standard Julia REPL!")
     append_output_line!(session, "")
     append_output_line!(session, "Commands")
-    append_output_line!(session, "  :help        show this help")
+    append_output_line!(session, "  ?            enter Julia help mode")
+    append_output_line!(session, "  :help        show Scratchpad commands")
     append_output_line!(session, "  :clear       clear scrollback output")
     append_output_line!(session, "  :reset       reset scratchpad session")
     append_output_line!(session, "  :hooks       list frame hooks")
@@ -915,8 +952,8 @@ function append_startup_banner!(session::ScratchpadSession)
         output_segment("    |"),
     ])
     lines = [
-        "   _ _   _| |_  __ _   |  Type \":help\" for help.",
-        "  | | | | | | |/ _` |  |",
+        "   _ _   _| |_  __ _   |  Type \"?\" for Julia help mode,",
+        "  | | | | | | |/ _` |  |  \":help\" for Scratchpad commands.",
         julia_version_banner_line(),
         " _/ |\\__'_|_|_|\\__'_|  |  Official https://julialang.org release",
         "|__/                   |",
@@ -1042,13 +1079,16 @@ format_current_exception_text(runtime::Module; color::Bool=false) =
 function append_input_echo_line!(
     session::ScratchpadSession,
     text::AbstractString,
-    first_line::Bool)
+    first_line::Bool,
+    input_mode::Int32)
 
-    prefix = first_line ? ReplPrompt : ReplContinuation
+    prompt = input_mode == InputModeHelp ? HelpPrompt : ReplPrompt
+    prompt_color = input_mode == InputModeHelp ? HelpPromptColor : ReplPromptColor
+    prefix = first_line ? prompt : ReplContinuation
     segments = ScratchpadOutputSegment[]
     if first_line
         push!(segments, ScratchpadOutputSegment(
-            ReplPrompt, DynviewStylePromptBold, ReplPromptColor))
+            prompt, DynviewStylePromptBold, prompt_color))
     else
         push!(segments, ScratchpadOutputSegment(
             ReplContinuation, DynviewStyleOutput, nothing))
@@ -1063,11 +1103,14 @@ function append_input_echo_line!(
         segments))
 end
 
-"""Echo submitted input with a green prompt and normal command text."""
-function append_input_echo!(session::ScratchpadSession, text::String)
+"""Echo submitted input with its mode prompt and normal command text."""
+function append_input_echo!(
+    session::ScratchpadSession, text::String, input_mode::Int32=InputModeJulia)
+
     lines = split(text, '\n')
     for i in eachindex(lines)
-        append_input_echo_line!(session, lines[i], i == firstindex(lines))
+        append_input_echo_line!(
+            session, lines[i], i == firstindex(lines), input_mode)
     end
 end
 
@@ -1752,7 +1795,40 @@ function resolve_helper_doc_alias(query::AbstractString)
     return (binding=binding, signature=signature)
 end
 
-"""Handle `?` scratchpad queries for modules and documented bindings."""
+"""Render one native Julia help query, retaining Euclid helper aliases."""
+function append_native_help_query!(session::ScratchpadSession, query::AbstractString)
+    helper_alias = resolve_helper_doc_alias(query)
+    if helper_alias !== nothing
+        append_binding_help!(session, query, helper_alias.binding, helper_alias.signature)
+        return
+    end
+
+    reason = blocked_input_reason(query)
+    if reason !== nothing
+        session.metrics.blocked_commands += 1
+        append_output_line!(session, "Blocked by scratchpad safety policy: " * reason)
+        return
+    end
+
+    side_io = IOBuffer()
+    try
+        context = IOContext(side_io, :color => false, :module => session.runtime)
+        help_expr = REPL.helpmode(context, String(query), session.runtime)
+        rendered_help = Core.eval(session.runtime, help_expr)
+        side_text = chomp(String(take!(side_io)))
+        if !isempty(side_text)
+            append_output_block!(session, side_text)
+        end
+        if rendered_help !== nothing
+            append_output_block!(session, format_result_value(rendered_help, session.runtime))
+        end
+    catch
+        append_native_error_block!(
+            session, format_current_exception_text(session.runtime; color=true))
+    end
+end
+
+"""Handle one-shot `?query` input through Julia's native help machinery."""
 function handle_help_query!(session::ScratchpadSession, text::AbstractString)
     if isempty(text) || first(text) != '?'
         return false
@@ -1760,40 +1836,11 @@ function handle_help_query!(session::ScratchpadSession, text::AbstractString)
 
     query = strip(String(text[2:end]))
     if isempty(query)
-        append_output_line!(session, "help error: expected a target after ?, for example ?OdinJuliaBridge.bridge_color")
+        append_help_lines!(session)
         return true
     end
 
-    helper_alias = resolve_helper_doc_alias(query)
-    if helper_alias !== nothing
-        append_binding_help!(session, query, helper_alias.binding, helper_alias.signature)
-        return true
-    end
-
-    binding, err = resolve_help_binding(session.runtime, query)
-    if binding === nothing
-        append_output_line!(session, err)
-        return true
-    end
-
-    if !isdefined(binding.mod, binding.var)
-        append_output_line!(session, "help error: $(query) is not defined")
-        return true
-    end
-
-    resolved_value = getfield(binding.mod, binding.var)
-    if resolved_value isa Module
-        append_module_help!(session, query, resolved_value, binding)
-        return true
-    end
-
-    if should_render_struct_help(resolved_value)
-        append_output_block!(session, render_struct_properties_help(query, resolved_value))
-        return true
-    end
-
-    append_binding_help!(session, query, binding)
-
+    append_native_help_query!(session, query)
     return true
 end
 
@@ -1854,10 +1901,20 @@ function repl_input_filename(session::ScratchpadSession)
 end
 
 """Evaluate one queued input line, including local commands, help mode, and safe eval."""
-function evaluate_queued_input!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, text::String)
+function evaluate_queued_input!(
+    session::ScratchpadSession,
+    state_ptr::Ptr{Cvoid},
+    text::String,
+    input_mode::Int32=InputModeJulia)
+
     stripped = strip(text)
     dispatched = stripped == "?" ? ":help" : stripped
-    append_input_echo!(session, text)
+    append_input_echo!(session, text, input_mode)
+
+    if input_mode == InputModeHelp
+        append_native_help_query!(session, stripped)
+        return
+    end
 
     if handle_help_query!(session, dispatched)
         return
@@ -1990,10 +2047,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
     session = ensure_session!(state_ptr)
     try
         if !isempty(session.queue)
-            text = popfirst!(session.queue)
+            entry = popfirst!(session.queue)
             session.metrics.queue_dequeued += 1
             eval_started_at = time_ns()
-            evaluate_queued_input!(session, state_ptr, text)
+            evaluate_queued_input!(session, state_ptr, entry.text, entry.mode)
             maybe_warn_slow_eval!(session, time_ns() - eval_started_at)
         end
 

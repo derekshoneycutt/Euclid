@@ -50,6 +50,7 @@ font_codepoint_policy_is_broad_but_bounded :: proc(t: ^testing.T) {
 
     testing.expect(t, codepoint_set.count > 7000)
     testing.expect(t, codepoint_set.count < app_view_core.FONT_CODEPOINT_CAPACITY)
+    testing.expect(t, app_view_core.font_codepoint_is_supported(0x2500))
     testing.expect(t, !app_view_core.font_codepoint_is_supported(0x2502))
     testing.expect(t, !app_view_core.font_codepoint_is_supported('漢'))
 }

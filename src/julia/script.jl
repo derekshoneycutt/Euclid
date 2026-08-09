@@ -47,28 +47,31 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
 
 end
 
-function scratchpad_classify_input(state_ptr::Ptr{Cvoid}, text::AbstractString)
-    Scratchpad.classify_input(state_ptr, String(text))
+function scratchpad_classify_input(state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
+    Scratchpad.classify_input(state_ptr, String(text), Int32(input_mode))
 end
 
 function scratchpad_complete_backslash(state_ptr::Ptr{Cvoid}, token::AbstractString)
     Scratchpad.complete_backslash(state_ptr, String(token))
 end
 
-function scratchpad_complete_input(state_ptr::Ptr{Cvoid}, text::AbstractString, caret_byte)
-    Scratchpad.complete_input(state_ptr, String(text), Int(caret_byte))
+function scratchpad_complete_input(
+    state_ptr::Ptr{Cvoid}, text::AbstractString, caret_byte, input_mode)
+
+    Scratchpad.complete_input(
+        state_ptr, String(text), Int(caret_byte), Int32(input_mode))
 end
 
-function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString)
-    Scratchpad.queue_input(state_ptr, String(text))
+function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
+    Scratchpad.queue_input(state_ptr, String(text), Int32(input_mode))
 end
 
 function scratchpad_save_history_to_file(state_ptr::Ptr{Cvoid}, path::AbstractString)
     Scratchpad.save_history_to_file(state_ptr, String(path))
 end
 
-function scratchpad_history_previous(state_ptr::Ptr{Cvoid})
-    Scratchpad.history_previous(state_ptr)
+function scratchpad_history_previous(state_ptr::Ptr{Cvoid}, input_mode)
+    Scratchpad.history_previous(state_ptr, Int32(input_mode))
 end
 
 function scratchpad_history_next(state_ptr::Ptr{Cvoid})

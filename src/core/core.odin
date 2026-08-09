@@ -191,6 +191,11 @@ Scratchpad_Async_Kind :: enum {
     Save_History,
 }
 
+Scratchpad_Input_Mode :: enum u8 {
+    Julia,
+    Help,
+}
+
 Scratchpad_Async_Slot_State :: enum u8 {
     Free,
     Pending,
@@ -202,6 +207,7 @@ Scratchpad_Async_Slot :: struct {
     kind: Scratchpad_Async_Kind,
     request_id: u64,
     input_generation: u64,
+    input_mode: Scratchpad_Input_Mode,
     host_state: ^Euclid_General_State,
     caret_byte: int,
     input_len: int,
@@ -1214,6 +1220,7 @@ Euclid_UI_Runtime_State :: struct {
     scratchpad_input_len: int,
     scratchpad_input_cursor: int,
     scratchpad_input_viewport_col_start: int,
+    scratchpad_input_mode: Scratchpad_Input_Mode,
     scratchpad_input_generation: u64,
     scratchpad_pending_submit_request_id: u64,
     scratchpad_latest_completion_request_id: u64,

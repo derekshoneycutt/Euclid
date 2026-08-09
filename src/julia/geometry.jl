@@ -4,6 +4,8 @@ Shared geometric intersection helpers used by Euclid animation scripts.
 `EuclidGeometry` provides stable utility functions for common XY/3D
 intersection calculations so content modules can reuse one canonical
 implementation instead of duplicating geometry math.
+
+Public functions: `circle_circle_intersections_xy`, `circle_line_intersections_xy`, and `line_intersection_3d`.
 """
 module EuclidGeometry
 

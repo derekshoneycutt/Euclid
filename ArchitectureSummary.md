@@ -85,9 +85,12 @@ like an embedded REPL control plane.
 ### Core Architecture
 
 - Odin owns UI input capture, text panel interaction, and buffer/cursor state.
+- Odin owns Julia/Help editor mode transitions and live prompt presentation.
 - Julia owns command parsing/evaluation, command history, and output stream
-  generation.
+  generation; Help-mode queries delegate to Julia's native `REPL.helpmode`.
 - Communication crosses the bridge through explicit scratchpad entrypoints.
+- Async requests, queued input, and history entries carry input mode explicitly
+  so delayed work and history navigation cannot infer the wrong prompt mode.
 
 ### Frame Model And Lifecycle
 

@@ -33,6 +33,7 @@ View_Snapshot :: core.View_Snapshot
 Scratchpad_Async_Kind :: core.Scratchpad_Async_Kind
 Scratchpad_Async_Slot_State :: core.Scratchpad_Async_Slot_State
 Scratchpad_Async_Slot :: core.Scratchpad_Async_Slot
+Scratchpad_Input_Mode :: core.Scratchpad_Input_Mode
 Julia_Lifecycle_State :: core.Julia_Lifecycle_State
 Julia_Reload_State :: core.Julia_Reload_State
 Julia_Task_Proc :: core.Julia_Task_Proc
