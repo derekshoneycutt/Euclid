@@ -47,9 +47,46 @@ SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 
 TREE_FONT_SIZE :: 16
 
-JULIA_MONO_GLYPH_COUNT :: 0x2C00 - 0x20
+FONT_CODEPOINT_CAPACITY :: 8192
 BASELINE_FONT_VARIANT_COUNT :: 3
 FONT_GLYPH_PADDING :: 4
+
+Font_Codepoint_Range :: struct {
+	first: rune,
+	last: rune,
+}
+
+Font_Codepoint_Set :: struct {
+	values: [FONT_CODEPOINT_CAPACITY]rune,
+	count: i32,
+}
+
+// Keep broad language and mathematical coverage while avoiding terminal-only
+// box/block glyphs and the unassigned holes in one giant Unicode interval.
+FONT_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
+	{0x0020, 0x007e},
+	{0x00a0, 0x00ac},
+	{0x00ae, 0x0377},
+	{0x037a, 0x052f},
+	{0x0531, 0x058f},
+	{0x0591, 0x05f4},
+	{0x0600, 0x06ff},
+	{0x10a0, 0x10ff},
+	{0x1ab0, 0x1aff},
+	{0x1c80, 0x1cbf},
+	{0x1d00, 0x1fff},
+	{0x2000, 0x24ff},
+	{0x25a0, 0x2bff},
+	{0x2c60, 0x2c7f},
+	{0x2d00, 0x2d2d},
+	{0xa640, 0xa69f},
+	{0xa708, 0xa7ff},
+	{0xab30, 0xab6f},
+	{0xfe20, 0xfe2f},
+	{0xfffd, 0xfffd},
+	{0x1d400, 0x1d7ff},
+	{0x1ee00, 0x1ee0b},
+}
 
 Prepared_Font :: struct {
 	font: rl.Font,
@@ -59,6 +96,42 @@ Prepared_Font :: struct {
 
 Baseline_Font_Preparation :: struct {
 	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
+}
+
+//   Build the immutable JuliaMono codepoint policy in raylib's required flat form.
+font_codepoint_set :: proc() -> Font_Codepoint_Set {
+	result: Font_Codepoint_Set
+	for codepoint_range in FONT_CODEPOINT_RANGES {
+		for codepoint := codepoint_range.first;
+			codepoint <= codepoint_range.last;
+			codepoint += 1 {
+
+			assert(result.count < FONT_CODEPOINT_CAPACITY)
+			result.values[result.count] = codepoint
+			result.count += 1
+		}
+	}
+	return result
+}
+
+//   Report whether one codepoint belongs to the JuliaMono loading policy.
+font_codepoint_is_supported :: proc(codepoint: rune) -> bool {
+	for codepoint_range in FONT_CODEPOINT_RANGES {
+		if codepoint >= codepoint_range.first && codepoint <= codepoint_range.last {
+			return true
+		}
+	}
+	return false
+}
+
+//   Suppress raylib's expected oversized-glyph and sparse-range messages during rasterization.
+font_rasterization_begin :: proc() {
+	rl.SetTraceLogLevel(.ERROR)
+}
+
+//   Restore normal raylib diagnostics immediately after font rasterization.
+font_rasterization_end :: proc() {
+	rl.SetTraceLogLevel(.INFO)
 }
 
 MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
@@ -193,10 +266,13 @@ font_prepare_variant :: proc(
 	}
 	defer rl.UnloadFileData(font_data)
 
+	codepoints := font_codepoint_set()
 	font := rl.Font{baseSize = font_size, glyphPadding = FONT_GLYPH_PADDING}
+	font_rasterization_begin()
 	font.glyphs = rl.LoadFontData(
-		rawptr(font_data), data_size, font_size, nil, JULIA_MONO_GLYPH_COUNT,
+		rawptr(font_data), data_size, font_size, &codepoints.values[0], codepoints.count,
 		.DEFAULT, &font.glyphCount)
+	font_rasterization_end()
 	if font.glyphs == nil || font.glyphCount == 0 {
 		font_discard_prepared_data(font, rl.Image{})
 		return
@@ -282,7 +358,10 @@ font_load_variant :: proc(
 	}
 
 	font_file := strings.clone_to_cstring(font_path, context.temp_allocator)
-	font := rl.LoadFontEx(font_file, font_size, nil, JULIA_MONO_GLYPH_COUNT)
+	codepoints := font_codepoint_set()
+	font_rasterization_begin()
+	font := rl.LoadFontEx(font_file, font_size, &codepoints.values[0], codepoints.count)
+	font_rasterization_end()
 	if font.texture.id == 0 {
 		if !slot^.missing_warned {
 			slot^.missing_warned = true
