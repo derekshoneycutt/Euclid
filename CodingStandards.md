@@ -20,7 +20,7 @@ This document is the coding source of truth for this repository.
 ## Purpose
 
 This document converts language-community guidance and project experience into reviewable rules for
-EuclidApp. It is intentionally concise, but not at the expense of rationale, scope, or enforcement.
+Euclid. It is intentionally concise, but not at the expense of rationale, scope, or enforcement.
 
 ## How To Read This Standard
 
@@ -52,7 +52,7 @@ This standard incorporates and specializes:
 - [Odin examples naming and style conventions](https://github.com/odin-lang/examples/wiki/Naming-and-style-convention)
 - [Julia style guide](https://docs.julialang.org/en/v1/manual/style-guide/)
 
-| Area | Upstream default | EuclidApp policy |
+| Area | Upstream default | Euclid policy |
 | --- | --- | --- |
 | Odin indentation | Tabs for indentation; spaces for alignment. | **Four spaces; tabs forbidden.** |
 | Odin vet flags | Includes `-vet-tabs`. | Uses strict flags but omits `-vet-tabs`. |

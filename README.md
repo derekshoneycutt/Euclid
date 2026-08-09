@@ -37,8 +37,8 @@ must be available on PATH.
 Clone the git repository as per usual practices and run the make script below.
 
 ```bash
-git clone https://github.com/derekshoneycutt/EuclidApp.git
-cd EuclidApp
+git clone https://github.com/derekshoneycutt/Euclid.git
+cd Euclid
 julia make.jl
 # To run immediately: julia make.jl -r
 ```
@@ -304,14 +304,14 @@ a compilation, this will automatically replace the assets package there.
 julia make.jl -na
 ```
 
-EuclidApp will automatically notice the updated package file, unpack it, and reload all
+Euclid will automatically notice the updated package file, unpack it, and reload all
 the Julia code, restarting the current animation according to the new code. If the current
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
 
 Animation content remains dynamically loaded when using a sysimage. Changes to baked core
 modules such as the bridge wrappers, LaTeX compiler, geometry helpers, animation helpers,
-or Scratchpad require rebuilding the sysimage and restarting EuclidApp.
+or Scratchpad require rebuilding the sysimage and restarting Euclid.
 
 ### Q: What is all this output in the make vet output?
 

@@ -1,4 +1,4 @@
-# EuclidApp Architecture Summary
+# Euclid Architecture Summary
 
 ## Table Of Contents
 
@@ -17,7 +17,7 @@
 
 ## What This Project Is
 
-EuclidApp is a desktop visualization app for geometric constructions and proofs.
+Euclid is a desktop visualization app for geometric constructions and proofs.
 The overall structure includes 2 programming languages, Odin and Julia.
 
 - **Odin** code provides the application shell, rendering loop, simulation data model,
@@ -258,7 +258,7 @@ sequenceDiagram
 
 ## Threading Strategy
 
-EuclidApp uses one display thread, one persistent Julia owner thread, and a
+Euclid uses one display thread, one persistent Julia owner thread, and a
 persistent simulation worker pool. These roles have separate ownership and
 synchronization rules; no subsystem may treat the workers as interchangeable.
 
