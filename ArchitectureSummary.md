@@ -360,7 +360,7 @@ This policy is strict by design.
    - Julia owns script/runtime objects.
    - Odin owns host state and must stay deterministic on the host side.
 1. Dedicated virtual arenas for lifecycle-scoped subsystems.
-  - Examples: GIF encoder working memory and Julia animation registries.
+   - Examples: GIF encoder working memory and Julia animation registries.
    - Requirement: `arena_free_all` on logical reset/reload and `arena_destroy`
     on subsystem/application teardown.
 1. Event-driven allocations outside steady frame loops.
