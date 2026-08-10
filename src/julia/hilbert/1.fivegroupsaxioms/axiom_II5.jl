@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomII5
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -80,9 +81,13 @@ const PhaseEndLift = 14f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom II,5
+    fallback = """David Hilbert - Foundations of Geometry - Axiom II,5
 
 II, 5. Let A, B, C be three points not lying in the same straight line and let a be a straight line lying in the plane ABC and not passing through any of the points A, B, C. Then, if the straight line a passes through a point of the segment AB, it will also pass through either a point of the segment BC or a point of the segment AC."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,5}
+
+\textbf{II, 5.} Let $A$, $B$, $C$ be three points not lying in the same straight line and let a be a straight line lying in the plane $ABC$ and not passing through any of the points $A$, $B$, $C$. Then, if the straight line a passes through a point of the segment $AB$, it will also pass through either a point of the segment $BC$ or a point of the segment $AC$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -2,6 +2,7 @@ module ElementsOneDefinitionTrapezia
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -37,9 +38,13 @@ const PhaseRise = 5f0
 const PhaseHideAll = 6f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Trapezia
+    fallback = """Euclid Elements - Book I - Definition: Trapezia
 
 And let quadrilateral figures besides these be called trapezia."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Trapezia}
+
+And let quadrilateral figures besides these be called trapezia."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

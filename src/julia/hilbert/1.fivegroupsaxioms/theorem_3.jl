@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem3
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -45,9 +46,13 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 3
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 3
 
 Between any two points of a straight line, there always exists an unlimited number of points."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 3}
+
+Between any two points of a straight line, there always exists an unlimited number of points."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

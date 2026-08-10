@@ -2,6 +2,7 @@ module ElementsOneDefinitionOblong
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -100,9 +101,13 @@ const PhaseCompassRise = 14f0
 const PhaseHideAll = 15f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Oblong
+    fallback = """Euclid Elements - Book I - Definition: Oblong
 
 Of quadrilateral figures, ... an oblong that which is right-angled but not equilateral; ..."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Oblong}
+
+Of quadrilateral figures, ... an oblong that which is right-angled but not equilateral; ..."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

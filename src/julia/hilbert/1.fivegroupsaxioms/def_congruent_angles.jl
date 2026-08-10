@@ -2,6 +2,7 @@ module HilbertChapterOneDefCongruentAngles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -130,9 +131,13 @@ const PhaseFinalHold = 23f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Congruent Angles
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Congruent Angles
 
 Let the angle (h, k) be congruent to the angle (h', k'). Since, according to axiom IV, 4, the angle (h, k) is congruent to itself, it follows from axiom IV, 5 that the angle (h', k') is congruent to the angle (h, k). We say, then, that the angles (h, k) and (h', k') are congruent to one another."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Congruent Angles}
+
+Let the angle $(h, k)$ be congruent to the angle $(h', k')$. Since, according to axiom IV, 4, the angle $(h, k)$ is congruent to itself, it follows from axiom IV, 5 that the angle $(h', k')$ is congruent to the angle $(h, k)$. We say, then, that the angles $(h, k)$ and $(h', k')$ are congruent to one another."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

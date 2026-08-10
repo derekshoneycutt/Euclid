@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem20
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -208,9 +209,13 @@ const PhaseFinalHold = 33f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 20
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 20
 
 The sum of the angles of a triangle is two right angles."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 20}
+
+The sum of the angles of a triangle is two right angles."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

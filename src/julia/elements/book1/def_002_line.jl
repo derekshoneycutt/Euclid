@@ -33,7 +33,7 @@ const DefinitionViewText = """Euclid Elements - Book I - Definition: Line
 
 A line is breadthless length."""
 
-const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition: Line}
+const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Line}
 
 A line \euclidline[color=steelblue,length=3,thickness=4] is breadthless length."""
 

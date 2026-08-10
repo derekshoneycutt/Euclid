@@ -2,6 +2,7 @@ module ElementsOneDefinitionSurfaceExtremity
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -51,9 +52,13 @@ const PhaseEndLift = 13f0
 const PhaseHideLines = 14f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Surface Extremities
+    fallback = """Euclid Elements - Book I - Definition: Surface Extremities
 
 The extremities of a surface are lines."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Surface Extremities}
+
+The extremities of a surface are lines."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function hide_edge_and_collapse(

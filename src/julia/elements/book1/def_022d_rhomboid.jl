@@ -2,6 +2,7 @@ module ElementsOneDefinitionRhomboid
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -100,9 +101,13 @@ const PhaseCompassRise = 14f0
 const PhaseHideAll = 15f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Rhomboid
+    fallback = """Euclid Elements - Book I - Definition: Rhomboid
 
 Of quadrilateral figures, ... and a rhomboid that which has its opposite sides and angles equal to one another but is neither equilateral nor right-angled."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhomboid}
+
+Of quadrilateral figures, ... and a rhomboid that which has its opposite sides and angles equal to one another but is neither equilateral nor right-angled."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

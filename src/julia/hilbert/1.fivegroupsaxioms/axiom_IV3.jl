@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIV3
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -114,9 +115,13 @@ const PhaseFinalHold = 35f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,3
+    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,3
 
 IV, 3. Let AB and BC be two segments of a straight line a which have no points in common aside from the point B, and, furthermore, let A'B' and B'C' be two segments of the same or of another straight line a' having, likewise, no point other than B' in common. Then, if AB ≡ A'B' and BC ≡ B'C', we have AC ≡ A'C'."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,3}
+
+\textbf{IV, 3.} Let $AB$ and $BC$ be two segments of a straight line a which have no points in common aside from the point $B$, and, furthermore, let $A'B'$ and $B'C'$ be two segments of the same or of another straight line $a'$ having, likewise, no point other than $B'$ in common. Then, if $AB \equiv A'B'$ and $BC \equiv B'C'$, we have $AC \equiv A'C'$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

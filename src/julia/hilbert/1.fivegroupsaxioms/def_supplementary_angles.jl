@@ -2,6 +2,7 @@ module HilbertChapterOneDefSupplementaryAngles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -65,9 +66,13 @@ const PhaseHideAll = 7f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Supplementary Angles
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Supplementary Angles
 
 Two angles having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles. Two angles having a common vertex and whose sides form straight lines are called vertical angles. An angle which is congruent to its supplementary angle is called a right angle."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Supplementary Angles}
+
+Two angles having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles. Two angles having a common vertex and whose sides form straight lines are called vertical angles. An angle which is congruent to its supplementary angle is called a right angle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

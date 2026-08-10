@@ -2,6 +2,7 @@ module HilbertChapterOneDefTriangleAngle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -97,9 +98,13 @@ const PhaseFinalHold = 9f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Triangle Angle
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Triangle Angle
 
 Suppose we have given a triangle ABC. Denote by h, k the two half-rays emanating from A and passing respectively through B and C. The angle (h, k) is then said to be the angle included by the sides AB and AC, or the one opposite to the side BC in the triangle ABC. It contains all of the interior points of the triangle ABC and is represented by the symbol ∠BAC, or by ∠A."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Triangle Angle}
+
+Suppose we have given a triangle $ABC$. Denote by $h$, $k$ the two half-rays emanating from $A$ and passing respectively through $B$ and $C$. The angle $(h, k)$ is then said to be the angle included by the sides $AB$ and $AC$, or the one opposite to the side BC in the triangle $ABC$. It contains all of the interior points of the triangle $ABC$ and is represented by the symbol $\angle BAC$, or by $\angle A$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

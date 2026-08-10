@@ -29,7 +29,7 @@ const DefinitionViewText = """Euclid Elements - Book I - Definition: Point
 
 A point is that which has no part."""
 
-const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition: Point}
+const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Point}
 
 A point \euclidpoint[color=steelblue,size=1] is that which has no part."""
 

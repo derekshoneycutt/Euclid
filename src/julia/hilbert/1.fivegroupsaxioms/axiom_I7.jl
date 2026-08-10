@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI7
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -58,9 +59,13 @@ const PhaseFinalHold = 11f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,7
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,7
 
 I, 7. Upon every straight line there exists at least two points, in every plane at least three points not lying in the same straight line, and in space there exist at least four points not lying in a plane."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,7}
+
+\textbf{I, 7.} Upon every straight line there exists at least two points, in every plane at least three points not lying in the same straight line, and in space there exist at least four points not lying in a plane."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

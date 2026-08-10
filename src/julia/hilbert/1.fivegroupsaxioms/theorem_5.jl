@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem5
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -73,9 +74,13 @@ const PhaseEndLift = 12f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 5
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 5
 
 Every straight line a, which lies in a plane α, divides the remaining points of this plane into two regions having the following properties: Every point A of the one region determines with each point B of the other region a segment AB containing a point of the straight line a. On the other hand, any two points A, A' of the same region determine a segment AA' containing no point of a."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 5}
+
+Every straight line $a$, which lies in a plane $\alpha$, divides the remaining points of this plane into two regions having the following properties: Every point $A$ of the one region determines with each point $B$ of the other region a segment $AB$ containing a point of the straight line $a$. On the other hand, any two points $A$, $A'$ of the same region determine a segment $AA'$ containing no point of $a$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem17
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -159,9 +160,13 @@ const PhaseFinalHold = 42f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 17
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 17
 
 If (A, B, C, ...) and (A', B', C', ...) are congruent plane figures and P is a point in the plane of the first, then it is always possible to find a point P' in the plane of the second figure so that (A, B, C, ..., P) and (A', B', C', ..., P') shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of P' can be made in only one way."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 17}
+
+If $(A, B, C, ...)$ and $(A', B', C', ...)$ are congruent plane figures and $P$ is a point in the plane of the first, then it is always possible to find a point $P'$ in the plane of the second figure so that $(A, B, C, ..., P)$ and $(A', B', C', ..., P')$ shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of $P'$ can be made in only one way."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

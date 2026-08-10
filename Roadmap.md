@@ -182,14 +182,14 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $Sim(2)$ (same as $E(2)$ but with scaling as well)
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
-  - $\R/\Z$ (coil going up, animating on each full circle)
+  - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
-- Category theory?
-- More primitives (gnomons, strings--small connectors, arrows)
+- Logic, Categories, Tarski?
+- More primitives (gnomons, strings--small connectors, arrows, logic)
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
-- More LaTeX support (more math; document mode)
+- More LaTeX support
 - Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support
 - Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording! ... replay_recording!)
@@ -215,8 +215,8 @@ After v1 is complete, the following is suggestions to evaluate next.
   - Propositions (37)
 - More group theory
   - $U(1)$ (show points on a polygon all at different distance from center, spinning individually around individual circles, one at a time, dynamically)
-  - $\Complex^x$ (literally drawing a spiral)
-  - $\Z^2$ (pen dragging, drawing out a grid of points regularly spaced)
+  - $\mathbb{C}^{\times}$ (literally drawing a spiral)
+  - $\mathbb{Z}^2$ (pen dragging, drawing out a grid of points regularly spaced)
   - $T$ (pac-man wrap around the surface, drawing line at an irrational angle like sqrt(2) and will cover it all)
   - Wallpaper groups (repeating drawings)
   - $PSL(2, R)$ (Polygon can be transformed by never crosses below a boundary)

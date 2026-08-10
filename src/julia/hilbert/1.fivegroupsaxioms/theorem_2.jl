@@ -3,6 +3,7 @@ module HilbertChapterOneTheorem2
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidGeometry
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -71,9 +72,13 @@ const PhaseFinalHold = 15f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 2
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 2
 
 Through a straight line and a point not lying in it, or through two distinct straight lines having a common point, one and only one plane may be made to pass."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 2}
+
+Through a straight line and a point not lying in it, or through two distinct straight lines having a common point, one and only one plane may be made to pass."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

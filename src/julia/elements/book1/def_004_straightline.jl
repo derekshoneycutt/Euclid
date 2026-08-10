@@ -2,6 +2,7 @@ module ElementsOneDefinitionStraightLine
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -45,9 +46,13 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Straight Line
+    fallback = """Euclid Elements - Book I - Definition: Straight Line
 
 A straight line is a line which lies evenly with the points on itself."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Straight Line}
+
+A straight line \euclidline[color=steelblue,length=3,thickness=4] is a line which lies evenly with the points \euclidpoint[color=palevioletred1,size=1] on itself."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

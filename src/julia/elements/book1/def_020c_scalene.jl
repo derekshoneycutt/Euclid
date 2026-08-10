@@ -2,6 +2,7 @@ module ElementsOneDefinitionScalene
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -41,9 +42,13 @@ const PhaseRise = 4f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Scalene Triangle
+    fallback = """Euclid Elements - Book I - Definition: Scalene Triangle
 
 Of trilateral figures, ... and a scalene triangle that which has its three sides unequal."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Scalene Triangle}
+
+Of trilateral figures, ... and a scalene triangle that which has its three sides unequal."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

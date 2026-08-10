@@ -2,6 +2,7 @@ module ElementsOneDefinitionFigure
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -75,9 +76,13 @@ end
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Figure
+    fallback = """Euclid Elements - Book I - Definition: Figure
 
 A figure is that which is contained by any boundary or boundaries."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Figure}
+
+A figure is that which is contained by any boundary or boundaries."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

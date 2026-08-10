@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomII3
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -63,9 +64,13 @@ const PhaseEndLift = 13f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom II,3
+    fallback = """David Hilbert - Foundations of Geometry - Axiom II,3
 
 II, 3. Of any three points situated on a straight line, there is always one and only one which lies between the other two."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,3}
+
+\textbf{II, 3.} Of any three points situated on a straight line, there is always one and only one which lies between the other two."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

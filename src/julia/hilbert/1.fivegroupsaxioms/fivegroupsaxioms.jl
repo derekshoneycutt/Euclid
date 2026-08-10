@@ -61,7 +61,7 @@ include("./axiom_completeness.jl")
 
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §1 The Elements of Geometry and the Five Groups of Axioms
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §1 The Elements of Geometry and the Five Groups of Axioms
     
 Let us consider three distinct systems of things. The things composing the first system, we will call points and designate them by the letters A, B, C,. . . ; those of the second, we will call straight lines and designate them by the letters a, b, c,. . . ; and those of the third system, we will call planes and designate them by the Greek letters α, β, γ,. . . The points are called the elements of linear geometry; the points and straight lines, the elements of plane geometry; and the points, lines, and planes, the elements of the geometry of space or the elements of space.
 
@@ -72,10 +72,22 @@ II, 1-5. Axioms of order.
 III. Axiom of parallels (Euclid's axiom).
 IV, 1-6. Axioms of congruence.
 V. Axiom of continuity (Archimedes's axiom)."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§1 The Elements of Geometry and the Five Groups of Axioms}
+    
+Let us consider three distinct systems of things. The things composing the first system, we will call points and designate them by the letters $A, B, C, ...$ ; those of the second, we will call straight lines and designate them by the letters $a, b, c, ...$; and those of the third system, we will call planes and designate them by the Greek letters $\alpha, \beta, \gamma, ...$ The points are called the elements of linear geometry; the points and straight lines, the elements of plane geometry; and the points, lines, and planes, the elements of the geometry of space or the elements of space.
+
+We think of these points, straight lines, and planes as having certain mutual relations, which we indicate by means of such words as "are situated," "between," "parallel," "congruent," "continuous," etc. The complete and exact description of these relations follows as a consequence of the axioms of geometry. These axioms may be arranged in five groups. Each of these groups expresses, by itself, certain related fundamental facts of our intuition. We will name these groups as follows:
+
+\textbf{I, 1-7.} Axioms of connection.
+\textbf{II, 1-5.} Axioms of order.
+\textbf{III.} Axiom of parallels (Euclid's axiom).
+\textbf{IV, 1-6.} Axioms of congruence.
+\textbf{V.} Axiom of continuity (Archimedes's axiom)."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_connection(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §2 Group I: Axioms of Connection
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §2 Group I: Axioms of Connection
 
 The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
 
@@ -83,36 +95,65 @@ The axioms of this group establish a connection between the concepts indicated a
 
 Axioms I, 1-2 contain statements concerning points and straight lines only; that is, concerning the elements of plane geometry. We will call them, therefore, the plane axioms of group I, in order to distinguish them from the axioms I, 3-7, which we will designate briefly as the space axioms of this group.
 Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§2 Group I: Axioms of Connection}
+
+The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
+
+...
+
+Axioms I, 1-2 contain statements concerning points and straight lines only; that is, concerning the elements of plane geometry. We will call them, therefore, the plane axioms of group I, in order to distinguish them from the axioms I, 3-7, which we will designate briefly as the space axioms of this group.
+Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_order(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §3 Group II: Axioms of Order
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §3 Group II: Axioms of Order
 
 The axioms of this group define the idea expressed by the word "between," and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word "between" serves to describe.
 
 ...
 
 Axioms II, 1-4 contain statements concerning the points of a straight line only, and, hence, we will call them the linear axioms of group II. Axiom II, 5 relates to the elements of plane geometry and, consequently, shall be called the plane axiom of group II."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§3 Group II: Axioms of Order}
+
+The axioms of this group define the idea expressed by the word "between," and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word "between" serves to describe.
+
+...
+
+Axioms II, 1-4 contain statements concerning the points of a straight line only, and, hence, we will call them the linear axioms of group II. Axiom II, 5 relates to the elements of plane geometry and, consequently, shall be called the plane axiom of group II."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_consequences(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §4 Consequences of the Axioms of Connection and Order
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §4 Consequences of the Axioms of Connection and Order
 
 By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§4 Consequences of the Axioms of Connection and Order}
+
+By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_parallels(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group III: Axiom of Parallels (Euclid's Axiom)
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group III: Axiom of Parallels (Euclid's Axiom)
 
 The introduction of this axiom simplifies greatly the fundamental principles of geometry and facilitates in no small degree its development.
 
 ...
 
 The axiom of parallels is a plane axiom."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§5 Group III: Axiom of Parallels (Euclid's Axiom)}
+
+The introduction of this axiom simplifies greatly the fundamental principles of geometry and facilitates in no small degree its development.
+
+...
+
+The axiom of parallels is a plane axiom."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_congruence(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group IV: Axioms of Congruence
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group IV: Axioms of Congruence
 
 The axioms of this group define the idea of congruence or displacement.
 
@@ -121,20 +162,38 @@ Segments stand in a certain relation to one another which is described by the wo
 ...
 
 Axioms IV, 1-3 contain statements concerning the congruence of segments of a straight line only. They may, therefore, be called the linear axioms of group IV. Axioms IV, 4, 5 contain statements relating to the congruence of angles. Axiom IV, 6 gives the connection between the congruence of segments and the congruence of angles. Axioms IV, 4-6 contain statements regarding the elements of plane geometry and may be called the plane axioms of group IV."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§5 Group IV: Axioms of Congruence}
+
+The axioms of this group define the idea of congruence or displacement.
+
+Segments stand in a certain relation to one another which is described by the word "congruent."
+
+...
+
+Axioms IV, 1-3 contain statements concerning the congruence of segments of a straight line only. They may, therefore, be called the linear axioms of group IV. Axioms IV, 4, 5 contain statements relating to the congruence of angles. Axiom IV, 6 gives the connection between the congruence of segments and the congruence of angles. Axioms IV, 4-6 contain statements regarding the elements of plane geometry and may be called the plane axioms of group IV."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_consequences_congruence(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §7 Consequences of the Axioms of Congruence
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §7 Consequences of the Axioms of Congruence
 
 Suppose the segment AB is congruent to the segment A'B'. Since, according to axiom IV, 1, the segment AB is congruent to itself, it follows from axiom IV, 2 that A'B' is congruent to AB; that is to say, if AB ≡ A'B', then A'B' ≡ AB. We say, then, that the two segments are congruent to one another.
 
 Let A, B, C, D, ..., K, L and A', B', C', D', ..., K', L' be two series of points on the straight lines a and a', respectively, so that all the corresponding segments AB and A'B', AC and A'C', BC and B'C', ..., KL and K'L' are respectively congruent. Then the two series of points are said to be congruent to one another. A and A', B and B', ..., L and L' are called corresponding points of the two congruent series of points.
 
 From the linear axioms IV, 1-3, we can easily deduce several theorems."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§7 Consequences of the Axioms of Congruence}
+
+Suppose the segment $AB$ is congruent to the segment $A'B'$. Since, according to axiom IV, 1, the segment $AB$ is congruent to itself, it follows from axiom IV, 2 that $A'B'$ is congruent to $AB$; that is to say, if $AB \equiv A'B'$, then $A'B' \equiv AB$. We say, then, that the two segments are congruent to one another.
+
+Let $A, B, C, D, ..., K, L$ and $A', B', C', D', ..., K', L'$ be two series of points on the straight lines $a$ and $a'$, respectively, so that all the corresponding segments $AB$ and $A'B'$, $AC$ and $A'C'$, $BC$ and $B'C', ..., KL$ and $K'L'$ are respectively congruent. Then the two series of points are said to be congruent to one another. $A$ and $A', B and B', ..., L and L'$ are called corresponding points of the two congruent series of points.
+
+From the linear axioms IV, 1-3, we can easily deduce several theorems."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_continuity(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §8 Group V. Axiom of Continuity. (Archimedean Axiom.)
+    fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §8 Group V. Axiom of Continuity. (Archimedean Axiom.)
 
 This axiom makes possible the introduction into geometry of the idea of continuity. In order to state this axiom, we must first establish a convention concerning the equality of two segments. For this purpose, we can either base our idea of equality upon the axioms relating to the congruence of segments and define as "equal" the correspondingly congruent segments, or, upon the basis of groups I and II, we may determine how, by suitable constructions (see Chap. V, Section 24), a segment is to be laid off from a point of a given straight line so that a new, definite segment is obtained "equal" to it. In conformity with such a convention, the axiom of Archimedes may be stated as follows.
 
@@ -143,6 +202,16 @@ The axiom of Archimedes is a linear axiom.
 ...
 
 Remark. To the preceding five groups of axioms, we may add the axiom of completeness, which, although not of a purely geometrical nature, merits particular attention from a theoretical point of view."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§8 Group V. Axiom of Continuity. (Archimedean Axiom.)}
+
+This axiom makes possible the introduction into geometry of the idea of continuity. In order to state this axiom, we must first establish a convention concerning the equality of two segments. For this purpose, we can either base our idea of equality upon the axioms relating to the congruence of segments and define as "equal" the correspondingly congruent segments, or, upon the basis of groups I and II, we may determine how, by suitable constructions (see Chap. V, Section 24), a segment is to be laid off from a point of a given straight line so that a new, definite segment is obtained "equal" to it. In conformity with such a convention, the axiom of Archimedes may be stated as follows.
+
+The axiom of Archimedes is a linear axiom.
+
+...
+
+Remark. To the preceding five groups of axioms, we may add the axiom of completeness, which, although not of a purely geometrical nature, merits particular attention from a theoretical point of view."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)

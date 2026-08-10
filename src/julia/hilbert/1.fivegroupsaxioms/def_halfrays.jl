@@ -2,6 +2,7 @@ module HilbertChapterOneDefHalfRays
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -70,11 +71,17 @@ const PhaseFinalHold = 15f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Half-rays
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Half-rays
 
 If A, A', O, B are four points of a straight line a, where O lies between A and B but not between A and A', then points A and A' are on the same side of O, and points A and B are on different sides of O.
 
 All points of a that lie on the same side of O, taken together, are called a half-ray emanating from O."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Half-rays}
+
+If $A$, $A'$, $O$, $B$ are four points of a straight line $a$, where $O$ lies between $A$ and $B$ but not between $A$ and $A'$, then points $A$ and $A'$ are on the same side of $O$, and points $A$ and $B$ are on different sides of $O$.
+
+All points of a that lie on the same side of $O$, taken together, are called a half-ray emanating from $O$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIV6
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -254,9 +255,13 @@ const PhaseFinalHold = 50f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,6
+    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,6
 
 IV, 6. If, in the two triangles ABC and A'B'C' the congruences AB ≡ A'B', AC ≡ A'C', ∠BAC ≡ ∠B'A'C' hold, then the congruences ∠ABC ≡ ∠A'B'C' and ∠ACB ≡ ∠A'C'B' also hold."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,6}
+
+\textbf{IV, 6.} If, in the two triangles $ABC$ and $A'B'C'$ the congruences $AB \equiv A'B'$, $AC \equiv A'C'$, $\angle BAC \equiv \angle B'A'C'$ hold, then the congruences $\angle ABC \equiv \angle A'B'C'$ and $\angle ACB \equiv \angle A'C'B'$ also hold."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

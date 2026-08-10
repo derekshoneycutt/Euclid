@@ -2,6 +2,7 @@ module ElementsOneDefinitionParallel
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -40,9 +41,13 @@ const PhaseRiseLine2 = 4f0
 const PhaseHideAll = 5f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Parallel Straight Lines
+    fallback = """Euclid Elements - Book I - Definition: Parallel Straight Lines
 
 Parallel straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Parallel Straight Lines}
+
+Parallel straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

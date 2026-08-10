@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem4
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -88,9 +89,13 @@ const PhaseEndLift = 26f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 4
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 4
 
-If we have given any finite number of points situated upon a straight line, we can always arrange them in a sequence A, B, C, D, E, . . . , K so that B shall lie between A and C, D, E, . . . , K; C between A, B and D, E, . . . , K; D between A, B, C and E, . . . , K, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order K, . . . , E, D, C, B, A."""
+If we have given any finite number of points situated upon a straight line, we can always arrange them in a sequence A, B, C, D, E, ... , K so that B shall lie between A and C, D, E, ... , K; C between A, B and D, E, ... , K; D between A, B, C and E, ... , K, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order K, ... , E, D, C, B, A."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 4}
+
+If we have given any finite number of points situated upon a straight line, we can always arrange them in a sequence $A, B, C, D, E, ... , K$ so that $B$ shall lie between $A$ and $C, D, E, ... , K$; $C$ between $A, B$ and $D, E, ... , K$; $D$ between $A, B, C$ and $E, ... , K$, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order $K, ... , E, D, C, B, A$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

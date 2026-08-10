@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI5
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -60,11 +61,17 @@ const PhaseEndLift = 14f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,5
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,5
 
 I, 5. If two points A, B of a straight line a lie in a plane α, then every point of a lies in α.
 
 In this case we say: "The straight line a lies in the plane α," etc."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,5}
+
+\textbf{I, 5.} If two points $A$, $B$ of a straight line a lie in a plane $\alpha$, then every point of a lies in $\alpha$.
+
+In this case we say: "The straight line a lies in the plane $\alpha$," etc."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

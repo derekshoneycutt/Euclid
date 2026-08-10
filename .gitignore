@@ -5,6 +5,7 @@
 
 AGENTS.md
 staging_*.md
+staging_*.pdf
 
 # CI-generated Wiki publication artifact. Authored Guides remain tracked.
 /docs/wiki/Code/

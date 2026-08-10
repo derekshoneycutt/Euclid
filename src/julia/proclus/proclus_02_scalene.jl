@@ -2,6 +2,7 @@ module ElementsOneProclusScalene
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -81,13 +82,21 @@ const PhaseHideAll = 100f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Proclus - Scalene Triangle
+    fallback = """Euclid Elements - Book I - Proclus - Scalene Triangle
 
 On a given finite straight line to construct an scalene triangle.
 
 This follows Euclid's Elements Book I, Proposition I, with modifications.
 
 Suppose AC to be a radius of one of the two circles, and D a point on AC lying in that portion of the circle with center A which is outside the circle with center B, Then, joining BD as in the figure, we have a triangle which obviously has all its sides unequal, that is, a scalene triangle."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Proclus - Scalene Triangle}
+
+On a given finite straight line to construct an scalene triangle.
+
+\textit{This follows Euclid's Elements Book I, Proposition I, with modifications.}
+
+Suppose $AC$ to be a radius of one of the two circles, and $D$ a point on $AC$ lying in that portion of the circle with center $A$ which is outside the circle with center $B$, Then, joining $BD$ as in the figure, we have a triangle which obviously has all its sides unequal, that is, a scalene triangle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

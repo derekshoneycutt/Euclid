@@ -2,6 +2,7 @@ module ElementsOneDefinitionAcuteAngle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -68,9 +69,13 @@ const PhaseCompassLift = 6f0
 const PhaseHideAll = 7f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Acute Angle
+    fallback = """Euclid Elements - Book I - Definition: Acute Angle
 
 An acute angle is an angle less than a right angle."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Acute Angle}
+
+An acute angle is an angle less than a right angle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 

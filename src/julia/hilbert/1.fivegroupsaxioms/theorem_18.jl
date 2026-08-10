@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem18
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -159,11 +160,17 @@ const PhaseFinalHold = 42f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 18
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 18
 
 If (A, B, C, ...) and (A', B', C', ...) are congruent figures and P represents any arbitrary point, then there can always be found a point P' so that the two figures (A, B, C, ..., P) and (A', B', C', ..., P') shall likewise be congruent. If the figure (A, B, C, ..., P) contains at least four points not lying in the same plane, then the determination of P' can be made in but one way.
 
 This theorem contains an important result; namely, that all the facts concerning space which have reference to congruence, that is to say, to displacements in space, are (by the addition of the axioms of groups I and II) exclusively the consequences of the six linear and plane axioms mentioned above. Hence, it is not necessary to assume the axiom of parallels in order to establish these facts."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 18}
+
+If $(A, B, C, ...)$ and $(A', B', C', ...)$ are congruent figures and $P$ represents any arbitrary point, then there can always be found a point $P'$ so that the two figures $(A, B, C, ..., P)$ and $(A', B', C', ..., P')$ shall likewise be congruent. If the figure $(A, B, C, ..., P)$ contains at least four points not lying in the same plane, then the determination of $P'$ can be made in but one way.
+
+This theorem contains an important result; namely, that all the facts concerning space which have reference to congruence, that is to say, to displacements in space, are (by the addition of the axioms of groups I and II) exclusively the consequences of the six linear and plane axioms mentioned above. Hence, it is not necessary to assume the axiom of parallels in order to establish these facts."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

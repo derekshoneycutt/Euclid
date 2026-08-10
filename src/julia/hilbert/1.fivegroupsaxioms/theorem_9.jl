@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem9
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -132,9 +133,13 @@ const TotalPassCount = length(TraceLegs)
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 9
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 9
 
 If the first of two congruent series of points A, B, C, D, ..., K, L and A', B', C', D', ..., K', L' is so arranged that B lies between A and C, D, ..., K, L, and C between A, B and D, ..., K, L, etc., then the points A', B', C', D', ..., K', L' of the second series are arranged in a similar way; that is to say, B' lies between A' and C', D', ..., K', L', and C' lies between A', B' and D', ..., K', L', etc."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 9}
+
+If the first of two congruent series of points $A, B, C, D, ..., K, L$ and $A', B', C', D', ..., K', L'$ is so arranged that $B$ lies between $A$ and $C, D, ..., K, L$, and $C$ between $A, B and D, ..., K, L$, etc., then the points $A', B', C', D', ..., K', L'$ of the second series are arranged in a similar way; that is to say, $B'$ lies between $A'$ and $C', D', ..., K', L'$, and $C'$ lies between $A', B'$ and $D', ..., K', L'$, etc."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

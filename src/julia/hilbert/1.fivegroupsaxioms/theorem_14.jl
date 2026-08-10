@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem14
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -168,7 +169,7 @@ const PhaseFinalHold = 32f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 14
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 14
 
 Let h, k, l and h', k', l' be two sets of three half-rays, where those of each set emanate from the same point and lie in the same plane. Then, if the congruences
 
@@ -177,6 +178,16 @@ Let h, k, l and h', k', l' be two sets of three half-rays, where those of each s
 are fulfilled, the following congruence is also valid; viz.:
 
     ∠(h, k) ≡ ∠(h', k')."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 14}
+
+Let $h, k, l$ and $h', k', l'$ be two sets of three half-rays, where those of each set emanate from the same point and lie in the same plane. Then, if the congruences
+
+    $\angle(h, l) \equiv \angle(h', l')$,   $\angle(k, l) \equiv \angle(k', l')$
+
+are fulfilled, the following congruence is also valid; viz.:
+
+    $\angle(h, k) \equiv \angle(h', k')$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

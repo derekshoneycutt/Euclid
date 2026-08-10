@@ -2,6 +2,7 @@ module HilbertChapterOneDefinitionPolygon
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -134,9 +135,13 @@ end
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Polygon
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Polygon
 
 A system of segments AB, BC, CD, ..., KL is called a broken line joining A with L and is designated, briefly, as the broken line ABCDE ... MKL. The points lying within the segments AB, BC, CD, ..., KL, as also the points A, B, C, D, ..., K, L, are called the points of the broken line. In particular, if the point A coincides with L, the broken line is called a polygon and is designated as the polygon ABCD ... KL. The segments AB, BC, CD, ..., KA are called the sides of the polygon and the points A, B, C, D, ..., K, are the vertices. Polygons having 3, 4, 5, ..., n vertices are called, respectively, triangles, quadrangles, pentagons, ..., n-gons. If the vertices of a polygon are all distinct and none of them lie within the segments composing the sides of the polygon, and, furthermore, if no two sides have a point in common, then the polygon is called a simple polygon."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Polygon}
+
+A system of segments $AB, BC, CD, ..., KL$ is called a broken line joining $A$ with $L$ and is designated, briefly, as the broken line $ABCDE ... MKL$. The points lying within the segments $AB, BC, CD, ..., KL$, as also the points $A, B, C, D, ..., K, L$, are called the points of the broken line. In particular, if the point $A$ coincides with $L$, the broken line is called a polygon and is designated as the polygon $ABCD ... KL$. The segments $AB, BC, CD, ..., KA$ are called the sides of the polygon and the points $A, B, C, D, ..., K$, are the vertices. Polygons having $3, 4, 5, ..., n$ vertices are called, respectively, triangles, quadrangles, pentagons, ..., n-gons. If the vertices of a polygon are all distinct and none of them lie within the segments composing the sides of the polygon, and, furthermore, if no two sides have a point in common, then the polygon is called a simple polygon."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

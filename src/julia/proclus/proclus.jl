@@ -9,7 +9,6 @@ Proclus provided an ancient commentary on Book I of Euclid's Elements, including
     latex = raw"""\textbf{Proclus's Commentary}
     
 Proclus provided an ancient commentary on Book I of \textit{Euclid's Elements}, including additional constructions and analyses. Some will be included here."""
-
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

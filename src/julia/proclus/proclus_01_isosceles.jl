@@ -2,6 +2,7 @@ module ElementsOneProclusIsosceles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -98,13 +99,21 @@ const PhaseHideAll = 100f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Proclus - Isosceles Triangle
+    fallback = """Euclid Elements - Book I - Proclus - Isosceles Triangle
 
 On a given finite straight line to construct an isosceles triangle.
 
 This follows Euclid's Elements Book I, Proposition I, with modifications.
 
 To make an isosceles triangle he produces AB in both directions to meet the respective circles in D, E and then describes circles with A, B as centers and AE, BD as radii respectively. The result is an isosceles triangle with each of two sides double of the third side."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Proclus - Isosceles Triangle}
+
+On a given finite straight line to construct an isosceles triangle.
+
+\textit{This follows Euclid's Elements Book I, Proposition I, with modifications.}
+
+To make an isosceles triangle he produces $AB$ in both directions to meet the respective circles in $D$, $E$ and then describes circles with $A$, $B$ as centers and $AE$, $BD$ as radii respectively. The result is an isosceles triangle with each of two sides double of the third side."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

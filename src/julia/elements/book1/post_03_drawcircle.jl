@@ -2,6 +2,7 @@ module ElementsOnePostulatesDrawCircle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -45,11 +46,17 @@ const PhaseHideAll = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Postulates: Draw a Circle
+    fallback = """Euclid Elements - Book I - Postulates: Draw a Circle
 
 Let the following be postulated:
 
 To describe a circle with any center and distance."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Draw a Circle}
+
+\textit{Let the following be postulated:}
+
+To describe a circle with any center and distance."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

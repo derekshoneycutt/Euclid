@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem8
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -55,11 +56,17 @@ const PhaseFinalHold = 7f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 8
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 8
 
 If two straight lines a, b of a plane do not meet a third straight line c of the same plane, then they do not meet each other.
 
 For, if a, b had a point A in common, there would then exist in the same plane with c two straight lines a and b each passing through the point A and not meeting the straight line c. This condition of affairs is, however, contradictory to the second assertion contained in the axiom of parallels as originally stated. Conversely, the second part of the axiom of parallels, in its original form, follows as a consequence of theorem 8."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 8}
+
+If two straight lines $a$, $b$ of a plane do not meet a third straight line $c$ of the same plane, then they do not meet each other.
+
+For, if $a$, $b$ had a point $A$ in common, there would then exist in the same plane with $c$ two straight lines $a$ and $b$ each passing through the point $A$ and not meeting the straight line $c$. This condition of affairs is, however, contradictory to the second assertion contained in the axiom of parallels as originally stated. Conversely, the second part of the axiom of parallels, in its original form, follows as a consequence of \textit{theorem 8}."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

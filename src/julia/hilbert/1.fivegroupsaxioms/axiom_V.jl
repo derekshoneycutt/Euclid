@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomV
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -87,13 +88,21 @@ const PhaseFinalHold = 20f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom V
+    fallback = """David Hilbert - Foundations of Geometry - Axiom V
 
 Let A₁ be any point upon a straight line between the arbitrarily chosen points A and B. Take the points A₂, A₃, A₄, ... so that A₁ lies between A and A₂, A₂ between A₁ and A₃, A₃ between A₂ and A₄, etc. Moreover, let the segments
 
     AA₁, A₁A₂, A₂A₃, A₃A₄, ...
 
 be equal to one another. Then, among this series of points, there always exists a certain point Aₙ such that B lies between A and Aₙ."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom V}
+
+Let $A_1$ be any point upon a straight line between the arbitrarily chosen points $A$ and $B$. Take the points $A_2$, $A_3$, $A_4$, ... so that $A_1$ lies between $A$ and $A_2$, $A_2$ between $A_1$ and $A_3$, $A_3$ between $A_2$ and $A_4$, etc. Moreover, let the segments
+
+    $AA_1$, $A_1A_2$, $A_2A_3$, $A_3A_4$, ...
+
+be equal to one another. Then, among this series of points, there always exists a certain point $A_n$ such that $B$ lies between $A$ and $A_n$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

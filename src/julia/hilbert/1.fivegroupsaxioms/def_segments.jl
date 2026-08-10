@@ -2,6 +2,7 @@ module HilbertChapterOneDefSegments
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -62,9 +63,13 @@ const PhaseFinalHold = 11f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Segments
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Segments
 
 We will call the system of two points A and B, lying upon a straight line, a segment and denote it by AB or BA. The points lying between A and B are called the points of the segment AB or the points lying within the segment AB. All other points of the straight line are referred to as the points lying outside the segment AB. The points A and B are called the extremities of the segment AB."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Segments}
+
+We will call the system of two points $A$ and $B$, lying upon a straight line, a segment and denote it by $AB$ or $BA$. The points lying between $A$ and $B$ are called the points of the segment $AB$ or the points lying within the segment $AB$. All other points of the straight line are referred to as the points lying outside the segment $AB$. The points $A$ and $B$ are called the extremities of the segment $AB$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

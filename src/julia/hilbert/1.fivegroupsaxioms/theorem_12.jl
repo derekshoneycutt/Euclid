@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem12
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -339,7 +340,7 @@ const PhaseFinalHold = 80f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 12
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 12
 
 If two angles ABC and A'B'C' are congruent to each other, their supplementary angles CBD and C'B'D' are also congruent.
 
@@ -356,6 +357,24 @@ On the other hand, since by axiom IV, 3 the segments AD and A'D' are congruent t
     CD ≡ C'D', ∠ADC ≡ ∠A'D'C'.
 
 From these congruences and the consideration of the triangles BCD and B'C'D', it follows by virtue of axiom IV, 6 that the angles CBD and C'B'D' are congruent."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 12}
+
+If two angles $ABC$ and $A'B'C'$ are congruent to each other, their supplementary angles $CBD$ and $C'B'D'$ are also congruent.
+
+Proof: Take the points $A'$, $C'$, $D'$ upon the sides passing through $B'$ in such a way that
+
+    $A'B' \equiv AB$, $C'B' \equiv CB$, $D'B' \equiv DB$.
+
+Then, in the two triangles $ABC$ and $A'B'C'$, the sides $AB$ and $BC$ are respectively congruent to $A'B'$ and $C'B'$. Moreover, since the angles included by these sides are congruent to each other by hypothesis, it follows from \textit{theorem 10} that these triangles are congruent; that is to say, we have the congruences
+
+    $AC \equiv A'C'$, $\angle BAC \equiv \angle B'A'C'$.
+
+On the other hand, since by \textit{axiom IV}, 3 the segments $AD$ and $A'D'$ are congruent to each other, it follows again from \textit{theorem 10} that the triangles $CAD$ and $C'A'D'$ are congruent, and, consequently, we have the congruences:
+
+    $CD \equiv C'D'$, $\angle ADC \equiv \angle A'D'C'$.
+
+From these congruences and the consideration of the triangles $BCD$ and $B'C'D'$, it follows by virtue of \textit{axiom IV, 6} that the angles $CBD$ and $C'B'D'$ are congruent."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

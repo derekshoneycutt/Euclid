@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomII2
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -72,9 +73,13 @@ const PhaseEndLift = 16f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom II,2
+    fallback = """David Hilbert - Foundations of Geometry - Axiom II,2
 
 II, 2. If A and C are two points of a straight line, then there exists at least one point B lying between A and C and at least one point D so situated that C lies between A and D."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,2}
+
+\textbf{II, 2.} If $A$ and $C$ are two points of a straight line, then there exists at least one point $B$ lying between $A$ and $C$ and at least one point D so situated that $C$ lies between $A$ and $D$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

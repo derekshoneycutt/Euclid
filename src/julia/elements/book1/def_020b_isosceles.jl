@@ -2,6 +2,7 @@ module ElementsOneDefinitionIsosceles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -45,9 +46,13 @@ const PhaseRise = 4f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Isosceles Triangle
+    fallback = """Euclid Elements - Book I - Definition: Isosceles Triangle
 
 Of trilateral figures, ... an isosceles triangle is that which has two of its sides alone equal, ..."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Isosceles Triangle}
+
+Of trilateral figures, ... an isosceles triangle is that which has two of its sides alone equal, ..."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

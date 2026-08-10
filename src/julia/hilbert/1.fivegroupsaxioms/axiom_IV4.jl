@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIV4
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -127,7 +128,7 @@ const PhaseFinalHold = 20f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,4
+    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,4
 
 IV, 4. Let an angle (h, k) be given in the plane α and let a straight line a' be given in a plane α'. Suppose also that, in the plane α, a definite side of the straight line a' be assigned. Denote by h' a half-ray of the straight line a' emanating from a point O' of this line. Then in the plane α' there is one and only one half-ray k' such that the angle (h, k), or (k, h), is congruent to the angle (h', k') and that at the same time all interior points of the angle (h', k') lie upon the given side of a'. We express this relation by means of the notation
 
@@ -142,6 +143,22 @@ or
 ∠(h, k) ≡ ∠(k, h)
 
 We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,4}
+
+\textbf{IV, 4.} Let an angle $(h, k)$ be given in the plane $\alpha$ and let a straight line $a'$ be given in a plane $\alpha'$. Suppose also that, in the plane $\alpha$, a definite side of the straight line $a'$ be assigned. Denote by $h'$ a half-ray of the straight line $a'$ emanating from a point $O'$ of this line. Then in the plane $\alpha'$ there is one and only one half-ray $k'$ such that the angle $(h, k)$, or $(k, h)$, is congruent to the angle $(h', k')$ and that at the same time all interior points of the angle $(h', k')$ lie upon the given side of $a'$. We express this relation by means of the notation
+
+$\angle(h, k) \equiv \angle(h', k')$
+
+Every angle is congruent to itself; that is,
+
+$\angle(h, k) \equiv \angle(h, k)$
+
+or
+
+$\angle(h, k) \equiv \angle(k, h)$
+
+We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

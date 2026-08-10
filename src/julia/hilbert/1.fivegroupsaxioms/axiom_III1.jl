@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIII1
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -52,11 +53,17 @@ const PhaseFinalHold = 7f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom III
+    fallback = """David Hilbert - Foundations of Geometry - Axiom III
 
 III. In a plane α there can be drawn through any point A, lying outside of a straight line a, one and only one straight line which does not intersect the line a. This straight line is called the parallel to a through the given point A.
 
 This statement of the axiom of parallels contains two assertions. The first of these is that, in the plane α, there is always a straight line passing through A which does not intersect the given line a. The second states that only one such line is possible. The latter of these statements is the essential one, and it may also be expressed as Theorem 8."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom III}
+
+\textbf{III.} In a plane $\alpha$ there can be drawn through any point $A$, lying outside of a straight line $a$, one and only one straight line which does not intersect the line $a$. This straight line is called the parallel to $a$ through the given point $A$.
+
+This statement of the axiom of parallels contains two assertions. The first of these is that, in the plane $\alpha$, there is always a straight line passing through $A$ which does not intersect the given line $a$. The second states that only one such line is possible. The latter of these statements is the essential one, and it may also be expressed as \textit{Theorem 8}."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

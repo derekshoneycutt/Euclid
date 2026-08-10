@@ -2,6 +2,7 @@ module ElementsOneDefinitionAcuteTriangle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -125,9 +126,13 @@ const PhaseHideAll = 12f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Acute-Angled Triangle
+    fallback = """Euclid Elements - Book I - Definition: Acute-Angled Triangle
 
 Further, of trilateral figures, ... an acute-angled triangle that which has its three angles acute."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Acute-Angled Triangle}
+
+Further, of trilateral figures, ... an acute-angled triangle that which has its three angles acute."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIV1
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -87,7 +88,7 @@ const PhaseFinalHold = 18f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,1
+    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,1
 
 IV, I. If A, B are two points on a straight line a, and if A' is a point upon the same or another straight line a', then, upon a given side of A' on the straight line a', we can always find one and only one point B' so that the segment AB (or BA) is congruent to the segment A'B'. We indicate this relation by writing
 
@@ -98,6 +99,18 @@ Every segment is congruent to itself; that is, we always have
     AB ≡ AB.
 
 We can state the above axiom briefly by saying that every segment can be laid off upon a given side of a given point of a given straight line in one and only one way."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,1}
+
+\textbf{IV, I.} If $A$, $B$ are two points on a straight line $a$, and if $A'$ is a point upon the same or another straight line $a'$, then, upon a given side of $A'$ on the straight line $a'$, we can always find one and only one point $B'$ so that the segment $AB$ (or $BA$) is congruent to the segment $A'B'$. We indicate this relation by writing
+
+    $AB \equiv A'B'$.
+
+Every segment is congruent to itself; that is, we always have
+
+    $AB \equiv AB$.
+
+We can state the above axiom briefly by saying that every segment can be laid off upon a given side of a given point of a given straight line in one and only one way."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

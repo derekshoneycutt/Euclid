@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem7
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -87,7 +88,7 @@ const PhaseFinalHold = 14f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 7
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 7
 
 Every plane α divides the remaining points of space into two regions having the following properties: Every point A of the one region determines with each point B of the other region a segment AB, within which lies a point of α. On the other hand, any two points A, A' lying within the same region determine a segment AA' containing no point of α.
 
@@ -96,6 +97,16 @@ Every plane α divides the remaining points of space into two regions having the
 Making use of the notation of theorem 7, we may now say: The points A, A' are situated in space upon one and the same side of the plane α, and the points A, B are situated in space upon different sides of the plane α.
 
 Theorem 7 gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in group II."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 7}
+
+Every plane $\alpha$ divides the remaining points of space into two regions having the following properties: Every point $A$ of the one region determines with each point $B$ of the other region a segment $AB$, within which lies a point of $\alpha$. On the other hand, any two points $A$, $A'$ lying within the same region determine a segment $AA'$ containing no point of $\alpha$.
+
+...
+
+Making use of the notation of theorem 7, we may now say: The points $A$, $A'$ are situated in space upon one and the same side of the plane $\alpha$, and the points $A$, $B$ are situated in space upon different sides of the plane $\alpha$.
+
+Theorem 7 gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in group II."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function set_plane_alpha(state_ptr::Ptr{Cvoid}, hostId, alpha01)

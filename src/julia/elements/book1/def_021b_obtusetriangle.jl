@@ -2,6 +2,7 @@ module ElementsOneDefinitionObtuseTriangle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -67,9 +68,13 @@ const PhaseHideAll = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Obtuse-Angled Triangle
+    fallback = """Euclid Elements - Book I - Definition: Obtuse-Angled Triangle
 
 Further, of trilateral figures, ... an obtuse-angled triangle that which has an obtuse angle, ..."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse-Angled Triangle}
+
+Further, of trilateral figures, ... an obtuse-angled triangle that which has an obtuse angle, ..."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

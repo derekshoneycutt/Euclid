@@ -2,6 +2,7 @@ module ElementsOnePostulatesFiniteLine
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -49,11 +50,17 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Postulates: Produce a Finite Line
+    fallback = """Euclid Elements - Book I - Postulates: Produce a Finite Line
 
 Let the following be postulated:
 
 To produce a finite straight line continuously in a straight line."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Produce a Finite Line}
+
+\textit{Let the following be postulated:}
+
+To produce a finite straight line continuously in a straight line."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

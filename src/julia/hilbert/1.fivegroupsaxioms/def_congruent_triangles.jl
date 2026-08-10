@@ -2,6 +2,7 @@ module HilbertChapterOneDefCongruentTriangles
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -242,12 +243,19 @@ const PhaseFinalHold = 51f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Congruent Triangles
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Congruent Triangles
 
 Two triangles ABC and A'B'C' are said to be congruent to one another when all of the following congruences are fulfilled:
 
     AB ≡ A'B',    AC ≡ A'C',    BC ≡ B'C',
     ∠A ≡ ∠A',    ∠B ≡ ∠B',    ∠C ≡ ∠C'."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Congruent Triangles}
+
+Two triangles $ABC$ and $A'B'C'$ are said to be congruent to one another when all of the following congruences are fulfilled:
+
+    $AB \equiv A'B'$,    $AC \equiv A'C'$,    $BC \equiv B'C'$,
+    $\angle A \equiv \angle A'$,    $\angle B \equiv \angleB'$,    $\angle C \equiv \angle C'."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

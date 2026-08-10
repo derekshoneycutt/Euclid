@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem19
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -132,9 +133,13 @@ const PhaseFinalHold = 20f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 19
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 19
 
 If two parallel lines are cut by a third straight line, the alternate-interior angles and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 19}
+
+If two parallel lines are cut by a third straight line, the alternate-interior angles and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

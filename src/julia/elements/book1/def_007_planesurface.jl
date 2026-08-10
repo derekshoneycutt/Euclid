@@ -2,6 +2,7 @@ module ElementsOneDefinitionPlaneSurface
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -32,9 +33,13 @@ const PhaseDrag2 = 3f0
 const PhaseEndLift = 4f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Plane Surface
+    fallback = """Euclid Elements - Book I - Definition: Plane Surface
 
 A plane surface is a surface which lies evenly with the straight lines on itself."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Surface}
+
+A plane surface is a surface which lies evenly with the straight lines on itself."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

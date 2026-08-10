@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI3
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -75,11 +76,17 @@ const PhaseEndLift = 14f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,3
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,3
 
 I, 3. Three points A, B, C not situated in the same straight line always completely determine a plane α. We write ABC = α.
 
 We employ also the expressions: A, B, C, "lie in" α; A, B, C "are points of" α, etc."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,3}
+
+\textbf{I, 3.} Three points $A$, $B$, $C$ not situated in the same straight line always completely determine a plane $\alpha$. We write $ABC = \alpha$.
+
+We employ also the expressions: $A$, $B$, $C$, "lie in" $\alpha$; $A$, $B$, $C$ "are points of" $\alpha$, etc."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

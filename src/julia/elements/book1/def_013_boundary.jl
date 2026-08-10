@@ -2,6 +2,7 @@ module ElementsOneDefinitionBoundary
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -39,9 +40,13 @@ const PhaseRise = 4f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Boundary
+    fallback = """Euclid Elements - Book I - Definition: Boundary
 
 A boundary is that which is an extremity of anything."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Boundary}
+
+A boundary is that which is an extremity of anything."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

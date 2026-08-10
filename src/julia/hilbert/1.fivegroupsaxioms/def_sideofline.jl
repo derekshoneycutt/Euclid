@@ -2,6 +2,7 @@ module HilbertChapterOneDefinitionSideOfLine
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -73,9 +74,13 @@ const PhaseEndLift = 12f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Side of Line
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Side of Line
 
 Making use of the notation of theorem 5, we say: The points A, A' lie in the plane α upon one and the same side of the straight line a, and the points A, B lie in the plane α upon different sides of the straight line a."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Side of Line}
+
+Making use of the notation of \textit{theorem 5}, we say: The points $A$, $A'$ lie in the plane $\alpha$ upon one and the same side of the straight line $a$, and the points $A$, $B$ lie in the plane $\alpha$ upon different sides of the straight line $a$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

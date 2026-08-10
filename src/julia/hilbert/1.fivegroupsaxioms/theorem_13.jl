@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem13
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -335,7 +336,7 @@ const PhaseFinalHold = 82f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 13
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 13
 
 Let the angle (h, k) of the plane α be congruent to the angle (h', k') of the plane α', and, furthermore, let l be a half-ray in the plane α emanating from the vertex of the angle (h, k) and lying within this angle. Then there always exists in the plane α' a half-ray l' emanating from the vertex of the angle (h', k') and lying within this angle so that we have
 
@@ -350,6 +351,22 @@ are fulfilled. Because of the congruence of the triangles OAB and O'A'B', we hav
     AB ≡ A'B',   ∠OAB ≡ ∠O'A'B',   ∠OBA ≡ ∠O'B'A'.
 
 Let the straight line AB intersect l in C. Take the point C' upon the segment A'B' so that A'C' ≡ AC. Then O'C' is the required half-ray. In fact, it follows directly from these congruences, by aid of axiom IV, 3, that BC ≡ B'C'. Furthermore, the triangles OAC and O'A'C' are congruent to each other, and the same is true also of the triangles OCB and O'B'C'. With this our proposition is demonstrated."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 13}
+
+Let the angle $(h, k)$ of the plane $\angle$ be congruent to the angle $(h', k')$ of the plane $\alpha '$, and, furthermore, let $l$ be a half-ray in the plane $\alpha$ emanating from the vertex of the angle $(h, k)$ and lying within this angle. Then there always exists in the plane $\angle '$ a half-ray $l'$ emanating from the vertex of the angle $(h', k')$ and lying within this angle so that we have
+
+    $\angle(h, l) \equiv \angle(h', l')$,   $\angle(k, l) \equiv \angle(k', l')$.
+
+Proof: We will represent the vertices of the angles $(h, k)$ and $(h', k')$ by $O$ and $O'$, respectively, and so select upon the sides $h$, $k$, $h'$, $k'$ the points $A$, $B$, $A'$, $B'$ so that the congruences
+
+    $OA \equiv O'A'$,   $OB \equiv O'B'$
+
+are fulfilled. Because of the congruence of the triangles $OAB$ and $O'A'B'$, we have at once
+
+    $AB \equiv A'B'$,   $\angle OAB \equiv \angle O'A'B'$,   $\angle OBA \equiv \angle O'B'A'$.
+
+Let the straight line $AB$ intersect $l$ in $C$. Take the point $C'$ upon the segment $A'B'$ so that $A'C' \equiv AC$. Then $O'C'$ is the required half-ray. In fact, it follows directly from these congruences, by aid of \textit{axiom IV, 3}, that $BC \equiv B'C'$. Furthermore, the triangles $OAC$ and $O'A'C'$ are congruent to each other, and the same is true also of the triangles $OCB$ and $O'B'C'$. With this our proposition is demonstrated."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

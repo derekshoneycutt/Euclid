@@ -2,6 +2,7 @@ module ElementsOneDefinitionDiameter
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -58,9 +59,13 @@ const PhaseHideAll = 9f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Diameter
+    fallback = """Euclid Elements - Book I - Definition: Diameter
 
 A diameter of the circle is any straight line drawn through the center and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Diameter}
+
+A diameter of the circle is any straight line drawn through the center and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

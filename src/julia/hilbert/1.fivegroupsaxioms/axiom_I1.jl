@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI1
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -50,11 +51,19 @@ const PhaseEndLift = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,1
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,1
 
-I, 1. Two distinct points A and B always completely determine a straight line a. We write AB = a or BA = a.
+I, 1. Two distinct points A and B always completely determine a straight line a.
+We write AB = a or BA = a.
 
 Instead of "determine," we may also employ other forms of expression; for example, we may say A "lies upon" a, A "is a point of" a, a "goes through" A "and through" B, a "joins" A "and" or "with" B, etc. If A lies upon a and at the same time upon another straight line b, we make use also of the expression: "The straight lines" a "and" b "have the point A in common," etc."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,1}
+
+\textbf{I, 1.} Two distinct points $A$ and $B$ always completely determine a straight line $a$.\\
+We write $AB = a$ or $BA = a$.
+
+Instead of "determine," we may also employ other forms of expression; for example, we may say $A$ "lies upon" $a$, $A$ "is a point of" $a$, $a$ "goes through" $A$ "and through" $B$, a "joins" $A$ "and" or "with" $B$, etc. If $A$ lies upon a and at the same time upon another straight line $b$, we make use also of the expression: "The straight lines" $a$ "and" $b$ "have the point A in common," etc."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

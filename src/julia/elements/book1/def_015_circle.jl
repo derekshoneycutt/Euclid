@@ -2,6 +2,7 @@ module ElementsOneDefinitionCircle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -45,9 +46,13 @@ const PhaseHideAll = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Circle and Center
+    fallback = """Euclid Elements - Book I - Definition: Circle and Center
 
 A circle is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another; and the point is called the center of the circle."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Circle and Center}
+
+A circle is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another; and the point is called the center of the circle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

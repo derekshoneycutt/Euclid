@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomII1
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -63,9 +64,13 @@ const PhaseEndLift = 13f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom II,1
+    fallback = """David Hilbert - Foundations of Geometry - Axiom II,1
 
 II, 1. If A, B, C are points of a straight line and B lies between A and C, then B lies also between C and A."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,1}
+
+\textbf{II, 1.} If $A$, $B$, $$ are points of a straight line and $B$ lies between $A$ and $C$, then $B$ lies also between $C$ and $A$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

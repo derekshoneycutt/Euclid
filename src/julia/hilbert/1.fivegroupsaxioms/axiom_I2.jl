@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI2
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -58,9 +59,13 @@ const PhaseEndLift = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,2
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,2
 
 I, 2. Any two distinct points of a straight line completely determine that line; that is, if AB = a and AC = a, where B ≠ C, then is also BC = a."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,2}
+
+\textbf{I, 2.} Any two distinct points of a straight line completely determine that line; that is, if $AB = a$ and $AC = a$, where $B \neq C$, then is also $BC = a$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

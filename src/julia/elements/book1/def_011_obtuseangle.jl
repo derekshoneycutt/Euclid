@@ -2,6 +2,7 @@ module ElementsOneDefinitionObtuseAngle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -68,9 +69,13 @@ const PhaseCompassLift = 6f0
 const PhaseHideAll = 7f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Obtuse Angle
+    fallback = """Euclid Elements - Book I - Definition: Obtuse Angle
 
 An obtuse angle is an angle greater than a right angle."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse Angle}
+
+An obtuse angle is an angle greater than a right angle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 

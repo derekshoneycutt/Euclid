@@ -2,6 +2,7 @@ module HilbertChapterOneDefAngle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -79,9 +80,13 @@ const PhaseFinalHold = 8f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Definition: Angle
+    fallback = """David Hilbert - Foundations of Geometry - Definition: Angle
 
-Definitions. Let α be any arbitrary plane and h, k any two distinct half-rays lying in α and emanating from the point O so as to form a part of two different straight lines. We call the system formed by these two half-rays h, k an angle and represent it by the symbol ∠(h, k) or ∠(k, h). From axioms II, 1–5, it follows readily that the half-rays h and k, taken together with the point O, divide the remaining points of the plane a into two regions having the following property: If A is a point of one region and B a point of the other, then every broken line joining A and B either passes through O or has a point in common with one of the half-rays h, k. If, however, A, A0 both lie within the same region, then it is always possible to join these two points by a broken line which neither passes through O nor has a point in common with either of the half-rays h, k. One of these two regions is distinguished from the other in that the segment joining any two points of this region lies entirely within the region. The region so characterised is called the interior of the angle (h, k). To distinguish the other region from this, we call it the exterior of the angle (h, k). The half rays h and k are called the sides of the angle, and the point O is called the vertex of the angle."""
+Let α be any arbitrary plane and h, k any two distinct half-rays lying in α and emanating from the point O so as to form a part of two different straight lines. We call the system formed by these two half-rays h, k an angle and represent it by the symbol ∠(h, k) or ∠(k, h). From axioms II, 1–5, it follows readily that the half-rays h and k, taken together with the point O, divide the remaining points of the plane a into two regions having the following property: If A is a point of one region and B a point of the other, then every broken line joining A and B either passes through O or has a point in common with one of the half-rays h, k. If, however, A, A0 both lie within the same region, then it is always possible to join these two points by a broken line which neither passes through O nor has a point in common with either of the half-rays h, k. One of these two regions is distinguished from the other in that the segment joining any two points of this region lies entirely within the region. The region so characterised is called the interior of the angle (h, k). To distinguish the other region from this, we call it the exterior of the angle (h, k). The half rays h and k are called the sides of the angle, and the point O is called the vertex of the angle."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Angle}
+
+Let $\alpha$ be any arbitrary plane and $h$, $k$ any two distinct half-rays lying in $\alpha$ and emanating from the point $O$ so as to form a part of two different straight lines. We call the system formed by these two half-rays $h$, $k$ an \textit{angle} and represent it by the symbol $\angle(h, k)$ or $\angle(k, h)$. From axioms II, 1–5, it follows readily that the half-rays $h$ and $k$, taken together with the point $O$, divide the remaining points of the plane $a$ into two regions having the following property: If $A$ is a point of one region and $B$ a point of the other, then every broken line joining $A$ and $B$ either passes through $O$ or has a point in common with one of the half-rays $h$, $k$. If, however, $A$, $A0$ both lie within the same region, then it is always possible to join these two points by a broken line which neither passes through $O$ nor has a point in common with either of the half-rays $h$, $k$. One of these two regions is distinguished from the other in that the segment joining any two points of this region lies entirely within the region. The region so characterised is called the interior of the angle $(h, k)$. To distinguish the other region from this, we call it the exterior of the angle $(h, k)$. The half rays $h$ and $k$ are called the sides of the angle, and the point $O$ is called the vertex of the angle."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -2,6 +2,7 @@ module ElementsOneProposition01
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -81,7 +82,7 @@ const PhaseHideAll = 100f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Proposition I
+    fallback = """Euclid Elements - Book I - Proposition I
 
 On a given finite straight line to construct an equilateral triangle.
 
@@ -100,6 +101,26 @@ Therefore the three straight lines CA, AB, BC are equal to one another.
 Therefore the triangle ABC is equilateral; and it has been constructed on the given finite straight line AB.
 
 Being what it was required to do."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Proposition I}
+
+\textit{On a given finite straight line to construct an equilateral triangle.}
+
+Let AB be the given finite straight line.
+
+Thus it is required to construct an equilateral triangle on the straing line AB.
+With center A and distance AB let the circle BCD be described;
+again, with center B and distance BA let the circle ACE be described;
+and from the point C, in which the circles cut one another, to the points A, B let the straight lines CA, CB be joined.
+
+Now, since the point A is the center of the circle CDB, AC is equal to AB.
+Again, since the point B is the center of the circle CAE, BC is equal to BA.
+But CA was also proved equal to AB; therefore each of the straight lines CA, CB is equal to AB.
+And things which are equal to the same thing are also equal to one another; therefore CA is also equal to CB.
+Therefore the three straight lines CA, AB, BC are equal to one another.
+Therefore the triangle ABC is equilateral; and it has been constructed on the given finite straight line AB.
+
+Being what it was required to do."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
@@ -129,8 +150,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [labelAId, labelBId, labelCId, labelDId, labelEId,
          lineABHostId, lineCBHostId, lineCAHostId,
-         circleBCDHostId, circleACEHostId
-        ])
+         circleBCDHostId, circleACEHostId])
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)

@@ -2,6 +2,7 @@ module ElementsOneDefinitionQuadrilateral
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -76,9 +77,13 @@ end
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Rectilineal Figures - Quadrilateral
+    fallback = """Euclid Elements - Book I - Definition: Rectilineal Figures - Quadrilateral
 
 Rectilineal figures are those which are contained by straight lines, ... quadrilateral those contained by four, ..."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Quadrilateral}
+
+Rectilineal figures are those which are contained by straight lines, ... quadrilateral those contained by four, ..."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

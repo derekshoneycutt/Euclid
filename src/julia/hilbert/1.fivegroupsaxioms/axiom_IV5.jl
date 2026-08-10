@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomIV5
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -179,9 +180,13 @@ const PhaseFinalHold = 39f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom IV,5
+    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,5
 
 IV, 5. If the angle (h, k) is congruent to the angle (h', k') and to the angle (h'', k''), then the angle (h', k') is congruent to the angle (h'', k''); that is to say, if ∠(h, k) ≡ ∠(h', k') and ∠(h, k) ≡ ∠(h'', k''), then ∠(h', k') ≡ ∠(h'', k'')."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,5}
+
+\textbf{IV, 5.} If the angle $(h, k)$ is congruent to the angle $(h', k')$ and to the angle $(h'', k'')$, then the angle $(h', k')$ is congruent to the angle $(h'', k'')$; that is to say, if $\angle(h, k) \equiv \angle(h', k')$ and $\angle(h, k) \equiv \angle(h'', k'')$, then $\angle(h', k') \equiv \angle(h'', k'')$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

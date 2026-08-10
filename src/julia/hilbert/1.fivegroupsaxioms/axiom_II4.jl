@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomII4
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -79,9 +80,13 @@ const PhaseEndLift = 22f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom II,4
+    fallback = """David Hilbert - Foundations of Geometry - Axiom II,4
 
 II, 4. Any four points A, B, C, D of a straight line can always be so arranged that B shall lie between A and C and also between A and D, and, furthermore, that C shall lie between A and D and also between B and D."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,4}
+
+\textbf{II, 4.} Any four points $A$, $B$, $C$, $D$ of a straight line can always be so arranged that $B$ shall lie between $A$ and $C$ and also between $A$ and $D$, and, furthermore, that $C$ shall lie between $A$ and $D$ and also between $B$ and $D$."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

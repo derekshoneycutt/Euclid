@@ -2,6 +2,7 @@ module ElementsOneDefinitionLineExtremities
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -41,9 +42,13 @@ const PhaseEndLift = 6f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Line Extremities
+    fallback = """Euclid Elements - Book I - Definition: Line Extremities
 
 The extremities of a line are points."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Line Extremities}
+
+The extremities of a line \euclidline[color=steelblue,length=3,thickness=4] are points \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=palevioletred1,size=1]."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

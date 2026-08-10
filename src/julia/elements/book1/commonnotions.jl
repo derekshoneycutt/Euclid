@@ -2,6 +2,7 @@ module ElementsOneCommonNotions
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -62,13 +63,21 @@ const PhaseHideAll = 500f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Common Notions
+    fallback = """Euclid Elements - Book I - Common Notions
 
-Things which are equal to the same thing are also equal to one another.
-If equals be added to equals, the wholes are equal.
-If equals be subtracted from equals, the remainders are equal.
-Things which coincide with one another are equal to one another.
-The whole is greater than the part."""
+1. Things which are equal to the same thing are also equal to one another.
+2. If equals be added to equals, the wholes are equal.
+3. If equals be subtracted from equals, the remainders are equal.
+4. Things which coincide with one another are equal to one another.
+5. The whole is greater than the part."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Common Notions}
+
+\textbf{1.} Things which are equal to the same thing are also equal to one another.\\
+\textbf{2.} If equals be added to equals, the wholes are equal.\\
+\textbf{3.} If equals be subtracted from equals, the remainders are equal.\\
+\textbf{4.} Things which coincide with one another are equal to one another.\\
+\textbf{5.} The whole is greater than the part."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

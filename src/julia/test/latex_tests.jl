@@ -160,6 +160,15 @@ end
         "\\Diamond \\clubsuit \\flat \\checkmark \\oint \\iint")
     @test notation_plain == "′ ℏ ℓ ℜ ℑ ℘ ∠ △ □ ◇ ♣ ♭ ✓ ∮ ∬"
 
+    command_space_plain = EuclidLatex.latex_to_plain_text("\\angle ABC")
+    @test command_space_plain == "∠ABC"
+
+    command_escaped_space_plain = EuclidLatex.latex_to_plain_text("\\angle\\ ABC")
+    @test command_escaped_space_plain == "∠ ABC"
+
+    command_nonbreaking_space_plain = EuclidLatex.latex_to_plain_text("\\angle~ABC")
+    @test command_nonbreaking_space_plain == "∠\u00a0ABC"
+
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
     @test length(program) == 2
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN

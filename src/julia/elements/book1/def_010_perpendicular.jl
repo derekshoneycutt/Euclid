@@ -2,6 +2,7 @@ module ElementsOneDefinitionPerpendicular
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -65,9 +66,13 @@ const PhaseHideAll = 7f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Right Angles and Perpendicular
+    fallback = """Euclid Elements - Book I - Definition: Right Angles and Perpendicular
 
 When a straight line set up on a straight line makes the adjacent angles equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Right Angles and Perpendicular}
+
+When a straight line set up on a straight line makes the adjacent angles equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

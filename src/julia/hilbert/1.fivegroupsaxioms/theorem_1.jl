@@ -3,6 +3,7 @@ module HilbertChapterOneTheorem1
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidGeometry
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -71,9 +72,13 @@ const PhaseFinalHold = 12f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 1
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 1
 
 Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
+
+Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function set_plane_alpha(state_ptr::Ptr{Cvoid}, hostId, alpha01)

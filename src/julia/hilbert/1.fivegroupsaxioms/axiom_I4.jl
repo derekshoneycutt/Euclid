@@ -2,6 +2,7 @@ module HilbertChapterOneAxiomI4
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -75,9 +76,13 @@ const PhaseEndLift = 14f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Axiom I,4
+    fallback = """David Hilbert - Foundations of Geometry - Axiom I,4
 
 I, 4. Any three points A, B, C of a plane α, which do not lie in the same straight line, completely determine that plane."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,4}
+
+\textbf{I, 4.} Any three points $A$, $B$, $C$ of a plane $\alpha$, which do not lie in the same straight line, completely determine that plane."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

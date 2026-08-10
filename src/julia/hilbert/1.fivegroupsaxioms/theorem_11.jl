@@ -2,6 +2,7 @@ module HilbertChapterOneTheorem11
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 export get_view_text, initialize, clean, loop
 
@@ -235,9 +236,13 @@ const PhaseFinalHold = 47f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """David Hilbert - Foundations of Geometry - Theorem 11 (Second theorem of congruence for triangles)
+    fallback = """David Hilbert - Foundations of Geometry - Theorem 11 (Second theorem of congruence for triangles)
 
 If in any two triangles one side and the two adjacent angles are respectively congruent, the triangles are congruent."""
+    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 11 (Second theorem of congruence for triangles)}
+
+If in any two triangles one side and the two adjacent angles are respectively congruent, the triangles are congruent."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

@@ -3,6 +3,7 @@ module ElementsOnePostulatesNonParallelLines
 using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -98,11 +99,17 @@ const PhaseHideAll = 500f0
 
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Postulate: Non-Parallel Lines
+    fallback = """Euclid Elements - Book I - Postulate: Non-Parallel Lines
 
 Let the following be postulated:
 
 That, if a straight line falling on two straight lines make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Postulate}: \textit{Non-Parallel Lines}
+
+\textit{Let the following be postulated:}
+
+That, if a straight line falling on two straight lines make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

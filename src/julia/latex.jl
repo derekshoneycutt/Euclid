@@ -28,7 +28,7 @@ export PARSER_GRAMMAR_VERSION,
     latex_to_plain_text,
     compiled_program_for
 
-const PARSER_GRAMMAR_VERSION = Int32(15)
+const PARSER_GRAMMAR_VERSION = Int32(16)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -138,6 +138,7 @@ const LARGE_OPERATOR_COMMAND_MAP = Dict(
     "\\lim" => ("lim", LARGE_OP_KIND_LIM))
 
 const UNICODE_COMMAND_MAP = Dict(
+    "\\ " => " ",
     "\\alpha" => "α",
     "\\beta" => "β",
     "\\gamma" => "γ",
@@ -365,6 +366,8 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\{" => "{",
     "\\}" => "}")
 
+const NONBREAKING_SPACE = "\u00a0"
+
 const MATHBB_UPPERCASE_MAP = Dict(
     "A" => "𝔸",
     "B" => "𝔹",
@@ -394,6 +397,11 @@ const MATHBB_UPPERCASE_MAP = Dict(
     "Z" => "ℤ")
 
 const MATHBB_GLYPH_TO_SOURCE_MAP = Dict(value => key for (key, value) in MATHBB_UPPERCASE_MAP)
+const COMMANDS_IGNORE_TRAILING_SPACE = Set([
+    "\\angle",
+    "\\measuredangle",
+    "\\sphericalangle",
+])
 
 struct LatexToken
     kind::Symbol
@@ -681,6 +689,39 @@ end
 """Read one plain-text token until the next control/syntax character."""
 is_text_token_stop_char(c::Char) = c == '\\' || c == '{' || c == '}' || c == '^' || c == '_' || c == '[' || c == ']' || c == '&'
 
+"""Return true when one char is ASCII horizontal/vertical whitespace."""
+is_ascii_space_char(c::Char) = c == ' ' || c == '\t' || c == '\n' || c == '\r'
+
+"""Normalize plain-text token spacing markers to Unicode output text."""
+normalize_text_whitespace(text::AbstractString) = replace(String(text), "~" => NONBREAKING_SPACE)
+
+"""Consume one command-delimiter whitespace run from the next text token."""
+function consume_command_delimiter_whitespace!(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    idx[] > length(tokens) && return nothing
+    token = tokens[idx[]]
+    if token.kind != :text || isempty(token.text)
+        return nothing
+    end
+
+    start_i = firstindex(token.text)
+    next_i = start_i
+    while next_i <= lastindex(token.text) && is_ascii_space_char(token.text[next_i])
+        next_i = nextind(token.text, next_i)
+    end
+
+    if next_i == start_i || next_i > lastindex(token.text)
+        return nothing
+    end
+
+    next_char = token.text[next_i]
+    if !isletter(next_char) && !isdigit(next_char)
+        return nothing
+    end
+
+    tokens[idx[]] = LatexToken(:text, token.text[next_i:end])
+    return nothing
+end
+
 """Read one plain-text token until the next control/syntax character."""
 function read_text_token(source::String, start_i::Int)
     j = start_i
@@ -735,7 +776,7 @@ function parse_atom(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     idx[] += 1
 
     if token.kind == :text
-        return [latex_atom_run(token.text, :math)]
+        return [latex_atom_run(normalize_text_whitespace(token.text), :math)]
     end
 
     if token.kind != :command
@@ -750,6 +791,10 @@ function parse_command_atom(
     command::String,
     tokens::Vector{LatexToken},
     idx::Base.RefValue{Int})
+
+    if command in COMMANDS_IGNORE_TRAILING_SPACE
+        consume_command_delimiter_whitespace!(tokens, idx)
+    end
 
     text_runs = parse_special_text_command(command, tokens, idx)
     if !isnothing(text_runs)
@@ -2162,7 +2207,10 @@ function consume_document_text!(
         parser.index = nextind(parser.source, parser.index)
     end
     push_document_text!(
-        runs, parser.source[start:prevind(parser.source, parser.index)], font_flags, color)
+        runs,
+        normalize_text_whitespace(parser.source[start:prevind(parser.source, parser.index)]),
+        font_flags,
+        color)
     return nothing
 end
 

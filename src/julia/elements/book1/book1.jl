@@ -50,19 +50,27 @@ include("./prop_01.jl")
 include("./prop_02.jl")
 
 function get_view_text_BookI(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I"
+    latex = raw"\textbf{Euclid Elements - Book I}"
+    fallback = "Euclid Elements - Book I"
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_defs(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Definitions"
+    latex = raw"\textbf{Euclid Elements - Book I - Definitions}"
+    fallback = "Euclid Elements - Book I - Definitions"
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_posts(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Postulates"
+    latex = raw"\textbf{Euclid Elements - Book I - Postulates}"
+    fallback = "Euclid Elements - Book I - Postulates"
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function get_view_text_BookI_props(state_ptr::Ptr{Cvoid})
-    "Euclid Elements - Book I - Propositions"
+    latex = raw"\textbf{Euclid Elements - Book I - Propositions}"
+    fallback = "Euclid Elements - Book I - Propositions"
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)

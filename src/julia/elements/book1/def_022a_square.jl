@@ -2,6 +2,7 @@ module ElementsOneDefinitionSquare
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -100,9 +101,13 @@ const PhaseCompassRise = 14f0
 const PhaseHideAll = 15f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Square
+    fallback = """Euclid Elements - Book I - Definition: Square
 
 Of quadrilateral figures, a square is that which is both equilateral and right-angled; ..."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Square}
+
+Of quadrilateral figures, a square is that which is both equilateral and right-angled; ..."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

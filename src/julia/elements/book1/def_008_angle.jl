@@ -2,6 +2,7 @@ module ElementsOneDefinitionPlaneAngle
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
+using ..EuclidLatex
 
 using LinearAlgebra
 
@@ -68,11 +69,17 @@ const PhaseCompassLift = 6f0
 const PhaseHideAll = 7f0
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    """Euclid Elements - Book I - Definition: Plane Angle
+    fallback = """Euclid Elements - Book I - Definition: Plane Angle
 
 A plane angle is the inclination to one another of two lines in a plane which meet one another and do not lie in a straight line.
 
 And when the lines containing the angle are straight, the angle is called rectilinear."""
+    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Angle}
+
+A plane angle is the inclination to one another of two lines in a plane which meet one another and do not lie in a straight line.
+
+And when the lines containing the angle are straight, the angle is called rectilinear."""
+    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 
