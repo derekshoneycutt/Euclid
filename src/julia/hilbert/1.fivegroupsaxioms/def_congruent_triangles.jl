@@ -253,8 +253,8 @@ Two triangles ABC and A'B'C' are said to be congruent to one another when all of
 
 Two triangles $ABC$ and $A'B'C'$ are said to be congruent to one another when all of the following congruences are fulfilled:
 
-    $AB \equiv A'B'$,    $AC \equiv A'C'$,    $BC \equiv B'C'$,
-    $\angle A \equiv \angle A'$,    $\angle B \equiv \angleB'$,    $\angle C \equiv \angle C'."""
+    $AB \equiv A'B'$,    $AC \equiv A'C'$,    $BC \equiv B'C'$,\\
+    $\angle A \equiv \angle A'$,    $\angle B \equiv \angle B'$,    $\angle C \equiv \angle C'$."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

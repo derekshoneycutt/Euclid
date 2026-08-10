@@ -289,13 +289,13 @@ If, for the two triangles $ABC$ and $A'B'C'$, the congruences
 
 hold, then the two triangles are congruent to each other.
 
-Proof: From axiom IV, 6, it follows that the two congruences
+Proof: From \textit{axiom IV, 6}, it follows that the two congruences
 
     $\angle B \equiv \angle B'$ and $\angle C \equiv \angle C'$
 
-are fulfilled, and it is, therefore, sufficient to show that the two sides $BC$ and $B'C'$ are congruent. We will assume the contrary to be true, namely, that $BC$ and $B'C'$ are not congruent, and show that this leads to a contradiction. We take upon $B'C'$ a point $D'$ such that $BC \equiv B'D'$. The two triangles $ABC$ and $A'B'D'$ have, then, two sides and the included angle of the one agreeing, respectively, to two sides and the included angle of the other. It follows from axiom IV, 6 that the two angles $BAC$ and $B'A'D'$ are also congruent to each other. Consequently, by aid of axiom IV, 5, the two angles $B'A'C'$ and $B'A'D'$ must be congruent.
+are fulfilled, and it is, therefore, sufficient to show that the two sides $BC$ and $B'C'$ are congruent. We will assume the contrary to be true, namely, that $BC$ and $B'C'$ are not congruent, and show that this leads to a contradiction. We take upon $B'C'$ a point $D'$ such that $BC \equiv B'D'$. The two triangles $ABC$ and $A'B'D'$ have, then, two sides and the included angle of the one agreeing, respectively, to two sides and the included angle of the other. It follows from \textit{axiom IV, 6} that the two angles $BAC$ and $B'A'D'$ are also congruent to each other. Consequently, by aid of \textit{axiom IV, 5}, the two angles $B'A'C'$ and $B'A'D'$ must be congruent.
 
-This, however, is impossible, since, by axiom IV, 4, an angle can be laid off in one and only one way on a given side of a given half-ray of a plane. From this contradiction the theorem follows."""
+This, however, is impossible, since, by \textit{axiom IV, 4}, an angle can be laid off in one and only one way on a given side of a given half-ray of a plane. From this contradiction the theorem follows."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
