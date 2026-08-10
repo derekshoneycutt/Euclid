@@ -68,17 +68,24 @@ navigation_order = 40
 owner = "guide_authors"
 
 [[guides]]
+title = "Scratchpad Architecture"
+path = "Guides/ScratchpadArchitecture.md"
+summary = "Interactive Julia terminal, evaluation pipeline, session model, and frame hook lifecycle."
+navigation_order = 50
+owner = "guide_authors"
+
+[[guides]]
 title = "LaTeX Support"
 path = "Guides/LaTeXSupport.md"
 summary = "Supported document and math syntax, output, and fallback behavior."
-navigation_order = 50
+navigation_order = 60
 owner = "guide_authors"
 
 [[guides]]
 title = "Wiki Composition"
 path = "Guides/WikiComposition.md"
 summary = "Wiki namespace ownership, producer outputs, and Content catalogue extension contract."
-navigation_order = 60
+navigation_order = 70
 owner = "guide_authors"
 
 [[guide_relations]]
