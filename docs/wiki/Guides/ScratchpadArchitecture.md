@@ -65,24 +65,24 @@ animation changes.
 
 | Concern | Primary implementation |
 | --- | --- |
-| Shared slot, mode, service, and UI state types | [`src/core/core.odin`](../../../src/core/core.odin) |
-| Copied requests and callback calls | [`scratchpad.odin`](../../../src/bridge/scratchpad.odin) |
-| Request dispatch and completion FIFO | [`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin) |
-| Callback resolution and generation validation | [`bootstrap.odin`](../../../src/bridge/bootstrap.odin) |
-| Selection/reload lifecycle integration | [`src/bridge/animations.odin`](../../../src/bridge/animations.odin) |
-| Terminal editor and reply application | [`scratchpad_panel.odin`](../../../src/view/ui/scratchpad_panel.odin) |
-| Text-panel routing | [`src/view/ui/text_panel.odin`](../../../src/view/ui/text_panel.odin) |
-| Display-frame reply publication | [`src/view/view.odin`](../../../src/view/view.odin) |
-| Julia registration and host-callable forwarding functions | [`src/julia/script.jl`](../../../src/julia/script.jl) |
-| Scratchpad Julia module composition | [`src/julia/scratchpad.jl`](../../../src/julia/scratchpad.jl) |
-| Session model, limits, and policy | [`model_state.jl`](../../../src/julia/scratchpad/model_state.jl) |
-| Parsing and REPL completion | [`parsing_completion.jl`](../../../src/julia/scratchpad/parsing_completion.jl) |
-| History, hooks, queue, and export | [`hooks_history.jl`](../../../src/julia/scratchpad/hooks_history.jl) |
-| Evaluation and animation callbacks | [`runtime_loop.jl`](../../../src/julia/scratchpad/runtime_loop.jl) |
-| Help, formatting, errors, and Dynview | [`presentation_help.jl`](../../../src/julia/scratchpad/presentation_help.jl) |
-| REPL-oriented Euclid drawing jobs | [`src/julia/euclidrepl.jl`](../../../src/julia/euclidrepl.jl) |
-| Julia behavioral tests | [`src/julia/test/scratchpad_tests.jl`](../../../src/julia/test/scratchpad_tests.jl) |
-| Odin editor/protocol tests | [`tests/view/ui_tests.odin`](../../../tests/view/ui_tests.odin) |
+| Shared slot, mode, service, and UI state types | `src/core/core.odin` |
+| Copied requests and callback calls | `src/bridge/scratchpad.odin` |
+| Request dispatch and completion FIFO | `src/bridge/runtime_service.odin` |
+| Callback resolution and generation validation | `src/bridge/bootstrap.odin` |
+| Selection/reload lifecycle integration | `src/bridge/animations.odin` |
+| Terminal editor and reply application | `src/view/ui/scratchpad_panel.odin` |
+| Text-panel routing | `src/view/ui/text_panel.odin` |
+| Display-frame reply publication | `src/view/view.odin` |
+| Julia registration and host-callable forwarding functions | `src/julia/script.jl` |
+| Scratchpad Julia module composition | `src/julia/scratchpad.jl` |
+| Session model, limits, and policy | `src/julia/scratchpad/model_state.jl` |
+| Parsing and REPL completion | `src/julia/scratchpad/parsing_completion.jl` |
+| History, hooks, queue, and export | `src/julia/scratchpad/hooks_history.jl` |
+| Evaluation and animation callbacks | `src/julia/scratchpad/runtime_loop.jl` |
+| Help, formatting, errors, and Dynview | `src/julia/scratchpad/presentation_help.jl` |
+| REPL-oriented Euclid drawing jobs | `src/julia/euclidrepl.jl` |
+| Julia behavioral tests | `src/julia/test/scratchpad_tests.jl` |
+| Odin editor/protocol tests | `tests/view/ui_tests.odin` |
 
 ## Execution And Ownership Model
 
