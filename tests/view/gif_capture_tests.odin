@@ -4,6 +4,7 @@ import "core:strings"
 import "core:testing"
 
 import app_core "../../src/core"
+import app_bridge "../../src/bridge"
 import app_view "../../src/view/core"
 
 @(test)
@@ -82,6 +83,30 @@ gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
     session := app_core.Gif_Capture_Session{}
     app_view.gif_capture_abort_session(&session)
     testing.expect(t, !session.active)
+}
+
+@(test)
+scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+
+    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.julia_interface = new(app_core.Euclid_Julia_Interface)
+    state^.julia_interface^.current_animation = new(app_core.Euclid_Julia_Animation_Interface)
+
+    batch: app_bridge.Scene_Command_Batch
+    app_bridge.begin_scene_command_batch(state, &batch)
+
+    ids: [10]i32
+    for i in 0..<len(ids) {
+        ids[i] = i32(i)
+    }
+
+    ok := app_bridge.capture_hide_point_batch_command(state, &ids[0], i32(len(ids)))
+    testing.expect(t, ok)
+    testing.expect_value(t, batch.command_count, 2)
+
+    app_bridge.end_scene_command_batch(state)
 }
 
 @(test)

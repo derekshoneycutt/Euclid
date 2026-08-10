@@ -132,26 +132,43 @@ capture_point_command :: proc "contextless" (
     return captured
 }
 
-//   Copy a bounded point-index list into one hide command.
-// Invalid counts mark the complete batch overflowed so commit remains transactional.
+//   Copy a bounded point-index list into hide commands.
+// Large batches are split into multiple commands so reset and tear-down paths do
+// not invalidate the whole scene batch when they hide more points than the per-command
+// point-index array can hold.
 capture_hide_point_batch_command :: proc "contextless" (
     state: ^core.Euclid_General_State, indices: [^]i32, count: i32) -> bool {
 
     if state^.scene_command_batch_target == nil {
         return false
     }
-    command, _ := append_scene_command(state, .Hide_Point_Batch)
-    if command == nil {
-        return true
-    }
-    if count < 0 || int(count) > len(command^.point_indices) {
+    if count < 0 {
         batch := state^.scene_command_batch_target
         batch^.overflowed = true
         return true
     }
-    command^.point_count = int(count)
-    for index in 0..<int(count) {
-        command^.point_indices[index] = indices[index]
+
+    remaining := int(count)
+    offset := 0
+    for remaining > 0 {
+        command, _ := append_scene_command(state, .Hide_Point_Batch)
+        if command == nil {
+            batch := state^.scene_command_batch_target
+            batch^.overflowed = true
+            return true
+        }
+
+        chunk_size := remaining
+        if chunk_size > len(command^.point_indices) {
+            chunk_size = len(command^.point_indices)
+        }
+        command^.point_count = chunk_size
+        for point_index in 0..<chunk_size {
+            command^.point_indices[point_index] = indices[offset + point_index]
+        }
+
+        remaining -= chunk_size
+        offset += chunk_size
     }
     return true
 }
