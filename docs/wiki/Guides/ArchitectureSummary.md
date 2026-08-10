@@ -82,6 +82,9 @@ Scratchpad is an interactive runtime surface, not a normal deterministic
 animation. It is mounted in the animation tree as `"Scratchpad"`, but behaves
 like an embedded REPL control plane.
 
+See [ScratchpadArchitecture.md](ScratchpadArchitecture.md) for the detailed
+Odin/Julia ownership, communication, evaluation, rendering, and lifecycle model.
+
 ### Core Architecture
 
 - Odin owns UI input capture, text panel interaction, and buffer/cursor state.
