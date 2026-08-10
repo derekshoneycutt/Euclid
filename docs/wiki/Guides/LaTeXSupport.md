@@ -18,6 +18,7 @@ breaks, and Euclid inline shapes.
 1. [Fallback And Failure Behavior](#fallback-and-failure-behavior)
 1. [Practical Authoring Tips](#practical-authoring-tips)
 1. [Known Limitations](#known-limitations)
+1. [Appendix: Module Architecture](#appendix-module-architecture)
 1. [Summary](#summary)
 
 ## Recommended Usage
@@ -165,6 +166,8 @@ Math mode supports these major groups:
     row separators.
 - Matrix wrapper environments composed through stretch delimiters: `bmatrix`,
     `pmatrix`, and `vmatrix`.
+- Spacing markers: `\;` for one normal space, `\ ` for one escaped literal
+    space, and `~` for a nonbreaking space.
 
 ## Character Support
 
@@ -182,6 +185,18 @@ a fixed map in `src/julia/latex.jl`: `UNICODE_COMMAND_MAP` and
 - Raw Unicode math symbols such as `α`, `≤`, and `∑` render best effort. Command
     forms are more reliable for parser and style behavior.
 - Arbitrary TeX-special characters and unlisted environments are unsupported.
+
+For angle-notation prefix commands, one delimiter whitespace run after the
+command is ignored when it is followed by an inline alphanumeric token.
+Examples:
+
+- `\angle ABC` renders as `∠ABC`.
+- `\angle\ ABC` preserves a literal space and renders as `∠ ABC`.
+- `\angle~ABC` renders with a nonbreaking space as `∠\u00a0ABC`.
+
+This delimiter-whitespace behavior is intentionally limited to
+`\angle`, `\measuredangle`, and `\sphericalangle`. That may change in the future with more
+active development on this engine.
 
 Practical rule: if a symbol matters, prefer its LaTeX command form over raw character entry.
 
@@ -236,7 +251,8 @@ Practical rule: if a symbol matters, prefer its LaTeX command form over raw char
     `\Box`, `\square`, `\Diamond`, `\lozenge`, and `\surd`.
 - Suits, music, and marks: `\clubsuit`, `\diamondsuit`, `\heartsuit`,
     `\spadesuit`, `\flat`, `\natural`, `\sharp`, `\checkmark`, and `\degree`.
-- Spacing: `\;` maps to one normal space.
+- Spacing: `\;` maps to one normal space, `\ ` maps to one escaped literal
+    space, and `~` maps to one nonbreaking space (`\u00a0`).
 - Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
     `\Vert`, `\backslash`, `\{`, `\}`.
 
@@ -344,6 +360,80 @@ structured stream the only source of user-visible meaning.
     styling.
 - Parser recovery prioritizes rendering continuity rather than TeX-grade error
     diagnostics.
+
+## Appendix: Module Architecture
+
+The LaTeX Julia implementation now uses one public facade module,
+`src/julia/latex.jl`, which includes responsibility-focused files under
+`src/julia/latex/`.
+
+### File Layout And Responsibilities
+
+| File | Primary Role | Key Public/Top-Level Surface |
+| --- | --- | --- |
+| `src/julia/latex.jl` | Facade module and stable API surface | `module EuclidLatex`, exports, include order |
+| `src/julia/latex/core.jl` | Core constants, maps, and data types | `UNICODE_COMMAND_MAP`, `LatexToken`, `LatexRun`, `MathPayloadOp` |
+| `src/julia/latex/cache.jl` | Parse/compile cache lifecycle | `clear_cache!`, `prune_cache!`, invalidate APIs |
+| `src/julia/latex/lexer_parser.jl` | Math lexer + parser + normalization | `tokenize_latex`, `parse_latex`, `normalize_runs` |
+| `src/julia/latex/compiler.jl` | AST-to-payload compilation + canonical serialization | `compile_emit_program`, `latex_to_plain_text`, payload builders |
+| `src/julia/latex/document_mode.jl` | Document-mode parsing and run replay orchestration | `classify_latex_mode`, `parse_latex_document`, `emit_latex_view_text!` |
+| `src/julia/latex/dynview_math.jl` | Recursive dynview math block bridge encoding/replay | `replay_emit_math_block!`, `emit_latex_dynview!`, bridge payload encoding |
+
+### Include And Dependency Direction
+
+The include order in `src/julia/latex.jl` is designed so later files can rely
+on earlier symbols without circular imports.
+
+```mermaid
+flowchart TD
+    Facade[src/julia/latex.jl]
+    Core[src/julia/latex/core.jl]
+    Cache[src/julia/latex/cache.jl]
+    Lex[src/julia/latex/lexer_parser.jl]
+    Comp[src/julia/latex/compiler.jl]
+    Doc[src/julia/latex/document_mode.jl]
+    Dyn[src/julia/latex/dynview_math.jl]
+
+    Facade --> Core --> Cache --> Lex --> Comp --> Doc --> Dyn
+    Comp --> Lex
+    Doc --> Comp
+    Dyn --> Comp
+```
+
+Practical rule: dependencies should generally flow from parsing toward
+compilation and replay, with the facade preserving one stable import path.
+
+### End-To-End Runtime Flow
+
+```mermaid
+flowchart LR
+    A[Source LaTeX text]
+    B{Mode classification}
+    C[Math lexer/parser]
+    D[Normalize runs]
+    E[Compile recursive payload]
+    F[Bridge encode + dynview replay]
+    G[Rendered dynview block]
+    H[Document parser]
+    I[Document runs + embedded math replay]
+    J[Fallback plain text]
+
+    A --> B
+    B -->|Math| C --> D --> E --> F --> G
+    B -->|Document| H --> I --> G
+    E --> J
+    I --> J
+```
+
+### Ownership And Failure Boundaries
+
+| Concern | Owning Unit | Failure Behavior |
+| --- | --- | --- |
+| Tokenization + math parse correctness | `lexer_parser.jl` | Produces recoverable fallback atoms where possible |
+| Document command parsing and validation | `document_mode.jl` | Fails closed to fallback on malformed document syntax |
+| Program caching and invalidation | `cache.jl` | Bounded cache with explicit clear/invalidate APIs |
+| Bridge payload encoding/replay | `dynview_math.jl` | Stops emission on bridge status failure |
+| User-visible copy fallback contract | `emit_latex_view_text!` | Always returns supplied fallback string |
 
 ## Summary
 
