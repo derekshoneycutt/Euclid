@@ -59,7 +59,7 @@ To produce a finite straight line continuously in a straight line."""
 
 \textit{Let the following be postulated:}
 
-To produce a finite straight line continuously in a straight line."""
+To produce a finite straight line \euclidline[color=steelblue,length=3,thickness=4] continuously in a straight line."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -45,7 +45,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A boundary is that which is an extremity of anything."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Boundary}
 
-A boundary is that which is an extremity of anything."""
+A boundary is that which is an extremity \euclidline[color=steelblue,length=3,thickness=4] of anything."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

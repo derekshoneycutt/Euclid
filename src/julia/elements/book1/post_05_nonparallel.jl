@@ -108,7 +108,7 @@ That, if a straight line falling on two straight lines make the interior angles 
 
 \textit{Let the following be postulated:}
 
-That, if a straight line falling on two straight lines make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
+That, if a straight line \euclidline[color=grey60,length=3,thickness=4] falling on two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

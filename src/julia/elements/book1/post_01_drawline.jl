@@ -52,7 +52,7 @@ To draw a straight line from any point to any point."""
 
 \textit{Let the following be postulated:}
 
-To draw a straight line from any point to any point."""
+To draw a straight line \euclidline[color=steelblue,length=3,thickness=4] from any point \euclidpoint[color=palevioletred1,size=1] to any point \euclidpoint[color=khaki3,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

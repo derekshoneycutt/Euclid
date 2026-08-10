@@ -57,7 +57,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 The extremities of a surface are lines."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Surface Extremities}
 
-The extremities of a surface are lines."""
+The extremities of a surface are lines \euclidline[color=steelblue,length=3,thickness=4]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

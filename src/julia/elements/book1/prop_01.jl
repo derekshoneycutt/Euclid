@@ -105,19 +105,19 @@ Being what it was required to do."""
 
 \textit{On a given finite straight line to construct an equilateral triangle.}
 
-Let AB be the given finite straight line.
+Let $AB$ \euclidline[color=grey60,length=3,thickness=4] be the given finite straight line.
 
-Thus it is required to construct an equilateral triangle on the straing line AB.
-With center A and distance AB let the circle BCD be described;
-again, with center B and distance BA let the circle ACE be described;
-and from the point C, in which the circles cut one another, to the points A, B let the straight lines CA, CB be joined.
+Thus it is required to construct an equilateral triangle on the straing line $AB$.\\
+With center $A$ and distance $AB$ let the circle $BCD$ \euclidcircle[color=steelblue,size=1,thickness=2] be described;\\
+again, with center $B$ and distance $BA$ let the circle $ACE$ \euclidcircle[color=palevioletred1,size=1,thickness=2] be described;\\
+and from the point $C$, in which the circles cut one another, to the points $A$, $B$ let the straight lines $CA$ \euclidline[color=khaki3,length=3,thickness=4], $CB$ \euclidline[color=palevioletred1,length=3,thickness=4] be joined.
 
-Now, since the point A is the center of the circle CDB, AC is equal to AB.
-Again, since the point B is the center of the circle CAE, BC is equal to BA.
-But CA was also proved equal to AB; therefore each of the straight lines CA, CB is equal to AB.
-And things which are equal to the same thing are also equal to one another; therefore CA is also equal to CB.
-Therefore the three straight lines CA, AB, BC are equal to one another.
-Therefore the triangle ABC is equilateral; and it has been constructed on the given finite straight line AB.
+Now, since the point $A$ is the center of the circle $CDB$ \euclidcircle[color=steelblue,size=1,thickness=2] , $AC$ \euclidline[color=khaki3,length=3,thickness=4] is equal to $AB$ \euclidline[color=grey60,length=3,thickness=4].\\
+Again, since the point B is the center of the circle $CAE$ \euclidcircle[color=palevioletred1,size=1,thickness=2] , $BC$ \euclidline[color=palevioletred1,length=3,thickness=4] is equal to $BA$ \euclidline[color=grey60,length=3,thickness=4].\\
+But $CA$ \euclidline[color=khaki3,length=3,thickness=4] was also proved equal to $AB$ \euclidline[color=grey60,length=3,thickness=4]; therefore each of the straight lines $CA$ \euclidline[color=khaki3,length=3,thickness=4], $CB$ \euclidline[color=palevioletred1,length=3,thickness=4] is equal to $AB$ \euclidline[color=grey60,length=3,thickness=4].\\
+And things which are equal to the same thing are also equal to one another; therefore $CA$ \euclidline[color=khaki3,length=3,thickness=4] is also equal to $CB$ \euclidline[color=palevioletred1,length=3,thickness=4].\\
+Therefore the three straight lines $CA$ \euclidline[color=khaki3,length=3,thickness=4], $AB$ \euclidline[color=grey60,length=3,thickness=4], $BC$ \euclidline[color=palevioletred1,length=3,thickness=4] are equal to one another.\\
+Therefore the triangle $ABC$ is equilateral; and it has been constructed on the given finite straight line $AB$ \euclidline[color=grey60,length=3,thickness=4].
 
 Being what it was required to do."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)

@@ -51,7 +51,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A circle is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another; and the point is called the center of the circle."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Circle and Center}
 
-A circle is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another; and the point is called the center of the circle."""
+A circle \euclidcircle[color=steelblue,size=1,thickness=2] is a plane figure contained by one line such that all the straight lines falling upon it from one point \euclidpoint[color=palevioletred1,size=1] among those lying within the figure equal one another; and the point \euclidpoint[color=palevioletred1,size=1] is called the center of the circle."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
