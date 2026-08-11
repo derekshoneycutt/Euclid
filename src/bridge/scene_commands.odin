@@ -1,6 +1,7 @@
 package bridge
 
 import "../core"
+import "../trace"
 
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
 // The Julia owner thread writes one bounded batch while the display thread reads an
@@ -354,41 +355,182 @@ commit_scene_command_batch :: proc(
         command := &batch^.commands[command_index]
         switch command^.kind {
         case .Set_Point_Position:
+            previous_position := state^.point_system^.points[command^.point_index].position
             set_point_position_with_floor_crossing_dust(
                 state, command^.point_index, command^.position)
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.position_changed",
+                command^.point_index,
+                previous_position,
+                command^.position,
+                nil,
+                nil,
+                nil,
+                nil)
         case .Set_Point_Color:
             set_point_color(state, i32(command^.point_index), command^.color)
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.style_changed",
+                command^.point_index,
+                nil,
+                nil,
+                nil,
+                nil,
+                nil,
+                command^.color)
         case .Set_Point_Brush:
             set_point_brush(state, i32(command^.point_index), command^.scalar)
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.style_changed",
+                command^.point_index,
+                nil,
+                nil,
+                nil,
+                command^.scalar,
+                nil,
+                nil)
         case .Set_Point_Offset:
             _ = set_point_offset(state, i32(command^.point_index), command^.scalar)
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.style_changed",
+                command^.point_index,
+                nil,
+                nil,
+                nil,
+                nil,
+                command^.scalar,
+                nil)
         case .Show_Point:
             show_point(state, i32(command^.point_index))
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.visibility_changed",
+                command^.point_index,
+                nil,
+                nil,
+                true,
+                nil,
+                nil,
+                nil)
         case .Hide_Point:
             hide_point(state, i32(command^.point_index))
+            _ = trace.record_point_event(
+                &state^.trace_state,
+                "point.visibility_changed",
+                command^.point_index,
+                nil,
+                nil,
+                false,
+                nil,
+                nil,
+                nil)
         case .Hide_Point_Batch:
             hide_point_batch(
                 state, &command^.point_indices[0], i32(command^.point_count))
         case .Lock_Pen_Joint1:
             lock_pen_joint1(state, command^.position)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "pen.joint_changed",
+                "pen",
+                "joint1",
+                command^.position,
+                nil,
+                nil)
         case .Move_Pen_Joint2:
             move_pen_joint2(state, command^.position)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "pen.joint_changed",
+                "pen",
+                "joint2",
+                command^.position,
+                nil,
+                nil)
         case .Set_Pen_Active:
             set_pen_active(state, i32(command^.integer), command^.color)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "pen.active_changed",
+                "pen",
+                "",
+                nil,
+                nil,
+                command^.integer)
         case .Show_Pen:
             show_pen(state)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "pen.visibility_changed",
+                "pen",
+                "",
+                nil,
+                true,
+                nil)
         case .Hide_Pen:
             hide_pen(state)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "pen.visibility_changed",
+                "pen",
+                "",
+                nil,
+                false,
+                nil)
         case .Hide_Compass:
             hide_compass(state)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "compass.visibility_changed",
+                "compass",
+                "",
+                nil,
+                false,
+                nil)
         case .Show_Compass:
             show_compass(state)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "compass.visibility_changed",
+                "compass",
+                "",
+                nil,
+                true,
+                nil)
         case .Set_Compass_Active:
             set_compass_active(state, i32(command^.integer), command^.color)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "compass.active_changed",
+                "compass",
+                "",
+                nil,
+                nil,
+                command^.integer)
         case .Lock_Compass_Joint1:
             lock_compass_joint1(state, command^.position, command^.flag)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "compass.joint_changed",
+                "compass",
+                "joint1",
+                command^.position,
+                nil,
+                nil)
         case .Lock_Compass_Joint2:
             lock_compass_joint2(state, command^.position, command^.flag)
+            _ = trace.record_tool_event(
+                &state^.trace_state,
+                "compass.joint_changed",
+                "compass",
+                "joint2",
+                command^.position,
+                nil,
+                nil)
         case .Set_Animation_Meta:
             set_animation_meta(state, i32(command^.integer), command^.scalar)
         case .Set_Drawing_Sound_Enabled:
@@ -397,8 +539,22 @@ commit_scene_command_batch :: proc(
             simulate_drawing_sound(state, command^.scalar)
         case .Emit_Trailing_Particle:
             emit_trailing_particle(state, command^.position, command^.color)
+            _ = trace.record_particles_emitted(
+                &state^.trace_state,
+                "trail",
+                "mid",
+                1,
+                command^.position,
+                command^.color)
         case .Emit_Flicker_Particle:
             emit_flicker_particle(state, command^.position, command^.color)
+            _ = trace.record_particles_emitted(
+                &state^.trace_state,
+                "flicker",
+                "high",
+                10,
+                command^.position,
+                command^.color)
         case .Notify_Animation_Cycle_Boundary:
             notify_animation_cycle_boundary_local(state)
         }

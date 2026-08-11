@@ -2,6 +2,7 @@ package bridge
 
 import "base:runtime"
 import "../core"
+import "../trace"
 import "core:os"
 import "core:sync/chan"
 import "core:thread"
@@ -169,19 +170,74 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         return false
     }
     slot := &service^.animation_tick_slots[slot_index]
-    committed := animation_tick_matches_current(state, service, slot) &&
-        commit_scene_command_batch(state, &slot^.scene_batch)
+    matches_current := animation_tick_matches_current(state, service, slot)
+    committed := false
+    reject_reason := ""
+    if !matches_current {
+        reject_reason = animation_tick_reject_reason(state, service, slot)
+    } else if !commit_scene_command_batch(state, &slot^.scene_batch) {
+        reject_reason = "invalid_command_batch"
+    } else {
+        committed = true
+    }
     if committed {
         service^.animation_ticks_committed += 1
         service^.animation_last_committed_sequence = slot^.sequence
         latency_ms := time.duration_seconds(time.tick_since(slot^.submitted_at)) * 1000
         service^.animation_last_latency_ms = latency_ms
         service^.animation_max_latency_ms = max(service^.animation_max_latency_ms, latency_ms)
+        _ = trace.record_animation_event_ex(
+            &state^.trace_state,
+            "animation.tick_committed",
+            service^.animation_generation,
+            slot^.sequence,
+            "",
+            "")
     } else {
         service^.animation_ticks_stale += 1
+        _ = trace.record_animation_event_ex(
+            &state^.trace_state,
+            "animation.tick_rejected",
+            service^.animation_generation,
+            slot^.sequence,
+            "",
+            reject_reason)
     }
     release_completed_animation_ticks(service)
     return committed
+}
+
+//   Classify why one completed tick was not committed against canonical state.
+//
+// Parameters:
+//   - state: Global runtime state containing current animation selection.
+//   - service: Julia runtime service with lifecycle counters.
+//   - slot: Completed animation tick slot under evaluation.
+//
+// Returns:
+//   - reason: Stable rejection reason token for trace payload.
+animation_tick_reject_reason :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service,
+    slot: ^Animation_Tick_Slot) -> string {
+
+    if slot == nil || state == nil || state^.julia_interface == nil {
+        return "invalid_command_batch"
+    }
+    if slot^.generation != service^.animation_generation {
+        return "stale_generation"
+    }
+    if slot^.sequence <= service^.animation_last_committed_sequence {
+        return "stale_sequence"
+    }
+    if state^.julia_interface^.pending_animation_reset {
+        return "reset_pending"
+    }
+    if slot^.animation != state^.julia_interface^.current_animation ||
+        slot^.animation != state^.julia_interface^.selected_animation {
+        return "selection_mismatch"
+    }
+    return "invalid_command_batch"
 }
 
 //   Match one result against current lifecycle generation and selection identity.

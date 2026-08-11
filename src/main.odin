@@ -2,6 +2,7 @@ package main
 
 import "core"
 import "files"
+import "trace"
 import "view"
 
 import "core:fmt"
@@ -19,12 +20,15 @@ main :: proc() {
 
     fmt.println("Initiating Euclid...")
 
-    view.run_window_loop(&settings)
+    trace_exit_code := view.run_window_loop(&settings)
 
     files.cleanup_packaged_assets_dir()
     free_all(context.temp_allocator)
     
     fmt.println("Euclid ended")
+    if trace_exit_code != 0 {
+        os.exit(trace_exit_code)
+    }
 }
 
 
@@ -172,6 +176,10 @@ print_command_line_help :: proc() {
     fmt.println("  -S, --no-simd            Disable SIMD projection.")
     fmt.println("  -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)")
     fmt.println("  -G, --no-gpu-dust-instancing Disable GPU dust instancing.")
+    fmt.println("  --semantic-trace         Enable semantic trace output.")
+    fmt.println("  --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.")
+    fmt.println("  --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).")
+    fmt.println("  --semantic-trace-strict  Fail the run when trace overflow or serialization fails.")
     fmt.println("  -h, --help               Show this help text.")
     fmt.println("")
     fmt.println("Short options can be combined, for example: -vasg or -VAFSG")
@@ -179,6 +187,13 @@ print_command_line_help :: proc() {
 
 //  Parse a single command line argument, updating settings accordingly.
 parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) {
+    handled_trace, valid_trace := trace.parse_semantic_trace_argument(settings, arg)
+    if handled_trace {
+        if !valid_trace {
+            fmt.println("Invalid semantic trace parameter: ", arg)
+        }
+        return
+    }
     if parse_short_flags_param(arg, settings) || parse_dust_particle_max_param(arg, settings) ||
         parse_window_flag(arg, settings) || parse_runtime_flag(arg, settings) {
         return
@@ -201,6 +216,10 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         limit_fps = true,
         use_simd_batch_projection = true,
         use_gpu_dust_instancing = true,
+        semantic_trace_enabled = false,
+        semantic_trace_strict = false,
+        semantic_trace_output = "",
+        semantic_trace_events = "",
     }
 
     for i in 1..<len(os.args) {

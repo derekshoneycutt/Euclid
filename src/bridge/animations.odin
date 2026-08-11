@@ -4,6 +4,7 @@ import "../julialib"
 import "../core"
 import "../files"
 import "../shapes"
+import "../trace"
 
 import "core:encoding/uuid"
 import "core:fmt"
@@ -204,11 +205,19 @@ update_running_animations :: proc(state: ^core.Euclid_General_State) -> bool {
             state^.julia_interface^.pending_animation_reset = false
         } else {
             if state^.julia_interface^.animation_reset_cooldown_remaining <= 0 {
+                _ = trace.record_animation_event_ex(
+                    &state^.trace_state, "animation.reset_requested",
+                    state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
+                    0, "", "")
                 if !reset_current_animation_loop(state) {
                     return false
                 }
                 state^.julia_interface^.animation_reset_cooldown_remaining = ANIMATION_RESET_MIN_INTERVAL
                 state^.julia_interface^.pending_animation_reset = false
+                _ = trace.record_animation_event_ex(
+                    &state^.trace_state, "animation.reset_committed",
+                    state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
+                    0, "", "")
             }
         }
     }
@@ -307,6 +316,13 @@ change_current_animation_loop :: proc(
     }
 
     state^.julia_interface^.current_animation = animation
+    _ = trace.record_animation_event_ex(
+        &state^.trace_state,
+        "animation.selected",
+        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
+        0,
+        animation^.name,
+        "")
     return true
 }
 
@@ -417,6 +433,27 @@ restore_current_animation_after_reload :: proc(
     return false
 }
 
+//   Record one reload lifecycle event using current runtime service state.
+//
+// Parameters:
+//   - state: Global runtime state containing trace and Julia service pointers.
+//   - event_name: Runtime lifecycle event name to emit.
+//
+// Returns:
+//   - none.
+record_runtime_reload_event :: proc(state: ^core.Euclid_General_State, event_name: string) {
+    if state == nil {
+        return
+    }
+    service := state^.julia_runtime_service
+    _ = trace.record_runtime_event_ex(
+        &state^.trace_state,
+        event_name,
+        service != nil ? service^.runtime_generation : 0,
+        service != nil ? int(service^.reload_state) : 0,
+        0)
+}
+
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
 reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> bool {
     archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
@@ -439,20 +476,30 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
     if service != nil {
         service^.reload_state = .Including
     }
+    record_runtime_reload_event(state, "runtime.reload_started")
 
     if !files.reload_packaged_assets_root() {
         fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
         mark_julia_reload_failed(service, archive_mtime)
+        record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
     }
     if !include_packaged_script(false) {
         fmt.eprintln("Julia asset reload skipped: failed to re-include script.jl")
         mark_julia_reload_failed(service, archive_mtime)
+        record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
     }
 
     stable_id, has_stable_id := active_animation_stable_id(state)
-    return stage_julia_interface_reload(state, archive_mtime, stable_id, has_stable_id)
+    reloaded := stage_julia_interface_reload(state, archive_mtime, stable_id, has_stable_id)
+    if !reloaded {
+        record_runtime_reload_event(state, "runtime.reload_rolled_back")
+        return false
+    }
+
+    record_runtime_reload_event(state, "runtime.reload_committed")
+    return true
 }
 
 //   Return stable identity for the current non-null animation generation.
@@ -552,6 +599,13 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
     }
 
     state^.cycle_boundary_generation += 1
+    _ = trace.record_animation_event_ex(
+        &state^.trace_state,
+        "animation.cycle_boundary",
+        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
+        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_tick_sequence : 0,
+        "",
+        "")
 }
 
 //   Consume a pending cycle-boundary notification exactly once.

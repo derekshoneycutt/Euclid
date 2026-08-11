@@ -8,6 +8,7 @@ package core
 import "../julialib"
 import "base:runtime"
 import "core:encoding/uuid"
+import "core:os"
 import vmem "core:mem/virtual"
 import "core:sync/chan"
 import "core:thread"
@@ -39,6 +40,13 @@ DYNVIEW__MAX_LAYOUT_ITEMS :: 8192
 DYNVIEW__MAX_MATH_PROGRAMS :: 256
 DYNVIEW__MAX_MATH_NODES :: 4096
 DYNVIEW__MAX_MATH_COMMANDS :: 4096
+
+TRACE_RECORD_CAPACITY :: 256
+TRACE_EVENT_NAME_CAPACITY :: 96
+TRACE_EVENT_PAYLOAD_CAPACITY :: 2048
+TRACE_SERIALIZE_BUFFER_CAPACITY :: 4096
+TRACE_RUN_ID_CAPACITY :: 64
+TRACE_OUTPUT_PATH_CAPACITY :: 1024
 
 FONT_VARIANT_SLOT_COUNT :: 14
 
@@ -155,6 +163,63 @@ Animation_Tick_Slot :: struct {
     submitted_at: time.Tick,
     query_snapshot: Animation_Query_Snapshot,
     scene_batch: Scene_Command_Batch,
+}
+
+Trace_Counters :: struct {
+    emitted_count: u64,
+    dropped_count: u64,
+    invalid: bool,
+}
+
+Trace_Output_Mode :: enum u8 {
+    Disabled,
+    Stdout,
+    File,
+    Sink,
+}
+
+Trace_Category :: enum u8 {
+    Trace,
+    Runtime,
+    Animation,
+    Geometry,
+    Tools,
+    Particles,
+    View,
+}
+
+Trace_Category_Set :: bit_set[Trace_Category]
+
+Trace_Event_Record :: struct {
+    sequence: u64,
+    category: Trace_Category,
+    event_len: int,
+    event: [TRACE_EVENT_NAME_CAPACITY]u8,
+    payload_len: int,
+    payload: [TRACE_EVENT_PAYLOAD_CAPACITY]u8,
+}
+
+Trace_State :: struct {
+    enabled: bool,
+    strict: bool,
+    invalid: bool,
+    finished: bool,
+    overflow_reported: bool,
+    output_open: bool,
+    output_mode: Trace_Output_Mode,
+    categories: Trace_Category_Set,
+    records_head: int,
+    records_count: int,
+    next_sequence: u64,
+    emitted_count: u64,
+    dropped_count: u64,
+    run_id_len: int,
+    run_id: [TRACE_RUN_ID_CAPACITY]u8,
+    output_path_len: int,
+    output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
+    output_handle: ^os.File,
+    records: [TRACE_RECORD_CAPACITY]Trace_Event_Record,
+    serialize_buffer: [TRACE_SERIALIZE_BUFFER_CAPACITY]u8,
 }
 
 View_Snapshot_Slot_State :: enum u8 {
@@ -1369,6 +1434,8 @@ Euclid_General_State :: struct {
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,
 
+    trace_state: Trace_State,
+
     current_delta_time : f32,
     accumulator : f32,
 
@@ -1383,4 +1450,8 @@ Euclid_Run_Settings :: struct {
     limit_fps: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
+    semantic_trace_enabled: bool,
+    semantic_trace_strict: bool,
+    semantic_trace_output: string,
+    semantic_trace_events: string,
 }

@@ -150,6 +150,36 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
 }
 
 @(test)
+animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    current := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(current)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = current
+    state^.julia_interface^.selected_animation = current
+    service^.animation_generation = 3
+    service^.animation_last_committed_sequence = 7
+
+    slot := app_bridge.Animation_Tick_Slot{
+        generation = 2,
+        sequence = 8,
+        animation = current,
+    }
+    testing.expect_value(
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_generation")
+
+    slot.generation = 3
+    slot.sequence = 7
+    testing.expect_value(
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_sequence")
+}
+
+@(test)
 scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
     defer free(state)
