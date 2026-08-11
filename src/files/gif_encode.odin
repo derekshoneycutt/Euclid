@@ -15,6 +15,18 @@ GIF_COLOR_DEPTH_TABLE_SIZE :: 17
 GIF_DITHER_TILE_SIZE :: 4
 GIF_DITHER_SHIFT :: 12
 GIF_MAX_PIXELS :: 268435456
+
+//   4x4 Bayer ordered-dither kernel, pre-shifted by GIF_DITHER_SHIFT.
+GIF_DITHER_KERNEL :: [GIF_DITHER_TILE_SIZE * GIF_DITHER_TILE_SIZE]int{
+     0 << GIF_DITHER_SHIFT,  8 << GIF_DITHER_SHIFT,
+     2 << GIF_DITHER_SHIFT, 10 << GIF_DITHER_SHIFT,
+    12 << GIF_DITHER_SHIFT,  4 << GIF_DITHER_SHIFT,
+    14 << GIF_DITHER_SHIFT,  6 << GIF_DITHER_SHIFT,
+     3 << GIF_DITHER_SHIFT, 11 << GIF_DITHER_SHIFT,
+     1 << GIF_DITHER_SHIFT,  9 << GIF_DITHER_SHIFT,
+    15 << GIF_DITHER_SHIFT,  7 << GIF_DITHER_SHIFT,
+    13 << GIF_DITHER_SHIFT,  5 << GIF_DITHER_SHIFT,
+}
 GIF_HEADER_SIZE :: 32
 GIF_FRAME_DEPTH_BIAS :: 160
 
@@ -73,6 +85,45 @@ Gif_Encode_Bitstream_State :: struct {
     end_code: int,
 }
 
+//   Allocate all per-frame encoder buffers on the arena; frees state on failure.
+gif_encode_allocate_buffers :: proc(state: ^Gif_Encode_State) -> bool {
+    state.lzw_mem = make([]i16,
+        GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE, state.arena_allocator)
+    state.tlb_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
+    state.used_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
+
+    pixel_count := state.width * state.height
+    state.previous_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
+    state.current_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
+
+    if len(state.lzw_mem) == 0 || len(state.tlb_mem) == 0 ||
+        len(state.used_mem) == 0 || len(state.previous_frame.pixels) == 0 ||
+        len(state.current_frame.pixels) == 0 {
+        gif_encode_free_state(state)
+        return false
+    }
+    return true
+}
+
+//   Write the logical-screen and Netscape header into a fresh output buffer.
+gif_encode_push_header :: proc(state: ^Gif_Encode_State) -> bool {
+    header, ok := gif_encode_new_buffer(state, GIF_HEADER_SIZE)
+    if !ok || header == nil {
+        gif_encode_free_state(state)
+        return false
+    }
+
+    if !gif_encode_write_logical_screen_and_netscape_ext(
+        header.data, state.width, state.height) {
+        gif_encode_free_buffer(header)
+        gif_encode_free_state(state)
+        return false
+    }
+
+    gif_encode_push_buffer(state, header)
+    return true
+}
+
 //   Initialize GIF encoder state for a new output stream.
 //
 // Parameters:
@@ -102,36 +153,11 @@ gif_encode_begin :: proc(state: ^Gif_Encode_State, width, height: int) -> bool {
     state.use_bgra = false
     state.frames_submitted = 0
 
-    state.lzw_mem = make([]i16,
-        GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE, state.arena_allocator)
-    state.tlb_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
-    state.used_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
-
-    pixel_count := width * height
-    state.previous_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
-    state.current_frame.pixels = make([]u32, pixel_count, state.arena_allocator)
-
-    if len(state.lzw_mem) == 0 || len(state.tlb_mem) == 0 || len(state.used_mem) == 0 ||
-       len(state.previous_frame.pixels) == 0 || len(state.current_frame.pixels) == 0 {
-        gif_encode_free_state(state)
+    if !gif_encode_allocate_buffers(state) {
         return false
     }
 
-    header, ok := gif_encode_new_buffer(state, GIF_HEADER_SIZE)
-    if !ok || header == nil {
-        gif_encode_free_state(state)
-        return false
-    }
-
-    out := header.data
-    if !gif_encode_write_logical_screen_and_netscape_ext(out, width, height) {
-        gif_encode_free_buffer(header)
-        gif_encode_free_state(state)
-        return false
-    }
-
-    gif_encode_push_buffer(state, header)
-    return true
+    return gif_encode_push_header(state)
 }
 
 //   Encode and append one frame to an initialized GIF stream.
@@ -495,26 +521,8 @@ gif_encode_depth_bits :: #force_inline proc(
 
 //   Return ordered-dither kernel value for a tile-relative pixel position.
 gif_encode_dither_kernel_value :: #force_inline proc(dx, dy: int) -> int {
-    idx := dy * GIF_DITHER_TILE_SIZE + dx
-    switch idx {
-    case 0: return 0 << GIF_DITHER_SHIFT
-    case 1: return 8 << GIF_DITHER_SHIFT
-    case 2: return 2 << GIF_DITHER_SHIFT
-    case 3: return 10 << GIF_DITHER_SHIFT
-    case 4: return 12 << GIF_DITHER_SHIFT
-    case 5: return 4 << GIF_DITHER_SHIFT
-    case 6: return 14 << GIF_DITHER_SHIFT
-    case 7: return 6 << GIF_DITHER_SHIFT
-    case 8: return 3 << GIF_DITHER_SHIFT
-    case 9: return 11 << GIF_DITHER_SHIFT
-    case 10: return 1 << GIF_DITHER_SHIFT
-    case 11: return 9 << GIF_DITHER_SHIFT
-    case 12: return 15 << GIF_DITHER_SHIFT
-    case 13: return 7 << GIF_DITHER_SHIFT
-    case 14: return 13 << GIF_DITHER_SHIFT
-    case 15: return 5 << GIF_DITHER_SHIFT
-    }
-    return 0
+    kernel := GIF_DITHER_KERNEL
+    return kernel[dy * GIF_DITHER_TILE_SIZE + dx]
 }
 
 //   Clear palette-used flags for the active palette size.
@@ -752,6 +760,10 @@ gif_encode_lzw_walk_pixels :: proc(
     frames_compatible: bool,
     bs: ^Gif_Encode_Bitstream_State) -> bool {
 
+    // #vet forgives(cyclomatic_complexity) — this is the LZW encoder inner loop.
+    // The branches are load-bearing (bounds guards, table eviction, frame-compat
+    // fast path) and it is a hot per-pixel path; decomposition would hurt clarity
+    // and speed without reducing real coupling.
     lzw_mem := state.lzw_mem
     lzw := Gif_Lzw_State{}
     gif_encode_lzw_reset(lzw_mem, &lzw, table_size, GIF_LZW_STRIDE)

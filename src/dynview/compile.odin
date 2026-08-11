@@ -173,52 +173,56 @@ compile_script_attach_recursive :: #force_inline proc(
         return status
     }
 
-    sup_text := text_span_from_buffer(
-        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_prefix := "^{"
-        for i in 0..<len(sup_prefix) {
-            status = append_compiled_byte(cache, sup_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sup_text) {
-            status = append_compiled_byte(cache, sup_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
+    status = append_compiled_optional_group(cache, buffer,
+        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
     }
 
-    sub_text := text_span_from_buffer(
-        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_prefix := "_{"
-        for i in 0..<len(sub_prefix) {
-            status = append_compiled_byte(cache, sub_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sub_text) {
-            status = append_compiled_byte(cache, sub_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
+    status = append_compiled_optional_group(cache, buffer,
+        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
     }
 
     state^.block_row_end = state^.current_row
     return DYNVIEW_STATUS_OK
+}
+
+//   Append a wrapped text group: prefix bytes, body bytes, then a closing byte.
+append_compiled_group :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    prefix, body: string,
+    close: u8) -> i32 {
+
+    for i in 0..<len(prefix) {
+        status := append_compiled_byte(cache, prefix[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+    for i in 0..<len(body) {
+        status := append_compiled_byte(cache, body[i])
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+    return append_compiled_byte(cache, close)
+}
+
+//   Append one wrapped group only when its body is non-empty.
+append_compiled_optional_group :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    offset, count: int,
+    prefix: string,
+    close: u8) -> i32 {
+
+    text := text_span_from_buffer(buffer, offset, count)
+    if len(text) == 0 {
+        return DYNVIEW_STATUS_OK
+    }
+    return append_compiled_group(cache, prefix, text, close)
 }
 
 //   Apply display-style large-operator compilation with canonical limits ordering.
@@ -241,48 +245,16 @@ compile_large_op_recursive :: #force_inline proc(
         }
     }
 
-    sub_text := text_span_from_buffer(
-        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_prefix := "_{"
-        for i in 0..<len(sub_prefix) {
-            status = append_compiled_byte(cache, sub_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sub_text) {
-            status = append_compiled_byte(cache, sub_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
+    status = append_compiled_optional_group(cache, buffer,
+        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
     }
 
-    sup_text := text_span_from_buffer(
-        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_prefix := "^{"
-        for i in 0..<len(sup_prefix) {
-            status = append_compiled_byte(cache, sup_prefix[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        for i in 0..<len(sup_text) {
-            status = append_compiled_byte(cache, sup_text[i])
-            if status != DYNVIEW_STATUS_OK {
-                return status
-            }
-        }
-        status = append_compiled_byte(cache, '}')
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
+    status = append_compiled_optional_group(cache, buffer,
+        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}')
+    if status != DYNVIEW_STATUS_OK {
+        return status
     }
 
     state^.block_row_end = state^.current_row
@@ -449,6 +421,121 @@ compile_newline_command :: #force_inline proc(
     return DYNVIEW_STATUS_OK
 }
 
+//   Uniform handler shape for one dynview command kind during compilation.
+Compile_Command_Handler ::
+    proc(cache: ^core.Dynview_Compile_Cache, buffer: ^core.Dynview_Command_Buffer,
+        state: ^Dynview_Compile_State, cmd: core.Dynview_Command) -> i32
+
+//   Adapt compile_begin_block (no command buffer) to the uniform table shape.
+compile_handle_begin_block :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_begin_block(cache, state, cmd)
+}
+
+//   Adapt compile_end_block (no command payload) to the uniform table shape.
+compile_handle_end_block :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_end_block(cache, state)
+}
+
+//   Adapt newline commands (no command payload) to the uniform table shape.
+compile_handle_newline :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_newline_command(cache, state)
+}
+
+//   Adapt compile_inline_line (no cache or buffer) to the uniform table shape.
+compile_handle_inline_line :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_line(state, cmd)
+}
+
+//   Adapt compile_inline_box (no cache or buffer) to the uniform table shape.
+compile_handle_inline_box :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_box(state, cmd)
+}
+
+//   Adapt compile_inline_circle (no cache or buffer) to the uniform table shape.
+compile_handle_inline_circle :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_circle(state, cmd)
+}
+
+//   Adapt compile_inline_filled_box (no cache or buffer) to the uniform shape.
+compile_handle_inline_filled_box :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_filled_box(state, cmd)
+}
+
+//   Adapt compile_inline_filled_circle (no cache or buffer) to the uniform shape.
+compile_handle_inline_filled_circle :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_filled_circle(state, cmd)
+}
+
+//   Adapt compile_inline_pie_section (no cache or buffer) to the uniform shape.
+compile_handle_inline_pie_section :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32 {
+    return compile_inline_pie_section(state, cmd)
+}
+
+//   Dispatch table mapping each dynview command kind to its compile handler.
+COMPILE_COMMAND_HANDLERS ::
+    [core.Dynview_Command_Kind]Compile_Command_Handler{
+    .BeginBlock = compile_handle_begin_block,
+    .EndBlock = compile_handle_end_block,
+    .TextRun = compile_text_run,
+    .MathGlyphRun = compile_text_run,
+    .MathBlock = compile_text_run,
+    .ScriptAttachRecursive = compile_script_attach_recursive,
+    .FracRecursive = compile_text_run,
+    .StretchDelimiterRecursive = compile_text_run,
+    .MatrixRecursive = compile_text_run,
+    .LargeOpRecursive = compile_large_op_recursive,
+    .AccentBarRecursive = compile_text_run,
+    .RadicalBarRecursive = compile_text_run,
+    .CopyableTextRun = compile_copyable_text_run,
+    .LineBreak = compile_handle_newline,
+    .Divider = compile_handle_newline,
+    .InlineLine = compile_handle_inline_line,
+    .InlineBox = compile_handle_inline_box,
+    .InlineCircle = compile_handle_inline_circle,
+    .InlineFilledBox = compile_handle_inline_filled_box,
+    .InlineFilledCircle = compile_handle_inline_filled_circle,
+    .InlinePieSection = compile_handle_inline_pie_section,
+    .InlinePerpendicular = compile_handle_inline_box,
+    .InlineTriangle = compile_handle_inline_box,
+    .InlinePentagon = compile_handle_inline_box,
+}
+
 //   Compile one command into cache and enforce the ordering contract.
 compile_command :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -456,58 +543,16 @@ compile_command :: #force_inline proc(
     state: ^Dynview_Compile_State,
     cmd: core.Dynview_Command) -> i32 {
 
-    switch cmd.kind {
-    case .BeginBlock:
-        return compile_begin_block(cache, state, cmd)
-    case .EndBlock:
-        return compile_end_block(cache, state)
-    case .TextRun:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .MathGlyphRun:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .MathBlock:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .ScriptAttachRecursive:
-        return compile_script_attach_recursive(cache, buffer, state, cmd)
-    case .FracRecursive:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .StretchDelimiterRecursive:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .MatrixRecursive:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .LargeOpRecursive:
-        return compile_large_op_recursive(cache, buffer, state, cmd)
-    case .AccentBarRecursive:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .RadicalBarRecursive:
-        return compile_text_run(cache, buffer, state, cmd)
-    case .CopyableTextRun:
-        return compile_copyable_text_run(cache, buffer, state, cmd)
-    case .LineBreak:
-        return compile_newline_command(cache, state)
-    case .Divider:
-        return compile_newline_command(cache, state)
-    case .InlineLine:
-        return compile_inline_line(state, cmd)
-    case .InlineBox:
-        return compile_inline_box(state, cmd)
-    case .InlineCircle:
-        return compile_inline_circle(state, cmd)
-    case .InlineFilledBox:
-        return compile_inline_filled_box(state, cmd)
-    case .InlineFilledCircle:
-        return compile_inline_filled_circle(state, cmd)
-    case .InlinePieSection:
-        return compile_inline_pie_section(state, cmd)
-    case .InlinePerpendicular:
-        return compile_inline_box(state, cmd)
-    case .InlineTriangle:
-        return compile_inline_box(state, cmd)
-    case .InlinePentagon:
-        return compile_inline_box(state, cmd)
+    kind := cmd.kind
+    if kind < .BeginBlock || kind > .InlinePentagon {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
-
-    return DYNVIEW_STATUS_INVALID_ARGUMENT
+    handlers := COMPILE_COMMAND_HANDLERS
+    handler := handlers[kind]
+    if handler == nil {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    }
+    return handler(cache, buffer, state, cmd)
 }
 
 //   Validate ordering contract and materialize stream text for host rendering.
@@ -552,57 +597,67 @@ rebuild_copy_hit_targets :: proc(
     }
 
     panel_top := panel.y
-    panel_bottom := panel.y + panel.height
     last_hover_bottom := panel_top
     for i in 0..<cache^.copy_block_count {
-        block := cache^.copy_blocks[i]
-        row_start, row_end, has_visible_items :=
-            layout_item_line_span_for_block(cache, block.block_id)
-        if !has_visible_items {
-            continue
-        }
-        if row_end >= cache^.layout_line_count {
-            continue
-        }
-
-        start_line := cache^.layout_lines[row_start]
-        end_line := cache^.layout_lines[row_end]
-        row_top := panel.y + text_padding + start_line.y_offset - scroll_y
-        row_bottom := panel.y + text_padding + end_line.y_offset +
-            end_line.line_height - scroll_y
-        if row_bottom < panel_top || row_top > panel_bottom {
-            continue
-        }
         if cache^.copy_hit_target_count >= len(cache^.copy_hit_targets) {
             break
         }
-
-        visible_top := max(row_top, panel_top)
-        visible_bottom := min(row_bottom, panel_bottom)
-        visible_top = max(visible_top, last_hover_bottom)
-        hover_rect := rl.Rectangle{
-            panel.x + text_padding,
-            visible_top,
-            max(0.0, panel.width - text_padding * 2),
-            max(0.0, visible_bottom - visible_top),
-        }
-        if hover_rect.height <= 0 || hover_rect.width <= 0 {
-            continue
-        }
-
-        icon_x := panel.x + panel.width - text_padding - icon_size - icon_x_pad
-        icon_y := max(panel_top + 1, min(row_top + 2, panel_bottom - icon_size - 1))
-        cache^.copy_hit_targets[cache^.copy_hit_target_count] =
-            core.Dynview_Copy_Hit_Target{
-                block_id = block.block_id,
-                payload_offset = block.payload_offset,
-                payload_len = block.payload_len,
-                rect = {icon_x, icon_y, icon_size, icon_size},
-                hover_rect = hover_rect,
-            }
-        cache^.copy_hit_target_count += 1
-        last_hover_bottom = hover_rect.y + hover_rect.height
+        last_hover_bottom = rebuild_one_copy_hit_target(cache,
+            cache^.copy_blocks[i], panel, scroll_y, text_padding, icon_size,
+            icon_x_pad, last_hover_bottom)
     }
+}
+
+//   Build one copy hit target for a block when its rows are visible on the panel.
+//   Returns the updated last-hover bottom edge (unchanged when nothing was added).
+rebuild_one_copy_hit_target :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    block: core.Dynview_Copy_Block,
+    panel: rl.Rectangle,
+    scroll_y, text_padding, icon_size, icon_x_pad: f32,
+    last_hover_bottom: f32) -> f32 {
+
+    row_start, row_end, has_visible_items :=
+        layout_item_line_span_for_block(cache, block.block_id)
+    if !has_visible_items || row_end >= cache^.layout_line_count {
+        return last_hover_bottom
+    }
+
+    panel_top := panel.y
+    panel_bottom := panel.y + panel.height
+    start_line := cache^.layout_lines[row_start]
+    end_line := cache^.layout_lines[row_end]
+    row_top := panel.y + text_padding + start_line.y_offset - scroll_y
+    row_bottom := panel.y + text_padding + end_line.y_offset +
+        end_line.line_height - scroll_y
+    if row_bottom < panel_top || row_top > panel_bottom {
+        return last_hover_bottom
+    }
+
+    visible_top := max(max(row_top, panel_top), last_hover_bottom)
+    visible_bottom := min(row_bottom, panel_bottom)
+    hover_rect := rl.Rectangle{
+        panel.x + text_padding,
+        visible_top,
+        max(0.0, panel.width - text_padding * 2),
+        max(0.0, visible_bottom - visible_top),
+    }
+    if hover_rect.height <= 0 || hover_rect.width <= 0 {
+        return last_hover_bottom
+    }
+
+    icon_x := panel.x + panel.width - text_padding - icon_size - icon_x_pad
+    icon_y := max(panel_top + 1, min(row_top + 2, panel_bottom - icon_size - 1))
+    cache^.copy_hit_targets[cache^.copy_hit_target_count] =
+        core.Dynview_Copy_Hit_Target{
+            block_id = block.block_id,
+            payload_offset = block.payload_offset,
+            payload_len = block.payload_len,
+            rect = {icon_x, icon_y, icon_size, icon_size},
+            hover_rect = hover_rect,
+        }
+    cache^.copy_hit_target_count += 1
+    return hover_rect.y + hover_rect.height
 }
 
 //   Return compiled copy payload string for one hit target index.

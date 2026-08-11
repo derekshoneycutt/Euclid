@@ -96,6 +96,9 @@ push_dust_for_connected_lines_on_floor_event :: proc(
     state: ^core.Euclid_General_State,
     point_index: int) {
 
+    // #vet forgives(cyclomatic_complexity) — per-line floor-contact dust sweep.
+    // The nested guards are load-bearing validity gates (line kind, child indices,
+    // positions present, floor-crossing sign) over a fixed grid of point pairs.
     next_index := state^.point_system^.next_point_index
     if point_index < 0 || point_index >= next_index {
         return
@@ -260,6 +263,9 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
     index: int,
     pos: core.Vector3) {
 
+    // #vet forgives(cyclomatic_complexity) — pen/compass tip audio router.
+    // The if/else-if chain routes motion to the right tip by host id; it is a flat,
+    // readable dispatch where extraction would only add indirection.
     set_point_position_with_floor_crossing_dust(state, index, pos)
     push_dust_if_floor_contact(state, pos)
 

@@ -151,48 +151,22 @@ Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
 Euclid_Run_Settings :: core.Euclid_Run_Settings
 
+//   Static JuliaMono filenames indexed by weight and italic style.
+FONT_VARIANT_FILENAMES :: [core.Font_Weight][2]string{
+	.Light = {"JuliaMono-Light.ttf", "JuliaMono-LightItalic.ttf"},
+	.Regular = {"JuliaMono-Regular.ttf", "JuliaMono-RegularItalic.ttf"},
+	.Medium = {"JuliaMono-Medium.ttf", "JuliaMono-MediumItalic.ttf"},
+	.SemiBold = {"JuliaMono-SemiBold.ttf", "JuliaMono-SemiBoldItalic.ttf"},
+	.Bold = {"JuliaMono-Bold.ttf", "JuliaMono-BoldItalic.ttf"},
+	.ExtraBold = {"JuliaMono-ExtraBold.ttf", "JuliaMono-ExtraBoldItalic.ttf"},
+	.Black = {"JuliaMono-Black.ttf", "JuliaMono-BlackItalic.ttf"},
+}
+
 //   Resolve one static JuliaMono filename from weight and italic style.
 font_variant_filename :: #force_inline proc(
 	weight: core.Font_Weight, italic: bool) -> string {
-	switch weight {
-	case .Light:
-		if italic {
-			return "JuliaMono-LightItalic.ttf"
-		}
-		return "JuliaMono-Light.ttf"
-	case .Regular:
-		if italic {
-			return "JuliaMono-RegularItalic.ttf"
-		}
-		return "JuliaMono-Regular.ttf"
-	case .Medium:
-		if italic {
-			return "JuliaMono-MediumItalic.ttf"
-		}
-		return "JuliaMono-Medium.ttf"
-	case .SemiBold:
-		if italic {
-			return "JuliaMono-SemiBoldItalic.ttf"
-		}
-		return "JuliaMono-SemiBold.ttf"
-	case .Bold:
-		if italic {
-			return "JuliaMono-BoldItalic.ttf"
-		}
-		return "JuliaMono-Bold.ttf"
-	case .ExtraBold:
-		if italic {
-			return "JuliaMono-ExtraBoldItalic.ttf"
-		}
-		return "JuliaMono-ExtraBold.ttf"
-	case .Black:
-		if italic {
-			return "JuliaMono-BlackItalic.ttf"
-		}
-		return "JuliaMono-Black.ttf"
-	}
-
-	return "JuliaMono-Regular.ttf"
+	filenames := FONT_VARIANT_FILENAMES
+	return filenames[weight][italic ? 1 : 0]
 }
 
 //   Return packed slot index for one weight/italic pair.

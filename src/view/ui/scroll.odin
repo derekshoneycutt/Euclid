@@ -126,50 +126,26 @@ scroll_container_begin :: proc(
     use_wheel_step := max(0.0, wheel_step)
     scroll_y_out := max(0.0, scroll_y_in)
 
-    max_scroll_hint: f32 = 0
-    had_overflow_hint := false
-    track_hint := rl.Rectangle{}
-    thumb_hint := rl.Rectangle{}
-    hovered_thumb := false
-
-    if content_height_hint > view_rect.height {
-        max_scroll_hint = max(0.0, content_height_hint - view_rect.height)
-        had_overflow_hint = max_scroll_hint > 0
-    }
-
-    if had_overflow_hint {
-        if hovered_view && mouse_input.wheel_delta != 0 && use_wheel_step > 0 {
-            scroll_y_out -= mouse_input.wheel_delta * use_wheel_step
-        }
-        clamp_scroll_position(&scroll_y_out, max_scroll_hint)
-
-        track_hint, thumb_hint, _, _ = build_vertical_scrollbar(
-            view_rect,
-            content_height_hint,
-            scroll_y_out,
-            max_scroll_hint,
-            SCROLLBAR_WIDTH,
-            SCROLLBAR_THUMB_MIN_HEIGHT)
-        hovered_thumb = in_interaction &&
-            rl.CheckCollisionPointRec(local_mouse, thumb_hint)
-    }
+    hint := scroll_overflow_hint(view_rect, content_height_hint, scroll_offset,
+        interaction_space_rect, local_mouse, mouse_input, &scroll_y_out,
+        use_wheel_step)
 
     is_dragging_thumb := state_in.is_dragging_thumb
     drag_offset_y := state_in.drag_offset_y
     owns_press := scroll_container_owns_press(press_owner, id)
-    if had_overflow_hint && is_dragging_thumb && !owns_press {
+    if hint.had_overflow && is_dragging_thumb && !owns_press {
         is_dragging_thumb = false
         drag_offset_y = 0
     }
 
-    if had_overflow_hint && !is_dragging_thumb {
+    if hint.had_overflow && !is_dragging_thumb {
         scroll_container_try_capture_press(
             press_owner,
             id,
             mouse_input,
-            hovered_thumb,
+            hint.hovered_thumb,
             local_mouse,
-            thumb_hint,
+            hint.thumb_rect,
             &is_dragging_thumb,
             &drag_offset_y)
     }
@@ -178,13 +154,13 @@ scroll_container_begin :: proc(
         id = id,
         view_rect = view_rect,
         wheel_step = use_wheel_step,
-        had_overflow_hint = had_overflow_hint,
+        had_overflow_hint = hint.had_overflow,
         is_hovered_view = hovered_view,
-        is_hovered_thumb = hovered_thumb,
+        is_hovered_thumb = hint.hovered_thumb,
         is_dragging_thumb = is_dragging_thumb,
         drag_offset_y = drag_offset_y,
-        track_rect = track_hint,
-        thumb_rect = thumb_hint,
+        track_rect = hint.track_rect,
+        thumb_rect = hint.thumb_rect,
     }
 
     rl.BeginScissorMode(
@@ -198,6 +174,58 @@ scroll_container_begin :: proc(
         view_rect = view_rect,
         scroll_y_out = scroll_y_out,
     }
+}
+
+//   Overflow geometry hint computed before drag lifecycle in scroll begin.
+Scroll_Overflow_Hint :: struct {
+    had_overflow:   bool,
+    track_rect:     rl.Rectangle,
+    thumb_rect:     rl.Rectangle,
+    hovered_thumb:  bool,
+}
+
+//   Compute scrollbar geometry and apply wheel scroll when content overflows.
+scroll_overflow_hint :: proc(
+    view_rect: rl.Rectangle,
+    content_height_hint: f32,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    local_mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_y_out: ^f32,
+    use_wheel_step: f32) -> Scroll_Overflow_Hint {
+
+    hint := Scroll_Overflow_Hint{}
+    if content_height_hint <= view_rect.height {
+        return hint
+    }
+
+    max_scroll_hint := max(0.0, content_height_hint - view_rect.height)
+    hint.had_overflow = max_scroll_hint > 0
+    if !hint.had_overflow {
+        return hint
+    }
+
+    in_interaction :=
+        scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
+    hovered_view := in_interaction && rl.CheckCollisionPointRec(local_mouse, view_rect)
+    if hovered_view && mouse_input.wheel_delta != 0 && use_wheel_step > 0 {
+        scroll_y_out^ -= mouse_input.wheel_delta * use_wheel_step
+    }
+    clamp_scroll_position(scroll_y_out, max_scroll_hint)
+
+    track_rect, thumb_rect, _, _ := build_vertical_scrollbar(
+        view_rect,
+        content_height_hint,
+        scroll_y_out^,
+        max_scroll_hint,
+        SCROLLBAR_WIDTH,
+        SCROLLBAR_THUMB_MIN_HEIGHT)
+    hint.track_rect = track_rect
+    hint.thumb_rect = thumb_rect
+    hint.hovered_thumb = in_interaction &&
+        rl.CheckCollisionPointRec(local_mouse, thumb_rect)
+    return hint
 }
 
 //   Finalize scrollbar state, drag lifecycle, and clamped scroll output.

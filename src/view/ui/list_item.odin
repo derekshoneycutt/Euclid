@@ -48,27 +48,11 @@ draw_list_item :: proc(
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     hovered := hovered_item && hovered_space
 
-    owns_press := press_owner^.active &&
-        press_owner^.kind == .List_Item &&
-        press_owner^.id == params.id
-    if params.interaction_enabled && !press_owner^.active &&
-        params.mouse.left_pressed && hovered {
-        press_owner^.active = true
-        press_owner^.kind = .List_Item
-        press_owner^.id = params.id
-        owns_press = true
-    }
+    clicked := list_item_run_press(params, press_owner, drawn_rect,
+        hovered, hovered_item)
 
-    clicked := false
-    if owns_press && params.mouse.left_released {
-        clicked = hovered_item
-        press_owner^.active = false
-        press_owner^.kind = .None
-        press_owner^.id = -1
-        owns_press = false
-    }
-
-    if owns_press && params.mouse.left_down {
+    if press_owner^.active && press_owner^.kind == .List_Item &&
+        press_owner^.id == params.id && params.mouse.left_down {
         rl.DrawRectangleRec(drawn_rect, rl.Color{
             UI_BORDER_COLOR.r,
             UI_BORDER_COLOR.g,
@@ -85,4 +69,32 @@ draw_list_item :: proc(
         hovered = hovered,
         clicked = clicked,
     }
+}
+
+//   Run the press acquire/release lifecycle for one list item; returns clicked.
+list_item_run_press :: proc(
+    params: List_Item_Params,
+    press_owner: ^core.Ui_Press_Owner_State,
+    drawn_rect: rl.Rectangle,
+    hovered, hovered_item: bool) -> bool {
+
+    owns_press := press_owner^.active &&
+        press_owner^.kind == .List_Item &&
+        press_owner^.id == params.id
+    if params.interaction_enabled && !press_owner^.active &&
+        params.mouse.left_pressed && hovered {
+        press_owner^.active = true
+        press_owner^.kind = .List_Item
+        press_owner^.id = params.id
+        owns_press = true
+    }
+
+    if owns_press && params.mouse.left_released {
+        clicked := hovered_item
+        press_owner^.active = false
+        press_owner^.kind = .None
+        press_owner^.id = -1
+        return clicked
+    }
+    return false
 }

@@ -314,6 +314,9 @@ get_point_view :: proc "c" (
     state: ^core.Euclid_General_State,
     index_abi: i32) -> Bridge_Point_View {
 
+    // #vet forgives(cyclomatic_complexity) — bridge point-view snapshot.
+    // Maps one internal point to the ABI view struct; the switch/optional unwraps
+    // are the wire-format translation, not decomposable logic.
     index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
@@ -822,6 +825,9 @@ set_point_offset :: proc "c" (
 attach_child_point :: proc "c" (
     state: ^core.Euclid_General_State, parentIndex, childIndex: i32) -> i32 {
 
+    // #vet forgives(cyclomatic_complexity) — child-graph attach with cycle guard.
+    // The linked-list walk plus visited-set guards enforce graph validity at the
+    // ABI boundary; the branches are the safety contract.
     context = state^.saved_context
 
     parent := int(parentIndex)

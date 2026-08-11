@@ -158,47 +158,48 @@ append_builder_text :: proc(buffer: []u8, length: ^int, text: string) -> bool {
 //
 // Returns:
 //   - ok: true when the escaped body fit and was appended.
+//   Fixed escape sequences for the control characters below 0x20 that have a
+//   short form. Indexed by the control character; empty entries use \u00XX.
+JSON_ESCAPE_SHORT :: [0x20]string{
+    '\b' = "\\b",
+    '\f' = "\\f",
+    '\n' = "\\n",
+    '\r' = "\\r",
+    '\t' = "\\t",
+}
+
+//   Append one JSON string body with escaping, without surrounding quotes.
+//
+// Parameters:
+//   - buffer: Destination byte buffer.
+//   - length: Current valid length, updated on success.
+//   - text: Source text to escape and append.
+//
+// Returns:
+//   - ok: true when the escaped body fit and was appended.
 append_json_escaped_body :: proc(buffer: []u8, length: ^int, text: string) -> bool {
     for ch in text {
         escaped := ""
-        escaped_len := 0
-        switch ch {
-        case '"':
+        if ch == '"' {
             escaped = "\\\""
-            escaped_len = 2
-        case '\\':
+        } else if ch == '\\' {
             escaped = "\\\\"
-            escaped_len = 2
-        case '\b':
-            escaped = "\\b"
-            escaped_len = 2
-        case '\f':
-            escaped = "\\f"
-            escaped_len = 2
-        case '\n':
-            escaped = "\\n"
-            escaped_len = 2
-        case '\r':
-            escaped = "\\r"
-            escaped_len = 2
-        case '\t':
-            escaped = "\\t"
-            escaped_len = 2
-        case:
-            if ch < 0x20 {
+        } else if ch >= 0x20 {
+            if length^ >= len(buffer) {
+                return false
+            }
+            buffer[length^] = u8(ch)
+            length^ += 1
+            continue
+        } else {
+            short := JSON_ESCAPE_SHORT
+            escaped = short[ch]
+            if len(escaped) == 0 {
                 escaped = fmt.tprintf("\\u%04x", int(ch))
-                escaped_len = len(escaped)
-            } else {
-                if length^ >= len(buffer) {
-                    return false
-                }
-                buffer[length^] = u8(ch)
-                length^ += 1
-                continue
             }
         }
 
-        if !append_builder_text(buffer, length, escaped[:escaped_len]) {
+        if !append_builder_text(buffer, length, escaped) {
             return false
         }
     }
@@ -433,26 +434,22 @@ build_configuration_payload :: proc(
     if !append_builder_text(out_buffer, &out_len, "{") {
         return 0, false
     }
-
     if !append_json_string_field(
         out_buffer, &out_len, "output_mode", output_mode_name(state^.output_mode)) {
         return 0, false
     }
-    if !append_builder_text(out_buffer, &out_len, ",") ||
-        !append_json_string_field(
-            out_buffer, &out_len, "strict", state^.strict ? "true" : "false") {
-        return 0, false
-    }
-    if !append_builder_text(out_buffer, &out_len, ",") ||
-        !append_json_number_field(out_buffer, &out_len, "category_mask",
-            trace_category_mask(state^.categories)) {
+    if !append_json_comma_field(out_buffer, &out_len,
+            fmt.tprintf("\"strict\":%s", state^.strict ? "true" : "false")) ||
+        !append_json_comma_field(out_buffer, &out_len,
+            fmt.tprintf("\"category_mask\":%d",
+                trace_category_mask(state^.categories))) {
         return 0, false
     }
 
-    output_path := string(state^.output_path[:state^.output_path_len])
     if state^.output_path_len > 0 {
-        if !append_builder_text(out_buffer, &out_len, ",") ||
-            !append_json_string_field(out_buffer, &out_len, "output_path", output_path) {
+        output_path := string(state^.output_path[:state^.output_path_len])
+        if !append_json_comma_field(out_buffer, &out_len,
+            fmt.tprintf("\"output_path\":%s", json_quote(output_path))) {
             return 0, false
         }
     }
@@ -460,7 +457,6 @@ build_configuration_payload :: proc(
     if !append_builder_text(out_buffer, &out_len, "}") {
         return 0, false
     }
-
     return out_len, true
 }
 
@@ -559,6 +555,33 @@ assign_run_id :: proc(state: ^core.Trace_State) -> bool {
     return state^.run_id_len > 0
 }
 
+//   One CLI category token mapped to its trace category.
+Trace_Category_Token :: struct {
+    name:     string,
+    category: core.Trace_Category,
+}
+
+//   CLI category tokens accepted in the comma-separated selection list.
+TRACE_CATEGORY_TOKENS :: []Trace_Category_Token{
+    {"runtime", .Runtime},
+    {"animation", .Animation},
+    {"geometry", .Geometry},
+    {"tools", .Tools},
+    {"particles", .Particles},
+    {"view", .View},
+}
+
+//   Look up one CLI category token, returning false when unrecognized.
+trace_category_for_token :: proc(token: string) -> (core.Trace_Category, bool) {
+    tokens := TRACE_CATEGORY_TOKENS
+    for entry in tokens {
+        if entry.name == token {
+            return entry.category, true
+        }
+    }
+    return .Trace, false
+}
+
 //   Resolve effective category set from optional CLI selection text.
 //
 // Parameters:
@@ -588,22 +611,11 @@ resolve_categories :: proc(categories_text: string) -> (Trace_Category_Set, bool
         }
 
         token := categories_text[start:i]
-        switch token {
-        case "runtime":
-            categories += {.Runtime}
-        case "animation":
-            categories += {.Animation}
-        case "geometry":
-            categories += {.Geometry}
-        case "tools":
-            categories += {.Tools}
-        case "particles":
-            categories += {.Particles}
-        case "view":
-            categories += {.View}
-        case:
+        category, found := trace_category_for_token(token)
+        if !found {
             return {}, false
         }
+        categories += {category}
         start = i + 1
     }
 
@@ -1137,34 +1149,39 @@ record_animation_event_ex :: proc(
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
     if !append_builder_text(payload_buffer, &payload_len, "{") ||
-        !append_json_number_field(
-            payload_buffer, &payload_len, "animation_generation", animation_generation) {
-        return false
-    }
-    if animation_tick > 0 {
-        if !append_builder_text(payload_buffer, &payload_len, ",") ||
-            !append_json_number_field(
-                payload_buffer, &payload_len, "animation_tick", animation_tick) {
-            return false
-        }
-    }
-    if len(animation_id) > 0 {
-        if !append_builder_text(payload_buffer, &payload_len, ",") ||
-            !append_json_string_field(payload_buffer,
-                &payload_len, "animation_id", animation_id) {
-            return false
-        }
-    }
-    if len(reason) > 0 {
-        if !append_builder_text(payload_buffer, &payload_len, ",") ||
-            !append_json_string_field(payload_buffer, &payload_len, "reason", reason) {
-            return false
-        }
-    }
-    if !append_builder_text(payload_buffer, &payload_len, "}") {
+        !append_builder_text(payload_buffer, &payload_len,
+            fmt.tprintf("\"animation_generation\":%d", animation_generation)) {
         return false
     }
 
+    // Optional fields, emitted only when present.
+    optional_bodies: [3]string
+    optional_count := 0
+    if animation_tick > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"animation_tick\":%d", animation_tick)
+        optional_count += 1
+    }
+    if len(animation_id) > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"animation_id\":%s", json_quote(animation_id))
+        optional_count += 1
+    }
+    if len(reason) > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"reason\":%s", json_quote(reason))
+        optional_count += 1
+    }
+    for index in 0..<optional_count {
+        if !append_json_comma_field(
+            payload_buffer, &payload_len, optional_bodies[index]) {
+            return false
+        }
+    }
+
+    if !append_builder_text(payload_buffer, &payload_len, "}") {
+        return false
+    }
     return record_event(state, .Animation, event_name,
         string(payload_buffer[:payload_len]))
 }
@@ -1209,18 +1226,20 @@ append_json_color_field :: proc(
     buffer: []u8, length: ^int, name: string, value: core.Bridge_Color) -> bool {
 
     if !append_json_string(buffer, length, name) ||
-        !append_builder_text(buffer, length, ":[") ||
-        !append_builder_text(buffer, length, fmt.tprintf("%d", value.r)) ||
-        !append_builder_text(buffer, length, ",") ||
-        !append_builder_text(buffer, length, fmt.tprintf("%d", value.g)) ||
-        !append_builder_text(buffer, length, ",") ||
-        !append_builder_text(buffer, length, fmt.tprintf("%d", value.b)) ||
-        !append_builder_text(buffer, length, ",") ||
-        !append_builder_text(buffer, length, fmt.tprintf("%d", value.a)) ||
-        !append_builder_text(buffer, length, "]") {
+        !append_builder_text(buffer, length, ":[") {
         return false
     }
-    return true
+
+    channels := [4]u8{value.r, value.g, value.b, value.a}
+    for channel, index in channels {
+        if index > 0 && !append_builder_text(buffer, length, ",") {
+            return false
+        }
+        if !append_builder_text(buffer, length, fmt.tprintf("%d", channel)) {
+            return false
+        }
+    }
+    return append_builder_text(buffer, length, "]")
 }
 
 //   Append one optional JSON field separator and marker when present.
@@ -1488,20 +1507,31 @@ record_particles_emitted :: proc(
     payload_buffer := state^.serialize_buffer[:]
     if !append_builder_text(payload_buffer, &payload_len, "{") ||
         !append_json_string_field(payload_buffer, &payload_len, "kind", kind) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_string_field(payload_buffer, &payload_len, "layer", layer) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_number_field(payload_buffer, &payload_len, "count", u64(count)) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_vector3_field(payload_buffer, &payload_len, "source", source) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_color_field(payload_buffer, &payload_len, "color", color) ||
+        !append_json_comma_field(payload_buffer, &payload_len,
+            fmt.tprintf("\"layer\":%s", json_quote(layer))) ||
+        !append_json_comma_field(payload_buffer, &payload_len,
+            fmt.tprintf("\"count\":%d", count)) ||
+        !append_json_comma_field(payload_buffer, &payload_len,
+            fmt.tprintf("\"source\":[%g,%g,%g]", source.x, source.y, source.z)) ||
+        !append_json_comma_field(payload_buffer, &payload_len,
+            fmt.tprintf("\"color\":[%d,%d,%d,%d]",
+                color.r, color.g, color.b, color.a)) ||
         !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }
 
     return record_event(
         state, .Particles, "particles.emitted", string(payload_buffer[:payload_len]))
+}
+
+//   Render a string as a JSON-quoted value (with surrounding quotes).
+json_quote :: proc(text: string) -> string {
+    buffer: [512]u8
+    length := 0
+    if !append_json_string(buffer[:], &length, text) {
+        return "\"\""
+    }
+    return fmt.tprintf("%s", string(buffer[:length]))
 }
 
 //   Record one post-solve constraint summary at a stable fixed-step boundary.
@@ -1567,27 +1597,46 @@ append_checkpoint_point :: proc(
     payload_buffer: []u8, payload_len: ^int,
     point: ^core.Trace_Checkpoint_Point) -> bool {
 
-    return append_builder_text(payload_buffer, payload_len, "{") &&
-        append_json_number_field(payload_buffer, payload_len,
-            "index", u64(point^.index)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len,
-            "kind", u64(point^.kind)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_bool_field(payload_buffer, payload_len, 
-            "visible", point^.do_draw) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer, payload_len, "active_child", u64(point^.active_child)) &&
-        append_checkpoint_point_position(payload_buffer, payload_len, point) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_builder_text(
-            payload_buffer, payload_len, fmt.tprintf("\"brush_size\":%g",
-            point^.brush_size)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_builder_text(
-            payload_buffer, payload_len, fmt.tprintf("\"offset\":%g", point^.offset)) &&
-        append_builder_text(payload_buffer, payload_len, "}")
+    // Pre-render each field body; position is optional and appended when present.
+    bodies: [7]string
+    body_count := 0
+    bodies[body_count] = fmt.tprintf("\"index\":%d", point^.index)
+    body_count += 1
+    bodies[body_count] = fmt.tprintf("\"kind\":%d", point^.kind)
+    body_count += 1
+    bodies[body_count] = fmt.tprintf("\"visible\":%v", point^.do_draw)
+    body_count += 1
+    bodies[body_count] = fmt.tprintf("\"active_child\":%d", point^.active_child)
+    body_count += 1
+    if point^.has_position {
+        bodies[body_count] = fmt.tprintf("\"position\":[%g,%g,%g]",
+            point^.position.x, point^.position.y, point^.position.z)
+        body_count += 1
+    }
+    bodies[body_count] = fmt.tprintf("\"brush_size\":%g", point^.brush_size)
+    body_count += 1
+    bodies[body_count] = fmt.tprintf("\"offset\":%g", point^.offset)
+    body_count += 1
+
+    if !append_builder_text(payload_buffer, payload_len, "{") {
+        return false
+    }
+    for body, index in bodies[:body_count] {
+        if index > 0 && !append_builder_text(payload_buffer, payload_len, ",") {
+            return false
+        }
+        if !append_builder_text(payload_buffer, payload_len, body) {
+            return false
+        }
+    }
+    return append_builder_text(payload_buffer, payload_len, "}")
+}
+
+//   Append one pre-rendered field body with a leading comma separator.
+append_json_comma_field :: proc(
+    payload_buffer: []u8, payload_len: ^int, body: string) -> bool {
+    return append_builder_text(payload_buffer, payload_len, ",") &&
+        append_builder_text(payload_buffer, payload_len, body)
 }
 
 //   Append checkpoint identity fields to the payload.
@@ -1596,33 +1645,28 @@ append_checkpoint_identity_fields :: proc(
     payload_len: ^int,
     snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
 
-    if !append_json_number_field(
-        payload_buffer, payload_len, "checkpoint_id", snapshot^.checkpoint_id) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, payload_len, "fixed_step", snapshot^.fixed_step) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_builder_text(
-            payload_buffer, payload_len,
-            fmt.tprintf("\"simulation_time\":%g", snapshot^.simulation_time)) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(payload_buffer, payload_len, "runtime_generation",
-            snapshot^.runtime_generation) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(payload_buffer, payload_len, "animation_generation",
-            snapshot^.animation_generation) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(payload_buffer, payload_len, "animation_tick",
-            snapshot^.animation_tick_sequence) ||
-        !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_string_field(
-            payload_buffer,
-            payload_len,
-            "animation_id",
-            string(snapshot^.animation_name[:snapshot^.animation_name_len])) {
+    if !append_builder_text(payload_buffer, payload_len,
+            fmt.tprintf("\"checkpoint_id\":%d", snapshot^.checkpoint_id)) {
         return false
     }
-    return true
+
+    bodies := [6]string{
+        fmt.tprintf("\"fixed_step\":%d", snapshot^.fixed_step),
+        fmt.tprintf("\"simulation_time\":%g", snapshot^.simulation_time),
+        fmt.tprintf("\"runtime_generation\":%d", snapshot^.runtime_generation),
+        fmt.tprintf("\"animation_generation\":%d", snapshot^.animation_generation),
+        fmt.tprintf("\"animation_tick\":%d", snapshot^.animation_tick_sequence),
+        "",
+    }
+    for index in 0..<5 {
+        if !append_json_comma_field(payload_buffer, payload_len, bodies[index]) {
+            return false
+        }
+    }
+
+    return append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_string_field(payload_buffer, payload_len, "animation_id",
+            string(snapshot^.animation_name[:snapshot^.animation_name_len]))
 }
 
 //   Append checkpoint lifecycle and counters to the payload.
@@ -1631,23 +1675,24 @@ append_checkpoint_counter_fields :: proc(
     payload_len: ^int,
     snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
 
-    return append_json_number_field(payload_buffer, payload_len, "next_point_index",
-            u64(snapshot^.next_point_index)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "next_constraint_index",
-            u64(snapshot^.next_constraint_index)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "active_constraints",
-            u64(snapshot^.active_constraint_count)) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "rejected_ticks",
-            snapshot^.rejected_tick_count) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "failed_requests",
-            snapshot^.failed_request_count) &&
-        append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "dropped_records",
-            snapshot^.dropped_record_count)
+    if !append_builder_text(payload_buffer, payload_len,
+            fmt.tprintf("\"next_point_index\":%d", snapshot^.next_point_index)) {
+        return false
+    }
+
+    bodies := [5]string{
+        fmt.tprintf("\"next_constraint_index\":%d", snapshot^.next_constraint_index),
+        fmt.tprintf("\"active_constraints\":%d", snapshot^.active_constraint_count),
+        fmt.tprintf("\"rejected_ticks\":%d", snapshot^.rejected_tick_count),
+        fmt.tprintf("\"failed_requests\":%d", snapshot^.failed_request_count),
+        fmt.tprintf("\"dropped_records\":%d", snapshot^.dropped_record_count),
+    }
+    for body in bodies {
+        if !append_json_comma_field(payload_buffer, payload_len, body) {
+            return false
+        }
+    }
+    return true
 }
 
 //   Append one tool summary object to the checkpoint payload.
@@ -1692,6 +1737,23 @@ append_checkpoint_points :: proc(
     return append_builder_text(payload_buffer, payload_len, "]")
 }
 
+//   Append the pen tool summary section of the checkpoint payload.
+append_checkpoint_pen_summary :: proc(
+    payload_buffer: []u8, payload_len: ^int,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+    return append_checkpoint_tool_summary(payload_buffer, payload_len, "pen",
+        snapshot^.pen_host_index, snapshot^.pen_visible, snapshot^.pen_active_child)
+}
+
+//   Append the compass tool summary section of the checkpoint payload.
+append_checkpoint_compass_summary :: proc(
+    payload_buffer: []u8, payload_len: ^int,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+    return append_checkpoint_tool_summary(payload_buffer, payload_len, "compass",
+        snapshot^.compass_host_index, snapshot^.compass_visible,
+        snapshot^.compass_active_child)
+}
+
 //   Record one canonical checkpoint snapshot captured after the deterministic worker join.
 //
 // Parameters:
@@ -1710,29 +1772,27 @@ record_checkpoint_snapshot :: proc(
 
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
-    if !append_builder_text(payload_buffer, &payload_len, "{") ||
-        !append_checkpoint_identity_fields(payload_buffer, &payload_len, snapshot) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_checkpoint_counter_fields(payload_buffer, &payload_len, snapshot) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_checkpoint_tool_summary(
-            payload_buffer,
-            &payload_len,
-            "pen",
-            snapshot^.pen_host_index,
-            snapshot^.pen_visible,
-            snapshot^.pen_active_child) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_checkpoint_tool_summary(
-            payload_buffer,
-            &payload_len,
-            "compass",
-            snapshot^.compass_host_index,
-            snapshot^.compass_visible,
-            snapshot^.compass_active_child) ||
-        !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_checkpoint_points(payload_buffer, &payload_len, snapshot) ||
-        !append_builder_text(payload_buffer, &payload_len, "}") {
+    if !append_builder_text(payload_buffer, &payload_len, "{") {
+        return false
+    }
+
+    // Each section is a comma-separated fragment; the first omits the comma.
+    sections := [5]proc([]u8, ^int, ^core.Trace_Checkpoint_Snapshot) -> bool{
+        append_checkpoint_identity_fields,
+        append_checkpoint_counter_fields,
+        append_checkpoint_pen_summary,
+        append_checkpoint_compass_summary,
+        append_checkpoint_points,
+    }
+    for section, index in sections {
+        if index > 0 && !append_builder_text(payload_buffer, &payload_len, ",") {
+            return false
+        }
+        if !section(payload_buffer, &payload_len, snapshot) {
+            return false
+        }
+    }
+    if !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }
 

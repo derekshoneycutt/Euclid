@@ -24,20 +24,51 @@ draw_tree_view :: proc(
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
     show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
-    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input, 
+    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input,
         &ui_runtime.ui_press_owner, show_tree,
         ui_runtime.show_tree_gif, ui_runtime.show_tree_settings,
         ui_runtime.simulation_paused)
 
-    if toolbar_hit.RefreshRequested {
-        if ui_runtime.simulation_paused &&
-            (ui_runtime.gif_capture_phase == .Armed ||
-            ui_runtime.gif_capture_phase == .Recording ||
-            ui_runtime.gif_capture_phase == .Finalizing) {
-            view_core.cancel_gif_capture_with_note(state,
-                "Canceled: refresh during pause interrupts GIF capture.")
-        }
+    apply_tree_toolbar_hit(state, ji, ui_runtime, toolbar_hit)
 
+    if ui_runtime.show_tree_settings {
+        draw_settings_view(state, list_panel, mouse_input)
+        return
+    }
+
+    if ui_runtime.show_tree_gif {
+        draw_gif_view(state, list_panel, mouse_input)
+        return
+    }
+
+    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse_input,
+        &state^.ui_runtime.tree_scroll_y, state.font)
+}
+
+//   Cancel an in-flight GIF capture when the user refreshes while paused.
+cancel_gif_capture_if_paused_mid_capture :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State) {
+
+    if !ui_runtime.simulation_paused {
+        return
+    }
+    phase := ui_runtime.gif_capture_phase
+    if phase == .Armed || phase == .Recording || phase == .Finalizing {
+        view_core.cancel_gif_capture_with_note(state,
+            "Canceled: refresh during pause interrupts GIF capture.")
+    }
+}
+
+//   Apply one toolbar interaction to tree panel state.
+apply_tree_toolbar_hit :: proc(
+    state: ^core.Euclid_General_State,
+    ji: ^core.Euclid_Julia_Interface,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    toolbar_hit: Tree_Toolbar_Hit) {
+
+    if toolbar_hit.RefreshRequested {
+        cancel_gif_capture_if_paused_mid_capture(state, ui_runtime)
         ui_runtime.simulation_paused = false
         ji.pending_animation_reset = true
     }
@@ -54,32 +85,17 @@ draw_tree_view :: proc(
 
     if toolbar_hit.ToggleSettingsRequested {
         ui_runtime.show_tree_settings = !ui_runtime.show_tree_settings
-        if ui_runtime.show_tree_settings {
-            ui_runtime.show_tree_gif = false
-        }
+        ui_runtime.show_tree_gif = ui_runtime.show_tree_gif &&
+            !ui_runtime.show_tree_settings
         ui_runtime.tree_scroll_dragging = false
     }
 
     if toolbar_hit.ToggleGifRequested {
         ui_runtime.show_tree_gif = !ui_runtime.show_tree_gif
-        if ui_runtime.show_tree_gif {
-            ui_runtime.show_tree_settings = false
-        }
+        ui_runtime.show_tree_settings = ui_runtime.show_tree_settings &&
+            !ui_runtime.show_tree_gif
         ui_runtime.tree_scroll_dragging = false
     }
-
-    if ui_runtime.show_tree_settings {
-        draw_settings_view(state, list_panel, mouse_input)
-        return
-    }
-
-    if ui_runtime.show_tree_gif {
-        draw_gif_view(state, list_panel, mouse_input)
-        return
-    }
-
-    draw_tree_list_panel(ji, ui_runtime, list_panel, mouse_input,
-        &state^.ui_runtime.tree_scroll_y, state.font)
 }
 
 //   Build a stable per-frame widget id for a node based on its pointer value.

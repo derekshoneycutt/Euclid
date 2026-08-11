@@ -270,6 +270,58 @@ dynview_math_block :: proc "c" (
     return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
 }
 
+//   Report whether the compile cache can hold the whole recursive math payload.
+dynview_math_capacity_available :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    ops: [^]Bridge_Dynview_Math_Op,
+    op_count: int) -> bool {
+
+    if cache^.math_program_count >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+        return false
+    }
+    extra_programs, extra_commands :=
+        dynview_count_recursive_math_capacity(ops, op_count)
+    if cache^.math_program_count + 1 + extra_programs >
+        core.DYNVIEW__MAX_MATH_PROGRAMS {
+        return false
+    }
+    return cache^.math_command_count + op_count + extra_commands <=
+        core.DYNVIEW__MAX_MATH_COMMANDS
+}
+
+//   Report whether the math-block arguments are non-nil and non-empty.
+dynview_math_block_args_valid :: proc(
+    plain_text: cstring,
+    ops: [^]Bridge_Dynview_Math_Op,
+    op_count: i32,
+    top_level_op_count: i32,
+    text_blob: cstring) -> bool {
+
+    return plain_text != nil && text_blob != nil && ops != nil &&
+        op_count > 0 && top_level_op_count > 0
+}
+
+//   Append the plain-text and shared blob payloads, returning both spans.
+dynview_append_math_text_payloads :: proc(
+    runtime: ^core.Dynview_System,
+    plain_text, text_blob: cstring) -> (
+        plain_offset, plain_count, blob_offset, blob_count: int, status: i32) {
+
+    status = dynview_append_text_payload(
+        runtime, string(plain_text), &plain_offset, &plain_count)
+    if status != BRIDGE_STATUS_OK {
+        return 0, 0, 0, 0, status
+    }
+
+    status = dynview_append_text_payload(
+        runtime, string(text_blob), &blob_offset, &blob_count)
+    if status != BRIDGE_STATUS_OK {
+        return 0, 0, 0, 0, status
+    }
+
+    return plain_offset, plain_count, blob_offset, blob_count, BRIDGE_STATUS_OK
+}
+
 //   Append one whole inline math block from a flat child-command payload.
 //
 // Parameters:
@@ -310,40 +362,20 @@ dynview_math_block_from_ops :: proc "c" (
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    if plain_text == nil || text_blob == nil || op_count <= 0 ||
-        top_level_op_count <= 0 || ops == nil {
+    if !dynview_math_block_args_valid(plain_text, ops, op_count,
+        top_level_op_count, text_blob) {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     cache := &runtime^.compile_cache
-    if cache^.math_program_count >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if !dynview_math_capacity_available(cache, ops, int(op_count)) {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
-    extra_programs, extra_commands :=
-        dynview_count_recursive_math_capacity(ops, int(op_count))
-    if cache^.math_program_count + 1 + extra_programs > core.DYNVIEW__MAX_MATH_PROGRAMS {
-        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
-    }
-    if cache^.math_command_count + int(op_count) + extra_commands >
-        core.DYNVIEW__MAX_MATH_COMMANDS {
-        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
-    }
-
-    plain_offset := 0
-    plain_count := 0
-    status = dynview_append_text_payload(
-        runtime, string(plain_text), &plain_offset, &plain_count)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-
-    blob_offset := 0
-    blob_count := 0
-    status = dynview_append_text_payload(
-        runtime, string(text_blob), &blob_offset, &blob_count)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    plain_offset, plain_count, blob_offset, blob_count, payload_status :=
+        dynview_append_math_text_payloads(runtime, plain_text, text_blob)
+    if payload_status != BRIDGE_STATUS_OK {
+        return payload_status
     }
 
     program_id := cache^.math_program_count

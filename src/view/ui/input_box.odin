@@ -321,45 +321,29 @@ input_box_utf8_sequence_len :: #force_inline proc(text: string, at: int) -> int 
         return 0
     }
 
-    first := text[at]
-    if (first & 0x80) == 0 {
+    width := input_box_utf8_lead_width(text[at])
+    if width == 1 {
         return 1
     }
-
-    if (first & 0xE0) == 0xC0 {
-        if at + 1 >= len(text) {
-            return 0
-        }
-        if !input_box_is_utf8_trailing_byte(text[at + 1]) {
-            return 0
-        }
-        return 2
+    if at + width > len(text) {
+        return 0
     }
 
-    if (first & 0xF0) == 0xE0 {
-        if at + 2 >= len(text) {
+    for offset in 1 ..< width {
+        if !input_box_is_utf8_trailing_byte(text[at + offset]) {
             return 0
         }
-        if !input_box_is_utf8_trailing_byte(text[at + 1]) ||
-            !input_box_is_utf8_trailing_byte(text[at + 2]) {
-            return 0
-        }
-        return 3
     }
+    return width
+}
 
-    if (first & 0xF8) == 0xF0 {
-        if at + 3 >= len(text) {
-            return 0
-        }
-        if !input_box_is_utf8_trailing_byte(text[at + 1]) ||
-            !input_box_is_utf8_trailing_byte(text[at + 2]) ||
-            !input_box_is_utf8_trailing_byte(text[at + 3]) {
-            return 0
-        }
-        return 4
-    }
-
-    return 0
+//   Return expected UTF-8 sequence width from the lead byte (1 when invalid).
+input_box_utf8_lead_width :: #force_inline proc(first: u8) -> int {
+    width := 1
+    width = 2 if (first & 0xE0) == 0xC0 else width
+    width = 3 if (first & 0xF0) == 0xE0 else width
+    width = 4 if (first & 0xF8) == 0xF0 else width
+    return width
 }
 
 //   Return byte count from text that fits in max_bytes without splitting UTF-8 codepoints.
@@ -769,25 +753,8 @@ input_box_apply_keyboard_events :: proc(
     moved_down^ = false
     paste_applied^ = false
 
-    if events.up {
-        moved_up^ = input_box_move_caret_up(params.text_buffer, text_len^, caret)
-    }
-    if events.down {
-        moved_down^ = input_box_move_caret_down(params.text_buffer, text_len^, caret)
-    }
-
-    if events.left {
-        caret^ = input_box_prev_codepoint_start(params.text_buffer, 0, caret^)
-    }
-    if events.right {
-        caret^ = input_box_next_codepoint_start(params.text_buffer, text_len^, caret^)
-    }
-    if events.home {
-        caret^ = 0
-    }
-    if events.end {
-        caret^ = text_len^
-    }
+    input_box_apply_caret_movement(params, events, text_len^, caret,
+        moved_up, moved_down)
 
     caret^ = input_box_clamp_cursor(caret^, text_len^)
 
@@ -816,6 +783,34 @@ input_box_apply_keyboard_events :: proc(
 
     caret^ = input_box_clamp_cursor(caret^, text_len^)
     input_box_update_viewport_for_caret(caret^, visible_cols, viewport)
+}
+
+//   Apply directional caret-movement events (up/down/left/right/home/end).
+input_box_apply_caret_movement :: proc(
+    params: Input_Box_Params,
+    events: Input_Box_Events,
+    text_len: int,
+    caret: ^int,
+    moved_up, moved_down: ^bool) {
+
+    if events.up {
+        moved_up^ = input_box_move_caret_up(params.text_buffer, text_len, caret)
+    }
+    if events.down {
+        moved_down^ = input_box_move_caret_down(params.text_buffer, text_len, caret)
+    }
+    if events.left {
+        caret^ = input_box_prev_codepoint_start(params.text_buffer, 0, caret^)
+    }
+    if events.right {
+        caret^ = input_box_next_codepoint_start(params.text_buffer, text_len, caret^)
+    }
+    if events.home {
+        caret^ = 0
+    }
+    if events.end {
+        caret^ = text_len
+    }
 }
 
 //   Map local mouse x-position to nearest caret column in visible text space.

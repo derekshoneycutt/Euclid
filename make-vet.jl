@@ -63,6 +63,26 @@ struct JuliaComplexityRow
     line::Int
 end
 
+mutable struct OdinProcRow
+    file::String
+    line::Int
+    name::String
+    nloc::Int
+    ccn::Int
+    params::Int
+    forgiven::Bool
+    severity::String
+    status::String
+end
+
+struct OdinAllocRow
+    file::String
+    line::Int
+    scope::String
+    kind::String
+    expr::String
+end
+
 struct ParserFileError
     file::String
     details::String
@@ -93,6 +113,12 @@ const LINE_LENGTH_EXCEPTION_PATTERNS = [
     r"vet:\s*allow-long-line"i,
     r"line-length:\s*allow"i,
 ]
+
+const ODIN_ANALYZER_PACKAGE = joinpath("tools", "vet")
+const ODIN_COMPLEXITY_BLOCK_THRESHOLD = 15
+const ODIN_COMPLEXITY_WARN_THRESHOLD = 10
+const ODIN_NLOC_REVIEW_THRESHOLD = 20
+const ODIN_PARAM_REVIEW_THRESHOLD = 5
 
 """Return true when a section should surface detailed payload in markdown."""
 function section_has_payload(section::VetSectionResult)
@@ -1587,44 +1613,273 @@ function run_jet_section(src_dir::String, script_dir::String)
         false, false, false, false)
 end
 
-"""Run Odin lizard once with capture and return structured section output."""
-function run_odin_lizard_section(src_dir::String, script_dir::String)
-    if Sys.which("lizard") === nothing
-        return VetSectionResult("odin-lizard", "Missing",
-            "lizard not installed; skipping Odin lizard analysis.",
-            "missing", nothing, "", "",
-            Dict{String,Any}(), false, false, true, true)
+"""Return the path of the compiled Odin static analyzer binary."""
+function odin_analyzer_path(script_dir::String)
+    name = Sys.iswindows() ? "euclid_vet_analyzer.exe" : "euclid_vet_analyzer"
+    return joinpath(script_dir, "bin", name)
+end
+
+"""Build the Odin static analyzer with the project vet flags."""
+function build_odin_analyzer(script_dir::String)
+    return run_command(
+        Cmd([
+            "odin", "build", ODIN_ANALYZER_PACKAGE,
+            "-vet", "-strict-style", "-disallow-do", "-warnings-as-errors",
+            "-out:" * odin_analyzer_path(script_dir),
+        ]);
+        cwd=script_dir, capture_output=true)
+end
+
+"""Parse analyzer TSV output into procedure rows, allocation rows, and failures."""
+function parse_odin_analyzer_output(text::String)
+    proc_rows = OdinProcRow[]
+    alloc_rows = OdinAllocRow[]
+    parse_failures = String[]
+
+    for line in split(text, '\n')
+        fields = split(line, '\t')
+        tag = fields[1]
+        if tag == "PROC" && length(fields) >= 8
+            push!(proc_rows, OdinProcRow(
+                String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
+                Base.parse(Int, fields[5]), Base.parse(Int, fields[6]),
+                Base.parse(Int, fields[7]), fields[8] == "true", "INFO", "PASS"))
+        elseif tag == "ALLOC" && length(fields) >= 6
+            push!(alloc_rows, OdinAllocRow(
+                String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
+                String(fields[5]), String(join(fields[6:end], '\t'))))
+        elseif tag == "PARSE_ERROR" && length(fields) >= 2
+            push!(parse_failures, String(join(fields[2:end], '\t')))
+        end
     end
 
-    odin_files = sort([path for path in collect_paths(src_dir) if endswith(path, ".odin")])
-    if isempty(odin_files)
-        return VetSectionResult("odin-lizard", "Skipped",
-            "No Odin files discovered; skipping lizard analysis.",
-            "skipped", nothing, "", "",
-            Dict{String,Any}("files" => 0),
-            false, false, true, false)
+    return proc_rows, alloc_rows, parse_failures
+end
+
+"""Classify Odin procedure rows against complexity policy (in-code markers only)."""
+function classify_odin_proc_rows!(rows::Vector{OdinProcRow})
+    blocking_count = 0
+    warning_count = 0
+    forgiven_count = 0
+
+    for row in rows
+        if row.ccn > ODIN_COMPLEXITY_WARN_THRESHOLD && row.forgiven
+            row.severity = "INFO"
+            row.status = "FORGIVEN"
+            forgiven_count += 1
+        elseif row.ccn >= ODIN_COMPLEXITY_BLOCK_THRESHOLD
+            row.severity = "BLOCK"
+            row.status = "FAIL"
+            blocking_count += 1
+        elseif row.ccn > ODIN_COMPLEXITY_WARN_THRESHOLD
+            row.severity = "WARN"
+            row.status = "WARN"
+            warning_count += 1
+        end
     end
 
-    result = run_command(
-        Cmd(vcat(["lizard", "-l", "cpp"], odin_files));
-        cwd=script_dir,
-        capture_output=true)
+    sort!(rows, by=r -> (
+        severity_rank(r.severity),
+        -r.ccn,
+        -r.nloc,
+        r.name,
+        r.file,
+        r.line))
 
-    metrics = Dict{String,Any}(
+    return Dict{String,Any}(
+        "blocking_count" => blocking_count,
+        "warning_count" => warning_count,
+        "forgiven_count" => forgiven_count)
+end
+
+"""Render the Odin static analysis table for report/console capture."""
+function render_odin_static_table(rows::Vector{OdinProcRow})
+    lines = String[]
+    push!(lines, "Odin static analysis table:")
+    push!(lines, "SEV  STATUS  NLOC  CCN  PARAM  PROCEDURE  FILE:LINE")
+
+    for row in rows
+        file_line = "src/" * row.file * ":" * string(row.line)
+        push!(lines,
+            rpad(row.severity, 5) * " " *
+            rpad(row.status, 13) * " " *
+            lpad(string(row.nloc), 5) * " " *
+            lpad(string(row.ccn), 4) * " " *
+            lpad(string(row.params), 6) * "  " *
+            row.name * "  " *
+            file_line)
+    end
+
+    return join(lines, '\n')
+end
+
+"""Aggregate Odin allocation statistics shared by the report and console."""
+function odin_allocation_stats(alloc_rows::Vector{OdinAllocRow})
+    kind_counts = Dict{String,Int}()
+    scope_set = Set{String}()
+    file_set = Set{String}()
+
+    for row in alloc_rows
+        kind_counts[row.kind] = get(kind_counts, row.kind, 0) + 1
+        push!(scope_set, row.scope)
+        push!(file_set, row.file)
+    end
+
+    return kind_counts, scope_set, file_set
+end
+
+"""Render the Odin allocation statistics block and site table for the report."""
+function render_odin_allocations(alloc_rows::Vector{OdinAllocRow})
+    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+
+    lines = String[]
+    push!(lines, "Odin allocation statistics:")
+    push!(lines, "  total allocation sites: $(length(alloc_rows))")
+    push!(lines, "  procedures with allocations: $(length(scope_set))")
+    push!(lines, "  files with allocations: $(length(file_set))")
+    push!(lines, "  sites by kind:")
+    kinds = sort(collect(keys(kind_counts)); by=k -> (-kind_counts[k], k))
+    for kind in kinds
+        push!(lines, "    $kind: $(kind_counts[kind])")
+    end
+
+    push!(lines, "")
+    push!(lines, "Odin allocation sites:")
+    push!(lines, "LINE  KIND  PROCEDURE  FILE  EXPRESSION")
+    for row in alloc_rows
+        push!(lines,
+            lpad(string(row.line), 5) * "  " *
+            row.kind * "  " * row.scope * "  " * "src/" * row.file * "  " *
+            row.expr)
+    end
+
+    return join(lines, '\n')
+end
+
+"""Print the Odin allocation statistics that appear in every vet run."""
+function print_odin_allocation_stats(alloc_rows::Vector{OdinAllocRow})
+    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+    println("Odin allocation sites: $(length(alloc_rows)) across " *
+        "$(length(scope_set)) procedures in $(length(file_set)) files.")
+    kinds = sort(collect(keys(kind_counts)); by=k -> (-kind_counts[k], k))
+    for kind in kinds
+        println("  - $kind: $(kind_counts[kind])")
+    end
+end
+
+"""Build one pair of failing Odin sections when the analyzer cannot run."""
+function odin_analyzer_failure_sections(
+    analysis_key::String, allocations_key::String, status::String,
+    summary::String, command_status::String, exit_code,
+    stdout_text::String, stderr_text::String, metrics::Dict{String,Any})
+    blocking = status == "Fail"
+    return VetSectionResult[
+        VetSectionResult(analysis_key, status, summary, command_status,
+            exit_code, stdout_text, stderr_text, metrics,
+            blocking, false, status == "Skipped", status == "Missing"),
+        VetSectionResult(allocations_key, status, summary, command_status,
+            exit_code, "", stderr_text, copy(metrics),
+            blocking, false, status == "Skipped", status == "Missing"),
+    ]
+end
+
+"""Build and run the parser-based Odin static analysis and allocation sections."""
+function run_odin_static_analysis_sections(src_dir::String, script_dir::String)
+    analysis_key = "odin-static-analysis"
+    allocations_key = "odin-allocations"
+
+    if Sys.which("odin") === nothing
+        return odin_analyzer_failure_sections(analysis_key, allocations_key,
+            "Missing", "odin not found on PATH; skipping Odin static analysis.",
+            "missing", nothing, "", "", Dict{String,Any}())
+    end
+
+    build_result = build_odin_analyzer(script_dir)
+    if build_result.exit_code != 0
+        return odin_analyzer_failure_sections(analysis_key, allocations_key,
+            "Fail", "Odin static analyzer failed to build.", "exit-nonzero",
+            build_result.exit_code, build_result.stdout, build_result.stderr,
+            Dict{String,Any}("exit_code" => build_result.exit_code))
+    end
+
+    run_result = run_command(
+        Cmd([odin_analyzer_path(script_dir), src_dir]);
+        cwd=script_dir, capture_output=true)
+    proc_rows, alloc_rows, parse_failures =
+        parse_odin_analyzer_output(run_result.stdout)
+
+    if run_result.exit_code != 0 && isempty(proc_rows) &&
+        isempty(alloc_rows) && isempty(parse_failures)
+        return odin_analyzer_failure_sections(analysis_key, allocations_key,
+            "Fail", "Odin static analyzer run failed.", "exit-nonzero",
+            run_result.exit_code, run_result.stdout, run_result.stderr,
+            Dict{String,Any}("exit_code" => run_result.exit_code))
+    end
+
+    class_metrics = classify_odin_proc_rows!(proc_rows)
+    odin_files = sort([
+        path for path in collect_paths(src_dir) if endswith(path, ".odin")])
+    analysis_metrics = merge(Dict{String,Any}(
         "files" => length(odin_files),
-        "exit_code" => result.exit_code)
+        "functions" => length(proc_rows),
+        "parse_failure_count" => length(parse_failures),
+        "over_nloc_review_count" =>
+            count(r -> r.nloc > ODIN_NLOC_REVIEW_THRESHOLD, proc_rows),
+        "over_param_review_count" =>
+            count(r -> r.params > ODIN_PARAM_REVIEW_THRESHOLD, proc_rows),
+        "max_ccn" => isempty(proc_rows) ? 0 : maximum(r -> r.ccn, proc_rows),
+        "exit_code" => run_result.exit_code), class_metrics)
 
-    if result.exit_code != 0
-        return VetSectionResult("odin-lizard", "Fail",
-            "Lizard odin analysis reported warnings.",
-            "exit-nonzero", result.exit_code, result.stdout, result.stderr,
-            metrics, true, false, false, false)
+    analysis_stdout = render_odin_static_table(proc_rows)
+    if !isempty(parse_failures)
+        analysis_stdout *= "\n\nParse failures:\n" * join(parse_failures, '\n')
     end
 
-    return VetSectionResult("odin-lizard", "Pass",
-        "Lizard odin analysis passed.",
-        "ok", result.exit_code, result.stdout, result.stderr, metrics,
-        false, false, false, false)
+    blocking_count = class_metrics["blocking_count"]
+    warning_count = class_metrics["warning_count"]
+    analysis_section = if !isempty(parse_failures)
+        VetSectionResult(analysis_key, "Fail",
+            "Odin analyzer failed to parse $(length(parse_failures)) file(s).",
+            "exit-nonzero", run_result.exit_code, analysis_stdout,
+            run_result.stderr, analysis_metrics, true, false, false, false)
+    elseif blocking_count > 0
+        VetSectionResult(analysis_key, "Fail",
+            "Odin static analysis reported $blocking_count blocking " *
+            "complexity violation(s).",
+            "ok", run_result.exit_code, analysis_stdout, run_result.stderr,
+            analysis_metrics, true, false, false, false)
+    elseif warning_count > 0
+        VetSectionResult(analysis_key, "Warn",
+            "Odin static analysis reported $warning_count new complexity " *
+            "warning(s); add an inline `#vet forgives(cyclomatic_complexity)` " *
+            "exception or reduce the complexity.",
+            "ok", run_result.exit_code, analysis_stdout, run_result.stderr,
+            analysis_metrics, false, true, false, false)
+    else
+        VetSectionResult(analysis_key, "Pass",
+            "Odin static analysis passed " *
+            "($(class_metrics["forgiven_count"]) forgiven).",
+            "ok", run_result.exit_code, analysis_stdout, run_result.stderr,
+            analysis_metrics, false, false, false, false)
+    end
+
+    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+    alloc_metrics = Dict{String,Any}(
+        "total_allocation_sites" => length(alloc_rows),
+        "procedures_with_allocations" => length(scope_set),
+        "files_with_allocations" => length(file_set))
+    for (kind, count) in kind_counts
+        alloc_metrics["kind_" * replace(kind, '.' => '_')] = count
+    end
+
+    print_odin_allocation_stats(alloc_rows)
+    allocations_section = VetSectionResult(allocations_key, "Pass",
+        "Recorded $(length(alloc_rows)) Odin allocation site(s) across " *
+        "$(length(scope_set)) procedures in $(length(file_set)) files.",
+        "ok", run_result.exit_code, render_odin_allocations(alloc_rows), "",
+        alloc_metrics, false, false, false, false)
+
+    return VetSectionResult[analysis_section, allocations_section]
 end
 
 """Run scc once with capture and return structured section output."""
@@ -1692,8 +1947,8 @@ function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result
     println("Running JET static analysis...")
     push!(sections, run_jet_section(src_dir, script_dir))
 
-    println("Running lizard analysis (odin)...")
-    push!(sections, run_odin_lizard_section(src_dir, script_dir))
+    println("Running Odin static analysis (parser-based)...")
+    append!(sections, run_odin_static_analysis_sections(src_dir, script_dir))
 
     println("Running scc statistics (scc --by-file -pw)...")
     push!(sections, run_repo_scc_section(script_dir))

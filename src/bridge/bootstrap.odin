@@ -123,16 +123,30 @@ julia_interface_staging_slot :: proc(
 }
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
+//   Report whether every required Julia interface handle is present.
 julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
-    return iface != nil && iface^.init_scripts != nil && iface^.global_loop != nil &&
-        iface^.scratchpad_classify_input != nil &&
-        iface^.scratchpad_complete_backslash != nil &&
-        iface^.scratchpad_complete_input != nil &&
-        iface^.scratchpad_queue_input != nil &&
-        iface^.scratchpad_save_history_to_file != nil &&
-        iface^.scratchpad_history_previous != nil &&
-        iface^.scratchpad_history_next != nil &&
-        iface^.scratchpad_history_reset_cursor != nil
+    if iface == nil {
+        return false
+    }
+
+    handles := [?]rawptr{
+        iface^.init_scripts,
+        iface^.global_loop,
+        iface^.scratchpad_classify_input,
+        iface^.scratchpad_complete_backslash,
+        iface^.scratchpad_complete_input,
+        iface^.scratchpad_queue_input,
+        iface^.scratchpad_save_history_to_file,
+        iface^.scratchpad_history_previous,
+        iface^.scratchpad_history_next,
+        iface^.scratchpad_history_reset_cursor,
+    }
+    for handle in handles {
+        if handle == nil {
+            return false
+        }
+    }
+    return true
 }
 
 //   Ensure the animation registry arena allocator exists for bridge storage.

@@ -1040,6 +1040,8 @@ function clean_build_files()
     targets = String[
         app_binary_path(),
         ASSETS_ARCHIVE_PATH,
+        joinpath(BIN_DIR,
+            is_windows() ? "euclid_vet_analyzer.exe" : "euclid_vet_analyzer"),
         joinpath(BIN_DIR, "runtime-closure.generated.cdx.json"),
         joinpath(BIN_DIR, "vet-report.md"),
         joinpath(BIN_DIR, "libeuclid.so"),

@@ -91,8 +91,11 @@ scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
     defer free(state)
 
     state^.point_system = new(app_core.Shapes_Point_System)
+    defer free(state^.point_system)
     state^.julia_interface = new(app_core.Euclid_Julia_Interface)
+    defer free(state^.julia_interface)
     state^.julia_interface^.current_animation = new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(state^.julia_interface^.current_animation)
 
     batch: app_bridge.Scene_Command_Batch
     app_bridge.begin_scene_command_batch(state, &batch)

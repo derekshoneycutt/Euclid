@@ -435,19 +435,23 @@ view_snapshot_matches_current :: proc(
 //   Validate all semantic bounds and require a closed, error-free command stream.
 // Counts are checked before any slice construction or copy into display-owned storage.
 view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
-    return slot^.fallback_text_len >= 0 &&
-        slot^.fallback_text_len <= len(slot^.fallback_text) &&
-        slot^.command_buffer.command_count >= 0 &&
-        slot^.command_buffer.command_count <= core.DYNVIEW__MAX_COMMANDS &&
-        slot^.command_buffer.text_bytes_len >= 0 &&
-        slot^.command_buffer.text_bytes_len <= core.DYNVIEW__MAX_TEXT_BYTES &&
-        slot^.math_program_count >= 0 &&
-        slot^.math_program_count <= core.DYNVIEW__MAX_MATH_PROGRAMS &&
-        slot^.math_command_count >= 0 &&
-        slot^.math_command_count <= core.DYNVIEW__MAX_MATH_COMMANDS &&
-        slot^.math_node_count >= 0 &&
-        slot^.math_node_count <= core.DYNVIEW__MAX_MATH_NODES &&
-        !slot^.command_buffer.has_stream_error &&
+    bounds := [5][2]int{
+        {slot^.fallback_text_len, len(slot^.fallback_text)},
+        {slot^.command_buffer.command_count, core.DYNVIEW__MAX_COMMANDS},
+        {slot^.command_buffer.text_bytes_len, core.DYNVIEW__MAX_TEXT_BYTES},
+        {slot^.math_program_count, core.DYNVIEW__MAX_MATH_PROGRAMS},
+        {slot^.math_command_count, core.DYNVIEW__MAX_MATH_COMMANDS},
+    }
+    for bound in bounds {
+        if bound[0] < 0 || bound[0] > bound[1] {
+            return false
+        }
+    }
+    if slot^.math_node_count < 0 ||
+        slot^.math_node_count > core.DYNVIEW__MAX_MATH_NODES {
+        return false
+    }
+    return !slot^.command_buffer.has_stream_error &&
         !slot^.command_buffer.stream_open_block
 }
 
@@ -671,34 +675,73 @@ try_submit_julia_request :: proc(
 // single-pending submission guards while payload slots retain the completed data.
 accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
     if !event.succeeded {
-        service^.failed_request_count += 1
-        service^.last_failed_request_id = event.request_id
-        service^.last_failed_request_kind = event.request_kind
-        if event.kind == .Initialized || event.kind == .Shutdown_Complete {
-            service^.lifecycle = .Failed
-        }
+        record_julia_event_failure(service, event)
     }
     if event.request_id == service^.active_request_id {
         service^.active_request_id = 0
     }
-    switch event.kind {
-    case .Initialized:
-    case .Shutdown_Complete:
-        if event.succeeded {
-            service^.lifecycle = .Stopped
-        }
-    case .Scratchpad_Complete:
-        completed_index := (service^.completed_scratchpad_head +
-            service^.completed_scratchpad_count) % SCRATCHPAD_ASYNC_SLOT_COUNT
-        assert(service^.completed_scratchpad_count < SCRATCHPAD_ASYNC_SLOT_COUNT)
-        service^.completed_scratchpad_slots[completed_index] = event.slot_index
-        service^.completed_scratchpad_count += 1
-    case .View_Snapshot_Complete:
-        service^.view_snapshot_pending = false
-    case .Animation_Tick_Complete:
-        service^.animation_tick_pending = false
-    case .Invoke_Complete:
+
+    handlers := JULIA_EVENT_HANDLERS
+    handler := handlers[event.kind]
+    if handler != nil {
+        handler(service, event)
     }
+}
+
+//   Mark the service stopped when a shutdown completes successfully.
+julia_event_on_shutdown :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+    if event.succeeded {
+        service^.lifecycle = .Stopped
+    }
+}
+
+//   Record a completed scratchpad slot for the polling consumer.
+julia_event_on_scratchpad :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+    record_completed_scratchpad_slot(service, event.slot_index)
+}
+
+//   Clear the view-snapshot pending flag.
+julia_event_on_view_snapshot :: proc(
+    service: ^Julia_Runtime_Service, event: Julia_Event) {
+    service^.view_snapshot_pending = false
+}
+
+//   Clear the animation-tick pending flag.
+julia_event_on_animation_tick :: proc(
+    service: ^Julia_Runtime_Service, event: Julia_Event) {
+    service^.animation_tick_pending = false
+}
+
+//   Dispatch table mapping each Julia event kind to its completion handler.
+//   Initialized and Invoke_Complete need no handler and map to nil.
+JULIA_EVENT_HANDLERS ::
+    [Julia_Event_Kind]proc(service: ^Julia_Runtime_Service, event: Julia_Event){
+    .Initialized = nil,
+    .Invoke_Complete = nil,
+    .Scratchpad_Complete = julia_event_on_scratchpad,
+    .View_Snapshot_Complete = julia_event_on_view_snapshot,
+    .Animation_Tick_Complete = julia_event_on_animation_tick,
+    .Shutdown_Complete = julia_event_on_shutdown,
+}
+
+//   Record a failed Julia event and fail the lifecycle on terminal events.
+record_julia_event_failure :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+    service^.failed_request_count += 1
+    service^.last_failed_request_id = event.request_id
+    service^.last_failed_request_kind = event.request_kind
+    if event.kind == .Initialized || event.kind == .Shutdown_Complete {
+        service^.lifecycle = .Failed
+    }
+}
+
+//   Enqueue one completed scratchpad slot for the polling consumer.
+record_completed_scratchpad_slot :: proc(
+    service: ^Julia_Runtime_Service, slot_index: i32) {
+    completed_index := (service^.completed_scratchpad_head +
+        service^.completed_scratchpad_count) % SCRATCHPAD_ASYNC_SLOT_COUNT
+    assert(service^.completed_scratchpad_count < SCRATCHPAD_ASYNC_SLOT_COUNT)
+    service^.completed_scratchpad_slots[completed_index] = slot_index
+    service^.completed_scratchpad_count += 1
 }
 
 //   Publish readiness after startup registration and priming have completed.
@@ -785,6 +828,10 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
 // Every request produces one correlated event. After each non-shutdown request, the worker
 // restores its saved Odin context and clears temporary allocations before receiving more work.
 julia_runtime_worker :: proc(data: rawptr) {
+    // #vet forgives(cyclomatic_complexity) — single-owner serializing event loop.
+    // The switch drives the Julia thread lifecycle; a dispatch table would need a
+    // shared-state side channel to carry success/kind back to the loop, which is a
+    // worse design for this hot correctness-critical path.
     service := cast(^Julia_Runtime_Service)data
     worker_context := context
     service^.owner_thread_id = os.get_current_thread_id()

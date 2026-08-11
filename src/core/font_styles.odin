@@ -1,25 +1,25 @@
 package core
 
+//   Canonical weight ordering ranks for heaviest-flag resolution.
+FONT_WEIGHT_RANKS :: [Font_Weight]int{
+    .Light = 1, .Regular = 2, .Medium = 3, .SemiBold = 4,
+    .Bold = 5, .ExtraBold = 6, .Black = 7,
+}
+
+//   Weight bits in canonical order; used to pick the heaviest requested weight.
+FONT_WEIGHT_FLAG_ORDER :: []Font_Variant_Flags{
+    .Light, .Regular, .Medium, .SemiBold, .Bold, .ExtraBold, .Black,
+}
+
+//   Weight value matched one-to-one with FONT_WEIGHT_FLAG_ORDER entries.
+FONT_WEIGHT_ORDER :: []Font_Weight{
+    .Light, .Regular, .Medium, .SemiBold, .Bold, .ExtraBold, .Black,
+}
+
 //   Return canonical weight ordering rank for heaviest-flag resolution.
 font_weight_rank :: #force_inline proc(weight: Font_Weight) -> int {
-	switch weight {
-	case .Light:
-		return 1
-	case .Regular:
-		return 2
-	case .Medium:
-		return 3
-	case .SemiBold:
-		return 4
-	case .Bold:
-		return 5
-	case .ExtraBold:
-		return 6
-	case .Black:
-		return 7
-	}
-
-	return 2
+    ranks := FONT_WEIGHT_RANKS
+    return ranks[weight]
 }
 
 //   Return true when one requested variant-flag bit is present.
@@ -32,53 +32,16 @@ font_resolve_weight_from_flags :: #force_inline proc(
 	flags: Font_Variant_Flags) -> Font_Weight {
 	resolved := Font_Weight.Regular
 	resolved_rank := font_weight_rank(resolved)
+	flag_order := FONT_WEIGHT_FLAG_ORDER
+	weight_order := FONT_WEIGHT_ORDER
 
-	if font_has_flag(flags, .Light) {
-		rank := font_weight_rank(.Light)
-		if rank > resolved_rank {
-			resolved = .Light
-			resolved_rank = rank
+	for index in 0..<len(flag_order) {
+		if !font_has_flag(flags, flag_order[index]) {
+			continue
 		}
-	}
-	if font_has_flag(flags, .Regular) {
-		rank := font_weight_rank(.Regular)
+		rank := font_weight_rank(weight_order[index])
 		if rank > resolved_rank {
-			resolved = .Regular
-			resolved_rank = rank
-		}
-	}
-	if font_has_flag(flags, .Medium) {
-		rank := font_weight_rank(.Medium)
-		if rank > resolved_rank {
-			resolved = .Medium
-			resolved_rank = rank
-		}
-	}
-	if font_has_flag(flags, .SemiBold) {
-		rank := font_weight_rank(.SemiBold)
-		if rank > resolved_rank {
-			resolved = .SemiBold
-			resolved_rank = rank
-		}
-	}
-	if font_has_flag(flags, .Bold) {
-		rank := font_weight_rank(.Bold)
-		if rank > resolved_rank {
-			resolved = .Bold
-			resolved_rank = rank
-		}
-	}
-	if font_has_flag(flags, .ExtraBold) {
-		rank := font_weight_rank(.ExtraBold)
-		if rank > resolved_rank {
-			resolved = .ExtraBold
-			resolved_rank = rank
-		}
-	}
-	if font_has_flag(flags, .Black) {
-		rank := font_weight_rank(.Black)
-		if rank > resolved_rank {
-			resolved = .Black
+			resolved = weight_order[index]
 			resolved_rank = rank
 		}
 	}

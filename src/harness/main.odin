@@ -33,40 +33,79 @@ parse_option_value :: proc(arg: string, prefix: string) -> (string, bool) {
     return arg[len(prefix):], true
 }
 
+//   Set one string-valued harness option field from a parsed --name=value pair.
+Harness_Option_Setter :: proc(options: ^Harness_Options, value: string) -> bool
+
+//   Store the asset root option.
+set_asset_root_option :: proc(options: ^Harness_Options, value: string) -> bool {
+    options.asset_root = value
+    return true
+}
+
+//   Store the animation id option.
+set_animation_id_option :: proc(options: ^Harness_Options, value: string) -> bool {
+    options.animation_id_text = value
+    return true
+}
+
+//   Store the trace output option.
+set_trace_output_option :: proc(options: ^Harness_Options, value: string) -> bool {
+    options.trace_output = value
+    return true
+}
+
+//   Store the scenario name option.
+set_scenario_option :: proc(options: ^Harness_Options, value: string) -> bool {
+    options.scenario_name = value
+    return true
+}
+
+//   Parse and store the positive step-count option.
+set_steps_option :: proc(options: ^Harness_Options, value: string) -> bool {
+    steps, parse_ok := strconv.parse_i64_of_base(value, 10)
+    if !parse_ok || steps <= 0 {
+        return false
+    }
+    options.steps = int(steps)
+    return true
+}
+
+//   One `--name=value` harness option mapped to its setter.
+Harness_Option :: struct {
+    prefix: string,
+    set:    Harness_Option_Setter,
+}
+
+//   All recognized harness options, matched by prefix.
+HARNESS_OPTIONS :: []Harness_Option{
+    {"--asset-root=", set_asset_root_option},
+    {"--animation-id=", set_animation_id_option},
+    {"--trace-output=", set_trace_output_option},
+    {"--scenario=", set_scenario_option},
+    {"--steps=", set_steps_option},
+}
+
+//   Apply one argument to the options block, returning false when unrecognized.
+apply_harness_arg :: proc(options: ^Harness_Options, arg: string) -> bool {
+    for option in HARNESS_OPTIONS {
+        if value, ok := parse_option_value(arg, option.prefix); ok {
+            return option.set(options, value)
+        }
+    }
+    if arg == "--help" {
+        print_usage()
+        return false
+    }
+    return false
+}
+
 //   Parse harness arguments into a validated options block.
 parse_args :: proc() -> (Harness_Options, bool) {
     options := Harness_Options{}
     for index in 1..<len(os.args) {
-        arg := os.args[index]
-        if value, ok := parse_option_value(arg, "--asset-root="); ok {
-            options.asset_root = value
-            continue
-        }
-        if value, ok := parse_option_value(arg, "--animation-id="); ok {
-            options.animation_id_text = value
-            continue
-        }
-        if value, ok := parse_option_value(arg, "--trace-output="); ok {
-            options.trace_output = value
-            continue
-        }
-        if value, ok := parse_option_value(arg, "--scenario="); ok {
-            options.scenario_name = value
-            continue
-        }
-        if value, ok := parse_option_value(arg, "--steps="); ok {
-            steps, parse_ok := strconv.parse_i64_of_base(value, 10)
-            if !parse_ok || steps <= 0 {
-                return {}, false
-            }
-            options.steps = int(steps)
-            continue
-        }
-        if arg == "--help" {
-            print_usage()
+        if !apply_harness_arg(&options, os.args[index]) {
             return {}, false
         }
-        return {}, false
     }
 
     return options, len(options.asset_root) > 0 && len(options.animation_id_text) > 0 &&
@@ -119,11 +158,9 @@ main :: proc() {
         os.exit(1)
     }
 
-    for _ in 0..<options.steps {
-        if !view.run_deterministic_fixed_step(session.state, view.FIXED_DT) {
-            fmt.eprintln("Deterministic fixed-step execution failed.")
-            os.exit(1)
-        }
+    if !run_harness_fixed_steps(session, options.steps) {
+        fmt.eprintln("Deterministic fixed-step execution failed.")
+        os.exit(1)
     }
 
     if len(options.scenario_name) > 0 &&
@@ -137,4 +174,15 @@ main :: proc() {
         fmt.eprintln("Harness observed rejected animation ticks.")
         os.exit(1)
     }
+}
+
+//   Run N deterministic fixed steps, returning false on the first failure.
+run_harness_fixed_steps :: proc(
+    session: view.Euclid_Runtime_Session, steps: int) -> bool {
+    for _ in 0..<steps {
+        if !view.run_deterministic_fixed_step(session.state, view.FIXED_DT) {
+            return false
+        }
+    }
+    return true
 }

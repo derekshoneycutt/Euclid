@@ -372,7 +372,9 @@ Pkg.add("JuliaSyntax")
 pkg.add("CodeComplexity")
 ```
 
-You should also have `lizard` installed for the static analysis of Odin code.
+Odin static analysis is performed by a purpose-built analyzer in `tools/vet`
+that is compiled automatically during vet mode; no external Odin linter is
+required.
 
 You should also have `scc` installed for broad code statistics of the codebase.
 
@@ -396,8 +398,9 @@ Report section statuses use these meanings:
 - `Skipped`: check was intentionally not run for the current context.
 - `Missing`: required external tool was not available.
 
-The report includes sections for Odin analysis, Julia syntax, Julia parser metadata, Julia
-CodeComplexity, Julia JET, Odin lizard, and repository scc.
+The report includes sections for the Odin vet build, Odin compiler dependencies,
+Julia syntax, Julia parser metadata, Julia CodeComplexity, Julia JET, Odin static
+analysis, Odin allocations, and repository scc.
 
 #### Odin
 
@@ -405,9 +408,16 @@ First, Odin is run with a set of vet flags that enforces style throughout the Od
 treating warnings as errors, etc. Thankfully, we can skip the tabs they require in their
 own repository in the Odin code.
 
-Additionally, we run `lizard` in C++ mode on the Odin code. If functions are especially
-long or complex, this will often catch them, even throwing a warning and stopping the
-build in vet mode.
+Additionally, vet mode compiles and runs the Odin static analyzer in
+`tools/vet`, which uses `core:odin/parser` to measure every Odin procedure
+against the coding standards: NLOC, cyclomatic complexity, and parameter count.
+Complexity at or above 15 is a blocking violation unless the procedure carries an
+inline `#vet forgives(cyclomatic_complexity)` exception or is listed in
+`staging_OdinComplexityGrandfathered.md`; complexity 11-14 warns. NLOC and
+parameter count remain review signals. The analyzer also traces allocation call
+sites (`new`, `make`, `append`, and known allocating helpers), which are reported
+prominently in the `odin-allocations` report section with basic statistics
+printed on every vet run.
 
 `scc` also provides additional information (see below).
 
@@ -437,7 +447,8 @@ an additional `Complexity/Code` measure for Odin, Julia, and Total values. In ge
 if the Odin code remains moderately high 0.13-0.18 it is considered pretty good, and we
 generally expect the Julia code to remain low-moderate 0.05-0.13. The total thus being a
 moderate 0.09-0.13 would be a great expectation. For meaningful measures to the function
-and file, the `lizard` and `CodeComplexity.jl` outputs are more telling to small-scale
+and file, the Odin static analyzer and `CodeComplexity.jl` outputs are more telling to
+small-scale
 needed attention than the `scc` outputs. Nonetheless, the `scc` outputs can indicate
 issues with stupid code decisions we should feel bad about. And make us feel like 100x
 developers or something.

@@ -168,22 +168,32 @@ decode_matrix_column_alignments :: #force_inline proc(
     }
 
     for col in 0..<cols {
-        switch preamble[col] {
-        case 'l':
-            alignments[col] = .Left
-        case 'c':
-            alignments[col] = .Center
-        case 'r':
-            alignments[col] = .Right
-        case:
+        alignment, ok := matrix_alignment_from_char(preamble[col])
+        if !ok {
             for idx in 0..<cols {
                 alignments[idx] = .Center
             }
             return alignments, false
         }
+        alignments[col] = alignment
     }
 
     return alignments, true
+}
+
+//   Map one l/c/r alignment character to its matrix column alignment.
+matrix_alignment_from_char :: #force_inline proc(
+    ch: u8) -> (Dynview_Matrix_Column_Alignment, bool) {
+
+    switch ch {
+    case 'l':
+        return .Left, true
+    case 'c':
+        return .Center, true
+    case 'r':
+        return .Right, true
+    }
+    return .Center, false
 }
 
 //   Resolve one cell x-position within a matrix column using l/c/r alignment rules.
@@ -201,39 +211,18 @@ matrix_aligned_cell_x :: #force_inline proc(
     return col_x + (column_width - cell_width) * 0.5
 }
 
+//   Draw text for each delimiter kind, indexed by kind minus one.
+DELIMITER_TEXTS :: [DELIMITER_KIND_COUNT]string{
+    "(", ")", "[", "]", "{", "}", "|", "‖", "⌈", "⌉", "⌊", "⌋", "⟨", "⟩",
+}
+
 //   Return delimiter draw text for one supported delimiter kind.
 delimiter_text :: #force_inline proc(delimiter_kind: i32) -> string {
-    switch delimiter_kind {
-    case DELIMITER_KIND_LEFT_PAREN:
-        return "("
-    case DELIMITER_KIND_RIGHT_PAREN:
-        return ")"
-    case DELIMITER_KIND_LEFT_BRACKET:
-        return "["
-    case DELIMITER_KIND_RIGHT_BRACKET:
-        return "]"
-    case DELIMITER_KIND_LEFT_BRACE:
-        return "{"
-    case DELIMITER_KIND_RIGHT_BRACE:
-        return "}"
-    case DELIMITER_KIND_VERT:
-        return "|"
-    case DELIMITER_KIND_DOUBLE_VERT:
-        return "‖"
-    case DELIMITER_KIND_LEFT_CEIL:
-        return "⌈"
-    case DELIMITER_KIND_RIGHT_CEIL:
-        return "⌉"
-    case DELIMITER_KIND_LEFT_FLOOR:
-        return "⌊"
-    case DELIMITER_KIND_RIGHT_FLOOR:
-        return "⌋"
-    case DELIMITER_KIND_LEFT_ANGLE:
-        return "⟨"
-    case DELIMITER_KIND_RIGHT_ANGLE:
-        return "⟩"
+    if delimiter_kind < 1 || delimiter_kind > DELIMITER_KIND_COUNT {
+        return ""
     }
-    return ""
+    texts := DELIMITER_TEXTS
+    return texts[delimiter_kind - 1]
 }
 
 //   Return family type for one delimiter kind.

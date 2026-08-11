@@ -164,9 +164,12 @@ Code review MUST reject a violation even when the compiler or formatter accepts 
   exception is granted.
 - Do not split into trivial wrappers only to satisfy line-count rules.
 
-The vet report records Julia NLOC, parameter count, and cyclomatic complexity. Complexity above 10
-is blocking outside configured content-script exceptions; NLOC and parameter count remain review
-signals. Apply the same design limits to Odin during review even where tooling does not measure them.
+The vet report records NLOC, parameter count, and cyclomatic complexity for both languages.
+Julia complexity above 10 is blocking outside configured content-script exceptions. Odin
+complexity is measured by the parser-based analyzer in `tools/vet`: complexity at or above 15
+is blocking unless the procedure carries an inline `#vet forgives(cyclomatic_complexity)`
+documented exception or is listed in `staging_OdinComplexityGrandfathered.md`; complexity 11-14
+produces a warning. NLOC and parameter count remain review signals in both languages.
 
 Use this decision path when a function grows:
 

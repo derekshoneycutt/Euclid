@@ -465,6 +465,9 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     delimiter_kind: i32,
     draw_x, baseline_y: f32) -> f32 {
 
+    // #vet forgives(cyclomatic_complexity) — stretch-delimiter glyph renderer.
+    // The switch fans out to per-family glyph drawing (vert, bracket, brace, etc.)
+    // with per-glyph geometry; a handler table would obscure the visual mapping.
     if delimiter_kind == dynview.DELIMITER_KIND_NONE {
         return 0
     }
@@ -769,29 +772,10 @@ draw_recursive_matrix_item :: #force_inline proc(
         return
     }
 
-    col_widths: [16]f32
-    row_ascents: [16]f32
-    row_descents: [16]f32
-    cell_items: [256]core.Dynview_Layout_Item
-    for row in 0..<rows {
-        for col in 0..<cols {
-            cell_index := row * cols + col
-            cmd_index := cell_program^.command_start + cell_index
-            cell_cmd := runtime^.compile_cache.math_commands[cmd_index]
-            cell_item, cell_ok := dynview.math_program_item(
-                &runtime^.compile_cache,
-                &runtime^.command_buffer,
-                cell_cmd,
-                font_size)
-            if !cell_ok {
-                return
-            }
-
-            cell_items[cell_index] = cell_item
-            col_widths[col] = max(col_widths[col], cell_item.draw_width)
-            row_ascents[row] = max(row_ascents[row], cell_item.ascent)
-            row_descents[row] = max(row_descents[row], cell_item.descent)
-        }
+    cells := Matrix_Draw_Cells{}
+    if !measure_matrix_draw_cells(runtime, cell_program, rows, cols,
+        font_size, &cells) {
+        return
     }
 
     alignments, _ := dynview.decode_matrix_column_alignments(
@@ -807,16 +791,34 @@ draw_recursive_matrix_item :: #force_inline proc(
     column_gap := dynview.matrix_column_gap(font_size, base_advance)
     row_gap := dynview.matrix_row_gap(font_size)
 
+    draw_matrix_cells(state, runtime, panel, font, font_size, cell_program,
+        &cells, alignments, rows, cols, draw_x, item_y, column_gap, row_gap)
+}
+
+//   Draw every measured matrix cell at its aligned position.
+draw_matrix_cells :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^core.Dynview_System,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    cell_program: ^core.Dynview_Math_Program,
+    cells: ^Matrix_Draw_Cells,
+    alignments: [16]dynview.Dynview_Matrix_Column_Alignment,
+    rows, cols: int,
+    draw_x, item_y: f32,
+    column_gap, row_gap: f32) {
+
     row_top := item_y
     for row in 0..<rows {
-        row_baseline := row_top + row_ascents[row]
+        row_baseline := row_top + cells.row_ascents[row]
         col_x := draw_x
         for col in 0..<cols {
             cell_index := row * cols + col
-            cell_item := cell_items[cell_index]
+            cell_item := cells.items[cell_index]
             cell_x := dynview.matrix_aligned_cell_x(
                 col_x,
-                col_widths[col],
+                cells.col_widths[col],
                 cell_item.draw_width,
                 alignments[col])
             command_start := cell_program^.command_start + cell_index
@@ -838,17 +840,56 @@ draw_recursive_matrix_item :: #force_inline proc(
                 cell_x,
                 row_baseline)
 
-            col_x += col_widths[col]
+            col_x += cells.col_widths[col]
             if col + 1 < cols {
                 col_x += column_gap
             }
         }
 
-        row_top += row_ascents[row] + row_descents[row]
+        row_top += cells.row_ascents[row] + cells.row_descents[row]
         if row + 1 < rows {
             row_top += row_gap
         }
     }
+}
+
+//   Measured per-cell items plus per-column widths and per-row extents.
+Matrix_Draw_Cells :: struct {
+    items:        [256]core.Dynview_Layout_Item,
+    col_widths:   [16]f32,
+    row_ascents:  [16]f32,
+    row_descents: [16]f32,
+}
+
+//   Measure every matrix cell, accumulating items, column widths, row extents.
+measure_matrix_draw_cells :: proc(
+    runtime: ^core.Dynview_System,
+    cell_program: ^core.Dynview_Math_Program,
+    rows, cols: int,
+    font_size: f32,
+    cells: ^Matrix_Draw_Cells) -> bool {
+
+    for row in 0..<rows {
+        for col in 0..<cols {
+            cell_index := row * cols + col
+            cmd_index := cell_program^.command_start + cell_index
+            cell_cmd := runtime^.compile_cache.math_commands[cmd_index]
+            cell_item, cell_ok := dynview.math_program_item(
+                &runtime^.compile_cache,
+                &runtime^.command_buffer,
+                cell_cmd,
+                font_size)
+            if !cell_ok {
+                return false
+            }
+
+            cells.items[cell_index] = cell_item
+            cells.col_widths[col] = max(cells.col_widths[col], cell_item.draw_width)
+            cells.row_ascents[row] = max(cells.row_ascents[row], cell_item.ascent)
+            cells.row_descents[row] = max(cells.row_descents[row], cell_item.descent)
+        }
+    }
+    return true
 }
 
 //   Draw one recursive structured math item variant routed by layout item kind.
@@ -1203,21 +1244,40 @@ draw_cached_text_item :: proc(
     case .MathBlock:
         draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun:
-        view_core.ui_text(text, int(draw_x), int(item_y), text_color,
-            resolved_font, font_size)
-        if style.underline {
-            underline_width := f32(item.col_span) * dynview.effective_advance(
-                style, runtime^.compile_cache.last_wrap_advance)
-            underline_y := item_y + font_size + 1
-            rl.DrawLineEx(
-                rl.Vector2{draw_x, underline_y},
-                rl.Vector2{draw_x + underline_width, underline_y},
-                1,
-                text_color)
-        }
+        draw_text_run_item(runtime, panel, font, font_size, style, item, text,
+            resolved_font, text_color, draw_x, item_y)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
         .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
+}
+
+//   Draw one cached text-run item with optional underline.
+draw_text_run_item :: proc(
+    runtime: ^core.Dynview_System,
+    panel: rl.Rectangle,
+    font: rl.Font,
+    font_size: f32,
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    text: string,
+    resolved_font: rl.Font,
+    text_color: rl.Color,
+    draw_x, item_y: f32) {
+
+    view_core.ui_text(text, int(draw_x), int(item_y), text_color,
+        resolved_font, font_size)
+    if !style.underline {
+        return
+    }
+
+    underline_width := f32(item.col_span) * dynview.effective_advance(
+        style, runtime^.compile_cache.last_wrap_advance)
+    underline_y := item_y + font_size + 1
+    rl.DrawLineEx(
+        rl.Vector2{draw_x, underline_y},
+        rl.Vector2{draw_x + underline_width, underline_y},
+        1,
+        text_color)
 }
 
 //   Draw one cached inline shape item.

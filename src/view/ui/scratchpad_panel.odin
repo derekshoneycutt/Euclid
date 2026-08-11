@@ -385,6 +385,53 @@ apply_scratchpad_mode_transition :: proc(
 }
 
 
+//   Run the scroll container for the scratchpad transcript and return its panel.
+//   Updates the live scroll offset and re-pins the bottom when the user scrolls.
+scratchpad_sync_scroll :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    text_panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State,
+    layout: Scratchpad_Terminal_Layout,
+    scroll_step: f32) -> Scroll_Container_Begin_Result {
+
+    scratch_scroll_state := Scroll_Container_State{
+        is_dragging_thumb = ui_runtime.text_scroll_dragging,
+        drag_offset_y = ui_runtime.text_scroll_drag_off,
+    }
+    pre_wheel_scroll := state^.ui_runtime.view_text_scroll_y
+    scratch_scroll_begin := scroll_container_begin(1002, text_panel,
+        state^.ui_runtime.view_text_scroll_y, layout.content_height, mouse_input,
+        rl.Vector2{}, text_panel, scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        &ui_runtime^.ui_press_owner, scratch_scroll_state)
+    state^.ui_runtime.view_text_scroll_y = scratch_scroll_begin.scroll_y_out
+
+    if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll {
+        ui_runtime^.scratchpad_bottom_pinned = scratchpad_scroll_is_at_bottom(
+            state^.ui_runtime.view_text_scroll_y, layout.max_scroll)
+    }
+
+    return scratch_scroll_begin
+}
+
+//   Recompute the layout pinned to the bottom when bottom-pinning is active.
+scratchpad_pin_layout_to_bottom :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    terminal_panel: rl.Rectangle,
+    font: rl.Font,
+    output_text_legacy: string,
+    layout: Scratchpad_Terminal_Layout) -> Scratchpad_Terminal_Layout {
+
+    if !ui_runtime^.scratchpad_bottom_pinned {
+        return layout
+    }
+    state^.ui_runtime.view_text_scroll_y = layout.max_scroll
+    return scratchpad_terminal_layout(
+        state, terminal_panel, ui_runtime, font, output_text_legacy,
+        state^.ui_runtime.view_text_scroll_y)
+}
+
 //   Draw Scratchpad transcript and live input as one terminal-style scroll surface.
 draw_scratchpad_output_and_prompt :: proc(
     state: ^core.Euclid_General_State,
@@ -410,22 +457,9 @@ draw_scratchpad_output_and_prompt :: proc(
     }
 
     mouse := mouse_input.position
-    scratch_scroll_state := Scroll_Container_State{
-        is_dragging_thumb = ui_runtime.text_scroll_dragging,
-        drag_offset_y = ui_runtime.text_scroll_drag_off,
-    }
-    pre_wheel_scroll := state^.ui_runtime.view_text_scroll_y
-    scratch_scroll_begin := scroll_container_begin(1002, text_panel,
-        state^.ui_runtime.view_text_scroll_y, layout.content_height, mouse_input,
-        rl.Vector2{}, text_panel, scroll_step * WHEEL_SCROLL_MULTIPLIER,
-        &ui_runtime^.ui_press_owner, scratch_scroll_state)
+    scratch_scroll_begin := scratchpad_sync_scroll(state, ui_runtime,
+        text_panel, mouse_input, layout, scroll_step)
     terminal_panel := scratch_scroll_begin.view_rect
-    state^.ui_runtime.view_text_scroll_y = scratch_scroll_begin.scroll_y_out
-
-    if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll {
-        ui_runtime^.scratchpad_bottom_pinned = scratchpad_scroll_is_at_bottom(
-            state^.ui_runtime.view_text_scroll_y, layout.max_scroll)
-    }
 
     layout = scratchpad_terminal_layout(
         state, terminal_panel, ui_runtime, font, output_text_legacy,
@@ -493,12 +527,9 @@ draw_scratchpad_output_and_prompt :: proc(
     layout = scratchpad_terminal_layout(
         state, terminal_panel, ui_runtime, font, output_text_legacy,
         state^.ui_runtime.view_text_scroll_y)
-    if ui_runtime^.scratchpad_bottom_pinned {
-        state^.ui_runtime.view_text_scroll_y = layout.max_scroll
-        layout = scratchpad_terminal_layout(
-            state, terminal_panel, ui_runtime, font, output_text_legacy,
-            state^.ui_runtime.view_text_scroll_y)
-    }
+    layout = scratchpad_pin_layout_to_bottom(state, ui_runtime, terminal_panel,
+        font, output_text_legacy, layout)
+
     prompt_font := view_core.font_runtime_resolve(
         state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
     live_prompt = scratchpad_prompt(ui_runtime^.scratchpad_input_mode)

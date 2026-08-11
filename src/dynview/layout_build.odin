@@ -230,53 +230,79 @@ layout_consume_text_run :: proc(
 
     max_cols := layout_max_cols(cache, style)
     ascent, descent := style_ascent_descent(style, font_size)
+    return layout_wrap_text_run(cache, state, acc, cmd, text, style,
+        max_cols, ascent, descent)
+}
+
+//   Wrap one text segment at `start`, finalizing full rows, and return the next
+//   start index. A returned next_start <= start signals the loop should stop.
+layout_wrap_one_segment :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    text: string,
+    style: Dynview_Text_Style,
+    max_cols: int,
+    start: int,
+    ascent, descent: f32) -> (int, i32) {
+
+    if state^.col >= max_cols {
+        status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+        if status != DYNVIEW_STATUS_OK {
+            return start, status
+        }
+    }
+
+    available := max_cols - state^.col
+    if available <= 0 {
+        status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+        if status != DYNVIEW_STATUS_OK {
+            return start, status
+        }
+        return start, DYNVIEW_STATUS_OK
+    }
+
+    line_start, line_end, next_start := next_wrapped_text_span(text, start, available)
+    line_col_span := text_codepoint_count_span(text, line_start, line_end)
+    line_byte_len := line_end - line_start
+    if line_col_span <= 0 || line_byte_len <= 0 {
+        return start, DYNVIEW_STATUS_OK
+    }
+
+    status := layout_push_wrapped_text_segment(
+        cache, state, acc, cmd, style, line_start, line_byte_len, line_col_span,
+        next_start < len(text), ascent, descent)
+    if status != DYNVIEW_STATUS_OK {
+        return start, status
+    }
+    return next_start, DYNVIEW_STATUS_OK
+}
+
+//   Wrap one text run into layout lines, finalizing a row whenever the line is full.
+layout_wrap_text_run :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    text: string,
+    style: Dynview_Text_Style,
+    max_cols: int,
+    ascent, descent: f32) -> (i32, int) {
+
     last_line := -1
     start := 0
     for start < len(text) {
-        if state^.col >= max_cols {
-            status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
-            if status != DYNVIEW_STATUS_OK {
-                return status, last_line
-            }
-        }
-
-        available := max_cols - state^.col
-        if available <= 0 {
-            status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
-            if status != DYNVIEW_STATUS_OK {
-                return status, last_line
-            }
-            continue
-        }
-
-        line_start, line_end, next_start := next_wrapped_text_span(text, start, available)
-        line_col_span := text_codepoint_count_span(text, line_start, line_end)
-        line_byte_len := line_end - line_start
-        if line_col_span <= 0 || line_byte_len <= 0 {
-            break
-        }
-
-        status := layout_push_wrapped_text_segment(
-            cache,
-            state,
-            acc,
-            cmd,
-            style,
-            line_start,
-            line_byte_len,
-            line_col_span,
-            next_start < len(text),
-            ascent,
-            descent)
+        next_start, status := layout_wrap_one_segment(cache, state, acc, cmd,
+            text, style, max_cols, start, ascent, descent)
         if status != DYNVIEW_STATUS_OK {
             return status, last_line
         }
-
-        last_line = state^.line_index
         if next_start <= start {
             break
         }
 
+        last_line = state^.line_index
         start = next_start
         if next_start < len(text) {
             last_line = state^.line_index - 1
@@ -1196,43 +1222,48 @@ layout_consume_text_like_command :: #force_inline proc(
 }
 
 //   Consume one visible math-structure command using the matching layout helper.
+//   Only top-level MathBlock is handled here; nested math-structure kinds are
+//   consumed through their own recursion and are rejected at this layer.
 layout_consume_structured_math_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
     cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
-    switch cmd.kind {
-    case .MathBlock:
-        status, _ := layout_consume_math_block(
-            ctx^.cache,
-            ctx^.buffer,
-            ctx^.state,
-            ctx^.acc,
-            cmd,
-            style,
-            ctx^.font_size)
-        return status
-    case .ScriptAttachRecursive:
+    if cmd.kind != .MathBlock {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .FracRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .StretchDelimiterRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .MatrixRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .LargeOpRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .AccentBarRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .RadicalBarRecursive:
-        return DYNVIEW_STATUS_INVALID_ARGUMENT
-    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .CopyableTextRun,
-        .LineBreak, .Divider, .InlineLine, .InlineBox, .InlineCircle,
-        .InlineFilledBox, .InlineFilledCircle, .InlinePieSection,
-        .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
+    status, _ := layout_consume_math_block(
+        ctx^.cache, ctx^.buffer, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+    return status
+}
 
-    return DYNVIEW_STATUS_INVALID_ARGUMENT
+//   Uniform handler shape for one inline-shape layout command.
+Layout_Inline_Shape_Handler :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int)
+
+//   Dispatch table mapping each inline-shape command kind to its layout handler.
+//   Non-inline-shape kinds map to nil and are rejected by the caller.
+LAYOUT_INLINE_SHAPE_HANDLERS ::
+    [core.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
+    .BeginBlock = nil, .EndBlock = nil, .TextRun = nil, .MathGlyphRun = nil,
+    .MathBlock = nil, .ScriptAttachRecursive = nil, .FracRecursive = nil,
+    .StretchDelimiterRecursive = nil, .MatrixRecursive = nil,
+    .LargeOpRecursive = nil, .AccentBarRecursive = nil, .RadicalBarRecursive = nil,
+    .CopyableTextRun = nil, .LineBreak = nil, .Divider = nil,
+    .InlineLine = layout_consume_inline_line,
+    .InlineBox = layout_consume_inline_box,
+    .InlineCircle = layout_consume_inline_circle,
+    .InlineFilledBox = layout_consume_inline_filled_box,
+    .InlineFilledCircle = layout_consume_inline_filled_circle,
+    .InlinePieSection = layout_consume_inline_pie_section,
+    .InlinePerpendicular = layout_consume_inline_perpendicular,
+    .InlineTriangle = layout_consume_inline_triangle,
+    .InlinePentagon = layout_consume_inline_pentagon,
 }
 
 //   Consume one visible inline-shape command using the matching layout helper.
@@ -1241,51 +1272,13 @@ layout_consume_inline_shape_command :: #force_inline proc(
     cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
-    switch cmd.kind {
-    case .InlineLine:
-        status, _ := layout_consume_inline_line(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlineBox:
-        status, _ := layout_consume_inline_box(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlineCircle:
-        status, _ := layout_consume_inline_circle(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlineFilledBox:
-        status, _ := layout_consume_inline_filled_box(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlineFilledCircle:
-        status, _ := layout_consume_inline_filled_circle(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlinePieSection:
-        status, _ := layout_consume_inline_pie_section(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlinePerpendicular:
-        status, _ := layout_consume_inline_perpendicular(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlineTriangle:
-        status, _ := layout_consume_inline_triangle(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .InlinePentagon:
-        status, _ := layout_consume_inline_pentagon(
-            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
-        return status
-    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, 
-        .MatrixRecursive, .LargeOpRecursive, .AccentBarRecursive,
-        .RadicalBarRecursive,
-        .CopyableTextRun, .LineBreak, .Divider:
+    handlers := LAYOUT_INLINE_SHAPE_HANDLERS
+    handler := handlers[cmd.kind]
+    if handler == nil {
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
-
-    return DYNVIEW_STATUS_INVALID_ARGUMENT
+    status, _ := handler(ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+    return status
 }
 
 //   Consume one visible dynview command and update copy-row span.

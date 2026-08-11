@@ -127,6 +127,7 @@ gif_capture_update_fixed_step :: proc(
     state: ^core.Euclid_General_State) {
     ui_runtime := &state.ui_runtime
 
+    // A save request either cancels an Armed capture or arms a fresh one.
     if ui_runtime.save_gif_requested {
         ui_runtime.save_gif_requested = false
         if ui_runtime.gif_capture_phase == .Armed {
@@ -136,9 +137,7 @@ gif_capture_update_fixed_step :: proc(
             clear_gif_status_note(ui_runtime)
             return
         }
-
-        if ui_runtime.gif_capture_phase != .Armed &&
-            ui_runtime.gif_capture_phase != .Recording &&
+        if ui_runtime.gif_capture_phase != .Recording &&
             ui_runtime.gif_capture_phase != .Finalizing {
             ui_runtime.gif_capture_phase = .Armed
             ui_runtime.gif_captured_frames = 0
@@ -153,27 +152,36 @@ gif_capture_update_fixed_step :: proc(
     }
 
     switch ui_runtime.gif_capture_phase {
-    case .Idle:
-    case .Finalizing:
-    case .Saved:
-    case .Error:
+    case .Idle, .Finalizing, .Saved, .Error:
     case .Armed:
-        if gif_capture_begin_session(state) {
-            ui_runtime.gif_capture_phase = .Recording
-            clear_gif_status_note(ui_runtime)
-        } else {
-            ui_runtime.gif_capture_phase = .Error
-            set_gif_status_note(ui_runtime, "Error: failed to begin GIF capture session.")
-        }
+        gif_capture_advance_armed(state, ui_runtime)
     case .Recording:
-        ui_runtime.gif_capture_phase = .Finalizing
-        if gif_capture_finalize_session(state) {
-            ui_runtime.gif_capture_phase = .Saved
-            clear_gif_status_note(ui_runtime)
-        } else {
-            ui_runtime.gif_capture_phase = .Error
-            set_gif_status_note(ui_runtime, "Error: failed to finalize GIF file.")
-        }
+        gif_capture_advance_recording(state, ui_runtime)
+    }
+}
+
+//   Advance the Armed phase: begin a capture session or record the failure.
+gif_capture_advance_armed :: proc(
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    if gif_capture_begin_session(state) {
+        ui_runtime.gif_capture_phase = .Recording
+        clear_gif_status_note(ui_runtime)
+    } else {
+        ui_runtime.gif_capture_phase = .Error
+        set_gif_status_note(ui_runtime, "Error: failed to begin GIF capture session.")
+    }
+}
+
+//   Advance the Recording phase: finalize the file or record the failure.
+gif_capture_advance_recording :: proc(
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    ui_runtime.gif_capture_phase = .Finalizing
+    if gif_capture_finalize_session(state) {
+        ui_runtime.gif_capture_phase = .Saved
+        clear_gif_status_note(ui_runtime)
+    } else {
+        ui_runtime.gif_capture_phase = .Error
+        set_gif_status_note(ui_runtime, "Error: failed to finalize GIF file.")
     }
 }
 

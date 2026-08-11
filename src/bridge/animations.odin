@@ -213,33 +213,39 @@ update_running_animations :: proc(state: ^core.Euclid_General_State) -> bool {
             state^.julia_interface^.selected_animation {
         if switched_animation {
             state^.julia_interface^.pending_animation_reset = false
-        } else {
-            if state^.julia_interface^.animation_reset_cooldown_remaining <= 0 {
-                animation_generation: u64 = 0
-                if state^.julia_runtime_service != nil {
-                    animation_generation =
-                        state^.julia_runtime_service^.animation_generation
-                }
-                _ = trace.record_animation_event_ex(
-                    &state^.trace_state, "animation.reset_requested",
-                    animation_generation, 0, "", "")
-                if !reset_current_animation_loop(state) {
-                    return false
-                }
-                state^.julia_interface^.animation_reset_cooldown_remaining =
-                    ANIMATION_RESET_MIN_INTERVAL
-                state^.julia_interface^.pending_animation_reset = false
-                animation_generation = 0
-                if state^.julia_runtime_service != nil {
-                    animation_generation =
-                        state^.julia_runtime_service^.animation_generation
-                }
-                _ = trace.record_animation_event_ex(
-                    &state^.trace_state, "animation.reset_committed",
-                    animation_generation, 0, "", "")
-            }
+        } else if !commit_pending_animation_reset(state) {
+            return false
         }
     }
+    return true
+}
+
+//   Read the current animation generation from the runtime service (0 when absent).
+current_animation_generation :: proc(state: ^core.Euclid_General_State) -> u64 {
+    if state^.julia_runtime_service == nil {
+        return 0
+    }
+    return state^.julia_runtime_service^.animation_generation
+}
+
+//   Commit a pending animation reset when the cooldown has elapsed.
+//   Returns false when the underlying reset fails.
+commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> bool {
+    if state^.julia_interface^.animation_reset_cooldown_remaining > 0 {
+        return true
+    }
+
+    _ = trace.record_animation_event_ex(&state^.trace_state,
+        "animation.reset_requested", current_animation_generation(state), 0, "", "")
+    if !reset_current_animation_loop(state) {
+        return false
+    }
+
+    state^.julia_interface^.animation_reset_cooldown_remaining =
+        ANIMATION_RESET_MIN_INTERVAL
+    state^.julia_interface^.pending_animation_reset = false
+    _ = trace.record_animation_event_ex(&state^.trace_state,
+        "animation.reset_committed", current_animation_generation(state), 0, "", "")
     return true
 }
 

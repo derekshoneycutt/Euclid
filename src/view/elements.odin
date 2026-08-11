@@ -827,6 +827,9 @@ polygon_plane :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     plane_point, plane_normal: ^Vector3) -> bool {
 
+    // #vet forgives(cyclomatic_complexity) — polygon plane-fit kernel.
+    // The guards are triangle-index bounds and degenerate-normal rejection over the
+    // triangle list; intrinsic to the geometry, not incidental branching.
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
         return false
     }
@@ -920,6 +923,9 @@ build_pen_polygon_crossing :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
+    // #vet forgives(cyclomatic_complexity) — pen/polygon clipping pipeline.
+    // The branches are half-space clip, plane-side classification, and front/back
+    // emission of a geometry crossing; each is a distinct geometric stage.
     stage0_start, stage0_end: Vector3
     if !z_split_clip_segment_halfspace(
         pen^.joint1,
@@ -1031,6 +1037,9 @@ find_pen_polygon_crossing :: proc(
     state: ^Euclid_General_State,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
+    // #vet forgives(cyclomatic_complexity) — crossing-search driver.
+    // The guards skip non-crossing candidate pairs over the merged draw cache;
+    // load-bearing filtering, not incidental control flow.
     cache := &state^.point_system^.draw_cache
     pen_index := -1
     pen := core.Shapes_Pen_Draw {}

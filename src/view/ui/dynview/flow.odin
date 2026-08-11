@@ -386,38 +386,7 @@ flow_consume_text_run :: proc(
             break
         }
 
-        if draw_ctx^.enabled {
-            row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-                f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-            if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-                row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-                line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) *
-                    dynview.effective_advance(style, draw_ctx^.wrap_advance)
-                if style.alignment == .Center && flow^.col == 0 {
-                    line_w := f32(line_len) * dynview.effective_advance(
-                        style, draw_ctx^.wrap_advance)
-                    line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
-                }
-
-                view_core.ui_text(line_text,
-                    int(line_x),
-                    int(row_y),
-                    style.color,
-                    style_font(draw_ctx, style),
-                    draw_ctx^.font_size)
-                if style.underline {
-                    underline_y := row_y + draw_ctx^.font_size + 1
-                    underline_width := f32(line_len) *
-                        dynview.effective_advance(style, draw_ctx^.wrap_advance)
-                    rl.DrawLineEx(
-                        rl.Vector2{line_x, underline_y},
-                        rl.Vector2{line_x + underline_width, underline_y},
-                        1,
-                        style.color)
-                }
-            }
-        }
+        flow_draw_text_line(flow, line_text, line_len, style, draw_ctx)
 
         flow^.had_visible = true
         flow^.col += line_len
@@ -431,6 +400,46 @@ flow_consume_text_run :: proc(
             break
         }
         start = next_start
+    }
+}
+
+//   Draw one wrapped text line at the current flow position when it is visible.
+flow_draw_text_line :: proc(
+    flow: ^Dynview_Flow_State,
+    line_text: string,
+    line_len: int,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    if !draw_ctx^.enabled {
+        return
+    }
+    row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
+        f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+    if row_y + draw_ctx^.text_row_height < draw_ctx^.panel.y ||
+        row_y > draw_ctx^.panel.y + draw_ctx^.panel.height {
+        return
+    }
+
+    line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) *
+        dynview.effective_advance(style, draw_ctx^.wrap_advance)
+    if style.alignment == .Center && flow^.col == 0 {
+        line_w := f32(line_len) * dynview.effective_advance(
+            style, draw_ctx^.wrap_advance)
+        line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
+    }
+
+    view_core.ui_text(line_text, int(line_x), int(row_y), style.color,
+        style_font(draw_ctx, style), draw_ctx^.font_size)
+    if style.underline {
+        underline_y := row_y + draw_ctx^.font_size + 1
+        underline_width := f32(line_len) *
+            dynview.effective_advance(style, draw_ctx^.wrap_advance)
+        rl.DrawLineEx(
+            rl.Vector2{line_x, underline_y},
+            rl.Vector2{line_x + underline_width, underline_y},
+            1,
+            style.color)
     }
 }
 
@@ -900,7 +909,136 @@ consume_linebreak :: proc(
     flow.col = 0
 }
 
-//  Consume a single command in the current run of the given flow
+//   Uniform handler shape for one flow command; the style is resolved by the caller.
+//   Handlers that do not need the command buffer receive nil for it.
+Flow_Command_Handler :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context)
+
+//   Adapt flow_consume_inline_line to the uniform table handler shape.
+flow_handle_inline_line :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_line(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_box to the uniform table handler shape.
+flow_handle_inline_box :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_box(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_circle to the uniform table handler shape.
+flow_handle_inline_circle :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_circle(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_filled_box to the uniform table handler shape.
+flow_handle_inline_filled_box :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_filled_box(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_filled_circle to the uniform table handler shape.
+flow_handle_inline_filled_circle :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_filled_circle(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_pie_section to the uniform table handler shape.
+flow_handle_inline_pie_section :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_pie_section(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_perpendicular to the uniform table handler shape.
+flow_handle_inline_perpendicular :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_perpendicular(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_triangle to the uniform table handler shape.
+flow_handle_inline_triangle :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_triangle(flow, cmd, style, draw_ctx)
+}
+
+//   Adapt flow_consume_inline_pentagon to the uniform table handler shape.
+flow_handle_inline_pentagon :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
+}
+
+//   Dispatch table mapping each dynview command kind to its flow handler.
+//   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
+FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
+    .BeginBlock = nil,
+    .EndBlock = nil,
+    .CopyableTextRun = nil,
+    .LineBreak = nil,
+    .Divider = nil,
+    .TextRun = consume_text_based_command,
+    .MathGlyphRun = consume_text_based_command,
+    .MathBlock = consume_text_based_command,
+    .ScriptAttachRecursive = consume_text_based_command,
+    .FracRecursive = consume_text_based_command,
+    .StretchDelimiterRecursive = consume_text_based_command,
+    .MatrixRecursive = consume_text_based_command,
+    .LargeOpRecursive = consume_large_op_command,
+    .AccentBarRecursive = consume_text_based_command,
+    .RadicalBarRecursive = consume_text_based_command,
+    .InlineLine = flow_handle_inline_line,
+    .InlineBox = flow_handle_inline_box,
+    .InlineCircle = flow_handle_inline_circle,
+    .InlineFilledBox = flow_handle_inline_filled_box,
+    .InlineFilledCircle = flow_handle_inline_filled_circle,
+    .InlinePieSection = flow_handle_inline_pie_section,
+    .InlinePerpendicular = flow_handle_inline_perpendicular,
+    .InlineTriangle = flow_handle_inline_triangle,
+    .InlinePentagon = flow_handle_inline_pentagon,
+}
+
+//   Consume a single command in the current run of the given flow.
+//   Handlers are dispatched from a static table indexed by command kind.
 consume_flow_command :: proc(
     runtime: ^core.Dynview_System,
     cmd: core.Dynview_Command,
@@ -908,50 +1046,17 @@ consume_flow_command :: proc(
     flow: ^Dynview_Flow_State,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    // #lizard forgives(cyclomatic_complexity)
-    style := dynview.style_by_id(cmd.style_id)
-    switch cmd.kind {
-    case .TextRun:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .MathGlyphRun:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .MathBlock:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .ScriptAttachRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .FracRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .StretchDelimiterRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .MatrixRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .LargeOpRecursive:
-        consume_large_op_command(cmd, buffer, flow, style, draw_ctx)
-    case .AccentBarRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .RadicalBarRecursive:
-        consume_text_based_command(cmd, buffer, flow, style, draw_ctx)
-    case .InlineLine:
-        flow_consume_inline_line(flow, cmd, style, draw_ctx)
-    case .InlineBox:
-        flow_consume_inline_box(flow, cmd, style, draw_ctx)
-    case .InlineCircle:
-        flow_consume_inline_circle(flow, cmd, style, draw_ctx)
-    case .InlineFilledBox:
-        flow_consume_inline_filled_box(flow, cmd, style, draw_ctx)
-    case .InlineFilledCircle:
-        flow_consume_inline_filled_circle(flow, cmd, style, draw_ctx)
-    case .InlinePieSection:
-        flow_consume_inline_pie_section(flow, cmd, style, draw_ctx)
-    case .InlinePerpendicular:
-        flow_consume_inline_perpendicular(flow, cmd, style, draw_ctx)
-    case .InlineTriangle:
-        flow_consume_inline_triangle(flow, cmd, style, draw_ctx)
-    case .InlinePentagon:
-        flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
-    case .LineBreak, .Divider:
+    kind := cmd.kind
+    if kind == .LineBreak || kind == .Divider {
         consume_linebreak(flow)
-    case .BeginBlock, .EndBlock, .CopyableTextRun:
+        return
+    }
+
+    style := dynview.style_by_id(cmd.style_id)
+    handlers := FLOW_COMMAND_HANDLERS
+    handler := handlers[kind]
+    if handler != nil {
+        handler(cmd, buffer, flow, style, draw_ctx)
     }
 }
 
