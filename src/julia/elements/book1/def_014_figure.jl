@@ -81,7 +81,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A figure is that which is contained by any boundary or boundaries."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Figure}
 
-A figure is that which is contained by any boundary or boundaries."""
+A figure \euclidtriangle[color=steelblue,height=2,width=3,filled] is that which is contained by any boundary or boundaries \euclidline[color=steelblue,length=3,thickness=4]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

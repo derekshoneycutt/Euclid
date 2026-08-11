@@ -417,6 +417,15 @@ struct LatexDocumentShape
     height::Float32
     thickness::Float32
     filled::Bool
+    start_angle::Float32
+    end_angle::Float32
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    arc_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_1::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_2::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_3::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_4::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_5::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
 struct LatexDocumentRun

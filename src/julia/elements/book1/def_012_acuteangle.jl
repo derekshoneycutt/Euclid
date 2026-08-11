@@ -74,7 +74,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 An acute angle is an angle less than a right angle."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Acute Angle}
 
-An acute angle is an angle less than a right angle."""
+An acute angle \euclidangle[color=khaki3,radius=2,end=60,filled] is an angle less than a right angle."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

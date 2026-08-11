@@ -766,7 +766,7 @@ layout_consume_inline_filled_circle :: proc(
         text_descent)
 }
 
-//   Build a filled pie-section item using circle-equivalent geometry.
+//   Build one pie-section item using circle-equivalent geometry.
 inline_pie_section_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     cmd: core.Dynview_Command,
@@ -774,12 +774,152 @@ inline_pie_section_item :: #force_inline proc(
     cols: int,
     text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
-    item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
-    item.kind = .InlinePieSection
-    item.pie_start_angle_degrees = cmd.pie_start_angle_degrees
-    item.pie_end_angle_degrees = cmd.pie_end_angle_degrees
-    item.inline_outline_stroke = max(0.0, cmd.inline_outline_stroke)
-    return item
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    reserved_width := f32(cols) * effective_advance
+
+    // Inline pie radius is authored in wrap-column units.
+    // Use requested radius directly so larger radius grows the marker itself,
+    // not only its surrounding horizontal span.
+    requested_radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
+
+    x_min, x_max, y_min, y_max := pie_section_bounds(
+        requested_radius,
+        cmd.pie_start_angle_degrees,
+        cmd.pie_end_angle_degrees)
+    draw_width := max(1.0, x_max - x_min)
+    draw_height := max(1.0, y_max - y_min)
+    center_offset_x := -x_min
+    center_offset_y := -y_min
+
+    // Keep draw width inside the reserved layout span in edge-rounding cases.
+    if draw_width > reserved_width {
+        draw_width = reserved_width
+    }
+
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Dynview_Layout_Item{
+        kind = .InlinePieSection,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        has_brush_color = cmd.has_brush_color,
+        brush_color = cmd.brush_color,
+        inline_outline_stroke = max(0.0, cmd.inline_outline_stroke),
+        pie_start_angle_degrees = cmd.pie_start_angle_degrees,
+        pie_end_angle_degrees = cmd.pie_end_angle_degrees,
+        pie_is_filled = cmd.pie_is_filled,
+        has_outline_color = cmd.has_outline_color,
+        outline_color = cmd.outline_color,
+        draw_width = draw_width,
+        draw_height = draw_height,
+        pie_center_offset_x = center_offset_x,
+        pie_center_offset_y = center_offset_y,
+        ascent = max(0.0, -(center - center_offset_y)),
+        descent = max(0.0, center + (draw_height - center_offset_y)),
+    }
+}
+
+//   Build one perpendicular item using box-equivalent geometry.
+inline_perpendicular_item :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
+
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    content_height := text_ascent + text_descent
+    requested := cmd.inline_box_height * effective_advance
+    line_height := max(2.0, min(content_height, requested))
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Dynview_Layout_Item{
+        kind = .InlinePerpendicular,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        inline_box_height = line_height,
+        has_brush_color = true,
+        brush_color = cmd.brush_color,
+        shape_edge_color_1 = cmd.shape_edge_color_1,
+        draw_width = f32(cols) * effective_advance,
+        draw_height = line_height,
+        ascent = max(0.0, -(center - line_height * 0.5)),
+        descent = max(0.0, center + line_height * 0.5),
+    }
+}
+
+//   Build one triangle item using box-equivalent geometry.
+inline_triangle_item :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
+
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    content_height := text_ascent + text_descent
+    requested := cmd.inline_box_height * effective_advance
+    tri_height := max(2.0, min(content_height, requested))
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Dynview_Layout_Item{
+        kind = .InlineTriangle,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        inline_box_height = tri_height,
+        has_brush_color = cmd.shape_is_filled,
+        brush_color = cmd.brush_color,
+        shape_is_filled = cmd.shape_is_filled,
+        shape_edge_color_1 = cmd.shape_edge_color_1,
+        shape_edge_color_2 = cmd.shape_edge_color_2,
+        shape_edge_color_3 = cmd.shape_edge_color_3,
+        draw_width = f32(cols) * effective_advance,
+        draw_height = tri_height,
+        ascent = max(0.0, -(center - tri_height * 0.5)),
+        descent = max(0.0, center + tri_height * 0.5),
+    }
+}
+
+//   Build one inline-pentagon layout item from command metrics and style defaults.
+inline_pentagon_item :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    cols: int,
+    text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
+
+    effective_advance := effective_advance(style, cache^.last_wrap_advance)
+    content_height := text_ascent + text_descent
+    requested := cmd.inline_box_height * effective_advance
+    pent_height := max(2.0, min(content_height, requested))
+    center := (text_descent - text_ascent) * 0.5
+
+    return core.Dynview_Layout_Item{
+        kind = .InlinePentagon,
+        style_id = cmd.style_id,
+        col_span = cols,
+        inline_atom_dimension = cmd.inline_atom_dimension,
+        inline_atom_stroke = max(1.0, cmd.inline_atom_stroke),
+        inline_box_height = pent_height,
+        shape_is_filled = cmd.shape_is_filled,
+        has_brush_color = cmd.shape_is_filled,
+        brush_color = cmd.brush_color,
+        shape_edge_color_1 = cmd.shape_edge_color_1,
+        shape_edge_color_2 = cmd.shape_edge_color_2,
+        shape_edge_color_3 = cmd.shape_edge_color_3,
+        shape_edge_color_4 = cmd.shape_edge_color_4,
+        shape_edge_color_5 = cmd.shape_edge_color_5,
+        draw_width = f32(cols) * effective_advance,
+        draw_height = pent_height,
+        ascent = max(0.0, -(center - pent_height * 0.5)),
+        descent = max(0.0, center + pent_height * 0.5),
+    }
 }
 
 //   Lay out one inline pie-section command and return the line touched.
@@ -802,7 +942,7 @@ layout_consume_inline_pie_section :: proc(
     }
 
     max_cols := layout_max_cols(cache, style)
-    cols := inline_circle_cols(cmd, style, max_cols)
+    cols := inline_pie_section_cols(cmd, style, max_cols)
     text_ascent, text_descent := style_ascent_descent(style, font_size)
 
     status := layout_wrap_before_inline(
@@ -830,6 +970,102 @@ layout_consume_inline_pie_section :: proc(
         max_cols,
         text_ascent,
         text_descent)
+}
+
+//   Lay out one inline-perpendicular command and return the line touched.
+layout_consume_inline_perpendicular :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_perpendicular_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
+}
+
+//   Lay out one inline-triangle command and return the line touched.
+layout_consume_inline_triangle :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_triangle_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
+}
+
+//   Lay out one inline-pentagon command and return the line touched.
+layout_consume_inline_pentagon :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int) {
+
+    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    if placement_status != DYNVIEW_STATUS_OK {
+        return placement_status, -1
+    }
+
+    max_cols := layout_max_cols(cache, style)
+    cols := inline_box_cols(cmd, style, max_cols)
+    text_ascent, text_descent := style_ascent_descent(style, font_size)
+
+    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    item := inline_pentagon_item(cache, cmd, style, cols, text_ascent, text_descent)
+    status = layout_push_item(cache, state, acc, item)
+    if status != DYNVIEW_STATUS_OK {
+        return status, -1
+    }
+
+    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
 }
 
 //   Fill a one-line layout cache for an empty command stream.
@@ -980,7 +1216,8 @@ layout_consume_structured_math_command :: #force_inline proc(
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .CopyableTextRun,
         .LineBreak, .Divider, .InlineLine, .InlineBox, .InlineCircle,
-        .InlineFilledBox, .InlineFilledCircle, .InlinePieSection:
+        .InlineFilledBox, .InlineFilledCircle, .InlinePieSection,
+        .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
 
     return DYNVIEW_STATUS_INVALID_ARGUMENT
@@ -1017,6 +1254,18 @@ layout_consume_inline_shape_command :: #force_inline proc(
         status, _ := layout_consume_inline_pie_section(
             ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
         return status
+    case .InlinePerpendicular:
+        status, _ := layout_consume_inline_perpendicular(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlineTriangle:
+        status, _ := layout_consume_inline_triangle(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
+    case .InlinePentagon:
+        status, _ := layout_consume_inline_pentagon(
+            ctx^.cache, ctx^.state, ctx^.acc, cmd, style, ctx^.font_size)
+        return status
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
         .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive, 
         .MatrixRecursive, .LargeOpRecursive, .AccentBarRecursive,
@@ -1042,7 +1291,8 @@ layout_consume_visible_command :: proc(
         .RadicalBarRecursive:
         return layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
-        .InlineFilledCircle, .InlinePieSection:
+        .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
+        .InlineTriangle, .InlinePentagon:
         return layout_consume_inline_shape_command(ctx, cmd, effective_style)
     case .LineBreak, .Divider:
         return layout_finalize_line(
@@ -1283,6 +1533,110 @@ inline_circle_cols :: #force_inline proc(
 
     scaled := f64(diameter_in_cols * max(0.5, style.wrap_scale))
     cols := int(math.ceil(scaled))
+    if cols < 1 {
+        cols = 1
+    }
+    if cols > max_cols {
+        cols = max_cols
+    }
+    return cols
+}
+
+//   Normalize one degree angle into the [0, 360) range.
+pie_normalize_angle_degrees :: #force_inline proc(angle: f32) -> f32 {
+    normalized := angle
+    for normalized < 0 {
+        normalized += 360
+    }
+    for normalized >= 360 {
+        normalized -= 360
+    }
+    return normalized
+}
+
+//   Compute positive sweep degrees from start to end with wraparound.
+pie_positive_sweep_degrees :: #force_inline proc(start_degrees, end_degrees: f32) -> f32 {
+    start_n := pie_normalize_angle_degrees(start_degrees)
+    end_n := pie_normalize_angle_degrees(end_degrees)
+    sweep := end_n - start_n
+    if sweep < 0 {
+        sweep += 360
+    }
+    return sweep
+}
+
+//   Return true when angle lies inside the inclusive start->end positive sweep.
+pie_angle_in_sweep :: #force_inline proc(
+    angle_degrees,
+    start_degrees,
+    sweep_degrees: f32) -> bool {
+
+    delta := pie_normalize_angle_degrees(angle_degrees - start_degrees)
+    return delta <= sweep_degrees + 0.0001
+}
+
+//   Compute tight wedge bounds including center and cardinal sweep crossings.
+pie_section_bounds :: #force_inline proc(
+    radius,
+    start_degrees,
+    end_degrees: f32) -> (f32, f32, f32, f32) {
+
+    start_n := pie_normalize_angle_degrees(start_degrees)
+    end_n := pie_normalize_angle_degrees(end_degrees)
+    sweep := pie_positive_sweep_degrees(start_n, end_n)
+
+    x_min: f32 = 0
+    x_max: f32 = 0
+    y_min: f32 = 0
+    y_max: f32 = 0
+
+    include_angle :: #force_inline proc(angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
+        radians := angle_degrees * math.PI / 180.0
+        x := radius * f32(math.cos(f64(radians)))
+        y := -radius * f32(math.sin(f64(radians)))
+        x_min^ = min(x_min^, x)
+        x_max^ = max(x_max^, x)
+        y_min^ = min(y_min^, y)
+        y_max^ = max(y_max^, y)
+    }
+
+    include_angle(start_n, radius, &x_min, &x_max, &y_min, &y_max)
+    include_angle(end_n, radius, &x_min, &x_max, &y_min, &y_max)
+
+    cardinals := [?]f32{0, 90, 180, 270}
+    for i in 0..<len(cardinals) {
+        angle := cardinals[i]
+        if pie_angle_in_sweep(angle, start_n, sweep) {
+            include_angle(angle, radius, &x_min, &x_max, &y_min, &y_max)
+        }
+    }
+
+    return x_min, x_max, y_min, y_max
+}
+
+//   Measure inline pie-section command using tight wedge horizontal bounds.
+inline_pie_section_cols :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    max_cols: int) -> int {
+
+    if max_cols <= 0 {
+        return 1
+    }
+
+    radius_in_cols := cmd.inline_atom_dimension
+    if radius_in_cols <= 0 {
+        radius_in_cols = 1
+    }
+    radius_scaled := radius_in_cols * max(0.5, style.wrap_scale)
+
+    x_min, x_max, _, _ := pie_section_bounds(
+        radius_scaled,
+        cmd.pie_start_angle_degrees,
+        cmd.pie_end_angle_degrees)
+    width_in_cols := max(1.0, x_max - x_min)
+
+    cols := int(math.ceil(f64(width_in_cols)))
     if cols < 1 {
         cols = 1
     }

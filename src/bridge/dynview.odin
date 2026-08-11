@@ -302,21 +302,12 @@ dynview_import_math_program_from_ops :: proc(
             if status != BRIDGE_STATUS_OK {
                 return status
             }
-        case .BeginBlock:
-        case .EndBlock:
-        case .TextRun:
-        case .MathGlyphRun:
-        case .MathBlock:
-        case .LargeOpRecursive:
-        case .CopyableTextRun:
-        case .LineBreak:
-        case .Divider:
-        case .InlineLine:
-        case .InlineBox:
-        case .InlineCircle:
-        case .InlineFilledBox:
-        case .InlineFilledCircle:
-        case .InlinePieSection:
+        case .BeginBlock, .EndBlock,
+             .TextRun, .MathGlyphRun, .MathBlock,
+             .LargeOpRecursive, .CopyableTextRun, .LineBreak, .Divider,
+             .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
+               .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
+               .InlineTriangle, .InlinePentagon:
         }
 
         cache^.math_commands[command_start + local_index] = core.Dynview_Command{

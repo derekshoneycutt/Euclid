@@ -815,6 +815,180 @@ dynview_inline_filled_circle :: proc "c" (
     })
 }
 
+//   Append one inline perpendicular atom with two independently colored legs.
+@(export)
+dynview_inline_perpendicular :: proc "c" (
+    state: ^core.Euclid_General_State,
+    length, stem_height, stroke: f32,
+    style_id: i32,
+    top_color, stem_color: Bridge_Color) -> i32 {
+
+    context = state^.saved_context
+    runtime: ^core.Dynview_System
+    status := dynview_require_runtime(state, &runtime)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if runtime == nil || !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer: ^core.Dynview_Command_Buffer
+    status = dynview_require_buffer(runtime, &buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    if length <= 0 || stem_height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Dynview_Command{
+        kind = .InlinePerpendicular,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = length,
+        inline_box_height = stem_height,
+        inline_atom_stroke = stroke,
+        brush_color = rl.Color{top_color.r, top_color.g, top_color.b, top_color.a},
+        shape_edge_color_1 = rl.Color{stem_color.r, stem_color.g, stem_color.b, stem_color.a},
+    })
+}
+
+//   Append one inline triangle atom with optional fill and three edge colors.
+@(export)
+dynview_inline_triangle :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height, stroke: f32,
+    style_id: i32,
+    filled: bool,
+    fill_color, edge1_color, edge2_color, edge3_color: Bridge_Color) -> i32 {
+
+    context = state^.saved_context
+    runtime: ^core.Dynview_System
+    status := dynview_require_runtime(state, &runtime)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if runtime == nil || !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer: ^core.Dynview_Command_Buffer
+    status = dynview_require_buffer(runtime, &buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    if width <= 0 || height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Dynview_Command{
+        kind = .InlineTriangle,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_box_height = height,
+        inline_atom_stroke = stroke,
+        shape_is_filled = filled,
+        has_brush_color = filled,
+        brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
+        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+    })
+}
+
+//   Append one inline box atom with independently colored edges.
+@(export)
+dynview_inline_box_edges :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height, stroke: f32,
+    style_id: i32,
+    edge1_color, edge2_color, edge3_color, edge4_color: Bridge_Color) -> i32 {
+
+    context = state^.saved_context
+    runtime: ^core.Dynview_System
+    status := dynview_require_runtime(state, &runtime)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if runtime == nil || !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer: ^core.Dynview_Command_Buffer
+    status = dynview_require_buffer(runtime, &buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    if width <= 0 || height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Dynview_Command{
+        kind = .InlineBox,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_atom_stroke = stroke,
+        inline_box_height = height,
+        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+        shape_edge_color_4 = rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+    })
+}
+
+//   Append one inline pentagon atom with optional fill and five edge colors.
+@(export)
+dynview_inline_pentagon :: proc "c" (
+    state: ^core.Euclid_General_State,
+    width, height, stroke: f32,
+    style_id: i32,
+    filled: bool,
+    fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color: Bridge_Color) -> i32 {
+
+    context = state^.saved_context
+    runtime: ^core.Dynview_System
+    status := dynview_require_runtime(state, &runtime)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    if runtime == nil || !runtime^.enabled {
+        return BRIDGE_STATUS_OK
+    }
+
+    buffer: ^core.Dynview_Command_Buffer
+    status = dynview_require_buffer(runtime, &buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+
+    if width <= 0 || height <= 0 || stroke <= 0 {
+        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
+    }
+
+    return dynview_push_command(runtime, core.Dynview_Command{
+        kind = .InlinePentagon,
+        block_id = buffer^.stream_open_block_id,
+        style_id = style_id,
+        inline_atom_dimension = width,
+        inline_box_height = height,
+        inline_atom_stroke = stroke,
+        shape_is_filled = filled,
+        has_brush_color = filled,
+        brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
+        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+        shape_edge_color_4 = rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+        shape_edge_color_5 = rl.Color{edge5_color.r, edge5_color.g, edge5_color.b, edge5_color.a},
+    })
+}
+
 //   Append one filled inline pie-section atom with an optional outline stroke.
 //
 // Parameters:
@@ -834,7 +1008,9 @@ dynview_inline_pie_section :: proc "c" (
     state: ^core.Euclid_General_State,
     radius, start_angle_degrees, end_angle_degrees: f32,
     style_id: i32,
+    filled: bool,
     fill_color: Bridge_Color,
+    arc_color: Bridge_Color,
     outline_stroke: f32) -> i32 {
 
     context = state^.saved_context
@@ -867,6 +1043,9 @@ dynview_inline_pie_section :: proc "c" (
         inline_outline_stroke = outline_stroke,
         pie_start_angle_degrees = start_angle_degrees,
         pie_end_angle_degrees = end_angle_degrees,
+        pie_is_filled = filled,
+        has_outline_color = true,
+        outline_color = rl.Color{arc_color.r, arc_color.g, arc_color.b, arc_color.a},
     })
 }
 

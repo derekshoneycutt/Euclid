@@ -786,6 +786,9 @@ Dynview_Command_Kind :: enum {
     InlineFilledBox,
     InlineFilledCircle,
     InlinePieSection,
+    InlinePerpendicular,
+    InlineTriangle,
+    InlinePentagon,
 }
 
 Dynview_Command :: struct {
@@ -825,6 +828,15 @@ Dynview_Command :: struct {
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
+    pie_is_filled: bool,
+    has_outline_color: bool,
+    outline_color: rl.Color,
+    shape_is_filled: bool,
+    shape_edge_color_1: rl.Color,
+    shape_edge_color_2: rl.Color,
+    shape_edge_color_3: rl.Color,
+    shape_edge_color_4: rl.Color,
+    shape_edge_color_5: rl.Color,
 }
 
 Dynview_Copy_Block :: struct {
@@ -861,6 +873,9 @@ Dynview_Layout_Item_Kind :: enum {
     InlineFilledBox,
     InlineFilledCircle,
     InlinePieSection,
+    InlinePerpendicular,
+    InlineTriangle,
+    InlinePentagon,
 }
 
 Dynview_Layout_Item :: struct {
@@ -899,10 +914,21 @@ Dynview_Layout_Item :: struct {
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
+    pie_is_filled: bool,
+    has_outline_color: bool,
+    outline_color: rl.Color,
+    shape_is_filled: bool,
+    shape_edge_color_1: rl.Color,
+    shape_edge_color_2: rl.Color,
+    shape_edge_color_3: rl.Color,
+    shape_edge_color_4: rl.Color,
+    shape_edge_color_5: rl.Color,
     x_offset: f32,
     y_offset: f32,
     draw_width: f32,
     draw_height: f32,
+    pie_center_offset_x: f32,
+    pie_center_offset_y: f32,
     ascent: f32,
     descent: f32,
     visual_padding_top: f32,

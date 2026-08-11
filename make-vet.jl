@@ -1042,15 +1042,21 @@ function emit_console_summary(run_result::VetRunResult, report_path::String)
             println("")
             println("Details for " * section.key * ":")
 
-            details = strip(section.stderr)
-            if isempty(details)
-                details = strip(section.stdout)
+            stderr_details = strip(section.stderr)
+            stdout_details = strip(section.stdout)
+            details = stderr_details
+            if !isempty(stderr_details) && !isempty(stdout_details)
+                details = "stderr:\n" * stderr_details * "\n\nstdout:\n" * stdout_details
+            elseif isempty(details)
+                details = stdout_details
             end
 
             if isempty(details)
                 println("  (no captured details)")
+            elseif section.status == "Fail"
+                println(details)
             else
-                println(truncate_console_details(details))
+                println(truncate_console_details(details; max_lines=120))
             end
         end
     end

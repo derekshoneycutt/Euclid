@@ -76,7 +76,7 @@ A plane angle is the inclination to one another of two lines in a plane which me
 And when the lines containing the angle are straight, the angle is called rectilinear."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Angle}
 
-A plane angle is the inclination to one another of two lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] in a plane which meet one another and do not lie in a straight line.
+A plane angle \euclidangle[color=khaki3,radius=2,end=60,filled] is the inclination to one another of two lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] in a plane which meet one another and do not lie in a straight line.
 
 And when the lines containing the angle are straight, the angle is called rectilinear."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)

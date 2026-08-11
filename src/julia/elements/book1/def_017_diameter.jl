@@ -64,7 +64,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A diameter of the circle is any straight line drawn through the center and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Diameter}
 
-A diameter of the circle is any straight line drawn through the center and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
+A diameter \euclidline[color=steelblue,length=3,thickness=4] of the circle \euclidcircle[color=khaki3,size=1,thickness=2] is any straight line drawn through the center \euclidpoint[color=palevioletred1,size=1] and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

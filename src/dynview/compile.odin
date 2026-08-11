@@ -492,6 +492,12 @@ compile_command :: #force_inline proc(
         return compile_inline_filled_circle(state, cmd)
     case .InlinePieSection:
         return compile_inline_pie_section(state, cmd)
+    case .InlinePerpendicular:
+        return compile_inline_box(state, cmd)
+    case .InlineTriangle:
+        return compile_inline_box(state, cmd)
+    case .InlinePentagon:
+        return compile_inline_box(state, cmd)
     }
 
     return DYNVIEW_STATUS_INVALID_ARGUMENT

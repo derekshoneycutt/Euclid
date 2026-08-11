@@ -878,7 +878,7 @@ draw_recursive_structured_item :: #force_inline proc(
         draw_recursive_radical_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun, .MathBlock,
         .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
-        .InlinePieSection:
+        .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
 }
 
@@ -1144,17 +1144,18 @@ draw_cached_text_item :: proc(
                 1,
                 text_color)
         }
-    case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle, .InlinePieSection:
+    case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
+        .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
 }
 
 //   Draw one cached inline shape item.
-draw_cached_inline_item :: proc(
+draw_cached_inline_basic_item :: #force_inline proc(
     style: Dynview_Text_Style,
     item: core.Dynview_Layout_Item,
-    item_x, item_y: f32) {
+    item_x, item_y: f32,
+    color: rl.Color) {
 
-    color := dynview.inline_draw_color(style, item)
     switch item.kind {
     case .InlineLine:
         center_y := item_y + item.draw_height * 0.5
@@ -1164,10 +1165,19 @@ draw_cached_inline_item :: proc(
             max(1.0, item.inline_atom_stroke),
             color)
     case .InlineBox:
-        rl.DrawRectangleLinesEx(
-            rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height},
-            max(1.0, item.inline_atom_stroke),
-            color)
+        top_left := rl.Vector2{item_x, item_y}
+        top_right := rl.Vector2{item_x + item.draw_width, item_y}
+        bottom_left := rl.Vector2{item_x, item_y + item.draw_height}
+        bottom_right := rl.Vector2{item_x + item.draw_width, item_y + item.draw_height}
+        edge1 := shape_edge_color_or(item.shape_edge_color_1, color)
+        edge2 := shape_edge_color_or(item.shape_edge_color_2, color)
+        edge3 := shape_edge_color_or(item.shape_edge_color_3, color)
+        edge4 := shape_edge_color_or(item.shape_edge_color_4, color)
+        stroke := max(1.0, item.inline_atom_stroke)
+        rl.DrawLineEx(top_left, top_right, stroke, edge1)
+        rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
+        rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
+        rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
     case .InlineCircle:
         center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
         rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
@@ -1178,6 +1188,21 @@ draw_cached_inline_item :: proc(
                 max(1.0, item.draw_height * 0.5 - 1),
                 color)
         }
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
+         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
+         .AccentBarRecursive, .RadicalBarRecursive, .InlineFilledBox, .InlineFilledCircle,
+            .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+    }
+}
+
+//   Draw one cached filled inline shape item.
+draw_cached_inline_filled_item :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    item_x, item_y: f32,
+    color: rl.Color) {
+
+    switch item.kind {
     case .InlineFilledBox:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         rl.DrawRectangleRec(rect, color)
@@ -1195,22 +1220,95 @@ draw_cached_inline_item :: proc(
                 rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
             }
         }
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
+         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
+         .AccentBarRecursive, .RadicalBarRecursive, .InlineLine, .InlineBox,
+            .InlineCircle, .InlinePieSection, .InlinePerpendicular, .InlineTriangle,
+            .InlinePentagon:
+    }
+}
+
+//   Draw one cached advanced inline shape item.
+draw_cached_inline_advanced_item :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    item_x, item_y: f32,
+    color: rl.Color) {
+
+    switch item.kind {
     case .InlinePieSection:
-        center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
-        radius := item.draw_height * 0.5
-        draw_filled_pie_section(
-            center,
-            radius,
-            item.pie_start_angle_degrees,
-            item.pie_end_angle_degrees,
-            color)
-        if item.inline_outline_stroke > 0 {
-            stroke := max(1.0, item.inline_outline_stroke)
-            start_point := pie_point(center, radius, item.pie_start_angle_degrees)
-            end_point := pie_point(center, radius, item.pie_end_angle_degrees)
-            rl.DrawLineEx(center, start_point, stroke, style.color)
-            rl.DrawLineEx(center, end_point, stroke, style.color)
+        center := rl.Vector2{item_x + item.pie_center_offset_x, item_y + item.pie_center_offset_y}
+        radius := max(
+            max(item.pie_center_offset_x, item.draw_width - item.pie_center_offset_x),
+            max(item.pie_center_offset_y, item.draw_height - item.pie_center_offset_y))
+        outline_color := item.has_outline_color ? item.outline_color : style.color
+        stroke := max(1.0, item.inline_outline_stroke)
+        if item.pie_is_filled {
+            draw_filled_pie_section(center, radius,
+                item.pie_start_angle_degrees, item.pie_end_angle_degrees, color)
+            if item.inline_outline_stroke > 0 {
+                draw_pie_section_outline(center, radius,
+                    item.pie_start_angle_degrees, item.pie_end_angle_degrees,
+                    stroke, outline_color)
+            }
+        } else {
+            draw_pie_section_outline(center, radius,
+                item.pie_start_angle_degrees, item.pie_end_angle_degrees,
+                stroke, outline_color)
         }
+    case .InlinePerpendicular:
+        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+        draw_perpendicular_shape(
+            rect,
+            max(1.0, item.inline_atom_stroke),
+            Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
+    case .InlineTriangle:
+        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+        base_color := item.brush_color
+        draw_triangle_shape(rect,
+            item.shape_is_filled,
+            Triangle_Colors{
+                base_color,
+                shape_edge_color_or(item.shape_edge_color_1, base_color),
+                shape_edge_color_or(item.shape_edge_color_2, base_color),
+                shape_edge_color_or(item.shape_edge_color_3, base_color),
+            },
+            max(1.0, item.inline_atom_stroke))
+    case .InlinePentagon:
+        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+        base_color := item.brush_color
+        draw_pentagon_shape(rect,
+            item.shape_is_filled,
+            Pentagon_Colors{
+                base_color,
+                shape_edge_color_or(item.shape_edge_color_1, base_color),
+                shape_edge_color_or(item.shape_edge_color_2, base_color),
+                shape_edge_color_or(item.shape_edge_color_3, base_color),
+                shape_edge_color_or(item.shape_edge_color_4, base_color),
+                shape_edge_color_or(item.shape_edge_color_5, base_color),
+            },
+            max(1.0, item.inline_atom_stroke))
+    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
+         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
+         .AccentBarRecursive, .RadicalBarRecursive, .InlineLine, .InlineBox,
+         .InlineCircle, .InlineFilledBox, .InlineFilledCircle:
+    }
+}
+
+//   Draw one cached inline shape item.
+draw_cached_inline_item :: proc(
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    item_x, item_y: f32) {
+
+    color := dynview.inline_draw_color(style, item)
+    switch item.kind {
+    case .InlineLine, .InlineBox, .InlineCircle:
+        draw_cached_inline_basic_item(style, item, item_x, item_y, color)
+    case .InlineFilledBox, .InlineFilledCircle:
+        draw_cached_inline_filled_item(style, item, item_x, item_y, color)
+    case .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+        draw_cached_inline_advanced_item(style, item, item_x, item_y, color)
     case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
         .AccentBarRecursive, .RadicalBarRecursive:

@@ -71,7 +71,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 When a straight line set up on a straight line makes the adjacent angles equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Right Angles and Perpendicular}
 
-When a straight line set up on a straight line makes the adjacent angles equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
+When a straight line set up on a straight line \euclidperpendicular[thickness=2,line1_color=steelblue,line2_color=palevioletred1,height=2,width=3] makes the adjacent angles \euclidangle[color=khaki3,radius=2,thickness=2] equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

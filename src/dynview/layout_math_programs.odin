@@ -570,7 +570,7 @@ math_program_item :: #force_inline proc(
         return math_program_recursive_radical_item(cache, buffer, cmd, style, font_size)
     case .MathBlock, .BeginBlock, .EndBlock, .CopyableTextRun, .LineBreak, .Divider,
         .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
-        .InlinePieSection:
+        .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
     }
 
     return core.Dynview_Layout_Item{}, false

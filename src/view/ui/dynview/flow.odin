@@ -26,6 +26,34 @@ Dynview_Draw_Context :: struct {
     fallback_font: rl.Font,
 }
 
+Perpendicular_Colors :: struct {
+    top: rl.Color,
+    stem: rl.Color,
+}
+
+Triangle_Colors :: struct {
+    fill: rl.Color,
+    edge1: rl.Color,
+    edge2: rl.Color,
+    edge3: rl.Color,
+}
+
+Pentagon_Colors :: struct {
+    fill: rl.Color,
+    edge1: rl.Color,
+    edge2: rl.Color,
+    edge3: rl.Color,
+    edge4: rl.Color,
+    edge5: rl.Color,
+}
+
+Inline_Shape_Frame :: struct {
+    rect: rl.Rectangle,
+    cols: int,
+    max_cols: int,
+    visible: bool,
+}
+
 style_font :: #force_inline proc(
     draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
     if draw_ctx == nil || draw_ctx^.state == nil {
@@ -65,6 +93,13 @@ command_draw_color :: #force_inline proc(
     return style.color
 }
 
+shape_edge_color_or :: #force_inline proc(edge_color, fallback: rl.Color) -> rl.Color {
+    if edge_color.r == 0 && edge_color.g == 0 && edge_color.b == 0 && edge_color.a == 0 {
+        return fallback
+    }
+    return edge_color
+}
+
 //   Normalize one degree angle into the [0, 360) range.
 normalize_angle_degrees :: #force_inline proc(angle: f32) -> f32 {
     normalized := angle
@@ -97,6 +132,55 @@ pie_point :: #force_inline proc(center: rl.Vector2, radius, angle_degrees: f32) 
     }
 }
 
+//   Return true when angle lies inside the inclusive start->end positive sweep.
+pie_angle_in_sweep :: #force_inline proc(
+    angle_degrees,
+    start_degrees,
+    sweep_degrees: f32) -> bool {
+
+    delta := normalize_angle_degrees(angle_degrees - start_degrees)
+    return delta <= sweep_degrees + 0.0001
+}
+
+//   Compute tight wedge bounds including center and cardinal sweep crossings.
+pie_section_bounds :: #force_inline proc(
+    radius,
+    start_degrees,
+    end_degrees: f32) -> (f32, f32, f32, f32) {
+
+    start_n := normalize_angle_degrees(start_degrees)
+    end_n := normalize_angle_degrees(end_degrees)
+    sweep := positive_sweep_degrees(start_n, end_n)
+
+    x_min: f32 = 0
+    x_max: f32 = 0
+    y_min: f32 = 0
+    y_max: f32 = 0
+
+    include_bound_angle :: #force_inline proc(angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
+        radians := angle_degrees * math.PI / 180.0
+        x := radius * f32(math.cos(f64(radians)))
+        y := -radius * f32(math.sin(f64(radians)))
+        x_min^ = min(x_min^, x)
+        x_max^ = max(x_max^, x)
+        y_min^ = min(y_min^, y)
+        y_max^ = max(y_max^, y)
+    }
+
+    include_bound_angle(start_n, radius, &x_min, &x_max, &y_min, &y_max)
+    include_bound_angle(end_n, radius, &x_min, &x_max, &y_min, &y_max)
+
+    cardinals := [?]f32{0, 90, 180, 270}
+    for i in 0..<len(cardinals) {
+        angle := cardinals[i]
+        if pie_angle_in_sweep(angle, start_n, sweep) {
+            include_bound_angle(angle, radius, &x_min, &x_max, &y_min, &y_max)
+        }
+    }
+
+    return x_min, x_max, y_min, y_max
+}
+
 //   Draw a filled pie section using a deterministic triangle fan.
 draw_filled_pie_section :: proc(
     center: rl.Vector2,
@@ -121,17 +205,150 @@ draw_filled_pie_section :: proc(
     }
 }
 
+//   Draw one pie-section outline with arc and radial edges.
+draw_pie_section_outline :: proc(
+    center: rl.Vector2,
+    radius: f32,
+    start_degrees, end_degrees: f32,
+    stroke: f32,
+    color: rl.Color) {
+
+    sweep := positive_sweep_degrees(start_degrees, end_degrees)
+    if sweep <= 0 {
+        return
+    }
+
+    segments := max(1, int(math.ceil(f64(sweep / 8.0))))
+    prev := pie_point(center, radius, start_degrees)
+    for i in 0..<segments {
+        t := f32(i + 1) / f32(segments)
+        angle := normalize_angle_degrees(start_degrees + sweep * t)
+        next_point := pie_point(center, radius, angle)
+        rl.DrawLineEx(prev, next_point, stroke, color)
+        prev = next_point
+    }
+
+    start_point := pie_point(center, radius, start_degrees)
+    end_point := pie_point(center, radius, end_degrees)
+    rl.DrawLineEx(center, start_point, stroke, color)
+    rl.DrawLineEx(center, end_point, stroke, color)
+}
+
+//   Draw one perpendicular shape with the primary line on the bottom edge.
+draw_perpendicular_shape :: proc(
+    rect: rl.Rectangle,
+    stroke: f32,
+    colors: Perpendicular_Colors) {
+
+    bottom_y := rect.y + rect.height
+    bottom_left := rl.Vector2{rect.x, bottom_y}
+    bottom_right := rl.Vector2{rect.x + rect.width, bottom_y}
+    stem_x := rect.x + rect.width * 0.5
+    rl.DrawLineEx(bottom_left, bottom_right, stroke, colors.top)
+    rl.DrawLineEx(rl.Vector2{stem_x, rect.y}, rl.Vector2{stem_x, bottom_y}, stroke, colors.stem)
+}
+
+//   Draw one triangle shape with optional fill and per-edge colors.
+draw_triangle_shape :: proc(
+    rect: rl.Rectangle,
+    filled: bool,
+    colors: Triangle_Colors,
+    stroke: f32) {
+
+    apex := rl.Vector2{rect.x + rect.width * 0.5, rect.y}
+    base_left := rl.Vector2{rect.x, rect.y + rect.height}
+    base_right := rl.Vector2{rect.x + rect.width, rect.y + rect.height}
+    if filled {
+        rl.DrawTriangle(apex, base_left, base_right, colors.fill)
+    }
+    if stroke <= 0 {
+        return
+    }
+    rl.DrawLineEx(apex, base_left, stroke, colors.edge1)
+    rl.DrawLineEx(base_left, base_right, stroke, colors.edge2)
+    rl.DrawLineEx(base_right, apex, stroke, colors.edge3)
+}
+
+//   Draw one pentagon shape with optional fill and per-edge colors.
+draw_pentagon_shape :: proc(
+    rect: rl.Rectangle,
+    filled: bool,
+    colors: Pentagon_Colors,
+    stroke: f32) {
+
+    center_x := rect.x + rect.width * 0.5
+    center_y := rect.y + rect.height * 0.5
+    radius := max(1.0, min(rect.width, rect.height) * 0.5)
+    start_angle: f32 = -90.0
+
+    points: [5]rl.Vector2
+    for i in 0..<5 {
+        angle := start_angle + f32(i) * 72.0
+        radians := angle * f32(math.PI) / 180.0
+        points[i] = rl.Vector2{
+            center_x + radius * math.cos_f32(radians),
+            center_y + radius * math.sin_f32(radians),
+        }
+    }
+
+    if filled {
+        for i in 1..<4 {
+            rl.DrawTriangle(points[0], points[i], points[i + 1], colors.fill)
+        }
+    }
+
+    if stroke <= 0 {
+        return
+    }
+
+    rl.DrawLineEx(points[0], points[1], stroke, colors.edge1)
+    rl.DrawLineEx(points[1], points[2], stroke, colors.edge2)
+    rl.DrawLineEx(points[2], points[3], stroke, colors.edge3)
+    rl.DrawLineEx(points[3], points[4], stroke, colors.edge4)
+    rl.DrawLineEx(points[4], points[0], stroke, colors.edge5)
+}
+
+//   Prepare one inline-shape frame using the current flow cursor and row height.
+flow_inline_shape_frame :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context,
+    y_start_scale, y_end_scale: f32) -> Inline_Shape_Frame {
+
+    max_cols := dynview.chars_per_row_for_style(
+        draw_ctx^.panel.width, draw_ctx^.text_padding, draw_ctx^.wrap_advance, style)
+    if max_cols <= 0 {
+        max_cols = 1
+    }
+
+    cols := dynview.inline_box_cols(cmd, style, max_cols)
+    if flow^.col > 0 && flow^.col + cols > max_cols {
+        flow^.row += 1
+        flow^.col = 0
+    }
+
+    if draw_ctx^.enabled {
+        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding + f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y && row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_w := f32(cols) * effective_advance
+            top_y := row_y + draw_ctx^.text_row_height * y_start_scale
+            bottom_y := row_y + draw_ctx^.text_row_height * y_end_scale
+            return Inline_Shape_Frame{rl.Rectangle{atom_x, top_y, atom_w, max(1.0, bottom_y - top_y)}, cols, max_cols, true}
+        }
+    }
+
+    return Inline_Shape_Frame{{}, cols, max_cols, false}
+}
+
 //   Consume one text run in flow layout, optionally drawing each wrapped segment.
 flow_consume_text_run :: proc(
     flow: ^Dynview_Flow_State,
     text: string,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
-
-    if len(text) <= 0 {
-        return
-    }
-
     max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
         draw_ctx^.text_padding,
@@ -286,10 +503,19 @@ flow_consume_inline_box :: proc(
             box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
             box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
             stroke := max(1.0, cmd.inline_atom_stroke)
-            rl.DrawRectangleLinesEx(
-                rl.Rectangle{box_x, box_y, box_w, box_h},
-                stroke,
-                command_draw_color(cmd, style))
+            top_left := rl.Vector2{box_x, box_y}
+            top_right := rl.Vector2{box_x + box_w, box_y}
+            bottom_left := rl.Vector2{box_x, box_y + box_h}
+            bottom_right := rl.Vector2{box_x + box_w, box_y + box_h}
+            base_color := command_draw_color(cmd, style)
+            edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
+            edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
+            edge3 := shape_edge_color_or(cmd.shape_edge_color_3, base_color)
+            edge4 := shape_edge_color_or(cmd.shape_edge_color_4, base_color)
+            rl.DrawLineEx(top_left, top_right, stroke, edge1)
+            rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
+            rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
+            rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
         }
     }
 
@@ -314,7 +540,7 @@ flow_consume_inline_circle :: proc(
         max_cols = 1
     }
 
-    cols := dynview.inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_pie_section_cols(cmd, style, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -477,23 +703,43 @@ flow_consume_inline_pie_section :: proc(
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
             atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
-            atom_w := f32(cols) * effective_advance
-            radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-            center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
-            color := command_draw_color(cmd, style)
-            draw_filled_pie_section(
-                center,
+            radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
+            x_min, _, y_min, y_max := pie_section_bounds(
                 radius,
                 cmd.pie_start_angle_degrees,
-                cmd.pie_end_angle_degrees,
-                color)
-
-            if cmd.inline_outline_stroke > 0 {
-                stroke := max(1.0, cmd.inline_outline_stroke)
-                start_point := pie_point(center, radius, cmd.pie_start_angle_degrees)
-                end_point := pie_point(center, radius, cmd.pie_end_angle_degrees)
-                rl.DrawLineEx(center, start_point, stroke, style.color)
-                rl.DrawLineEx(center, end_point, stroke, style.color)
+                cmd.pie_end_angle_degrees)
+            wedge_height := max(1.0, y_max - y_min)
+            center := rl.Vector2{
+                atom_x + (-x_min),
+                row_y + draw_ctx^.text_row_height * 0.58 - wedge_height * 0.5 + (-y_min),
+            }
+            fill_color := command_draw_color(cmd, style)
+            outline_color := cmd.has_outline_color ? cmd.outline_color : style.color
+            stroke := max(1.0, cmd.inline_outline_stroke)
+            if cmd.pie_is_filled {
+                draw_filled_pie_section(
+                    center,
+                    radius,
+                    cmd.pie_start_angle_degrees,
+                    cmd.pie_end_angle_degrees,
+                    fill_color)
+                if cmd.inline_outline_stroke > 0 {
+                    draw_pie_section_outline(
+                        center,
+                        radius,
+                        cmd.pie_start_angle_degrees,
+                        cmd.pie_end_angle_degrees,
+                        stroke,
+                        outline_color)
+                }
+            } else {
+                draw_pie_section_outline(
+                    center,
+                    radius,
+                    cmd.pie_start_angle_degrees,
+                    cmd.pie_end_angle_degrees,
+                    stroke,
+                    outline_color)
             }
         }
     }
@@ -501,6 +747,72 @@ flow_consume_inline_pie_section :: proc(
     flow^.had_visible = true
     flow^.col += cols
     wrap_if_full(flow, max_cols)
+}
+
+//   Consume one inline-perpendicular atom in flow layout, optionally drawing it.
+flow_consume_inline_perpendicular :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.34, 0.74)
+    if frame.visible {
+        draw_perpendicular_shape(frame.rect, max(1.0, cmd.inline_atom_stroke),
+            Perpendicular_Colors{command_draw_color(cmd, style), cmd.shape_edge_color_1})
+    }
+
+    flow^.had_visible = true
+    flow^.col += frame.cols
+    wrap_if_full(flow, frame.max_cols)
+}
+
+//   Consume one inline-triangle atom in flow layout, optionally drawing it.
+flow_consume_inline_triangle :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.30, 0.78)
+    if frame.visible {
+        base_color := command_draw_color(cmd, style)
+        draw_triangle_shape(frame.rect, cmd.shape_is_filled, Triangle_Colors{
+            base_color,
+            shape_edge_color_or(cmd.shape_edge_color_1, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_2, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_3, base_color),
+        }, max(1.0, cmd.inline_atom_stroke))
+    }
+
+    flow^.had_visible = true
+    flow^.col += frame.cols
+    wrap_if_full(flow, frame.max_cols)
+}
+
+//   Consume one inline-pentagon atom in flow layout, optionally drawing it.
+flow_consume_inline_pentagon :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.30, 0.78)
+    if frame.visible {
+        base_color := command_draw_color(cmd, style)
+        draw_pentagon_shape(frame.rect, cmd.shape_is_filled, Pentagon_Colors{
+            base_color,
+            shape_edge_color_or(cmd.shape_edge_color_1, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_2, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_3, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_4, base_color),
+            shape_edge_color_or(cmd.shape_edge_color_5, base_color),
+        }, max(1.0, cmd.inline_atom_stroke))
+    }
+
+    flow^.had_visible = true
+    flow^.col += frame.cols
+    wrap_if_full(flow, frame.max_cols)
 }
 
 //   Compute style-aware row count for one text command payload.
@@ -610,6 +922,12 @@ consume_flow_command :: proc(
         flow_consume_inline_filled_circle(flow, cmd, style, draw_ctx)
     case .InlinePieSection:
         flow_consume_inline_pie_section(flow, cmd, style, draw_ctx)
+    case .InlinePerpendicular:
+        flow_consume_inline_perpendicular(flow, cmd, style, draw_ctx)
+    case .InlineTriangle:
+        flow_consume_inline_triangle(flow, cmd, style, draw_ctx)
+    case .InlinePentagon:
+        flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
     case .LineBreak, .Divider:
         consume_linebreak(flow)
     case .BeginBlock, .EndBlock, .CopyableTextRun:
