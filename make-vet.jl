@@ -80,6 +80,8 @@ struct OdinAllocRow
     line::Int
     scope::String
     kind::String
+    alloc_class::String
+    status::String
     expr::String
 end
 
@@ -1644,10 +1646,11 @@ function parse_odin_analyzer_output(text::String)
                 String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
                 Base.parse(Int, fields[5]), Base.parse(Int, fields[6]),
                 Base.parse(Int, fields[7]), fields[8] == "true", "INFO", "PASS"))
-        elseif tag == "ALLOC" && length(fields) >= 6
+        elseif tag == "ALLOC" && length(fields) >= 8
             push!(alloc_rows, OdinAllocRow(
                 String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
-                String(fields[5]), String(join(fields[6:end], '\t'))))
+                String(fields[5]), String(fields[6]), String(fields[7]),
+                String(join(fields[8:end], '\t'))))
         elseif tag == "PARSE_ERROR" && length(fields) >= 2
             push!(parse_failures, String(join(fields[2:end], '\t')))
         end
@@ -1716,27 +1719,50 @@ end
 """Aggregate Odin allocation statistics shared by the report and console."""
 function odin_allocation_stats(alloc_rows::Vector{OdinAllocRow})
     kind_counts = Dict{String,Int}()
+    class_counts = Dict{String,Int}()
     scope_set = Set{String}()
     file_set = Set{String}()
+    block_count = 0
+    warn_count = 0
+    forgiven_count = 0
 
     for row in alloc_rows
         kind_counts[row.kind] = get(kind_counts, row.kind, 0) + 1
+        class_counts[row.alloc_class] = get(class_counts, row.alloc_class, 0) + 1
         push!(scope_set, row.scope)
         push!(file_set, row.file)
+        if row.status == "block"
+            block_count += 1
+        elseif row.status == "warn"
+            warn_count += 1
+        elseif row.status == "forgiven"
+            forgiven_count += 1
+        end
     end
 
-    return kind_counts, scope_set, file_set
+    return kind_counts, class_counts, scope_set, file_set,
+        block_count, warn_count, forgiven_count
 end
 
 """Render the Odin allocation statistics block and site table for the report."""
 function render_odin_allocations(alloc_rows::Vector{OdinAllocRow})
-    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+    kind_counts, class_counts, scope_set, file_set,
+        block_count, warn_count, forgiven_count = odin_allocation_stats(alloc_rows)
 
     lines = String[]
     push!(lines, "Odin allocation statistics:")
     push!(lines, "  total allocation sites: $(length(alloc_rows))")
     push!(lines, "  procedures with allocations: $(length(scope_set))")
     push!(lines, "  files with allocations: $(length(file_set))")
+    push!(lines, "  implicit-allocator blocks: $block_count")
+    push!(lines, "  default-heap warnings: $warn_count")
+    push!(lines, "  forgiven sites: $forgiven_count")
+    push!(lines, "  sites by allocator class:")
+    classes = sort(collect(keys(class_counts));
+        by=c -> (-class_counts[c], c))
+    for class in classes
+        push!(lines, "    $class: $(class_counts[class])")
+    end
     push!(lines, "  sites by kind:")
     kinds = sort(collect(keys(kind_counts)); by=k -> (-kind_counts[k], k))
     for kind in kinds
@@ -1745,9 +1771,11 @@ function render_odin_allocations(alloc_rows::Vector{OdinAllocRow})
 
     push!(lines, "")
     push!(lines, "Odin allocation sites:")
-    push!(lines, "LINE  KIND  PROCEDURE  FILE  EXPRESSION")
+    push!(lines, "STATUS  CLASS  LINE  KIND  PROCEDURE  FILE  EXPRESSION")
     for row in alloc_rows
         push!(lines,
+            rpad(row.status, 7) * " " *
+            rpad(row.alloc_class, 8) * " " *
             lpad(string(row.line), 5) * "  " *
             row.kind * "  " * row.scope * "  " * "src/" * row.file * "  " *
             row.expr)
@@ -1758,12 +1786,23 @@ end
 
 """Print the Odin allocation statistics that appear in every vet run."""
 function print_odin_allocation_stats(alloc_rows::Vector{OdinAllocRow})
-    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+    kind_counts, class_counts, scope_set, file_set,
+        block_count, warn_count, forgiven_count = odin_allocation_stats(alloc_rows)
     println("Odin allocation sites: $(length(alloc_rows)) across " *
         "$(length(scope_set)) procedures in $(length(file_set)) files.")
-    kinds = sort(collect(keys(kind_counts)); by=k -> (-kind_counts[k], k))
-    for kind in kinds
-        println("  - $kind: $(kind_counts[kind])")
+    classes = sort(collect(keys(class_counts));
+        by=c -> (-class_counts[c], c))
+    for class in classes
+        println("  - allocator $class: $(class_counts[class])")
+    end
+    if block_count > 0
+        println("  - BLOCK: $block_count site(s) allocate without an explicit allocator")
+    end
+    if warn_count > 0
+        println("  - WARN: $warn_count site(s) allocate on the default heap allocator")
+    end
+    if forgiven_count > 0
+        println("  - forgiven: $forgiven_count site(s) carry #vet forgiveness markers")
     end
 end
 
@@ -1863,21 +1902,45 @@ function run_odin_static_analysis_sections(src_dir::String, script_dir::String)
             analysis_metrics, false, false, false, false)
     end
 
-    kind_counts, scope_set, file_set = odin_allocation_stats(alloc_rows)
+    kind_counts, class_counts, scope_set, file_set,
+        alloc_block_count, alloc_warn_count, alloc_forgiven_count =
+        odin_allocation_stats(alloc_rows)
     alloc_metrics = Dict{String,Any}(
         "total_allocation_sites" => length(alloc_rows),
         "procedures_with_allocations" => length(scope_set),
-        "files_with_allocations" => length(file_set))
+        "files_with_allocations" => length(file_set),
+        "implicit_allocator_blocks" => alloc_block_count,
+        "heap_allocator_warnings" => alloc_warn_count,
+        "forgiven_sites" => alloc_forgiven_count)
     for (kind, count) in kind_counts
         alloc_metrics["kind_" * replace(kind, '.' => '_')] = count
     end
+    for (class, count) in class_counts
+        alloc_metrics["class_" * class] = count
+    end
 
     print_odin_allocation_stats(alloc_rows)
-    allocations_section = VetSectionResult(allocations_key, "Pass",
-        "Recorded $(length(alloc_rows)) Odin allocation site(s) across " *
-        "$(length(scope_set)) procedures in $(length(file_set)) files.",
-        "ok", run_result.exit_code, render_odin_allocations(alloc_rows), "",
-        alloc_metrics, false, false, false, false)
+    alloc_summary = "Recorded $(length(alloc_rows)) Odin allocation site(s) across " *
+        "$(length(scope_set)) procedures in $(length(file_set)) files."
+    allocations_section = if alloc_block_count > 0
+        VetSectionResult(allocations_key, "Fail",
+            alloc_summary * " $alloc_block_count site(s) allocate without an " *
+            "explicit allocator (add one, or a documented " *
+            "`#vet forgives(implicit_allocator)` exception).",
+            "ok", run_result.exit_code, render_odin_allocations(alloc_rows), "",
+            alloc_metrics, true, false, false, false)
+    elseif alloc_warn_count > 0
+        VetSectionResult(allocations_key, "Warn",
+            alloc_summary * " $alloc_warn_count site(s) allocate on the default " *
+            "heap allocator (prefer context.temp_allocator or an owned arena, or " *
+            "add a documented `#vet forgives(heap_allocator)` exception).",
+            "ok", run_result.exit_code, render_odin_allocations(alloc_rows), "",
+            alloc_metrics, false, true, false, false)
+    else
+        VetSectionResult(allocations_key, "Pass", alloc_summary,
+            "ok", run_result.exit_code, render_odin_allocations(alloc_rows), "",
+            alloc_metrics, false, false, false, false)
+    end
 
     return VetSectionResult[analysis_section, allocations_section]
 end

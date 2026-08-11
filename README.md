@@ -412,10 +412,13 @@ Additionally, vet mode compiles and runs the Odin static analyzer in
 `tools/vet`, which uses `core:odin/parser` to measure every Odin procedure
 against the coding standards: NLOC, cyclomatic complexity, and parameter count.
 Complexity at or above 15 is a blocking violation unless the procedure carries an
-inline `#vet forgives(cyclomatic_complexity)` exception or is listed in
-`staging_OdinComplexityGrandfathered.md`; complexity 11-14 warns. NLOC and
-parameter count remain review signals. The analyzer also traces allocation call
-sites (`new`, `make`, `append`, and known allocating helpers), which are reported
+inline `#vet forgives(cyclomatic_complexity)` exception; complexity 11-14 warns.
+NLOC and parameter count remain review signals. The analyzer also traces
+allocation call sites (`new`, `make`, `append`, and known allocating helpers) and
+classifies each by allocator source: a site with no explicit allocator is a
+blocking violation, and an explicit default-heap allocator (`context.allocator`)
+warns. Documented exceptions use `#vet forgives(implicit_allocator)` or
+`#vet forgives(heap_allocator)` with an explanatory comment. Sites are reported
 prominently in the `odin-allocations` report section with basic statistics
 printed on every vet run.
 

@@ -168,8 +168,16 @@ The vet report records NLOC, parameter count, and cyclomatic complexity for both
 Julia complexity above 10 is blocking outside configured content-script exceptions. Odin
 complexity is measured by the parser-based analyzer in `tools/vet`: complexity at or above 15
 is blocking unless the procedure carries an inline `#vet forgives(cyclomatic_complexity)`
-documented exception or is listed in `staging_OdinComplexityGrandfathered.md`; complexity 11-14
-produces a warning. NLOC and parameter count remain review signals in both languages.
+documented exception; complexity 11-14 produces a warning. NLOC and parameter count remain
+review signals in both languages.
+
+The analyzer also classifies every allocation call site by allocator source. An allocation
+without an explicit allocator argument (silently using the default heap) is a **blocking** vet
+failure; an explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
+a warning. Dynamic-array mutators (`append`, `reserve`, `resize`) are exempt because the array
+carries its allocator from creation. Documented exceptions use `#vet forgives(implicit_allocator)`
+or `#vet forgives(heap_allocator)` with a following comment explaining why the default heap is
+correct there, such as a process-lifetime singleton created once at startup.
 
 Use this decision path when a function grows:
 

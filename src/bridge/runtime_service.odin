@@ -583,6 +583,9 @@ julia_runtime_diagnostics :: proc(
 // the returned service and must stop Julia before destroy_julia_runtime_service.
 create_julia_runtime_service :: proc() -> (
     ^Julia_Runtime_Service, runtime.Allocator_Error) {
+    // #vet forgives(implicit_allocator) — the service and its dynview staging are
+    // process-lifetime singletons allocated once at startup and freed at shutdown;
+    // the default heap is the intended owner, no per-frame churn exists here.
     service := new(Julia_Runtime_Service)
     requests, request_err := chan.create(
         chan.Chan(Julia_Request), JULIA_REQUEST_CAPACITY, context.allocator)

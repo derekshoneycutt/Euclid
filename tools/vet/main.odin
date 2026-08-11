@@ -15,8 +15,17 @@ import "core:odin/tokenizer"
 import "core:slice"
 import "core:strings"
 
-//   Marker substring that grants a procedure a documented complexity exception.
-COMPLEXITY_FORGIVENESS_MARKER :: "forgives(cyclomatic_complexity)"
+//   Marker prefix that grants a procedure a documented vet exception.
+FORGIVENESS_PREFIX :: "forgives("
+
+//   Marker name that forgives cyclomatic complexity above the standard.
+COMPLEXITY_FORGIVENESS_MARKER :: "cyclomatic_complexity"
+
+//   Marker name that forgives an allocation without an explicit allocator.
+IMPLICIT_ALLOCATOR_MARKER :: "implicit_allocator"
+
+//   Marker name that forgives an allocation on the default heap allocator.
+HEAP_ALLOCATOR_MARKER :: "heap_allocator"
 
 //   Maximum length of an allocation expression snippet in the report.
 SNIPPET_MAX :: 120
@@ -34,11 +43,13 @@ Proc_Metric :: struct {
 
 //   One allocation call site discovered inside a procedure body.
 Alloc_Record :: struct {
-    file:  string,
-    line:  int,
-    scope: string,
-    kind:  string,
-    expr:  string,
+    file:        string,
+    line:        int,
+    scope:       string,
+    kind:        string,
+    alloc_class: string,
+    status:      string,
+    expr:        string,
 }
 
 //   Accumulated analysis output for the whole source root.
@@ -84,11 +95,11 @@ relative_path :: proc(root, path: string) -> string {
 
 //   Record the set of source lines that hold at least one real token.
 //   Comment-only and blank lines stay unmarked, approximating executable lines.
-//   Comment lines carrying the complexity forgiveness marker are also recorded.
+//   Comment lines carrying a `#vet forgives(NAME)` marker record the name.
 scan_token_lines :: proc(
     src, path: string,
     lines: ^map[int]bool,
-    forgiveness_lines: ^map[int]bool) {
+    marker_lines: ^map[int]string) {
     t: tokenizer.Tokenizer
     tokenizer.init(&t, src, path)
     for {
@@ -97,8 +108,8 @@ scan_token_lines :: proc(
             break
         }
         if token.kind == .Comment {
-            if strings.contains(token.text, COMPLEXITY_FORGIVENESS_MARKER) {
-                forgiveness_lines[token.pos.line] = true
+            if marker, ok := marker_name_from_comment(token.text); ok {
+                marker_lines[token.pos.line] = marker
             }
             continue
         }
@@ -107,6 +118,20 @@ scan_token_lines :: proc(
             lines[line] = true
         }
     }
+}
+
+//   Extract the NAME from a comment carrying `#vet forgives(NAME)`.
+marker_name_from_comment :: proc(text: string) -> (string, bool) {
+    index := strings.index(text, FORGIVENESS_PREFIX)
+    if index < 0 {
+        return "", false
+    }
+    rest := text[index + len(FORGIVENESS_PREFIX):]
+    close := strings.index(rest, ")")
+    if close <= 0 {
+        return "", false
+    }
+    return strings.clone(rest[:close]), true
 }
 
 //   Analyze one source file: measure its procedures and trace its allocations.
@@ -119,8 +144,8 @@ analyze_file :: proc(root, path: string, result: ^Analysis_Result) {
     src := string(src_bytes)
 
     token_lines: map[int]bool
-    forgiveness_lines: map[int]bool
-    scan_token_lines(src, path, &token_lines, &forgiveness_lines)
+    marker_lines: map[int]string
+    scan_token_lines(src, path, &token_lines, &marker_lines)
 
     p := parser.default_parser()
     file := ast.File{src = src}
@@ -142,10 +167,11 @@ analyze_file :: proc(root, path: string, result: ^Analysis_Result) {
             }
             name := decl_name(value_decl, index)
             metric := measure_proc(proc_lit, name, rel, &token_lines)
-            metric.forgiven = has_complexity_forgiveness(
-                value_decl, proc_lit, &forgiveness_lines)
+            metric.forgiven = proc_has_marker(
+                value_decl, proc_lit, &marker_lines, COMPLEXITY_FORGIVENESS_MARKER)
             append(&result.metrics, metric)
-            trace_allocations(proc_lit, name, rel, src, result)
+            trace_allocations(proc_lit, value_decl, name, rel, src,
+                &marker_lines, result)
         }
     }
 }
@@ -161,32 +187,34 @@ decl_name :: proc(decl: ^ast.Value_Decl, index: int) -> string {
     return "<anonymous>"
 }
 
-//   Return true when the procedure carries a documented complexity exception.
+//   Return true when the procedure carries a documented exception marker.
 //   The marker is accepted in the declaration doc comments or anywhere on a
 //   comment line inside the procedure span, matching the legacy lizard style.
-has_complexity_forgiveness :: proc(
+proc_has_marker :: proc(
     decl: ^ast.Value_Decl,
     lit: ^ast.Proc_Lit,
-    forgiveness_lines: ^map[int]bool) -> bool {
-    if comment_group_has_marker(decl.docs) ||
-        comment_group_has_marker(decl.comment) {
+    marker_lines: ^map[int]string,
+    name: string) -> bool {
+    if comment_group_has_marker(decl.docs, name) ||
+        comment_group_has_marker(decl.comment, name) {
         return true
     }
     for line in lit.pos.line ..= lit.end.line {
-        if forgiveness_lines[line] {
+        if marker, found := marker_lines[line]; found && marker == name {
             return true
         }
     }
     return false
 }
 
-//   Return true when a comment group contains the complexity forgiveness marker.
-comment_group_has_marker :: proc(group: ^ast.Comment_Group) -> bool {
+//   Return true when a comment group contains the named forgiveness marker.
+comment_group_has_marker :: proc(group: ^ast.Comment_Group, name: string) -> bool {
     if group == nil {
         return false
     }
     for token in group.list {
-        if strings.contains(token.text, COMPLEXITY_FORGIVENESS_MARKER) {
+        marker, ok := marker_name_from_comment(token.text)
+        if ok && marker == name {
             return true
         }
     }
@@ -203,8 +231,9 @@ emit_report :: proc(result: ^Analysis_Result) {
     }
     for record in result.allocations {
         fmt.printfln(
-            "ALLOC\t%s\t%d\t%s\t%s\t%s",
-            record.file, record.line, record.scope, record.kind, record.expr)
+            "ALLOC\t%s\t%d\t%s\t%s\t%s\t%s\t%s",
+            record.file, record.line, record.scope, record.kind,
+            record.alloc_class, record.status, record.expr)
     }
     for failure in result.parse_errors {
         fmt.printfln("PARSE_ERROR\t%s", failure)

@@ -505,6 +505,9 @@ record_checkpoint_trace_snapshot :: proc(state: ^Euclid_General_State) {
         return
     }
 
+    // #vet forgives(implicit_allocator) — one bounded snapshot per recorded
+    // checkpoint (a rare, user-triggered/debug event), immediately freed by the
+    // defer below; the default heap is sufficient and keeps ownership obvious.
     snapshot := new(core.Trace_Checkpoint_Snapshot)
     defer free(snapshot)
     snapshot^.checkpoint_id = state^.fixed_step
