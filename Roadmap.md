@@ -124,22 +124,12 @@ Final tasks:
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
 - [X] Generated Code Wiki
-- [ ] Versioned structured semantic trace and checkpoint snapshot system behind runtime flag (default off)
-  - [ ] Configurable JSONL event output
-  - [ ] Runtime, animation, geometry, tool, and particle event schemas
-  - [ ] Deterministic state snapshots at test checkpoints
-  - [ ] Stable identities, simulation timestamps, and runtime generations
-  - [ ] Bounded thread-safe collection and overflow reporting
-- [ ] Integration and end-to-end test infrastructure
-  - [ ] Serial integration executable using embedded Julia
-  - [ ] Embedded-runtime integration test suite
-  - [ ] Extensible animation scenario harness
-  - [ ] Deterministic animation test controls and observation API
-  - [ ] Semantic animation test suite
-  - [ ] Representative visual animation regression suite
-  - [ ] Running-application end-to-end harness
-  - [ ] End-to-end application test suite
-  - [ ] Add integration and end-to-end phases to `make.jl -t`
+- [ ] Semantic trace and deterministic animation test harness (default off)
+  - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
+  - [X] Deterministic checkpoint snapshots and stable run/step identity
+  - [X] Headless harness with stable-UUID scenario selection and Julia assertions
+  - [ ] Running-app end-to-end harness with screenshot correlation
+- [ ] Complete testing series across animations, integrations, and end-to-end runs
 - [ ] Runtime hardening
   - [ ] Julia/Odin boundary ownership and lifecycle audit
   - [ ] Bridge ABI validation and malformed-input tests

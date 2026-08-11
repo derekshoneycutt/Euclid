@@ -8,12 +8,44 @@ import "core:compress/gzip"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+import "core:strings"
 import "core:time"
 
 ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
 ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
+
+asset_root_override := ""
+
+//   Set an explicit packaged-asset root for test harnesses that do not run from bin/.
+//
+// Parameters:
+//   - root_dir: Directory that directly contains assets.pkg.
+//   - allocator: Allocator used for the retained override path.
+//
+// Returns:
+//   - none.
+set_asset_root_override :: proc(root_dir: string, allocator := context.allocator) {
+    if len(asset_root_override) > 0 {
+        delete(asset_root_override)
+    }
+    asset_root_override = strings.clone(root_dir, allocator)
+}
+
+//   Clear any explicit packaged-asset root override.
+//
+// Parameters:
+//   - none.
+//
+// Returns:
+//   - none.
+clear_asset_root_override :: proc() {
+    if len(asset_root_override) > 0 {
+        delete(asset_root_override)
+    }
+    asset_root_override = ""
+}
 
 //   Join a base directory with GIF_OUTPUT_DIR_NAME and ensure it exists.
 //
@@ -185,6 +217,10 @@ cleanup_packaged_assets_dir :: proc() {
 
 //   Resolve executable directory once with standard validity checks.
 resolve_executable_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+
+    if len(asset_root_override) > 0 {
+        return asset_root_override, true
+    }
 
     exe_dir, exe_err := os.get_executable_directory(allocator)
     if exe_err != nil || len(exe_dir) == 0 {

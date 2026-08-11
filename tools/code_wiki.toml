@@ -75,6 +75,13 @@ navigation_order = 50
 owner = "guide_authors"
 
 [[guides]]
+title = "Testing Strategy"
+path = "Guides/TestingStrategy.md"
+summary = "Semantic trace, deterministic harness execution, scenario testing, and E2E direction."
+navigation_order = 55
+owner = "guide_authors"
+
+[[guides]]
 title = "LaTeX Support"
 path = "Guides/LaTeXSupport.md"
 summary = "Supported document and math syntax, output, and fallback behavior."

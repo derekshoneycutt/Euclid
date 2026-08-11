@@ -49,6 +49,17 @@ is_invalid :: proc(state: ^core.Trace_State) -> bool {
     return state != nil && state^.invalid
 }
 
+//   Report whether trace state is present and currently valid.
+//
+// Parameters:
+//   - state: Trace state block owned by Euclid_General_State.
+//
+// Returns:
+//   - valid: true when the trace state exists and has not been invalidated.
+state_is_valid :: proc(state: ^core.Trace_State) -> bool {
+    return state != nil && !state^.invalid
+}
+
 //   Copy bounded text into one fixed-capacity trace field.
 //
 // Parameters:
@@ -232,6 +243,17 @@ append_json_bool_field :: proc(
         return false
     }
     return append_builder_text(buffer, length, value ? "true" : "false")
+}
+
+//   Append one signed integer JSON field.
+append_json_signed_field :: proc(
+    buffer: []u8, length: ^int, name: string, value: int) -> bool {
+
+    if !append_json_string(buffer, length, name) ||
+        !append_builder_text(buffer, length, ":") {
+        return false
+    }
+    return append_builder_text(buffer, length, fmt.tprintf("%d", value))
 }
 
 //   Append one JSON numeric field.
@@ -1507,6 +1529,195 @@ record_constraint_solve_summary :: proc(
         .Geometry,
         "constraint.solve_summary",
         string(payload_buffer[:payload_len]))
+}
+
+//   Append one optional checkpoint point position field.
+append_checkpoint_point_position :: proc(
+    payload_buffer: []u8,
+    payload_len: ^int,
+    point: ^core.Trace_Checkpoint_Point) -> bool {
+
+    if !point^.has_position {
+        return true
+    }
+    return append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_vector3_field(payload_buffer, payload_len, "position", point^.position)
+}
+
+//   Append one checkpoint point record to the payload.
+append_checkpoint_point :: proc(
+    payload_buffer: []u8, payload_len: ^int, point: ^core.Trace_Checkpoint_Point) -> bool {
+
+    return append_builder_text(payload_buffer, payload_len, "{") &&
+        append_json_number_field(payload_buffer, payload_len, "index", u64(point^.index)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(payload_buffer, payload_len, "kind", u64(point^.kind)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_bool_field(payload_buffer, payload_len, "visible", point^.do_draw) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer, payload_len, "active_child", u64(point^.active_child)) &&
+        append_checkpoint_point_position(payload_buffer, payload_len, point) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_builder_text(
+            payload_buffer, payload_len, fmt.tprintf("\"brush_size\":%g", point^.brush_size)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_builder_text(
+            payload_buffer, payload_len, fmt.tprintf("\"offset\":%g", point^.offset)) &&
+        append_builder_text(payload_buffer, payload_len, "}")
+}
+
+//   Append checkpoint identity fields to the payload.
+append_checkpoint_identity_fields :: proc(
+    payload_buffer: []u8,
+    payload_len: ^int,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+
+    if !append_json_number_field(
+        payload_buffer, payload_len, "checkpoint_id", snapshot^.checkpoint_id) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_json_number_field(
+            payload_buffer, payload_len, "fixed_step", snapshot^.fixed_step) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_builder_text(
+            payload_buffer, payload_len,
+            fmt.tprintf("\"simulation_time\":%g", snapshot^.simulation_time)) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_json_number_field(
+            payload_buffer, payload_len, "runtime_generation", snapshot^.runtime_generation) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_json_number_field(
+            payload_buffer, payload_len, "animation_generation", snapshot^.animation_generation) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_json_number_field(
+            payload_buffer, payload_len, "animation_tick", snapshot^.animation_tick_sequence) ||
+        !append_builder_text(payload_buffer, payload_len, ",") ||
+        !append_json_string_field(
+            payload_buffer,
+            payload_len,
+            "animation_id",
+            string(snapshot^.animation_name[:snapshot^.animation_name_len])) {
+        return false
+    }
+    return true
+}
+
+//   Append checkpoint lifecycle and counters to the payload.
+append_checkpoint_counter_fields :: proc(
+    payload_buffer: []u8,
+    payload_len: ^int,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+
+    return append_json_number_field(
+            payload_buffer, payload_len, "next_point_index", u64(snapshot^.next_point_index)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer,
+            payload_len,
+            "next_constraint_index",
+            u64(snapshot^.next_constraint_index)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer,
+            payload_len,
+            "active_constraints",
+            u64(snapshot^.active_constraint_count)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer, payload_len, "rejected_ticks", snapshot^.rejected_tick_count) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer, payload_len, "failed_requests", snapshot^.failed_request_count) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_number_field(
+            payload_buffer, payload_len, "dropped_records", snapshot^.dropped_record_count)
+}
+
+//   Append one tool summary object to the checkpoint payload.
+append_checkpoint_tool_summary :: proc(
+    payload_buffer: []u8,
+    payload_len: ^int,
+    name: string,
+    host_index: int,
+    visible: bool,
+    active_child: int) -> bool {
+
+    return append_json_string(payload_buffer, payload_len, name) &&
+        append_builder_text(payload_buffer, payload_len, ":{") &&
+        append_json_number_field(payload_buffer, payload_len, "host_index", u64(host_index)) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_bool_field(payload_buffer, payload_len, "visible", visible) &&
+        append_builder_text(payload_buffer, payload_len, ",") &&
+        append_json_signed_field(payload_buffer, payload_len, "active_child", active_child) &&
+        append_builder_text(payload_buffer, payload_len, "}")
+}
+
+//   Append all checkpoint point records to the payload array.
+append_checkpoint_points :: proc(
+    payload_buffer: []u8,
+    payload_len: ^int,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+
+    if !append_builder_text(payload_buffer, payload_len, "\"points\":[") {
+        return false
+    }
+    for point_index in 0..<snapshot^.point_count {
+        if point_index > 0 && !append_builder_text(payload_buffer, payload_len, ",") {
+            return false
+        }
+        if !append_checkpoint_point(
+            payload_buffer, payload_len, &snapshot^.points[point_index]) {
+            return false
+        }
+    }
+    return append_builder_text(payload_buffer, payload_len, "]")
+}
+
+//   Record one canonical checkpoint snapshot captured after the deterministic worker join.
+//
+// Parameters:
+//   - state: Trace state block owned by Euclid_General_State.
+//   - snapshot: Bounded post-join checkpoint snapshot.
+//
+// Returns:
+//   - ok: true when the checkpoint event was queued.
+record_checkpoint_snapshot :: proc(
+    state: ^core.Trace_State,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
+
+    if state == nil || snapshot == nil {
+        return false
+    }
+
+    payload_len := 0
+    payload_buffer := state^.serialize_buffer[:]
+    if !append_builder_text(payload_buffer, &payload_len, "{") ||
+        !append_checkpoint_identity_fields(payload_buffer, &payload_len, snapshot) ||
+        !append_builder_text(payload_buffer, &payload_len, ",") ||
+        !append_checkpoint_counter_fields(payload_buffer, &payload_len, snapshot) ||
+        !append_builder_text(payload_buffer, &payload_len, ",") ||
+        !append_checkpoint_tool_summary(
+            payload_buffer,
+            &payload_len,
+            "pen",
+            snapshot^.pen_host_index,
+            snapshot^.pen_visible,
+            snapshot^.pen_active_child) ||
+        !append_builder_text(payload_buffer, &payload_len, ",") ||
+        !append_checkpoint_tool_summary(
+            payload_buffer,
+            &payload_len,
+            "compass",
+            snapshot^.compass_host_index,
+            snapshot^.compass_visible,
+            snapshot^.compass_active_child) ||
+        !append_builder_text(payload_buffer, &payload_len, ",") ||
+        !append_checkpoint_points(payload_buffer, &payload_len, snapshot) ||
+        !append_builder_text(payload_buffer, &payload_len, "}") {
+        return false
+    }
+
+    return record_event(state, .Trace, "trace.checkpoint", string(payload_buffer[:payload_len]))
 }
 
 //   Build one trace module instance from application settings.

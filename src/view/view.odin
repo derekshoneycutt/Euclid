@@ -5,7 +5,6 @@ package view
 
 import view_core "core"
 import "ui"
-import "../dynview"
 import "../core"
 import "../audio"
 import "../shapes"
@@ -15,9 +14,9 @@ import "../trace"
 
 import "base:runtime"
 import "core:fmt"
-import "core:math/linalg"
 import "core:strings"
 import "core:thread"
+import "core:time"
 
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
@@ -90,12 +89,13 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     open_window(settings)
     defer rl.CloseWindow()
 
-    state, julia_service := initialize_application_with_loading(settings)
-    defer free_animations_state(state)
+    session, ok := initialize_window_runtime_with_loading(settings)
+    if !ok {
+        return 1
+    }
+    state := session.state
+    defer shutdown_runtime_session(session)
     defer shutdown_window_resources(state)
-    defer destroy_simulation_executor(state^.simulation_executor)
-    defer shutdown_julia_runtime(state, julia_service)
-    defer trace.finish_trace(&state^.trace_state)
 
     free_all(context.temp_allocator)
 
@@ -132,90 +132,15 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
 //   Allocate and initialize persistent runtime state for simulation and rendering.
 //
 // Notes:
-//   - Allocates long-lived runtime state and returns ownership to caller.
-initiate_animations_state :: proc(
-    julia_service: ^julia.Julia_Runtime_Service,
-    settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
-    iso_scale := new(Iso_Scale)
-    iso_scale^.scale = ISO_SCALE_VALUE
-    iso_scale^.x_offset = ISO_X_OFFSET
-    iso_scale^.y_offset = ISO_Y_OFFSET
-    view_core.recompute_iso_scale_precompute(iso_scale)
-    iso_scale^.main_light_dir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
-    iso_scale^.use_directional_shadow = true
-
-    drawing_surface := new(Euclid_Drawing_Surface)
-    drawing_surface^.zeros = Vector3{0 - SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.right_up = Vector3{1 + SURFACE_EDGE_SIZE, 0 - SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.left_down = Vector3{0 - SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.right_down = Vector3{1 + SURFACE_EDGE_SIZE, 1 + SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.color = SURFACE_COLOR
-    drawing_surface^.edge_color = SURFACE_EDGE_COLOR
-    drawing_surface^.edge_size = SURFACE_EDGE_SIZE
-
-    particle_system := new(Particle_System)
-    particle_system^.use_max_dust_particles = settings^.dust_particle_max
-
-    point_system := new(Shapes_Point_System)
-
-    compass := shapes.init_compass(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
-    pen := shapes.init_pen(point_system, TOOL_LENGTH, TOOL_COLOR, 5)
-    shapes.freeze_system_indices(point_system)
-
-    shapes.apply_all_constraints_to_error(point_system, ALLOWED_CONSTRAINT_ERROR)
-    shapes.update_last_cache_vectors(point_system)
-
-
-    state := new(Euclid_General_State)
-    state^.saved_context = context
-    state^.julia_runtime_service = julia_service
-    state^.julia_interface_active_slot = 0
-    state^.julia_interface = &state^.julia_interface_slots[0]
-    state^.iso_scale = iso_scale
-    state^.draw_surface = drawing_surface
-    state^.point_system = point_system
-    state^.particle_system = particle_system
-    state^.user_drawing_sound_enabled = true
-    state^.animation_drawing_sound_enabled = true
-    state^.compass = compass
-    state^.pen = pen
-    state^.current_delta_time = FIXED_DT
-    state^.accumulator = 0
-    state^.ui_runtime.limit_fps = settings^.limit_fps
-    state^.ui_runtime.simulation_paused = false
-    state^.ui_runtime.use_simd_batch_projection =
-        settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
-    state^.ui_runtime.use_gpu_dust_instancing =
-        settings^.use_gpu_dust_instancing && rlgl.GetVersion() >= .OPENGL_33
-    dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
-    state^.ui_runtime.gif_downsample_factor = 2
-    state^.ui_runtime.gif_frame_step = 2
-    state^.ui_runtime.gif_capture_phase = .Idle
-    view_core.clear_gif_status_note(&state^.ui_runtime)
-    view_core.screenshake_clear(state^.iso_scale)
-    state^.simulation_executor = create_simulation_executor(state)
-
-    if !trace.initialize_trace_state(&state^.trace_state, settings) {
-        fmt.eprintln("Invalid semantic trace configuration; terminating process.")
-        runtime.exit(1)
-    }
-    if !trace.begin_trace(&state^.trace_state) {
-        fmt.eprintln("Failed to initialize semantic trace output; terminating process.")
-        runtime.exit(1)
-    }
-
-    return state
-}
-
-//   Ask the Julia owner thread to tear down Julia, then release the service.
+//   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
 shutdown_julia_runtime :: proc(state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
-    started_at := rl.GetTime()
+    started_at := time.tick_now()
     shutdown_id: u64
     sent := false
     for !sent {
         shutdown_id, sent = julia.try_submit_julia_request(service, .Shutdown)
         _, _ = julia.try_receive_julia_event(service)
-        if rl.GetTime() - started_at >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+        if time.duration_seconds(time.tick_since(started_at)) >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
             fmt.eprintln("Julia shutdown request queue remained saturated; terminating process.")
             runtime.exit(1)
         }
@@ -229,7 +154,7 @@ shutdown_julia_runtime :: proc(state: ^Euclid_General_State, service: ^julia.Jul
         if ok && event.request_id == shutdown_id && event.kind == .Shutdown_Complete {
             break
         }
-        if rl.GetTime() - started_at >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+        if time.duration_seconds(time.tick_since(started_at)) >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
             fmt.eprintln("Julia shutdown timed out; terminating process.")
             runtime.exit(1)
         }
@@ -246,6 +171,9 @@ shutdown_julia_runtime :: proc(state: ^Euclid_General_State, service: ^julia.Jul
 // Notes:
 //   - Must be paired with initiate_animations_state to release owned allocations.
 free_animations_state :: proc(state : ^Euclid_General_State) {
+    if state == nil {
+        return
+    }
     view_core.gif_capture_destroy_session(&state^.gif_capture)
     julia.destroy_julia_interface_resources(state)
     free(state^.particle_system)
@@ -285,6 +213,9 @@ initialize_window_resources :: proc(
     } else {
         audio.init_chalk_runtime(&state^.chalk_audio)
     }
+
+    state^.ui_runtime.use_gpu_dust_instancing =
+        settings^.use_gpu_dust_instancing && rlgl.GetVersion() >= .OPENGL_33
 
     if state^.ui_runtime.limit_fps {
         rl.SetTargetFPS(LIMIT_FPS)
@@ -392,11 +323,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     step_count := 0
     for state^.accumulator >= FIXED_DT {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
-        julia.publish_available_animation_tick(state)
-        julia.schedule_animation_tick(state, FIXED_DT)
-        run_parallel_simulation_step(state^.simulation_executor, FIXED_DT)
-        view_core.gif_capture_update_fixed_step(state)
-        record_constraint_trace_summary(state)
+        run_windowed_fixed_step(state, FIXED_DT)
 
         state^.accumulator -= FIXED_DT
         step_count += 1
@@ -408,6 +335,47 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 
     alpha := state^.accumulator / FIXED_DT
     return alpha
+}
+
+//   Run one deterministic fixed step through animation publication and worker join.
+//
+// Parameters:
+//   - state: Runtime state advanced by one fixed step.
+//   - dt: Deterministic fixed-step duration.
+//
+// Returns:
+//   - ok: true when the step completed and post-join identity advanced.
+run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> bool {
+    if state == nil || state^.simulation_executor == nil || dt <= 0 {
+        return false
+    }
+
+    state^.current_delta_time = dt
+    julia.publish_available_animation_tick(state)
+    julia.schedule_animation_tick(state, dt)
+    run_parallel_simulation_step(state^.simulation_executor, dt)
+    state^.fixed_step += 1
+    state^.simulation_time += dt
+    record_constraint_trace_summary(state)
+    record_checkpoint_trace_snapshot(state)
+    return true
+}
+
+//   Run one fixed step and apply windowed presentation side effects after the worker join.
+//
+// Parameters:
+//   - state: Runtime state advanced by one fixed step.
+//   - dt: Fixed-step duration from the windowed runtime.
+//
+// Returns:
+//   - ok: true when the deterministic step completed.
+run_windowed_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> bool {
+    if !run_deterministic_fixed_step(state, dt) {
+        return false
+    }
+
+    view_core.gif_capture_update_fixed_step(state)
+    return true
 }
 
 //   Record one post-join constraint summary for semantic trace consumers.
@@ -423,10 +391,118 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
     }
     _ = trace.record_constraint_solve_summary(
         &state^.trace_state,
-        state^.trace_state.next_sequence,
-        state^.current_delta_time,
+        state^.fixed_step,
+        state^.simulation_time,
         active_constraints,
         state^.point_system^.next_constraint_index)
+}
+
+//   Populate animation identity fields for one checkpoint snapshot.
+capture_checkpoint_animation_fields :: proc(
+    state: ^Euclid_General_State,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) {
+
+    if state == nil || snapshot == nil || state^.julia_runtime_service == nil {
+        return
+    }
+
+    snapshot^.runtime_generation = state^.julia_runtime_service^.runtime_generation
+    snapshot^.animation_generation = state^.julia_runtime_service^.animation_generation
+    snapshot^.animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
+    snapshot^.rejected_tick_count = state^.julia_runtime_service^.animation_ticks_stale
+    snapshot^.failed_request_count = state^.julia_runtime_service^.failed_request_count
+    snapshot^.dropped_record_count = state^.trace_state.dropped_count
+
+    if state^.julia_interface == nil || state^.julia_interface^.current_animation == nil {
+        return
+    }
+
+    animation_name := state^.julia_interface^.current_animation^.name
+    snapshot^.animation_name_len = min(len(snapshot^.animation_name), len(animation_name))
+    copy(snapshot^.animation_name[:snapshot^.animation_name_len], transmute([]u8)animation_name)
+}
+
+//   Populate bounded point records for one checkpoint snapshot.
+capture_checkpoint_points :: proc(
+    state: ^Euclid_General_State,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) {
+
+    if state == nil || snapshot == nil || state^.point_system == nil {
+        return
+    }
+
+    snapshot^.next_point_index = state^.point_system^.next_point_index
+    snapshot^.next_constraint_index = state^.point_system^.next_constraint_index
+    for constraint_index in 0..<state^.point_system^.next_constraint_index {
+        if state^.point_system^.constraints[constraint_index].do_apply {
+            snapshot^.active_constraint_count += 1
+        }
+    }
+
+    point_count := min(len(snapshot^.points), state^.point_system^.next_point_index)
+    snapshot^.point_count = point_count
+    for point_index in 0..<point_count {
+        point := &state^.point_system^.points[point_index]
+        snapshot_point := &snapshot^.points[point_index]
+        snapshot_point^.index = point_index
+        snapshot_point^.kind = point^.kind
+        snapshot_point^.do_draw = point^.do_draw
+        snapshot_point^.active_child = point^.active_child
+        snapshot_point^.brush_size = point^.brush_size
+        snapshot_point^.offset = point^.offset
+        if position, ok := point^.position.?; ok {
+            snapshot_point^.position = position
+            snapshot_point^.has_position = true
+        }
+    }
+}
+
+//   Populate tool summary fields for one checkpoint snapshot.
+capture_checkpoint_tools :: proc(
+    state: ^Euclid_General_State,
+    snapshot: ^core.Trace_Checkpoint_Snapshot) {
+
+    if state == nil || snapshot == nil || state^.point_system == nil {
+        return
+    }
+
+    snapshot^.pen_host_index = state^.pen.host_id
+    snapshot^.pen_joint1_index = state^.pen.joint1_id
+    snapshot^.pen_joint2_index = state^.pen.joint2_id
+    if state^.pen.host_id >= 0 && state^.pen.host_id < state^.point_system^.next_point_index {
+        pen_point := &state^.point_system^.points[state^.pen.host_id]
+        snapshot^.pen_visible = pen_point^.do_draw
+        snapshot^.pen_active_child = pen_point^.active_child
+    }
+
+    snapshot^.compass_host_index = state^.compass.host_id
+    snapshot^.compass_pivot_index = state^.compass.pivot_id
+    snapshot^.compass_joint1_index = state^.compass.joint1_id
+    snapshot^.compass_joint2_index = state^.compass.joint2_id
+    if state^.compass.host_id >= 0 &&
+        state^.compass.host_id < state^.point_system^.next_point_index {
+        compass_point := &state^.point_system^.points[state^.compass.host_id]
+        snapshot^.compass_visible = compass_point^.do_draw
+        snapshot^.compass_active_child = compass_point^.active_child
+    }
+}
+
+//   Capture and record one bounded canonical checkpoint after worker join.
+record_checkpoint_trace_snapshot :: proc(state: ^Euclid_General_State) {
+    if state == nil || state^.point_system == nil || state^.julia_runtime_service == nil {
+        return
+    }
+
+    snapshot := new(core.Trace_Checkpoint_Snapshot)
+    defer free(snapshot)
+    snapshot^.checkpoint_id = state^.fixed_step
+    snapshot^.fixed_step = state^.fixed_step
+    snapshot^.simulation_time = state^.simulation_time
+    capture_checkpoint_animation_fields(state, snapshot)
+    capture_checkpoint_points(state, snapshot)
+    capture_checkpoint_tools(state, snapshot)
+
+    _ = trace.record_checkpoint_snapshot(&state^.trace_state, snapshot)
 }
 
 //   Render one full frame including world, particles, UI panels, and capture step.

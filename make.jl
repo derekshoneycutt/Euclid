@@ -11,6 +11,7 @@ Options:
     --assets, -a        Build assets.pkg. (default)
     --no-assets, -A     Skip assets.pkg build.
     --sysimage, -s      Build a custom Julia sysimage beside the application.
+    --harness, -H       Build and run the headless semantic trace harness.
     --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
@@ -37,6 +38,7 @@ struct Args
     build::Bool
     assets::Bool
     sysimage::Bool
+    harness::Bool
     clean::Bool
     test::Bool
     vet::Bool
@@ -75,6 +77,10 @@ const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 
 """Return true when running on Windows."""
 is_windows() = Sys.iswindows()
+
+const HARNESS_BINARY_PATH = joinpath(BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
+const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.jsonl")
+const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
 
 """Return the expected output path for the Euclid application binary."""
 app_binary_path() = joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
@@ -174,6 +180,8 @@ function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
         args[:no_assets] = true
     elseif flag == 's'
         args[:sysimage] = true
+    elseif flag == 'H'
+        args[:harness] = true
     elseif flag == 'c'
         args[:clean] = true
     elseif flag == 't'
@@ -212,6 +220,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         :build => false,
         :assets => false,
         :sysimage => false,
+        :harness => false,
         :clean => false,
         :test => false,
         :vet => false,
@@ -232,6 +241,8 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
             parsed[:no_assets] = false
         elseif arg == "--sysimage" || arg == "-s"
             parsed[:sysimage] = true
+        elseif arg == "--harness" || arg == "-H"
+            parsed[:harness] = true
         elseif arg == "--clean" || arg == "-c"
             parsed[:clean] = true
         elseif arg == "--test" || arg == "-t"
@@ -272,6 +283,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         parsed[:build],
         parsed[:assets],
         parsed[:sysimage],
+        parsed[:harness],
         parsed[:clean],
         parsed[:test],
         parsed[:vet],
@@ -283,7 +295,7 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
 end
 
 """Run Julia and Odin tests that implement the phased testing plan."""
-function run_test_plan()
+function run_test_plan(julia_linker_flags::String)
     println("Running test plan...")
 
     ran_any = false
@@ -306,12 +318,22 @@ function run_test_plan()
 
     if isdir(ODIN_TEST_ROOT)
         println("Running Odin tests...")
-        odin_result = run_command(Cmd([
+        odin_command = [
             "odin",
             "test",
             ODIN_TEST_ROOT,
             "-all-packages",
-        ]); cwd=SCRIPT_DIR)
+        ]
+        test_linker_flags = julia_linker_flags
+        if !is_windows() && !Sys.isapple()
+            test_linker_flags = strip(string(
+                test_linker_flags,
+                " -lX11 -lXrandr -lXi -lXcursor -lXinerama"))
+        end
+        if !isempty(test_linker_flags)
+            push!(odin_command, "-extra-linker-flags:$test_linker_flags")
+        end
+        odin_result = run_command(Cmd(odin_command); cwd=SCRIPT_DIR)
         println("Odin tests exited $(odin_result.exit_code)")
         if odin_result.exit_code != 0
             error("Odin tests failed.")
@@ -768,6 +790,39 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
     return nothing
 end
 
+"""Build and run the deterministic headless harness target."""
+function run_harness(julia_linker_flags::String)
+    println("Running headless harness...")
+
+    cmd_parts = [
+        "odin",
+        "build",
+        "harness/main.odin",
+        "-file",
+        is_windows() ? "-out:../bin/euclid_harness.exe" : "-out:../bin/euclid_harness",
+    ]
+    if !isempty(julia_linker_flags)
+        push!(cmd_parts, "-extra-linker-flags:$julia_linker_flags")
+    end
+
+    build_result = run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
+    print_captured_output("stdout:", build_result.stdout)
+    print_captured_output("stderr:", build_result.stderr)
+    build_result.exit_code == 0 || error("Harness build failed.")
+
+    harness_args = [
+        "--asset-root=" * BIN_DIR,
+        "--animation-id=" * HARNESS_ANIMATION_ID,
+        "--steps=8",
+        "--trace-output=" * HARNESS_TRACE_PATH,
+        "--scenario=scenario_point_after_eight_steps",
+    ]
+    harness_result = run_command(Cmd([HARNESS_BINARY_PATH; harness_args...]); cwd=SCRIPT_DIR)
+    harness_result.exit_code == 0 || error("Harness execution failed.")
+    isfile(HARNESS_TRACE_PATH) || error("Harness did not produce a semantic trace artifact.")
+    println("Wrote $(relpath(HARNESS_TRACE_PATH, SCRIPT_DIR))")
+end
+
 """Include and run externalized vet analysis from make-vet.jl."""
 function run_vet_analysis(odin_build_result=nothing)
     vet_script_path = joinpath(SCRIPT_DIR, "make-vet.jl")
@@ -1022,7 +1077,7 @@ end
 
 """Return true when any build/run action flag was explicitly requested."""
 explicit_action_requested(args::Args) =
-    args.run || args.build || args.assets || args.sysimage || args.vet || args.test ||
+    args.run || args.build || args.assets || args.sysimage || args.harness || args.vet || args.test ||
     args.wiki || args.check_wiki || args.no_build || args.no_assets
 
 """Resolve effective build, vet, and asset steps from CLI argument combinations."""
@@ -1152,10 +1207,11 @@ function execute_build_plan(
     do_vet::Bool,
     do_assets::Bool,
     build_sysimage::Bool,
+    run_harness_target::Bool,
     run_tests::Bool,
     run_after_build::Bool,
     run_args::Vector{String})
-    julia_flags, julia_bindir = resolve_julia_linker_flags(do_build)
+    julia_flags, julia_bindir = resolve_julia_linker_flags(do_build || run_tests || run_harness_target)
     if run_after_build && is_windows() && julia_bindir === nothing
         julia_bindir = resolve_julia_bindir()
     end
@@ -1182,7 +1238,11 @@ function execute_build_plan(
     end
 
     if run_tests
-        run_test_plan()
+        run_test_plan(julia_flags)
+    end
+
+    if run_harness_target
+        run_harness(julia_flags)
     end
 
     if run_after_build
@@ -1227,6 +1287,7 @@ function main()
             do_vet,
             do_assets,
             args.sysimage,
+            args.harness,
             run_tests,
             run_after_build,
             run_args)

@@ -47,6 +47,7 @@ TRACE_EVENT_PAYLOAD_CAPACITY :: 2048
 TRACE_SERIALIZE_BUFFER_CAPACITY :: 4096
 TRACE_RUN_ID_CAPACITY :: 64
 TRACE_OUTPUT_PATH_CAPACITY :: 1024
+TRACE_CHECKPOINT_POINT_CAPACITY :: 8
 
 FONT_VARIANT_SLOT_COUNT :: 14
 
@@ -163,63 +164,6 @@ Animation_Tick_Slot :: struct {
     submitted_at: time.Tick,
     query_snapshot: Animation_Query_Snapshot,
     scene_batch: Scene_Command_Batch,
-}
-
-Trace_Counters :: struct {
-    emitted_count: u64,
-    dropped_count: u64,
-    invalid: bool,
-}
-
-Trace_Output_Mode :: enum u8 {
-    Disabled,
-    Stdout,
-    File,
-    Sink,
-}
-
-Trace_Category :: enum u8 {
-    Trace,
-    Runtime,
-    Animation,
-    Geometry,
-    Tools,
-    Particles,
-    View,
-}
-
-Trace_Category_Set :: bit_set[Trace_Category]
-
-Trace_Event_Record :: struct {
-    sequence: u64,
-    category: Trace_Category,
-    event_len: int,
-    event: [TRACE_EVENT_NAME_CAPACITY]u8,
-    payload_len: int,
-    payload: [TRACE_EVENT_PAYLOAD_CAPACITY]u8,
-}
-
-Trace_State :: struct {
-    enabled: bool,
-    strict: bool,
-    invalid: bool,
-    finished: bool,
-    overflow_reported: bool,
-    output_open: bool,
-    output_mode: Trace_Output_Mode,
-    categories: Trace_Category_Set,
-    records_head: int,
-    records_count: int,
-    next_sequence: u64,
-    emitted_count: u64,
-    dropped_count: u64,
-    run_id_len: int,
-    run_id: [TRACE_RUN_ID_CAPACITY]u8,
-    output_path_len: int,
-    output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
-    output_handle: ^os.File,
-    records: [TRACE_RECORD_CAPACITY]Trace_Event_Record,
-    serialize_buffer: [TRACE_SERIALIZE_BUFFER_CAPACITY]u8,
 }
 
 View_Snapshot_Slot_State :: enum u8 {
@@ -1389,6 +1333,117 @@ Simulation_Executor :: struct {
     dynview_task: Frame_Preparation_Task_Data,
 }
 
+
+
+
+
+/****
+    Semantric trace system; used for deterministic testing and animation tracing
+*/
+
+
+
+Trace_Counters :: struct {
+    emitted_count: u64,
+    dropped_count: u64,
+    invalid: bool,
+}
+
+Trace_Output_Mode :: enum u8 {
+    Disabled,
+    Stdout,
+    File,
+    Sink,
+}
+
+Trace_Category :: enum u8 {
+    Trace,
+    Runtime,
+    Animation,
+    Geometry,
+    Tools,
+    Particles,
+    View,
+}
+
+Trace_Category_Set :: bit_set[Trace_Category]
+
+Trace_Event_Record :: struct {
+    sequence: u64,
+    category: Trace_Category,
+    event_len: int,
+    event: [TRACE_EVENT_NAME_CAPACITY]u8,
+    payload_len: int,
+    payload: [TRACE_EVENT_PAYLOAD_CAPACITY]u8,
+}
+
+Trace_Checkpoint_Point :: struct {
+    index: int,
+    kind: Shapes_Point_Type,
+    do_draw: bool,
+    active_child: int,
+    position: Vector3,
+    has_position: bool,
+    brush_size: f32,
+    offset: f32,
+}
+
+Trace_Checkpoint_Snapshot :: struct {
+    checkpoint_id: u64,
+    fixed_step: u64,
+    simulation_time: f32,
+    runtime_generation: u64,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
+    animation_name_len: int,
+    animation_name: [96]u8,
+    point_count: int,
+    next_point_index: int,
+    next_constraint_index: int,
+    active_constraint_count: int,
+    rejected_tick_count: u64,
+    failed_request_count: u64,
+    dropped_record_count: u64,
+    points: [TRACE_CHECKPOINT_POINT_CAPACITY]Trace_Checkpoint_Point,
+    pen_host_index: int,
+    pen_joint1_index: int,
+    pen_joint2_index: int,
+    pen_visible: bool,
+    pen_active_child: int,
+    compass_host_index: int,
+    compass_pivot_index: int,
+    compass_joint1_index: int,
+    compass_joint2_index: int,
+    compass_visible: bool,
+    compass_active_child: int,
+}
+
+Trace_State :: struct {
+    enabled: bool,
+    strict: bool,
+    invalid: bool,
+    finished: bool,
+    overflow_reported: bool,
+    output_open: bool,
+    output_mode: Trace_Output_Mode,
+    categories: Trace_Category_Set,
+    records_head: int,
+    records_count: int,
+    next_sequence: u64,
+    emitted_count: u64,
+    dropped_count: u64,
+    run_id_len: int,
+    run_id: [TRACE_RUN_ID_CAPACITY]u8,
+    output_path_len: int,
+    output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
+    output_handle: ^os.File,
+    records: [TRACE_RECORD_CAPACITY]Trace_Event_Record,
+    serialize_buffer: [TRACE_SERIALIZE_BUFFER_CAPACITY]u8,
+}
+
+
+
+
 /****
     General state of the application is the host of all primary memory for Odin and the application
 */
@@ -1436,6 +1491,8 @@ Euclid_General_State :: struct {
 
     trace_state: Trace_State,
 
+    fixed_step: u64,
+    simulation_time: f32,
     current_delta_time : f32,
     accumulator : f32,
 

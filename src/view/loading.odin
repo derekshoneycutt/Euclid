@@ -126,10 +126,10 @@ end_startup_phase :: proc(label: string, started_at: f64) {
 //   Initialize startup phases while the window stays responsive.
 //
 // Notes:
-//   - Loads assets, starts Julia, initializes content, then uploads fonts and graphics.
-//   - Terminates the process immediately when startup-critical work fails.
-initialize_application_with_loading :: proc(
-    settings: ^Euclid_Run_Settings) -> (^Euclid_General_State, ^julia.Julia_Runtime_Service) {
+//   - Drives runtime startup through visible progress frames so window event processing never stalls.
+//   - Shares runtime-state ownership with the headless session path after startup completes.
+initialize_window_runtime_with_loading :: proc(
+    settings: ^Euclid_Run_Settings) -> (Euclid_Runtime_Session, bool) {
 
     startup_started_at := rl.GetTime()
     started_at := begin_startup_phase("Preparing assets", 0.15)
@@ -140,17 +140,26 @@ initialize_application_with_loading :: proc(
     font_preparation := view_core.Baseline_Font_Preparation{}
     font_worker := thread.create_and_start_with_data(rawptr(&font_preparation), prepare_fonts_worker)
     julia_service, service_err := julia.create_julia_runtime_service()
-    assert(service_err == .None && julia_service != nil, "failed to create Julia runtime service")
+    if service_err != .None || julia_service == nil {
+        fmt.eprintln("Failed to create Julia runtime service.")
+        return {}, false
+    }
     initialize_id, initialize_sent := julia.try_submit_julia_request(julia_service, .Initialize)
     if !initialize_sent || !finish_julia_startup_request(
         julia_service, initialize_id, .Initialized, 0.35) {
-        fmt.eprintln("Julia initialization failed; terminating process.")
-        runtime.exit(1)
+        fmt.eprintln("Julia initialization failed.")
+        julia.destroy_julia_runtime_service(julia_service)
+        return {}, false
     }
     end_startup_phase("Starting Julia", started_at)
 
     started_at = begin_startup_phase("Loading content", 0.65)
     state := initiate_animations_state(julia_service, settings)
+    if state == nil {
+        fmt.eprintln("Runtime state initialization failed.")
+        julia.destroy_julia_runtime_service(julia_service)
+        return {}, false
+    }
     _ = trace.record_runtime_event_ex(
         &state^.trace_state, "runtime.starting", julia_service^.runtime_generation,
         int(julia_service^.reload_state), initialize_id)
@@ -158,8 +167,12 @@ initialize_application_with_loading :: proc(
         julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
     if !content_sent || !finish_julia_startup_request(
         julia_service, content_id, .Invoke_Complete, 0.65) {
-        fmt.eprintln("Julia content initialization failed; terminating process.")
-        runtime.exit(1)
+        fmt.eprintln("Julia content initialization failed.")
+        shutdown_runtime_session(Euclid_Runtime_Session{
+            state = state,
+            julia_service = julia_service,
+        })
+        return {}, false
     }
     julia.mark_julia_runtime_ready(julia_service)
     _ = trace.record_runtime_event_ex(
@@ -173,5 +186,5 @@ initialize_application_with_loading :: proc(
     end_startup_phase("Loading fonts and graphics", started_at)
     draw_startup_frame(1.0)
     end_startup_phase("Total startup", startup_started_at)
-    return state, julia_service
+    return Euclid_Runtime_Session{state = state, julia_service = julia_service}, true
 }

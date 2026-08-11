@@ -19,6 +19,12 @@ Animation_Lifecycle_Task_Data :: struct {
     state: ^core.Euclid_General_State,
 }
 
+Harness_Scenario_Task_Data :: struct {
+    state: ^core.Euclid_General_State,
+    scenario_name: cstring,
+    step_count: int,
+}
+
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
 // Parameters:
@@ -393,6 +399,96 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
     }
 
     ji^.selected_animation = target
+}
+
+//   Select one animation by stable UUID without involving UI input handling.
+//
+// Parameters:
+//   - state: Global runtime state containing the active Julia interface.
+//   - stable_id: Stable animation UUID to select.
+//
+// Returns:
+//   - ok: true when the animation exists and selection state was updated.
+select_animation_by_stable_id :: proc(
+    state: ^core.Euclid_General_State,
+    stable_id: uuid.Identifier) -> bool {
+
+    if state == nil || state^.julia_interface == nil {
+        return false
+    }
+
+    selected := find_animation_by_stable_id(state, stable_id)
+    if selected == nil {
+        return false
+    }
+
+    ji := state^.julia_interface
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        node^.is_selected = node == selected
+    }
+    ji^.selected_animation = selected
+    return true
+}
+
+//   Invoke one harness scenario callback on the Julia owner thread.
+//
+// Parameters:
+//   - state: Global runtime state forwarded to Julia.
+//   - scenario_name: Scenario function name resolved from Main.
+//   - step_count: Number of deterministic fixed steps already executed.
+//
+// Returns:
+//   - ok: true when the scenario callback completed successfully.
+invoke_harness_scenario :: proc(
+    state: ^core.Euclid_General_State,
+    scenario_name: string,
+    step_count: int) -> bool {
+
+    if state == nil || len(scenario_name) == 0 {
+        return false
+    }
+
+    task_data := Harness_Scenario_Task_Data{
+        state = state,
+        scenario_name = strings.clone_to_cstring(scenario_name, context.temp_allocator),
+        step_count = step_count,
+    }
+    return invoke_julia_compatibility_task(state, run_harness_scenario_task, rawptr(&task_data))
+}
+
+//   Execute one harness scenario callback after deterministic stepping.
+run_harness_scenario_task :: proc(data: rawptr) -> bool {
+    task_data := cast(^Harness_Scenario_Task_Data)data
+    assert_julia_runtime_owner(task_data^.state)
+    context = task_data^.state^.saved_context
+
+    main_module := resolve_main_module()
+    if main_module == nil || task_data^.scenario_name == nil {
+        return false
+    }
+
+    harness_module := julialib.jl_get_function(main_module, "EuclidHarnessScenarios")
+    if harness_module == nil {
+        return false
+    }
+
+    scenario := julialib.jl_get_function(
+        cast(^julialib.jl_module_t)harness_module, task_data^.scenario_name)
+    if scenario == nil {
+        return false
+    }
+
+    state_value := julialib.jl_box_voidpointer(task_data^.state)
+    step_value := julialib.jl_box_int64(i64(task_data^.step_count))
+    result := julialib.jl_call2(scenario, state_value, step_value)
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception("harness scenario")
+        return false
+    }
+    if result == nil {
+        return false
+    }
+    return julialib.jl_unbox_bool(result) != 0
 }
 
 //   Clear animation registry state and reset interface selection fields to defaults.

@@ -290,3 +290,87 @@ trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
     testing.expect(t, strings.contains(content, "\"active_constraints\":12"))
     testing.expect(t, strings.contains(content, "\"next_constraint_index\":18"))
 }
+
+@(test)
+trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing.T) {
+    sandbox := prepare_trace_sandbox(t, "euclid_trace_checkpoint")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+
+    output_path, join_err := filepath.join([]string{sandbox, "trace.jsonl"}, context.allocator)
+    defer delete(output_path)
+    testing.expect(t, join_err == nil)
+
+    state := new(app_core.Trace_State)
+    defer free(state)
+    configure_enabled_trace(t, state, output_path, true)
+
+    snapshot := app_core.Trace_Checkpoint_Snapshot{
+        checkpoint_id = 7,
+        fixed_step = 21,
+        simulation_time = 0.35,
+        runtime_generation = 2,
+        animation_generation = 4,
+        animation_tick_sequence = 19,
+        next_point_index = 3,
+        next_constraint_index = 2,
+        active_constraint_count = 1,
+        rejected_tick_count = 5,
+        failed_request_count = 6,
+        dropped_record_count = 7,
+        point_count = 2,
+        pen_host_index = 10,
+        pen_visible = true,
+        pen_active_child = 2,
+        compass_host_index = 20,
+        compass_visible = false,
+        compass_active_child = -1,
+    }
+    snapshot.animation_name_len = set_trace_record_text(
+        snapshot.animation_name[:], "Euclid's Elements")
+    snapshot.points[0] = app_core.Trace_Checkpoint_Point{
+        index = 0,
+        kind = .Point,
+        do_draw = true,
+        active_child = 1,
+        position = app_core.Vector3{0.25, 0.5, 0},
+        has_position = true,
+        brush_size = 2,
+        offset = 0.5,
+    }
+    snapshot.points[1] = app_core.Trace_Checkpoint_Point{
+        index = 1,
+        kind = .Pen,
+        do_draw = false,
+        active_child = -1,
+        has_position = false,
+        brush_size = 3,
+        offset = 0.75,
+    }
+
+    testing.expect(t, app_trace.record_checkpoint_snapshot(state, &snapshot))
+    testing.expect(t, app_trace.finish_trace(state))
+
+    content := read_text_file(t, output_path)
+    testing.expect(t, strings.contains(content, "\"event\":\"trace.checkpoint\""))
+    testing.expect(t, strings.contains(content, "\"checkpoint_id\":7"))
+    testing.expect(t, strings.contains(content, "\"fixed_step\":21"))
+    testing.expect(t, strings.contains(content, "\"simulation_time\":0.35"))
+    testing.expect(t, strings.contains(content, "\"runtime_generation\":2"))
+    testing.expect(t, strings.contains(content, "\"animation_generation\":4"))
+    testing.expect(t, strings.contains(content, "\"animation_tick\":19"))
+    testing.expect(t, strings.contains(content, "\"animation_id\":\"Euclid's Elements\""))
+    testing.expect(t, strings.contains(content, "\"next_point_index\":3"))
+    testing.expect(t, strings.contains(content, "\"next_constraint_index\":2"))
+    testing.expect(t, strings.contains(content, "\"active_constraints\":1"))
+    testing.expect(t, strings.contains(content, "\"rejected_ticks\":5"))
+    testing.expect(t, strings.contains(content, "\"failed_requests\":6"))
+    testing.expect(t, strings.contains(content, "\"dropped_records\":7"))
+    testing.expect(t, strings.contains(content, "\"pen\":{\"host_index\":10,\"visible\":true,\"active_child\":2}"))
+    testing.expect(t, strings.contains(content, "\"compass\":{\"host_index\":20,\"visible\":false,\"active_child\":-1}"))
+    testing.expect(t, strings.contains(content, "\"points\":["))
+    testing.expect(t, strings.contains(content, "\"index\":0"))
+    testing.expect(t, strings.contains(content, "\"position\":[0.25,0.5,0]"))
+    testing.expect(t, strings.contains(content, "\"brush_size\":2"))
+    testing.expect(t, strings.contains(content, "\"offset\":0.5"))
+}

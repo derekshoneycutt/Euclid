@@ -245,6 +245,10 @@ Options:
   -S, --no-simd            Disable SIMD projection.
   -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)
   -G, --no-gpu-dust-instancing Disable GPU dust instancing.
+  --semantic-trace         Enable semantic trace output.
+  --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.
+  --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).
+  --semantic-trace-strict  Fail the run when trace overflow or serialization fails.
   -h, --help               Show this help text.
 
 Short options can be combined, for example: -vasg or -VAFSG
@@ -289,9 +293,13 @@ Options:
     --assets, -a        Build assets.pkg. (default)
     --no-assets, -A     Skip assets.pkg build.
     --sysimage, -s      Build a custom Julia sysimage beside the application.
+    --harness, -H       Build and run the headless semantic trace harness.
+    --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
+    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
+    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
 
@@ -300,6 +308,16 @@ Notes:
     - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
     - Short options can be combined, e.g. -rvas or -Ba.
 ```
+
+The harness target is intended for semantic trace and deterministic scenario work. Its
+underlying executable accepts a smaller control surface:
+
+```text
+Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
+```
+
+`julia make.jl -H` builds and runs the default harness scenario and writes the resulting trace
+to `bin/semantic-trace-harness.jsonl`.
 
 ### Q: Where Should I Start If I Want In The Code?
 

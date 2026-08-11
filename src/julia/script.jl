@@ -13,6 +13,7 @@ if !isdefined(Main, :EUCLID_SYSIMAGE_CORE_LOADED)
 end
 
 include("./nullanimation.jl")
+include("./harness_scenarios.jl")
 
 include("./elements/elements.jl")
 include("./proclus/proclus.jl")
