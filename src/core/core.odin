@@ -1511,4 +1511,8 @@ Euclid_Run_Settings :: struct {
     semantic_trace_strict: bool,
     semantic_trace_output: string,
     semantic_trace_events: string,
+    // When true, tracing runs and records are validated but discarded instead of
+    // written to stdout or a file. Used by tests to exercise the trace pipeline
+    // without producing output bytes.
+    semantic_trace_sink: bool,
 }

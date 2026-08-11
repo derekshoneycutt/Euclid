@@ -35,6 +35,8 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(t: ^
         semantic_trace_strict = true,
         semantic_trace_output = "",
         semantic_trace_events = "",
+        // Exercise the trace pipeline without printing records to stdout.
+        semantic_trace_sink = true,
     }
 
     session, ok := app_view.create_runtime_session(&settings)

@@ -659,6 +659,9 @@ configure_from_settings :: proc(
 
     state^.categories = categories
     state^.output_mode = .Stdout
+    if settings^.semantic_trace_sink {
+        state^.output_mode = .Sink
+    }
     if len(settings^.semantic_trace_output) > 0 {
         if len(settings^.semantic_trace_output) > len(state^.output_path) {
             fmt.eprintln("Invalid --semantic-trace-output value: path exceeds capacity.")
