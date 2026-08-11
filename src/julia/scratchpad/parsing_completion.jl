@@ -108,7 +108,8 @@ function longest_completion_prefix(values::Vector{String})
 end
 
 """Encode a completion replacement as `start\nend\ntext` using Odin byte offsets."""
-function encode_completion_result(start_byte::Int, end_byte::Int, replacement::AbstractString)
+function encode_completion_result(
+    start_byte::Int, end_byte::Int, replacement::AbstractString)
     return string(start_byte) * "\n" * string(end_byte) * "\n" * String(replacement)
 end
 
@@ -131,14 +132,16 @@ function completion_range_text(text::String, completion_range)
 end
 
 """Resolve replacement text from completion candidates, or return `nothing` when no change applies."""
-function completion_replacement_text(text::String, completion_range, values::Vector{String})
+function completion_replacement_text(
+    text::String, completion_range, values::Vector{String})
     if isempty(values)
         return nothing
     end
 
     if length(values) == 1
         replacement = first(values)
-        return replacement == completion_range_text(text, completion_range) ? nothing : replacement
+        return replacement == completion_range_text(text, completion_range) ?
+            nothing : replacement
     end
 
     current_text = completion_range_text(text, completion_range)
@@ -172,7 +175,8 @@ function complete_input(
     end
 
     replacement_values = completion_replacement_values(completions)
-    replacement_text = completion_replacement_text(text, completion_range, replacement_values)
+    replacement_text =
+        completion_replacement_text(text, completion_range, replacement_values)
     if replacement_text === nothing
         return ""
     end

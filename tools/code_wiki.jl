@@ -241,7 +241,8 @@ function odin_package_comment(lines::Vector{String})
 end
 
 """Populate the canonical package comment from its package-named source file when available."""
-function enrich_odin_package_comment!(package::DocumentationPackage, repository_root::String)
+function enrich_odin_package_comment!(
+    package::DocumentationPackage, repository_root::String)
     isempty(package.source_files) && return package
     preferred_name = package.display_name * ".odin"
     source_file = preferred_name in package.source_files ?
@@ -252,7 +253,8 @@ function enrich_odin_package_comment!(package::DocumentationPackage, repository_
 end
 
 """Enrich compiler records with narrow source locations and ABI classification."""
-function enrich_odin_source_metadata!(package::DocumentationPackage, repository_root::String)
+function enrich_odin_source_metadata!(
+    package::DocumentationPackage, repository_root::String)
     files = Dict{String,Vector{String}}()
     for symbol in package.symbols
         lines = get!(files, symbol.source_path) do
@@ -493,7 +495,8 @@ function main(arguments::Vector{String}=ARGS)
             joinpath(repository_root, "bin", "wiki"))
         source_prefix = get(ENV, "EUCLID_WIKI_SOURCE_PREFIX",
             "https://github.com/derekshoneycutt/Euclid/blob/main/")
-        expected_paths = generate_wiki_artifact(repository_root, output_root, source_prefix)
+        expected_paths =
+            generate_wiki_artifact(repository_root, output_root, source_prefix)
         foreach(path -> println("Wrote ", path), expected_paths)
         return 0
     end

@@ -51,7 +51,8 @@ draw_list_item :: proc(
     owns_press := press_owner^.active &&
         press_owner^.kind == .List_Item &&
         press_owner^.id == params.id
-    if params.interaction_enabled && !press_owner^.active && params.mouse.left_pressed && hovered {
+    if params.interaction_enabled && !press_owner^.active &&
+        params.mouse.left_pressed && hovered {
         press_owner^.active = true
         press_owner^.kind = .List_Item
         press_owner^.id = params.id

@@ -39,7 +39,8 @@ wait_for_julia_request :: proc(
 }
 
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
-create_runtime_session :: proc(settings: ^Euclid_Run_Settings) -> (Euclid_Runtime_Session, bool) {
+create_runtime_session :: proc(
+    settings: ^Euclid_Run_Settings) -> (Euclid_Runtime_Session, bool) {
     if settings == nil {
         return {}, false
     }
@@ -50,8 +51,10 @@ create_runtime_session :: proc(settings: ^Euclid_Run_Settings) -> (Euclid_Runtim
         return {}, false
     }
 
-    initialize_id, initialize_sent := julia.try_submit_julia_request(julia_service, .Initialize)
-    if !initialize_sent || !wait_for_julia_request(julia_service, initialize_id, .Initialized, 10.0) {
+    initialize_id, initialize_sent :=
+        julia.try_submit_julia_request(julia_service, .Initialize)
+    if !initialize_sent ||
+        !wait_for_julia_request(julia_service, initialize_id, .Initialized, 10.0) {
         julia.destroy_julia_runtime_service(julia_service)
         return {}, false
     }
@@ -67,7 +70,8 @@ create_runtime_session :: proc(settings: ^Euclid_Run_Settings) -> (Euclid_Runtim
         int(julia_service^.reload_state), initialize_id)
     content_id, content_sent := julia.try_submit_julia_request(
         julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
-    if !content_sent || !wait_for_julia_request(julia_service, content_id, .Invoke_Complete, 10.0) {
+    if !content_sent ||
+        !wait_for_julia_request(julia_service, content_id, .Invoke_Complete, 10.0) {
         shutdown_runtime_session(Euclid_Runtime_Session{
             state = state,
             julia_service = julia_service,
@@ -96,14 +100,14 @@ initiate_animations_state :: proc(
     iso_scale^.use_directional_shadow = true
 
     drawing_surface := new(Euclid_Drawing_Surface)
-    drawing_surface^.zeros = Vector3{0 - view_core.SURFACE_EDGE_SIZE, 0 - view_core.SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.right_up = Vector3{1 + view_core.SURFACE_EDGE_SIZE, 0 - view_core.SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.left_down = Vector3{0 - view_core.SURFACE_EDGE_SIZE, 1 + view_core.SURFACE_EDGE_SIZE, 0}
-    drawing_surface^.right_down = Vector3{
-        1 + view_core.SURFACE_EDGE_SIZE,
-        1 + view_core.SURFACE_EDGE_SIZE,
-        0,
-    }
+    drawing_surface^.zeros =
+        Vector3{0 - view_core.SURFACE_EDGE_SIZE, 0 - view_core.SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.right_up =
+        Vector3{1 + view_core.SURFACE_EDGE_SIZE, 0 - view_core.SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.left_down =
+        Vector3{0 - view_core.SURFACE_EDGE_SIZE, 1 + view_core.SURFACE_EDGE_SIZE, 0}
+    drawing_surface^.right_down =
+        Vector3{1 + view_core.SURFACE_EDGE_SIZE, 1 + view_core.SURFACE_EDGE_SIZE, 0}
     drawing_surface^.color = view_core.SURFACE_COLOR
     drawing_surface^.edge_color = view_core.SURFACE_EDGE_COLOR
     drawing_surface^.edge_size = view_core.SURFACE_EDGE_SIZE
@@ -115,7 +119,8 @@ initiate_animations_state :: proc(
     compass := shapes.init_compass(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
     pen := shapes.init_pen(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
     shapes.freeze_system_indices(point_system)
-    shapes.apply_all_constraints_to_error(point_system, view_core.ALLOWED_CONSTRAINT_ERROR)
+    shapes.apply_all_constraints_to_error(
+        point_system, view_core.ALLOWED_CONSTRAINT_ERROR)
     shapes.update_last_cache_vectors(point_system)
 
     state := new(Euclid_General_State)

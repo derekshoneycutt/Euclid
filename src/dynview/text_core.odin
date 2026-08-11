@@ -117,7 +117,8 @@ next_wrapped_text_span :: proc(
     if next_start < len(text) && text[next_start] == '\n' {
         next_start += 1
     } else {
-        for next_start < len(text) && (text[next_start] == ' ' || text[next_start] == '\t') {
+        for next_start < len(text) && (text[next_start] == ' ' ||
+            text[next_start] == '\t') {
             next_start += 1
         }
     }

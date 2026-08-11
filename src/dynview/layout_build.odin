@@ -129,7 +129,8 @@ layout_finalize_line :: proc(
     line^.max_ascent = acc^.max_ascent
     line^.max_descent = acc^.max_descent
 
-    layout_apply_item_offsets(cache, line^.item_start, line^.item_count, line^.line_height)
+    layout_apply_item_offsets(
+        cache, line^.item_start, line^.item_count, line^.line_height)
     layout_advance_after_line(cache, state, acc, line_height, base_ascent, base_descent)
     return DYNVIEW_STATUS_OK
 }
@@ -447,7 +448,8 @@ layout_consume_inline_line :: proc(
     }
 
     thickness := max(1.0, cmd.inline_atom_stroke)
-    ascent, descent, draw_height := inline_line_metrics(thickness, text_ascent, text_descent)
+    ascent, descent, draw_height :=
+        inline_line_metrics(thickness, text_ascent, text_descent)
     item := core.Dynview_Layout_Item{
         kind = .InlineLine,
         style_id = cmd.style_id,
@@ -981,7 +983,8 @@ layout_consume_inline_perpendicular :: proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
-    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    placement_status :=
+        layout_prepare_style_placement(cache, state, acc, style, font_size)
     if placement_status != DYNVIEW_STATUS_OK {
         return placement_status, -1
     }
@@ -990,7 +993,8 @@ layout_consume_inline_perpendicular :: proc(
     cols := inline_box_cols(cmd, style, max_cols)
     text_ascent, text_descent := style_ascent_descent(style, font_size)
 
-    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    status := layout_wrap_before_inline(
+        cache, state, acc, max_cols, cols, text_ascent, text_descent)
     if status != DYNVIEW_STATUS_OK {
         return status, -1
     }
@@ -1001,7 +1005,8 @@ layout_consume_inline_perpendicular :: proc(
         return status, -1
     }
 
-    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
+    return layout_finalize_after_inline_if_full(
+        cache, state, acc, max_cols, text_ascent, text_descent)
 }
 
 //   Lay out one inline-triangle command and return the line touched.
@@ -1013,7 +1018,8 @@ layout_consume_inline_triangle :: proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
-    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    placement_status := layout_prepare_style_placement(
+        cache, state, acc, style, font_size)
     if placement_status != DYNVIEW_STATUS_OK {
         return placement_status, -1
     }
@@ -1022,7 +1028,8 @@ layout_consume_inline_triangle :: proc(
     cols := inline_box_cols(cmd, style, max_cols)
     text_ascent, text_descent := style_ascent_descent(style, font_size)
 
-    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    status := layout_wrap_before_inline(
+        cache, state, acc, max_cols, cols, text_ascent, text_descent)
     if status != DYNVIEW_STATUS_OK {
         return status, -1
     }
@@ -1033,7 +1040,8 @@ layout_consume_inline_triangle :: proc(
         return status, -1
     }
 
-    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
+    return layout_finalize_after_inline_if_full(
+        cache, state, acc, max_cols, text_ascent, text_descent)
 }
 
 //   Lay out one inline-pentagon command and return the line touched.
@@ -1045,7 +1053,8 @@ layout_consume_inline_pentagon :: proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (i32, int) {
 
-    placement_status := layout_prepare_style_placement(cache, state, acc, style, font_size)
+    placement_status := layout_prepare_style_placement(
+        cache, state, acc, style, font_size)
     if placement_status != DYNVIEW_STATUS_OK {
         return placement_status, -1
     }
@@ -1054,7 +1063,8 @@ layout_consume_inline_pentagon :: proc(
     cols := inline_box_cols(cmd, style, max_cols)
     text_ascent, text_descent := style_ascent_descent(style, font_size)
 
-    status := layout_wrap_before_inline(cache, state, acc, max_cols, cols, text_ascent, text_descent)
+    status := layout_wrap_before_inline(
+        cache, state, acc, max_cols, cols, text_ascent, text_descent)
     if status != DYNVIEW_STATUS_OK {
         return status, -1
     }
@@ -1065,7 +1075,8 @@ layout_consume_inline_pentagon :: proc(
         return status, -1
     }
 
-    return layout_finalize_after_inline_if_full(cache, state, acc, max_cols, text_ascent, text_descent)
+    return layout_finalize_after_inline_if_full(
+        cache, state, acc, max_cols, text_ascent, text_descent)
 }
 
 //   Fill a one-line layout cache for an empty command stream.
@@ -1143,7 +1154,8 @@ layout_handle_block_markers :: proc(
 
     if cmd.kind == .BeginBlock {
         new_format := block_format_for_kind(cmd.style_id)
-        spacing_status := layout_apply_block_spacing(ctx, new_format.paragraph_spacing_before)
+        spacing_status :=
+            layout_apply_block_spacing(ctx, new_format.paragraph_spacing_before)
         if spacing_status != DYNVIEW_STATUS_OK {
             return spacing_status
         }
@@ -1286,7 +1298,8 @@ layout_consume_visible_command :: proc(
     switch cmd.kind {
     case .TextRun, .MathGlyphRun:
         return layout_consume_text_like_command(ctx, cmd, effective_style)
-    case .MathBlock, .ScriptAttachRecursive, .FracRecursive, .LargeOpRecursive, .AccentBarRecursive,
+    case .MathBlock, .ScriptAttachRecursive, .FracRecursive,
+        .LargeOpRecursive, .AccentBarRecursive,
         .StretchDelimiterRecursive, .MatrixRecursive,
         .RadicalBarRecursive:
         return layout_consume_structured_math_command(ctx, cmd, effective_style)
@@ -1590,7 +1603,8 @@ pie_section_bounds :: #force_inline proc(
     y_min: f32 = 0
     y_max: f32 = 0
 
-    include_angle :: #force_inline proc(angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
+    include_angle :: #force_inline proc(
+        angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
         radians := angle_degrees * math.PI / 180.0
         x := radius * f32(math.cos(f64(radians)))
         y := -radius * f32(math.sin(f64(radians)))

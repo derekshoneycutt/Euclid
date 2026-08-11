@@ -20,7 +20,8 @@ import rl "vendor:raylib"
 @(export)
 create_new_label :: proc "c" (
     state: ^core.Euclid_General_State,
-    label: rune, pos: core.Vector3, color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
+    label: rune, pos: core.Vector3,
+    color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
 
     return create_new_label_decorated(
         state, label, i32(core.Shapes_Label_Decoration_Kind.None), pos, color, brushSize)
@@ -75,7 +76,8 @@ create_new_label_decorated :: proc "c" (
         color = Bridge_Color{ color.r, color.g, color.b, color.a },
 
         has_active_color = hasActiveColor,
-        active_color = Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+        active_color =
+            Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
 
         has_label = hasLabel,
         label = use_label,
@@ -129,7 +131,8 @@ create_new_point :: proc "c" (
         color = Bridge_Color{ color.r, color.g, color.b, color.a },
 
         has_active_color = hasActiveColor,
-        active_color = Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+        active_color =
+            Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
 
         has_label = hasLabel,
         label = label,
@@ -156,7 +159,8 @@ create_new_point :: proc "c" (
 @(export)
 create_new_line :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2: core.Vector3, color: Bridge_Color, brushSize: f32) -> core.Shapes_Line {
+    point1, point2: core.Vector3,
+    color: Bridge_Color, brushSize: f32) -> core.Shapes_Line {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
@@ -259,7 +263,8 @@ create_new_triangle :: proc "c" (
 @(export)
 create_new_square :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4: core.Vector3, color: Bridge_Color) -> core.Shapes_Square {
+    point1, point2, point3, point4: core.Vector3,
+    color: Bridge_Color) -> core.Shapes_Square {
 
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
@@ -359,7 +364,9 @@ get_point_view :: proc "c" (
             color = Bridge_Color{ color.r, color.g, color.b, color.a },
 
             has_active_color = hasActiveColor,
-            active_color = Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+            active_color =
+                Bridge_Color{ activeColor.r, activeColor.g,
+                    activeColor.b, activeColor.a },
 
             has_label = hasLabel,
             label = label,
@@ -450,7 +457,8 @@ hide_point :: proc "c" (state: ^core.Euclid_General_State, index_abi: i32) {
 //   - indices: Pointer to index array consumed by this batch operation.
 //   - count: Number of entries available in the provided array.
 @(export)
-hide_point_batch :: proc "c" (state: ^core.Euclid_General_State, indices: [^]i32, count: i32) {
+hide_point_batch :: proc "c" (
+    state: ^core.Euclid_General_State, indices: [^]i32, count: i32) {
     if capture_hide_point_batch_command(state, indices, count) {
         return
     }
@@ -575,7 +583,8 @@ get_point_next_index :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
 // Returns:
 //   - 1 when true, 0 when false for C ABI compatibility.
 @(export)
-is_point_index_in_range :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> u8 {
+is_point_index_in_range :: proc "c" (
+    state: ^core.Euclid_General_State, index: i32) -> u8 {
     context = state^.saved_context
     _ = state
     return to_u8(is_point_index_in_bounds(int(index)))
@@ -735,7 +744,8 @@ set_point_active_color_status :: proc "c" (
 // Returns:
 //   - BRIDGE_STATUS_OK on success or BRIDGE_STATUS_INVALID_INDEX when index is out of bounds.
 @(export)
-clear_point_active_color :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> i32 {
+clear_point_active_color :: proc "c" (
+    state: ^core.Euclid_General_State, index: i32) -> i32 {
     context = state^.saved_context
     pointIndex := int(index)
     if !is_point_index_in_bounds(pointIndex) {
@@ -944,7 +954,8 @@ detach_child_point :: proc "c" (
 //   - BRIDGE_STATUS_INVALID_INDEX when parentIndex is out of bounds.
 //   - BRIDGE_STATUS_INVALID_GRAPH when the child chain contains invalid indices or cycles.
 @(export)
-rebuild_child_count :: proc "c" (state: ^core.Euclid_General_State, parentIndex: i32) -> i32 {
+rebuild_child_count :: proc "c" (
+    state: ^core.Euclid_General_State, parentIndex: i32) -> i32 {
     context = state^.saved_context
     parent := int(parentIndex)
     if !is_point_index_in_bounds(parent) {

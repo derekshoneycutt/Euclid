@@ -129,7 +129,8 @@ CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 //
 // Returns:
 //   - none.
-emit_flicker_particles :: proc(ps: ^Particle_System, x, y, z: f32, color: rl.Color, count: int = 1) {
+emit_flicker_particles :: proc(
+    ps: ^Particle_System, x, y, z: f32, color: rl.Color, count: int = 1) {
     origin := Vector3{x, y, z}
     if count <= 0 {
         return
@@ -274,7 +275,8 @@ push_dust_away_from_xy_large :: proc (ps: ^Particle_System, x, y: f32) {
 //   - none.
 kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
     // Dust only fades when it is kicked by a new clear burst.
-    ps.low_particles[i].age += random_f32_range(ps, DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
+    ps.low_particles[i].age +=
+        random_f32_range(ps, DUST_KICK_FADE_MIN, DUST_KICK_FADE_MAX)
 
     ps.low_particles.vel_x[i] += random_f32_range(ps,
         -DUST_EXISTING_XY_KICK,
@@ -744,7 +746,8 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
 
 //   Spawn one ember particle near the provided tool-tip position.
 spawn_ember_particle :: proc(
-    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) -> (Vector3, bool) {
+    ps: ^Particle_System, tip_x, tip_y, tip_z: f32,
+    tip_color: rl.Color) -> (Vector3, bool) {
 
     index, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -760,7 +763,8 @@ spawn_ember_particle :: proc(
 
     ps.particles.age[index] = 0
 
-    life_scale := f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
+    life_scale :=
+        f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
     ps.particles.life[index] = PARTICLE_LIFE * life_scale
 
     ps.particles.size[index] = PARTICLE_SIZE_START
@@ -775,7 +779,8 @@ spawn_ember_particle :: proc(
     ps.particles.vel_z[index] = 0
     ps.particles.lit_frames[index] = 0
 
-    spawn_pos := Vector3{ps.particles.pos_x[index], ps.particles.pos_y[index], ps.particles.pos_z[index]}
+    spawn_pos := Vector3{ps.particles.pos_x[index],
+        ps.particles.pos_y[index], ps.particles.pos_z[index]}
     return spawn_pos, true
 }
 
@@ -807,7 +812,8 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
     ps.high_particles.ember_size_end[index] = 0.0
     ps.high_particles.ember_white_at_birth[index] = 0.0
     ps.high_particles.age[index] = 0
-    ps.high_particles.life[index] = random_f32_range(ps, FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
+    ps.high_particles.life[index] =
+        random_f32_range(ps, FLICKER_LIFE_MIN, FLICKER_LIFE_MAX)
     ps.high_particles.lit_frames[index] = 0
     ps.high_particles.alive[index] = true
 
@@ -830,7 +836,8 @@ spawn_burnout_ember_particle :: proc(
     ps.particles.pos_z[index] = tip_z
 
     ps.particles.age[index] = 0
-    life_scale := f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
+    life_scale :=
+        f32(random_i32_range(ps, LIFE_VARIATION_MIN, LIFE_VARIATION_MAX)) / 100.0
     ps.particles.life[index] = BURNOUT_LIFE * life_scale
 
     ps.particles.size[index] = BURNOUT_SIZE_START
@@ -876,7 +883,8 @@ clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
 }
 
 //   Spawn one low-layer dust particle around an origin with random kick values.
-spawn_dust_particle_index :: proc(ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
+spawn_dust_particle_index :: proc(
+    ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
     ps.low_particles[i].life = random_f32_range(ps, DUST_LIFE_MIN, DUST_LIFE_MAX)
@@ -889,7 +897,8 @@ spawn_dust_particle_index :: proc(ps: ^Particle_System, i: int, origin: Vector3,
     ps.low_particles.vel_y[i] = random_f32_range(ps, DUST_VY_MIN, DUST_VY_MAX)
     ps.low_particles.vel_z[i] = random_f32_range(ps, DUST_VZ_MIN, DUST_VZ_MAX)
 
-    ps.low_particles[i].size = random_f32_range(ps, DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
+    ps.low_particles[i].size =
+        random_f32_range(ps, DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
     ps.low_particles[i].ember_size_start = 0.0
     ps.low_particles[i].ember_size_end = 0.0
     ps.low_particles[i].ember_white_at_birth = 0.0

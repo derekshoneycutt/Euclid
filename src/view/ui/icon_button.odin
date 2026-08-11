@@ -57,7 +57,8 @@ icon_button_try_capture_press :: proc(
     hovered: bool,
     owns_press: ^bool) {
 
-    if press_owner^.active || !params.interaction_enabled || !params.mouse.left_pressed || !hovered {
+    if press_owner^.active || !params.interaction_enabled ||
+        !params.mouse.left_pressed || !hovered {
         return
     }
 
@@ -99,7 +100,8 @@ icon_button_local_mouse :: #force_inline proc(
     mouse: Mouse_Input_State,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
-    return rl.Vector2{mouse.position.x - scroll_offset.x, mouse.position.y - scroll_offset.y}
+    return rl.Vector2{mouse.position.x - scroll_offset.x,
+        mouse.position.y - scroll_offset.y}
 }
 
 //   Resolve icon draw rectangle centered in slot using min-dimension sizing.
@@ -126,7 +128,8 @@ icon_button_icon_draw_rect :: #force_inline proc(
 }
 
 //   Draw icon glyph for a known icon-button id.
-draw_icon_button_glyph :: proc(icon_id: Icon_Button_Id, rect: rl.Rectangle, color: rl.Color) {
+draw_icon_button_glyph :: proc(
+    icon_id: Icon_Button_Id, rect: rl.Rectangle, color: rl.Color) {
     switch icon_id {
     case .Refresh:
         view_core.draw_refresh_icon(rect, color)

@@ -126,7 +126,8 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
     }
 
     segment_rect = clamp_non_negative_rect(segment_rect)
-    has_used_rect, used_rect := stack_panel_accumulate_used_rect(params.cursor_in, segment_rect)
+    has_used_rect, used_rect :=
+        stack_panel_accumulate_used_rect(params.cursor_in, segment_rect)
 
     cursor_out := Stack_Panel_Cursor{
         offset = params.cursor_in.offset + segment_size,

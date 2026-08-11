@@ -152,7 +152,8 @@ Euclid_General_State :: core.Euclid_General_State
 Euclid_Run_Settings :: core.Euclid_Run_Settings
 
 //   Resolve one static JuliaMono filename from weight and italic style.
-font_variant_filename :: #force_inline proc(weight: core.Font_Weight, italic: bool) -> string {
+font_variant_filename :: #force_inline proc(
+	weight: core.Font_Weight, italic: bool) -> string {
 	switch weight {
 	case .Light:
 		if italic {
@@ -195,7 +196,8 @@ font_variant_filename :: #force_inline proc(weight: core.Font_Weight, italic: bo
 }
 
 //   Return packed slot index for one weight/italic pair.
-font_variant_slot_index :: #force_inline proc(weight: core.Font_Weight, italic: bool) -> int {
+font_variant_slot_index :: #force_inline proc(
+	weight: core.Font_Weight, italic: bool) -> int {
 	base := 0
 	switch weight {
 	case .Light:
@@ -225,7 +227,8 @@ font_variant_slot_index :: #force_inline proc(weight: core.Font_Weight, italic: 
 // Notes:
 //   - Safe to call before GPU finalization; preparation owns all returned memory.
 //   - Pair with font_runtime_init_from_preparation to transfer or release that memory.
-font_runtime_prepare_baseline :: proc(preparation: ^Baseline_Font_Preparation, font_size: i32) {
+font_runtime_prepare_baseline :: proc(
+	preparation: ^Baseline_Font_Preparation, font_size: i32) {
 	font_prepare_variant(&preparation^.variants[0], .Regular, false, font_size)
 	font_prepare_variant(&preparation^.variants[1], .Bold, false, font_size)
 	font_prepare_variant(&preparation^.variants[2], .Regular, true, font_size)
@@ -353,7 +356,8 @@ font_load_variant :: proc(
 	if len(font_path) == 0 {
 		if !slot^.missing_warned {
 			slot^.missing_warned = true
-			fmt.eprintln("font load fallback: unable to resolve asset path for ", filename)
+			fmt.eprintln(
+				"font load fallback: unable to resolve asset path for ", filename)
 		}
 		return false
 	}
@@ -388,7 +392,8 @@ font_runtime_resolve :: proc(
 	requested_italic := core.font_has_flag(flags, .Italic)
 	requested_slot := font_variant_slot_index(requested_weight, requested_italic)
 
-	if font_load_variant(state, requested_slot, requested_weight, requested_italic, font_size) {
+	if font_load_variant(
+		state, requested_slot, requested_weight, requested_italic, font_size) {
 		return state^.font_runtime.variants[requested_slot].font
 	}
 
@@ -411,7 +416,8 @@ font_runtime_resolve :: proc(
 // Notes:
 //   - Baseline startup set is Regular, Bold, and RegularItalic.
 //   - Other variants still load lazily when requested.
-font_runtime_init_with_regular :: proc(state: ^core.Euclid_General_State, font_size: i32) -> bool {
+font_runtime_init_with_regular :: proc(
+	state: ^core.Euclid_General_State, font_size: i32) -> bool {
 	if state == nil {
 		return false
 	}
@@ -453,7 +459,8 @@ font_runtime_unload_all :: proc(state: ^core.Euclid_General_State) {
 }
 
 //   Build flags for simple bold/italic requests using Regular as default weight.
-font_flags_from_bold_italic :: #force_inline proc(bold, italic: bool) -> core.Font_Variant_Flags {
+font_flags_from_bold_italic :: #force_inline proc(
+	bold, italic: bool) -> core.Font_Variant_Flags {
 	flags := core.Font_Variant_Flags.Regular
 	if bold {
 		flags = core.Font_Variant_Flags.Bold

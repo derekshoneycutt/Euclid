@@ -57,7 +57,8 @@ end_scene_command_batch :: proc(state: ^core.Euclid_General_State) {
 // Returns captured=true when capture mode handled the operation, including overflow.
 // Overflow marks the whole batch invalid and deliberately suppresses direct mutation.
 append_scene_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind) -> (^Scene_Command, bool) {
+    state: ^core.Euclid_General_State,
+    kind: Scene_Command_Kind) -> (^Scene_Command, bool) {
 
     if state^.scene_command_batch_target == nil {
         return nil, false
@@ -176,7 +177,8 @@ capture_hide_point_batch_command :: proc "contextless" (
 
 //   Capture a position payload for a tool movement or lock command.
 capture_position_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, position: core.Vector3) -> bool {
+    state: ^core.Euclid_General_State,
+    kind: Scene_Command_Kind, position: core.Vector3) -> bool {
 
     command, captured := append_scene_command(state, kind)
     if command != nil {
@@ -271,9 +273,9 @@ valid_scene_point_index :: #force_inline proc(
 validate_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
-    if state == nil || batch == nil || batch^.overflowed || state^.julia_interface == nil ||
-        state^.point_system == nil || batch^.command_count < 0 ||
-        batch^.command_count > len(batch^.commands) ||
+    if state == nil || batch == nil || batch^.overflowed ||
+        state^.julia_interface == nil || state^.point_system == nil ||
+        batch^.command_count < 0 || batch^.command_count > len(batch^.commands) ||
         batch^.animation != state^.julia_interface^.current_animation {
         return false
     }
@@ -286,7 +288,8 @@ validate_scene_command_batch :: proc(
                 return false
             }
         case .Hide_Point_Batch:
-            if command^.point_count < 0 || command^.point_count > len(command^.point_indices) {
+            if command^.point_count < 0 ||
+                command^.point_count > len(command^.point_indices) {
                 return false
             }
             for point_index in command^.point_indices[:command^.point_count] {
@@ -320,14 +323,16 @@ validate_scene_command_batch :: proc(
             if !valid_scene_point_index(state, state^.compass.joint1_id) ||
                 !valid_scene_point_index(state, state^.compass.pivot_id) ||
                 state^.compass.lock_point1_id < 0 ||
-                state^.compass.lock_point1_id >= state^.point_system^.next_constraint_index {
+                state^.compass.lock_point1_id >=
+                    state^.point_system^.next_constraint_index {
                 return false
             }
         case .Lock_Compass_Joint2:
             if !valid_scene_point_index(state, state^.compass.joint2_id) ||
                 !valid_scene_point_index(state, state^.compass.pivot_id) ||
                 state^.compass.lock_point2_id < 0 ||
-                state^.compass.lock_point2_id >= state^.point_system^.next_constraint_index {
+                state^.compass.lock_point2_id >=
+                    state^.point_system^.next_constraint_index {
                 return false
             }
         case .Set_Animation_Meta:
@@ -355,7 +360,8 @@ commit_scene_command_batch :: proc(
         command := &batch^.commands[command_index]
         switch command^.kind {
         case .Set_Point_Position:
-            previous_position := state^.point_system^.points[command^.point_index].position
+            previous_position :=
+                state^.point_system^.points[command^.point_index].position
             set_point_position_with_floor_crossing_dust(
                 state, command^.point_index, command^.position)
             _ = trace.record_point_event(

@@ -58,7 +58,8 @@ gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> s
     case .Armed:
         return "Status: Armed"
     case .Recording:
-        return fmt.tprintf("Status: Recording (%d frames)", ui_runtime.gif_captured_frames)
+        return fmt.tprintf("Status: Recording (%d frames)",
+            ui_runtime.gif_captured_frames)
     case .Finalizing:
         return "Status: Saving"
     case .Saved:

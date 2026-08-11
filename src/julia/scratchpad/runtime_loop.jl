@@ -107,7 +107,8 @@ function evaluate_queued_input!(
         end
     catch
         session.metrics.eval_errors += 1
-        append_native_error_block!(session, format_current_exception_text(runtime; color=true))
+        append_native_error_block!(session,
+            format_current_exception_text(runtime; color=true))
     end
 end
 
@@ -191,7 +192,8 @@ function clean(state_ptr::Ptr{Cvoid})
     clean_count_ref[] += 1
     session_ref[] = nothing
 
-    if isdefined(Main, :EuclidRepl) && isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
+    if isdefined(Main, :EuclidRepl) &&
+        isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
         Main.EuclidRepl.reset_scratchpad_session!()
     end
 end

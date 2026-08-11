@@ -48,7 +48,8 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
 
 end
 
-function scratchpad_classify_input(state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
+function scratchpad_classify_input(
+    state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
     Scratchpad.classify_input(state_ptr, String(text), Int32(input_mode))
 end
 

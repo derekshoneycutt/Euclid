@@ -119,7 +119,8 @@ scroll_container_begin :: proc(
 
     view_rect := clamp_non_negative_rect(rect)
     local_mouse := scroll_container_local_mouse(mouse_input, scroll_offset)
-    in_interaction := scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
+    in_interaction :=
+        scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
     hovered_view := in_interaction && rl.CheckCollisionPointRec(local_mouse, view_rect)
 
     use_wheel_step := max(0.0, wheel_step)
@@ -149,7 +150,8 @@ scroll_container_begin :: proc(
             max_scroll_hint,
             SCROLLBAR_WIDTH,
             SCROLLBAR_THUMB_MIN_HEIGHT)
-        hovered_thumb = in_interaction && rl.CheckCollisionPointRec(local_mouse, thumb_hint)
+        hovered_thumb = in_interaction &&
+            rl.CheckCollisionPointRec(local_mouse, thumb_hint)
     }
 
     is_dragging_thumb := state_in.is_dragging_thumb
@@ -412,7 +414,8 @@ handle_scrollbar_drag :: proc(
     drag_off: ^f32,
     drag_epsilon: f32) {
 
-    if mouse_input.left_pressed && rl.CheckCollisionPointRec(mouse_input.position, thumb) {
+    if mouse_input.left_pressed &&
+        rl.CheckCollisionPointRec(mouse_input.position, thumb) {
         dragging^ = true
         drag_off^ = mouse_input.position.y - thumb.y
     }

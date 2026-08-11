@@ -86,7 +86,8 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     }
     service^.reload_state = .Quiescing
     task_data := Animation_Lifecycle_Task_Data{state = state}
-    if !invoke_julia_compatibility_task(state, update_animation_lifecycle_task, rawptr(&task_data)) {
+    if !invoke_julia_compatibility_task(
+        state, update_animation_lifecycle_task, rawptr(&task_data)) {
         if service^.reload_state == .Quiescing {
             service^.reload_state = .Idle
         }
@@ -197,33 +198,45 @@ update_running_animations :: proc(state: ^core.Euclid_General_State) -> bool {
     if state^.julia_interface^.selected_animation !=
         state^.julia_interface^.current_animation {
         previous_animation := state^.julia_interface^.current_animation
-        if !change_current_animation_loop(state, state^.julia_interface^.selected_animation) {
+        if !change_current_animation_loop(
+            state, state^.julia_interface^.selected_animation) {
             return false
         }
         switched_animation =
-            state^.julia_interface^.current_animation == state^.julia_interface^.selected_animation &&
+            state^.julia_interface^.current_animation ==
+                state^.julia_interface^.selected_animation &&
             state^.julia_interface^.current_animation != previous_animation
     }
 
     if state^.julia_interface^.pending_animation_reset &&
-        state^.julia_interface^.current_animation == state^.julia_interface^.selected_animation {
+        state^.julia_interface^.current_animation ==
+            state^.julia_interface^.selected_animation {
         if switched_animation {
             state^.julia_interface^.pending_animation_reset = false
         } else {
             if state^.julia_interface^.animation_reset_cooldown_remaining <= 0 {
+                animation_generation: u64 = 0
+                if state^.julia_runtime_service != nil {
+                    animation_generation =
+                        state^.julia_runtime_service^.animation_generation
+                }
                 _ = trace.record_animation_event_ex(
                     &state^.trace_state, "animation.reset_requested",
-                    state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
-                    0, "", "")
+                    animation_generation, 0, "", "")
                 if !reset_current_animation_loop(state) {
                     return false
                 }
-                state^.julia_interface^.animation_reset_cooldown_remaining = ANIMATION_RESET_MIN_INTERVAL
+                state^.julia_interface^.animation_reset_cooldown_remaining =
+                    ANIMATION_RESET_MIN_INTERVAL
                 state^.julia_interface^.pending_animation_reset = false
+                animation_generation = 0
+                if state^.julia_runtime_service != nil {
+                    animation_generation =
+                        state^.julia_runtime_service^.animation_generation
+                }
                 _ = trace.record_animation_event_ex(
                     &state^.trace_state, "animation.reset_committed",
-                    state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
-                    0, "", "")
+                    animation_generation, 0, "", "")
             }
         }
     }
@@ -305,7 +318,8 @@ change_current_animation_loop :: proc(
         }
     }
 
-    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(
+        state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.anim_metadata) {
@@ -322,13 +336,12 @@ change_current_animation_loop :: proc(
     }
 
     state^.julia_interface^.current_animation = animation
-    _ = trace.record_animation_event_ex(
-        &state^.trace_state,
-        "animation.selected",
-        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
-        0,
-        animation^.name,
-        "")
+    animation_generation: u64 = 0
+    if state^.julia_runtime_service != nil {
+        animation_generation = state^.julia_runtime_service^.animation_generation
+    }
+    _ = trace.record_animation_event_ex(&state^.trace_state, "animation.selected",
+        animation_generation, 0, animation^.name, "")
     return true
 }
 
@@ -346,7 +359,8 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
         return false
     }
 
-    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(
+        state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
     hide_compass(state)
     for i in 0..<len(state^.anim_metadata) {
@@ -453,7 +467,8 @@ invoke_harness_scenario :: proc(
         scenario_name = strings.clone_to_cstring(scenario_name, context.temp_allocator),
         step_count = step_count,
     }
-    return invoke_julia_compatibility_task(state, run_harness_scenario_task, rawptr(&task_data))
+    return invoke_julia_compatibility_task(
+        state, run_harness_scenario_task, rawptr(&task_data))
 }
 
 //   Execute one harness scenario callback after deterministic stepping.
@@ -525,7 +540,8 @@ restore_current_animation_after_reload :: proc(
         return change_current_animation_loop(state, restored_animation)
     }
 
-    fmt.eprintln("Julia asset reload: unable to restore animation for requested stable_id")
+    fmt.eprintln(
+        "Julia asset reload: unable to restore animation for requested stable_id")
     return false
 }
 
@@ -537,7 +553,8 @@ restore_current_animation_after_reload :: proc(
 //
 // Returns:
 //   - none.
-record_runtime_reload_event :: proc(state: ^core.Euclid_General_State, event_name: string) {
+record_runtime_reload_event :: proc(
+    state: ^core.Euclid_General_State, event_name: string) {
     if state == nil {
         return
     }
@@ -588,7 +605,8 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
     }
 
     stable_id, has_stable_id := active_animation_stable_id(state)
-    reloaded := stage_julia_interface_reload(state, archive_mtime, stable_id, has_stable_id)
+    reloaded := stage_julia_interface_reload(
+        state, archive_mtime, stable_id, has_stable_id)
     if !reloaded {
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
@@ -603,7 +621,8 @@ active_animation_stable_id :: proc(
     state: ^core.Euclid_General_State) -> (uuid.Identifier, bool) {
 
     active_animation := state^.julia_interface^.current_animation
-    if active_animation == nil || active_animation == &state^.julia_interface^.null_animation {
+    if active_animation == nil ||
+        active_animation == &state^.julia_interface^.null_animation {
         return {}, false
     }
     return active_animation^.stable_id, true
@@ -695,13 +714,16 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
     }
 
     state^.cycle_boundary_generation += 1
-    _ = trace.record_animation_event_ex(
-        &state^.trace_state,
-        "animation.cycle_boundary",
-        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_generation : 0,
-        state^.julia_runtime_service != nil ? state^.julia_runtime_service^.animation_tick_sequence : 0,
-        "",
-        "")
+    animation_generation: u64 = 0
+    if state^.julia_runtime_service != nil {
+        animation_generation = state^.julia_runtime_service^.animation_generation
+    }
+    animation_tick_sequence: u64 = 0
+    if state^.julia_runtime_service != nil {
+        animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
+    }
+    _ = trace.record_animation_event_ex(&state^.trace_state, "animation.cycle_boundary",
+        animation_generation, animation_tick_sequence, "", "")
 }
 
 //   Consume a pending cycle-boundary notification exactly once.
@@ -942,11 +964,12 @@ animation_lookup_grow :: proc(
             return false
         }
 
-        ji^.animation_lookup_entries[insert_index] = core.Euclid_Julia_Animation_Lookup_Entry{
-            is_occupied = true,
-            stable_id = entry.stable_id,
-            animation = entry.animation,
-        }
+        ji^.animation_lookup_entries[insert_index] =
+            core.Euclid_Julia_Animation_Lookup_Entry{
+                is_occupied = true,
+                stable_id = entry.stable_id,
+                animation = entry.animation,
+            }
         ji^.animation_lookup_count += 1
     }
 
@@ -1031,7 +1054,8 @@ add_animation_to_registry :: proc(
     get_view_text, initiate, loop, clean: ^julialib.jl_value_t,
     name: cstring,
     stable_id: uuid.Identifier,
-    parent: ^core.Euclid_Julia_Animation_Interface) -> (^core.Euclid_Julia_Animation_Interface, bool) {
+    parent: ^core.Euclid_Julia_Animation_Interface) -> (
+        ^core.Euclid_Julia_Animation_Interface, bool) {
 
     if state == nil || state^.julia_interface == nil {
         return nil, false

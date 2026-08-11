@@ -173,7 +173,8 @@ compile_script_attach_recursive :: #force_inline proc(
         return status
     }
 
-    sup_text := text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    sup_text := text_span_from_buffer(
+        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
     if len(sup_text) > 0 {
         sup_prefix := "^{"
         for i in 0..<len(sup_prefix) {
@@ -194,7 +195,8 @@ compile_script_attach_recursive :: #force_inline proc(
         }
     }
 
-    sub_text := text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    sub_text := text_span_from_buffer(
+        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
     if len(sub_text) > 0 {
         sub_prefix := "_{"
         for i in 0..<len(sub_prefix) {
@@ -239,7 +241,8 @@ compile_large_op_recursive :: #force_inline proc(
         }
     }
 
-    sub_text := text_span_from_buffer(buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
+    sub_text := text_span_from_buffer(
+        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len)
     if len(sub_text) > 0 {
         sub_prefix := "_{"
         for i in 0..<len(sub_prefix) {
@@ -260,7 +263,8 @@ compile_large_op_recursive :: #force_inline proc(
         }
     }
 
-    sup_text := text_span_from_buffer(buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
+    sup_text := text_span_from_buffer(
+        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len)
     if len(sup_text) > 0 {
         sup_prefix := "^{"
         for i in 0..<len(sup_prefix) {
@@ -297,7 +301,8 @@ compile_copyable_text_run :: #force_inline proc(
         return status
     }
 
-    status = append_copy_payload_slice(cache, buffer, cmd.copy_text_offset, cmd.copy_text_len)
+    status = append_copy_payload_slice(
+        cache, buffer, cmd.copy_text_offset, cmd.copy_text_len)
     if status != DYNVIEW_STATUS_OK {
         return status
     }
@@ -336,7 +341,8 @@ compile_inline_box :: #force_inline proc(
         return status
     }
 
-    if cmd.inline_atom_dimension <= 0 || cmd.inline_box_height <= 0 || cmd.inline_atom_stroke <= 0 {
+    if cmd.inline_atom_dimension <= 0 || cmd.inline_box_height <= 0 ||
+        cmd.inline_atom_stroke <= 0 {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
@@ -372,7 +378,8 @@ compile_inline_filled_box :: #force_inline proc(
         return status
     }
 
-    if cmd.inline_atom_dimension <= 0 || cmd.inline_box_height <= 0 || cmd.inline_outline_stroke < 0 {
+    if cmd.inline_atom_dimension <= 0 || cmd.inline_box_height <= 0 ||
+        cmd.inline_outline_stroke < 0 {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
@@ -549,7 +556,8 @@ rebuild_copy_hit_targets :: proc(
     last_hover_bottom := panel_top
     for i in 0..<cache^.copy_block_count {
         block := cache^.copy_blocks[i]
-        row_start, row_end, has_visible_items := layout_item_line_span_for_block(cache, block.block_id)
+        row_start, row_end, has_visible_items :=
+            layout_item_line_span_for_block(cache, block.block_id)
         if !has_visible_items {
             continue
         }
@@ -584,13 +592,14 @@ rebuild_copy_hit_targets :: proc(
 
         icon_x := panel.x + panel.width - text_padding - icon_size - icon_x_pad
         icon_y := max(panel_top + 1, min(row_top + 2, panel_bottom - icon_size - 1))
-        cache^.copy_hit_targets[cache^.copy_hit_target_count] = core.Dynview_Copy_Hit_Target{
-            block_id = block.block_id,
-            payload_offset = block.payload_offset,
-            payload_len = block.payload_len,
-            rect = {icon_x, icon_y, icon_size, icon_size},
-            hover_rect = hover_rect,
-        }
+        cache^.copy_hit_targets[cache^.copy_hit_target_count] =
+            core.Dynview_Copy_Hit_Target{
+                block_id = block.block_id,
+                payload_offset = block.payload_offset,
+                payload_len = block.payload_len,
+                rect = {icon_x, icon_y, icon_size, icon_size},
+                hover_rect = hover_rect,
+            }
         cache^.copy_hit_target_count += 1
         last_hover_bottom = hover_rect.y + hover_rect.height
     }
@@ -615,7 +624,8 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
         return ""
     }
 
-    return string(cache^.compiled_copy_payload[target.payload_offset:target.payload_offset + target.payload_len])
+    return string(cache^.compiled_copy_payload[
+            target.payload_offset:target.payload_offset + target.payload_len])
 }
 
 //   Compile command buffer metadata plus plain-text stream projection when needed.

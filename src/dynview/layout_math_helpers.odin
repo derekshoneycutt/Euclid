@@ -5,12 +5,14 @@ import "../core"
 Dynview_Matrix_Column_Alignment :: core.Dynview_Matrix_Column_Alignment
 
 //   Return style-adjusted horizontal advance for one column unit.
-effective_advance :: #force_inline proc(style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
+effective_advance :: #force_inline proc(
+    style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
     return max(1.0, wrap_advance * max(0.5, style.wrap_scale))
 }
 
 //   Return style-aware ascent/descent estimates from active font size.
-style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
+style_ascent_descent :: #force_inline proc(
+    style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
     scale := max(0.8, style.wrap_scale)
     ascent := max(1.0, font_size * (0.74 + 0.06 * scale))
     descent := max(1.0, font_size * (0.22 + 0.02 * scale))
@@ -90,7 +92,8 @@ fraction_vertical_gap :: #force_inline proc(font_size: f32) -> f32 {
 }
 
 //   Return small horizontal side padding for stretch-delimiter wrappers.
-stretch_delimiter_side_padding :: #force_inline proc(font_size, base_advance: f32) -> f32 {
+stretch_delimiter_side_padding :: #force_inline proc(
+    font_size, base_advance: f32) -> f32 {
     return max(0.5, max(base_advance * 0.12, font_size * 0.08))
 }
 
@@ -271,7 +274,8 @@ delimiter_is_right :: #force_inline proc(delimiter_kind: i32) -> bool {
 }
 
 //   Return one recipe-like base width factor keyed by delimiter family.
-delimiter_base_width_factor :: #force_inline proc(family: Dynview_Delimiter_Family) -> f32 {
+delimiter_base_width_factor :: #force_inline proc(
+    family: Dynview_Delimiter_Family) -> f32 {
     switch family {
     case .Paren:
         return 0.42
@@ -378,8 +382,11 @@ style_with_block_format :: #force_inline proc(
     }
 
     merged.indent_cols = max(merged.indent_cols, block_format.indent_cols)
-    merged.paragraph_spacing_before = max(merged.paragraph_spacing_before, block_format.paragraph_spacing_before)
-    merged.paragraph_spacing_after = max(merged.paragraph_spacing_after, block_format.paragraph_spacing_after)
-    merged.line_height_multiplier = max(merged.line_height_multiplier, block_format.line_height_multiplier)
+    merged.paragraph_spacing_before =
+        max(merged.paragraph_spacing_before, block_format.paragraph_spacing_before)
+    merged.paragraph_spacing_after =
+        max(merged.paragraph_spacing_after, block_format.paragraph_spacing_after)
+    merged.line_height_multiplier =
+        max(merged.line_height_multiplier, block_format.line_height_multiplier)
     return merged
 }

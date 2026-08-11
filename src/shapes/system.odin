@@ -182,14 +182,16 @@ draw_cache_polygon_centroid_and_flatness :: proc(
 }
 
 //   Return representative depth and flatness for one cached line item.
-draw_cache_line_depth_and_flatness :: #force_inline proc(line: Shapes_Line_Draw) -> (f32, bool) {
+draw_cache_line_depth_and_flatness :: #force_inline proc(
+    line: Shapes_Line_Draw) -> (f32, bool) {
     midpoint := (line.point1 + line.point2) * 0.5
     flat := draw_cache_point_is_flat(line.point1) && draw_cache_point_is_flat(line.point2)
     return draw_cache_visual_depth(midpoint), flat
 }
 
 //   Return representative depth and flatness for one cached circle item.
-draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Shapes_Circle_Draw) -> (f32, bool) {
+draw_cache_circle_depth_and_flatness :: #force_inline proc(
+    circle: Shapes_Circle_Draw) -> (f32, bool) {
     flat := draw_cache_point_is_flat(circle.center) &&
         draw_cache_point_is_flat(circle.start) &&
         draw_cache_point_is_flat(circle.end)
@@ -197,7 +199,8 @@ draw_cache_circle_depth_and_flatness :: #force_inline proc(circle: Shapes_Circle
 }
 
 //   Return representative depth and flatness for one cached filled-circle item.
-draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Shapes_Filled_Circle_Draw) -> (f32, bool) {
+draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(
+    circle: Shapes_Filled_Circle_Draw) -> (f32, bool) {
     flat := draw_cache_point_is_flat(circle.center) &&
         draw_cache_point_is_flat(circle.start) &&
         draw_cache_point_is_flat(circle.end)
@@ -205,14 +208,16 @@ draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(circle: Shapes_
 }
 
 //   Return representative depth and flatness for one cached pen item.
-draw_cache_pen_depth_and_flatness :: #force_inline proc(pen: Shapes_Pen_Draw) -> (f32, bool) {
+draw_cache_pen_depth_and_flatness :: #force_inline proc(
+    pen: Shapes_Pen_Draw) -> (f32, bool) {
     midpoint := (pen.joint1 + pen.joint2) * 0.5
     flat := draw_cache_point_is_flat(pen.joint1) && draw_cache_point_is_flat(pen.joint2)
     return draw_cache_visual_depth(midpoint), flat
 }
 
 //   Return representative depth and flatness for one cached compass item.
-draw_cache_compass_depth_and_flatness :: #force_inline proc(compass: Shapes_Compass_Draw) -> (f32, bool) {
+draw_cache_compass_depth_and_flatness :: #force_inline proc(
+    compass: Shapes_Compass_Draw) -> (f32, bool) {
     centroid := (compass.joint1 + compass.pivot + compass.joint2) / 3.0
     flat := draw_cache_point_is_flat(compass.joint1) &&
         draw_cache_point_is_flat(compass.pivot) &&
@@ -230,11 +235,16 @@ draw_cache_item_depth_and_flatness :: proc(
     item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
     switch &typed in item {
-    case Shapes_Label_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
-    case Shapes_Point_Draw: return draw_cache_visual_depth(typed.point1), draw_cache_point_is_flat(typed.point1)
+    case Shapes_Label_Draw:
+        return draw_cache_visual_depth(typed.point1),
+            draw_cache_point_is_flat(typed.point1)
+    case Shapes_Point_Draw:
+        return draw_cache_visual_depth(typed.point1),
+            draw_cache_point_is_flat(typed.point1)
     case Shapes_Line_Draw: return draw_cache_line_depth_and_flatness(typed)
     case Shapes_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
-    case Shapes_Filled_Circle_Draw: return draw_cache_filledcircle_depth_and_flatness(typed)
+    case Shapes_Filled_Circle_Draw:
+        return draw_cache_filledcircle_depth_and_flatness(typed)
     case Shapes_Polygon_Draw:
         centroid, flat := draw_cache_polygon_centroid_and_flatness(point_system, &typed)
         return draw_cache_visual_depth(centroid), flat
@@ -261,7 +271,8 @@ draw_cache_item_should_precede :: #force_inline proc(
     }
 
     depth_delta := lhs_depth - rhs_depth
-    if depth_delta >= -DRAW_CACHE_SORT_FLAT_EPSILON && depth_delta <= DRAW_CACHE_SORT_FLAT_EPSILON {
+    if depth_delta >= -DRAW_CACHE_SORT_FLAT_EPSILON &&
+        depth_delta <= DRAW_CACHE_SORT_FLAT_EPSILON {
         return false
     }
 
@@ -656,9 +667,11 @@ triangulate_polygon_ear_loop :: #force_inline proc(
         }
 
         if want_ccw {
-            emit_polygon_triangle(point_system, triangle_start, triangle_count, base_vertex, prev, node, next)
+            emit_polygon_triangle(point_system, triangle_start, triangle_count,
+                base_vertex, prev, node, next)
         } else {
-            emit_polygon_triangle(point_system, triangle_start, triangle_count, base_vertex, next, node, prev)
+            emit_polygon_triangle(point_system, triangle_start, triangle_count,
+                base_vertex, next, node, prev)
         }
 
         ring[prev].next = next
@@ -812,7 +825,8 @@ cache_push_label :: proc(
         return
     }
 
-    point := Shapes_Label_Draw{ make_draw_base(source_index, src), p0, label, src^.decoration_kind }
+    point := Shapes_Label_Draw{ make_draw_base(source_index, src),
+        p0, label, src^.decoration_kind }
     slot^ = point
 }
 
@@ -854,7 +868,8 @@ cache_push_line :: proc(
         return
     }
 
-    point := Shapes_Line_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
+    point := Shapes_Line_Draw{ make_draw_base(source_index, src),
+        child_points[0], child_points[1] }
     slot^ = point
 }
 
@@ -890,7 +905,8 @@ cache_push_circle :: proc(
         return
     }
 
-    point := Shapes_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
+    point := Shapes_Circle_Draw{ make_draw_base(source_index, src), center, start, end,
+        src^.offset }
     slot^ = point
 }
 
@@ -926,7 +942,8 @@ cache_push_filledcircle :: proc(
         return
     }
 
-    point := Shapes_Filled_Circle_Draw{ make_draw_base(source_index, src), center, start, end, src^.offset }
+    point := Shapes_Filled_Circle_Draw{ make_draw_base(source_index, src), center,
+        start, end, src^.offset }
     slot^ = point
 }
 
@@ -949,7 +966,8 @@ cache_push_polygon :: proc(
         return
     }
 
-    vertices := point_system^.draw_cache.polygon_vertices[first_vertex:first_vertex + vertex_count]
+    vertices := point_system^.draw_cache.polygon_vertices[
+        first_vertex:first_vertex + vertex_count]
     if !lerped_child_positions(point_system, src, alpha, vertices) {
         rollback_polygon_cache_ranges(point_system, vertex_count, max_triangle_count)
         return
@@ -991,7 +1009,8 @@ cache_push_pen :: proc(
         return
     }
 
-    point := Shapes_Pen_Draw{ make_draw_base(source_index, src), child_points[0], child_points[1] }
+    point := Shapes_Pen_Draw{
+        make_draw_base(source_index, src), child_points[0], child_points[1] }
     point_system^.draw_cache.pen = point
     point_system^.draw_cache.draw_pen = src^.do_draw
 

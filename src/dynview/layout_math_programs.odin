@@ -126,7 +126,8 @@ math_program_recursive_script_item :: #force_inline proc(
         descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
     }
 
-    script_advance := effective_advance(script_style, cache^.last_wrap_advance) * script_scale
+    script_advance := effective_advance(script_style, cache^.last_wrap_advance) *
+        script_scale
     gap_px := max(1.0, cmd.script_gap * font_size)
     script_width := f32(script_cols) * script_advance
     draw_width := child_program^.draw_width
@@ -152,7 +153,8 @@ math_program_recursive_script_item :: #force_inline proc(
         ascent = ascent,
         descent = descent,
         visual_padding_top = max(child_program^.visual_padding_top, script_top_pad),
-        visual_padding_bottom = max(child_program^.visual_padding_bottom, script_bottom_pad),
+        visual_padding_bottom =
+            max(child_program^.visual_padding_bottom, script_bottom_pad),
     }, true
 }
 
@@ -189,7 +191,8 @@ math_program_large_op_item :: #force_inline proc(
     limit_font_size := max(1.0, font_size * limit_scale)
     limit_ascent, limit_descent := style_ascent_descent(script_style, limit_font_size)
     limit_top_pad, limit_bottom_pad := script_visual_padding(limit_font_size)
-    limit_advance := effective_advance(script_style, cache^.last_wrap_advance) * limit_scale
+    limit_advance :=
+        effective_advance(script_style, cache^.last_wrap_advance) * limit_scale
     sup_width := f32(sup_cols) * limit_advance
     sub_width := f32(sub_cols) * limit_advance
 
@@ -261,8 +264,10 @@ math_program_recursive_fraction_item :: #force_inline proc(
 
     content_width := max(numerator_program^.draw_width, denominator_program^.draw_width)
     draw_width := max(content_width + side_padding * 2.0, base_advance)
-    ascent := numerator_program^.ascent + numerator_program^.descent + divider_gap + divider_half
-    descent := denominator_program^.ascent + denominator_program^.descent + divider_gap + divider_half
+    ascent := numerator_program^.ascent +
+        numerator_program^.descent + divider_gap + divider_half
+    descent := denominator_program^.ascent + denominator_program^.descent +
+        divider_gap + divider_half
     visual_pad := max(0.6, divider_thickness * 0.5)
 
     return core.Dynview_Layout_Item{
@@ -276,8 +281,10 @@ math_program_recursive_fraction_item :: #force_inline proc(
         draw_height = ascent + descent,
         ascent = ascent,
         descent = descent,
-        visual_padding_top = max(max(numerator_program^.visual_padding_top, denominator_program^.visual_padding_top), visual_pad),
-        visual_padding_bottom = max(max(numerator_program^.visual_padding_bottom, denominator_program^.visual_padding_bottom), visual_pad),
+        visual_padding_top = max(max(numerator_program^.visual_padding_top,
+            denominator_program^.visual_padding_top), visual_pad),
+        visual_padding_bottom = max(max(numerator_program^.visual_padding_bottom,
+            denominator_program^.visual_padding_bottom), visual_pad),
     }, true
 }
 
@@ -322,7 +329,8 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
         content_height,
         cmd.radical_mode)
 
-    draw_width := max(content_width + left_width + right_width + side_padding * 2.0, base_advance)
+    draw_width := max(content_width + left_width + right_width + side_padding * 2.0,
+        base_advance)
     return core.Dynview_Layout_Item{
         kind = .StretchDelimiterRecursive,
         style_id = cmd.style_id,
@@ -511,7 +519,8 @@ math_program_recursive_radical_item :: #force_inline proc(
     }
 
     base_advance := effective_advance(style, cache^.last_wrap_advance)
-    index_advance := effective_advance(script_style, cache^.last_wrap_advance) * index_scale
+    index_advance :=
+        effective_advance(script_style, cache^.last_wrap_advance) * index_scale
     index_width := f32(index_cols) * index_advance
     lead_width := max(
         radical_lead_width(font_size, base_advance),
@@ -538,8 +547,10 @@ math_program_recursive_radical_item :: #force_inline proc(
         draw_height = ascent + descent,
         ascent = ascent,
         descent = descent,
-        visual_padding_top = max(child_program^.visual_padding_top, max(script_top_pad, accent_pad)),
-        visual_padding_bottom = max(child_program^.visual_padding_bottom, max(script_bottom_pad, accent_pad)),
+        visual_padding_top = max(child_program^.visual_padding_top,
+            max(script_top_pad, accent_pad)),
+        visual_padding_bottom = max(child_program^.visual_padding_bottom,
+            max(script_bottom_pad, accent_pad)),
     }, true
 }
 
@@ -559,7 +570,8 @@ math_program_item :: #force_inline proc(
     case .FracRecursive:
         return math_program_recursive_fraction_item(cache, buffer, cmd, style, font_size)
     case .StretchDelimiterRecursive:
-        return math_program_recursive_stretch_delimiter_item(cache, buffer, cmd, style, font_size)
+        return math_program_recursive_stretch_delimiter_item(
+            cache, buffer, cmd, style, font_size)
     case .MatrixRecursive:
         return math_program_recursive_matrix_item(cache, buffer, cmd, style, font_size)
     case .LargeOpRecursive:

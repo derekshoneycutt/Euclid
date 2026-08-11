@@ -117,17 +117,22 @@ julia_interface_staging_slot :: proc(
         state^.julia_interface_active_slot >= len(state^.julia_interface_slots) {
         return nil, -1
     }
-    slot_index := (state^.julia_interface_active_slot + 1) % len(state^.julia_interface_slots)
+    slot_index :=
+        (state^.julia_interface_active_slot + 1) % len(state^.julia_interface_slots)
     return &state^.julia_interface_slots[slot_index], slot_index
 }
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
 julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
     return iface != nil && iface^.init_scripts != nil && iface^.global_loop != nil &&
-        iface^.scratchpad_classify_input != nil && iface^.scratchpad_complete_backslash != nil &&
-        iface^.scratchpad_complete_input != nil && iface^.scratchpad_queue_input != nil &&
-        iface^.scratchpad_save_history_to_file != nil && iface^.scratchpad_history_previous != nil &&
-        iface^.scratchpad_history_next != nil && iface^.scratchpad_history_reset_cursor != nil
+        iface^.scratchpad_classify_input != nil &&
+        iface^.scratchpad_complete_backslash != nil &&
+        iface^.scratchpad_complete_input != nil &&
+        iface^.scratchpad_queue_input != nil &&
+        iface^.scratchpad_save_history_to_file != nil &&
+        iface^.scratchpad_history_previous != nil &&
+        iface^.scratchpad_history_next != nil &&
+        iface^.scratchpad_history_reset_cursor != nil
 }
 
 //   Ensure the animation registry arena allocator exists for bridge storage.
@@ -154,7 +159,8 @@ ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State)
         return false
     }
 
-    iface^.animation_registry_allocator = vmem.arena_allocator(&iface^.animation_registry_arena)
+    iface^.animation_registry_allocator =
+        vmem.arena_allocator(&iface^.animation_registry_arena)
     iface^.animation_registry_arena_initialized = true
     return true
 }
@@ -264,7 +270,8 @@ resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, 
 }
 
 //   Resolve the Main.include function used to load packaged Julia scripts.
-resolve_main_include_function :: proc(exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
+resolve_main_include_function :: proc(
+    exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
     main_module := resolve_main_module()
     if main_module == nil {
         fmt.eprintln("Failed to resolve Julia Main module.")

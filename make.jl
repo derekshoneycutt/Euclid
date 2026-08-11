@@ -99,7 +99,8 @@ Run a command and return its exit code and optional captured output.
 
 When capture_output is false, stdout and stderr in the return value are empty strings.
 """
-function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, capture_output::Bool=false)
+function run_command(
+    command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, capture_output::Bool=false)
     if capture_output
         stdout_buffer = IOBuffer()
         stderr_buffer = IOBuffer()
@@ -117,7 +118,8 @@ function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, c
             exit_code = failed_process_exit_code(error_object)
         end
 
-        return CommandResult(exit_code, String(take!(stdout_buffer)), String(take!(stderr_buffer)))
+        return CommandResult(
+            exit_code, String(take!(stdout_buffer)), String(take!(stderr_buffer)))
     end
 
     exit_code = 0
@@ -448,7 +450,8 @@ function new_import_library(
 end
 
 """Parse runtime dependency tool output into a unique list of library names."""
-function parse_runtime_libs(output::String; skip_first_line::Bool=false, stop_at_summary::Bool=false)
+function parse_runtime_libs(
+    output::String; skip_first_line::Bool=false, stop_at_summary::Bool=false)
     libs = String[]
     for (index, raw_line) in enumerate(split(output, '\n'))
         if skip_first_line && index == 1

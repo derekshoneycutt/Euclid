@@ -42,7 +42,8 @@ end
 """Return the callable name represented by a parsed Julia signature expression."""
 function julia_callable_name(expression)
     expression isa Symbol && return String(expression)
-    expression isa QuoteNode && expression.value isa Symbol && return String(expression.value)
+    expression isa QuoteNode && expression.value isa Symbol &&
+        return String(expression.value)
     expression isa Expr || return ""
     expression.head in (:where, :(::)) && return julia_callable_name(expression.args[1])
     expression.head == :call && return julia_callable_name(expression.args[1])
@@ -89,7 +90,8 @@ function julia_declaration_identity(declaration)
     elseif kind == :const
         source = strip(julia_syntax_text(declaration))
         expression = Meta.parse(source)
-        value = expression isa Expr && expression.head == :const ? expression.args[1] : expression
+        value = expression isa Expr && expression.head == :const ?
+            expression.args[1] : expression
         name_expr = value isa Expr && value.head == :(=) ? value.args[1] : value
         return julia_callable_name(name_expr), String(source)
     end
@@ -277,7 +279,8 @@ function extract_julia_files!(
         tree = JuliaSyntax.parseall(JuliaSyntax.SyntaxNode, source)
         nodes = source_path == entry_path ?
             julia_container_nodes(module_node) : julia_container_nodes(tree)
-        collect_julia_includes!(pending, package, nodes, source_path, config.repository_root)
+        collect_julia_includes!(pending, package, nodes,
+            source_path, config.repository_root)
         collect_julia_declarations!(package, nodes, source, source_path, exported_names)
     end
     package.source_files = sort!(normalize_repo_path.(

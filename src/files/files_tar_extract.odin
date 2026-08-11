@@ -220,7 +220,8 @@ parse_tar_entry_metadata :: proc(header: []u8) -> (string, int, bool) {
 //   - file_data: Entry payload bytes.
 //   - next_idx: Index of the next tar header.
 //   - ok: False when payload bounds are invalid.
-slice_tar_entry_data :: proc(payload: []u8, data_idx, file_size: int) -> ([]u8, int, bool) {
+slice_tar_entry_data :: proc(
+    payload: []u8, data_idx, file_size: int) -> ([]u8, int, bool) {
     if data_idx + file_size > len(payload) {
         fmt.eprintln("asset payload invalid: tar entry size bounds")
         return nil, data_idx, false
@@ -263,7 +264,8 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
             return false
         }
 
-        if !handle_packaged_asset_tar_entry(unpack_dir, entry_path, file_data, header[156]) {
+        if !handle_packaged_asset_tar_entry(
+            unpack_dir, entry_path, file_data, header[156]) {
             return false
         }
 

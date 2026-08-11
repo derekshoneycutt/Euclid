@@ -34,14 +34,18 @@ draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
         }
         rl.DrawCircleV(center + offset, 4, color)
     }
-    rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280, 4}, STARTUP_TRACK_COLOR)
-    rl.DrawRectangleRec(rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4}, STARTUP_PROGRESS_COLOR)
+    rl.DrawRectangleRec(
+        rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280, 4}, STARTUP_TRACK_COLOR)
+    rl.DrawRectangleRec(
+        rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4},
+        STARTUP_PROGRESS_COLOR)
     if show_julia_warning {
         font := rl.GetFontDefault()
         font_size: f32 = 18
         text_width := rl.MeasureTextEx(font, STARTUP_WARNING_TEXT, font_size, 0).x
         text_position := rl.Vector2{WINDOW_WIDTH / 2 - text_width / 2, 402}
-        rl.DrawTextEx(font, STARTUP_WARNING_TEXT, text_position, font_size, 0, UI_TEXT_COLOR)
+        rl.DrawTextEx(font, STARTUP_WARNING_TEXT, text_position, font_size, 0,
+            UI_TEXT_COLOR)
     }
     rl.EndDrawing()
 }
@@ -54,7 +58,8 @@ prepare_assets_worker :: proc() {
 //   Prepare baseline font glyphs and atlases without touching GPU resources.
 prepare_fonts_worker :: proc(data: rawptr) {
     preparation := cast(^view_core.Baseline_Font_Preparation)data
-    view_core.font_runtime_prepare_baseline(preparation, view_core.JULIA_MONO_FONT_LOAD_SIZE)
+    view_core.font_runtime_prepare_baseline(preparation,
+        view_core.JULIA_MONO_FONT_LOAD_SIZE)
 }
 
 //   Keep drawing and pumping window events until one startup worker is ready.
@@ -87,13 +92,15 @@ finish_julia_startup_request :: proc(
         }
         if rl.GetTime() - started_at >= JULIA_UNRESPONSIVE_SECONDS {
             if !reported_unresponsive {
-                fmt.eprintln("Julia startup operation is not responding; request id: ", request_id)
+                fmt.eprintln(
+                    "Julia startup operation is not responding; request id: ", request_id)
                 reported_unresponsive = true
             }
         }
         draw_startup_frame(progress, reported_unresponsive)
         if rl.WindowShouldClose() {
-            fmt.eprintln("Window closed before Julia startup completed; terminating process.")
+            fmt.eprintln(
+                "Window closed before Julia startup completed; terminating process.")
             runtime.exit(0)
         }
         free_all(context.temp_allocator)
@@ -138,13 +145,15 @@ initialize_window_runtime_with_loading :: proc(
 
     started_at = begin_startup_phase("Starting Julia", 0.35)
     font_preparation := view_core.Baseline_Font_Preparation{}
-    font_worker := thread.create_and_start_with_data(rawptr(&font_preparation), prepare_fonts_worker)
+    font_worker := thread.create_and_start_with_data(
+        rawptr(&font_preparation), prepare_fonts_worker)
     julia_service, service_err := julia.create_julia_runtime_service()
     if service_err != .None || julia_service == nil {
         fmt.eprintln("Failed to create Julia runtime service.")
         return {}, false
     }
-    initialize_id, initialize_sent := julia.try_submit_julia_request(julia_service, .Initialize)
+    initialize_id, initialize_sent :=
+        julia.try_submit_julia_request(julia_service, .Initialize)
     if !initialize_sent || !finish_julia_startup_request(
         julia_service, initialize_id, .Initialized, 0.35) {
         fmt.eprintln("Julia initialization failed.")

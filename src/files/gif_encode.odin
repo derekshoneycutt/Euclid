@@ -102,7 +102,8 @@ gif_encode_begin :: proc(state: ^Gif_Encode_State, width, height: int) -> bool {
     state.use_bgra = false
     state.frames_submitted = 0
 
-    state.lzw_mem = make([]i16, GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE, state.arena_allocator)
+    state.lzw_mem = make([]i16,
+        GIF_LZW_TABLE_CAPACITY * GIF_LZW_STRIDE, state.arena_allocator)
     state.tlb_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
     state.used_mem = make([]u8, GIF_MAX_TABLE_BYTES, state.arena_allocator)
 
@@ -175,7 +176,8 @@ gif_encode_frame :: proc(
     gif_encode_cook_frame(&state.current_frame, raw, state.used_mem, state.width,
         state.height, pitch, state.use_bgra, state.alpha_threshold, next_depth)
 
-    node, ok := gif_encode_compress_frame(state, state.current_frame, centiseconds_per_frame)
+    node, ok := gif_encode_compress_frame(
+        state, state.current_frame, centiseconds_per_frame)
     if !ok || node == nil {
         gif_encode_free_state(state)
         return false
@@ -311,7 +313,8 @@ gif_encode_ensure_arena :: proc(state: ^Gif_Encode_State) -> bool {
 //
 // Notes:
 //   - Caller owns the returned node and must free it with gif_encode_free_buffer.
-gif_encode_new_buffer :: proc(state: ^Gif_Encode_State, size: int) -> (^Gif_Encode_Buffer, bool) {
+gif_encode_new_buffer :: proc(
+    state: ^Gif_Encode_State, size: int) -> (^Gif_Encode_Buffer, bool) {
     if !state.arena_initialized {
         return nil, false
     }
@@ -475,10 +478,14 @@ gif_encode_write_u16le :: #force_inline proc(dst: []u8, offset: int, value: int)
 }
 
 //   Resolve per-channel quantization bit depths for a chosen GIF palette depth.
-gif_encode_depth_bits :: #force_inline proc(depth: int, use_bgra: bool) -> (int, int, int) {
-    rdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
-    gdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6}
-    bdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5}
+gif_encode_depth_bits :: #force_inline proc(
+    depth: int, use_bgra: bool) -> (int, int, int) {
+    rdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{
+        0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
+    gdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{
+        0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6}
+    bdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{
+        0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5}
 
     if use_bgra {
         return bdepths[depth], gdepths[depth], rdepths[depth]
@@ -546,9 +553,10 @@ gif_encode_dither_and_quantize_pixels :: proc(
             k := gif_encode_dither_kernel_value(dx, dy)
 
             bq := (
-                min(65535, p2 * bmul + (k >> u32(bbits))) >> u32(16 - rbits - gbits - bbits)
-            ) & bmask
-            gq := (min(65535, p1 * gmul + (k >> u32(gbits))) >> u32(16 - rbits - gbits)) & gmask
+                min(65535, p2 * bmul + (k >> u32(bbits))) >>
+                    u32(16 - rbits - gbits - bbits)) & bmask
+            gq := (min(65535, p1 * gmul + (k >> u32(gbits))) >>
+                u32(16 - rbits - gbits)) & gmask
             rq := (min(65535, p0 * rmul + (k >> u32(rbits))) >> u32(16 - rbits))
 
             cooked[y * width + x] = u32(bq | gq | rq)
@@ -859,12 +867,12 @@ gif_encode_build_palette_table :: proc(
         g <<= u32(8 - frame.g_bits)
         b <<= u32(8 - frame.b_bits)
 
-        rr := 
-            u8(r | (r >> u32(frame.r_bits)) | (r >> u32(frame.r_bits * 2)) | (r >> u32(frame.r_bits * 3)))
-        gg :=
-            u8(g | (g >> u32(frame.g_bits)) | (g >> u32(frame.g_bits * 2)) | (g >> u32(frame.g_bits * 3)))
-        bb :=
-            u8(b | (b >> u32(frame.b_bits)) | (b >> u32(frame.b_bits * 2)) | (b >> u32(frame.b_bits * 3)))
+        rr := u8(r | (r >> u32(frame.r_bits)) | (r >> u32(frame.r_bits * 2)) |
+            (r >> u32(frame.r_bits * 3)))
+        gg := u8(g | (g >> u32(frame.g_bits)) | (g >> u32(frame.g_bits * 2)) |
+            (g >> u32(frame.g_bits * 3)))
+        bb := u8(b | (b >> u32(frame.b_bits)) | (b >> u32(frame.b_bits * 2)) |
+            (b >> u32(frame.b_bits * 3)))
 
         if state.use_bgra {
             table^[table_idx] = Gif_Rgb{R = bb, G = gg, B = rr}
@@ -1054,11 +1062,12 @@ gif_encode_compress_frame :: proc(
     table_size := 1 << u32(table_bits)
 
     prev := state.previous_frame
-    has_same_pal :=
-        frame.r_bits == prev.r_bits && frame.g_bits == prev.g_bits && frame.b_bits == prev.b_bits
+    has_same_pal := frame.r_bits == prev.r_bits && frame.g_bits == prev.g_bits &&
+        frame.b_bits == prev.b_bits
     // Only emit unchanged pixels as index 0 when the frame advertises transparency.
     // For opaque captures (our default), index 0 is an actual color, not transparency.
-    frames_compatible := has_same_pal && palette.has_transparent_pixels && state.frames_submitted > 0
+    frames_compatible := has_same_pal && palette.has_transparent_pixels &&
+        state.frames_submitted > 0
 
     bitstream: []u8 = nil
     stream_len := 0

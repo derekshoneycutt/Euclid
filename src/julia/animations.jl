@@ -12,10 +12,11 @@ using ..OdinJuliaBridge
 
 using LinearAlgebra
 
-export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_compass_rise,
-    animate_pen_tilt, animate_pen_cone, animate_pen_drag, animate_pen_arcmove,
-    animate_compass_arcmove, animate_highlight_point, animate_extend_line,
-    animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line, animate_draw_filledcircle,
+export animate_pen_descend, animate_pen_rise, animate_compass_descend,
+    animate_compass_rise, animate_pen_tilt, animate_pen_cone, animate_pen_drag,
+    animate_pen_arcmove, animate_compass_arcmove, animate_highlight_point,
+    animate_extend_line, animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line,
+    animate_draw_filledcircle,
     animate_draw_two_line_segments,
     animate_draw_circle, animate_compass_fill_arc_highlight,
     animate_compass_arc_highlight,
@@ -24,7 +25,8 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend, animate_c
     transform_translate_point,
     transform_rotate_point, transform_rotate_point_x,
     transform_rotate_point_y, transform_rotate_point_z,
-    transform_reflect2d_point, transform_reflect2d_point_negative, transform_reflect2d_point_x_axis,
+    transform_reflect2d_point, transform_reflect2d_point_negative,
+    transform_reflect2d_point_x_axis,
     transform_reflect2d_point_y_axis, transform_reflect2d_point_diag_pos,
     transform_reflect2d_point_diag_neg,
     reflected_angle_marker_pose_xy,
@@ -38,7 +40,8 @@ const PenDrawLineAngle = π / 3f0
 
 const PenConeRadius = 0.02f0
 const PenConeSpinSpeed = 6f0
-const PenConeTipHeight = Float32(sqrt(PenLength * PenLength - PenConeRadius * PenConeRadius))
+const PenConeTipHeight =
+    Float32(sqrt(PenLength * PenLength - PenConeRadius * PenConeRadius))
 const PenConeFloorAngle = Float32(atan(PenConeTipHeight, PenConeRadius))
 const PenConeSimulatedDrawSpeed = 3f0
 
@@ -107,7 +110,8 @@ Rotate one point around a 3D axis line using Rodrigues' rotation formula.
 Returns `nothing` when the axis line is degenerate.
 """
 @inline function rotate_point_about_axis_line(
-    point::AbstractVector{<:Real}, axisA::AbstractVector{<:Real}, axisB::AbstractVector{<:Real}, angle::Real)
+    point::AbstractVector{<:Real}, axisA::AbstractVector{<:Real},
+    axisB::AbstractVector{<:Real}, angle::Real)
 
     pointVec = Float32[Float32(p) for p in point]
     axisAVec = Float32[Float32(a) for a in axisA]
@@ -139,7 +143,8 @@ Only XY components participate in reflection geometry; `z` is preserved.
 Returns `nothing` when the line is degenerate.
 """
 @inline function reflect_point_xy_across_line(
-    point::AbstractVector{<:Real}, lineA::AbstractVector{<:Real}, lineB::AbstractVector{<:Real})
+    point::AbstractVector{<:Real}, lineA::AbstractVector{<:Real},
+    lineB::AbstractVector{<:Real})
 
     pointVec = Float32[Float32(p) for p in point]
     lineAVec = Float32[Float32(a) for a in lineA]
@@ -631,10 +636,12 @@ function reflected_angle_marker_pose_xy(
     swap_boundary_points::Bool=true)
 
     reflected_center = reflect_point_xy_across_line(center, line_point_a, line_point_b)
-    reflected_start = reflect_point_xy_across_line(start_point, line_point_a, line_point_b)
+    reflected_start =
+        reflect_point_xy_across_line(start_point, line_point_a, line_point_b)
     reflected_end = reflect_point_xy_across_line(end_point, line_point_a, line_point_b)
 
-    if reflected_center === nothing || reflected_start === nothing || reflected_end === nothing
+    if reflected_center === nothing || reflected_start === nothing ||
+        reflected_end === nothing
         return nothing
     end
 
@@ -748,7 +755,8 @@ function animate_reflect2d_filled_angle_marker(
         current_time,
         total_duration)
 
-    if reflected_center === nothing || reflected_start === nothing || reflected_end === nothing
+    if reflected_center === nothing || reflected_start === nothing ||
+        reflected_end === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
@@ -761,12 +769,14 @@ function animate_reflect2d_filled_angle_marker(
         end
     end
 
-    host_status = OdinJuliaBridge.set_point_position_status(state_ptr, marker_host_id, reflected_center)
+    host_status = OdinJuliaBridge.set_point_position_status(
+        state_ptr, marker_host_id, reflected_center)
     if host_status != OdinJuliaBridge.BRIDGE_STATUS_OK
         return host_status
     end
 
-    start_status = OdinJuliaBridge.set_point_position_status(state_ptr, marker_start_id, start_out)
+    start_status = OdinJuliaBridge.set_point_position_status(
+        state_ptr, marker_start_id, start_out)
     if start_status != OdinJuliaBridge.BRIDGE_STATUS_OK
         return start_status
     end
@@ -986,7 +996,8 @@ function animate_pen_tilt(
     penx::Float32, peny::Float32, penz::Float32,
     startθ::Float32, endθ::Float32, azimuth::Float32)
 
-    animate_pen_tilt(state_ptr, timer, duration, [penx, peny, penz], startθ, endθ, azimuth)
+    animate_pen_tilt(state_ptr, timer, duration,
+        [penx, peny, penz], startθ, endθ, azimuth)
 end
 
 function animate_pen_tilt(
@@ -1170,7 +1181,8 @@ end
 end
 
 @inline function avg_radius_to_xy_center(
-    startJoint::Vector{Float32}, endJoint::Vector{Float32}, centerX::Float32, centerY::Float32)
+    startJoint::Vector{Float32}, endJoint::Vector{Float32},
+    centerX::Float32, centerY::Float32)
 
     startRadius = hypot(startJoint[1] - centerX, startJoint[2] - centerY)
     endRadius = hypot(endJoint[1] - centerX, endJoint[2] - centerY)
@@ -1325,9 +1337,9 @@ function animate_pen_tilt_and_drag(
             state_ptr, timer, duration * TiltToLineDuration, startpos,
             PenStraightFloorAngle, PenDrawLineAngle, azimuth)
     elseif t < GroundLineEndTime
-        tippos = animate_pen_drag(
-            state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
-            startpos, endpos, PenDrawLineAngle, azimuth, color)
+        tippos = animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
+            duration * GroundLineDuration, startpos, endpos, PenDrawLineAngle,
+            azimuth, color)
 
         OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, color)
 
@@ -1483,13 +1495,12 @@ function animate_draw_line(
 
     azimuth = Float32(atan(endpos[2] - startpos[2], endpos[1] - startpos[1]))
     if t < TiltToLineDuration
-        animate_pen_tilt(
-            state_ptr, timer, duration * TiltToLineDuration, startpos,
+        animate_pen_tilt(state_ptr, timer, duration * TiltToLineDuration, startpos,
             PenStraightFloorAngle, PenDrawLineAngle, azimuth)
     elseif t < GroundLineEndTime
-        tippos = animate_pen_drag(
-            state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
-            startpos, endpos, PenDrawLineAngle, azimuth, pencolor)
+        tippos = animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
+            duration * GroundLineDuration, startpos, endpos, PenDrawLineAngle,
+            azimuth, pencolor)
 
         OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
         OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
@@ -1630,13 +1641,12 @@ function animate_extend_line(
 
     azimuth = Float32(atan(endpos[2] - startpos[2], endpos[1] - startpos[1]))
     if t < TiltToLineDuration
-        animate_pen_tilt(
-            state_ptr, timer, duration * TiltToLineDuration, midpos,
+        animate_pen_tilt(state_ptr, timer, duration * TiltToLineDuration, midpos,
             PenStraightFloorAngle, PenDrawLineAngle, azimuth)
     elseif t < GroundLineEndTime
-        tippos = animate_pen_drag(
-            state_ptr, timer - duration * TiltToLineDuration, duration * GroundLineDuration,
-            midpos, endpos, PenDrawLineAngle, azimuth, pencolor)
+        tippos = animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
+            duration * GroundLineDuration, midpos, endpos, PenDrawLineAngle,
+            azimuth, pencolor)
 
         OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
         OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
@@ -1687,7 +1697,8 @@ function animate_draw_circle(
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1]))
     theta = startTheta + angleTheta * t
 
     endPoint = [
@@ -1741,7 +1752,8 @@ function animate_draw_filledcircle(
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1]))
     theta = startTheta + angleTheta * t
 
     endPoint = [
@@ -1790,7 +1802,8 @@ function animate_compass_fill_arc_highlight(
     angleTheta::Float32, radius::Float32, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1]))
     theta = startTheta + angleTheta * t
 
     endPoint = [
@@ -1833,7 +1846,8 @@ function animate_compass_arc_highlight(
     angleTheta::Float32, radius::Float32, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1]))
+    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1]))
     theta = startTheta + angleTheta * t
 
     endPoint = [
@@ -1997,7 +2011,8 @@ function animate_repl_draw_circle(
         OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
     end
 
-    final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta
+    final_theta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1])) + angleTheta
     endPoint = Float32[
         jointPoint[1] + radius * Float32(cos(final_theta)),
         jointPoint[2] + radius * Float32(sin(final_theta)),
@@ -2067,7 +2082,8 @@ function animate_repl_draw_filledcircle(
         OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
     end
 
-    final_theta = Float32(atan(startPoint[2] - jointPoint[2], startPoint[1] - jointPoint[1])) + angleTheta
+    final_theta = Float32(atan(startPoint[2] - jointPoint[2],
+        startPoint[1] - jointPoint[1])) + angleTheta
     endPoint = Float32[
         jointPoint[1] + radius * Float32(cos(final_theta)),
         jointPoint[2] + radius * Float32(sin(final_theta)),

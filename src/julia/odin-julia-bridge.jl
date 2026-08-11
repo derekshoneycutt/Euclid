@@ -11,8 +11,8 @@ module OdinJuliaBridge
 using Colors
 using UUIDs
 
-export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec, BridgeSolveResult,
-    BridgeDynviewMathOp,
+export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
+    BridgeSolveResult, BridgeDynviewMathOp,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle, BridgeShapeTriangle,
     BridgeShapeSquare, BridgeShapePentagon, BridgeShapePen, BridgeShapeCompass,
     LABEL_DECORATION_NONE, LABEL_DECORATION_PRIME, LABEL_DECORATION_DOUBLEPRIME,
@@ -53,7 +53,8 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     dynview_style_with_font_flags,
     BRIDGE_STATUS_OK, BRIDGE_STATUS_INVALID_INDEX, BRIDGE_STATUS_INVALID_ARGUMENT,
     BRIDGE_STATUS_INVALID_GRAPH, BRIDGE_STATUS_INVALID_CONSTRAINT,
-    BRIDGE_STATUS_OUT_OF_CAPACITY, BRIDGE_STATUS_ILLEGAL_STATE, BRIDGE_STATUS_NON_CONVERGED,
+    BRIDGE_STATUS_OUT_OF_CAPACITY, BRIDGE_STATUS_ILLEGAL_STATE,
+    BRIDGE_STATUS_NON_CONVERGED,
     CONSTRAINT_SPEC_TRAITS, CONSTRAINT_SPEC_ONPOINT, CONSTRAINT_SPEC_RESTRICTION,
     CONSTRAINT_SPEC_BOUNCE, CONSTRAINT_SPEC_ALLOWANCE, CONSTRAINT_SPEC_DEPENDON,
     CONSTRAINT_SPEC_CHILDOFFSET, CONSTRAINT_SPEC_DOAPPLY,

@@ -9,14 +9,16 @@ import rl "vendor:raylib"
 
 //   Draw UTF-8 UI text using temp C-string conversion.
 ui_text :: #force_inline proc(
-    text: string, x, y: int, color: rl.Color, font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
+    text: string, x, y: int, color: rl.Color,
+    font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
     cloned := strings.clone_to_cstring(text, context.temp_allocator)
     rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, 0, color)
 }
 
 //   Draw UTF-8 UI text using float coordinates to avoid pixel snap artifacts.
 ui_text_f32 :: #force_inline proc(
-    text: string, x, y: f32, color: rl.Color, font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
+    text: string, x, y: f32, color: rl.Color,
+    font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
     cloned := strings.clone_to_cstring(text, context.temp_allocator)
     rl.DrawTextEx(font, cloned, rl.Vector2{x, y}, font_size, 0, color)
 }
@@ -44,7 +46,8 @@ draw_wrapped_text_content :: proc(
     }
 
     for start < len(text) {
-        line_start, line_end, next_start := dynview.next_wrapped_text_span(text, start, max_chars)
+        line_start, line_end, next_start :=
+            dynview.next_wrapped_text_span(text, start, max_chars)
         row_y := panel.y + text_padding + f32(row) * text_row_height - scroll_y
 
         if row_y + text_row_height >= panel.y && row_y <= panel.y + panel.height {

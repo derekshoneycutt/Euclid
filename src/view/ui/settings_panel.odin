@@ -24,7 +24,8 @@ draw_settings_particle_stats :: proc(
     view_core.ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
         UI_TEXT_COLOR, font)
-    view_core.ui_text(fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+    view_core.ui_text(fmt.tprintf(
+        "Julia animation entries added: %d", animation_entries_added),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 3),
         UI_TEXT_COLOR, font)
 }
@@ -248,7 +249,8 @@ draw_settings_view :: proc(
     _ = draw_container(panel, .Grey)
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
+    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y,
+        UI_TEXT_COLOR, font)
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -365,11 +367,16 @@ draw_settings_view :: proc(
         0,
         max_particles,
         font)
-    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, animation_entries_added, font)
-    draw_settings_fps_checkbox(panel, fps_row.segment_rect.y, mouse_input, ui_runtime, font)
-    draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)
-    draw_settings_sound_checkbox(panel, sound_row.segment_rect.y, mouse_input, state, font)
-    draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y, mouse_input, ui_runtime, font)
+    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps,
+        animation_entries_added, font)
+    draw_settings_fps_checkbox(panel, fps_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
+    draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
+    draw_settings_sound_checkbox(panel, sound_row.segment_rect.y,
+        mouse_input, state, font)
+    draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
     draw_settings_gpu_dust_checkbox(
         panel,
         gpu_dust_row.segment_rect.y,

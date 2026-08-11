@@ -111,11 +111,13 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
             draw_frame(state, alpha)
         rl.EndDrawing()
 
-        if !state^.ui_runtime.simulation_paused && state^.ui_runtime.gif_capture_phase == .Recording {
+        if !state^.ui_runtime.simulation_paused &&
+            state^.ui_runtime.gif_capture_phase == .Recording {
             if !view_core.gif_capture_submit_frame(state) {
                 view_core.gif_capture_abort_session(&state^.gif_capture)
                 state^.ui_runtime.gif_capture_phase = .Error
-                view_core.set_gif_status_note(&state^.ui_runtime, "Error: failed to submit GIF frame.")
+                view_core.set_gif_status_note(&state^.ui_runtime,
+                    "Error: failed to submit GIF frame.")
             }
         }
 
@@ -133,15 +135,18 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
 //
 // Notes:
 //   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
-shutdown_julia_runtime :: proc(state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
+shutdown_julia_runtime :: proc(
+    state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
     started_at := time.tick_now()
     shutdown_id: u64
     sent := false
     for !sent {
         shutdown_id, sent = julia.try_submit_julia_request(service, .Shutdown)
         _, _ = julia.try_receive_julia_event(service)
-        if time.duration_seconds(time.tick_since(started_at)) >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
-            fmt.eprintln("Julia shutdown request queue remained saturated; terminating process.")
+        if time.duration_seconds(time.tick_since(started_at)) >=
+            JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+            fmt.eprintln(
+                "Julia shutdown request queue remained saturated; terminating process.")
             runtime.exit(1)
         }
         thread.yield()
@@ -154,7 +159,8 @@ shutdown_julia_runtime :: proc(state: ^Euclid_General_State, service: ^julia.Jul
         if ok && event.request_id == shutdown_id && event.kind == .Shutdown_Complete {
             break
         }
-        if time.duration_seconds(time.tick_since(started_at)) >= JULIA_SHUTDOWN_TIMEOUT_SECONDS {
+        if time.duration_seconds(time.tick_since(started_at)) >=
+            JULIA_SHUTDOWN_TIMEOUT_SECONDS {
             fmt.eprintln("Julia shutdown timed out; terminating process.")
             runtime.exit(1)
         }
@@ -224,7 +230,8 @@ initialize_window_resources :: proc(
     }
 
     icon_file := strings.clone_to_cstring(
-        files.packaged_asset_path("compass_icon.png", context.temp_allocator), context.temp_allocator)
+        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
+            context.temp_allocator)
     if rl.FileExists(icon_file) {
         icon_image := rl.LoadImage(icon_file)
         rl.SetWindowIcon(icon_image)
@@ -278,8 +285,10 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
         if ui_runtime.fps_avg_bucket_elapsed >= 1.0 {
             next_cursor := (cursor + 1) % FPS_AVERAGE_BUCKET_COUNT
 
-            ui_runtime.fps_avg_rolling_seconds -= ui_runtime.fps_avg_bucket_seconds[next_cursor]
-            ui_runtime.fps_avg_rolling_frames -= ui_runtime.fps_avg_bucket_frames[next_cursor]
+            ui_runtime.fps_avg_rolling_seconds -=
+                ui_runtime.fps_avg_bucket_seconds[next_cursor]
+            ui_runtime.fps_avg_rolling_frames -=
+                ui_runtime.fps_avg_bucket_frames[next_cursor]
 
             ui_runtime.fps_avg_bucket_seconds[next_cursor] = 0
             ui_runtime.fps_avg_bucket_frames[next_cursor] = 0
@@ -408,7 +417,8 @@ capture_checkpoint_animation_fields :: proc(
 
     snapshot^.runtime_generation = state^.julia_runtime_service^.runtime_generation
     snapshot^.animation_generation = state^.julia_runtime_service^.animation_generation
-    snapshot^.animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
+    snapshot^.animation_tick_sequence =
+        state^.julia_runtime_service^.animation_tick_sequence
     snapshot^.rejected_tick_count = state^.julia_runtime_service^.animation_ticks_stale
     snapshot^.failed_request_count = state^.julia_runtime_service^.failed_request_count
     snapshot^.dropped_record_count = state^.trace_state.dropped_count
@@ -419,7 +429,8 @@ capture_checkpoint_animation_fields :: proc(
 
     animation_name := state^.julia_interface^.current_animation^.name
     snapshot^.animation_name_len = min(len(snapshot^.animation_name), len(animation_name))
-    copy(snapshot^.animation_name[:snapshot^.animation_name_len], transmute([]u8)animation_name)
+    copy(snapshot^.animation_name[:snapshot^.animation_name_len],
+        transmute([]u8)animation_name)
 }
 
 //   Populate bounded point records for one checkpoint snapshot.
@@ -469,7 +480,8 @@ capture_checkpoint_tools :: proc(
     snapshot^.pen_host_index = state^.pen.host_id
     snapshot^.pen_joint1_index = state^.pen.joint1_id
     snapshot^.pen_joint2_index = state^.pen.joint2_id
-    if state^.pen.host_id >= 0 && state^.pen.host_id < state^.point_system^.next_point_index {
+    if state^.pen.host_id >= 0 &&
+        state^.pen.host_id < state^.point_system^.next_point_index {
         pen_point := &state^.point_system^.points[state^.pen.host_id]
         snapshot^.pen_visible = pen_point^.do_draw
         snapshot^.pen_active_child = pen_point^.active_child

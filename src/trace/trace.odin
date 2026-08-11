@@ -444,8 +444,8 @@ build_configuration_payload :: proc(
         return 0, false
     }
     if !append_builder_text(out_buffer, &out_len, ",") ||
-        !append_json_number_field(
-            out_buffer, &out_len, "category_mask", trace_category_mask(state^.categories)) {
+        !append_json_number_field(out_buffer, &out_len, "category_mask",
+            trace_category_mask(state^.categories)) {
         return 0, false
     }
 
@@ -638,7 +638,8 @@ configure_from_settings :: proc(
 
     categories, ok := resolve_categories(settings^.semantic_trace_events)
     if !ok {
-        fmt.eprintln("Invalid --semantic-trace-events value: ", settings^.semantic_trace_events)
+        fmt.eprintln("Invalid --semantic-trace-events value: ",
+            settings^.semantic_trace_events)
         state^.enabled = false
         state^.invalid = true
         return false
@@ -690,7 +691,8 @@ begin_trace :: proc(state: ^core.Trace_State) -> bool {
         return false
     }
 
-    payload_len, payload_ok := build_configuration_payload(state, state^.serialize_buffer[:])
+    payload_len, payload_ok :=
+        build_configuration_payload(state, state^.serialize_buffer[:])
     if !payload_ok {
         state^.invalid = true
         return false
@@ -789,7 +791,8 @@ flush_overflow_notice :: proc(state: ^core.Trace_State) -> bool {
         return false
     }
 
-    if !record_event(state, .Trace, "trace.overflow", string(payload_buffer[:payload_len])) {
+    if !record_event(state, .Trace, "trace.overflow",
+        string(payload_buffer[:payload_len])) {
         return false
     }
     state^.overflow_reported = true
@@ -1099,7 +1102,8 @@ record_runtime_event_ex :: proc(
     }
     if request_id > 0 {
         if !append_builder_text(payload_buffer, &payload_len, ",") ||
-            !append_json_number_field(payload_buffer, &payload_len, "request_id", request_id) {
+            !append_json_number_field(payload_buffer,
+                &payload_len, "request_id", request_id) {
             return false
         }
     }
@@ -1146,7 +1150,8 @@ record_animation_event_ex :: proc(
     }
     if len(animation_id) > 0 {
         if !append_builder_text(payload_buffer, &payload_len, ",") ||
-            !append_json_string_field(payload_buffer, &payload_len, "animation_id", animation_id) {
+            !append_json_string_field(payload_buffer,
+                &payload_len, "animation_id", animation_id) {
             return false
         }
     }
@@ -1160,7 +1165,8 @@ record_animation_event_ex :: proc(
         return false
     }
 
-    return record_event(state, .Animation, event_name, string(payload_buffer[:payload_len]))
+    return record_event(state, .Animation, event_name,
+        string(payload_buffer[:payload_len]))
 }
 
 //   Append one JSON vector3 array field.
@@ -1323,12 +1329,18 @@ append_point_event_optional_fields :: proc(
     offset: Maybe(f32),
     color: Maybe(core.Bridge_Color)) -> bool {
 
-    return append_optional_vector_field(payload_buffer, payload_len, "from", from_position) &&
-        append_optional_vector_field(payload_buffer, payload_len, "to", to_position) &&
-        append_optional_bool_field(payload_buffer, payload_len, "visible", visible) &&
-        append_optional_float_field(payload_buffer, payload_len, "brush_size", brush_size) &&
-        append_optional_float_field(payload_buffer, payload_len, "offset", offset) &&
-        append_optional_color_field(payload_buffer, payload_len, "color", color)
+    return append_optional_vector_field(payload_buffer, payload_len,
+            "from", from_position) &&
+        append_optional_vector_field(payload_buffer, payload_len,
+            "to", to_position) &&
+        append_optional_bool_field(payload_buffer, payload_len,
+            "visible", visible) &&
+        append_optional_float_field(payload_buffer, payload_len,
+            "brush_size", brush_size) &&
+        append_optional_float_field(payload_buffer, payload_len,
+            "offset", offset) &&
+        append_optional_color_field(payload_buffer, payload_len,
+            "color", color)
 }
 
 //   Record one committed point state transition.
@@ -1374,7 +1386,8 @@ record_point_event :: proc(
         return false
     }
 
-    return record_event(state, .Geometry, event_name, string(payload_buffer[:payload_len]))
+    return record_event(state, .Geometry, event_name,
+        string(payload_buffer[:payload_len]))
 }
 
 //   Append optional tool-event fields to one payload buffer.
@@ -1403,9 +1416,12 @@ append_tool_event_optional_fields :: proc(
         return false
     }
 
-    return append_optional_vector_field(payload_buffer, payload_len, "position", position) &&
-        append_optional_bool_field(payload_buffer, payload_len, "visible", visible) &&
-        append_optional_int_field(payload_buffer, payload_len, "active", active)
+    return append_optional_vector_field(payload_buffer, payload_len,
+            "position", position) &&
+        append_optional_bool_field(payload_buffer, payload_len,
+            "visible", visible) &&
+        append_optional_int_field(payload_buffer, payload_len,
+            "active", active)
 }
 
 //   Record one committed tool state transition.
@@ -1509,17 +1525,18 @@ record_constraint_solve_summary :: proc(
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
     if !append_builder_text(payload_buffer, &payload_len, "{") ||
-        !append_json_number_field(payload_buffer, &payload_len, "fixed_step", fixed_step) ||
+        !append_json_number_field(payload_buffer, &payload_len,
+            "fixed_step", fixed_step) ||
         !append_builder_text(payload_buffer, &payload_len, ",") ||
         !append_builder_text(
             payload_buffer, &payload_len,
             fmt.tprintf("\"simulation_time\":%g", simulation_time)) ||
         !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, &payload_len, "active_constraints", u64(active_constraints)) ||
+        !append_json_number_field(payload_buffer, &payload_len, "active_constraints",
+            u64(active_constraints)) ||
         !append_builder_text(payload_buffer, &payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, &payload_len, "next_constraint_index", u64(next_constraint_index)) ||
+        !append_json_number_field(payload_buffer, &payload_len, "next_constraint_index",
+            u64(next_constraint_index)) ||
         !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }
@@ -1541,26 +1558,32 @@ append_checkpoint_point_position :: proc(
         return true
     }
     return append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_vector3_field(payload_buffer, payload_len, "position", point^.position)
+        append_json_vector3_field(payload_buffer, payload_len,
+            "position", point^.position)
 }
 
 //   Append one checkpoint point record to the payload.
 append_checkpoint_point :: proc(
-    payload_buffer: []u8, payload_len: ^int, point: ^core.Trace_Checkpoint_Point) -> bool {
+    payload_buffer: []u8, payload_len: ^int,
+    point: ^core.Trace_Checkpoint_Point) -> bool {
 
     return append_builder_text(payload_buffer, payload_len, "{") &&
-        append_json_number_field(payload_buffer, payload_len, "index", u64(point^.index)) &&
+        append_json_number_field(payload_buffer, payload_len,
+            "index", u64(point^.index)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(payload_buffer, payload_len, "kind", u64(point^.kind)) &&
+        append_json_number_field(payload_buffer, payload_len,
+            "kind", u64(point^.kind)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_bool_field(payload_buffer, payload_len, "visible", point^.do_draw) &&
+        append_json_bool_field(payload_buffer, payload_len, 
+            "visible", point^.do_draw) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
         append_json_number_field(
             payload_buffer, payload_len, "active_child", u64(point^.active_child)) &&
         append_checkpoint_point_position(payload_buffer, payload_len, point) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
         append_builder_text(
-            payload_buffer, payload_len, fmt.tprintf("\"brush_size\":%g", point^.brush_size)) &&
+            payload_buffer, payload_len, fmt.tprintf("\"brush_size\":%g",
+            point^.brush_size)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
         append_builder_text(
             payload_buffer, payload_len, fmt.tprintf("\"offset\":%g", point^.offset)) &&
@@ -1583,14 +1606,14 @@ append_checkpoint_identity_fields :: proc(
             payload_buffer, payload_len,
             fmt.tprintf("\"simulation_time\":%g", snapshot^.simulation_time)) ||
         !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, payload_len, "runtime_generation", snapshot^.runtime_generation) ||
+        !append_json_number_field(payload_buffer, payload_len, "runtime_generation",
+            snapshot^.runtime_generation) ||
         !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, payload_len, "animation_generation", snapshot^.animation_generation) ||
+        !append_json_number_field(payload_buffer, payload_len, "animation_generation",
+            snapshot^.animation_generation) ||
         !append_builder_text(payload_buffer, payload_len, ",") ||
-        !append_json_number_field(
-            payload_buffer, payload_len, "animation_tick", snapshot^.animation_tick_sequence) ||
+        !append_json_number_field(payload_buffer, payload_len, "animation_tick",
+            snapshot^.animation_tick_sequence) ||
         !append_builder_text(payload_buffer, payload_len, ",") ||
         !append_json_string_field(
             payload_buffer,
@@ -1608,29 +1631,23 @@ append_checkpoint_counter_fields :: proc(
     payload_len: ^int,
     snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
 
-    return append_json_number_field(
-            payload_buffer, payload_len, "next_point_index", u64(snapshot^.next_point_index)) &&
+    return append_json_number_field(payload_buffer, payload_len, "next_point_index",
+            u64(snapshot^.next_point_index)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer,
-            payload_len,
-            "next_constraint_index",
+        append_json_number_field(payload_buffer, payload_len, "next_constraint_index",
             u64(snapshot^.next_constraint_index)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer,
-            payload_len,
-            "active_constraints",
+        append_json_number_field(payload_buffer, payload_len, "active_constraints",
             u64(snapshot^.active_constraint_count)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer, payload_len, "rejected_ticks", snapshot^.rejected_tick_count) &&
+        append_json_number_field(payload_buffer, payload_len, "rejected_ticks",
+            snapshot^.rejected_tick_count) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer, payload_len, "failed_requests", snapshot^.failed_request_count) &&
+        append_json_number_field(payload_buffer, payload_len, "failed_requests",
+            snapshot^.failed_request_count) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_number_field(
-            payload_buffer, payload_len, "dropped_records", snapshot^.dropped_record_count)
+        append_json_number_field(payload_buffer, payload_len, "dropped_records",
+            snapshot^.dropped_record_count)
 }
 
 //   Append one tool summary object to the checkpoint payload.
@@ -1644,11 +1661,13 @@ append_checkpoint_tool_summary :: proc(
 
     return append_json_string(payload_buffer, payload_len, name) &&
         append_builder_text(payload_buffer, payload_len, ":{") &&
-        append_json_number_field(payload_buffer, payload_len, "host_index", u64(host_index)) &&
+        append_json_number_field(payload_buffer, payload_len, "host_index",
+            u64(host_index)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
         append_json_bool_field(payload_buffer, payload_len, "visible", visible) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_signed_field(payload_buffer, payload_len, "active_child", active_child) &&
+        append_json_signed_field(payload_buffer, payload_len, "active_child",
+            active_child) &&
         append_builder_text(payload_buffer, payload_len, "}")
 }
 
@@ -1717,7 +1736,8 @@ record_checkpoint_snapshot :: proc(
         return false
     }
 
-    return record_event(state, .Trace, "trace.checkpoint", string(payload_buffer[:payload_len]))
+    return record_event(
+        state, .Trace, "trace.checkpoint", string(payload_buffer[:payload_len]))
 }
 
 //   Build one trace module instance from application settings.

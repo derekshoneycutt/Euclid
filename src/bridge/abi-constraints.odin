@@ -93,7 +93,8 @@ get_constraint_view :: proc "c" (
 //   - Use BRIDGE_STATUS_* constants to branch on invalid indices, arguments, or graph state failures.
 @(export)
 create_constraint :: proc "c" (
-    state: ^core.Euclid_General_State, spec: Bridge_Constraint_Spec, outIndex: ^i32) -> i32 {
+    state: ^core.Euclid_General_State,
+    spec: Bridge_Constraint_Spec, outIndex: ^i32) -> i32 {
 
     context = state^.saved_context
 
@@ -155,7 +156,8 @@ create_constraint :: proc "c" (
 //   - Use BRIDGE_STATUS_* constants to branch on invalid indices, arguments, or graph state failures.
 @(export)
 update_constraint :: proc "c" (
-    state: ^core.Euclid_General_State, index: i32, specMask: i32, spec: Bridge_Constraint_Spec) -> i32 {
+    state: ^core.Euclid_General_State, index: i32, specMask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
 
     context = state^.saved_context
 
@@ -370,7 +372,8 @@ apply_all_constraints_bridge :: proc "c" (
 //   - If status is BRIDGE_STATUS_NON_CONVERGED, inspect final_error to decide next solver action.
 @(export)
 solve_constraints_to_error :: proc "c" (
-    state: ^core.Euclid_General_State, allowableError: f32, maxIterations: i32) -> Bridge_Solve_Result {
+    state: ^core.Euclid_General_State, allowableError: f32,
+    maxIterations: i32) -> Bridge_Solve_Result {
 
     context = state^.saved_context
 

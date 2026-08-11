@@ -241,7 +241,8 @@ scratchpad_complete_input_direct :: proc(
     caret_value := julialib.jl_box_int64(i64(caret_byte))
     mode_value := julialib.jl_box_int32(i32(input_mode))
     args: [4]^julialib.jl_value_t = {state_value, text_value, caret_value, mode_value}
-    result := julialib.jl_call(state^.julia_interface^.scratchpad_complete_input, &args[0], 4)
+    result := julialib.jl_call(
+        state^.julia_interface^.scratchpad_complete_input, &args[0], 4)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_complete_input")
@@ -354,7 +355,8 @@ scratchpad_history_next_direct :: proc(state: ^core.Euclid_General_State) -> str
     }
 
     state_value := julialib.jl_box_voidpointer(state)
-    result := julialib.jl_call1(state^.julia_interface^.scratchpad_history_next, state_value)
+    result := julialib.jl_call1(
+        state^.julia_interface^.scratchpad_history_next, state_value)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_history_next")
@@ -369,7 +371,8 @@ scratchpad_history_next_direct :: proc(state: ^core.Euclid_General_State) -> str
 // Notes:
 //   - The helper forwards the reset request to Julia and reports whether the
 //     callback completed successfully.
-scratchpad_history_reset_cursor_direct :: proc(state: ^core.Euclid_General_State) -> bool {
+scratchpad_history_reset_cursor_direct :: proc(
+    state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_interface == nil {
         return false
     }

@@ -122,7 +122,8 @@ get_constraint_error :: proc(
         if targets.child_count < 2 {
             return 0
         }
-        return get_constraint_error_distance(constraint, targets.children[0], targets.children[1])
+        return get_constraint_error_distance(
+            constraint, targets.children[0], targets.children[1])
 
     case .MaxAngle:
         if targets.child_count < 3 {

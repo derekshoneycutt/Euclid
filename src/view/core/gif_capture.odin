@@ -264,7 +264,8 @@ gif_output_path :: proc() -> string {
     }
 
     output_name := gif_output_filename()
-    output_path, err := filepath.join([]string{output_dir, output_name}, context.temp_allocator)
+    output_path, err := filepath.join(
+        []string{output_dir, output_name}, context.temp_allocator)
     if err != nil {
         return ""
     }
@@ -278,7 +279,8 @@ gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
 }
 
 //   Map one logical axis extent into framebuffer pixels using screen/render sizes.
-gif_capture_scaled_extent :: #force_inline proc(logical_extent, screen_extent, render_extent: int) -> int {
+gif_capture_scaled_extent :: #force_inline proc(
+    logical_extent, screen_extent, render_extent: int) -> int {
     if logical_extent <= 0 {
         return 1
     }

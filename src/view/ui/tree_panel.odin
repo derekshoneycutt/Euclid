@@ -24,10 +24,10 @@ draw_tree_view :: proc(
     toolbar_panel, list_panel := build_tree_view_panels(panel)
 
     show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
-    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input,
-        &ui_runtime.ui_press_owner,
-        show_tree,
-        ui_runtime.show_tree_gif, ui_runtime.show_tree_settings, ui_runtime.simulation_paused)
+    toolbar_hit := draw_tree_toolbar(toolbar_panel, mouse_input, 
+        &ui_runtime.ui_press_owner, show_tree,
+        ui_runtime.show_tree_gif, ui_runtime.show_tree_settings,
+        ui_runtime.simulation_paused)
 
     if toolbar_hit.RefreshRequested {
         if ui_runtime.simulation_paused &&
@@ -232,7 +232,8 @@ walk_draw_child_nodes_limited :: proc(
 
 //   Return first child pointer only when node is expanded.
 expanded_first_child :: #force_inline proc(
-    node: ^core.Euclid_Julia_Animation_Interface) -> ^core.Euclid_Julia_Animation_Interface {
+    node: ^core.Euclid_Julia_Animation_Interface) ->
+    ^core.Euclid_Julia_Animation_Interface {
 
     if node == nil || !node.is_expanded {
         return nil

@@ -28,7 +28,8 @@ font_has_flag :: #force_inline proc(flags, flag: Font_Variant_Flags) -> bool {
 }
 
 //   Resolve one weight from possibly multiple weight bits by choosing the heaviest bit set.
-font_resolve_weight_from_flags :: #force_inline proc(flags: Font_Variant_Flags) -> Font_Weight {
+font_resolve_weight_from_flags :: #force_inline proc(
+	flags: Font_Variant_Flags) -> Font_Weight {
 	resolved := Font_Weight.Regular
 	resolved_rank := font_weight_rank(resolved)
 

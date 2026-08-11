@@ -5,7 +5,8 @@ import "../core"
 import rl "vendor:raylib"
 
 //   Resolve a style id using custom font flags encoded in the style id bits.
-style_from_custom_font_flags :: #force_inline proc(style_id: i32) -> (Dynview_Text_Style, bool) {
+style_from_custom_font_flags :: #force_inline proc(
+    style_id: i32) -> (Dynview_Text_Style, bool) {
     bits := u32(style_id)
     if (bits & u32(DYNVIEW_STYLE_CUSTOM_FONT)) == 0 {
         return Dynview_Text_Style{}, false

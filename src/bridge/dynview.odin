@@ -9,7 +9,8 @@ import "../core"
 //
 // Returns:
 //   - Matching label decoration enum value, or .None for unsupported values.
-label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Shapes_Label_Decoration_Kind {
+label_decoration_kind_from_i32 :: #force_inline proc(
+    kind: i32) -> core.Shapes_Label_Decoration_Kind {
     switch kind {
     case BRIDGE_LABEL_DECORATION_PRIME:
         return .Prime
@@ -189,7 +190,8 @@ dynview_import_fraction_children :: proc(
     cursor: ^int,
     op: Bridge_Dynview_Math_Op,
     blob_offset, blob_count: int,
-    next_program_id: ^int) -> (numerator_program_id: i32, denominator_program_id: i32, status: i32) {
+    next_program_id: ^int) -> (
+        numerator_program_id: i32, denominator_program_id: i32, status: i32) {
 
     numerator_direct_count := int(op.child_program_id)
     denominator_direct_count := int(op.secondary_child_program_id)

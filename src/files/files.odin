@@ -82,7 +82,8 @@ resolve_writable_gif_output_dir :: proc(
 // Returns:
 //   - output_dir: Writable path ending in GIF_OUTPUT_DIR_NAME when successful, otherwise "".
 //   - ok: true when a writable directory was resolved/created, otherwise false.
-resolve_writable_pictures_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+resolve_writable_pictures_dir :: proc(
+    allocator := context.temp_allocator) -> (string, bool) {
     pictures_dir, _ := os.user_pictures_dir(allocator)
     data_dir, _ := os.user_data_dir(allocator)
     cache_dir, _ := os.user_cache_dir(allocator)
@@ -170,7 +171,8 @@ packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
 //
 // Returns:
 //   - asset_path: Joined absolute path when successful, otherwise "".
-packaged_asset_path :: proc(relative_path: string, allocator := context.allocator) -> string {
+packaged_asset_path :: proc(
+    relative_path: string, allocator := context.allocator) -> string {
     exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
     if !exe_ok {
         return ""
@@ -309,7 +311,8 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     }
 
     for entry in required_entries {
-        path, path_err := filepath.join([]string{unpack_dir, entry}, context.temp_allocator)
+        path, path_err :=
+            filepath.join([]string{unpack_dir, entry}, context.temp_allocator)
         if path_err != nil || !os.exists(path) {
             return false
         }
@@ -345,7 +348,8 @@ resolve_unpack_targets :: proc(exe_dir: string) -> (string, string, bool) {
 // Returns:
 //   - continue_unpack: true when caller should proceed with unpack work.
 //   - result: return value the caller should use when unpack should not continue.
-should_continue_unpack :: proc(archive_path, unpack_dir: string, force: bool) -> (bool, bool) {
+should_continue_unpack :: proc(
+    archive_path, unpack_dir: string, force: bool) -> (bool, bool) {
     if !os.exists(archive_path) {
         fmt.eprintln("asset unpack failed: archive not found at ", archive_path)
         return false, os.is_directory(unpack_dir)
@@ -393,13 +397,15 @@ decode_and_extract_archive_payload :: proc(archive_path, unpack_dir: string) -> 
 //
 // Notes:
 //   - When force is true, existing unpacked content is removed and rebuilt.
-ensure_packaged_assets_unpacked_with_force :: proc(exe_dir: string, force: bool) -> bool {
+ensure_packaged_assets_unpacked_with_force :: proc(
+    exe_dir: string, force: bool) -> bool {
     archive_path, unpack_dir, targets_ok := resolve_unpack_targets(exe_dir)
     if !targets_ok {
         return false
     }
 
-    continue_unpack, early_result := should_continue_unpack(archive_path, unpack_dir, force)
+    continue_unpack, early_result :=
+        should_continue_unpack(archive_path, unpack_dir, force)
     if !continue_unpack {
         return early_result
     }

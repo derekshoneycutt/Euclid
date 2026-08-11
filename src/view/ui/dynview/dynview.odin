@@ -43,7 +43,8 @@ draw_scratchpad_styled_or_fallback :: proc(
 
     runtime := &state^.dynview
     if runtime^.enabled && runtime^.compile_cache.is_valid &&
-        !runtime^.command_buffer.has_stream_error && runtime^.command_buffer.command_count > 0 {
+        !runtime^.command_buffer.has_stream_error &&
+        runtime^.command_buffer.command_count > 0 {
         if runtime^.compile_cache.layout_is_valid {
             draw_cached_layout(state,
                 runtime,

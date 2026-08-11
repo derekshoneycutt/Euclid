@@ -82,10 +82,10 @@ run_parallel_simulation_step :: proc(executor: ^Simulation_Executor, dt: f32) {
     executor^.particle_task.dt = dt
     executor^.constraint_task.dt = dt
     allocator := os.heap_allocator()
-    thread.pool_add_task(
-        &executor^.pool, allocator, update_particles_task, rawptr(&executor^.particle_task))
-    thread.pool_add_task(
-        &executor^.pool, allocator, solve_constraints_task, rawptr(&executor^.constraint_task))
+    thread.pool_add_task(&executor^.pool, allocator, update_particles_task,
+        rawptr(&executor^.particle_task))
+    thread.pool_add_task(&executor^.pool, allocator, solve_constraints_task,
+        rawptr(&executor^.constraint_task))
     join_simulation_tasks(executor, SIMULATION_TASK_COUNT)
 }
 
@@ -96,12 +96,12 @@ run_parallel_frame_preparation :: proc(state: ^core.Euclid_General_State, alpha:
     executor^.shape_cache_task.interpolation_alpha = alpha
     allocator := os.heap_allocator()
 
-    thread.pool_add_task(
-        &executor^.pool, allocator, build_shape_cache_task, rawptr(&executor^.shape_cache_task))
+    thread.pool_add_task(&executor^.pool, allocator, build_shape_cache_task,
+        rawptr(&executor^.shape_cache_task))
     task_count := 1
     if ui.prepare_ui_frame(state) {
-        thread.pool_add_task(
-            &executor^.pool, allocator, compile_dynview_task, rawptr(&executor^.dynview_task))
+        thread.pool_add_task(&executor^.pool, allocator, compile_dynview_task,
+            rawptr(&executor^.dynview_task))
         task_count += 1
     }
 

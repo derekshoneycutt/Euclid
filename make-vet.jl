@@ -68,6 +68,32 @@ struct ParserFileError
     details::String
 end
 
+struct LineLengthIssue
+    severity::String
+    file::String
+    line::Int
+    code_length::Int
+    line_length::Int
+    has_explicit_exception::Bool
+end
+
+mutable struct LineScanState
+    in_string::Bool
+    string_delim::String
+    in_block_comment::Bool
+end
+
+const LINE_LENGTH_WARN_THRESHOLD = 90
+const LINE_LENGTH_DISCOURAGED_THRESHOLD = 100
+const LINE_LENGTH_HARD_LIMIT = 120
+
+const LINE_LENGTH_EXCEPTION_PATTERNS = [
+    r"line-length-exception"i,
+    r"line_length_exception"i,
+    r"vet:\s*allow-long-line"i,
+    r"line-length:\s*allow"i,
+]
+
 """Return true when a section should surface detailed payload in markdown."""
 function section_has_payload(section::VetSectionResult)
     return !isempty(strip(section.stdout)) || !isempty(strip(section.stderr))
@@ -134,7 +160,8 @@ function write_section_payload(io::IO, section::VetSectionResult)
 end
 
 """Write a markdown report to disk for all captured vet sections."""
-function write_vet_report(run_result::VetRunResult, report_path::String, script_dir::String)
+function write_vet_report(
+    run_result::VetRunResult, report_path::String, script_dir::String)
     mkpath(dirname(report_path))
 
     overall_status = compute_overall_status(run_result)
@@ -188,7 +215,8 @@ Run a command and return its exit code and optional captured output.
 
 When capture_output is false, stdout and stderr in the return value are empty strings.
 """
-function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, capture_output::Bool=false)
+function run_command(
+    command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, capture_output::Bool=false)
     if capture_output
         stdout_buffer = IOBuffer()
         stderr_buffer = IOBuffer()
@@ -206,7 +234,8 @@ function run_command(command::Cmd; cwd::Union{Nothing,AbstractString}=nothing, c
             exit_code = 1
         end
 
-        return CommandResult(exit_code, String(take!(stdout_buffer)), String(take!(stderr_buffer)))
+        return CommandResult(
+            exit_code, String(take!(stdout_buffer)), String(take!(stderr_buffer)))
     end
 
     exit_code = 0
@@ -390,7 +419,8 @@ function metadata_from_function_node(node, rel_file::String)
     function_expr = first_parsed_expr(parsed)
 
     signature = function_expr
-    if function_expr isa Expr && function_expr.head == :function && !isempty(function_expr.args)
+    if function_expr isa Expr && function_expr.head == :function &&
+        !isempty(function_expr.args)
         signature = function_expr.args[1]
     elseif function_expr isa Expr && is_short_function_assignment(function_expr)
         signature = function_expr.args[1]
@@ -402,13 +432,7 @@ function metadata_from_function_node(node, rel_file::String)
     end_line = start_line + line_span_count - 1
     nloc = max(1, count_nonempty_lines(function_text))
 
-    return JuliaFunctionMetadata(
-        name,
-        rel_file,
-        start_line,
-        end_line,
-        nloc,
-        param_count,
+    return JuliaFunctionMetadata(name, rel_file, start_line, end_line, nloc, param_count,
         short_signature_preview(signature))
 end
 
@@ -491,7 +515,8 @@ end
 
 """Extract parser-backed metadata for Julia functions under src/julia."""
 function extract_julia_function_metadata(src_dir::String, script_dir::String)
-    metadata, quality, file_count, parse_errors = collect_julia_metadata_bundle(src_dir, script_dir)
+    metadata, quality, file_count,
+    parse_errors = collect_julia_metadata_bundle(src_dir, script_dir)
 
     sample_limit = min(5, length(metadata))
     println("Julia parser metadata collected for $(length(metadata)) functions.")
@@ -642,7 +667,8 @@ function build_julia_complexity_rows(
         normalized_file = replace(item.file, '\\' => '/')
         warning_only_get_view_text = startswith(item.name, "get_view_text") &&
             occursin(r"^src/julia/[^/]+/", normalized_file)
-        warning_only = warning_only_path || warning_only_loop || warning_only_get_view_text
+        warning_only = warning_only_path || warning_only_loop ||
+            warning_only_get_view_text
         is_violation = ccn > max_complexity
 
         severity = "INFO"
@@ -841,12 +867,8 @@ function run_code_complexity_analysis(src_dir::String, script_dir::String)
     metric = CodeComplexity.CyclomaticComplexity()
     all_measures = CodeComplexity.measure_directory(metric, julia_root; recursive=true)
 
-    rows, row_metrics = build_julia_complexity_rows(
-        metadata,
-        all_measures,
-        max_complexity,
-        warning_roots,
-        script_dir)
+    rows, row_metrics = build_julia_complexity_rows(metadata, all_measures,
+        max_complexity, warning_roots, script_dir)
 
     println(render_julia_complexity_table(rows))
 
@@ -981,6 +1003,283 @@ function truncate_console_details(text::AbstractString; max_lines::Int=24)
     return join(kept, '\n')
 end
 
+"""Return true when path should be excluded from line-length checks."""
+function should_skip_line_length_path(path::String)::Bool
+    normalized = replace(normpath(path), '\\' => '/')
+
+    if occursin("/tests/", normalized) || occursin("/test/", normalized)
+        return true
+    end
+
+    if endswith(normalized, "_tests.odin") || endswith(normalized, "_test.jl") ||
+        endswith(normalized, "_tests.jl")
+        return true
+    end
+
+    if startswith(normalized, "src/julia/elements/") ||
+        startswith(normalized, "src/julia/algebra/") ||
+        startswith(normalized, "src/julia/hilbert/") ||
+        startswith(normalized, "src/julia/proclus/") ||
+        startswith(normalized, "src/julialib/")
+        return true
+    end
+
+    return false
+end
+
+"""Return true when line contains an explicit long-line exception marker."""
+function has_line_length_exception_marker(line::AbstractString)::Bool
+    for pattern in LINE_LENGTH_EXCEPTION_PATTERNS
+        if occursin(pattern, line)
+            return true
+        end
+    end
+
+    return false
+end
+
+"""Return true when substring starts at index and matches token."""
+function starts_with_token(line::AbstractString, index::Int, token::String)::Bool
+    if isempty(line) || index > lastindex(line)
+        return false
+    end
+
+    return startswith(SubString(line, index), token)
+end
+
+"""Advance index by a number of characters, clamped to line end + 1."""
+function advance_index_by_chars(line::AbstractString, index::Int, chars::Int)::Int
+    advanced = index
+    for _ in 1:chars
+        if advanced > lastindex(line)
+            return advanced
+        end
+        advanced = nextind(line, advanced)
+    end
+
+    return advanced
+end
+
+"""Advance one line and return its code-only length plus updated scanner state."""
+function scan_line_code_length(
+    line::AbstractString,
+    state::LineScanState,
+    line_comment_token::String,
+    block_comment_start::String,
+    block_comment_end::String,
+    string_delims::Vector{String})
+    code_length = 0
+    index = 1
+    line_end = lastindex(line)
+
+    while index <= line_end
+        if state.in_block_comment
+            if starts_with_token(line, index, block_comment_end)
+                state.in_block_comment = false
+                index = advance_index_by_chars(line, index, length(block_comment_end))
+            else
+                index = nextind(line, index)
+            end
+            continue
+        end
+
+        if state.in_string
+            if state.string_delim == "\""
+                if starts_with_token(line, index, "\\")
+                    index = advance_index_by_chars(line, index, 2)
+                    continue
+                end
+
+                if starts_with_token(line, index, "\"")
+                    state.in_string = false
+                    state.string_delim = ""
+                    index = nextind(line, index)
+                    continue
+                end
+            elseif starts_with_token(line, index, state.string_delim)
+                delim_len = length(state.string_delim)
+                state.in_string = false
+                state.string_delim = ""
+                index = advance_index_by_chars(line, index, delim_len)
+                continue
+            end
+
+            index = nextind(line, index)
+            continue
+        end
+
+        if starts_with_token(line, index, line_comment_token)
+            break
+        end
+
+        if starts_with_token(line, index, block_comment_start)
+            state.in_block_comment = true
+            index = advance_index_by_chars(line, index, length(block_comment_start))
+            continue
+        end
+
+        matched_delim = ""
+        for delim in string_delims
+            if starts_with_token(line, index, delim)
+                matched_delim = delim
+                break
+            end
+        end
+
+        if !isempty(matched_delim)
+            state.in_string = true
+            state.string_delim = matched_delim
+            index = advance_index_by_chars(line, index, length(matched_delim))
+            continue
+        end
+
+        code_length += 1
+        index = nextind(line, index)
+    end
+
+    return code_length
+end
+
+"""Build line-length issues for a source file using language-specific token rules."""
+function collect_file_line_length_issues(
+    path::String, rel_path::String, extension::String)
+    lines = split(read(path, String), '\n')
+    issues = LineLengthIssue[]
+
+    if extension == ".odin"
+        state = LineScanState(false, "", false)
+        for (line_number, line) in enumerate(lines)
+            code_length = scan_line_code_length(
+                line,
+                state,
+                "//",
+                "/*",
+                "*/",
+                ["\"", "`"])
+
+            line_length = length(line)
+            if code_length <= LINE_LENGTH_WARN_THRESHOLD
+                continue
+            end
+
+            has_exception = has_line_length_exception_marker(line)
+            if code_length > LINE_LENGTH_HARD_LIMIT && !has_exception
+                push!(issues, LineLengthIssue("BLOCK", rel_path, line_number,
+                    code_length, line_length, false))
+            elseif code_length >= LINE_LENGTH_DISCOURAGED_THRESHOLD
+                push!(issues, LineLengthIssue("HARD_WARN", rel_path, line_number,
+                    code_length, line_length, has_exception))
+            else
+                push!(issues, LineLengthIssue("WARN", rel_path, line_number,
+                    code_length, line_length, has_exception))
+            end
+        end
+    else
+        state = LineScanState(false, "", false)
+        for (line_number, line) in enumerate(lines)
+            code_length = scan_line_code_length(
+                line,
+                state,
+                "#",
+                "#=",
+                "=#",
+                ["\"\"\"", "\"", "`"])
+
+            line_length = length(line)
+            if code_length <= LINE_LENGTH_WARN_THRESHOLD
+                continue
+            end
+
+            has_exception = has_line_length_exception_marker(line)
+            if code_length > LINE_LENGTH_HARD_LIMIT && !has_exception
+                push!(issues, LineLengthIssue("BLOCK", rel_path, line_number,
+                    code_length, line_length, false))
+            elseif code_length >= LINE_LENGTH_DISCOURAGED_THRESHOLD
+                push!(issues, LineLengthIssue("HARD_WARN", rel_path, line_number,
+                    code_length, line_length, has_exception))
+            else
+                push!(issues, LineLengthIssue("WARN", rel_path, line_number,
+                    code_length, line_length, has_exception))
+            end
+        end
+    end
+
+    return issues
+end
+
+"""Render line-length issues table for vet output."""
+function render_line_length_issues(issues::Vector{LineLengthIssue})
+    lines = String[]
+    push!(lines, "Line-length table (.odin/.jl code-only chars):")
+    push!(lines, "SEV       CODE  LINE  FILE:LINE  EXCEPTION")
+
+    for issue in issues
+        marker = issue.has_explicit_exception ? "yes" : "no"
+        file_line = issue.file * ":" * string(issue.line)
+        push!(
+            lines,
+            rpad(issue.severity, 9) * " " *
+            lpad(string(issue.code_length), 5) * " " *
+            lpad(string(issue.line_length), 5) * "  " *
+            file_line * "  " * marker)
+    end
+
+    return join(lines, '\n')
+end
+
+"""Run line-length policy checks for Odin and Julia source files."""
+function run_line_length_policy_section(script_dir::String)
+    candidate_files = sort([
+        path for path in collect_paths(script_dir)
+        if endswith(path, ".odin") || endswith(path, ".jl")
+    ])
+
+    scanned_files = 0
+    skipped_files = 0
+    issues = LineLengthIssue[]
+
+    for absolute_path in candidate_files
+        rel_path = relpath(absolute_path, script_dir)
+        if should_skip_line_length_path(rel_path)
+            skipped_files += 1
+            continue
+        end
+
+        extension = endswith(rel_path, ".odin") ? ".odin" : ".jl"
+        append!(issues,
+            collect_file_line_length_issues(absolute_path, rel_path, extension))
+        scanned_files += 1
+    end
+
+    sort!(issues, by=issue -> (
+        issue.severity == "BLOCK" ? 0 : (issue.severity == "HARD_WARN" ? 1 : 2),
+        -issue.code_length,
+        issue.file,
+        issue.line))
+
+    warn_count = count(issue -> issue.severity == "WARN", issues)
+    hard_warn_count = count(issue -> issue.severity == "HARD_WARN", issues)
+    block_count = count(issue -> issue.severity == "BLOCK", issues)
+    exception_count = count(issue -> issue.has_explicit_exception, issues)
+
+    if !isempty(issues)
+        println(render_line_length_issues(issues))
+    else
+        println("Line-length table (.odin/.jl code-only chars): no issues")
+    end
+
+    return Dict{String,Any}(
+        "warn_threshold" => LINE_LENGTH_WARN_THRESHOLD,
+        "discouraged_threshold" => LINE_LENGTH_DISCOURAGED_THRESHOLD,
+        "hard_limit" => LINE_LENGTH_HARD_LIMIT,
+        "scanned_files" => scanned_files,
+        "skipped_files" => skipped_files,
+        "warn_count" => warn_count,
+        "hard_warn_count" => hard_warn_count,
+        "block_count" => block_count,
+        "exception_count" => exception_count)
+end
+
 """Create a VetSectionResult from a captured Julia analysis section."""
 function build_internal_section_result(
     key::String,
@@ -991,34 +1290,12 @@ function build_internal_section_result(
     stderr_text::String,
     caught_error)
     if caught_error !== nothing
-        return VetSectionResult(
-            key,
-            "Fail",
-            fail_summary,
-            "internal-error",
-            nothing,
-            stdout_text,
-            stderr_text,
-            metrics,
-            true,
-            false,
-            false,
-            false)
+        return VetSectionResult(key, "Fail", fail_summary, "internal-error", nothing,
+            stdout_text, stderr_text, metrics, true, false, false, false)
     end
 
-    return VetSectionResult(
-        key,
-        "Pass",
-        ok_summary,
-        "ok",
-        nothing,
-        stdout_text,
-        stderr_text,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+    return VetSectionResult(key, "Pass", ok_summary, "ok", nothing, stdout_text,
+        stderr_text, metrics, false, false, false, false)
 end
 
 """Print concise section summaries, with details only for warnings or failures."""
@@ -1064,41 +1341,24 @@ end
 
 """Return true when external object has command-result-like fields."""
 function is_command_result_like(value)
-    return hasproperty(value, :exit_code) && hasproperty(value, :stdout) && hasproperty(value, :stderr)
+    return hasproperty(value, :exit_code) && hasproperty(value, :stdout) &&
+        hasproperty(value, :stderr)
 end
 
 """Build an odin-build-vet section from captured build output in make.jl."""
 function run_odin_build_vet_section(odin_build_result)
     if odin_build_result === nothing
-        return VetSectionResult(
-            "odin-build-vet",
-            "Skipped",
-            "Odin vet build output was not captured.",
-            "skipped",
-            nothing,
-            "",
-            "",
-            Dict{String,Any}(),
-            false,
-            false,
-            true,
-            false)
+        return VetSectionResult("odin-build-vet", "Skipped",
+            "Odin vet build output was not captured.", "skipped", nothing,
+            "", "", Dict{String,Any}(), false, false, true, false)
     end
 
     if !is_command_result_like(odin_build_result)
-        return VetSectionResult(
-            "odin-build-vet",
-            "Warn",
-            "Odin vet build capture had an unexpected shape.",
-            "unexpected-result",
-            nothing,
-            "",
-            "",
+        return VetSectionResult("odin-build-vet", "Warn",
+            "Odin vet build capture had an unexpected shape.", "unexpected-result",
+            nothing, "", "",
             Dict{String,Any}("result_type" => string(typeof(odin_build_result))),
-            false,
-            true,
-            false,
-            false)
+            false, true, false, false)
     end
 
     exit_code = getproperty(odin_build_result, :exit_code)
@@ -1111,52 +1371,22 @@ function run_odin_build_vet_section(odin_build_result)
         "stderr_bytes" => ncodeunits(stderr_text))
 
     if exit_code != 0
-        return VetSectionResult(
-            "odin-build-vet",
-            "Fail",
-            "Odin vet build failed.",
-            "exit-nonzero",
-            exit_code,
-            stdout_text,
-            stderr_text,
-            metrics,
-            true,
-            false,
-            false,
-            false)
+        return VetSectionResult("odin-build-vet", "Fail", "Odin vet build failed.",
+            "exit-nonzero", exit_code, stdout_text, stderr_text, metrics,
+            true, false, false, false)
     end
 
-    return VetSectionResult(
-        "odin-build-vet",
-        "Pass",
-        "Odin vet build passed.",
-        "ok",
-        exit_code,
-        stdout_text,
-        stderr_text,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+    return VetSectionResult("odin-build-vet", "Pass", "Odin vet build passed.", "ok",
+        exit_code, stdout_text, stderr_text, metrics, false, false, false, false)
 end
 
 """Export Odin compiler dependency metadata and return structured section output."""
 function run_odin_dependencies_section(src_dir::String, script_dir::String)
     if Sys.which("odin") === nothing
-        return VetSectionResult(
-            "odin-dependencies",
-            "Missing",
+        return VetSectionResult("odin-dependencies", "Missing",
             "odin not found on PATH; skipping dependency export.",
-            "missing",
-            nothing,
-            "",
-            "",
-            Dict{String,Any}(),
-            false,
-            false,
-            true,
-            true)
+            "missing", nothing, "", "",
+            Dict{String,Any}(), false, false, true, true)
     end
 
     export_dir = mktempdir()
@@ -1195,34 +1425,16 @@ function run_odin_dependencies_section(src_dir::String, script_dir::String)
         ]), "\n")
 
         if result.exit_code != 0
-            return VetSectionResult(
-                "odin-dependencies",
-                "Warn",
+            return VetSectionResult("odin-dependencies", "Warn",
                 "Odin dependency export failed.",
-                "exit-nonzero",
-                result.exit_code,
-                stdout_text,
-                result.stderr,
-                metrics,
-                false,
-                true,
-                false,
-                false)
+                "exit-nonzero", result.exit_code, stdout_text, result.stderr,
+                metrics, false, true, false, false)
         end
 
-        return VetSectionResult(
-            "odin-dependencies",
-            "Pass",
+        return VetSectionResult("odin-dependencies", "Pass",
             "Odin dependency export completed.",
-            "ok",
-            result.exit_code,
-            stdout_text,
-            result.stderr,
-            metrics,
-            false,
-            false,
-            false,
-            false)
+            "ok", result.exit_code, stdout_text, result.stderr,
+            metrics, false, false, false, false)
     finally
         if ispath(export_dir)
             rm(export_dir; force=true, recursive=true)
@@ -1237,14 +1449,48 @@ function run_julia_syntax_section(src_dir::String, script_dir::String)
     end
 
     metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
-    return build_internal_section_result(
-        "julia-syntax",
+    return build_internal_section_result("julia-syntax",
         "Julia syntax validation passed.",
         "Julia syntax validation failed.",
-        metrics,
-        stdout_text,
-        stderr_text,
-        caught_error)
+        metrics, stdout_text, stderr_text, caught_error)
+end
+
+"""Run the line-length policy section and return structured section output."""
+function run_line_length_section(script_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        run_line_length_policy_section(script_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+    if caught_error !== nothing
+        return build_internal_section_result("source-line-length",
+            "Source line-length policy passed.",
+            "Source line-length policy failed to execute.",
+            metrics, stdout_text, stderr_text, caught_error)
+    end
+
+    block_count = get(metrics, "block_count", 0)
+    hard_warn_count = get(metrics, "hard_warn_count", 0)
+    warn_count = get(metrics, "warn_count", 0)
+
+    if block_count > 0
+        return VetSectionResult("source-line-length", "Fail",
+            "Line-length policy found blocking violations above 120 without explicit exceptions.",
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            true, false, false, false)
+    end
+
+    if hard_warn_count > 0 || warn_count > 0
+        return VetSectionResult("source-line-length", "Warn",
+            "Line-length policy found non-blocking warnings.",
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            false, true, false, false)
+    end
+
+    return VetSectionResult("source-line-length", "Pass",
+        "Line-length policy passed.",
+        "ok", nothing, stdout_text, stderr_text, metrics,
+        false, false, false, false)
 end
 
 """Run the parser-backed Julia metadata section and return structured output."""
@@ -1255,46 +1501,24 @@ function run_julia_parser_metadata_section(src_dir::String, script_dir::String)
 
     metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
     if caught_error !== nothing
-        return build_internal_section_result(
-            "julia-parser-metadata",
+        return build_internal_section_result("julia-parser-metadata",
             "Julia parser metadata extraction passed.",
             "Julia parser metadata extraction failed.",
-            metrics,
-            stdout_text,
-            stderr_text,
-            caught_error)
+            metrics, stdout_text, stderr_text, caught_error)
     end
 
     parse_failure_count = get(metrics, "parse_failure_count", 0)
     if parse_failure_count > 0
-        return VetSectionResult(
-            "julia-parser-metadata",
-            "Warn",
+        return VetSectionResult("julia-parser-metadata", "Warn",
             "Julia parser metadata extraction completed with partial parse failures.",
-            "ok",
-            nothing,
-            stdout_text,
-            stderr_text,
-            metrics,
-            false,
-            true,
-            false,
-            false)
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            false, true, false, false)
     end
 
-    return VetSectionResult(
-        "julia-parser-metadata",
-        "Pass",
+    return VetSectionResult("julia-parser-metadata", "Pass",
         "Julia parser metadata extraction passed.",
-        "ok",
-        nothing,
-        stdout_text,
-        stderr_text,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+        "ok", nothing, stdout_text, stderr_text, metrics,
+        false, false, false, false)
 end
 
 """Run the Julia CodeComplexity section and return structured section output."""
@@ -1306,64 +1530,33 @@ function run_codecomplexity_section(src_dir::String, script_dir::String)
     metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
 
     if caught_error !== nothing
-        return build_internal_section_result(
-            "julia-codecomplexity",
+        return build_internal_section_result("julia-codecomplexity",
             "CodeComplexity passed.",
             "CodeComplexity analysis failed to execute.",
-            metrics,
-            stdout_text,
-            stderr_text,
-            caught_error)
+            metrics, stdout_text, stderr_text, caught_error)
     end
 
     blocking_found = get(metrics, "blocking_found", false)
     warning_count = get(metrics, "warning_count", 0)
 
     if blocking_found
-        return VetSectionResult(
-            "julia-codecomplexity",
-            "Fail",
+        return VetSectionResult("julia-codecomplexity", "Fail",
             "CodeComplexity reported blocking violations.",
-            "ok",
-            nothing,
-            stdout_text,
-            stderr_text,
-            metrics,
-            true,
-            false,
-            false,
-            false)
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            true, false, false, false)
     end
 
     if warning_count > 0
-        return VetSectionResult(
-            "julia-codecomplexity",
-            "Warn",
+        return VetSectionResult("julia-codecomplexity","Warn",
             "CodeComplexity produced warning-only violations.",
-            "ok",
-            nothing,
-            stdout_text,
-            stderr_text,
-            metrics,
-            false,
-            true,
-            false,
-            false)
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            false, true, false, false)
     end
 
-    return VetSectionResult(
-        "julia-codecomplexity",
-        "Pass",
+    return VetSectionResult("julia-codecomplexity", "Pass",
         "CodeComplexity passed.",
-        "ok",
-        nothing,
-        stdout_text,
-        stderr_text,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+        "ok", nothing, stdout_text, stderr_text, metrics,
+        false, false, false, false)
 end
 
 """Run the Julia JET section and return structured section output."""
@@ -1374,81 +1567,42 @@ function run_jet_section(src_dir::String, script_dir::String)
 
     metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
     if caught_error !== nothing
-        return build_internal_section_result(
-            "julia-jet",
+        return build_internal_section_result("julia-jet",
             "JET analysis passed.",
             "JET analysis failed to execute.",
-            metrics,
-            stdout_text,
-            stderr_text,
-            caught_error)
+            metrics, stdout_text, stderr_text, caught_error)
     end
 
     failed = get(metrics, "failed", false)
     if failed
-        return VetSectionResult(
-            "julia-jet",
-            "Fail",
+        return VetSectionResult("julia-jet", "Fail",
             "JET analysis reported actionable issues.",
-            "ok",
-            nothing,
-            stdout_text,
-            stderr_text,
-            metrics,
-            true,
-            false,
-            false,
-            false)
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            true, false, false, false)
     end
 
-    return VetSectionResult(
-        "julia-jet",
-        "Pass",
+    return VetSectionResult("julia-jet", "Pass",
         "JET analysis passed.",
-        "ok",
-        nothing,
-        stdout_text,
-        stderr_text,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+        "ok", nothing, stdout_text, stderr_text, metrics,
+        false, false, false, false)
 end
 
 """Run Odin lizard once with capture and return structured section output."""
 function run_odin_lizard_section(src_dir::String, script_dir::String)
     if Sys.which("lizard") === nothing
-        return VetSectionResult(
-            "odin-lizard",
-            "Missing",
+        return VetSectionResult("odin-lizard", "Missing",
             "lizard not installed; skipping Odin lizard analysis.",
-            "missing",
-            nothing,
-            "",
-            "",
-            Dict{String,Any}(),
-            false,
-            false,
-            true,
-            true)
+            "missing", nothing, "", "",
+            Dict{String,Any}(), false, false, true, true)
     end
 
     odin_files = sort([path for path in collect_paths(src_dir) if endswith(path, ".odin")])
     if isempty(odin_files)
-        return VetSectionResult(
-            "odin-lizard",
-            "Skipped",
+        return VetSectionResult("odin-lizard", "Skipped",
             "No Odin files discovered; skipping lizard analysis.",
-            "skipped",
-            nothing,
-            "",
-            "",
+            "skipped", nothing, "", "",
             Dict{String,Any}("files" => 0),
-            false,
-            false,
-            true,
-            false)
+            false, false, true, false)
     end
 
     result = run_command(
@@ -1461,69 +1615,35 @@ function run_odin_lizard_section(src_dir::String, script_dir::String)
         "exit_code" => result.exit_code)
 
     if result.exit_code != 0
-        return VetSectionResult(
-            "odin-lizard",
-            "Fail",
+        return VetSectionResult("odin-lizard", "Fail",
             "Lizard odin analysis reported warnings.",
-            "exit-nonzero",
-            result.exit_code,
-            result.stdout,
-            result.stderr,
-            metrics,
-            true,
-            false,
-            false,
-            false)
+            "exit-nonzero", result.exit_code, result.stdout, result.stderr,
+            metrics, true, false, false, false)
     end
 
-    return VetSectionResult(
-        "odin-lizard",
-        "Pass",
+    return VetSectionResult("odin-lizard", "Pass",
         "Lizard odin analysis passed.",
-        "ok",
-        result.exit_code,
-        result.stdout,
-        result.stderr,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+        "ok", result.exit_code, result.stdout, result.stderr, metrics,
+        false, false, false, false)
 end
 
 """Run scc once with capture and return structured section output."""
 function run_repo_scc_section(script_dir::String)
     if Sys.which("scc") === nothing
-        return VetSectionResult(
-            "repo-scc",
-            "Missing",
+        return VetSectionResult("repo-scc", "Missing",
             "scc not found on PATH; skipping scc analysis.",
-            "missing",
-            nothing,
-            "",
-            "",
+            "missing", nothing, "", "",
             Dict{String,Any}(),
-            false,
-            false,
-            true,
-            true)
+            false, false, true, true)
     end
 
     result = run_command(Cmd(["scc", "--by-file", "-pw"]); cwd=script_dir, capture_output=true)
     if result.exit_code != 0
-        return VetSectionResult(
-            "repo-scc",
-            "Warn",
-            "scc analysis failed.",
-            "exit-nonzero",
-            result.exit_code,
-            result.stdout,
-            result.stderr,
+        return VetSectionResult("repo-scc", "Warn",
+            "scc analysis failed.", "exit-nonzero",
+            result.exit_code, result.stdout, result.stderr,
             Dict{String,Any}("exit_code" => result.exit_code),
-            false,
-            true,
-            false,
-            false)
+            false, true, false, false)
     end
 
     summary_capture = run_command(Cmd(["scc", "-f", "csv"]); cwd=script_dir, capture_output=true)
@@ -1541,19 +1661,9 @@ function run_repo_scc_section(script_dir::String)
         "complexity_per_code_julia" => get(summary_metrics, "complexity_per_code_julia", 0.0),
         "complexity_per_code_total" => get(summary_metrics, "complexity_per_code_total", 0.0))
 
-    return VetSectionResult(
-        "repo-scc",
-        "Pass",
-        "scc analysis completed.",
-        "ok",
-        result.exit_code,
-        result.stdout,
-        result.stderr,
-        metrics,
-        false,
-        false,
-        false,
-        false)
+    return VetSectionResult("repo-scc", "Pass", "scc analysis completed.", "ok",
+        result.exit_code, result.stdout, result.stderr, metrics,
+        false, false, false, false)
 end
 
 """Run complete vet analysis for Julia checks and Odin lizard."""
@@ -1569,6 +1679,9 @@ function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result
 
     println("Running Julia syntax validation...")
     push!(sections, run_julia_syntax_section(src_dir, script_dir))
+
+    println("Running source line-length policy...")
+    push!(sections, run_line_length_section(script_dir))
 
     println("Running Julia parser metadata extraction...")
     push!(sections, run_julia_parser_metadata_section(src_dir, script_dir))
@@ -1586,7 +1699,8 @@ function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result
     push!(sections, run_repo_scc_section(script_dir))
 
     has_blocking_failures = any(section -> section.blocking, sections)
-    run_result = VetRunResult(string(Dates.now(Dates.UTC)), sections, has_blocking_failures)
+    run_result =
+        VetRunResult(string(Dates.now(Dates.UTC)), sections, has_blocking_failures)
 
     try
         write_vet_report(run_result, report_path, script_dir)

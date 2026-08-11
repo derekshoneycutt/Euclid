@@ -106,7 +106,8 @@ coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
 // The display thread snapshots query state before submission. On saturation, the slot is
 // recycled and elapsed time is retained for the next request instead of partially lost.
 try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -> bool {
-    if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.julia_interface == nil {
         return false
     }
     service := state^.julia_runtime_service
@@ -155,7 +156,8 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
 // Event draining updates service metadata, while completed slot storage remains authoritative.
 // Every completed slot is recycled after selecting and attempting the newest valid batch.
 publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.julia_interface == nil {
         return false
     }
     service := state^.julia_runtime_service
@@ -185,7 +187,8 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         service^.animation_last_committed_sequence = slot^.sequence
         latency_ms := time.duration_seconds(time.tick_since(slot^.submitted_at)) * 1000
         service^.animation_last_latency_ms = latency_ms
-        service^.animation_max_latency_ms = max(service^.animation_max_latency_ms, latency_ms)
+        service^.animation_max_latency_ms =
+            max(service^.animation_max_latency_ms, latency_ms)
         _ = trace.record_animation_event_ex(
             &state^.trace_state,
             "animation.tick_committed",
@@ -273,7 +276,8 @@ newest_completed_animation_tick_index :: proc(service: ^Julia_Runtime_Service) -
     newest_index := -1
     newest_sequence: u64
     for &slot, slot_index in service^.animation_tick_slots {
-        if slot.state == .Complete && (newest_index < 0 || slot.sequence > newest_sequence) {
+        if slot.state == .Complete && (newest_index < 0 ||
+            slot.sequence > newest_sequence) {
             newest_index = slot_index
             newest_sequence = slot.sequence
         }
@@ -422,7 +426,8 @@ view_snapshot_matches_current :: proc(
     service: ^Julia_Runtime_Service,
     slot: ^View_Snapshot) -> bool {
 
-    return state != nil && service != nil && slot != nil && state^.julia_interface != nil &&
+    return state != nil && service != nil && slot != nil &&
+        state^.julia_interface != nil && 
         slot^.runtime_generation == service^.runtime_generation &&
         slot^.animation == state^.julia_interface^.current_animation
 }
@@ -449,7 +454,8 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
 //   Return fallback text only when it belongs to the active animation.
 // The returned string aliases service-owned published slot storage until replacement.
 current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string {
-    if state == nil || state^.julia_runtime_service == nil || state^.julia_interface == nil {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.julia_interface == nil {
         return ""
     }
     service := state^.julia_runtime_service
@@ -504,7 +510,8 @@ generate_view_snapshot_task :: proc(data: rawptr) -> bool {
         cache^.math_programs[:slot^.math_program_count])
     copy(slot^.math_commands[:slot^.math_command_count],
         cache^.math_commands[:slot^.math_command_count])
-    copy(slot^.math_nodes[:slot^.math_node_count], cache^.math_nodes[:slot^.math_node_count])
+    copy(slot^.math_nodes[:slot^.math_node_count],
+        cache^.math_nodes[:slot^.math_node_count])
     slot^.state = .Complete
     return true
 }
@@ -539,7 +546,8 @@ copy_view_snapshot_to_runtime :: proc(
         slot^.math_programs[:slot^.math_program_count])
     copy(cache^.math_commands[:slot^.math_command_count],
         slot^.math_commands[:slot^.math_command_count])
-    copy(cache^.math_nodes[:slot^.math_node_count], slot^.math_nodes[:slot^.math_node_count])
+    copy(cache^.math_nodes[:slot^.math_node_count],
+        slot^.math_nodes[:slot^.math_node_count])
     cache^.is_valid = false
     cache^.layout_is_valid = false
     cache^.copy_hit_target_count = 0
@@ -548,7 +556,8 @@ copy_view_snapshot_to_runtime :: proc(
 
 //   Return display-owned lifecycle, failure, and backpressure diagnostics.
 // This is a scalar snapshot and does not synchronize with or invoke the Julia owner thread.
-julia_runtime_diagnostics :: proc(service: ^Julia_Runtime_Service) -> Julia_Runtime_Diagnostics {
+julia_runtime_diagnostics :: proc(
+    service: ^Julia_Runtime_Service) -> Julia_Runtime_Diagnostics {
     if service == nil {
         return {}
     }
@@ -568,7 +577,8 @@ julia_runtime_diagnostics :: proc(service: ^Julia_Runtime_Service) -> Julia_Runt
 //   Create the bounded channels, staging storage, and persistent Julia owner worker.
 // On partial failure, resources are released in reverse construction order. The caller owns
 // the returned service and must stop Julia before destroy_julia_runtime_service.
-create_julia_runtime_service :: proc() -> (^Julia_Runtime_Service, runtime.Allocator_Error) {
+create_julia_runtime_service :: proc() -> (
+    ^Julia_Runtime_Service, runtime.Allocator_Error) {
     service := new(Julia_Runtime_Service)
     requests, request_err := chan.create(
         chan.Chan(Julia_Request), JULIA_REQUEST_CAPACITY, context.allocator)
@@ -592,7 +602,8 @@ create_julia_runtime_service :: proc() -> (^Julia_Runtime_Service, runtime.Alloc
     service^.dynview_staging = new(core.Dynview_System)
     service^.dynview_staging^.enabled = true
     service^.published_view_snapshot_index = -1
-    service^.worker = thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
+    service^.worker =
+        thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
     if service^.worker == nil {
         free(service^.dynview_staging)
         _ = chan.destroy(events)

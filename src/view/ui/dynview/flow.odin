@@ -124,7 +124,8 @@ positive_sweep_degrees :: #force_inline proc(start_degrees, end_degrees: f32) ->
 }
 
 //   Compute one point on a circle from center/radius and degree angle.
-pie_point :: #force_inline proc(center: rl.Vector2, radius, angle_degrees: f32) -> rl.Vector2 {
+pie_point :: #force_inline proc(
+    center: rl.Vector2, radius, angle_degrees: f32) -> rl.Vector2 {
     radians := angle_degrees * math.PI / 180.0
     return rl.Vector2{
         center.x + radius * f32(math.cos(f64(radians))),
@@ -157,7 +158,8 @@ pie_section_bounds :: #force_inline proc(
     y_min: f32 = 0
     y_max: f32 = 0
 
-    include_bound_angle :: #force_inline proc(angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
+    include_bound_angle :: #force_inline proc(
+        angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
         radians := angle_degrees * math.PI / 180.0
         x := radius * f32(math.cos(f64(radians)))
         y := -radius * f32(math.sin(f64(radians)))
@@ -245,7 +247,8 @@ draw_perpendicular_shape :: proc(
     bottom_right := rl.Vector2{rect.x + rect.width, bottom_y}
     stem_x := rect.x + rect.width * 0.5
     rl.DrawLineEx(bottom_left, bottom_right, stroke, colors.top)
-    rl.DrawLineEx(rl.Vector2{stem_x, rect.y}, rl.Vector2{stem_x, bottom_y}, stroke, colors.stem)
+    rl.DrawLineEx(rl.Vector2{stem_x, rect.y},
+        rl.Vector2{stem_x, bottom_y}, stroke, colors.stem)
 }
 
 //   Draw one triangle shape with optional fill and per-edge colors.
@@ -329,14 +332,19 @@ flow_inline_shape_frame :: proc(
     }
 
     if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding + f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y && row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding + f32(flow^.row) *
+            draw_ctx^.text_row_height - draw_ctx^.scroll_y
+        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
+            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             top_y := row_y + draw_ctx^.text_row_height * y_start_scale
             bottom_y := row_y + draw_ctx^.text_row_height * y_end_scale
-            return Inline_Shape_Frame{rl.Rectangle{atom_x, top_y, atom_w, max(1.0, bottom_y - top_y)}, cols, max_cols, true}
+            return Inline_Shape_Frame{rl.Rectangle{
+                atom_x, top_y, atom_w, max(1.0, bottom_y - top_y)}, cols, max_cols, true}
         }
     }
 
@@ -370,7 +378,8 @@ flow_consume_text_run :: proc(
             continue
         }
 
-        line_start, line_end, next_start := dynview.next_wrapped_text_span(text, start, available)
+        line_start, line_end, next_start :=
+            dynview.next_wrapped_text_span(text, start, available)
         line_text := text[line_start:line_end]
         line_len := dynview.text_codepoint_count_span(line_text, 0, len(line_text))
         if line_len <= 0 {
@@ -383,10 +392,11 @@ flow_consume_text_run :: proc(
             if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
                 row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
-                line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                    f32(flow^.col) * dynview.effective_advance(style, draw_ctx^.wrap_advance)
+                line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) *
+                    dynview.effective_advance(style, draw_ctx^.wrap_advance)
                 if style.alignment == .Center && flow^.col == 0 {
-                    line_w := f32(line_len) * dynview.effective_advance(style, draw_ctx^.wrap_advance)
+                    line_w := f32(line_len) * dynview.effective_advance(
+                        style, draw_ctx^.wrap_advance)
                     line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
                 }
 
@@ -453,7 +463,8 @@ flow_consume_inline_line :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             line_w := f32(cols) * effective_advance
             baseline_y := row_y + draw_ctx^.text_row_height * 0.62
             thickness := max(1.0, cmd.inline_atom_stroke)
@@ -497,7 +508,8 @@ flow_consume_inline_box :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             box_w := f32(cols) * effective_advance
             raw_h := cmd.inline_box_height * effective_advance
             box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
@@ -553,15 +565,18 @@ flow_consume_inline_circle :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-            center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
+            center := rl.Vector2{atom_x + atom_w * 0.5, row_y +
+                draw_ctx^.text_row_height * 0.58}
             stroke := max(1.0, cmd.inline_atom_stroke)
             color := command_draw_color(cmd, style)
             rl.DrawCircleLines(i32(center.x), i32(center.y), radius, color)
             if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), color)
+                rl.DrawCircleLines(i32(center.x), i32(center.y),
+                    max(1.0, radius - 1), color)
             }
         }
     }
@@ -600,7 +615,8 @@ flow_consume_inline_filled_box :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             box_w := f32(cols) * effective_advance
             raw_h := cmd.inline_box_height * effective_advance
             box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
@@ -651,10 +667,12 @@ flow_consume_inline_filled_circle :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             atom_w := f32(cols) * effective_advance
             radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-            center := rl.Vector2{atom_x + atom_w * 0.5, row_y + draw_ctx^.text_row_height * 0.58}
+            center := rl.Vector2{atom_x + atom_w * 0.5, row_y +
+                    draw_ctx^.text_row_height * 0.58}
             color := command_draw_color(cmd, style)
             rl.DrawCircleV(center, radius, color)
 
@@ -662,7 +680,8 @@ flow_consume_inline_filled_circle :: proc(
                 stroke := max(1.0, cmd.inline_outline_stroke)
                 rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
                 if stroke > 1 {
-                    rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
+                    rl.DrawCircleLines(i32(center.x), i32(center.y),
+                        max(1.0, radius - 1), style.color)
                 }
             }
         }
@@ -702,7 +721,8 @@ flow_consume_inline_pie_section :: proc(
             row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
 
             effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) * effective_advance
+            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+                f32(flow^.col) * effective_advance
             radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
             x_min, _, y_min, y_max := pie_section_bounds(
                 radius,
@@ -821,7 +841,8 @@ count_rows_for_run :: #force_inline proc(
     panel_width, text_padding, wrap_advance: f32,
     style: Dynview_Text_Style) -> int {
 
-    max_chars := dynview.chars_per_row_for_style(panel_width, text_padding, wrap_advance, style)
+    max_chars := dynview.chars_per_row_for_style(
+        panel_width, text_padding, wrap_advance, style)
     return dynview.count_wrapped_text_rows(text, max_chars)
 }
 

@@ -76,7 +76,8 @@ track_content :: proc(runtime: ^core.Dynview_System, text: string) {
     content_hash := hash_text(text)
     content_len := len(text)
     cache := &runtime^.compile_cache
-    if content_hash == cache^.last_content_hash && content_len == cache^.last_content_len {
+    if content_hash == cache^.last_content_hash &&
+        content_len == cache^.last_content_len {
         return
     }
 
@@ -92,7 +93,8 @@ track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
     }
 
     cache := &runtime^.compile_cache
-    if panel.width == cache^.last_panel_width && panel.height == cache^.last_panel_height {
+    if panel.width == cache^.last_panel_width &&
+        panel.height == cache^.last_panel_height {
         return
     }
 

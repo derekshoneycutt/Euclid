@@ -127,7 +127,8 @@ main :: proc() {
     }
 
     if len(options.scenario_name) > 0 &&
-        !bridge.invoke_harness_scenario(session.state, options.scenario_name, options.steps) {
+        !bridge.invoke_harness_scenario(
+            session.state, options.scenario_name, options.steps) {
         fmt.eprintln("Harness scenario failed: ", options.scenario_name)
         os.exit(1)
     }

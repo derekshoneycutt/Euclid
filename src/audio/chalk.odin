@@ -176,15 +176,18 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     }
     processed_count := 0
     for rl.IsAudioStreamProcessed(runtime^.stream) {
-        normalized_speed := math.clamp(runtime^.accum_speed / CHALK_SPEED_FOR_MAX, 0.0, 1.0)
+        normalized_speed := math.clamp(
+            runtime^.accum_speed / CHALK_SPEED_FOR_MAX, 0.0, 1.0)
         if !runtime^.has_contact_this_frame {
             normalized_speed = 0
         }
 
         volume := normalized_speed * CHALK_DRAW_GAIN
-        filter_alpha := CHALK_FILTER_ALPHA_BASE + (normalized_speed * CHALK_FILTER_ALPHA_RANGE)
+        filter_alpha := CHALK_FILTER_ALPHA_BASE +
+            (normalized_speed * CHALK_FILTER_ALPHA_RANGE)
         phase_step := (2.0 * math.PI *
-            (CHALK_RESONANCE_FREQ + runtime^.resonance_freq_offset)) / f32(CHALK_SAMPLE_RATE)
+            (CHALK_RESONANCE_FREQ + runtime^.resonance_freq_offset)) /
+            f32(CHALK_SAMPLE_RATE)
 
         for i := 0; i < CHALK_BUFFER_SIZE; i += 1 {
             // Advance the stick-slip grain envelope: hold a random level for a
@@ -195,9 +198,11 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
             if runtime^.grain_hold_remaining <= 0 {
                 runtime^.grain_target = rand.float32_range(CHALK_GRAIN_MIN_LEVEL, 1.0)
                 runtime^.grain_hold_remaining =
-                    rand.float32_range(CHALK_GRAIN_HOLD_MIN_SAMPLES, CHALK_GRAIN_HOLD_MAX_SAMPLES)
+                    rand.float32_range(CHALK_GRAIN_HOLD_MIN_SAMPLES,
+                        CHALK_GRAIN_HOLD_MAX_SAMPLES)
                 runtime^.resonance_freq_offset =
-                    rand.float32_range(-CHALK_RESONANCE_OFFSET_HZ, CHALK_RESONANCE_OFFSET_HZ)
+                    rand.float32_range(-CHALK_RESONANCE_OFFSET_HZ,
+                        CHALK_RESONANCE_OFFSET_HZ)
             }
             runtime^.grain_level +=
                 (runtime^.grain_target - runtime^.grain_level) * CHALK_GRAIN_SNAP_ALPHA
@@ -211,7 +216,8 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
             sine_tone := math.sin(runtime^.phase)
 
             modulated_resonance := sine_tone * math.abs(raw_noise) * runtime^.grain_level
-            runtime^.prev_out = runtime^.prev_out + filter_alpha * (raw_noise - runtime^.prev_out)
+            runtime^.prev_out =
+                runtime^.prev_out + filter_alpha * (raw_noise - runtime^.prev_out)
             hiss := runtime^.prev_out * runtime^.grain_level
 
             hit_component: f32 = 0
@@ -223,7 +229,8 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
             combined_signal :=
                 (modulated_resonance * CHALK_RESONANCE_MIX) +
                 (hiss * CHALK_NOISE_MIX)
-            runtime^.sample_buffer[i] = (combined_signal * volume) + (hit_component * CHALK_HIT_MIX)
+            runtime^.sample_buffer[i] =
+                (combined_signal * volume) + (hit_component * CHALK_HIT_MIX)
         }
 
         rl.UpdateAudioStream(runtime^.stream, &runtime^.sample_buffer, CHALK_BUFFER_SIZE)

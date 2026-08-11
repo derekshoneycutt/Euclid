@@ -4,7 +4,8 @@ function compile_emit_program(runs::Vector{LatexRun})
 end
 
 """Compile and cache one latex string for the given grammar/style key."""
-function resolve_cache_entry(source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
+function resolve_cache_entry(
+    source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
     key = (String(source), PARSER_GRAMMAR_VERSION, Int32(style_profile))
     existing = get(parse_cache, key, nothing)
     if existing !== nothing
@@ -31,7 +32,8 @@ function resolve_cache_entry(source::AbstractString; style_profile::Integer=DEFA
 end
 
 """Return compiled emit program for one latex input string."""
-function compiled_program_for(source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
+function compiled_program_for(
+    source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
     entry = resolve_cache_entry(source; style_profile=style_profile)
     return entry.program
 end
@@ -64,7 +66,8 @@ function plain_text_for_recursive_payload(op::MathPayloadOp)
     end
 
     if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
-        return stretch_delimiter_text(op.radical_index_text, plain_text_for_program(op.children), op.sup_text)
+        return stretch_delimiter_text(op.radical_index_text,
+            plain_text_for_program(op.children), op.sup_text)
     end
 
     if op.kind == MATH_OP_MATRIX_RECURSIVE
@@ -110,7 +113,8 @@ function plain_text_for_program(program::Vector{MathPayloadOp})
 end
 
 """Resolve latex input to plain Unicode/text fallback."""
-function latex_to_plain_text(source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
+function latex_to_plain_text(
+    source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
     entry = resolve_cache_entry(source; style_profile=style_profile)
     return plain_text_for_program(entry.program)
 end

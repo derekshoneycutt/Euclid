@@ -345,7 +345,8 @@ apply_scratchpad_completion_result :: proc(
         return
     }
     payload := julia.scratchpad_async_result_text(slot)
-    replace_start, replace_end, replacement, ok := scratchpad_parse_completion_payload(payload)
+    replace_start, replace_end, replacement, ok :=
+        scratchpad_parse_completion_payload(payload)
     if !ok || replace_start > ui_runtime^.scratchpad_input_len ||
         replace_end > ui_runtime^.scratchpad_input_len {
         return
@@ -397,7 +398,8 @@ draw_scratchpad_output_and_prompt :: proc(
     layout := scratchpad_terminal_layout(
         state, text_panel, ui_runtime, font, output_text_legacy,
         state^.ui_runtime.view_text_scroll_y)
-    scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
+    scroll_step :=
+        dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
 
     output_len := len(output_text)
     if output_len != ui_runtime^.scratchpad_last_output_len {

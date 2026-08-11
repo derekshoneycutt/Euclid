@@ -10,7 +10,8 @@ export get_view_text, initialize, clean, loop
 const StartRotation = π / 4f0
 const CircleRadius = 0.25f0
 const Anchor = [0.5f0, 0.5f0, 0f0]
-const StartRotationPos = Anchor + [ CircleRadius * cos(StartRotation), CircleRadius * sin(StartRotation), 0]
+const StartRotationPos = Anchor +
+    [ CircleRadius * cos(StartRotation), CircleRadius * sin(StartRotation), 0]
 const PenRotation = π / 4f0
 const Color1 = :steelblue
 const Color2 = :khaki3
@@ -35,7 +36,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 1, PenDrawColor1)
     OdinJuliaBridge.lock_pen_joint1(state_ptr, 0.9f0, 0.9f0, 0f0)
-    OdinJuliaBridge.move_pen_joint2(state_ptr, 0.9f0, 0.9f0 + cos(useRotation), sin(useRotation))
+    OdinJuliaBridge.move_pen_joint2(
+        state_ptr, 0.9f0, 0.9f0 + cos(useRotation), sin(useRotation))
 
     OdinJuliaBridge.show_compass(state_ptr)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, CompassDrawColor)
@@ -96,11 +98,15 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
         peny2 = peny2 - (dt * 0.4f0)
 
         OdinJuliaBridge.hide_point(state_ptr, Integer(line2Host))
-        OdinJuliaBridge.set_point_position(state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
-        OdinJuliaBridge.set_point_position(state_ptr, Integer(line2Point2), 0.9f0, 0.1f0, 0f0)
+        OdinJuliaBridge.set_point_position(
+            state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
+        OdinJuliaBridge.set_point_position(
+            state_ptr, Integer(line2Point2), 0.9f0, 0.1f0, 0f0)
         if drawLineFlag > 0
-            OdinJuliaBridge.set_point_position(state_ptr, Integer(line1Point1), 0.9f0, 0.9f0, 0f0)
-            OdinJuliaBridge.set_point_position(state_ptr, Integer(line1Point2), penx1, peny1, 0f0)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, Integer(line1Point1), 0.9f0, 0.9f0, 0f0)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, Integer(line1Point2), penx1, peny1, 0f0)
             OdinJuliaBridge.set_point_brush(state_ptr, Integer(line1Host), 5f0)
             OdinJuliaBridge.show_point(state_ptr, Integer(line1Host))
         end
@@ -124,11 +130,15 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
         peny2 = peny2 + (dt * 0.4f0)
 
         OdinJuliaBridge.hide_point(state_ptr, Integer(line1Host))
-        OdinJuliaBridge.set_point_position(state_ptr, Integer(line1Point1), 0.9f0, 0.1f0, 0f0)
-        OdinJuliaBridge.set_point_position(state_ptr, Integer(line1Point2), 0.9f0, 0.1f0, 0f0)
+        OdinJuliaBridge.set_point_position(
+            state_ptr, Integer(line1Point1), 0.9f0, 0.1f0, 0f0)
+        OdinJuliaBridge.set_point_position(
+            state_ptr, Integer(line1Point2), 0.9f0, 0.1f0, 0f0)
         if drawLineFlag > 0
-            OdinJuliaBridge.set_point_position(state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
-            OdinJuliaBridge.set_point_position(state_ptr, Integer(line2Point2), penx1, peny1, 0f0)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, Integer(line2Point1), 0.9f0, 0.1f0, 0f0)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, Integer(line2Point2), penx1, peny1, 0f0)
             OdinJuliaBridge.set_point_brush(state_ptr, Integer(line2Host), 5f0)
             OdinJuliaBridge.show_point(state_ptr, Integer(line2Host))
         end

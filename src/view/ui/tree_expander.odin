@@ -48,7 +48,8 @@ tree_expander_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.C
 }
 
 //   Scale around center for hover/press emphasis while preserving anchor behavior.
-tree_expander_scaled_rect :: #force_inline proc(rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
+tree_expander_scaled_rect :: #force_inline proc(
+    rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
     cx := rect.x + rect.width * 0.5
     cy := rect.y + rect.height * 0.5
     use_scale := max(0.4, scale)

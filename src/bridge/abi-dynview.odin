@@ -179,7 +179,8 @@ dynview_text_run_brush :: proc "c" (
         text_offset = offset,
         text_len = count,
         has_brush_color = true,
-        brush_color = rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
+        brush_color =
+            rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
     })
 }
 
@@ -309,7 +310,8 @@ dynview_math_block_from_ops :: proc "c" (
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    if plain_text == nil || text_blob == nil || op_count <= 0 || top_level_op_count <= 0 || ops == nil {
+    if plain_text == nil || text_blob == nil || op_count <= 0 ||
+        top_level_op_count <= 0 || ops == nil {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
@@ -318,24 +320,28 @@ dynview_math_block_from_ops :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
-    extra_programs, extra_commands := dynview_count_recursive_math_capacity(ops, int(op_count))
+    extra_programs, extra_commands :=
+        dynview_count_recursive_math_capacity(ops, int(op_count))
     if cache^.math_program_count + 1 + extra_programs > core.DYNVIEW__MAX_MATH_PROGRAMS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
-    if cache^.math_command_count + int(op_count) + extra_commands > core.DYNVIEW__MAX_MATH_COMMANDS {
+    if cache^.math_command_count + int(op_count) + extra_commands >
+        core.DYNVIEW__MAX_MATH_COMMANDS {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
     plain_offset := 0
     plain_count := 0
-    status = dynview_append_text_payload(runtime, string(plain_text), &plain_offset, &plain_count)
+    status = dynview_append_text_payload(
+        runtime, string(plain_text), &plain_offset, &plain_count)
     if status != BRIDGE_STATUS_OK {
         return status
     }
 
     blob_offset := 0
     blob_count := 0
-    status = dynview_append_text_payload(runtime, string(text_blob), &blob_offset, &blob_count)
+    status = dynview_append_text_payload(
+        runtime, string(text_blob), &blob_offset, &blob_count)
     if status != BRIDGE_STATUS_OK {
         return status
     }
@@ -605,7 +611,8 @@ dynview_inline_line_brush :: proc "c" (
         inline_atom_dimension = length,
         inline_atom_stroke = thickness,
         has_brush_color = true,
-        brush_color = rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
+        brush_color =
+            rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
     })
 }
 
@@ -657,7 +664,8 @@ dynview_inline_box_brush :: proc "c" (
         inline_atom_stroke = stroke,
         inline_box_height = height,
         has_brush_color = true,
-        brush_color = rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
+        brush_color =
+            rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
     })
 }
 
@@ -707,7 +715,8 @@ dynview_inline_circle_brush :: proc "c" (
         inline_atom_dimension = radius,
         inline_atom_stroke = stroke,
         has_brush_color = true,
-        brush_color = rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
+        brush_color =
+            rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
     })
 }
 
@@ -851,7 +860,8 @@ dynview_inline_perpendicular :: proc "c" (
         inline_box_height = stem_height,
         inline_atom_stroke = stroke,
         brush_color = rl.Color{top_color.r, top_color.g, top_color.b, top_color.a},
-        shape_edge_color_1 = rl.Color{stem_color.r, stem_color.g, stem_color.b, stem_color.a},
+        shape_edge_color_1 =
+            rl.Color{stem_color.r, stem_color.g, stem_color.b, stem_color.a},
     })
 }
 
@@ -894,9 +904,12 @@ dynview_inline_triangle :: proc "c" (
         shape_is_filled = filled,
         has_brush_color = filled,
         brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
-        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
-        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
-        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+        shape_edge_color_1 =
+            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 =
+            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 =
+            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
     })
 }
 
@@ -935,10 +948,14 @@ dynview_inline_box_edges :: proc "c" (
         inline_atom_dimension = width,
         inline_atom_stroke = stroke,
         inline_box_height = height,
-        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
-        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
-        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
-        shape_edge_color_4 = rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+        shape_edge_color_1 =
+            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 =
+            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 =
+            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+        shape_edge_color_4 =
+            rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
     })
 }
 
@@ -949,7 +966,9 @@ dynview_inline_pentagon :: proc "c" (
     width, height, stroke: f32,
     style_id: i32,
     filled: bool,
-    fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color: Bridge_Color) -> i32 {
+    fill_color,
+        edge1_color, edge2_color, edge3_color,
+        edge4_color, edge5_color: Bridge_Color) -> i32 {
 
     context = state^.saved_context
     runtime: ^core.Dynview_System
@@ -981,11 +1000,16 @@ dynview_inline_pentagon :: proc "c" (
         shape_is_filled = filled,
         has_brush_color = filled,
         brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
-        shape_edge_color_1 = rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
-        shape_edge_color_2 = rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
-        shape_edge_color_3 = rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
-        shape_edge_color_4 = rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
-        shape_edge_color_5 = rl.Color{edge5_color.r, edge5_color.g, edge5_color.b, edge5_color.a},
+        shape_edge_color_1 =
+            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+        shape_edge_color_2 =
+            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+        shape_edge_color_3 =
+            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+        shape_edge_color_4 =
+            rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+        shape_edge_color_5 =
+            rl.Color{edge5_color.r, edge5_color.g, edge5_color.b, edge5_color.a},
     })
 }
 

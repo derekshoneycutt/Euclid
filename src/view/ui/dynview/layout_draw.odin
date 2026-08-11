@@ -29,7 +29,8 @@ line_visual_padding :: #force_inline proc(
         bottom_pad = max(bottom_pad, item.visual_padding_bottom)
 
         script_font_size := max(1.0, font_size * max(0.2, item.script_scale))
-        script_top_pad, script_bottom_pad := dynview.script_visual_padding(script_font_size)
+        script_top_pad, script_bottom_pad :=
+            dynview.script_visual_padding(script_font_size)
         top_pad = max(top_pad, script_top_pad)
         bottom_pad = max(bottom_pad, script_bottom_pad)
     }
@@ -48,7 +49,8 @@ draw_math_block_item :: proc(
     item_x, item_y: f32) {
 
     program_id := int(item.math_program_id)
-    if runtime == nil || program_id < 0 || program_id >= runtime^.compile_cache.math_program_count {
+    if runtime == nil || program_id < 0 ||
+        program_id >= runtime^.compile_cache.math_program_count {
         return
     }
 
@@ -58,7 +60,8 @@ draw_math_block_item :: proc(
     }
 
     baseline_y := item_y + item.ascent
-    draw_math_program_at(state, runtime, panel, font, font_size, program, item_x, baseline_y)
+    draw_math_program_at(state, runtime, panel, font, font_size,
+        program, item_x, baseline_y)
 }
 
 //   Draw one recursive accent wrapper by drawing the child math program first, then the line.
@@ -72,13 +75,15 @@ draw_recursive_accent_item :: proc(
     item: core.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    child_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    child_program, ok := dynview.math_program_from_id(
+        &runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
     }
 
     baseline_y := item_y + item.ascent
-    draw_math_program_at(state, runtime, panel, font, font_size, child_program^, draw_x, baseline_y)
+    draw_math_program_at(state, runtime, panel, font, font_size,
+        child_program^, draw_x, baseline_y)
 
     accent_style := dynview.style_by_id(item.accent_style_id)
     bar_thickness := max(1.0, item.accent_thickness * font_size)
@@ -105,7 +110,8 @@ draw_recursive_radical_item :: proc(
     item: core.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    child_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    child_program, ok := dynview.math_program_from_id(
+        &runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
     }
@@ -114,12 +120,14 @@ draw_recursive_radical_item :: proc(
     style := dynview.style_by_id(item.style_id)
     script_style := dynview.style_by_id(item.script_style_id)
     script_font := resolve_font_for_style(state, script_style, font)
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    base_advance :=
+        dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     lead_width := dynview.radical_lead_width(font_size, base_advance)
     front_padding, back_padding := dynview.radical_side_paddings(font_size, base_advance)
     content_x := draw_x + front_padding + lead_width
 
-    draw_math_program_at(state, runtime, panel, font, font_size, child_program^, content_x, baseline_y)
+    draw_math_program_at(state, runtime, panel, font, font_size, child_program^,
+        content_x, baseline_y)
 
     index_text := dynview.text_span_from_buffer(
         &runtime^.command_buffer,
@@ -150,23 +158,32 @@ draw_recursive_radical_item :: proc(
     root_high_y := bar_y - font_size * 0.06 + bar_thickness * 0.5
     hook_stroke := max(bar_thickness, bar_thickness * 1.25)
 
-    rl.DrawLineEx(rl.Vector2{hook_flag_x, hook_start_y}, rl.Vector2{hook_start_x, hook_start_y}, hook_stroke, radical_style.color)
-    rl.DrawLineEx(rl.Vector2{hook_start_x, hook_start_y}, rl.Vector2{root_low_x, root_low_y}, hook_stroke, radical_style.color)
-    rl.DrawLineEx(rl.Vector2{root_low_x, root_low_y}, rl.Vector2{root_rise_x, root_rise_y}, hook_stroke, radical_style.color)
-    rl.DrawLineEx(rl.Vector2{root_rise_x, root_rise_y}, rl.Vector2{root_high_x, root_high_y}, hook_stroke, radical_style.color)
-    rl.DrawLineEx(rl.Vector2{root_high_x, root_high_y}, rl.Vector2{bar_start_x, bar_y}, hook_stroke, radical_style.color)
+    rl.DrawLineEx(rl.Vector2{hook_flag_x, hook_start_y},
+        rl.Vector2{hook_start_x, hook_start_y}, hook_stroke, radical_style.color)
+    rl.DrawLineEx(rl.Vector2{hook_start_x, hook_start_y},
+        rl.Vector2{root_low_x, root_low_y}, hook_stroke, radical_style.color)
+    rl.DrawLineEx(rl.Vector2{root_low_x, root_low_y},
+        rl.Vector2{root_rise_x, root_rise_y}, hook_stroke, radical_style.color)
+    rl.DrawLineEx(rl.Vector2{root_rise_x, root_rise_y},
+        rl.Vector2{root_high_x, root_high_y}, hook_stroke, radical_style.color)
+    rl.DrawLineEx(rl.Vector2{root_high_x, root_high_y},
+        rl.Vector2{bar_start_x, bar_y}, hook_stroke, radical_style.color)
 
     if len(index_text) > 0 {
         index_scale := max(0.75, item.script_scale)
         index_font_size := max(3.0, font_size * index_scale)
         index_ascent, _ := dynview.style_ascent_descent(script_style, index_font_size)
-        index_cols := max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
-        index_advance := dynview.effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * index_scale
+        index_cols :=
+            max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
+        index_advance := dynview.effective_advance(script_style,
+            runtime^.compile_cache.last_wrap_advance) * index_scale
         index_width := f32(index_cols) * index_advance
         index_right_limit := draw_x + front_padding + lead_width * 0.36
         index_x := index_right_limit - index_width
-        index_y := baseline_y - child_program^.ascent * 0.62 - index_ascent * 0.50 - font_size * 0.25
-        view_core.ui_text_f32(index_text, index_x, index_y, script_style.color, script_font, index_font_size)
+        index_y := baseline_y - child_program^.ascent * 0.62 - index_ascent * 0.50 -
+            font_size * 0.25
+        view_core.ui_text_f32(index_text, index_x, index_y, script_style.color,
+            script_font, index_font_size)
     }
 }
 
@@ -224,7 +241,8 @@ draw_script_children :: #force_inline proc(
         item.script_sup_raise,
         item.script_sub_drop)
     base_ascent, base_descent := dynview.style_ascent_descent(style, font_size)
-    script_ascent, script_descent := dynview.style_ascent_descent(script_style, script_font_size)
+    script_ascent, script_descent :=
+        dynview.style_ascent_descent(script_style, script_font_size)
     script_top_pad, script_bottom_pad := dynview.script_visual_padding(script_font_size)
 
     sup_text := dynview.text_span_from_buffer(
@@ -237,23 +255,29 @@ draw_script_children :: #force_inline proc(
         item.script_sub_text_len)
 
     base_cols := max(1, dynview.text_codepoint_count_span(base_text, 0, len(base_text)))
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
-    script_x := draw_x + f32(base_cols) * base_advance + max(1.0, item.script_gap * font_size)
+    base_advance := dynview.effective_advance(
+        style, runtime^.compile_cache.last_wrap_advance)
+    script_x := draw_x + f32(base_cols) * base_advance +
+        max(1.0, item.script_gap * font_size)
 
     content_ascent := base_ascent
     content_descent := base_descent
 
     if len(sup_text) > 0 {
         sup_top := baseline_y - sup_raise_px - script_ascent
-        view_core.ui_text_f32(sup_text, script_x, sup_top, script_color, script_font, script_font_size)
-        content_ascent = max(content_ascent, script_ascent + sup_raise_px + script_top_pad)
+        view_core.ui_text_f32(sup_text, script_x, sup_top,
+            script_color, script_font, script_font_size)
+        content_ascent = max(content_ascent,
+            script_ascent + sup_raise_px + script_top_pad)
     }
 
     if len(sub_text) > 0 {
         // Keep padding for layout/culling only; avoid shifting glyphs upward.
         sub_top := baseline_y + sub_drop_px - script_ascent
-        view_core.ui_text_f32(sub_text, script_x, sub_top, script_color, script_font, script_font_size)
-        content_descent = max(content_descent, script_descent + sub_drop_px + script_bottom_pad)
+        view_core.ui_text_f32(sub_text, script_x, sub_top, script_color,
+            script_font, script_font_size)
+        content_descent = max(content_descent,
+            script_descent + sub_drop_px + script_bottom_pad)
     }
 
     return content_ascent, content_descent
@@ -300,13 +324,15 @@ draw_recursive_script_attach_item :: #force_inline proc(
     item: core.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    child_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    child_program, ok :=
+        dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
     }
 
     baseline_y := item_y + item.ascent
-    draw_math_program_at(state, runtime, panel, font, font_size, child_program^, draw_x, baseline_y)
+    draw_math_program_at(state, runtime, panel, font, font_size, child_program^,
+        draw_x, baseline_y)
 
     script_style := dynview.style_by_id(item.script_style_id)
     script_font := resolve_font_for_style(state, script_style, font)
@@ -330,12 +356,14 @@ draw_recursive_script_attach_item :: #force_inline proc(
     script_x := draw_x + child_program^.draw_width + max(1.0, item.script_gap * font_size)
     if len(sup_text) > 0 {
         sup_top := baseline_y - sup_raise_px - script_ascent
-        view_core.ui_text_f32(sup_text, script_x, sup_top, script_style.color, script_font, script_font_size)
+        view_core.ui_text_f32(sup_text, script_x, sup_top,
+            script_style.color, script_font, script_font_size)
     }
 
     if len(sub_text) > 0 {
         sub_top := baseline_y + sub_drop_px - script_ascent
-        view_core.ui_text_f32(sub_text, script_x, sub_top, script_style.color, script_font, script_font_size)
+        view_core.ui_text_f32(sub_text, script_x, sub_top, script_style.color,
+            script_font, script_font_size)
     }
 }
 
@@ -350,11 +378,13 @@ draw_recursive_fraction_item :: #force_inline proc(
     style: Dynview_Text_Style,
     draw_x, item_y: f32) {
 
-    numerator_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    numerator_program, ok :=
+        dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
     }
-    denominator_program, ok_den := dynview.math_program_from_id(&runtime^.compile_cache, item.secondary_math_program_id)
+    denominator_program, ok_den := dynview.math_program_from_id(&runtime^.compile_cache,
+        item.secondary_math_program_id)
     if !ok_den {
         return
     }
@@ -366,12 +396,17 @@ draw_recursive_fraction_item :: #force_inline proc(
 
     numerator_x := draw_x + (item.draw_width - numerator_program^.draw_width) * 0.5
     denominator_x := draw_x + (item.draw_width - denominator_program^.draw_width) * 0.5
-    numerator_baseline_y := baseline_y - divider_half - divider_gap - numerator_program^.descent
-    denominator_baseline_y := baseline_y + divider_half + divider_gap + denominator_program^.ascent
-    draw_math_program_at(state, runtime, panel, font, font_size, numerator_program^, numerator_x, numerator_baseline_y)
-    draw_math_program_at(state, runtime, panel, font, font_size, denominator_program^, denominator_x, denominator_baseline_y)
+    numerator_baseline_y :=
+        baseline_y - divider_half - divider_gap - numerator_program^.descent
+    denominator_baseline_y :=
+        baseline_y + divider_half + divider_gap + denominator_program^.ascent
+    draw_math_program_at(state, runtime, panel, font, font_size, numerator_program^,
+        numerator_x, numerator_baseline_y)
+    draw_math_program_at(state, runtime, panel, font, font_size, denominator_program^,
+        denominator_x, denominator_baseline_y)
 
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    base_advance :=
+        dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     side_padding := dynview.fraction_side_padding(font_size, base_advance)
     divider_start_x := draw_x + side_padding
     divider_end_x := draw_x + item.draw_width - side_padding
@@ -407,8 +442,10 @@ draw_normalized_cubic_segment :: #force_inline proc(
     for i in 1..=segment_count {
         t := f32(i) / f32(segment_count)
         u := 1.0 - t
-        x_norm := u * u * u * p0.x + 3.0 * u * u * t * p1.x + 3.0 * u * t * t * p2.x + t * t * t * p3.x
-        y_norm := u * u * u * p0.y + 3.0 * u * u * t * p1.y + 3.0 * u * t * t * p2.y + t * t * t * p3.y
+        x_norm := u * u * u * p0.x + 3.0 * u * u * t * p1.x +
+            3.0 * u * t * t * p2.x + t * t * t * p3.x
+        y_norm := u * u * u * p0.y + 3.0 * u * u * t * p1.y +
+            3.0 * u * t * t * p2.y + t * t * t * p3.y
         if right_side {
             x_norm = 1.0 - x_norm
         }
@@ -433,7 +470,8 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     }
 
     family := dynview.delimiter_family(delimiter_kind)
-    width := dynview.stretch_delimiter_width(style, wrap_advance, font_size, content_height, delimiter_kind)
+    width := dynview.stretch_delimiter_width(
+        style, wrap_advance, font_size, content_height, delimiter_kind)
     if family == .None || width <= 0 {
         return 0
     }
@@ -448,14 +486,17 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     switch family {
     case .Vert:
         x := draw_x + width * 0.5
-        rl.DrawLineEx(rl.Vector2{x, top_y}, rl.Vector2{x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{x, top_y},
+            rl.Vector2{x, bottom_y}, thickness, style.color)
         return width
     case .DoubleVert:
         lane_gap := max(1.0, width * 0.26)
         x1 := draw_x + width * 0.5 - lane_gap
         x2 := draw_x + width * 0.5 + lane_gap
-        rl.DrawLineEx(rl.Vector2{x1, top_y}, rl.Vector2{x1, bottom_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{x2, top_y}, rl.Vector2{x2, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{x1, top_y},
+            rl.Vector2{x1, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{x2, top_y},
+            rl.Vector2{x2, bottom_y}, thickness, style.color)
         return width
     case .Bracket:
         stem_x := draw_x + width * 0.28
@@ -464,9 +505,12 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
             stem_x = draw_x + width * 0.72
             hook_x = draw_x + width * 0.12
         }
-        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{hook_x, top_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y}, rl.Vector2{hook_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y},
+            rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y},
+            rl.Vector2{hook_x, top_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y},
+            rl.Vector2{hook_x, bottom_y}, thickness, style.color)
         return width
     case .Ceil:
         stem_x := draw_x + width * 0.28
@@ -475,8 +519,10 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
             stem_x = draw_x + width * 0.72
             hook_x = draw_x + width * 0.12
         }
-        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{hook_x, top_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y},
+            rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y},
+            rl.Vector2{hook_x, top_y}, thickness, style.color)
         return width
     case .Floor:
         stem_x := draw_x + width * 0.28
@@ -485,8 +531,10 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
             stem_x = draw_x + width * 0.72
             hook_x = draw_x + width * 0.12
         }
-        rl.DrawLineEx(rl.Vector2{stem_x, top_y}, rl.Vector2{stem_x, bottom_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y}, rl.Vector2{hook_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, top_y},
+            rl.Vector2{stem_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{stem_x, bottom_y},
+            rl.Vector2{hook_x, bottom_y}, thickness, style.color)
         return width
     case .Angle:
         apex_x := draw_x + width * 0.14
@@ -495,8 +543,10 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
             apex_x = draw_x + width * 0.86
             rail_x = draw_x + width * 0.14
         }
-        rl.DrawLineEx(rl.Vector2{rail_x, top_y}, rl.Vector2{apex_x, center_y}, thickness, style.color)
-        rl.DrawLineEx(rl.Vector2{apex_x, center_y}, rl.Vector2{rail_x, bottom_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{rail_x, top_y},
+            rl.Vector2{apex_x, center_y}, thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{apex_x, center_y},
+            rl.Vector2{rail_x, bottom_y}, thickness, style.color)
         return width
     case .Paren:
         segment_count := 12
@@ -633,7 +683,8 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     delimiter_font_size := max(1.0, font_size * stretch_scale)
     delim_ascent, _ := dynview.style_ascent_descent(style, delimiter_font_size)
     resolved_font := resolve_font_for_style(state, style, fallback_font)
-    view_core.ui_text_f32(delimiter, draw_x, baseline_y - delim_ascent, style.color, resolved_font, delimiter_font_size)
+    view_core.ui_text_f32(delimiter, draw_x, baseline_y - delim_ascent,
+        style.color, resolved_font, delimiter_font_size)
     return width
 }
 
@@ -649,7 +700,8 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
     draw_x, item_y: f32) {
 
     baseline_y := item_y + item.ascent
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    base_advance :=
+        dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     side_padding := dynview.stretch_delimiter_side_padding(font_size, base_advance)
     content_height := item.ascent + item.descent
 
@@ -670,10 +722,12 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
     content_x := left_draw_x + left_width
     content_width: f32 = 0
     if item.math_program_id > 0 {
-        child_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+        child_program, ok :=
+            dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
         if ok {
             content_width = child_program^.draw_width
-            draw_math_program_at(state, runtime, panel, font, font_size, child_program^, content_x, baseline_y)
+            draw_math_program_at(state, runtime, panel, font, font_size,
+                child_program^, content_x, baseline_y)
         }
     }
 
@@ -709,7 +763,8 @@ draw_recursive_matrix_item :: #force_inline proc(
         return
     }
 
-    cell_program, ok := dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
+    cell_program, ok :=
+        dynview.math_program_from_id(&runtime^.compile_cache, item.math_program_id)
     if !ok || cell_program^.command_count < rows * cols {
         return
     }
@@ -747,7 +802,8 @@ draw_recursive_matrix_item :: #force_inline proc(
         },
         cols)
 
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    base_advance :=
+        dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     column_gap := dynview.matrix_column_gap(font_size, base_advance)
     row_gap := dynview.matrix_row_gap(font_size)
 
@@ -875,7 +931,8 @@ draw_recursive_structured_item :: #force_inline proc(
             draw_x,
             item_y)
     case .RadicalBarRecursive:
-        draw_recursive_radical_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
+        draw_recursive_radical_item(state, runtime, panel, font, font_size,
+            item, draw_x, item_y)
     case .TextRun, .MathGlyphRun, .MathBlock,
         .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
         .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
@@ -896,15 +953,18 @@ draw_large_op_recursive_item :: #force_inline proc(
     glyph_font_size := max(1.0, font_size * glyph_scale)
     glyph_ascent, glyph_descent := dynview.style_ascent_descent(style, glyph_font_size)
     glyph_cols := max(1, dynview.text_codepoint_count_span(text, 0, len(text)))
-    glyph_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance) * glyph_scale
+    glyph_advance := dynview.effective_advance(style,
+        runtime^.compile_cache.last_wrap_advance) * glyph_scale
     glyph_width := f32(glyph_cols) * glyph_advance
 
     script_style := dynview.style_by_id(item.script_style_id)
     script_font := resolve_font_for_style(state, script_style, resolved_font)
     limit_scale := dynview.large_op_limit_scale(max(0.2, item.script_scale))
     limit_font_size := max(1.0, font_size * limit_scale)
-    limit_ascent, limit_descent := dynview.style_ascent_descent(script_style, limit_font_size)
-    limit_advance := dynview.effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * limit_scale
+    limit_ascent, limit_descent :=
+    dynview.style_ascent_descent(script_style, limit_font_size)
+    limit_advance := dynview.effective_advance(script_style,
+        runtime^.compile_cache.last_wrap_advance) * limit_scale
 
     sup_text := dynview.text_span_from_buffer(
         &runtime^.command_buffer,
@@ -926,26 +986,30 @@ draw_large_op_recursive_item :: #force_inline proc(
         lower_height = limit_ascent + limit_descent
     }
 
-    limit_gap := dynview.large_op_limit_gap_for_kind(item.large_op_kind, font_size, item.script_gap)
+    limit_gap := dynview.large_op_limit_gap_for_kind(
+        item.large_op_kind, font_size, item.script_gap)
     glyph_top := item_y
     if sup_cols > 0 {
         glyph_top += upper_height + limit_gap
     }
     glyph_x := draw_x + (item.draw_width - glyph_width) * 0.5
-    view_core.ui_text_f32(text, glyph_x, glyph_top, style.color, resolved_font, glyph_font_size)
+    view_core.ui_text_f32(text, glyph_x, glyph_top, style.color,
+        resolved_font, glyph_font_size)
 
     if sup_cols > 0 {
         sup_width := f32(sup_cols) * limit_advance
         sup_x := draw_x + (item.draw_width - sup_width) * 0.5
         sup_top := glyph_top - limit_gap - upper_height
-        view_core.ui_text_f32(sup_text, sup_x, sup_top, script_style.color, script_font, limit_font_size)
+        view_core.ui_text_f32(sup_text, sup_x, sup_top, script_style.color,
+            script_font, limit_font_size)
     }
 
     if sub_cols > 0 {
         sub_width := f32(sub_cols) * limit_advance
         sub_x := draw_x + (item.draw_width - sub_width) * 0.5
         sub_top := glyph_top + glyph_ascent + glyph_descent + limit_gap
-        view_core.ui_text_f32(sub_text, sub_x, sub_top, script_style.color, script_font, limit_font_size)
+        view_core.ui_text_f32(sub_text, sub_x, sub_top, script_style.color,
+            script_font, limit_font_size)
     }
 }
 
@@ -1012,12 +1076,14 @@ draw_radical_bar_item :: #force_inline proc(
 
     baseline_y := item_y + item.ascent
     base_ascent, _ := dynview.style_ascent_descent(style, font_size)
-    base_advance := dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
+    base_advance :=
+        dynview.effective_advance(style, runtime^.compile_cache.last_wrap_advance)
     lead_width := dynview.radical_lead_width(font_size, base_advance)
     front_padding, back_padding := dynview.radical_side_paddings(font_size, base_advance)
     content_x := draw_x + front_padding + lead_width
     base_top := baseline_y - base_ascent
-    view_core.ui_text_f32(text, content_x, base_top, style.color, resolved_font, font_size)
+    view_core.ui_text_f32(text, content_x, base_top, style.color,
+        resolved_font, font_size)
 
     content_ascent, content_descent := draw_script_children(
         runtime,
@@ -1091,13 +1157,17 @@ draw_radical_bar_item :: #force_inline proc(
         index_scale := max(0.75, item.script_scale)
         index_font_size := max(3.0, font_size * index_scale)
         index_ascent, _ := dynview.style_ascent_descent(script_style, index_font_size)
-        index_cols := max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
-        index_advance := dynview.effective_advance(script_style, runtime^.compile_cache.last_wrap_advance) * index_scale
+        index_cols :=
+            max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
+        index_advance := dynview.effective_advance(script_style,
+            runtime^.compile_cache.last_wrap_advance) * index_scale
         index_width := f32(index_cols) * index_advance
         index_right_limit := draw_x + front_padding + lead_width * 0.36
         index_x := index_right_limit - index_width
-        index_y := baseline_y - content_ascent * 0.62 - index_ascent * 0.50 - font_size * 0.25
-        view_core.ui_text_f32(index_text, index_x, index_y, script_style.color, script_font, index_font_size)
+        index_y := baseline_y - content_ascent * 0.62 -
+            index_ascent * 0.50 - font_size * 0.25
+        view_core.ui_text_f32(index_text, index_x, index_y,
+            script_style.color, script_font, index_font_size)
     }
 }
 
@@ -1133,7 +1203,8 @@ draw_cached_text_item :: proc(
     case .MathBlock:
         draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
     case .TextRun, .MathGlyphRun:
-        view_core.ui_text(text, int(draw_x), int(item_y), text_color, resolved_font, font_size)
+        view_core.ui_text(text, int(draw_x), int(item_y), text_color,
+            resolved_font, font_size)
         if style.underline {
             underline_width := f32(item.col_span) * dynview.effective_advance(
                 style, runtime^.compile_cache.last_wrap_advance)
@@ -1179,7 +1250,8 @@ draw_cached_inline_basic_item :: #force_inline proc(
         rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
         rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
     case .InlineCircle:
-        center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
+        center := rl.Vector2{item_x + item.draw_width * 0.5,
+            item_y + item.draw_height * 0.5}
         rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
         if item.inline_atom_stroke > 1 {
             rl.DrawCircleLines(
@@ -1207,17 +1279,20 @@ draw_cached_inline_filled_item :: #force_inline proc(
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         rl.DrawRectangleRec(rect, color)
         if item.inline_outline_stroke > 0 {
-            rl.DrawRectangleLinesEx(rect, max(1.0, item.inline_outline_stroke), style.color)
+            rl.DrawRectangleLinesEx(
+                rect, max(1.0, item.inline_outline_stroke), style.color)
         }
     case .InlineFilledCircle:
-        center := rl.Vector2{item_x + item.draw_width * 0.5, item_y + item.draw_height * 0.5}
+        center := rl.Vector2{item_x + item.draw_width * 0.5,
+            item_y + item.draw_height * 0.5}
         radius := item.draw_height * 0.5
         rl.DrawCircleV(center, radius, color)
         if item.inline_outline_stroke > 0 {
             stroke := max(1.0, item.inline_outline_stroke)
             rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
             if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y), max(1.0, radius - 1), style.color)
+                rl.DrawCircleLines(i32(center.x), i32(center.y),
+                    max(1.0, radius - 1), style.color)
             }
         }
     case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
@@ -1237,7 +1312,8 @@ draw_cached_inline_advanced_item :: #force_inline proc(
 
     switch item.kind {
     case .InlinePieSection:
-        center := rl.Vector2{item_x + item.pie_center_offset_x, item_y + item.pie_center_offset_y}
+        center := rl.Vector2{item_x + item.pie_center_offset_x,
+            item_y + item.pie_center_offset_y}
         radius := max(
             max(item.pie_center_offset_x, item.draw_width - item.pie_center_offset_x),
             max(item.pie_center_offset_y, item.draw_height - item.pie_center_offset_y))
@@ -1339,7 +1415,8 @@ draw_cached_line :: proc(
             item.kind == .StretchDelimiterRecursive ||
             item.kind == .MatrixRecursive ||
             item.kind == .LargeOpRecursive {
-            draw_cached_text_item(state, runtime, panel, font, font_size, style, item, item_x, item_y)
+            draw_cached_text_item(state, runtime, panel, font, font_size, style,
+                item, item_x, item_y)
             continue
         }
 
@@ -1379,7 +1456,8 @@ draw_cached_layout :: proc(
             continue
         }
 
-        draw_cached_line(state, runtime, panel, line, line_top, text_padding, font_size, font)
+        draw_cached_line(state, runtime, panel, line, line_top,
+            text_padding, font_size, font)
     }
 }
 

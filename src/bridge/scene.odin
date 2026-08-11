@@ -60,7 +60,8 @@ push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.
 //
 // Notes:
 //   - No-op unless both compass joints are valid and near floor height.
-push_dust_for_compass_segment_if_floor_contact :: proc(state: ^core.Euclid_General_State) {
+push_dust_for_compass_segment_if_floor_contact :: proc(
+    state: ^core.Euclid_General_State) {
     pointIndex1 := state^.compass.joint1_id
     pointIndex2 := state^.compass.joint2_id
     if pointIndex1 < 0 || pointIndex1 >= MAX_SHAPESPOINTS ||
@@ -192,7 +193,8 @@ push_dust_if_floor_crossing :: proc(
     }
 
     if previous_sign != 0 && current_sign == 0 {
-        particles.push_dust_away_from_xy(state^.particle_system, current_pos.x, current_pos.y)
+        particles.push_dust_away_from_xy(
+            state^.particle_system, current_pos.x, current_pos.y)
         return true
     }
 
@@ -274,7 +276,8 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
 
     compass_active_child := -1
     if state^.compass.host_id >= 0 && state^.compass.host_id < MAX_SHAPESPOINTS {
-        compass_active_child = state^.point_system^.points[state^.compass.host_id].active_child
+        compass_active_child =
+            state^.point_system^.points[state^.compass.host_id].active_child
     }
 
     if index == state^.pen.joint1_id {
