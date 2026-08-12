@@ -10,6 +10,7 @@
 # ParserFileError. The public entry points each return a Dict{String,Any} of
 # metrics; the driver's section runners wrap those into VetSectionResult.
 
+using Pkg
 using JET
 using CodeComplexity
 using JuliaSyntax
@@ -732,61 +733,72 @@ function run_jet_analysis(src_dir::String, script_dir::String)
         error("JET target file not found: $(julia_files[1])")
     end
 
+    previous_project = Base.active_project()
+    Pkg.activate(julia_root; io=devnull)
+
     failed = false
     report_count = 0
     actionable_count = 0
     whitelisted_count_total = 0
     max_reports_per_file = 8
 
-    for path::String in julia_files
-        println("JET analyzing " * relpath(path, julia_root))
-        result = JET.report_file(path)
-        reports = JET.get_reports(result)
+    try
+        for path::String in julia_files
+            println("JET analyzing " * relpath(path, julia_root))
+            result = JET.report_file(path)
+            reports = JET.get_reports(result)
 
-        actionable = Tuple{String,String,String}[]
-        whitelisted_count = 0
-        for report in reports
-            report_type = string(nameof(typeof(report)))
-            location = jet_report_location(report, script_dir)
-            message = jet_report_message(report)
-            if is_whitelisted_jet_report(report_type, message)
-                whitelisted_count += 1
-            else
-                push!(actionable, (report_type, location, message))
+            actionable = Tuple{String,String,String}[]
+            whitelisted_count = 0
+            for report in reports
+                report_type = string(nameof(typeof(report)))
+                location = jet_report_location(report, script_dir)
+                message = jet_report_message(report)
+                if is_whitelisted_jet_report(report_type, message)
+                    whitelisted_count += 1
+                else
+                    push!(actionable, (report_type, location, message))
+                end
+            end
+
+            report_count += length(reports)
+            actionable_count += length(actionable)
+            whitelisted_count_total += whitelisted_count
+
+            if !isempty(reports)
+                display_path = relpath(path, script_dir)
+                println("JET findings in $display_path: $(length(reports))")
+
+                if whitelisted_count > 0
+                    println("  - whitelisted: $whitelisted_count")
+                end
+
+                if isempty(actionable)
+                    println("  - actionable: 0")
+                    continue
+                end
+
+                failed = true
+                println("  - actionable: $(length(actionable))")
+
+                show_count = min(length(actionable), max_reports_per_file)
+                for index in 1:show_count
+                    report_entry = actionable[index]
+                    report_type, location, message = report_entry
+                    println("  - [$report_type] $location | $message")
+                end
+
+                if length(actionable) > max_reports_per_file
+                    remaining = length(actionable) - max_reports_per_file
+                    println("  - ... and $remaining more report(s)")
+                end
             end
         end
-
-        report_count += length(reports)
-        actionable_count += length(actionable)
-        whitelisted_count_total += whitelisted_count
-
-        if !isempty(reports)
-            display_path = relpath(path, script_dir)
-            println("JET findings in $display_path: $(length(reports))")
-
-            if whitelisted_count > 0
-                println("  - whitelisted: $whitelisted_count")
-            end
-
-            if isempty(actionable)
-                println("  - actionable: 0")
-                continue
-            end
-
-            failed = true
-            println("  - actionable: $(length(actionable))")
-
-            show_count = min(length(actionable), max_reports_per_file)
-            for index in 1:show_count
-                report_entry = actionable[index]
-                report_type, location, message = report_entry
-                println("  - [$report_type] $location | $message")
-            end
-
-            if length(actionable) > max_reports_per_file
-                remaining = length(actionable) - max_reports_per_file
-                println("  - ... and $remaining more report(s)")
-            end
+    finally
+        if isnothing(previous_project)
+            Pkg.activate(; temp=true, io=devnull)
+        else
+            Pkg.activate(dirname(previous_project); io=devnull)
         end
     end
 
