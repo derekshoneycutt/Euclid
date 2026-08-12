@@ -656,20 +656,37 @@ function build_julia_complexity_rows(
     return rows, metrics
 end
 
-"""Run JET static analysis over Julia source files in src/julia."""
+"""Return one report location using either direct file/line fields or the
+virtual stack trace frames carried by older JET report types."""
 function jet_report_location(report, script_dir::String)::String
     project_root = normpath(script_dir)
 
-    for frame in report.vst
-        frame_file = String(frame.file)
+    if hasproperty(report, :file) && hasproperty(report, :line)
+        frame_file = String(getproperty(report, :file))
+        frame_line = getproperty(report, :line)
         normalized = normpath(frame_file)
 
         if startswith(normalized, project_root)
-            return relpath(normalized, script_dir) * ":" * string(frame.line)
+            return relpath(normalized, script_dir) * ":" * string(frame_line)
         end
 
         if startswith(frame_file, "src/")
-            return frame_file * ":" * string(frame.line)
+            return frame_file * ":" * string(frame_line)
+        end
+    end
+
+    if hasproperty(report, :vst)
+        for frame in getproperty(report, :vst)
+            frame_file = String(frame.file)
+            normalized = normpath(frame_file)
+
+            if startswith(normalized, project_root)
+                return relpath(normalized, script_dir) * ":" * string(frame.line)
+            end
+
+            if startswith(frame_file, "src/")
+                return frame_file * ":" * string(frame.line)
+            end
         end
     end
 
