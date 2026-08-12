@@ -125,7 +125,8 @@ function extract_wrapper_ccalls(
     for macro_call in macro_calls
         macro_source = strip(julia_syntax_text(macro_call))
         startswith(macro_source, "@ccall ") || continue
-        abi_name, parameter_types, return_type = parse_julia_ccall_expression(macro_source)
+        abi_name, parameter_types, return_type =
+            parse_julia_ccall_expression(macro_source)
         push!(calls, BridgeJuliaCall(
             abi_name=abi_name, wrapper_name=wrapper_name,
             wrapper_signature=wrapper_signature,
@@ -174,6 +175,10 @@ const ODIN_ABI_TYPE_ALIASES = Dict(
     "Bridge_Constraint_Spec" => "bridge-constraint-spec",
     "Bridge_Solve_Result" => "bridge-solve-result",
     "Bridge_Dynview_Style" => "bridge-dynview-style",
+    "Bridge_Pentagon_Colors" => "bridge-pentagon-colors",
+    "Bridge_Triangle_Colors" => "bridge-triangle-colors",
+    "Bridge_Box_Edge_Colors" => "bridge-box-edge-colors",
+    "Bridge_Pie_Colors" => "bridge-pie-colors",
     "core.Shapes_Line" => "bridge-shape-line",
     "core.Shapes_Circle" => "bridge-shape-circle",
     "core.Shapes_Filled_Circle" => "bridge-shape-filled-circle",
@@ -197,6 +202,10 @@ const JULIA_ABI_TYPE_ALIASES = Dict(
     "BridgeConstraintSpec" => "bridge-constraint-spec",
     "BridgeSolveResult" => "bridge-solve-result",
     "BridgeDynviewStyle" => "bridge-dynview-style",
+    "BridgePentagonColors" => "bridge-pentagon-colors",
+    "BridgeTriangleColors" => "bridge-triangle-colors",
+    "BridgeBoxEdgeColors" => "bridge-box-edge-colors",
+    "BridgePieColors" => "bridge-pie-colors",
     "BridgeShapeLine" => "bridge-shape-line",
     "BridgeShapeCircle" => "bridge-shape-circle",
     "BridgeShapeFilledCircle" => "bridge-shape-filled-circle",
@@ -213,7 +222,8 @@ const JULIA_ABI_TYPE_ALIASES = Dict(
     "Bool" => "bool")
 
 """Return one canonical ABI type or fail on an unreviewed spelling."""
-function canonical_abi_type(type_name::String, aliases::Dict{String,String}, language::String)
+function canonical_abi_type(
+    type_name::String, aliases::Dict{String,String}, language::String)
     canonical = get(aliases, replace(type_name, " " => ""), nothing)
     canonical === nothing && error("Unknown $language ABI type: $type_name")
     return canonical
@@ -251,12 +261,14 @@ function pair_bridge_records(
     export_by_name = Dict(exported.abi_name => exported for exported in exports)
     calls_by_name = Dict(name => filter(call -> call.abi_name == name, calls)
         for name in unique(call.abi_name for call in calls))
-    unpaired = setdiff(union(Set(keys(export_by_name)), Set(keys(calls_by_name))), Set(exceptions))
+    unpaired = setdiff(union(Set(keys(export_by_name)),
+        Set(keys(calls_by_name))), Set(exceptions))
     orphans = sort!([name for name in unpaired if
         !haskey(export_by_name, name) || !haskey(calls_by_name, name)])
     isempty(orphans) || error("Orphaned bridge ABI symbols: $(join(orphans, ", "))")
     pairs = BridgePair[]
-    for name in sort!(collect(intersect(Set(keys(export_by_name)), Set(keys(calls_by_name)))))
+    for name in sort!(
+        collect(intersect(Set(keys(export_by_name)), Set(keys(calls_by_name)))))
         name in exceptions && continue
         exported = export_by_name[name]
         isempty(exported.doc_markdown) && error("Missing Odin bridge documentation: $name")
@@ -307,7 +319,8 @@ function render_bridge_page(pairs::Vector{BridgePair};
             "ABI symbol: `", pair.abi_name, "`\n\n### Julia wrappers\n")
         wrapper_names = sort!(unique(call.wrapper_name for call in pair.julia_calls))
         for wrapper_name in wrapper_names
-            calls = sort(filter(call -> call.wrapper_name == wrapper_name, pair.julia_calls);
+            calls = sort(
+                filter(call -> call.wrapper_name == wrapper_name, pair.julia_calls);
                 by=call -> (call.source_path, call.source_line, call.abi_signature))
             wrapper_signatures = sort!(unique(call.wrapper_signature for call in calls))
             abi_signatures = sort!(unique(call.abi_signature for call in calls))

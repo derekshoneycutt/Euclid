@@ -117,17 +117,36 @@ julia_interface_staging_slot :: proc(
         state^.julia_interface_active_slot >= len(state^.julia_interface_slots) {
         return nil, -1
     }
-    slot_index := (state^.julia_interface_active_slot + 1) % len(state^.julia_interface_slots)
+    slot_index :=
+        (state^.julia_interface_active_slot + 1) % len(state^.julia_interface_slots)
     return &state^.julia_interface_slots[slot_index], slot_index
 }
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
+//   Report whether every required Julia interface handle is present.
 julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
-    return iface != nil && iface^.init_scripts != nil && iface^.global_loop != nil &&
-        iface^.scratchpad_classify_input != nil && iface^.scratchpad_complete_backslash != nil &&
-        iface^.scratchpad_complete_input != nil && iface^.scratchpad_queue_input != nil &&
-        iface^.scratchpad_save_history_to_file != nil && iface^.scratchpad_history_previous != nil &&
-        iface^.scratchpad_history_next != nil && iface^.scratchpad_history_reset_cursor != nil
+    if iface == nil {
+        return false
+    }
+
+    handles := [?]rawptr{
+        iface^.init_scripts,
+        iface^.global_loop,
+        iface^.scratchpad_classify_input,
+        iface^.scratchpad_complete_backslash,
+        iface^.scratchpad_complete_input,
+        iface^.scratchpad_queue_input,
+        iface^.scratchpad_save_history_to_file,
+        iface^.scratchpad_history_previous,
+        iface^.scratchpad_history_next,
+        iface^.scratchpad_history_reset_cursor,
+    }
+    for handle in handles {
+        if handle == nil {
+            return false
+        }
+    }
+    return true
 }
 
 //   Ensure the animation registry arena allocator exists for bridge storage.
@@ -154,7 +173,8 @@ ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State)
         return false
     }
 
-    iface^.animation_registry_allocator = vmem.arena_allocator(&iface^.animation_registry_arena)
+    iface^.animation_registry_allocator =
+        vmem.arena_allocator(&iface^.animation_registry_arena)
     iface^.animation_registry_arena_initialized = true
     return true
 }
@@ -251,6 +271,61 @@ include_packaged_script_failure :: proc(exit_on_failure: bool) -> bool {
     return false
 }
 
+//   Resolve the packaged Julia project directory that owns Project.toml.
+resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, bool) {
+    project_path := files.packaged_asset_path("julia", context.temp_allocator)
+    if len(project_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia project path.")
+        fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
+        return "", include_packaged_script_failure(exit_on_failure)
+    }
+
+    return project_path, true
+}
+
+//   Resolve the Julia `Pkg.activate` function used to activate the packaged project.
+resolve_pkg_activate_function :: proc(
+    exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
+    pkg_value := julialib.jl_eval_string("import Pkg; Pkg")
+    if pkg_value == nil || julialib.jl_exception_occurred() != nil {
+        fmt.eprintln("Failed to resolve Julia Pkg module.")
+        print_julia_exception("resolve Julia Pkg module")
+        return nil, include_packaged_script_failure(exit_on_failure)
+    }
+
+    pkg_module := (^julialib.jl_module_t)(pkg_value)
+    activate_fn := julialib.jl_get_function(pkg_module, "activate")
+    if activate_fn == nil {
+        fmt.eprintln("Failed to resolve Pkg.activate from the Julia Pkg module.")
+        return nil, include_packaged_script_failure(exit_on_failure)
+    }
+
+    return activate_fn, true
+}
+
+//   Activate the packaged Julia project before loading script.jl through Main.include.
+activate_packaged_julia_project :: proc(
+    project_path: string,
+    exit_on_failure: bool) -> bool {
+
+    activate_fn, activate_ok := resolve_pkg_activate_function(exit_on_failure)
+    if !activate_ok {
+        return false
+    }
+
+    project_cstr := strings.clone_to_cstring(project_path, context.temp_allocator)
+    project_value := julialib.jl_cstr_to_string(project_cstr)
+    activate_result := julialib.jl_call1(activate_fn, project_value)
+    if julialib.jl_exception_occurred() != nil || activate_result == nil {
+        fmt.eprintln("Failed to activate packaged Julia project via Pkg.activate(path).")
+        fmt.eprintln("Resolved project path: ", project_path)
+        print_julia_exception("activate packaged Julia project")
+        return include_packaged_script_failure(exit_on_failure)
+    }
+
+    return true
+}
+
 //   Resolve the packaged Julia script path needed for Main.include.
 resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
     script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
@@ -264,7 +339,8 @@ resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, 
 }
 
 //   Resolve the Main.include function used to load packaged Julia scripts.
-resolve_main_include_function :: proc(exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
+resolve_main_include_function :: proc(
+    exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
     main_module := resolve_main_module()
     if main_module == nil {
         fmt.eprintln("Failed to resolve Julia Main module.")
@@ -305,6 +381,14 @@ call_include_packaged_script :: proc(
 // Notes:
 //   - When exit_on_failure is true, unrecoverable include errors terminate the process.
 include_packaged_script :: proc(exit_on_failure: bool) -> bool {
+    project_path, project_ok := resolve_packaged_julia_project_path(exit_on_failure)
+    if !project_ok {
+        return false
+    }
+    if !activate_packaged_julia_project(project_path, exit_on_failure) {
+        return false
+    }
+
     script_path, path_ok := resolve_packaged_script_include_path(exit_on_failure)
     if !path_ok {
         return false

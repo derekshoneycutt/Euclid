@@ -1,5 +1,11 @@
 package dynview
 
+Wrapped_Text_Span :: struct {
+    line_start: int,
+    line_end:   int,
+    next_start: int,
+}
+
 //   Return whether one byte is a UTF-8 continuation byte (10xxxxxx).
 text_is_utf8_trailing_byte :: #force_inline proc(b: u8) -> bool {
     return (b & 0xC0) == 0x80
@@ -12,34 +18,26 @@ text_utf8_sequence_len :: #force_inline proc(text: string, start: int) -> int {
     }
 
     b := text[start]
-    if (b & 0x80) == 0x00 {
-        return 1
-    }
-    if (b & 0xE0) == 0xC0 {
-        if start + 1 < len(text) && text_is_utf8_trailing_byte(text[start + 1]) {
-            return 2
-        }
-        return 1
-    }
-    if (b & 0xF0) == 0xE0 {
-        if start + 2 < len(text) &&
-            text_is_utf8_trailing_byte(text[start + 1]) &&
-            text_is_utf8_trailing_byte(text[start + 2]) {
-            return 3
-        }
-        return 1
-    }
-    if (b & 0xF8) == 0xF0 {
-        if start + 3 < len(text) &&
-            text_is_utf8_trailing_byte(text[start + 1]) &&
-            text_is_utf8_trailing_byte(text[start + 2]) &&
-            text_is_utf8_trailing_byte(text[start + 3]) {
-            return 4
-        }
+    width := text_utf8_lead_width(b)
+    if width == 1 {
         return 1
     }
 
-    return 1
+    available := len(text) - start
+    valid := available >= width
+    for index in 1 ..< min(width, available) {
+        valid = valid && text_is_utf8_trailing_byte(text[start + index])
+    }
+    return valid ? width : 1
+}
+
+//   Return expected UTF-8 sequence width from the lead byte (1 when invalid).
+text_utf8_lead_width :: #force_inline proc(b: u8) -> int {
+    width := 1
+    width = 2 if (b & 0xE0) == 0xC0 else width
+    width = 3 if (b & 0xF0) == 0xE0 else width
+    width = 4 if (b & 0xF8) == 0xF0 else width
+    return width
 }
 
 //   Count UTF-8 codepoints in the byte range [start, end) of a string.
@@ -74,12 +72,30 @@ chars_per_text_row :: #force_inline proc(width, wrap_advance: f32) -> int {
 
 //   Compute the next wrapped line span and next-start index.
 next_wrapped_text_span :: proc(
-    text: string, start: int, max_chars: int) -> (int, int, int) {
+    text: string, start: int, max_chars: int) -> Wrapped_Text_Span {
 
     if start >= len(text) {
-        return start, start, start
+        return Wrapped_Text_Span{start, start, start}
     }
 
+    line_end := scan_wrapped_line_end(text, start, max_chars)
+
+    // Guarantee forward progress when the first codepoint already overflows.
+    if line_end == start && line_end < len(text) && text[line_end] != '\n' {
+        seq_len := text_utf8_sequence_len(text, line_end)
+        if seq_len <= 0 {
+            seq_len = 1
+        }
+        line_end += seq_len
+    }
+
+    next_start := next_wrapped_line_start(text, line_end)
+    return Wrapped_Text_Span{start, line_end, next_start}
+}
+
+//   Scan forward from start to the byte index that ends the current wrapped line.
+// Prefers breaking at the last whitespace before the character budget is exceeded.
+scan_wrapped_line_end :: proc(text: string, start, max_chars: int) -> int {
     line_end := start
     chars_used := 0
     last_space := -1
@@ -105,24 +121,20 @@ next_wrapped_text_span :: proc(
         line_end += seq_len
     }
 
-    if line_end == start && line_end < len(text) && text[line_end] != '\n' {
-        seq_len := text_utf8_sequence_len(text, line_end)
-        if seq_len <= 0 {
-            seq_len = 1
-        }
-        line_end += seq_len
-    }
+    return line_end
+}
 
+//   Compute the byte index where the next wrapped line begins after line_end.
+next_wrapped_line_start :: proc(text: string, line_end: int) -> int {
     next_start := line_end
     if next_start < len(text) && text[next_start] == '\n' {
-        next_start += 1
-    } else {
-        for next_start < len(text) && (text[next_start] == ' ' || text[next_start] == '\t') {
-            next_start += 1
-        }
+        return next_start + 1
     }
-
-    return start, line_end, next_start
+    for next_start < len(text) &&
+        (text[next_start] == ' ' || text[next_start] == '\t') {
+        next_start += 1
+    }
+    return next_start
 }
 
 //   Count wrapped line rows needed for given text and width.
@@ -134,12 +146,12 @@ count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
     rows := 0
     start := 0
     for start < len(text) {
-        _, _, next_start := next_wrapped_text_span(text, start, max_chars)
+        span := next_wrapped_text_span(text, start, max_chars)
         rows += 1
-        if next_start <= start {
+        if span.next_start <= start {
             break
         }
-        start = next_start
+        start = span.next_start
     }
 
     return rows

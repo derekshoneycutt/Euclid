@@ -1,3 +1,13 @@
+
+struct DynviewBlockSwitchResult
+    ok::Bool
+    open_block::Bool
+    current_kind::Int32
+    block_id::Int32
+end
+
+
+
 """Return helper method names laid out in 2-3 text columns for :help output."""
 function helper_method_name_columns()
     names = sort!(collect(keys(HELPER_DOC_ALIASES)))
@@ -191,7 +201,8 @@ end
 function scrub_scratchpad_exception_stack(exception_stack)
     scrubbed = Base.scrub_repl_backtrace(exception_stack)
     return Base.ExceptionStack(Any[
-        (; item.exception, backtrace=trim_scratchpad_backtrace(item.backtrace)) for item in scrubbed
+        (; item.exception, backtrace=trim_scratchpad_backtrace(item.backtrace))
+            for item in scrubbed
     ])
 end
 
@@ -360,11 +371,12 @@ function parse_native_error_segments(text::AbstractString)
 
     for sgr_match in eachmatch(r"\e\[([0-9;]*)m", source)
         if cursor < sgr_match.offset
-            append_native_error_run!(
-                segments, SubString(source, cursor, prevind(source, sgr_match.offset)), style)
+            append_native_error_run!(segments,
+                SubString(source, cursor, prevind(source, sgr_match.offset)), style)
         end
         codes_text = something(sgr_match.captures[1], "")
-        codes = isempty(codes_text) ? (0,) : something.(tryparse.(Int, split(codes_text, ';')), -1)
+        codes = isempty(codes_text) ?
+            (0,) : something.(tryparse.(Int, split(codes_text, ';')), -1)
         for code in codes
             apply_native_error_sgr!(style, code)
         end
@@ -407,7 +419,8 @@ is_bridge_status_ok(code::Integer) = Int32(code) == OdinJuliaBridge.BRIDGE_STATU
 
 """Map one output line into block/style ids for dynview emission."""
 function dynview_ids_for_line(line::AbstractString)
-    if startswith(line, "ERROR:") || startswith(line, "Error:") || startswith(line, "help error:") ||
+    if startswith(line, "ERROR:") || startswith(line, "Error:") ||
+        startswith(line, "help error:") ||
             startswith(line, "Blocked ")
         return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleError
     end
@@ -416,19 +429,22 @@ function dynview_ids_for_line(line::AbstractString)
 end
 
 """Switch dynview block when needed, preserving strict begin/end ordering."""
-function dynview_switch_block!(state_ptr::Ptr{Cvoid}, open_block::Bool, current_kind::Int32, next_kind::Int32, block_id::Int32)
+function dynview_switch_block!(
+    state_ptr::Ptr{Cvoid}, open_block::Bool, current_kind::Int32,
+    next_kind::Int32, block_id::Int32)
     if open_block && next_kind == current_kind
-        return true, open_block, current_kind, block_id
+        return DynviewBlockSwitchResult(true, open_block, current_kind, block_id)
     end
 
     if open_block && !is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
-        return false, open_block, current_kind, block_id
+        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
     end
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_begin_block(state_ptr, next_kind, block_id))
-        return false, open_block, current_kind, block_id
+    if !is_bridge_status_ok(
+        OdinJuliaBridge.dynview_begin_block(state_ptr, next_kind, block_id))
+        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
     end
 
-    return true, true, next_kind, block_id + Int32(1)
+    return DynviewBlockSwitchResult(true, true, next_kind, block_id + Int32(1))
 end
 
 """Emit one optional-color text segment into the active dynview block."""
@@ -458,10 +474,12 @@ function dynview_emit_line!(
             end
         end
     end
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, entry.line))
+    if !is_bridge_status_ok(
+        OdinJuliaBridge.dynview_copyable_text_run(state_ptr, entry.line))
         return false
     end
-    if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
+    if add_line_break &&
+        !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
         return false
     end
     return true
@@ -490,7 +508,8 @@ function dynview_emit_latex_result_line!(
         end
     end
 
-    if add_line_break && !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
+    if add_line_break &&
+        !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
         return false
     end
     return true
@@ -498,7 +517,8 @@ end
 
 """Emit current scratchpad output as a dynview command stream for host-side rendering."""
 function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadSession)
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) || isempty(session.output_entries)
+    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) ||
+        isempty(session.output_entries)
         return isempty(session.output_entries)
     end
 
@@ -508,15 +528,18 @@ function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadS
     last_line_index = lastindex(session.output_entries)
     for i in eachindex(session.output_entries)
         entry = session.output_entries[i]
-        ok, open_block, current_kind, block_id = dynview_switch_block!(
+        switch_result = dynview_switch_block!(
             state_ptr,
             open_block,
             current_kind,
             entry.block_kind,
             block_id)
-        if !ok
+        if !switch_result.ok
             return false
         end
+        open_block = switch_result.open_block
+        current_kind = switch_result.current_kind
+        block_id = switch_result.block_id
 
         if isempty(entry.latex_source)
             if !dynview_emit_line!(state_ptr, entry, i != last_line_index)
@@ -530,7 +553,8 @@ function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadS
         end
     end
 
-    return !open_block || is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
+    return !open_block ||
+        is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
 end
 
 """Validate one dotted help-query segment as an identifier-like token."""
@@ -774,7 +798,8 @@ function resolve_module_doc_entry(binding::Base.Docs.Binding, module_value::Modu
         return doc_meta[binding]
     end
 
-    canonical_binding = Base.Docs.Binding(parentmodule(module_value), nameof(module_value))
+    canonical_binding =
+        Base.Docs.Binding(parentmodule(module_value), nameof(module_value))
     canonical_meta = Base.Docs.meta(canonical_binding.mod)
     if haskey(canonical_meta, canonical_binding)
         return canonical_meta[canonical_binding]
@@ -817,7 +842,8 @@ function append_module_help!(
 end
 
 """Append binding docs and method signatures to scratchpad output."""
-function append_binding_help!(session::ScratchpadSession, query::AbstractString, binding::Base.Docs.Binding)
+function append_binding_help!(
+    session::ScratchpadSession, query::AbstractString, binding::Base.Docs.Binding)
     append_binding_help!(session, query, binding, nothing)
 end
 
@@ -961,7 +987,8 @@ function append_native_help_query!(session::ScratchpadSession, query::AbstractSt
             append_output_block!(session, side_text)
         end
         if rendered_help !== nothing
-            append_output_block!(session, format_result_value(rendered_help, session.runtime))
+            append_output_block!(session,
+                format_result_value(rendered_help, session.runtime))
         end
     catch
         append_native_error_block!(

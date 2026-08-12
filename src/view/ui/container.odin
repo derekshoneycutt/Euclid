@@ -13,7 +13,8 @@ Container_Draw_Result :: struct {
 }
 
 //   Resolve container fill color from the selected visual family variant.
-container_fill_color :: #force_inline proc(fill_variant: Container_Fill_Variant) -> rl.Color {
+container_fill_color :: #force_inline proc(
+    fill_variant: Container_Fill_Variant) -> rl.Color {
     switch fill_variant {
     case .Dark_Red:
         return BACKGROUND_COLOR
@@ -25,7 +26,8 @@ container_fill_color :: #force_inline proc(fill_variant: Container_Fill_Variant)
 }
 
 //   Return clamped outer and inner geometry without drawing the container.
-container_geometry :: proc(rect: rl.Rectangle, border_thickness: f32) -> Container_Draw_Result {
+container_geometry :: proc(
+    rect: rl.Rectangle, border_thickness: f32) -> Container_Draw_Result {
     drawn_rect := clamp_non_negative_rect(rect)
     border := max(0.0, border_thickness)
 

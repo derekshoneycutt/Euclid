@@ -53,7 +53,8 @@ checkbox_label_layout :: proc(
     label_y := box_rect.y + params.label_offset_y
     label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
     measured := rl.MeasureTextEx(params.font, label_cstr, params.label_font_size, 0)
-    label_rect := rl.Rectangle{label_x, label_y, max(0.0, measured.x), max(0.0, measured.y)}
+    label_rect := rl.Rectangle{label_x, label_y,
+        max(0.0, measured.x), max(0.0, measured.y)}
     return label_rect, checkbox_union_rect(hit_rect, label_rect)
 }
 

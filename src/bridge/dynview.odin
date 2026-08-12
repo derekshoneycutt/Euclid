@@ -2,6 +2,47 @@ package bridge
 
 import "../core"
 
+Dynview_Validated_Op :: struct {
+    op:     Bridge_Dynview_Math_Op,
+    kind:   core.Dynview_Command_Kind,
+    status: i32,
+}
+
+Dynview_Imported_Children :: struct {
+    child_program_id:           i32,
+    secondary_child_program_id: i32,
+    status:                     i32,
+}
+
+//   Shared import environment for walking the flat bridge math-op stream into
+//   the dynview compile cache. Groups the cache target, source stream, cursor,
+//   blob window, and program-id allocator so the recursive import helpers pass
+//   one coherent value instead of a long positional parameter list.
+Dynview_Import_Context :: struct {
+    cache:           ^core.Dynview_Compile_Cache,
+    block_id:        i32,
+    ops:             [^]Bridge_Dynview_Math_Op,
+    op_count:        int,
+    cursor:          ^int,
+    blob_offset:     int,
+    blob_count:      int,
+    next_program_id: ^int,
+}
+
+//   Dynview command kind for each bridge math-op kind, indexed by op kind.
+BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
+    [BRIDGE_DYNVIEW_MATH_OP_MAX + 1]core.Dynview_Command_Kind{
+    BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN = .TextRun,
+    BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN = .MathGlyphRun,
+    BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE = .AccentBarRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE = .RadicalBarRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE = .ScriptAttachRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE = .LargeOpRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .FracRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .StretchDelimiterRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .MatrixRecursive,
+}
+
 //   Convert bridge decoration integer values to label decoration enum values.
 //
 // Parameters:
@@ -9,7 +50,8 @@ import "../core"
 //
 // Returns:
 //   - Matching label decoration enum value, or .None for unsupported values.
-label_decoration_kind_from_i32 :: #force_inline proc(kind: i32) -> core.Shapes_Label_Decoration_Kind {
+label_decoration_kind_from_i32 :: #force_inline proc(
+    kind: i32) -> core.Shapes_Label_Decoration_Kind {
     switch kind {
     case BRIDGE_LABEL_DECORATION_PRIME:
         return .Prime
@@ -98,27 +140,11 @@ dynview_append_text_payload :: #force_inline proc(
 //     making progress instead of failing the whole program.
 dynview_math_command_kind_from_bridge :: #force_inline proc(
     kind: i32) -> (core.Dynview_Command_Kind, bool) {
-    switch kind {
-    case BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN:
-        return .TextRun, true
-    case BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN:
-        return .MathGlyphRun, true
-    case BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE:
-        return .ScriptAttachRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE:
-        return .FracRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE:
-        return .StretchDelimiterRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE:
-        return .MatrixRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE:
-        return .LargeOpRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE:
-        return .AccentBarRecursive, true
-    case BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE:
-        return .RadicalBarRecursive, true
+    if kind < 1 || kind > BRIDGE_DYNVIEW_MATH_OP_MAX {
+        return .TextRun, false
     }
-    return .TextRun, false
+    kinds := BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND
+    return kinds[kind], true
 }
 
 //   Return whether an op's text spans fit inside the shared text blob.
@@ -128,17 +154,22 @@ dynview_math_command_kind_from_bridge :: #force_inline proc(
 //     emits any dynview command using the payload offsets.
 dynview_math_op_spans_valid :: #force_inline proc(
     op: Bridge_Dynview_Math_Op, blob_count: int) -> bool {
-    if op.text_offset < 0 || op.text_len < 0 ||
-        op.index_text_offset < 0 || op.index_text_len < 0 ||
-        op.sup_text_offset < 0 || op.sup_text_len < 0 ||
-        op.sub_text_offset < 0 || op.sub_text_len < 0 {
-        return false
-    }
 
-    return int(op.text_offset + op.text_len) <= blob_count &&
-        int(op.index_text_offset + op.index_text_len) <= blob_count &&
-        int(op.sup_text_offset + op.sup_text_len) <= blob_count &&
-        int(op.sub_text_offset + op.sub_text_len) <= blob_count
+    spans := [4][2]i32{
+        {op.text_offset, op.text_len},
+        {op.index_text_offset, op.index_text_len},
+        {op.sup_text_offset, op.sup_text_len},
+        {op.sub_text_offset, op.sub_text_len},
+    }
+    for span in spans {
+        if span[0] < 0 || span[1] < 0 {
+            return false
+        }
+        if int(span[0] + span[1]) > blob_count {
+            return false
+        }
+    }
+    return true
 }
 
 //   Import one recursive child program into the dynview compile cache.
@@ -147,27 +178,20 @@ dynview_math_op_spans_valid :: #force_inline proc(
 //   - The helper reserves the next available program id and reuses the shared
 //     recursive importer to pull the requested subtree into the cache.
 dynview_import_child_program :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
-    direct_count: int,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> (program_id: i32, status: i32) {
+    ctx: Dynview_Import_Context,
+    direct_count: int) -> (program_id: i32, status: i32) {
 
-    if direct_count <= 0 || next_program_id == nil {
+    if direct_count <= 0 || ctx.next_program_id == nil {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if ctx.next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
-    host_program_id := next_program_id^
-    next_program_id^ += 1
-    child_status: i32 = dynview_import_math_program_from_ops(cache, block_id, ops,
-        op_count, cursor, direct_count, blob_offset, blob_count, host_program_id,
-        next_program_id)
+    host_program_id := ctx.next_program_id^
+    ctx.next_program_id^ += 1
+    child_status: i32 = dynview_import_math_program_from_ops(ctx,
+        direct_count, host_program_id)
     if child_status != BRIDGE_STATUS_OK {
         return 0, child_status
     }
@@ -182,39 +206,150 @@ dynview_import_child_program :: proc(
 //   - The helper advances the shared cursor and program allocation state for both
 //     children before returning the assigned program ids.
 dynview_import_fraction_children :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
-    op: Bridge_Dynview_Math_Op,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> (numerator_program_id: i32, denominator_program_id: i32, status: i32) {
+    ctx: Dynview_Import_Context,
+    op: Bridge_Dynview_Math_Op) -> Dynview_Imported_Children {
 
     numerator_direct_count := int(op.child_program_id)
     denominator_direct_count := int(op.secondary_child_program_id)
     if numerator_direct_count <= 0 || denominator_direct_count <= 0 {
-        return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
+        return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
-    if next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
-        return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
+    if ctx.next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+        return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
 
-    numerator_result, numerator_status := dynview_import_child_program(cache, block_id,
-        ops, op_count, cursor, numerator_direct_count, blob_offset, blob_count,
-        next_program_id)
+    numerator_result, numerator_status := dynview_import_child_program(ctx,
+        numerator_direct_count)
     if numerator_status != BRIDGE_STATUS_OK {
-        return 0, 0, numerator_status
+        return Dynview_Imported_Children{0, 0, numerator_status}
     }
 
-    denominator_result, denominator_status := dynview_import_child_program(cache,
-        block_id, ops, op_count, cursor, denominator_direct_count,
-        blob_offset, blob_count, next_program_id)
+    denominator_result, denominator_status := dynview_import_child_program(ctx,
+        denominator_direct_count)
     if denominator_status != BRIDGE_STATUS_OK {
-        return 0, 0, denominator_status
+        return Dynview_Imported_Children{0, 0, denominator_status}
     }
 
-    return numerator_result, denominator_result, BRIDGE_STATUS_OK
+    return Dynview_Imported_Children{
+        numerator_result,
+        denominator_result,
+        BRIDGE_STATUS_OK,
+    }
+}
+
+//   Resolve the child program ids for one recursive math op.
+//
+// Notes:
+//   - Child-bearing kinds import their subprograms from the shared flat stream;
+//     leaf kinds keep their incoming child id and a zero secondary id.
+dynview_import_op_children :: proc(
+    ctx: Dynview_Import_Context,
+    command_kind: core.Dynview_Command_Kind,
+    op: Bridge_Dynview_Math_Op) -> Dynview_Imported_Children {
+
+    child_direct_count := int(op.child_program_id)
+    switch command_kind {
+    case .ScriptAttachRecursive, .AccentBarRecursive, .RadicalBarRecursive,
+        .MatrixRecursive:
+        if child_direct_count <= 0 {
+            return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
+        }
+        child_id, child_status := dynview_import_child_program(ctx,
+            child_direct_count)
+        return Dynview_Imported_Children{child_id, 0, child_status}
+    case .FracRecursive:
+        return dynview_import_fraction_children(ctx, op)
+    case .StretchDelimiterRecursive:
+        if child_direct_count <= 0 {
+            return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_OK}
+        }
+        child_id, child_status := dynview_import_child_program(ctx,
+            child_direct_count)
+        return Dynview_Imported_Children{child_id, 0, child_status}
+    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
+        .LargeOpRecursive, .CopyableTextRun, .LineBreak, .Divider,
+        .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
+        .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
+        .InlineTriangle, .InlinePentagon:
+    }
+    return Dynview_Imported_Children{i32(op.child_program_id), 0, BRIDGE_STATUS_OK}
+}
+
+//   Build the compiled dynview command record for one imported math op.
+dynview_math_command_from_op :: proc(
+    op: Bridge_Dynview_Math_Op,
+    command_kind: core.Dynview_Command_Kind,
+    block_id: i32,
+    child_program_id, secondary_child_program_id: i32,
+    blob_offset: int) -> core.Dynview_Command {
+
+    return core.Dynview_Command{
+        kind = command_kind,
+        block_id = block_id,
+        style_id = op.style_id,
+        math_program_id = child_program_id,
+        secondary_math_program_id = secondary_child_program_id,
+        text_offset = blob_offset + int(op.text_offset),
+        text_len = int(op.text_len),
+        script_base_text_offset = blob_offset + int(op.text_offset),
+        script_base_text_len = int(op.text_len),
+        script_sup_text_offset = blob_offset + int(op.sup_text_offset),
+        script_sup_text_len = int(op.sup_text_len),
+        script_sub_text_offset = blob_offset + int(op.sub_text_offset),
+        script_sub_text_len = int(op.sub_text_len),
+        script_style_id = op.script_style_id,
+        script_scale = op.script_scale,
+        script_sup_raise = op.script_sup_raise,
+        script_sub_drop = op.script_sub_drop,
+        script_gap = op.script_gap,
+        accent_mode = op.accent_mode,
+        radical_mode = op.radical_mode,
+        large_op_kind = op.large_op_kind,
+        radical_index_text_offset = blob_offset + int(op.index_text_offset),
+        radical_index_text_len = int(op.index_text_len),
+        accent_style_id = op.accent_style_id,
+        accent_thickness = op.accent_thickness,
+        accent_offset = op.accent_offset,
+    }
+}
+
+//   Read and validate the next math op from the flat stream, advancing the cursor.
+dynview_read_validated_op :: proc(
+    ops: [^]Bridge_Dynview_Math_Op,
+    op_count: int,
+    cursor: ^int,
+    blob_count: int) -> Dynview_Validated_Op {
+
+    if cursor^ >= op_count {
+        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+
+    op := ops[cursor^]
+    cursor^ += 1
+    command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
+    if !ok || !dynview_math_op_spans_valid(op, blob_count) {
+        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+    return Dynview_Validated_Op{op, command_kind, BRIDGE_STATUS_OK}
+}
+
+//   Import a single math op into one reserved command slot.
+dynview_import_one_op :: proc(
+    ctx: Dynview_Import_Context,
+    validated: Dynview_Validated_Op,
+    command_slot: int) -> i32 {
+
+    children := dynview_import_op_children(ctx, validated.kind, validated.op)
+    if children.status != BRIDGE_STATUS_OK {
+        return children.status
+    }
+
+    ctx.cache^.math_commands[command_slot] =
+        dynview_math_command_from_op(validated.op, validated.kind, ctx.block_id,
+            children.child_program_id,
+            children.secondary_child_program_id,
+            ctx.blob_offset)
+    return BRIDGE_STATUS_OK
 }
 
 //   Import one math program from the flat bridge op stream.
@@ -223,133 +358,36 @@ dynview_import_fraction_children :: proc(
 //   - The helper reserves command slots for the requested subtree size and then
 //     walks the bridge ops into the dynview compile cache.
 dynview_import_math_program_from_ops :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
+    ctx: Dynview_Import_Context,
     direct_count: int,
-    blob_offset, blob_count: int,
-    program_id: int,
-    next_program_id: ^int) -> i32 {
+    program_id: int) -> i32 {
 
-    if direct_count <= 0 || cache == nil || cursor == nil || next_program_id == nil {
+    if direct_count <= 0 || ctx.cache == nil || ctx.cursor == nil ||
+        ctx.next_program_id == nil {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
-    command_start := cache^.math_command_count
+    command_start := ctx.cache^.math_command_count
     if command_start + direct_count > core.DYNVIEW__MAX_MATH_COMMANDS {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
-    cache^.math_command_count += direct_count
+    ctx.cache^.math_command_count += direct_count
 
     for local_index in 0..<direct_count {
-        if cursor^ >= op_count {
-            return BRIDGE_STATUS_INVALID_ARGUMENT
+        validated := dynview_read_validated_op(ctx.ops, ctx.op_count, ctx.cursor,
+            ctx.blob_count)
+        if validated.status != BRIDGE_STATUS_OK {
+            return validated.status
         }
 
-        op := ops[cursor^]
-        cursor^ += 1
-        command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
-        if !ok || !dynview_math_op_spans_valid(op, blob_count) {
-            return BRIDGE_STATUS_INVALID_ARGUMENT
-        }
-
-        child_program_id := i32(op.child_program_id)
-        secondary_child_program_id: i32 = 0
-        status: i32 = BRIDGE_STATUS_OK
-        switch command_kind {
-        case .ScriptAttachRecursive, .AccentBarRecursive, .RadicalBarRecursive:
-            child_direct_count := int(op.child_program_id)
-            if child_direct_count <= 0 {
-                return BRIDGE_STATUS_INVALID_ARGUMENT
-            }
-            child_program_id, status = dynview_import_child_program(cache, block_id,
-                ops, op_count, cursor, child_direct_count, blob_offset, blob_count,
-                next_program_id)
-            if status != BRIDGE_STATUS_OK {
-                return status
-            }
-        case .FracRecursive:
-            numerator_program_id, denominator_program_id, child_status :=
-                dynview_import_fraction_children(cache, block_id, ops, op_count, cursor,
-                    op, blob_offset, blob_count, next_program_id)
-            if child_status != BRIDGE_STATUS_OK {
-                return child_status
-            }
-            child_program_id = numerator_program_id
-            secondary_child_program_id = denominator_program_id
-        case .StretchDelimiterRecursive:
-            child_direct_count := int(op.child_program_id)
-            if child_direct_count > 0 {
-                child_program_id, status = dynview_import_child_program(cache, block_id,
-                    ops, op_count, cursor, child_direct_count, blob_offset, blob_count,
-                    next_program_id)
-                if status != BRIDGE_STATUS_OK {
-                    return status
-                }
-            } else {
-                child_program_id = 0
-            }
-        case .MatrixRecursive:
-            child_direct_count := int(op.child_program_id)
-            if child_direct_count <= 0 {
-                return BRIDGE_STATUS_INVALID_ARGUMENT
-            }
-            child_program_id, status = dynview_import_child_program(cache, block_id,
-                ops, op_count, cursor, child_direct_count, blob_offset, blob_count,
-                next_program_id)
-            if status != BRIDGE_STATUS_OK {
-                return status
-            }
-        case .BeginBlock:
-        case .EndBlock:
-        case .TextRun:
-        case .MathGlyphRun:
-        case .MathBlock:
-        case .LargeOpRecursive:
-        case .CopyableTextRun:
-        case .LineBreak:
-        case .Divider:
-        case .InlineLine:
-        case .InlineBox:
-        case .InlineCircle:
-        case .InlineFilledBox:
-        case .InlineFilledCircle:
-        case .InlinePieSection:
-        }
-
-        cache^.math_commands[command_start + local_index] = core.Dynview_Command{
-            kind = command_kind,
-            block_id = block_id,
-            style_id = op.style_id,
-            math_program_id = child_program_id,
-            secondary_math_program_id = secondary_child_program_id,
-            text_offset = blob_offset + int(op.text_offset),
-            text_len = int(op.text_len),
-            script_base_text_offset = blob_offset + int(op.text_offset),
-            script_base_text_len = int(op.text_len),
-            script_sup_text_offset = blob_offset + int(op.sup_text_offset),
-            script_sup_text_len = int(op.sup_text_len),
-            script_sub_text_offset = blob_offset + int(op.sub_text_offset),
-            script_sub_text_len = int(op.sub_text_len),
-            script_style_id = op.script_style_id,
-            script_scale = op.script_scale,
-            script_sup_raise = op.script_sup_raise,
-            script_sub_drop = op.script_sub_drop,
-            script_gap = op.script_gap,
-            accent_mode = op.accent_mode,
-            radical_mode = op.radical_mode,
-            large_op_kind = op.large_op_kind,
-            radical_index_text_offset = blob_offset + int(op.index_text_offset),
-            radical_index_text_len = int(op.index_text_len),
-            accent_style_id = op.accent_style_id,
-            accent_thickness = op.accent_thickness,
-            accent_offset = op.accent_offset,
+        status := dynview_import_one_op(ctx, validated,
+            command_start + local_index)
+        if status != BRIDGE_STATUS_OK {
+            return status
         }
     }
 
-    cache^.math_programs[program_id] = core.Dynview_Math_Program{
+    ctx.cache^.math_programs[program_id] = core.Dynview_Math_Program{
         valid = true,
         command_start = command_start,
         command_count = direct_count,

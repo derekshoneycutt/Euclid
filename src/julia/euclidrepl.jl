@@ -22,9 +22,9 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
     euclidcolors, hide!, point!, line!, circle!, highlight_pen!, highlight_compass!,
-    translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!, rotate_points_z!,
-    reflect2d_points!, reflect2d_points_x_axis!, reflect2d_points_y_axis!,
-    reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
+    translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!,
+    rotate_points_z!, reflect2d_points!, reflect2d_points_x_axis!,
+    reflect2d_points_y_axis!, reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
     stop!, clear!, status
 
 const DEFAULT_POINT_DURATION = 5.5f0
@@ -47,8 +47,7 @@ const EUCLID_COLORS = (
     :grey60,
     :plum1,
     :lightgreen,
-    :firebrick,
-)
+    :firebrick)
 
 """Return the curated Euclid color palette as Julia Colors objects."""
 function euclidcolors()
@@ -139,6 +138,15 @@ end
 mutable struct ReplDrawSession
     active_job::Union{Nothing, ReplDrawJob}
     managed_host_ids::Vector{Int}
+end
+
+struct ReplStatus
+    active::Bool
+    kind::Union{Nothing,Symbol}
+    elapsed::Union{Nothing,Float32}
+    duration::Union{Nothing,Float32}
+    hook_id::Union{Nothing,Int}
+    managed_shape_count::Int
 end
 
 const session_ref = Ref{Union{Nothing, ReplDrawSession}}(nothing)
@@ -349,12 +357,14 @@ end
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
     for (index, point_id) in pairs(payload.point_ids)
         start_position = payload.start_positions[index]
-        render_transform_spec!(state_ptr, 1f0, 1f0, point_id, start_position, payload.spec)
+        render_transform_spec!(state_ptr, 1f0, 1f0, point_id,
+            start_position, payload.spec)
     end
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PointPayload)
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PointPayload)
     EuclidAnimations.animate_repl_draw_point(
         state_ptr,
         Float32(elapsed),
@@ -366,7 +376,8 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, p
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::LinePayload)
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::LinePayload)
     EuclidAnimations.animate_repl_draw_line(
         state_ptr,
         Float32(elapsed),
@@ -381,7 +392,8 @@ function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, p
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::CirclePayload)
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::CirclePayload)
     if payload.filled
         EuclidAnimations.animate_repl_draw_filledcircle(
             state_ptr,
@@ -474,7 +486,8 @@ end
 
 """Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
 function render_payload!(
-    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::CompassHighlightPayload)
+    state_ptr::Ptr{Cvoid}, elapsed::Real,
+    duration::Real, payload::CompassHighlightPayload)
 
     descend_duration = duration * HIGHLIGHT_DESCEND_SHARE
     pass_duration = duration * HIGHLIGHT_PASS_SHARE
@@ -629,7 +642,8 @@ function render_transform_spec!(
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
-function render_payload!(state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::TransformPayload)
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::TransformPayload)
     for (index, point_id) in pairs(payload.point_ids)
         start_position = payload.start_positions[index]
         render_transform_spec!(
@@ -812,24 +826,22 @@ function status(state_ptr::Ptr{Cvoid})
     job = session.active_job
 
     if job === nothing
-        return (
-            active = false,
-            kind = nothing,
-            elapsed = nothing,
-            duration = nothing,
-            hook_id = nothing,
-            managed_shape_count = length(session.managed_host_ids),
-        )
+        return ReplStatus(
+            false,
+            nothing,
+            nothing,
+            nothing,
+            nothing,
+            length(session.managed_host_ids))
     end
 
-    return (
-        active = true,
-        kind = job.kind,
-        elapsed = job.elapsed,
-        duration = job.duration,
-        hook_id = job.hook_id,
-        managed_shape_count = length(session.managed_host_ids),
-    )
+    return ReplStatus(
+        true,
+        job.kind,
+        job.elapsed,
+        job.duration,
+        job.hook_id,
+        length(session.managed_host_ids))
 end
 
 """
@@ -864,7 +876,9 @@ Keywords:
 - `brush=5f0`
 - `duration=DEFAULT_LINE_DURATION` (draw animation duration only)
 """
-function line!(state_ptr::Ptr{Cvoid}, start_pos::AbstractVector{<:Real}, end_pos::AbstractVector{<:Real};
+function line!(
+    state_ptr::Ptr{Cvoid},
+    start_pos::AbstractVector{<:Real}, end_pos::AbstractVector{<:Real};
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_LINE_DURATION)
     start_pos3 = vec3("start_pos", start_pos)

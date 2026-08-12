@@ -41,8 +41,8 @@ A Wiki producer must:
 batch before its first filesystem write. `validate_managed_outputs` then rejects missing or stale
 pages inside each declared stale boundary.
 
-`julia make.jl -w` replaces `bin/wiki/` with a validated artifact whose repository source links are
-pinned to the generating commit. `julia make.jl -W` generates into a temporary directory and
+`make wiki` replaces `bin/wiki/` with a validated artifact whose repository source links are
+pinned to the generating commit. `make check-wiki` generates into a temporary directory and
 compares every path and byte with `bin/wiki/` without modifying the retained artifact.
 
 Shared navigation is composed from all manifest sections regardless of which producer owns their

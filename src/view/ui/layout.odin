@@ -49,29 +49,25 @@ compute_ui_regions :: proc(mode: core.Ui_Layout_Mode) -> core.Ui_Regions {
 }
 
 //   Validate region geometry before draw dispatch.
+//   Report whether one rectangle has non-negative dimensions.
+ui_rect_valid :: #force_inline proc(rect: rl.Rectangle) -> bool {
+    return rect.width >= 0 && rect.height >= 0
+}
+
+//   Validate that every UI region has non-negative dimensions.
 validate_ui_regions :: proc(regions: core.Ui_Regions) -> bool {
-    if regions.world_rect.width < 0 || regions.world_rect.height < 0 {
-        return false
+    rects := [?]rl.Rectangle{
+        regions.world_rect,
+        regions.tree_rect,
+        regions.text_rect,
+        regions.settings_rect,
+        regions.gif_rect,
+        regions.scratchpad_rect,
     }
-
-    if regions.tree_rect.width < 0 || regions.tree_rect.height < 0 {
-        return false
-    }
-
-    if regions.text_rect.width < 0 || regions.text_rect.height < 0 {
-        return false
-    }
-
-    if regions.settings_rect.width < 0 || regions.settings_rect.height < 0 {
-        return false
-    }
-
-    if regions.gif_rect.width < 0 || regions.gif_rect.height < 0 {
-        return false
-    }
-
-    if regions.scratchpad_rect.width < 0 || regions.scratchpad_rect.height < 0 {
-        return false
+    for rect in rects {
+        if !ui_rect_valid(rect) {
+            return false
+        }
     }
 
     return true

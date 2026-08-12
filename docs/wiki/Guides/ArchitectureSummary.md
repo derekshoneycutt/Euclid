@@ -10,6 +10,7 @@
 1. [Dynamic LaTeX Pipeline (Julia Parse + Odin Layout)](#dynamic-latex-pipeline-julia-parse--odin-layout)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
 1. [Threading Strategy](#threading-strategy)
+1. [Testing Strategy](#testing-strategy)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
 1. [Build and Packaging Model](#build-and-packaging-model)
 1. [Practical Contributor Guide](#practical-contributor-guide)
@@ -56,6 +57,7 @@ If you are new, read in this order:
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Dynview Runtime | Text/math command compilation, layout planning, and draw-ready dynview caches. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
+| **Odin** | Semantic Trace | Bounded trace configuration, JSONL serialization, overflow policy, and output lifecycle. | `src/trace/trace.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
@@ -300,13 +302,19 @@ state machine, diagnostics, shutdown policy, and current constraints.
 
 ### Fixed-Step Simulation
 
-Each fixed step preserves this ordering:
+The canonical fixed-step operation is `run_deterministic_fixed_step`. It preserves this
+ordering:
 
 1. Publish an available Julia animation batch.
 1. Schedule the next nonblocking Julia animation tick.
 1. Submit particle update and constraint solve tasks to the simulation pool.
 1. Join the complete simulation batch.
-1. Continue with GIF capture and any remaining fixed steps.
+1. Advance display-owned `fixed_step` and deterministic `simulation_time`.
+1. Emit the post-join semantic trace summary.
+
+The interactive loop calls `run_windowed_fixed_step`, which layers GIF capture state on top of
+that deterministic step. GIF behavior is presentation-side policy and is not part of the core
+semantic step boundary.
 
 Particle workers exclusively mutate `Particle_System`; constraint workers
 exclusively mutate `Shapes_Point_System`. Their task payloads and pool
@@ -339,6 +347,22 @@ display thread.
   reloads retain the previous valid interface generation.
 - Julia shutdown completes on its owner thread before service destruction.
   The simulation pool is also joined before canonical state is freed.
+
+---
+
+## Testing Strategy
+
+Euclid's testing foundation is the ordinary unit and module test suite. Those tests are the
+first line of defense for geometry, dynview, files, particles, bridge behavior, and runtime
+invariants before any higher-level harness or trace system is involved.
+
+On top of that baseline, Euclid now has a dedicated testing architecture built around semantic
+tracing, deterministic fixed-step execution, and a headless runtime harness. The interactive app
+and the harness share the same runtime session and deterministic step boundary, while test-only
+orchestration remains outside the production control surface.
+
+See [TestingStrategy.md](TestingStrategy.md) for the full testing model, including trace
+ownership, checkpoint boundaries, harness usage, failure policy, and current coverage gaps.
 
 ---
 
@@ -394,6 +418,11 @@ This policy is strict by design.
 
 ## Build and Packaging Model
 
+- The `Makefile` is the standard entry point on systems that support `make`. It runs
+  the `configure` script once (toolchain check + Julia dependency install) and then
+  drives `make.jl`. Bare `make` builds; `make test` runs the full verification gate.
+- `configure` (polyglot sh/PowerShell) verifies the toolchain and installs Julia
+  dependencies; `make.jl` is the build/test/vet driver that both wrap.
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
 - Packaged assets include:
   - `src/julia/**` scripts

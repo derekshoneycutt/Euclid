@@ -63,8 +63,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 116
-    @test sum(length(pair.julia_calls) for pair in pairs) == 126
+    @test length(pairs) == 120
+    @test sum(length(pair.julia_calls) for pair in pairs) == 130
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

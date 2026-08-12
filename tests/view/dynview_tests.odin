@@ -150,6 +150,36 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
 }
 
 @(test)
+animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    interface := new(app_core.Euclid_Julia_Interface)
+    defer free(interface)
+    current := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(current)
+    state^.julia_interface = interface
+    state^.julia_interface^.current_animation = current
+    state^.julia_interface^.selected_animation = current
+    service^.animation_generation = 3
+    service^.animation_last_committed_sequence = 7
+
+    slot := app_bridge.Animation_Tick_Slot{
+        generation = 2,
+        sequence = 8,
+        animation = current,
+    }
+    testing.expect_value(
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_generation")
+
+    slot.generation = 3
+    slot.sequence = 7
+    testing.expect_value(
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_sequence")
+}
+
+@(test)
 scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
     defer free(state)
@@ -348,11 +378,11 @@ text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
     testing.expect_value(t, app_dynview.count_wrapped_text_rows("", 20), 1)
 
     text := "supercalifragilistic"
-    line_start, line_end, next_start := app_dynview.next_wrapped_text_span(text, 0, 4)
+    span := app_dynview.next_wrapped_text_span(text, 0, 4)
 
-    testing.expect_value(t, line_start, 0)
-    testing.expect(t, line_end > line_start)
-    testing.expect(t, next_start > line_start)
+    testing.expect_value(t, span.line_start, 0)
+    testing.expect(t, span.line_end > span.line_start)
+    testing.expect(t, span.next_start > span.line_start)
 
     rows := app_dynview.count_wrapped_text_rows("aaaa bbbb cccc", 4)
     testing.expect(t, rows >= 3)
@@ -494,17 +524,18 @@ stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
     // Validates dynview text span extraction bounds checks for base and scripted spans.
-    buffer := app_core.Dynview_Command_Buffer{}
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
     text := "abc"
     for i in 0..<len(text) {
         buffer.text_bytes[i] = u8(text[i])
     }
     buffer.text_bytes_len = len(text)
 
-    span := app_dynview.text_span_from_buffer(&buffer, 1, 2)
+    span := app_dynview.text_span_from_buffer(buffer, 1, 2)
     testing.expect_value(t, span, "bc")
 
-    out_of_bounds := app_dynview.text_span_from_buffer(&buffer, 2, 5)
+    out_of_bounds := app_dynview.text_span_from_buffer(buffer, 2, 5)
     testing.expect_value(t, out_of_bounds, "")
 
     cmd := app_core.Dynview_Command{
@@ -514,7 +545,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
         script_sup_text_len = 1,
     }
     base_text := app_dynview.text_span_from_buffer(
-        &buffer,
+        buffer,
         cmd.script_base_text_offset,
         cmd.script_base_text_len)
     testing.expect_value(t, base_text, "abc")
@@ -610,12 +641,12 @@ dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
     testing.expect(t, ascent > descent)
     testing.expect(t, ascent > 8)
 
-    script_font_size, sup_raise_px, sub_drop_px := app_dynview.script_draw_offsets(12, 1.0, 0.25, 0.25)
-    top_pad, bottom_pad := app_dynview.script_visual_padding(script_font_size)
+    offsets := app_dynview.script_draw_offsets(12, 1.0, 0.25, 0.25)
+    top_pad, bottom_pad := app_dynview.script_visual_padding(offsets.script_font_size)
 
-    testing.expect(t, script_font_size > 1.0)
-    testing.expect(t, sup_raise_px >= 0)
-    testing.expect(t, sub_drop_px >= 0)
+    testing.expect(t, offsets.script_font_size > 1.0)
+    testing.expect(t, offsets.sup_raise_px >= 0)
+    testing.expect(t, offsets.sub_drop_px >= 0)
     testing.expect(t, top_pad > 0)
     testing.expect(t, bottom_pad > 0)
 }
@@ -653,7 +684,8 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     cache^.math_program_count = 1
     cache^.math_command_count = 1
 
-    buffer := app_core.Dynview_Command_Buffer{}
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
     buffer.text_bytes[0] = 'a'
     buffer.text_bytes[1] = 'b'
     buffer.text_bytes_len = 2
@@ -670,7 +702,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     program^.command_start = 0
     program^.command_count = 1
 
-    ok := app_dynview.measure_math_program(cache, &buffer, program, 12)
+    ok := app_dynview.measure_math_program(cache, buffer, program, 12)
 
     testing.expect(t, ok)
     testing.expect(t, program.draw_width > 0)
@@ -715,21 +747,22 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
 
-    buffer := app_core.Dynview_Command_Buffer{}
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
 
     invalid_program := app_core.Dynview_Math_Program{}
     invalid_program.valid = false
-    testing.expect(t, !app_dynview.measure_math_program(cache, &buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
 
     invalid_program.valid = true
     invalid_program.command_start = 0
     invalid_program.command_count = 0
-    testing.expect(t, !app_dynview.measure_math_program(cache, &buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
 
     cache^.math_command_count = 1
     invalid_program.command_start = 1
     invalid_program.command_count = 1
-    testing.expect(t, !app_dynview.measure_math_program(cache, &buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
 }
 
 @(test)
@@ -741,7 +774,8 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
     cache^.math_program_count = 2
     cache^.math_command_count = 2
 
-    buffer := app_core.Dynview_Command_Buffer{}
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
     buffer.text_bytes[0] = 'a'
     buffer.text_bytes[1] = 'b'
     buffer.text_bytes[2] = 'c'
@@ -770,8 +804,8 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
     two_cmd^.command_start = 0
     two_cmd^.command_count = 2
 
-    ok_one := app_dynview.measure_math_program(cache, &buffer, one_cmd, 12)
-    ok_two := app_dynview.measure_math_program(cache, &buffer, two_cmd, 12)
+    ok_one := app_dynview.measure_math_program(cache, buffer, one_cmd, 12)
+    ok_two := app_dynview.measure_math_program(cache, buffer, two_cmd, 12)
 
     testing.expect(t, ok_one)
     testing.expect(t, ok_two)

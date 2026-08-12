@@ -7,6 +7,38 @@ package shapes
 import "core:math"
 import "core:math/linalg"
 
+//   Uniform handler shape for computing one constraint's error from its targets.
+Constraint_Error_Handler :: proc(
+    constraint: ^Shapes_Constraint,
+    targets: ^Constraint_Targets) -> f32
+
+//   Dispatch table mapping each constraint kind to its error handler.
+CONSTRAINT_ERROR_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Error_Handler{
+    .Floor = get_constraint_error_floor_entry,
+    .SnapToFloor = get_constraint_error_snaptofloor_entry,
+    .SnapPoint = get_constraint_error_snappoint_entry,
+    .Distance = get_constraint_error_distance_entry,
+    .MaxAngle = get_constraint_error_maxangle_entry,
+    .MinAngle = get_constraint_error_minangle_entry,
+    .CenterPivot = get_constraint_error_centerpivot_entry,
+}
+
+//   Uniform handler shape for applying one constraint mutation to its targets.
+Constraint_Apply_Handler :: proc(
+    constraint: ^Shapes_Constraint,
+    targets: ^Constraint_Targets)
+
+//   Dispatch table mapping each constraint kind to its apply handler.
+CONSTRAINT_APPLY_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Apply_Handler{
+    .Floor = apply_constraint_floor_entry,
+    .SnapToFloor = apply_constraint_snaptofloor_entry,
+    .SnapPoint = apply_constraint_snappoint_entry,
+    .Distance = apply_constraint_distance_entry,
+    .MaxAngle = apply_constraint_maxangle_entry,
+    .MinAngle = apply_constraint_minangle_entry,
+    .CenterPivot = apply_constraint_centerpivot_entry,
+}
+
 //   Local resolved constraint targets used by get/apply constraint logic.
 Constraint_Targets :: struct {
     host: ^Shapes_Point,
@@ -87,6 +119,64 @@ apply_all_constraints_to_error :: proc(
     }
 }
 
+//   Adapt a single-host constraint error handler to the uniform target shape.
+get_constraint_error_floor_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    return get_constraint_error_floor(constraint, targets.host)
+}
+
+//   Adapt a snap-to-floor constraint error handler to the uniform target shape.
+get_constraint_error_snaptofloor_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    return get_constraint_error_snaptofloor(constraint, targets.host)
+}
+
+//   Adapt a snap-point constraint error handler to the uniform target shape.
+get_constraint_error_snappoint_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    return get_constraint_error_snappoint(constraint, targets.host)
+}
+
+//   Adapt a two-point distance constraint error handler to the target shape.
+get_constraint_error_distance_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    if targets.child_count < 2 {
+        return 0
+    }
+    return get_constraint_error_distance(
+        constraint, targets.children[0], targets.children[1])
+}
+
+//   Adapt a three-point max-angle constraint error handler to the target shape.
+get_constraint_error_maxangle_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    if targets.child_count < 3 {
+        return 0
+    }
+    return get_constraint_error_maxangle(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
+}
+
+//   Adapt a three-point min-angle constraint error handler to the target shape.
+get_constraint_error_minangle_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    if targets.child_count < 3 {
+        return 0
+    }
+    return get_constraint_error_minangle(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
+}
+
+//   Adapt a three-point center-pivot constraint error handler to the target shape.
+get_constraint_error_centerpivot_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
+    if targets.child_count < 3 {
+        return 0
+    }
+    return get_constraint_error_centerpivot(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
+}
+
 //   Compute the error contribution of a single constraint against system points.
 //
 // Parameters:
@@ -108,46 +198,69 @@ get_constraint_error :: proc(
         return 0
     }
 
-    switch constraint^.kind {
-    case .Floor:
-        return get_constraint_error_floor(constraint, targets.host)
-
-    case .SnapToFloor:
-        return get_constraint_error_snaptofloor(constraint, targets.host)
-
-    case .SnapPoint:
-        return get_constraint_error_snappoint(constraint, targets.host)
-
-    case .Distance:
-        if targets.child_count < 2 {
-            return 0
-        }
-        return get_constraint_error_distance(constraint, targets.children[0], targets.children[1])
-
-    case .MaxAngle:
-        if targets.child_count < 3 {
-            return 0
-        }
-        return get_constraint_error_maxangle(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case .MinAngle:
-        if targets.child_count < 3 {
-            return 0
-        }
-        return get_constraint_error_minangle(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case .CenterPivot:
-        if targets.child_count < 3 {
-            return 0
-        }
-        return get_constraint_error_centerpivot(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case:
+    handlers := CONSTRAINT_ERROR_HANDLERS
+    handler := handlers[constraint^.kind]
+    if handler == nil {
         return 0
     }
+    return handler(constraint, &targets)
+}
+
+//   Adapt a single-host floor constraint applier to the uniform target shape.
+apply_constraint_floor_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    apply_constraint_floor(constraint, targets.host)
+}
+
+//   Adapt a snap-to-floor constraint applier to the uniform target shape.
+apply_constraint_snaptofloor_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    apply_constraint_snaptofloor(constraint, targets.host)
+}
+
+//   Adapt a snap-point constraint applier to the uniform target shape.
+apply_constraint_snappoint_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    apply_constraint_snappoint(constraint, targets.host)
+}
+
+//   Adapt a two-point distance constraint applier to the target shape.
+apply_constraint_distance_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    if targets.child_count < 2 {
+        return
+    }
+    apply_constraint_distance(constraint, targets.children[0], targets.children[1])
+}
+
+//   Adapt a three-point max-angle constraint applier to the target shape.
+apply_constraint_maxangle_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    if targets.child_count < 3 {
+        return
+    }
+    apply_constraint_maxangle(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
+}
+
+//   Adapt a three-point min-angle constraint applier to the target shape.
+apply_constraint_minangle_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    if targets.child_count < 3 {
+        return
+    }
+    apply_constraint_minangle(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
+}
+
+//   Adapt a three-point center-pivot constraint applier to the target shape.
+apply_constraint_centerpivot_entry :: proc(
+    constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) {
+    if targets.child_count < 3 {
+        return
+    }
+    apply_constraint_centerpivot(constraint,
+        targets.children[0], targets.children[1], targets.children[2])
 }
 
 //   Apply one constraint mutation pass to the referenced points.
@@ -171,46 +284,12 @@ apply_constraint :: proc(
         return
     }
 
-    switch constraint^.kind {
-    case .Floor:
-        apply_constraint_floor(constraint, targets.host)
-
-    case .SnapToFloor:
-        apply_constraint_snaptofloor(constraint, targets.host)
-
-    case .SnapPoint:
-        apply_constraint_snappoint(constraint, targets.host)
-
-    case .Distance:
-        if targets.child_count < 2 {
-            return
-        }
-        apply_constraint_distance(constraint, targets.children[0], targets.children[1])
-
-    case .MaxAngle:
-        if targets.child_count < 3 {
-            return
-        }
-        apply_constraint_maxangle(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case .MinAngle:
-        if targets.child_count < 3 {
-            return
-        }
-        apply_constraint_minangle(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case .CenterPivot:
-        if targets.child_count < 3 {
-            return
-        }
-        apply_constraint_centerpivot(constraint,
-            targets.children[0], targets.children[1], targets.children[2])
-
-    case:
+    handlers := CONSTRAINT_APPLY_HANDLERS
+    handler := handlers[constraint^.kind]
+    if handler == nil {
         return
     }
+    handler(constraint, &targets)
 }
 
 

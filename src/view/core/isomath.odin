@@ -82,8 +82,10 @@ screenshake_add_trauma :: proc(scale: ^Iso_Scale, impulse: f32) {
 
 //   Rebuild current shake offsets from trauma and phase without advancing time.
 screenshake_set_offsets_from_trauma :: proc(scale: ^Iso_Scale) {
-    amplitude := SCREENSHAKE_MAX_PIXELS * scale^.screenshake_trauma * scale^.screenshake_trauma
-    phase_y := screenshake_normalize_theta(scale^.screenshake_phase * 1.6180339 + 1.0471976)
+    amplitude := SCREENSHAKE_MAX_PIXELS *
+        scale^.screenshake_trauma * scale^.screenshake_trauma
+    phase_y := screenshake_normalize_theta(
+        scale^.screenshake_phase * 1.6180339 + 1.0471976)
     scale^.screenshake_offset_x = amplitude * f32(math.sin(scale^.screenshake_phase))
     scale^.screenshake_offset_y = amplitude * f32(math.sin(phase_y))
 }
@@ -194,8 +196,11 @@ iso_to_cartesian_components_batch_simd :: proc(
         count = len(out)
     }
 
-    half_scale := simd.f32x4{scale.half_scale, scale.half_scale, scale.half_scale, scale.half_scale}
-    quarter_scale := simd.f32x4{scale.quarter_scale, scale.quarter_scale, scale.quarter_scale, scale.quarter_scale}
+    half_scale := simd.f32x4{
+        scale.half_scale, scale.half_scale, scale.half_scale, scale.half_scale}
+    quarter_scale := simd.f32x4{
+        scale.quarter_scale, scale.quarter_scale,
+        scale.quarter_scale, scale.quarter_scale}
     x_offset := simd.f32x4{scale.x_offset, scale.x_offset, scale.x_offset, scale.x_offset}
     y_offset := simd.f32x4{scale.y_offset, scale.y_offset, scale.y_offset, scale.y_offset}
 

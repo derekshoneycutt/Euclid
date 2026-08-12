@@ -36,7 +36,8 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, pos::AbstractVector{<:Real},
     color::BridgeColor, brushSize::Real)
-    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], color, brushSize)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3],
+        color, brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, x::Real, y::Real, z::Real,
@@ -51,12 +52,14 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
     color::Colorant, brushSize::Real)
-    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, pos::AbstractVector{<:Real},
     color::Colorant, brushSize::Real)
-    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, x::Real, y::Real, z::Real,
@@ -71,12 +74,14 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
     color::Symbol, brushSize::Real)
-    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, pos::AbstractVector{<:Real},
     color::Symbol, brushSize::Real)
-    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, x::Real, y::Real, z::Real,
@@ -91,12 +96,14 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
     color::AbstractString, brushSize::Real)
-    create_new_label(state_ptr, label, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, label, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, pos::AbstractVector{<:Real},
     color::AbstractString, brushSize::Real)
-    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label(state_ptr, codepoint(label), pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 
 """
@@ -121,77 +128,99 @@ end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::BridgeColor, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, color, brushSize)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z,
+        color, brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::BridgeColor, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], color, brushSize)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3],
+        color, brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::BridgeColor, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], color, brushSize)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind,
+        pos[1], pos[2], pos[3], color, brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::Colorant, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z,
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::Colorant, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z,
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::Colorant, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::Colorant, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::Symbol, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z,
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::Symbol, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, codepoint(label), decoration_kind, x, y, z,
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::Symbol, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, label, decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::Symbol, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::AbstractString, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, label, decoration_kind, x, y, z, bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::AbstractString, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, x, y, z, bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, codepoint(label), decoration_kind, x, y, z,
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::AbstractString, brushSize::Real)
-    create_new_label_decorated(state_ptr, label, decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, label, decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::Char, decoration_kind::Integer, pos::AbstractVector{<:Real},
     color::AbstractString, brushSize::Real)
-    create_new_label_decorated(state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3], bridge_color(color), brushSize)
+    create_new_label_decorated(
+        state_ptr, codepoint(label), decoration_kind, pos[1], pos[2], pos[3],
+        bridge_color(color), brushSize)
 end
 
 """
@@ -287,7 +316,8 @@ end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::BridgeColor, brushSize::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], color, brushSize)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
+        color, brushSize)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Real, y1::Real, z1::Real,
@@ -298,7 +328,8 @@ end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::Colorant, brushSize::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
+        bridge_color(color), brushSize)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Real, y1::Real, z1::Real,
@@ -309,7 +340,8 @@ end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::Symbol, brushSize::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
+        bridge_color(color), brushSize)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Real, y1::Real, z1::Real,
@@ -320,7 +352,8 @@ end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::AbstractString, brushSize::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3], bridge_color(color), brushSize)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
+        bridge_color(color), brushSize)
 end
 
 """
@@ -356,43 +389,51 @@ function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, startθ::Real, endθ::Real,
     color::BridgeColor, brushSize::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, color, brushSize)
+    create_new_circle(
+        state_ptr, center[1], center[2], center[3], radius, startθ, endθ,
+        color, brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::Colorant, brushSize::Real)
-    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, startθ::Real, endθ::Real,
     color::Colorant, brushSize::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius,
+        startθ, endθ, bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::Symbol, brushSize::Real)
-    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, startθ::Real, endθ::Real,
     color::Symbol, brushSize::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::AbstractString, brushSize::Real)
-    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, startθ::Real, endθ::Real,
     color::AbstractString, brushSize::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 
 """
@@ -428,13 +469,15 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, startθ::Real, endθ::Real,
     color::BridgeColor, brushSize::Real)
-    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius, startθ, endθ, color, brushSize)
+    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
+        startθ, endθ, color, brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::Colorant, brushSize::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
@@ -447,7 +490,8 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::Symbol, brushSize::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
@@ -460,7 +504,8 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
     radius::Real, startθ::Real, endθ::Real,
     color::AbstractString, brushSize::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ, bridge_color(color), brushSize)
+    create_new_filledcircle(state_ptr, x, y, z, radius, startθ, endθ,
+        bridge_color(color), brushSize)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
@@ -508,8 +553,8 @@ function create_new_triangle(state_ptr::Ptr{Cvoid},
         color::BridgeColor)::BridgeShapeTriangle
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    color::BridgeColor)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, color::BridgeColor)
     create_new_triangle(
         state_ptr, pos1[1], pos1[2], pos1[3],
         pos2[1], pos2[2], pos2[3],
@@ -521,11 +566,12 @@ function create_new_triangle(state_ptr::Ptr{Cvoid},
     x2::Real, y2::Real, z2::Real,
     x3::Real, y3::Real, z3::Real,
     color::Colorant)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
+        bridge_color(color))
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    color::Colorant)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, color::Colorant)
     create_new_triangle(
         state_ptr, pos1[1], pos1[2], pos1[3],
         pos2[1], pos2[2], pos2[3],
@@ -537,11 +583,12 @@ function create_new_triangle(state_ptr::Ptr{Cvoid},
     x2::Real, y2::Real, z2::Real,
     x3::Real, y3::Real, z3::Real,
     color::Symbol)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
+        bridge_color(color))
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    color::Symbol)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, color::Symbol)
     create_new_triangle(
         state_ptr, pos1[1], pos1[2], pos1[3],
         pos2[1], pos2[2], pos2[3],
@@ -553,11 +600,12 @@ function create_new_triangle(state_ptr::Ptr{Cvoid},
     x2::Real, y2::Real, z2::Real,
     x3::Real, y3::Real, z3::Real,
     color::AbstractString)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3, bridge_color(color))
+    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
+        bridge_color(color))
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    color::AbstractString)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, color::AbstractString)
     create_new_triangle(
         state_ptr, pos1[1], pos1[2], pos1[3],
         pos2[1], pos2[2], pos2[3],
@@ -609,7 +657,8 @@ function create_new_square(state_ptr::Ptr{Cvoid},
         color::BridgeColor)::BridgeShapeSquare
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::BridgeColor)
     create_new_square(
         state_ptr, pos1[1], pos1[2], pos1[3],
@@ -632,7 +681,8 @@ function create_new_square(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::Colorant)
     create_new_square(
         state_ptr, pos1[1], pos1[2], pos1[3],
@@ -655,7 +705,8 @@ function create_new_square(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::Symbol)
     create_new_square(
         state_ptr, pos1[1], pos1[2], pos1[3],
@@ -678,7 +729,8 @@ function create_new_square(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::AbstractString)
     create_new_square(
         state_ptr, pos1[1], pos1[2], pos1[3],
@@ -721,9 +773,9 @@ function create_new_pentagon(state_ptr::Ptr{Cvoid},
         color::BridgeColor)::BridgeShapePentagon
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    pos4::AbstractVector{<:Real}, pos5::AbstractVector{<:Real},
-    color::BridgeColor)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos5::AbstractVector{<:Real}, color::BridgeColor)
     create_new_pentagon(
         state_ptr,
         pos1[1], pos1[2], pos1[3],
@@ -750,9 +802,9 @@ function create_new_pentagon(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    pos4::AbstractVector{<:Real}, pos5::AbstractVector{<:Real},
-    color::Colorant)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos5::AbstractVector{<:Real}, color::Colorant)
     create_new_pentagon(
         state_ptr,
         pos1[1], pos1[2], pos1[3],
@@ -779,9 +831,9 @@ function create_new_pentagon(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    pos4::AbstractVector{<:Real}, pos5::AbstractVector{<:Real},
-    color::Symbol)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos5::AbstractVector{<:Real}, color::Symbol)
     create_new_pentagon(
         state_ptr,
         pos1[1], pos1[2], pos1[3],
@@ -808,9 +860,9 @@ function create_new_pentagon(state_ptr::Ptr{Cvoid},
         bridge_color(color))
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real}, pos3::AbstractVector{<:Real},
-    pos4::AbstractVector{<:Real}, pos5::AbstractVector{<:Real},
-    color::AbstractString)
+    pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
+    pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
+    pos5::AbstractVector{<:Real}, color::AbstractString)
     create_new_pentagon(
         state_ptr,
         pos1[1], pos1[2], pos1[3],
@@ -876,7 +928,8 @@ Parameters:
 """
 function hide_point_batch(state_ptr::Ptr{Cvoid}, ids)
     arr = Cint[Cint(id) for id in ids]
-    @ccall hide_point_batch(state_ptr::Ptr{Cvoid}, arr::Ptr{Cint}, length(arr)::Cint)::Cvoid
+    @ccall hide_point_batch(
+        state_ptr::Ptr{Cvoid}, arr::Ptr{Cint}, length(arr)::Cint)::Cvoid
 end
 """
 Update a point position by id.
@@ -895,12 +948,14 @@ Parameters:
 function set_point_position(
     state_ptr::Ptr{Cvoid}, id::Integer, x::Real, y::Real, z::Real)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall set_point_position(state_ptr::Ptr{Cvoid}, id::Cint, pos::NTuple{3, Cfloat})::Cvoid
+    @ccall set_point_position(
+        state_ptr::Ptr{Cvoid}, id::Cint, pos::NTuple{3, Cfloat})::Cvoid
 end
 function set_point_position(
     state_ptr::Ptr{Cvoid}, id::Integer, pos::AbstractVector{<:Real})
     postupled = (pos[1], pos[2], pos[3])
-    @ccall set_point_position(state_ptr::Ptr{Cvoid}, id::Cint, postupled::NTuple{3, Cfloat})::Cvoid
+    @ccall set_point_position(
+        state_ptr::Ptr{Cvoid}, id::Cint, postupled::NTuple{3, Cfloat})::Cvoid
 end
 
 """
@@ -958,7 +1013,8 @@ Parameters:
 Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and `AbstractString`.
 """
 function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::BridgeColor)
-    @ccall set_point_active_color(state_ptr::Ptr{Cvoid}, id::Cint, color::BridgeColor)::Cvoid
+    @ccall set_point_active_color(
+        state_ptr::Ptr{Cvoid}, id::Cint, color::BridgeColor)::Cvoid
 end
 function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Colorant)
     set_point_active_color(state_ptr, id, bridge_color(color))
@@ -1026,7 +1082,8 @@ Parameters:
 Returns: `Int32` status code
 """
 function set_point_draw_enabled(state_ptr::Ptr{Cvoid}, index::Integer, enabled::Bool)
-    @ccall set_point_draw_enabled(state_ptr::Ptr{Cvoid}, index::Int32, UInt8(enabled)::UInt8)::Int32
+    @ccall set_point_draw_enabled(state_ptr::Ptr{Cvoid}, index::Int32,
+        UInt8(enabled)::UInt8)::Int32
 end
 
 """
@@ -1048,9 +1105,11 @@ Returns: `Int32` status code
 function set_point_position_status(state_ptr::Ptr{Cvoid}, index::Integer,
     x::Real, y::Real, z::Real)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall set_point_position_status(state_ptr::Ptr{Cvoid}, index::Int32, pos::NTuple{3, Cfloat})::Int32
+    @ccall set_point_position_status(state_ptr::Ptr{Cvoid}, index::Int32,
+        pos::NTuple{3, Cfloat})::Int32
 end
-function set_point_position_status(state_ptr::Ptr{Cvoid}, index::Integer, pos::AbstractVector{<:Real})
+function set_point_position_status(state_ptr::Ptr{Cvoid}, index::Integer,
+    pos::AbstractVector{<:Real})
     postupled = (pos[1], pos[2], pos[3])
     @ccall set_point_position_status(state_ptr::Ptr{Cvoid}, index::Int32,
         postupled::NTuple{3, Cfloat})::Int32
@@ -1088,7 +1147,8 @@ Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and 
 Returns: `Int32` status code
 """
 function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
-    @ccall set_point_color_status(state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
+    @ccall set_point_color_status(
+        state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
 end
 function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Colorant)
     set_point_color_status(state_ptr, index, bridge_color(color))
@@ -1096,7 +1156,8 @@ end
 function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Symbol)
     set_point_color_status(state_ptr, index, bridge_color(color))
 end
-function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
+function set_point_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
     set_point_color_status(state_ptr, index, bridge_color(color))
 end
 
@@ -1131,16 +1192,21 @@ Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and 
 
 Returns: `Int32` status code
 """
-function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
-    @ccall set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
+function set_point_active_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
+    @ccall set_point_active_color_status(
+        state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
 end
-function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Colorant)
+function set_point_active_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::Colorant)
     set_point_active_color_status(state_ptr, index, bridge_color(color))
 end
-function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::Symbol)
+function set_point_active_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::Symbol)
     set_point_active_color_status(state_ptr, index, bridge_color(color))
 end
-function set_point_active_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
+function set_point_active_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::AbstractString)
     set_point_active_color_status(state_ptr, index, bridge_color(color))
 end
 
@@ -1207,8 +1273,10 @@ Parameters:
 
 Returns: `Int32` status code
 """
-function attach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
-    @ccall attach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
+function attach_child_point(
+    state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
+    @ccall attach_child_point(
+        state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
 end
 
 """
@@ -1224,8 +1292,10 @@ Parameters:
 
 Returns: `Int32` status code
 """
-function detach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
-    @ccall detach_child_point(state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
+function detach_child_point(
+    state_ptr::Ptr{Cvoid}, parentIndex::Integer, childIndex::Integer)
+    @ccall detach_child_point(
+        state_ptr::Ptr{Cvoid}, parentIndex::Int32, childIndex::Int32)::Int32
 end
 
 """

@@ -36,7 +36,8 @@ Parameters:
 Returns 1 on success and -1 on failure
 """
 function add_root_animation_interface(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String, stable_id::String)
+    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String,
+    stable_id::String)
 
     @ccall add_root_animation_interface(
         state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,

@@ -12,7 +12,8 @@ Begin a host dynview block for subsequent content commands.
 
 Returns a BRIDGE_STATUS_* code.
 """
-function dynview_begin_block(state_ptr::Ptr{Cvoid}, block_kind::Integer, block_id::Integer)
+function dynview_begin_block(
+    state_ptr::Ptr{Cvoid}, block_kind::Integer, block_id::Integer)
     @ccall dynview_begin_block(
         state_ptr::Ptr{Cvoid},
         Int32(block_kind)::Int32,
@@ -78,7 +79,8 @@ Emit a visible math-glyph run inside the currently open host dynview block.
 
 Returns a BRIDGE_STATUS_* code.
 """
-function dynview_math_glyph_run(state_ptr::Ptr{Cvoid}, text::AbstractString, style_id::Integer)
+function dynview_math_glyph_run(
+    state_ptr::Ptr{Cvoid}, text::AbstractString, style_id::Integer)
     @ccall dynview_math_glyph_run(
         state_ptr::Ptr{Cvoid},
         text::Cstring,
@@ -230,7 +232,8 @@ function dynview_inline_line_brush(
     style_id::Integer,
     brush_color::Colorant)
 
-    dynview_inline_line_brush(state_ptr, length, thickness, style_id, bridge_color(brush_color))
+    dynview_inline_line_brush(
+        state_ptr, length, thickness, style_id, bridge_color(brush_color))
 end
 function dynview_inline_line_brush(
     state_ptr::Ptr{Cvoid},
@@ -239,7 +242,8 @@ function dynview_inline_line_brush(
     style_id::Integer,
     brush_color::Symbol)
 
-    dynview_inline_line_brush(state_ptr, length, thickness, style_id, bridge_color(brush_color))
+    dynview_inline_line_brush(
+        state_ptr, length, thickness, style_id, bridge_color(brush_color))
 end
 function dynview_inline_line_brush(
     state_ptr::Ptr{Cvoid},
@@ -248,7 +252,8 @@ function dynview_inline_line_brush(
     style_id::Integer,
     brush_color::AbstractString)
 
-    dynview_inline_line_brush(state_ptr, length, thickness, style_id, bridge_color(brush_color))
+    dynview_inline_line_brush(
+        state_ptr, length, thickness, style_id, bridge_color(brush_color))
 end
 
 """
@@ -281,7 +286,8 @@ function dynview_inline_box_brush(
     style_id::Integer,
     brush_color::Colorant)
 
-    dynview_inline_box_brush(state_ptr, width, height, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_box_brush(state_ptr,
+        width, height, stroke, style_id, bridge_color(brush_color))
 end
 function dynview_inline_box_brush(
     state_ptr::Ptr{Cvoid},
@@ -291,7 +297,8 @@ function dynview_inline_box_brush(
     style_id::Integer,
     brush_color::Symbol)
 
-    dynview_inline_box_brush(state_ptr, width, height, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_box_brush(state_ptr,
+        width, height, stroke, style_id, bridge_color(brush_color))
 end
 function dynview_inline_box_brush(
     state_ptr::Ptr{Cvoid},
@@ -301,7 +308,8 @@ function dynview_inline_box_brush(
     style_id::Integer,
     brush_color::AbstractString)
 
-    dynview_inline_box_brush(state_ptr, width, height, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_box_brush(state_ptr, width, height, stroke, style_id,
+        bridge_color(brush_color))
 end
 
 """
@@ -331,7 +339,8 @@ function dynview_inline_circle_brush(
     style_id::Integer,
     brush_color::Colorant)
 
-    dynview_inline_circle_brush(state_ptr, radius, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_circle_brush(
+        state_ptr, radius, stroke, style_id, bridge_color(brush_color))
 end
 function dynview_inline_circle_brush(
     state_ptr::Ptr{Cvoid},
@@ -340,7 +349,8 @@ function dynview_inline_circle_brush(
     style_id::Integer,
     brush_color::Symbol)
 
-    dynview_inline_circle_brush(state_ptr, radius, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_circle_brush(
+        state_ptr, radius, stroke, style_id, bridge_color(brush_color))
 end
 function dynview_inline_circle_brush(
     state_ptr::Ptr{Cvoid},
@@ -349,7 +359,8 @@ function dynview_inline_circle_brush(
     style_id::Integer,
     brush_color::AbstractString)
 
-    dynview_inline_circle_brush(state_ptr, radius, stroke, style_id, bridge_color(brush_color))
+    dynview_inline_circle_brush(
+        state_ptr, radius, stroke, style_id, bridge_color(brush_color))
 end
 
 """
@@ -382,7 +393,8 @@ function dynview_inline_filled_box(
     fill_color::Colorant,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_box(state_ptr, width, height, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_box(state_ptr, width, height, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 function dynview_inline_filled_box(
     state_ptr::Ptr{Cvoid},
@@ -392,7 +404,8 @@ function dynview_inline_filled_box(
     fill_color::Symbol,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_box(state_ptr, width, height, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_box(state_ptr, width, height, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 function dynview_inline_filled_box(
     state_ptr::Ptr{Cvoid},
@@ -402,7 +415,8 @@ function dynview_inline_filled_box(
     fill_color::AbstractString,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_box(state_ptr, width, height, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_box(state_ptr, width, height, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 
 """
@@ -432,7 +446,8 @@ function dynview_inline_filled_circle(
     fill_color::Colorant,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_circle(state_ptr, radius, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_circle(state_ptr, radius, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 function dynview_inline_filled_circle(
     state_ptr::Ptr{Cvoid},
@@ -441,7 +456,8 @@ function dynview_inline_filled_circle(
     fill_color::Symbol,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_circle(state_ptr, radius, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_circle(state_ptr, radius, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 function dynview_inline_filled_circle(
     state_ptr::Ptr{Cvoid},
@@ -450,7 +466,8 @@ function dynview_inline_filled_circle(
     fill_color::AbstractString,
     outline_stroke::Real=0)
 
-    dynview_inline_filled_circle(state_ptr, radius, style_id, bridge_color(fill_color), outline_stroke)
+    dynview_inline_filled_circle(state_ptr, radius, style_id,
+        bridge_color(fill_color), outline_stroke)
 end
 
 """
@@ -466,16 +483,20 @@ function dynview_inline_pie_section(
     start_angle_degrees::Real,
     end_angle_degrees::Real,
     style_id::Integer,
+    filled::Bool,
     fill_color::BridgeColor,
+    arc_color::BridgeColor=fill_color,
     outline_stroke::Real=0)
 
+    colors = BridgePieColors(fill_color, arc_color)
     @ccall dynview_inline_pie_section(
         state_ptr::Ptr{Cvoid},
         Cfloat(radius)::Cfloat,
         Cfloat(start_angle_degrees)::Cfloat,
         Cfloat(end_angle_degrees)::Cfloat,
         Int32(style_id)::Int32,
-        fill_color::BridgeColor,
+        filled::Bool,
+        colors::BridgePieColors,
         Cfloat(outline_stroke)::Cfloat)::Int32
 end
 function dynview_inline_pie_section(
@@ -484,17 +505,127 @@ function dynview_inline_pie_section(
     start_angle_degrees::Real,
     end_angle_degrees::Real,
     style_id::Integer,
+    filled::Bool,
     fill_color::Colorant,
+    arc_color::Colorant=fill_color,
     outline_stroke::Real=0)
 
-    dynview_inline_pie_section(
-        state_ptr,
-        radius,
-        start_angle_degrees,
-        end_angle_degrees,
-        style_id,
-        bridge_color(fill_color),
-        outline_stroke)
+    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
+        style_id, filled, bridge_color(fill_color),
+        bridge_color(arc_color), outline_stroke)
+end
+
+"""
+Emit one inline perpendicular atom.
+
+Length is the horizontal top bar; stem_height is the vertical drop.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_perpendicular(
+    state_ptr::Ptr{Cvoid},
+    length::Real,
+    stem_height::Real,
+    stroke::Real,
+    style_id::Integer,
+    top_color::BridgeColor,
+    stem_color::BridgeColor)
+
+    @ccall dynview_inline_perpendicular(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(length)::Cfloat,
+        Cfloat(stem_height)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32,
+        top_color::BridgeColor,
+        stem_color::BridgeColor)::Int32
+end
+
+"""
+Emit one inline triangle atom.
+
+Width and height are in wrap-column units; stroke is host pixel units.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_triangle(
+    state_ptr::Ptr{Cvoid},
+    width::Real,
+    height::Real,
+    stroke::Real,
+    style_id::Integer,
+    filled::Bool,
+    fill_color::BridgeColor,
+    edge1_color::BridgeColor,
+    edge2_color::BridgeColor,
+    edge3_color::BridgeColor)
+
+    colors = BridgeTriangleColors(fill_color, edge1_color, edge2_color, edge3_color)
+    @ccall dynview_inline_triangle(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(width)::Cfloat,
+        Cfloat(height)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32,
+        filled::Bool,
+        colors::BridgeTriangleColors)::Int32
+end
+
+"""
+Emit one inline box atom with four independently colored edges.
+
+Width and height are in wrap-column units; stroke is host pixel units.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_box_edges(
+    state_ptr::Ptr{Cvoid},
+    width::Real,
+    height::Real,
+    stroke::Real,
+    style_id::Integer,
+    edge1_color::BridgeColor,
+    edge2_color::BridgeColor,
+    edge3_color::BridgeColor,
+    edge4_color::BridgeColor)
+
+    colors = BridgeBoxEdgeColors(edge1_color, edge2_color, edge3_color, edge4_color)
+    @ccall dynview_inline_box_edges(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(width)::Cfloat,
+        Cfloat(height)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32,
+        colors::BridgeBoxEdgeColors)::Int32
+end
+
+"""
+Emit one inline pentagon atom.
+
+Width and height are in wrap-column units; stroke is host pixel units.
+Returns a BRIDGE_STATUS_* code.
+"""
+function dynview_inline_pentagon(
+    state_ptr::Ptr{Cvoid},
+    width::Real,
+    height::Real,
+    stroke::Real,
+    style_id::Integer,
+    filled::Bool,
+    fill_color::BridgeColor,
+    edge1_color::BridgeColor,
+    edge2_color::BridgeColor,
+    edge3_color::BridgeColor,
+    edge4_color::BridgeColor,
+    edge5_color::BridgeColor)
+
+    colors = BridgePentagonColors(fill_color, edge1_color, edge2_color,
+        edge3_color, edge4_color, edge5_color)
+    @ccall dynview_inline_pentagon(
+        state_ptr::Ptr{Cvoid},
+        Cfloat(width)::Cfloat,
+        Cfloat(height)::Cfloat,
+        Cfloat(stroke)::Cfloat,
+        Int32(style_id)::Int32,
+        filled::Bool,
+        colors::BridgePentagonColors)::Int32
 end
 function dynview_inline_pie_section(
     state_ptr::Ptr{Cvoid},
@@ -502,17 +633,14 @@ function dynview_inline_pie_section(
     start_angle_degrees::Real,
     end_angle_degrees::Real,
     style_id::Integer,
+    filled::Bool,
     fill_color::Symbol,
+    arc_color::Symbol=fill_color,
     outline_stroke::Real=0)
 
-    dynview_inline_pie_section(
-        state_ptr,
-        radius,
-        start_angle_degrees,
-        end_angle_degrees,
-        style_id,
-        bridge_color(fill_color),
-        outline_stroke)
+    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
+        style_id, filled, bridge_color(fill_color),
+        bridge_color(arc_color), outline_stroke)
 end
 function dynview_inline_pie_section(
     state_ptr::Ptr{Cvoid},
@@ -520,17 +648,14 @@ function dynview_inline_pie_section(
     start_angle_degrees::Real,
     end_angle_degrees::Real,
     style_id::Integer,
+    filled::Bool,
     fill_color::AbstractString,
+    arc_color::AbstractString=fill_color,
     outline_stroke::Real=0)
 
-    dynview_inline_pie_section(
-        state_ptr,
-        radius,
-        start_angle_degrees,
-        end_angle_degrees,
-        style_id,
-        bridge_color(fill_color),
-        outline_stroke)
+    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
+        style_id, filled, bridge_color(fill_color),
+        bridge_color(arc_color), outline_stroke)
 end
 
 """

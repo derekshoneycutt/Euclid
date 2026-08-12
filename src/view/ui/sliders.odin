@@ -10,7 +10,8 @@ import rl "vendor:raylib"
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 
 //   Build knob geometry from track bounds and normalized ratio.
-build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
+build_slider_knob :: proc(
+    slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
     knob_center_x := slider_track.x + ratio * slider_track.width
     knob := rl.Rectangle{
         knob_center_x - SETTINGS_KNOB_WIDTH * 0.5,
@@ -22,7 +23,8 @@ build_slider_knob :: proc(slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Re
 }
 
 //   Scale a rectangle around its center for hover/press visual feedback.
-scale_rect_about_center :: #force_inline proc(rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
+scale_rect_about_center :: #force_inline proc(
+    rect: rl.Rectangle, scale: f32) -> rl.Rectangle {
     if scale <= 0 {
         return rect
     }
@@ -182,19 +184,37 @@ slider_knob_draw_style :: proc(
 }
 
 
-//   Render and update a reusable integer slider control.
-draw_settings_integer_slider :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
+//   Inputs for one reusable integer slider control: placement, pointer input,
+//   shared UI/press state, label, value cell, and the allowed range, grouped so
+//   the draw call passes one coherent value.
+Integer_Slider_Params :: struct {
+    panel:       rl.Rectangle,
+    row_y:       f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    press_id: int,
-    label: string,
-    value: ^int,
-    min_value, max_value: int,
-    font: rl.Font) {
+    ui_runtime:  ^core.Euclid_UI_Runtime_State,
+    press_id:    int,
+    label:       string,
+    value:       ^int,
+    min_value:   int,
+    max_value:   int,
+    font:        rl.Font,
+}
 
-    view_core.ui_text(label, int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
+//   Render and update a reusable integer slider control.
+draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
+
+    panel := params.panel
+    row_y := params.row_y
+    mouse_input := params.mouse_input
+    ui_runtime := params.ui_runtime
+    press_id := params.press_id
+    value := params.value
+    min_value := params.min_value
+    max_value := params.max_value
+    font := params.font
+
+    view_core.ui_text(params.label, int(panel.x + SETTINGS_PANEL_INSET),
+        int(row_y), UI_TEXT_COLOR, font)
 
     track := slider_track_rect(panel, row_y)
     hit := slider_hit_rect(track)
@@ -211,7 +231,8 @@ draw_settings_integer_slider :: proc(
     owns_press := slider_owns_press(ui_runtime, press_id)
     slider_try_capture_press(ui_runtime, mouse_input, press_id, hovered_hit, &owns_press)
     slider_release_if_needed(ui_runtime, mouse_input, &owns_press)
-    slider_apply_drag_value(&clamped, min_value, max_value, denom, mouse_input, track, owns_press)
+    slider_apply_drag_value(&clamped, min_value, max_value, denom,
+        mouse_input, track, owns_press)
 
     value^ = clamped
 
@@ -219,7 +240,8 @@ draw_settings_integer_slider :: proc(
     knob_center_x, knob = build_slider_knob(track, ratio)
 
     pressed_knob := owns_press && mouse_input.left_down
-    knob_draw, knob_color := slider_knob_draw_style(knob, panel, mouse_input, pressed_knob)
+    knob_draw, knob_color :=
+        slider_knob_draw_style(knob, panel, mouse_input, pressed_knob)
 
     rl.DrawRectangleRec(track, BACKGROUND_COLOR)
     rl.DrawRectangleRec(

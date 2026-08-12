@@ -8,6 +8,7 @@ package core
 import "../julialib"
 import "base:runtime"
 import "core:encoding/uuid"
+import "core:os"
 import vmem "core:mem/virtual"
 import "core:sync/chan"
 import "core:thread"
@@ -40,6 +41,14 @@ DYNVIEW__MAX_MATH_PROGRAMS :: 256
 DYNVIEW__MAX_MATH_NODES :: 4096
 DYNVIEW__MAX_MATH_COMMANDS :: 4096
 
+TRACE_RECORD_CAPACITY :: 256
+TRACE_EVENT_NAME_CAPACITY :: 96
+TRACE_EVENT_PAYLOAD_CAPACITY :: 2048
+TRACE_SERIALIZE_BUFFER_CAPACITY :: 4096
+TRACE_RUN_ID_CAPACITY :: 64
+TRACE_OUTPUT_PATH_CAPACITY :: 1024
+TRACE_CHECKPOINT_POINT_CAPACITY :: 8
+
 FONT_VARIANT_SLOT_COUNT :: 14
 
 Vector2 :: rl.Vector2
@@ -56,6 +65,8 @@ ANIMATION_TICK_SLOT_COUNT :: 2
 SCENE_COMMAND_BATCH_CAPACITY :: 64
 SCENE_COMMAND_POINT_BATCH_CAPACITY :: 8
 
+JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
+
 
 /****
     Starting with the Julia Animation tree and runtime structures
@@ -66,6 +77,42 @@ Bridge_Color :: struct {
     g: u8,
     b: u8,
     a: u8,
+}
+
+//   Fill plus five edge colors for one inline pentagon atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Pentagon_Colors :: struct {
+    fill:  Bridge_Color,
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+    edge4: Bridge_Color,
+    edge5: Bridge_Color,
+}
+
+//   Fill plus three edge colors for one inline triangle atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Triangle_Colors :: struct {
+    fill:  Bridge_Color,
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+}
+
+//   Four independent edge colors for one inline box atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Box_Edge_Colors :: struct {
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+    edge4: Bridge_Color,
+}
+
+//   Fill and arc colors for one inline pie-section atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Pie_Colors :: struct {
+    fill: Bridge_Color,
+    arc:  Bridge_Color,
 }
 
 Scene_Command_Kind :: enum u8 {
@@ -324,8 +371,6 @@ Euclid_Julia_Animation_Lookup_Entry :: struct {
 Euclid_Julia_Animation_Iterator :: struct {
     current : ^Euclid_Julia_Animation_Interface,
 }
-
-JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
 
 Euclid_Julia_Interface :: struct {
     init_scripts : ^julialib.jl_value_t,
@@ -786,6 +831,9 @@ Dynview_Command_Kind :: enum {
     InlineFilledBox,
     InlineFilledCircle,
     InlinePieSection,
+    InlinePerpendicular,
+    InlineTriangle,
+    InlinePentagon,
 }
 
 Dynview_Command :: struct {
@@ -825,6 +873,15 @@ Dynview_Command :: struct {
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
+    pie_is_filled: bool,
+    has_outline_color: bool,
+    outline_color: rl.Color,
+    shape_is_filled: bool,
+    shape_edge_color_1: rl.Color,
+    shape_edge_color_2: rl.Color,
+    shape_edge_color_3: rl.Color,
+    shape_edge_color_4: rl.Color,
+    shape_edge_color_5: rl.Color,
 }
 
 Dynview_Copy_Block :: struct {
@@ -861,6 +918,9 @@ Dynview_Layout_Item_Kind :: enum {
     InlineFilledBox,
     InlineFilledCircle,
     InlinePieSection,
+    InlinePerpendicular,
+    InlineTriangle,
+    InlinePentagon,
 }
 
 Dynview_Layout_Item :: struct {
@@ -899,10 +959,21 @@ Dynview_Layout_Item :: struct {
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
+    pie_is_filled: bool,
+    has_outline_color: bool,
+    outline_color: rl.Color,
+    shape_is_filled: bool,
+    shape_edge_color_1: rl.Color,
+    shape_edge_color_2: rl.Color,
+    shape_edge_color_3: rl.Color,
+    shape_edge_color_4: rl.Color,
+    shape_edge_color_5: rl.Color,
     x_offset: f32,
     y_offset: f32,
     draw_width: f32,
     draw_height: f32,
+    pie_center_offset_x: f32,
+    pie_center_offset_y: f32,
     ascent: f32,
     descent: f32,
     visual_padding_top: f32,
@@ -1298,6 +1369,117 @@ Simulation_Executor :: struct {
     dynview_task: Frame_Preparation_Task_Data,
 }
 
+
+
+
+
+/****
+    Semantric trace system; used for deterministic testing and animation tracing
+*/
+
+
+
+Trace_Counters :: struct {
+    emitted_count: u64,
+    dropped_count: u64,
+    invalid: bool,
+}
+
+Trace_Output_Mode :: enum u8 {
+    Disabled,
+    Stdout,
+    File,
+    Sink,
+}
+
+Trace_Category :: enum u8 {
+    Trace,
+    Runtime,
+    Animation,
+    Geometry,
+    Tools,
+    Particles,
+    View,
+}
+
+Trace_Category_Set :: bit_set[Trace_Category]
+
+Trace_Event_Record :: struct {
+    sequence: u64,
+    category: Trace_Category,
+    event_len: int,
+    event: [TRACE_EVENT_NAME_CAPACITY]u8,
+    payload_len: int,
+    payload: [TRACE_EVENT_PAYLOAD_CAPACITY]u8,
+}
+
+Trace_Checkpoint_Point :: struct {
+    index: int,
+    kind: Shapes_Point_Type,
+    do_draw: bool,
+    active_child: int,
+    position: Vector3,
+    has_position: bool,
+    brush_size: f32,
+    offset: f32,
+}
+
+Trace_Checkpoint_Snapshot :: struct {
+    checkpoint_id: u64,
+    fixed_step: u64,
+    simulation_time: f32,
+    runtime_generation: u64,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
+    animation_name_len: int,
+    animation_name: [96]u8,
+    point_count: int,
+    next_point_index: int,
+    next_constraint_index: int,
+    active_constraint_count: int,
+    rejected_tick_count: u64,
+    failed_request_count: u64,
+    dropped_record_count: u64,
+    points: [TRACE_CHECKPOINT_POINT_CAPACITY]Trace_Checkpoint_Point,
+    pen_host_index: int,
+    pen_joint1_index: int,
+    pen_joint2_index: int,
+    pen_visible: bool,
+    pen_active_child: int,
+    compass_host_index: int,
+    compass_pivot_index: int,
+    compass_joint1_index: int,
+    compass_joint2_index: int,
+    compass_visible: bool,
+    compass_active_child: int,
+}
+
+Trace_State :: struct {
+    enabled: bool,
+    strict: bool,
+    invalid: bool,
+    finished: bool,
+    overflow_reported: bool,
+    output_open: bool,
+    output_mode: Trace_Output_Mode,
+    categories: Trace_Category_Set,
+    records_head: int,
+    records_count: int,
+    next_sequence: u64,
+    emitted_count: u64,
+    dropped_count: u64,
+    run_id_len: int,
+    run_id: [TRACE_RUN_ID_CAPACITY]u8,
+    output_path_len: int,
+    output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
+    output_handle: ^os.File,
+    records: [TRACE_RECORD_CAPACITY]Trace_Event_Record,
+    serialize_buffer: [TRACE_SERIALIZE_BUFFER_CAPACITY]u8,
+}
+
+
+
+
 /****
     General state of the application is the host of all primary memory for Odin and the application
 */
@@ -1343,6 +1525,10 @@ Euclid_General_State :: struct {
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,
 
+    trace_state: Trace_State,
+
+    fixed_step: u64,
+    simulation_time: f32,
     current_delta_time : f32,
     accumulator : f32,
 
@@ -1357,4 +1543,12 @@ Euclid_Run_Settings :: struct {
     limit_fps: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
+    semantic_trace_enabled: bool,
+    semantic_trace_strict: bool,
+    semantic_trace_output: string,
+    semantic_trace_events: string,
+    // When true, tracing runs and records are validated but discarded instead of
+    // written to stdout or a file. Used by tests to exercise the trace pipeline
+    // without producing output bytes.
+    semantic_trace_sink: bool,
 }

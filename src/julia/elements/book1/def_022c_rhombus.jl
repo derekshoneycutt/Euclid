@@ -21,6 +21,13 @@ const MarkerRadius = 0.15f0
 const MarkerCenters = (VertexA, VertexB, VertexC, VertexD)
 const MarkerColors = (:steelblue, :khaki3, :steelblue, :khaki3)
 
+struct MarkerGeometry
+    start::Vector{Float32}
+    sweep_theta::Float32
+    start_theta::Float32
+    finish::Vector{Float32}
+end
+
 function marker_geometry(prev::Vector{Float32}, curr::Vector{Float32}, nxt::Vector{Float32}, radius)
     v1 = normalize(Float32[prev[1] - curr[1], prev[2] - curr[2]])
     v2 = normalize(Float32[nxt[1] - curr[1], nxt[2] - curr[2]])
@@ -43,7 +50,7 @@ function marker_geometry(prev::Vector{Float32}, curr::Vector{Float32}, nxt::Vect
         0f0,
     ]
 
-    return start, sweepTheta, startTheta, finish
+    return MarkerGeometry(start, sweepTheta, startTheta, finish)
 end
 
 const MarkerGeom1 = marker_geometry(VertexD, VertexA, VertexB, MarkerRadius)
@@ -51,10 +58,16 @@ const MarkerGeom2 = marker_geometry(VertexA, VertexB, VertexC, MarkerRadius)
 const MarkerGeom3 = marker_geometry(VertexB, VertexC, VertexD, MarkerRadius)
 const MarkerGeom4 = marker_geometry(VertexC, VertexD, VertexA, MarkerRadius)
 
-const MarkerStarts = (MarkerGeom1[1], MarkerGeom2[1], MarkerGeom3[1], MarkerGeom4[1])
-const MarkerSweeps = (MarkerGeom1[2], MarkerGeom2[2], MarkerGeom3[2], MarkerGeom4[2])
-const MarkerStartThetas = (MarkerGeom1[3], MarkerGeom2[3], MarkerGeom3[3], MarkerGeom4[3])
-const MarkerEnds = (MarkerGeom1[4], MarkerGeom2[4], MarkerGeom3[4], MarkerGeom4[4])
+const MarkerStarts = (
+    MarkerGeom1.start, MarkerGeom2.start, MarkerGeom3.start, MarkerGeom4.start)
+const MarkerSweeps = (
+    MarkerGeom1.sweep_theta, MarkerGeom2.sweep_theta,
+    MarkerGeom3.sweep_theta, MarkerGeom4.sweep_theta)
+const MarkerStartThetas = (
+    MarkerGeom1.start_theta, MarkerGeom2.start_theta,
+    MarkerGeom3.start_theta, MarkerGeom4.start_theta)
+const MarkerEnds = (
+    MarkerGeom1.finish, MarkerGeom2.finish, MarkerGeom3.finish, MarkerGeom4.finish)
 
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0

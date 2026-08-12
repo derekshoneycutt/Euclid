@@ -68,6 +68,13 @@ mutable struct ScratchpadSession
     next_hook_id::Int
 end
 
+mutable struct NativeErrorStyle
+    bold::Bool
+    italic::Bool
+    underline::Bool
+    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
 const ScratchpadName = "Scratchpad"
 const ParseError = Int32(0)
 const ParseIncomplete = Int32(1)
@@ -97,13 +104,6 @@ const HelpPromptColor = OdinJuliaBridge.BridgeColor(0xd9, 0xb4, 0x4a, 0xff)
 const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
-
-mutable struct NativeErrorStyle
-    bold::Bool
-    italic::Bool
-    underline::Bool
-    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
-end
 
 const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
 const next_session_id_ref = Ref(1)
@@ -194,7 +194,8 @@ function create_runtime_module(session_id::Int)
 
     # Expose helpers directly in session scope so users can register/remove hooks from input.
     Core.eval(runtime, quote
-        register_frame_hook(fn; label="") = Scratchpad.register_frame_hook(state_ptr, fn; label=label)
+        register_frame_hook(fn; label="") =
+            Scratchpad.register_frame_hook(state_ptr, fn; label=label)
         remove_frame_hook(hook_id) = Scratchpad.remove_frame_hook(state_ptr, hook_id)
         clear_frame_hooks() = Scratchpad.clear_frame_hooks(state_ptr)
         list_frame_hooks() = Scratchpad.list_frame_hooks(state_ptr)
@@ -206,18 +207,30 @@ function create_runtime_module(session_id::Int)
         point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
         line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
         circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
-        highlight_pen!(args...; kwargs...) = EuclidRepl.highlight_pen!(state_ptr, args...; kwargs...)
-        highlight_compass!(args...; kwargs...) = EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
-        translate_points!(args...; kwargs...) = EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
-        rotate_points!(args...; kwargs...) = EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
-        rotate_points_x!(args...; kwargs...) = EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
-        rotate_points_y!(args...; kwargs...) = EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
-        rotate_points_z!(args...; kwargs...) = EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
-        reflect2d_points!(args...; kwargs...) = EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
-        reflect2d_points_x_axis!(args...; kwargs...) = EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
-        reflect2d_points_y_axis!(args...; kwargs...) = EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
-        reflect2d_points_diag_pos!(args...; kwargs...) = EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
-        reflect2d_points_diag_neg!(args...; kwargs...) = EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
+        highlight_pen!(args...; kwargs...) =
+            EuclidRepl.highlight_pen!(state_ptr, args...; kwargs...)
+        highlight_compass!(args...; kwargs...) =
+            EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
+        translate_points!(args...; kwargs...) =
+            EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
+        rotate_points!(args...; kwargs...) =
+            EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
+        rotate_points_x!(args...; kwargs...) =
+            EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
+        rotate_points_y!(args...; kwargs...) =
+            EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
+        rotate_points_z!(args...; kwargs...) =
+            EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
+        reflect2d_points!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
+        reflect2d_points_x_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
+        reflect2d_points_y_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
+        reflect2d_points_diag_pos!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
+        reflect2d_points_diag_neg!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
 
         # Intercept interactive exit/quit and reset only scratchpad session state.
         exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
@@ -269,7 +282,8 @@ function queue_line!(
 
     push!(session.queue, ScratchpadInputEntry(text, input_mode))
     session.metrics.queue_enqueued += 1
-    session.metrics.queue_high_water = max(session.metrics.queue_high_water, length(session.queue))
+    session.metrics.queue_high_water =
+        max(session.metrics.queue_high_water, length(session.queue))
 end
 
 """Return a safety-policy block reason for input text, or `nothing` when allowed."""
@@ -312,7 +326,8 @@ function maybe_warn_slow_eval!(session::ScratchpadSession, elapsed_ns::Integer)
 end
 
 """Record hook timing and log a console warning when a hook exceeds the slow threshold."""
-function maybe_warn_slow_hook!(session::ScratchpadSession, hook::ScratchpadFrameHook, elapsed_ns::Integer)
+function maybe_warn_slow_hook!(
+    session::ScratchpadSession, hook::ScratchpadFrameHook, elapsed_ns::Integer)
     session.metrics.last_hook_ns = elapsed_ns
     if elapsed_ns <= SlowHookWarnNs
         return
@@ -340,7 +355,8 @@ end
 
 """Create and install a fresh scratchpad session, runtime module, and counters."""
 function reset_session!(state_ptr::Ptr{Cvoid})
-    if isdefined(Main, :EuclidRepl) && isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
+    if isdefined(Main, :EuclidRepl) &&
+        isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
         Main.EuclidRepl.reset_scratchpad_session!()
     end
 
@@ -385,7 +401,8 @@ end
 
 """Build one regular-weight output segment with an optional named brush color."""
 function output_segment(text::AbstractString, color_name::Union{Nothing,Symbol}=nothing)
-    brush_color = color_name === nothing ? nothing : OdinJuliaBridge.bridge_color(color_name)
+    brush_color = color_name === nothing ?
+        nothing : OdinJuliaBridge.bridge_color(color_name)
     return ScratchpadOutputSegment(String(text), DynviewStyleOutput, brush_color)
 end
 
@@ -404,7 +421,8 @@ function append_segmented_output_line!(
 end
 
 """Append one eval-result output line that should render as inline formatted LaTeX."""
-function append_latex_result_line!(session::ScratchpadSession, latex_source::AbstractString, plain_text::AbstractString)
+function append_latex_result_line!(
+    session::ScratchpadSession, latex_source::AbstractString, plain_text::AbstractString)
     line = String(plain_text)
     append_output_entry!(session, ScratchpadOutputEntry(
         line,

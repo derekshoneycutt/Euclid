@@ -31,7 +31,7 @@ Normative language and enforcement labels:
 | **MUST** | Required. A violation blocks acceptance unless this document names an exception. |
 | **SHOULD** | Strong default. Deviations require a concrete readability or correctness reason. |
 | **MAY** | Optional and context-dependent. |
-| **Automated** | Checked by `julia make.jl -vt`, compiler flags, tests, or vet analysis. |
+| **Automated** | Checked by `make test` (the `julia make.jl -vt` gate), compiler flags, tests, or vet analysis. |
 | **Review** | Checked during code review because reliable automation is not yet available. |
 
 When guidance conflicts, use this precedence:
@@ -71,7 +71,8 @@ numeric width is part of the contract.
 
 Before marking work complete, verify all items below:
 
-- Build + vet + tests run with `julia make.jl -vt`.
+- Build + vet + tests run with `make test` (the standard Makefile path; equivalently
+  `julia make.jl -vt`).
 - No hidden per-frame allocation growth in host-side hot paths.
 - Odin and Julia bridge changes are symmetric and documented.
 - Ownership is explicit: who allocates, mutates, and frees.
@@ -85,14 +86,20 @@ Before marking work complete, verify all items below:
 
 ## Verification Gate
 
-Before work is complete, run:
+Before work is complete, run the standard Makefile target:
 
 ```sh
-julia make.jl -vt
+make test
 ```
 
-`-v` alone is insufficient because it omits tests. `-t` alone is insufficient because it omits the
-validated build and vet analysis. Do not report the combined gate as passing when a phase was skipped.
+`make test` is the preferred path on systems that support `make`. It runs the
+`configure` script once (verifying the toolchain and installing Julia dependencies)
+and then the full driver gate, equivalent to `julia make.jl -vt`. `make check` is an
+alias.
+
+`make vet` alone is insufficient because it omits tests. Running tests alone is
+insufficient because it omits the validated build and vet analysis. Do not report the
+combined gate as passing when a phase was skipped.
 
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
@@ -164,9 +171,20 @@ Code review MUST reject a violation even when the compiler or formatter accepts 
   exception is granted.
 - Do not split into trivial wrappers only to satisfy line-count rules.
 
-The vet report records Julia NLOC, parameter count, and cyclomatic complexity. Complexity above 10
-is blocking outside configured content-script exceptions; NLOC and parameter count remain review
-signals. Apply the same design limits to Odin during review even where tooling does not measure them.
+The vet report records NLOC, parameter count, and cyclomatic complexity for both languages.
+Julia complexity above 10 is blocking outside configured content-script exceptions. Odin
+complexity is measured by the parser-based analyzer in `tools/vet`: complexity at or above 15
+is blocking unless the procedure carries an inline `#vet forgives(cyclomatic_complexity)`
+documented exception; complexity 11-14 produces a warning. NLOC and parameter count remain
+review signals in both languages.
+
+The analyzer also classifies every allocation call site by allocator source. An allocation
+without an explicit allocator argument (silently using the default heap) is a **blocking** vet
+failure; an explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
+a warning. Dynamic-array mutators (`append`, `reserve`, `resize`) are exempt because the array
+carries its allocator from creation. Documented exceptions use `#vet forgives(implicit_allocator)`
+or `#vet forgives(heap_allocator)` with a following comment explaining why the default heap is
+correct there, such as a process-lifetime singleton created once at startup.
 
 Use this decision path when a function grows:
 

@@ -65,7 +65,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 A semicircle is the figure contained by the diameter and the circumference cut off by it. And the center of the semicircle is the same as that of the circle."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Semicircle}
 
-A semicircle is the figure contained by the diameter and the circumference cut off by it. And the center of the semicircle is the same as that of the circle."""
+A semicircle \euclidsemicircle[color=steelblue,radius=2,thickness=2] is the figure contained by the diameter and the circumference cut off by it. And the center \euclidpoint[color=palevioletred1,size=1] of the semicircle is the same as that of the circle."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -78,7 +78,8 @@ freeze_shapes_animation_boundary :: proc "c" (state: ^core.Euclid_General_State)
 @(export)
 clear_shapes_animation_data :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     context = state^.saved_context
-    shapes.clear_animation_data(state^.point_system, state^.particle_system, state^.iso_scale)
+    shapes.clear_animation_data(
+        state^.point_system, state^.particle_system, state^.iso_scale)
     return BRIDGE_STATUS_OK
 }
 
@@ -129,7 +130,8 @@ validate_shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
             if !is_point_index_in_bounds(constraint.on_point) {
                 return BRIDGE_STATUS_INVALID_CONSTRAINT
             }
-            if constraint.depend_on >= 0 && !is_constraint_index_in_bounds(int(constraint.depend_on)) {
+            if constraint.depend_on >= 0 &&
+                !is_constraint_index_in_bounds(int(constraint.depend_on)) {
                 return BRIDGE_STATUS_INVALID_CONSTRAINT
             }
         }
@@ -460,7 +462,8 @@ clear_compass_active :: proc "c" (
 //   - pos: Target world-space position for joint1 and its lock restriction.
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
-lock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+lock_compass_joint1 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     if capture_position_flag_command(state, .Lock_Compass_Joint1, pos, sweep) {
         return
     }
@@ -506,7 +509,8 @@ unlock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - pos: Target world-space position for joint1.
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
-move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+move_compass_joint1 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     context = state^.saved_context
     index := state^.compass.joint1_id
     pivotIndex := state^.compass.pivot_id
@@ -533,7 +537,8 @@ move_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 // Returns:
 //   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
 @(export)
-get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
+get_compass_joint1_position :: proc "c" (
+    state: ^core.Euclid_General_State) -> core.Vector3 {
     compass := state^.compass
     query_snapshot := active_animation_query_snapshot(state)
     if query_snapshot != nil {
@@ -556,7 +561,8 @@ get_compass_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> c
 //   - pos: Target world-space position for joint2 and its lock restriction.
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
-lock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+lock_compass_joint2 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     if capture_position_flag_command(state, .Lock_Compass_Joint2, pos, sweep) {
         return
     }
@@ -602,7 +608,8 @@ unlock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - pos: Target world-space position for joint2.
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
-move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+move_compass_joint2 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     context = state^.saved_context
     index := state^.compass.joint2_id
     pivotIndex := state^.compass.pivot_id
@@ -629,7 +636,8 @@ move_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Ve
 // Returns:
 //   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
 @(export)
-get_compass_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
+get_compass_joint2_position :: proc "c" (
+    state: ^core.Euclid_General_State) -> core.Vector3 {
     compass := state^.compass
     query_snapshot := active_animation_query_snapshot(state)
     if query_snapshot != nil {
@@ -720,5 +728,6 @@ emit_flicker_particle :: proc "c" (
     }
     context = state^.saved_context
     rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    particles.emit_flicker_particles(state^.particle_system, pos.x, pos.y, pos.z, rlColor, 10)
+    particles.emit_flicker_particles(
+        state^.particle_system, pos.x, pos.y, pos.z, rlColor, 10)
 }

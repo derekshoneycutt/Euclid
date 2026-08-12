@@ -50,11 +50,10 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, y_bottom, f32(150) - thumb_h)
 
     panel := rl.Rectangle{10, 20, 200, 120}
-    track, thumb, built_thumb_h, has_scrollbar := app_ui.build_vertical_scrollbar(
-        panel, 480, 60, 360, 8, 24)
-    testing.expect(t, has_scrollbar)
-    testing.expect_value(t, track.x, panel.x + panel.width - 8)
-    testing.expect_value(t, built_thumb_h, thumb.height)
+    scrollbar := app_ui.build_vertical_scrollbar(panel, 480, 60, 360, 8, 24)
+    testing.expect(t, scrollbar.has_scrollbar)
+    testing.expect_value(t, scrollbar.track_rect.x, panel.x + panel.width - 8)
+    testing.expect_value(t, scrollbar.thumb_height, scrollbar.thumb_rect.height)
 }
 
 seed_tree_node :: proc(
@@ -172,11 +171,11 @@ scratchpad_bottom_detection_uses_terminal_epsilon :: proc(t: ^testing.T) {
 @(test)
 scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
     // Verifies completion payload parsing extracts start, end, and replacement text from the wire format.
-    start, ending, replacement, ok := app_ui.scratchpad_parse_completion_payload("2\n5\npoint!")
-    testing.expect(t, ok)
-    testing.expect_value(t, start, 2)
-    testing.expect_value(t, ending, 5)
-    testing.expect_value(t, replacement, "point!")
+    completion := app_ui.scratchpad_parse_completion_payload("2\n5\npoint!")
+    testing.expect(t, completion.ok)
+    testing.expect_value(t, completion.replace_start, 2)
+    testing.expect_value(t, completion.replace_end, 5)
+    testing.expect_value(t, completion.replacement, "point!")
 }
 
 @(test)
@@ -194,15 +193,15 @@ scratchpad_prompt_tracks_input_mode :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_history_payload_restores_mode_and_text :: proc(t: ^testing.T) {
-    mode, text, ok := app_ui.scratchpad_parse_history_payload("1\n@time")
-    testing.expect(t, ok)
-    testing.expect_value(t, mode, app_core.Scratchpad_Input_Mode.Help)
-    testing.expect_value(t, text, "@time")
+    history := app_ui.scratchpad_parse_history_payload("1\n@time")
+    testing.expect(t, history.ok)
+    testing.expect_value(t, history.mode, app_core.Scratchpad_Input_Mode.Help)
+    testing.expect_value(t, history.text, "@time")
 
-    _, _, missing_separator_ok := app_ui.scratchpad_parse_history_payload("1@time")
-    testing.expect(t, !missing_separator_ok)
-    _, _, unknown_mode_ok := app_ui.scratchpad_parse_history_payload("2\n@time")
-    testing.expect(t, !unknown_mode_ok)
+    missing_separator := app_ui.scratchpad_parse_history_payload("1@time")
+    testing.expect(t, !missing_separator.ok)
+    unknown_mode := app_ui.scratchpad_parse_history_payload("2\n@time")
+    testing.expect(t, !unknown_mode.ok)
 }
 
 @(test)
@@ -444,7 +443,7 @@ input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.
 @(test)
 scratchpad_completion_payload_rejects_missing_separator :: proc(t: ^testing.T) {
     // Verifies malformed completion payloads without all required separators are rejected.
-    _, _, _, ok := app_ui.scratchpad_parse_completion_payload("1\n2")
-    testing.expect(t, !ok)
+    invalid_completion := app_ui.scratchpad_parse_completion_payload("1\n2")
+    testing.expect(t, !invalid_completion.ok)
 }
 

@@ -51,6 +51,33 @@ FONT_CODEPOINT_CAPACITY :: 8192
 BASELINE_FONT_VARIANT_COUNT :: 3
 FONT_GLYPH_PADDING :: 4
 
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+TOOL_LENGTH :: core.TOOL_LENGTH
+
+Vector2 :: core.Vector2
+Vector3 :: core.Vector3
+Iso_Scale :: core.Iso_Scale
+Shapes_Point_Type :: core.Shapes_Point_Type
+Shapes_Point :: core.Shapes_Point
+Shapes_Constraint :: core.Shapes_Constraint
+Shapes_Point_System :: core.Shapes_Point_System
+Particle :: core.Particle
+Particle_System :: core.Particle_System
+Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
+Euclid_General_State :: core.Euclid_General_State
+Euclid_Run_Settings :: core.Euclid_Run_Settings
+
+//   Static JuliaMono filenames indexed by weight and italic style.
+FONT_VARIANT_FILENAMES :: [core.Font_Weight][2]string{
+	.Light = {"JuliaMono-Light.ttf", "JuliaMono-LightItalic.ttf"},
+	.Regular = {"JuliaMono-Regular.ttf", "JuliaMono-RegularItalic.ttf"},
+	.Medium = {"JuliaMono-Medium.ttf", "JuliaMono-MediumItalic.ttf"},
+	.SemiBold = {"JuliaMono-SemiBold.ttf", "JuliaMono-SemiBoldItalic.ttf"},
+	.Bold = {"JuliaMono-Bold.ttf", "JuliaMono-BoldItalic.ttf"},
+	.ExtraBold = {"JuliaMono-ExtraBold.ttf", "JuliaMono-ExtraBoldItalic.ttf"},
+	.Black = {"JuliaMono-Black.ttf", "JuliaMono-BlackItalic.ttf"},
+}
+
 Font_Codepoint_Range :: struct {
 	first: rune,
 	last: rune,
@@ -59,6 +86,16 @@ Font_Codepoint_Range :: struct {
 Font_Codepoint_Set :: struct {
 	values: [FONT_CODEPOINT_CAPACITY]rune,
 	count: i32,
+}
+
+Prepared_Font :: struct {
+	font: rl.Font,
+	atlas: rl.Image,
+	ready: bool,
+}
+
+Baseline_Font_Preparation :: struct {
+	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
 }
 
 // Keep broad language and mathematical coverage while avoiding terminal-only
@@ -87,16 +124,6 @@ FONT_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
 	{0xfffd, 0xfffd},
 	{0x1d400, 0x1d7ff},
 	{0x1ee00, 0x1ee0b},
-}
-
-Prepared_Font :: struct {
-	font: rl.Font,
-	atlas: rl.Image,
-	ready: bool,
-}
-
-Baseline_Font_Preparation :: struct {
-	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
 }
 
 //   Build the immutable JuliaMono codepoint policy in raylib's required flat form.
@@ -135,67 +162,16 @@ font_rasterization_end :: proc() {
 	rl.SetTraceLogLevel(.INFO)
 }
 
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
-TOOL_LENGTH :: core.TOOL_LENGTH
-
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Iso_Scale :: core.Iso_Scale
-Shapes_Point_Type :: core.Shapes_Point_Type
-Shapes_Point :: core.Shapes_Point
-Shapes_Constraint :: core.Shapes_Constraint
-Shapes_Point_System :: core.Shapes_Point_System
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
-Euclid_General_State :: core.Euclid_General_State
-Euclid_Run_Settings :: core.Euclid_Run_Settings
-
 //   Resolve one static JuliaMono filename from weight and italic style.
-font_variant_filename :: #force_inline proc(weight: core.Font_Weight, italic: bool) -> string {
-	switch weight {
-	case .Light:
-		if italic {
-			return "JuliaMono-LightItalic.ttf"
-		}
-		return "JuliaMono-Light.ttf"
-	case .Regular:
-		if italic {
-			return "JuliaMono-RegularItalic.ttf"
-		}
-		return "JuliaMono-Regular.ttf"
-	case .Medium:
-		if italic {
-			return "JuliaMono-MediumItalic.ttf"
-		}
-		return "JuliaMono-Medium.ttf"
-	case .SemiBold:
-		if italic {
-			return "JuliaMono-SemiBoldItalic.ttf"
-		}
-		return "JuliaMono-SemiBold.ttf"
-	case .Bold:
-		if italic {
-			return "JuliaMono-BoldItalic.ttf"
-		}
-		return "JuliaMono-Bold.ttf"
-	case .ExtraBold:
-		if italic {
-			return "JuliaMono-ExtraBoldItalic.ttf"
-		}
-		return "JuliaMono-ExtraBold.ttf"
-	case .Black:
-		if italic {
-			return "JuliaMono-BlackItalic.ttf"
-		}
-		return "JuliaMono-Black.ttf"
-	}
-
-	return "JuliaMono-Regular.ttf"
+font_variant_filename :: #force_inline proc(
+	weight: core.Font_Weight, italic: bool) -> string {
+	filenames := FONT_VARIANT_FILENAMES
+	return filenames[weight][italic ? 1 : 0]
 }
 
 //   Return packed slot index for one weight/italic pair.
-font_variant_slot_index :: #force_inline proc(weight: core.Font_Weight, italic: bool) -> int {
+font_variant_slot_index :: #force_inline proc(
+	weight: core.Font_Weight, italic: bool) -> int {
 	base := 0
 	switch weight {
 	case .Light:
@@ -225,7 +201,8 @@ font_variant_slot_index :: #force_inline proc(weight: core.Font_Weight, italic: 
 // Notes:
 //   - Safe to call before GPU finalization; preparation owns all returned memory.
 //   - Pair with font_runtime_init_from_preparation to transfer or release that memory.
-font_runtime_prepare_baseline :: proc(preparation: ^Baseline_Font_Preparation, font_size: i32) {
+font_runtime_prepare_baseline :: proc(
+	preparation: ^Baseline_Font_Preparation, font_size: i32) {
 	font_prepare_variant(&preparation^.variants[0], .Regular, false, font_size)
 	font_prepare_variant(&preparation^.variants[1], .Bold, false, font_size)
 	font_prepare_variant(&preparation^.variants[2], .Regular, true, font_size)
@@ -353,7 +330,8 @@ font_load_variant :: proc(
 	if len(font_path) == 0 {
 		if !slot^.missing_warned {
 			slot^.missing_warned = true
-			fmt.eprintln("font load fallback: unable to resolve asset path for ", filename)
+			fmt.eprintln(
+				"font load fallback: unable to resolve asset path for ", filename)
 		}
 		return false
 	}
@@ -388,7 +366,8 @@ font_runtime_resolve :: proc(
 	requested_italic := core.font_has_flag(flags, .Italic)
 	requested_slot := font_variant_slot_index(requested_weight, requested_italic)
 
-	if font_load_variant(state, requested_slot, requested_weight, requested_italic, font_size) {
+	if font_load_variant(
+		state, requested_slot, requested_weight, requested_italic, font_size) {
 		return state^.font_runtime.variants[requested_slot].font
 	}
 
@@ -411,7 +390,8 @@ font_runtime_resolve :: proc(
 // Notes:
 //   - Baseline startup set is Regular, Bold, and RegularItalic.
 //   - Other variants still load lazily when requested.
-font_runtime_init_with_regular :: proc(state: ^core.Euclid_General_State, font_size: i32) -> bool {
+font_runtime_init_with_regular :: proc(
+	state: ^core.Euclid_General_State, font_size: i32) -> bool {
 	if state == nil {
 		return false
 	}
@@ -453,7 +433,8 @@ font_runtime_unload_all :: proc(state: ^core.Euclid_General_State) {
 }
 
 //   Build flags for simple bold/italic requests using Regular as default weight.
-font_flags_from_bold_italic :: #force_inline proc(bold, italic: bool) -> core.Font_Variant_Flags {
+font_flags_from_bold_italic :: #force_inline proc(
+	bold, italic: bool) -> core.Font_Variant_Flags {
 	flags := core.Font_Variant_Flags.Regular
 	if bold {
 		flags = core.Font_Variant_Flags.Bold

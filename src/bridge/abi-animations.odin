@@ -101,7 +101,8 @@ add_child_animation_interface :: proc "c" (
     if !parsed_ok {
         return -1
     }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, parent_stable_id) {
+    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id,
+        parent_stable_id) {
         return -1
     }
 

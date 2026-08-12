@@ -58,7 +58,8 @@ gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> s
     case .Armed:
         return "Status: Armed"
     case .Recording:
-        return fmt.tprintf("Status: Recording (%d frames)", ui_runtime.gif_captured_frames)
+        return fmt.tprintf("Status: Recording (%d frames)",
+            ui_runtime.gif_captured_frames)
     case .Finalizing:
         return "Status: Saving"
     case .Saved:
@@ -179,13 +180,31 @@ draw_gif_view :: proc(
         cursor_in = stack_cursor,
     })
 
-    draw_settings_integer_slider(panel,
-        downsample_row.segment_rect.y, mouse_input, ui_runtime, 6201, "Downsample",
-        &ui_runtime.gif_downsample_factor, 1, 4, font)
+    draw_settings_integer_slider(Integer_Slider_Params{
+        panel = panel,
+        row_y = downsample_row.segment_rect.y,
+        mouse_input = mouse_input,
+        ui_runtime = ui_runtime,
+        press_id = 6201,
+        label = "Downsample",
+        value = &ui_runtime.gif_downsample_factor,
+        min_value = 1,
+        max_value = 4,
+        font = font,
+    })
 
-    draw_settings_integer_slider(panel,
-        frame_step_row.segment_rect.y, mouse_input, ui_runtime, 6202, "Frame Step",
-        &ui_runtime.gif_frame_step, 1, 4, font)
+    draw_settings_integer_slider(Integer_Slider_Params{
+        panel = panel,
+        row_y = frame_step_row.segment_rect.y,
+        mouse_input = mouse_input,
+        ui_runtime = ui_runtime,
+        press_id = 6202,
+        label = "Frame Step",
+        value = &ui_runtime.gif_frame_step,
+        min_value = 1,
+        max_value = 4,
+        font = font,
+    })
 
     draw_settings_save_gif_button(panel,
         save_button_row.segment_rect.y, mouse_input, ui_runtime, font)

@@ -27,6 +27,12 @@ Text_Button_Result :: struct {
     pressed: bool,
 }
 
+Text_Button_Colors :: struct {
+    background: rl.Color,
+    foreground: rl.Color,
+    border:     rl.Color,
+}
+
 //   Resolve whether this text button currently owns the shared press state.
 text_button_owns_press :: #force_inline proc(
     press_owner: ^core.Ui_Press_Owner_State,
@@ -79,7 +85,7 @@ text_button_release_press :: proc(
 text_button_colors :: proc(
     params: Text_Button_Params,
     hovered: bool,
-    pressed: bool) -> (rl.Color, rl.Color, rl.Color) {
+    pressed: bool) -> Text_Button_Colors {
 
     bg := BACKGROUND_COLOR
     fg := UI_TEXT_COLOR
@@ -98,7 +104,11 @@ text_button_colors :: proc(
     if params.has_font_color_override {
         fg = params.font_color_override
     }
-    return bg, fg, border
+    return Text_Button_Colors{
+        background = bg,
+        foreground = fg,
+        border = border,
+    }
 }
 
 //   Convert screen-space mouse position into local interaction space.
@@ -136,16 +146,16 @@ draw_text_button :: proc(
         &owns_press)
 
     pressed := owns_press && params.mouse.left_down
-    bg, fg, border := text_button_colors(params, hovered, pressed)
+    colors := text_button_colors(params, hovered, pressed)
 
-    rl.DrawRectangleRec(button_rect, bg)
-    rl.DrawRectangleLinesEx(button_rect, 1, border)
+    rl.DrawRectangleRec(button_rect, colors.background)
+    rl.DrawRectangleLinesEx(button_rect, 1, colors.border)
 
     label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
     measured := rl.MeasureTextEx(params.font, label_cstr, TREE_FONT_SIZE, 0)
     text_x := int(button_rect.x + (button_rect.width - measured.x) * 0.5)
     text_y := int(button_rect.y + (button_rect.height - measured.y) * 0.5)
-    view_core.ui_text(params.label, text_x, text_y, fg, params.font)
+    view_core.ui_text(params.label, text_x, text_y, colors.foreground, params.font)
 
     return Text_Button_Result{
         button_drawn_rect = button_rect,

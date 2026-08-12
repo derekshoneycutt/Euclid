@@ -16,8 +16,50 @@ end
 function whole_math_source(source::String)
     isempty(source) && return nothing
     parser = LatexDocumentParser(source, firstindex(source))
-    math_source, _, ok = consume_document_math!(parser)
-    return ok && parser.index > lastindex(source) ? math_source : nothing
+    result = consume_document_math!(parser)
+    return result.ok && parser.index > lastindex(source) ? result.content : nothing
+end
+
+struct DocumentMathDelimiterInfo
+    opener::String
+    closer::String
+    run_kind::Symbol
+end
+
+struct DocumentMathConsumptionResult
+    content::String
+    run_kind::Symbol
+    ok::Bool
+end
+
+struct DocumentShapeDimensions
+    width::Float32
+    height::Float32
+    thickness::Float32
+    filled::Bool
+end
+
+struct DocumentTriangleColors
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
+struct DocumentBoxEdgeColors
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge4_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
+struct DocumentPentagonColors
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge4_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge5_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
 """Append text while merging adjacent document runs with the same style and color."""
@@ -32,7 +74,8 @@ function push_document_text!(
     end
     if !isempty(runs) && runs[end].kind == :text &&
             runs[end].font_flags == font_flags && runs[end].color == color
-        runs[end] = LatexDocumentRun(:text, runs[end].text * text, font_flags, nothing, color)
+        runs[end] = LatexDocumentRun(
+            :text, runs[end].text * text, font_flags, nothing, color)
         return nothing
     end
     push!(runs, LatexDocumentRun(:text, text, font_flags, nothing, color))
@@ -41,7 +84,8 @@ end
 
 """Append one document line break, suppressing runs beyond a blank line."""
 function push_document_line_break!(runs::Vector{LatexDocumentRun})
-    if length(runs) >= 2 && runs[end].kind == :line_break && runs[end - 1].kind == :line_break
+    if length(runs) >= 2 && runs[end].kind == :line_break &&
+        runs[end - 1].kind == :line_break
         return nothing
     end
     push!(runs, LatexDocumentRun(:line_break, "", DOCUMENT_STYLE_REGULAR))
@@ -84,7 +128,8 @@ function consume_document_color_name!(parser::LatexDocumentParser)
     start = nextind(parser.source, parser.index)
     close_index = findnext('}', parser.source, start)
     close_index === nothing && return "", false
-    name = start == close_index ? "" : parser.source[start:prevind(parser.source, close_index)]
+    name = start == close_index ?
+        "" : parser.source[start:prevind(parser.source, close_index)]
     parser.index = nextind(parser.source, close_index)
     return String(name), !isempty(strip(name))
 end
@@ -92,35 +137,39 @@ end
 """Return delimiters and document run kind for math at the parser cursor."""
 function document_math_delimiters(parser::LatexDocumentParser)
     tail = SubString(parser.source, parser.index)
-    startswith(tail, "\$\$") && return "\$\$", "\$\$", :math_display
-    startswith(tail, "\$") && return "\$", "\$", :math_inline
-    startswith(tail, "\\(") && return "\\(", "\\)", :math_inline
-    startswith(tail, "\\[") && return "\\[", "\\]", :math_display
-    return "", "", :none
+    startswith(tail, "\$\$") &&
+        return DocumentMathDelimiterInfo("\$\$", "\$\$", :math_display)
+    startswith(tail, "\$") &&
+        return DocumentMathDelimiterInfo("\$", "\$", :math_inline)
+    startswith(tail, "\\(") &&
+        return DocumentMathDelimiterInfo("\\(", "\\)", :math_inline)
+    startswith(tail, "\\[") &&
+        return DocumentMathDelimiterInfo("\\[", "\\]", :math_display)
+    return DocumentMathDelimiterInfo("", "", :none)
 end
 
 """Return true when the document parser is at a supported math opener."""
 function document_math_starts_at_cursor(parser::LatexDocumentParser)
-    opener, _, _ = document_math_delimiters(parser)
-    return !isempty(opener)
+    delimiters = document_math_delimiters(parser)
+    return !isempty(delimiters.opener)
 end
 
 """Read a delimited math fragment and its document run kind at the parser cursor."""
 function consume_document_math!(parser::LatexDocumentParser)
-    opener, closer, run_kind = document_math_delimiters(parser)
-    if isempty(opener)
-        return "", :none, false
+    delimiters = document_math_delimiters(parser)
+    if isempty(delimiters.opener)
+        return DocumentMathConsumptionResult("", :none, false)
     end
 
-    content_start = parser.index + ncodeunits(opener)
-    close_index = findnext(closer, parser.source, content_start)
+    content_start = parser.index + ncodeunits(delimiters.opener)
+    close_index = findnext(delimiters.closer, parser.source, content_start)
     if close_index === nothing
-        return "", :none, false
+        return DocumentMathConsumptionResult("", :none, false)
     end
     content_end = prevind(parser.source, first(close_index))
     parser.index = nextind(parser.source, last(close_index))
     content = content_start > content_end ? "" : parser.source[content_start:content_end]
-    return content, run_kind, true
+    return DocumentMathConsumptionResult(String(content), delimiters.run_kind, true)
 end
 
 """Consume document whitespace beginning with a source newline."""
@@ -162,11 +211,10 @@ function consume_document_text!(
         end
         parser.index = nextind(parser.source, parser.index)
     end
-    push_document_text!(
-        runs,
-        normalize_text_whitespace(parser.source[start:prevind(parser.source, parser.index)]),
-        font_flags,
-        color)
+    push_document_text!(runs,
+        normalize_text_whitespace(
+            parser.source[start:prevind(parser.source, parser.index)]),
+        font_flags, color)
     return nothing
 end
 
@@ -195,7 +243,8 @@ function consume_document_textcolor!(
     parser.index += ncodeunits("\\textcolor")
     color_name, ok = consume_document_color_name!(parser)
     ok || return false
-    parser.index <= lastindex(parser.source) && parser.source[parser.index] == '{' || return false
+    parser.index <= lastindex(parser.source) && parser.source[parser.index] == '{' ||
+        return false
     parser.index = nextind(parser.source, parser.index)
     color = resolve_document_text_color(color_name, inherited)
     children, children_ok = parse_document_sequence!(parser, font_flags, color, true)
@@ -217,6 +266,11 @@ function document_shape_command(parser::LatexDocumentParser)
     document_command_matches(parser, "\\euclidline") && return "\\euclidline", :line
     document_command_matches(parser, "\\euclidcircle") && return "\\euclidcircle", :circle
     document_command_matches(parser, "\\euclidbox") && return "\\euclidbox", :box
+    document_command_matches(parser, "\\euclidangle") && return "\\euclidangle", :angle
+    document_command_matches(parser, "\\euclidsemicircle") && return "\\euclidsemicircle", :semicircle
+    document_command_matches(parser, "\\euclidperpendicular") && return "\\euclidperpendicular", :perpendicular
+    document_command_matches(parser, "\\euclidtriangle") && return "\\euclidtriangle", :triangle
+    document_command_matches(parser, "\\euclidpentagon") && return "\\euclidpentagon", :pentagon
     return "", :none
 end
 
@@ -253,7 +307,8 @@ function consume_document_shape_options!(parser::LatexDocumentParser)
     close_index = findnext(']', parser.source, nextind(parser.source, parser.index))
     close_index === nothing && return "", false
     start = nextind(parser.source, parser.index)
-    options = start == close_index ? "" : parser.source[start:prevind(parser.source, close_index)]
+    options = start == close_index ?
+        "" : parser.source[start:prevind(parser.source, close_index)]
     parser.index = nextind(parser.source, close_index)
     return options, true
 end
@@ -285,7 +340,12 @@ function document_shape_allowed_options(kind::Symbol)
     kind == :point && return Set(["color", "size"])
     kind == :line && return Set(["color", "length", "thickness"])
     kind == :circle && return Set(["color", "size", "thickness", "filled"])
-    kind == :box && return Set(["color", "width", "height", "thickness", "filled"])
+    kind == :box && return Set(["color", "width", "height", "thickness", "filled", "edge1_color", "edge2_color", "edge3_color", "edge4_color"])
+    kind == :angle && return Set(["color", "radius", "start", "end", "thickness", "filled", "fill_color", "arc_color"])
+    kind == :semicircle && return Set(["color", "radius", "thickness", "filled", "fill_color", "arc_color"])
+    kind == :perpendicular && return Set(["color", "length", "width", "height", "thickness", "line1_color", "line2_color"])
+    kind == :triangle && return Set(["color", "width", "height", "thickness", "filled", "fill_color", "edge1_color", "edge2_color", "edge3_color"])
+    kind == :pentagon && return Set(["color", "width", "height", "thickness", "filled", "fill_color", "edge1_color", "edge2_color", "edge3_color", "edge4_color", "edge5_color"])
     return Set{String}()
 end
 
@@ -293,6 +353,16 @@ end
 function document_shape_option_color(options::Dict{String,String})
     haskey(options, "color") || return nothing, true
     color = parse_document_shape_color(options["color"])
+    return color, color !== nothing
+end
+
+"""Resolve one optional shape color key with a fallback default."""
+function document_shape_option_color_or(
+    options::Dict{String,String}, key::String,
+    default::Union{Nothing,OdinJuliaBridge.BridgeColor})
+
+    haskey(options, key) || return default, true
+    color = parse_document_shape_color(options[key])
     return color, color !== nothing
 end
 
@@ -316,12 +386,224 @@ end
 function document_shape_width_rule(kind::Symbol)
     kind == :line && return "length", 3f0
     kind == :box && return "width", 2f0
+    kind == :angle && return "radius", 1f0
+    kind == :perpendicular && return "length", 2f0
+    kind == :triangle && return "width", 1f0
+    kind == :pentagon && return "width", 1f0
     return "size", 1f0
 end
 
-"""Build one validated Euclid shape payload from parsed options."""
-function document_shape_payload(kind::Symbol, options::Dict{String,String})
-    all(key -> key in document_shape_allowed_options(kind), keys(options)) || return nothing
+"""Build one validated Euclid angle-marker payload from parsed options."""
+function document_shape_payload_angle(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:angle), keys(options)) ||
+        return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    radius = document_shape_option_dimension(options, "radius", 1f0)
+    start_angle = document_shape_option_dimension(options, "start", 0f0)
+    end_angle = document_shape_option_dimension(options, "end", 90f0)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    filled = document_shape_option_bool(options, "filled", false)
+    (radius === nothing || start_angle === nothing || end_angle === nothing ||
+        thickness === nothing || filled === nothing) && return nothing
+    fill_color, fill_ok = document_shape_option_color_or(options, "fill_color", color)
+    fill_ok || return nothing
+    arc_color, arc_ok = document_shape_option_color_or(options, "arc_color", color)
+    arc_ok || return nothing
+    return LatexDocumentShape(:angle, color, radius, 0f0, thickness, filled,
+        start_angle, end_angle, fill_color, arc_color,
+        nothing, nothing, nothing, nothing, nothing)
+end
+
+"""Build one validated Euclid semicircle payload from parsed options."""
+function document_shape_payload_semicircle(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:semicircle), keys(options)) ||
+        return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    radius = document_shape_option_dimension(options, "radius", 1f0)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    filled = document_shape_option_bool(options, "filled", false)
+    (radius === nothing || thickness === nothing || filled === nothing) && return nothing
+    fill_color, fill_ok = document_shape_option_color_or(options, "fill_color", color)
+    fill_ok || return nothing
+    arc_color, arc_ok = document_shape_option_color_or(options, "arc_color", color)
+    arc_ok || return nothing
+
+    # Fixed top-half arc from 0 to 180 degrees.
+    return LatexDocumentShape(:angle, color, radius, 0f0, thickness, filled, 0f0, 180f0,
+        fill_color, arc_color, nothing, nothing, nothing, nothing, nothing)
+end
+
+"""Build one validated Euclid perpendicular payload from parsed options."""
+function document_shape_payload_perpendicular(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:perpendicular), keys(options)) ||
+        return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    width = document_shape_option_dimension(options, "width", 2f0)
+    length = document_shape_option_dimension(options, "length", width)
+    height = document_shape_option_dimension(options, "height", 1f0)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    (length === nothing || height === nothing || thickness === nothing) && return nothing
+    line1_color, line1_ok = document_shape_option_color_or(options, "line1_color", color)
+    line1_ok || return nothing
+    line2_color, line2_ok = document_shape_option_color_or(options, "line2_color", color)
+    line2_ok || return nothing
+    return LatexDocumentShape(:perpendicular, color, length, height, thickness,
+        false, 0f0, 0f0, nothing, nothing, line1_color, line2_color,
+        nothing, nothing, nothing)
+end
+
+"""Build one validated Euclid triangle payload from parsed options."""
+function document_shape_triangle_dimensions(options::Dict{String,String})
+    width = document_shape_option_dimension(options, "width", 1f0)
+    height = document_shape_option_dimension(options, "height", width)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    filled = document_shape_option_bool(options, "filled", false)
+    (width === nothing || height === nothing || thickness === nothing ||
+        filled === nothing) &&
+        return nothing
+    return DocumentShapeDimensions(width, height, thickness, filled)
+end
+
+"""Resolve the four triangle colors from parsed options."""
+function document_shape_triangle_colors(options::Dict{String,String}, default_color)
+    fill_color, fill_ok =
+        document_shape_option_color_or(options, "fill_color", default_color)
+    fill_ok || return nothing
+    edge1_color, edge1_ok =
+        document_shape_option_color_or(options, "edge1_color", default_color)
+    edge1_ok || return nothing
+    edge2_color, edge2_ok =
+        document_shape_option_color_or(options, "edge2_color", default_color)
+    edge2_ok || return nothing
+    edge3_color, edge3_ok =
+        document_shape_option_color_or(options, "edge3_color", default_color)
+    edge3_ok || return nothing
+    return DocumentTriangleColors(fill_color, edge1_color, edge2_color, edge3_color)
+end
+
+"""Build one validated Euclid triangle payload from parsed options."""
+function document_shape_payload_triangle(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:triangle), keys(options)) ||
+     return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    dims = document_shape_triangle_dimensions(options)
+    dims === nothing && return nothing
+    colors = document_shape_triangle_colors(options, color)
+    colors === nothing && return nothing
+    return LatexDocumentShape(
+        :triangle, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, colors.fill_color, nothing, colors.edge1_color,
+        colors.edge2_color, colors.edge3_color,
+        nothing, nothing)
+end
+
+"""Resolve box width/height/thickness/filled values."""
+function document_shape_box_dimensions(options::Dict{String,String})
+    width = document_shape_option_dimension(options, "width", 2f0)
+    height = document_shape_option_dimension(options, "height", 1f0)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    filled = document_shape_option_bool(options, "filled", false)
+    (width === nothing || height === nothing ||
+        thickness === nothing || filled === nothing) &&
+        return nothing
+    return DocumentShapeDimensions(width, height, thickness, filled)
+end
+
+"""Resolve four edge colors with per-key fallback to default color."""
+function document_shape_box_edge_colors(options::Dict{String,String}, default_color)
+    edge1_color, edge1_ok = document_shape_option_color_or(options, "edge1_color", default_color)
+    edge1_ok || return nothing
+    edge2_color, edge2_ok = document_shape_option_color_or(options, "edge2_color", default_color)
+    edge2_ok || return nothing
+    edge3_color, edge3_ok = document_shape_option_color_or(options, "edge3_color", default_color)
+    edge3_ok || return nothing
+    edge4_color, edge4_ok = document_shape_option_color_or(options, "edge4_color", default_color)
+    edge4_ok || return nothing
+    return DocumentBoxEdgeColors(edge1_color, edge2_color, edge3_color, edge4_color)
+end
+
+"""Build one validated Euclid box payload from parsed options."""
+function document_shape_payload_box(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:box), keys(options)) ||
+        return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    dims = document_shape_box_dimensions(options)
+    dims === nothing && return nothing
+
+    edge_colors = document_shape_box_edge_colors(options, color)
+    edge_colors === nothing && return nothing
+
+    return LatexDocumentShape(
+        :box, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, nothing, nothing, edge_colors.edge1_color,
+        edge_colors.edge2_color, edge_colors.edge3_color,
+        edge_colors.edge4_color, nothing)
+end
+
+"""Resolve pentagon width/height/thickness/filled values."""
+function document_shape_pentagon_dimensions(options::Dict{String,String})
+    width = document_shape_option_dimension(options, "width", 1f0)
+    height = document_shape_option_dimension(options, "height", width)
+    thickness = document_shape_option_dimension(options, "thickness", 1f0)
+    filled = document_shape_option_bool(options, "filled", false)
+    (width === nothing || height === nothing ||
+        thickness === nothing || filled === nothing) &&
+        return nothing
+    return DocumentShapeDimensions(width, height, thickness, filled)
+end
+
+"""Resolve pentagon fill and edge colors with per-key fallback."""
+function document_shape_pentagon_colors(options::Dict{String,String}, default_color)
+    fill_color, fill_ok =
+        document_shape_option_color_or(options, "fill_color", default_color)
+    fill_ok || return nothing
+    edge1_color, edge1_ok =
+        document_shape_option_color_or(options, "edge1_color", default_color)
+    edge1_ok || return nothing
+    edge2_color, edge2_ok =
+        document_shape_option_color_or(options, "edge2_color", default_color)
+    edge2_ok || return nothing
+    edge3_color, edge3_ok =
+        document_shape_option_color_or(options, "edge3_color", default_color)
+    edge3_ok || return nothing
+    edge4_color, edge4_ok =
+        document_shape_option_color_or(options, "edge4_color", default_color)
+    edge4_ok || return nothing
+    edge5_color, edge5_ok =
+        document_shape_option_color_or(options, "edge5_color", default_color)
+    edge5_ok || return nothing
+    return DocumentPentagonColors(
+        fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color)
+end
+
+"""Build one validated Euclid pentagon payload from parsed options."""
+function document_shape_payload_pentagon(options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(:pentagon), keys(options)) ||
+        return nothing
+    color, color_ok = document_shape_option_color(options)
+    color_ok || return nothing
+    dims = document_shape_pentagon_dimensions(options)
+    dims === nothing && return nothing
+
+    colors = document_shape_pentagon_colors(options, color)
+    colors === nothing && return nothing
+
+    return LatexDocumentShape(
+        :pentagon, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, colors.fill_color, nothing, colors.edge1_color,
+        colors.edge2_color, colors.edge3_color, colors.edge4_color,
+        colors.edge5_color)
+end
+
+"""Build one validated Euclid shape payload from parsed options for basic shapes."""
+function document_shape_payload_basic(kind::Symbol, options::Dict{String,String})
+    all(key -> key in document_shape_allowed_options(kind), keys(options)) ||
+        return nothing
     color, color_ok = document_shape_option_color(options)
     color_ok || return nothing
     width_key, default_width = document_shape_width_rule(kind)
@@ -329,8 +611,23 @@ function document_shape_payload(kind::Symbol, options::Dict{String,String})
     height = document_shape_option_dimension(options, "height", 1f0)
     thickness = document_shape_option_dimension(options, "thickness", 1f0)
     filled = document_shape_option_bool(options, "filled", false)
-    (width === nothing || height === nothing || thickness === nothing || filled === nothing) && return nothing
-    return LatexDocumentShape(kind, color, width, height, thickness, kind == :point || filled)
+    (width === nothing || height === nothing ||
+        thickness === nothing || filled === nothing) &&
+        return nothing
+    return LatexDocumentShape(kind, color, width, height, thickness,
+        kind == :point || filled,
+        0f0, 0f0, nothing, nothing, nothing, nothing, nothing, nothing, nothing)
+end
+
+"""Build one validated Euclid shape payload from parsed options."""
+function document_shape_payload(kind::Symbol, options::Dict{String,String})
+    kind == :angle && return document_shape_payload_angle(options)
+    kind == :semicircle && return document_shape_payload_semicircle(options)
+    kind == :perpendicular && return document_shape_payload_perpendicular(options)
+    kind == :triangle && return document_shape_payload_triangle(options)
+    kind == :box && return document_shape_payload_box(options)
+    kind == :pentagon && return document_shape_payload_pentagon(options)
+    return document_shape_payload_basic(kind, options)
 end
 
 """Consume one Euclid inline-shape command into a structured document run."""
@@ -393,12 +690,13 @@ function consume_document_math_run!(
     runs::Vector{LatexDocumentRun},
     color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
-    math_source, run_kind, ok = consume_document_math!(parser)
-    if !ok || isempty(strip(math_source))
+    result = consume_document_math!(parser)
+    if !result.ok || isempty(strip(result.content))
         return false
     end
     push!(runs, LatexDocumentRun(
-        run_kind, String(strip(math_source)), DOCUMENT_STYLE_REGULAR, nothing, color))
+        result.run_kind, String(strip(result.content)), DOCUMENT_STYLE_REGULAR,
+        nothing, color))
     return true
 end
 
@@ -410,7 +708,8 @@ function consume_document_prose_or_break!(
     color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
     c = parser.source[parser.index]
-    c == '\n' && (consume_document_newlines!(parser, runs, font_flags, color); return true)
+    c == '\n' &&
+        (consume_document_newlines!(parser, runs, font_flags, color); return true)
     tail = SubString(parser.source, parser.index)
     startswith(tail, "\\\\") && return consume_document_forced_break!(parser, runs, "\\\\")
     startswith(tail, "\\newline") &&
@@ -485,13 +784,116 @@ function replay_document_display_math!(
     i::Int,
     text_style::Integer)
     if i == firstindex(runs) || runs[prevind(runs, i)].kind != :line_break
-        OdinJuliaBridge.dynview_line_break(state_ptr) == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+        OdinJuliaBridge.dynview_line_break(state_ptr) ==
+            OdinJuliaBridge.BRIDGE_STATUS_OK ||
+            return false
     end
-    replay_emit_math_block!(state_ptr, runs[i].text; text_style=text_style) || return false
+    replay_emit_math_block!(state_ptr, runs[i].text; text_style=text_style) ||
+         return false
     if i == lastindex(runs) || runs[nextind(runs, i)].kind != :line_break
-        OdinJuliaBridge.dynview_line_break(state_ptr) == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+        OdinJuliaBridge.dynview_line_break(state_ptr) ==
+            OdinJuliaBridge.BRIDGE_STATUS_OK ||
+            return false
     end
     return true
+end
+
+"""Replay one angle-marker shape through the pie-section bridge primitive."""
+function replay_document_angle_shape!(
+    state_ptr::Ptr{Cvoid}, shape::LatexDocumentShape, style_id::Int32)
+
+    fill_color = something(shape.fill_color,
+        something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    arc_color = something(shape.arc_color,
+        something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    status = OdinJuliaBridge.dynview_inline_pie_section(
+        state_ptr,
+        shape.width,
+        shape.start_angle,
+        shape.end_angle,
+        style_id,
+        shape.filled,
+        fill_color,
+        arc_color,
+        shape.thickness)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Replay one perpendicular shape through the dedicated bridge primitive."""
+function replay_document_perpendicular_shape!(
+    state_ptr::Ptr{Cvoid}, shape::LatexDocumentShape, style_id::Int32)
+
+    top_color = something(
+        shape.edge_color_1, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    stem_color = something(
+        shape.edge_color_2, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    status = OdinJuliaBridge.dynview_inline_perpendicular(
+        state_ptr,
+        shape.width,
+        shape.height,
+        shape.thickness,
+        style_id,
+        top_color,
+        stem_color)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Replay one triangle shape through the dedicated bridge primitive."""
+function replay_document_triangle_shape!(
+    state_ptr::Ptr{Cvoid}, shape::LatexDocumentShape, style_id::Int32)
+
+    fill_color = something(
+        shape.fill_color, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge1_color = something(
+        shape.edge_color_1, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge2_color = something(
+        shape.edge_color_2, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge3_color = something(
+        shape.edge_color_3, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    status = OdinJuliaBridge.dynview_inline_triangle(
+        state_ptr,
+        shape.width,
+        shape.height,
+        shape.thickness,
+        style_id,
+        shape.filled,
+        fill_color,
+        edge1_color,
+        edge2_color,
+        edge3_color)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Replay one pentagon shape through the dedicated bridge primitive."""
+function replay_document_pentagon_shape!(
+    state_ptr::Ptr{Cvoid}, shape::LatexDocumentShape, style_id::Int32)
+
+    fill_color = something(
+        shape.fill_color, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge1_color = something(
+        shape.edge_color_1, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge2_color = something(
+        shape.edge_color_2, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge3_color = something(
+        shape.edge_color_3, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge4_color = something(
+        shape.edge_color_4, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    edge5_color = something(
+        shape.edge_color_5, something(shape.color, OdinJuliaBridge.bridge_color("white")))
+    status = OdinJuliaBridge.dynview_inline_pentagon(
+        state_ptr,
+        shape.width,
+        shape.height,
+        shape.thickness,
+        style_id,
+        shape.filled,
+        fill_color,
+        edge1_color,
+        edge2_color,
+        edge3_color,
+        edge4_color,
+        edge5_color)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
 """Replay one line or outline shape through the matching bridge primitive."""
@@ -500,18 +902,40 @@ function replay_document_outline_shape!(
 
     if shape.kind == :line
         status = shape.color === nothing ?
-            OdinJuliaBridge.dynview_inline_line(state_ptr, shape.width, shape.thickness, style_id) :
+            OdinJuliaBridge.dynview_inline_line(
+                state_ptr, shape.width, shape.thickness, style_id) :
             OdinJuliaBridge.dynview_inline_line_brush(
                 state_ptr, shape.width, shape.thickness, style_id, shape.color)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     end
     if shape.kind == :circle
         status = shape.color === nothing ?
-            OdinJuliaBridge.dynview_inline_circle(state_ptr, shape.width, shape.thickness, style_id) :
+            OdinJuliaBridge.dynview_inline_circle(
+                state_ptr, shape.width, shape.thickness, style_id) :
             OdinJuliaBridge.dynview_inline_circle_brush(
                 state_ptr, shape.width, shape.thickness, style_id, shape.color)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     end
+    if shape.edge_color_1 !== nothing || shape.edge_color_2 !== nothing ||
+            shape.edge_color_3 !== nothing || shape.edge_color_4 !== nothing
+        default_color = something(shape.color, OdinJuliaBridge.bridge_color("white"))
+        edge1_color = something(shape.edge_color_1, default_color)
+        edge2_color = something(shape.edge_color_2, default_color)
+        edge3_color = something(shape.edge_color_3, default_color)
+        edge4_color = something(shape.edge_color_4, default_color)
+        status = OdinJuliaBridge.dynview_inline_box_edges(
+            state_ptr,
+            shape.width,
+            shape.height,
+            shape.thickness,
+            style_id,
+            edge1_color,
+            edge2_color,
+            edge3_color,
+            edge4_color)
+        return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+    end
+
     status = shape.color === nothing ?
         OdinJuliaBridge.dynview_inline_box(
             state_ptr, shape.width, shape.height, shape.thickness, style_id) :
@@ -541,23 +965,34 @@ function replay_document_shape!(
 
     run.shape === nothing && return false
     style_id = document_run_style_id(run, text_style)
+    run.shape.kind == :angle &&
+        return replay_document_angle_shape!(state_ptr, run.shape, style_id)
+    run.shape.kind == :perpendicular &&
+        return replay_document_perpendicular_shape!(state_ptr, run.shape, style_id)
+    run.shape.kind == :triangle &&
+        return replay_document_triangle_shape!(state_ptr, run.shape, style_id)
+    run.shape.kind == :pentagon &&
+        return replay_document_pentagon_shape!(state_ptr, run.shape, style_id)
     return run.shape.filled ?
         replay_document_filled_shape!(state_ptr, run.shape, style_id) :
         replay_document_outline_shape!(state_ptr, run.shape, style_id)
 end
 
 """Replay one parsed document run into the currently open dynview block."""
-function replay_document_run!(state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentRun}, i::Int, text_style::Integer)
+function replay_document_run!(
+    state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentRun}, i::Int, text_style::Integer)
     run = runs[i]
     if run.kind == :text
         style_id = document_run_style_id(run, text_style)
         status = run.color === nothing ?
             OdinJuliaBridge.dynview_text_run(state_ptr, run.text, style_id) :
-            OdinJuliaBridge.dynview_text_run_brush(state_ptr, run.text, style_id, run.color)
+            OdinJuliaBridge.dynview_text_run_brush(
+                state_ptr, run.text, style_id, run.color)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     end
     if run.kind == :line_break
-        return OdinJuliaBridge.dynview_line_break(state_ptr) == OdinJuliaBridge.BRIDGE_STATUS_OK
+        return OdinJuliaBridge.dynview_line_break(state_ptr) ==
+            OdinJuliaBridge.BRIDGE_STATUS_OK
     end
     if run.kind == :math_inline
         return replay_emit_math_block!(state_ptr, run.text; text_style=text_style)
@@ -565,11 +1000,13 @@ function replay_document_run!(state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentR
     if run.kind == :shape
         return replay_document_shape!(state_ptr, run, text_style)
     end
-    return run.kind == :math_display && replay_document_display_math!(state_ptr, runs, i, text_style)
+    return run.kind == :math_display &&
+        replay_document_display_math!(state_ptr, runs, i, text_style)
 end
 
 """Replay parsed document runs into the currently open dynview block."""
-function replay_emit_document!(state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentRun}, text_style::Integer)
+function replay_emit_document!(
+    state_ptr::Ptr{Cvoid}, runs::Vector{LatexDocumentRun}, text_style::Integer)
     for i in eachindex(runs)
         replay_document_run!(state_ptr, runs, i, text_style) || return false
     end
@@ -588,15 +1025,20 @@ function emit_latex_view_text!(
     fallback_text = String(fallback)
     mode = classify_latex_mode(source)
     stripped_source = String(strip(source))
-    math_source = mode == LATEX_MODE_MATH ? something(whole_math_source(stripped_source), stripped_source) : ""
-    document_runs = mode == LATEX_MODE_DOCUMENT ? parse_latex_document(source) : LatexDocumentRun[]
+    math_source = mode == LATEX_MODE_MATH ?
+        something(whole_math_source(stripped_source), stripped_source) : ""
+    document_runs = mode == LATEX_MODE_DOCUMENT ?
+        parse_latex_document(source) : LatexDocumentRun[]
     if mode == LATEX_MODE_DOCUMENT && document_runs === nothing
         return fallback_text
     end
 
-    OdinJuliaBridge.dynview_reset_stream(state_ptr) == OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
-    OdinJuliaBridge.dynview_begin_block(state_ptr, block_kind, block_id) == OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
-    OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback_text) == OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
+    OdinJuliaBridge.dynview_reset_stream(state_ptr) == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        return fallback_text
+    OdinJuliaBridge.dynview_begin_block(state_ptr, block_kind, block_id) ==
+        OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
+    OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback_text) ==
+        OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
     rendered = mode == LATEX_MODE_MATH ?
         replay_emit_math_block!(state_ptr, math_source; text_style=text_style) :
         replay_emit_document!(state_ptr, document_runs, text_style)

@@ -602,11 +602,14 @@ Odin tests exercise:
 - incomplete-submit newline insertion;
 - terminal geometry, UTF-8 caret behavior, scrolling, and style integration.
 
-The complete repository verification gate is:
+The complete repository verification gate is the standard Makefile target:
 
 ```sh
-julia make.jl -vt
+make test
 ```
+
+This runs the validated build, vet analysis, and all tests (equivalent to
+`julia make.jl -vt`).
 
 ## Change Guide
 

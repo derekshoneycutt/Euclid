@@ -12,7 +12,8 @@ Parameters:
 Returns: `BridgeShapeLine`
 """
 function get_shape_line_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_line_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeLine
+    @ccall get_shape_line_view(
+        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeLine
 end
 
 """
@@ -28,7 +29,8 @@ Parameters:
 Returns: `BridgeShapeCircle`
 """
 function get_shape_circle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_circle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeCircle
+    @ccall get_shape_circle_view(
+        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeCircle
 end
 
 """
@@ -44,7 +46,8 @@ Parameters:
 Returns: `BridgeShapeFilledCircle`
 """
 function get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeFilledCircle
+    @ccall get_shape_filledcircle_view(
+        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeFilledCircle
 end
 
 """
@@ -60,7 +63,8 @@ Parameters:
 Returns: `BridgeShapeTriangle`
 """
 function get_shape_triangle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_triangle_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeTriangle
+    @ccall get_shape_triangle_view(state_ptr::Ptr{Cvoid},
+        Int32(hostId)::Int32)::BridgeShapeTriangle
 end
 
 """
@@ -76,7 +80,8 @@ Parameters:
 Returns: `BridgeShapeSquare`
 """
 function get_shape_square_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_square_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeSquare
+    @ccall get_shape_square_view(
+        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeSquare
 end
 
 """
@@ -92,7 +97,8 @@ Parameters:
 Returns: `BridgeShapePentagon`
 """
 function get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
-    @ccall get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapePentagon
+    @ccall get_shape_pentagon_view(state_ptr::Ptr{Cvoid},
+        Int32(hostId)::Int32)::BridgeShapePentagon
 end
 
 """
@@ -527,12 +533,14 @@ Parameters:
 function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall lock_compass_joint1(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall lock_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall lock_compass_joint1(
+        state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -565,12 +573,14 @@ Parameters:
 function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall move_compass_joint1(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall move_compass_joint1(state_ptr::Ptr{Cvoid},
+        postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -605,12 +615,14 @@ Parameters:
 function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall lock_compass_joint2(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall lock_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall lock_compass_joint2(
+        state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -643,12 +655,14 @@ Parameters:
 function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall move_compass_joint2(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real}; sweep::Bool = true)
     postupled = (pos[1], pos[2], pos[3])
-    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid}, postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
+    @ccall move_compass_joint2(state_ptr::Ptr{Cvoid},
+        postupled::NTuple{3, Cfloat}, sweep::Bool)::Cvoid
 end
 
 """
@@ -745,7 +759,8 @@ Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and 
 function emit_trailing_particle(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real, color::BridgeColor)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall emit_trailing_particle(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, color::BridgeColor)::Cvoid
+    @ccall emit_trailing_particle(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, color::BridgeColor)::Cvoid
 end
 
 function emit_trailing_particle(
@@ -802,7 +817,8 @@ Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and 
 function emit_flicker_particle(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real, color::BridgeColor)
     pos = (Float32(x), Float32(y), Float32(z))
-    @ccall emit_flicker_particle(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, color::BridgeColor)::Cvoid
+    @ccall emit_flicker_particle(
+        state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat}, color::BridgeColor)::Cvoid
 end
 
 function emit_flicker_particle(

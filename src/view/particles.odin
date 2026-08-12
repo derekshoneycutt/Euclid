@@ -351,8 +351,10 @@ ensure_dust_instancing :: proc(state: ^Euclid_General_State) {
 
 //   Load the packaged dust shader and resolve its required uniforms.
 load_dust_instancing_shader :: proc(dust_render: ^core.Dust_Render_State) -> bool {
-    vertex_path := files.packaged_asset_path("shaders/dust_instanced.vs", context.temp_allocator)
-    fragment_path := files.packaged_asset_path("shaders/dust_instanced.fs", context.temp_allocator)
+    vertex_path :=
+        files.packaged_asset_path("shaders/dust_instanced.vs", context.temp_allocator)
+    fragment_path :=
+        files.packaged_asset_path("shaders/dust_instanced.fs", context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println("dust shader paths could not be resolved; using immediate rendering")
         return false
@@ -366,7 +368,8 @@ load_dust_instancing_shader :: proc(dust_render: ^core.Dust_Render_State) -> boo
         return false
     }
 
-    dust_render^.viewport_location = rl.GetShaderLocation(dust_render^.shader, "uViewport")
+    dust_render^.viewport_location =
+        rl.GetShaderLocation(dust_render^.shader, "uViewport")
     dust_render^.texture_location = rl.GetShaderLocation(dust_render^.shader, "texture0")
     if dust_render^.viewport_location < 0 || dust_render^.texture_location < 0 {
         fmt.println("dust shader is missing required uniforms; using immediate rendering")
@@ -519,7 +522,8 @@ render_particle_ember_mid_index :: proc(
 }
 
 //   Render one high-layer flicker particle only while its lit window is active.
-render_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int, screen: Vector2) {
+render_particle_flicker_high_index :: proc(
+    ps: ^Particle_System, i: int, screen: Vector2) {
     if ps.high_particles.lit_frames[i] > 0 {
         rl.DrawPixelV(screen, rl.WHITE)
     }

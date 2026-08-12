@@ -366,7 +366,8 @@ const MATHBB_UPPERCASE_MAP = Dict(
     "Y" => "𝕐",
     "Z" => "ℤ")
 
-const MATHBB_GLYPH_TO_SOURCE_MAP = Dict(value => key for (key, value) in MATHBB_UPPERCASE_MAP)
+const MATHBB_GLYPH_TO_SOURCE_MAP =
+    Dict(value => key for (key, value) in MATHBB_UPPERCASE_MAP)
 const COMMANDS_IGNORE_TRAILING_SPACE = Set([
     "\\angle",
     "\\measuredangle",
@@ -417,6 +418,15 @@ struct LatexDocumentShape
     height::Float32
     thickness::Float32
     filled::Bool
+    start_angle::Float32
+    end_angle::Float32
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    arc_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_1::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_2::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_3::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_4::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge_color_5::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
 struct LatexDocumentRun
@@ -448,26 +458,32 @@ const parse_cache_order = Tuple{String, Int32, Int32}[]
 const EMPTY_CHILD_RUNS = LatexRun[]
 
 """Return one normal atom run payload."""
-latex_atom_run(text::String, role::Symbol) = LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+latex_atom_run(text::String, role::Symbol) =
+    LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one superscript script-segment run payload."""
-latex_sup_run(text::String) = LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+latex_sup_run(text::String) =
+    LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one subscript script-segment run payload."""
-latex_sub_run(text::String) = LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+latex_sub_run(text::String) =
+    LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one overline accent run payload."""
-latex_overline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_over, children, EMPTY_CHILD_RUNS)
+latex_overline_run(children::Vector{LatexRun}) =
+    LatexRun("", :math, :accent_over, children, EMPTY_CHILD_RUNS)
 
 """Return one underline accent run payload."""
-latex_underline_run(children::Vector{LatexRun}) = LatexRun("", :math, :accent_under, children, EMPTY_CHILD_RUNS)
+latex_underline_run(children::Vector{LatexRun}) =
+    LatexRun("", :math, :accent_under, children, EMPTY_CHILD_RUNS)
 
 """Return one square-root radical run payload."""
 latex_sqrt_run(children::Vector{LatexRun}, index_text::AbstractString="") =
     LatexRun(String(index_text), :math, :radical_sqrt, children, EMPTY_CHILD_RUNS)
 
 """Return one fraction run payload with numerator and denominator child runs."""
-latex_fraction_run(numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
+latex_fraction_run(
+    numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
     LatexRun("", :math, :fraction, numerator_children, denominator_children)
 
 """Return one stretch-delimiter run payload with left/right delimiters and inner runs."""
@@ -487,4 +503,5 @@ latex_matrix_run(rows::Int, cols::Int, cells::Vector{LatexRun}) =
 
 """Return one array run payload with row/column metadata and normalized alignment preamble."""
 latex_array_run(rows::Int, cols::Int, cells::Vector{LatexRun}, preamble::String) =
-    LatexRun(matrix_dims_text(rows, cols), :math, :array, cells, [latex_atom_run(preamble, :math)])
+    LatexRun(matrix_dims_text(rows, cols), :math, :array, cells,
+        [latex_atom_run(preamble, :math)])

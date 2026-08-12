@@ -5,6 +5,25 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
+Tar_Header_Read_Result :: struct {
+    header:   []u8,
+    data_idx: int,
+    done:     bool,
+    ok:       bool,
+}
+
+Tar_Entry_Metadata :: struct {
+    entry_path: string,
+    file_size:  int,
+    ok:         bool,
+}
+
+Tar_Entry_Data_Slice :: struct {
+    file_data: []u8,
+    next_idx:  int,
+    ok:        bool,
+}
+
 //   Return true when every byte in the slice is zero.
 bytes_are_zero :: #force_inline proc(data: []u8) -> bool {
     for b in data {
@@ -178,19 +197,19 @@ handle_packaged_asset_tar_entry :: proc(
 //   - data_idx: Payload index immediately after header.
 //   - done: True when end-of-archive marker is reached.
 //   - ok: False when payload is malformed.
-read_tar_header :: proc(payload: []u8, idx: int) -> ([]u8, int, bool, bool) {
+read_tar_header :: proc(payload: []u8, idx: int) -> Tar_Header_Read_Result {
     if idx + 512 > len(payload) {
         fmt.eprintln("asset payload invalid: truncated tar header")
-        return nil, idx, false, false
+        return Tar_Header_Read_Result{nil, idx, false, false}
     }
 
     header := payload[idx:][:512]
     data_idx := idx + 512
     if bytes_are_zero(header) {
-        return header, data_idx, true, true
+        return Tar_Header_Read_Result{header, data_idx, true, true}
     }
 
-    return header, data_idx, false, true
+    return Tar_Header_Read_Result{header, data_idx, false, true}
 }
 
 //   Parse and validate tar entry path and size from one tar header block.
@@ -199,19 +218,19 @@ read_tar_header :: proc(payload: []u8, idx: int) -> ([]u8, int, bool, bool) {
 //   - entry_path: Relative entry path.
 //   - file_size: Entry payload size in bytes.
 //   - ok: False when entry metadata is invalid.
-parse_tar_entry_metadata :: proc(header: []u8) -> (string, int, bool) {
+parse_tar_entry_metadata :: proc(header: []u8) -> Tar_Entry_Metadata {
     entry_path, path_ok := parse_tar_entry_path(header)
     if !path_ok {
-        return "", 0, false
+        return Tar_Entry_Metadata{"", 0, false}
     }
 
     entry_size: i64 = 0
     if !parse_tar_octal_i64(header[124:136], &entry_size) || entry_size < 0 {
         fmt.eprintln("asset payload invalid: tar entry size")
-        return "", 0, false
+        return Tar_Entry_Metadata{"", 0, false}
     }
 
-    return entry_path, int(entry_size), true
+    return Tar_Entry_Metadata{entry_path, int(entry_size), true}
 }
 
 //   Slice entry file bytes and compute the next tar-header index.
@@ -220,10 +239,11 @@ parse_tar_entry_metadata :: proc(header: []u8) -> (string, int, bool) {
 //   - file_data: Entry payload bytes.
 //   - next_idx: Index of the next tar header.
 //   - ok: False when payload bounds are invalid.
-slice_tar_entry_data :: proc(payload: []u8, data_idx, file_size: int) -> ([]u8, int, bool) {
+slice_tar_entry_data :: proc(
+    payload: []u8, data_idx, file_size: int) -> Tar_Entry_Data_Slice {
     if data_idx + file_size > len(payload) {
         fmt.eprintln("asset payload invalid: tar entry size bounds")
-        return nil, data_idx, false
+        return Tar_Entry_Data_Slice{nil, data_idx, false}
     }
 
     file_data := payload[data_idx:][:file_size]
@@ -231,10 +251,10 @@ slice_tar_entry_data :: proc(payload: []u8, data_idx, file_size: int) -> ([]u8, 
     next_idx := data_idx + file_size + padding
     if next_idx > len(payload) {
         fmt.eprintln("asset payload invalid: tar padding bounds")
-        return nil, data_idx, false
+        return Tar_Entry_Data_Slice{nil, data_idx, false}
     }
 
-    return file_data, next_idx, true
+    return Tar_Entry_Data_Slice{file_data, next_idx, true}
 }
 
 //   Extract a gzip-decoded tar payload blob into the unpack directory.
@@ -245,28 +265,31 @@ extract_packaged_assets_blob :: proc(unpack_dir: string, payload: []u8) -> bool 
     idx := 0
 
     for {
-        header, data_idx, done, header_ok := read_tar_header(payload, idx)
-        if !header_ok {
+        header_result := read_tar_header(payload, idx)
+        if !header_result.ok {
             return false
         }
-        if done {
+        if header_result.done {
             return true
         }
 
-        entry_path, file_size, meta_ok := parse_tar_entry_metadata(header)
-        if !meta_ok {
+        metadata := parse_tar_entry_metadata(header_result.header)
+        if !metadata.ok {
             return false
         }
 
-        file_data, next_idx, data_ok := slice_tar_entry_data(payload, data_idx, file_size)
-        if !data_ok {
+        data_slice := slice_tar_entry_data(
+            payload, header_result.data_idx, metadata.file_size)
+        if !data_slice.ok {
             return false
         }
 
-        if !handle_packaged_asset_tar_entry(unpack_dir, entry_path, file_data, header[156]) {
+        if !handle_packaged_asset_tar_entry(
+            unpack_dir, metadata.entry_path, data_slice.file_data,
+            header_result.header[156]) {
             return false
         }
 
-        idx = next_idx
+        idx = data_slice.next_idx
     }
 }

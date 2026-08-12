@@ -109,7 +109,8 @@ Parameters:
 Returns: `Int32` status code
 """
 function set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Integer, enabled::Bool)
-    @ccall set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Int32, UInt8(enabled)::UInt8)::Int32
+    @ccall set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Int32,
+        UInt8(enabled)::UInt8)::Int32
 end
 
 """
@@ -175,7 +176,8 @@ Parameters:
 Returns: `Int32` status code
 """
 function apply_constraint_bridge(state_ptr::Ptr{Cvoid}, constraintIndex::Integer)
-    @ccall apply_constraint_bridge(state_ptr::Ptr{Cvoid}, Int32(constraintIndex)::Int32)::Int32
+    @ccall apply_constraint_bridge(
+        state_ptr::Ptr{Cvoid}, Int32(constraintIndex)::Int32)::Int32
 end
 
 """
@@ -191,7 +193,8 @@ Parameters:
 Returns: `Int32` status code
 """
 function apply_all_constraints_bridge(state_ptr::Ptr{Cvoid}, reverse::Bool=false)
-    @ccall apply_all_constraints_bridge(state_ptr::Ptr{Cvoid}, UInt8(reverse)::UInt8)::Int32
+    @ccall apply_all_constraints_bridge(
+        state_ptr::Ptr{Cvoid}, UInt8(reverse)::UInt8)::Int32
 end
 
 """

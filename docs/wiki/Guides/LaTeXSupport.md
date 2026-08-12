@@ -86,7 +86,8 @@ Document mode supports a deliberately small LaTeX-like prose language:
 - Forced line breaks with `\\` or `\newline`.
 - Paragraph breaks from a blank source line.
 - Inline Euclid shapes through `\euclidpoint`, `\euclidline`,
-  `\euclidcircle`, and `\euclidbox`.
+    `\euclidcircle`, `\euclidbox`, `\euclidangle`, `\euclidsemicircle`,
+    `\euclidperpendicular`, `\euclidtriangle`, and `\euclidpentagon`.
 
 A single source newline in prose normalizes to one space. A blank line emits a
 paragraph break. Display math receives surrounding line breaks unless adjacent
@@ -129,8 +130,27 @@ be duplicated, dimensions must be finite and positive, booleans are strictly
 - `\euclidcircle`: options are `color`, `size`, `thickness`, and `filled`.
     Defaults are `size=1`, `thickness=1`, and `filled=false`.
 - `\euclidbox`: options are `color`, `width`, `height`, `thickness`, and
-    `filled`. Defaults are `width=2`, `height=1`, `thickness=1`, and
+    `filled`, plus per-edge overrides `edge1_color`, `edge2_color`,
+    `edge3_color`, and `edge4_color`. Defaults are `width=2`, `height=1`,
+    `thickness=1`, and `filled=false`.
+- `\euclidangle`: options are `color`, `radius`, `start`, `end`,
+    `thickness`, `filled`, `fill_color`, and `arc_color`. Defaults are
+    `radius=1`, `start=0`, `end=90`, `thickness=1`, and `filled=false`.
+- `\euclidsemicircle`: shorthand for a top-half angle marker. Options are
+    `color`, `radius`, `thickness`, `filled`, `fill_color`, and `arc_color`.
+    It always uses `start=0` and `end=180` internally.
+- `\euclidperpendicular`: options are `color`, `length`, `width`, `height`,
+    `thickness`, `line1_color`, and `line2_color`. Defaults are `length=2`,
+    `height=1`, and `thickness=1`. `width` is accepted as an alias for
+    `length`.
+- `\euclidtriangle`: options are `color`, `width`, `height`, `thickness`,
+    `filled`, `fill_color`, `edge1_color`, `edge2_color`, and
+    `edge3_color`. Defaults are `width=1`, `height=width`, `thickness=1`, and
     `filled=false`.
+- `\euclidpentagon`: options are `color`, `width`, `height`, `thickness`,
+    `filled`, `fill_color`, `edge1_color`, `edge2_color`, `edge3_color`,
+    `edge4_color`, and `edge5_color`. Defaults are `width=1`,
+    `height=width`, `thickness=1`, and `filled=false`.
 
 The shorthand option `filled` is equivalent to `filled=true`.
 
@@ -141,6 +161,12 @@ raw"\euclidpoint[color=steelblue,size=1]"
 raw"\euclidline[color=steelblue,length=4,thickness=2]"
 raw"\euclidcircle[color=khaki3,size=2,filled]"
 raw"\euclidbox[width=3,height=2,thickness=1,filled=false]"
+raw"\euclidbox[color=steelblue,width=3,height=2,thickness=2,edge1_color=steelblue,edge2_color=teal,edge3_color=olive,edge4_color=cyan]"
+raw"\euclidangle[color=steelblue,radius=2,thickness=2,start=20,end=140]"
+raw"\euclidsemicircle[color=steelblue,radius=2,thickness=2]"
+raw"\euclidperpendicular[color=steelblue,length=2,height=1,thickness=2,line1_color=cyan,line2_color=yellow]"
+raw"\euclidtriangle[color=steelblue,width=2,height=1.5,thickness=2,filled,fill_color=lightgray,edge1_color=red,edge2_color=green,edge3_color=blue]"
+raw"\euclidpentagon[color=steelblue,width=2,height=2,thickness=2,filled,fill_color=lightgray,edge1_color=red,edge2_color=green,edge3_color=blue,edge4_color=teal,edge5_color=orange]"
 ```
 
 Document mode does not implement general LaTeX commands or environments.

@@ -36,6 +36,52 @@ Scroll_Container_End_Result :: struct {
     thumb_rect: rl.Rectangle,
 }
 
+//   Inputs for starting a scroll-container frame: identity, geometry, current
+//   scroll position, content extent, pointer input, and shared press/drag
+//   ownership, grouped so the begin call passes one coherent value.
+Scroll_Container_Begin_Params :: struct {
+    id:                     int,
+    rect:                   rl.Rectangle,
+    scroll_y_in:            f32,
+    content_height_hint:    f32,
+    mouse_input:            Mouse_Input_State,
+    scroll_offset:          rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    wheel_step:             f32,
+    press_owner:            ^core.Ui_Press_Owner_State,
+    state_in:               Scroll_Container_State,
+}
+
+//   Mutable drag state for one scrollbar thumb interaction, grouped with the
+//   panel geometry and scroll limits it operates against.
+Scrollbar_Drag_Context :: struct {
+    mouse_input:  Mouse_Input_State,
+    thumb:        rl.Rectangle,
+    panel_y:      f32,
+    panel_height: f32,
+    thumb_h:      f32,
+    max_scroll:   f32,
+    scroll_y:     ^f32,
+    dragging:     ^bool,
+    drag_off:     ^f32,
+    drag_epsilon: f32,
+}
+
+//   Overflow geometry hint computed before drag lifecycle in scroll begin.
+Scroll_Overflow_Hint :: struct {
+    had_overflow:   bool,
+    track_rect:     rl.Rectangle,
+    thumb_rect:     rl.Rectangle,
+    hovered_thumb:  bool,
+}
+
+Vertical_Scrollbar_Geometry :: struct {
+    track_rect:    rl.Rectangle,
+    thumb_rect:    rl.Rectangle,
+    thumb_height:  f32,
+    has_scrollbar: bool,
+}
+
 //   Convert screen-space pointer position to local interaction space.
 scroll_container_local_mouse :: #force_inline proc(
     mouse_input: Mouse_Input_State,
@@ -106,68 +152,43 @@ scroll_container_release_press :: proc(
 
 //   Create scroll-container frame state and apply wheel scrolling from hint data.
 scroll_container_begin :: proc(
-    id: int,
-    rect: rl.Rectangle,
-    scroll_y_in: f32,
-    content_height_hint: f32,
-    mouse_input: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    wheel_step: f32,
-    press_owner: ^core.Ui_Press_Owner_State,
-    state_in: Scroll_Container_State) -> Scroll_Container_Begin_Result {
+    params: Scroll_Container_Begin_Params) -> Scroll_Container_Begin_Result {
 
-    view_rect := clamp_non_negative_rect(rect)
-    local_mouse := scroll_container_local_mouse(mouse_input, scroll_offset)
-    in_interaction := scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
+    id := params.id
+    mouse_input := params.mouse_input
+    press_owner := params.press_owner
+    state_in := params.state_in
+
+    view_rect := clamp_non_negative_rect(params.rect)
+    local_mouse := scroll_container_local_mouse(mouse_input, params.scroll_offset)
+    in_interaction :=
+        scroll_container_in_interaction_space(local_mouse,
+            params.interaction_space_rect)
     hovered_view := in_interaction && rl.CheckCollisionPointRec(local_mouse, view_rect)
 
-    use_wheel_step := max(0.0, wheel_step)
-    scroll_y_out := max(0.0, scroll_y_in)
+    use_wheel_step := max(0.0, params.wheel_step)
+    scroll_y_out := max(0.0, params.scroll_y_in)
 
-    max_scroll_hint: f32 = 0
-    had_overflow_hint := false
-    track_hint := rl.Rectangle{}
-    thumb_hint := rl.Rectangle{}
-    hovered_thumb := false
-
-    if content_height_hint > view_rect.height {
-        max_scroll_hint = max(0.0, content_height_hint - view_rect.height)
-        had_overflow_hint = max_scroll_hint > 0
-    }
-
-    if had_overflow_hint {
-        if hovered_view && mouse_input.wheel_delta != 0 && use_wheel_step > 0 {
-            scroll_y_out -= mouse_input.wheel_delta * use_wheel_step
-        }
-        clamp_scroll_position(&scroll_y_out, max_scroll_hint)
-
-        track_hint, thumb_hint, _, _ = build_vertical_scrollbar(
-            view_rect,
-            content_height_hint,
-            scroll_y_out,
-            max_scroll_hint,
-            SCROLLBAR_WIDTH,
-            SCROLLBAR_THUMB_MIN_HEIGHT)
-        hovered_thumb = in_interaction && rl.CheckCollisionPointRec(local_mouse, thumb_hint)
-    }
+    hint := scroll_overflow_hint(view_rect, params.content_height_hint,
+        params.scroll_offset, params.interaction_space_rect, local_mouse,
+        mouse_input, &scroll_y_out, use_wheel_step)
 
     is_dragging_thumb := state_in.is_dragging_thumb
     drag_offset_y := state_in.drag_offset_y
     owns_press := scroll_container_owns_press(press_owner, id)
-    if had_overflow_hint && is_dragging_thumb && !owns_press {
+    if hint.had_overflow && is_dragging_thumb && !owns_press {
         is_dragging_thumb = false
         drag_offset_y = 0
     }
 
-    if had_overflow_hint && !is_dragging_thumb {
+    if hint.had_overflow && !is_dragging_thumb {
         scroll_container_try_capture_press(
             press_owner,
             id,
             mouse_input,
-            hovered_thumb,
+            hint.hovered_thumb,
             local_mouse,
-            thumb_hint,
+            hint.thumb_rect,
             &is_dragging_thumb,
             &drag_offset_y)
     }
@@ -176,13 +197,13 @@ scroll_container_begin :: proc(
         id = id,
         view_rect = view_rect,
         wheel_step = use_wheel_step,
-        had_overflow_hint = had_overflow_hint,
+        had_overflow_hint = hint.had_overflow,
         is_hovered_view = hovered_view,
-        is_hovered_thumb = hovered_thumb,
+        is_hovered_thumb = hint.hovered_thumb,
         is_dragging_thumb = is_dragging_thumb,
         drag_offset_y = drag_offset_y,
-        track_rect = track_hint,
-        thumb_rect = thumb_hint,
+        track_rect = hint.track_rect,
+        thumb_rect = hint.thumb_rect,
     }
 
     rl.BeginScissorMode(
@@ -196,6 +217,50 @@ scroll_container_begin :: proc(
         view_rect = view_rect,
         scroll_y_out = scroll_y_out,
     }
+}
+
+//   Compute scrollbar geometry and apply wheel scroll when content overflows.
+scroll_overflow_hint :: proc(
+    view_rect: rl.Rectangle,
+    content_height_hint: f32,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    local_mouse: rl.Vector2,
+    mouse_input: Mouse_Input_State,
+    scroll_y_out: ^f32,
+    use_wheel_step: f32) -> Scroll_Overflow_Hint {
+
+    hint := Scroll_Overflow_Hint{}
+    if content_height_hint <= view_rect.height {
+        return hint
+    }
+
+    max_scroll_hint := max(0.0, content_height_hint - view_rect.height)
+    hint.had_overflow = max_scroll_hint > 0
+    if !hint.had_overflow {
+        return hint
+    }
+
+    in_interaction :=
+        scroll_container_in_interaction_space(local_mouse, interaction_space_rect)
+    hovered_view := in_interaction && rl.CheckCollisionPointRec(local_mouse, view_rect)
+    if hovered_view && mouse_input.wheel_delta != 0 && use_wheel_step > 0 {
+        scroll_y_out^ -= mouse_input.wheel_delta * use_wheel_step
+    }
+    clamp_scroll_position(scroll_y_out, max_scroll_hint)
+
+    scrollbar := build_vertical_scrollbar(
+        view_rect,
+        content_height_hint,
+        scroll_y_out^,
+        max_scroll_hint,
+        SCROLLBAR_WIDTH,
+        SCROLLBAR_THUMB_MIN_HEIGHT)
+    hint.track_rect = scrollbar.track_rect
+    hint.thumb_rect = scrollbar.thumb_rect
+    hint.hovered_thumb = in_interaction &&
+        rl.CheckCollisionPointRec(local_mouse, scrollbar.thumb_rect)
+    return hint
 }
 
 //   Finalize scrollbar state, drag lifecycle, and clamped scroll output.
@@ -239,14 +304,14 @@ scroll_container_end :: proc(
 
     clamp_scroll_position(&scroll_y_out, max_scroll)
 
-    track_rect, thumb_rect, thumb_h, has_scrollbar := build_vertical_scrollbar(
+    scrollbar := build_vertical_scrollbar(
         view_rect,
         content_height_final,
         scroll_y_out,
         max_scroll,
         SCROLLBAR_WIDTH,
         SCROLLBAR_THUMB_MIN_HEIGHT)
-    if !has_scrollbar {
+    if !scrollbar.has_scrollbar {
         scroll_container_release_press(
             press_owner,
             scroll_ref.id,
@@ -266,9 +331,9 @@ scroll_container_end :: proc(
             press_owner,
             scroll_ref.id,
             mouse_input,
-            rl.CheckCollisionPointRec(local_mouse, thumb_rect),
+                rl.CheckCollisionPointRec(local_mouse, scrollbar.thumb_rect),
             local_mouse,
-            thumb_rect,
+                scrollbar.thumb_rect,
             &state_out.is_dragging_thumb,
             &state_out.drag_offset_y)
     }
@@ -281,7 +346,7 @@ scroll_container_end :: proc(
                 &state_out.is_dragging_thumb,
                 &state_out.drag_offset_y)
         } else {
-            thumb_range := view_rect.height - thumb_h
+            thumb_range := view_rect.height - scrollbar.thumb_height
             if thumb_range <= SCROLLBAR_DRAG_EPSILON {
                 scroll_y_out = 0
             } else {
@@ -291,7 +356,7 @@ scroll_container_end :: proc(
             }
             clamp_scroll_position(&scroll_y_out, max_scroll)
 
-            track_rect, thumb_rect, _, _ = build_vertical_scrollbar(
+            scrollbar = build_vertical_scrollbar(
                 view_rect,
                 content_height_final,
                 scroll_y_out,
@@ -301,17 +366,17 @@ scroll_container_end :: proc(
         }
     }
 
-    if has_scrollbar {
-        rl.DrawRectangleRec(track_rect, BACKGROUND_COLOR)
-        rl.DrawRectangleRec(thumb_rect, UI_BORDER_COLOR)
+    if scrollbar.has_scrollbar {
+        rl.DrawRectangleRec(scrollbar.track_rect, BACKGROUND_COLOR)
+        rl.DrawRectangleRec(scrollbar.thumb_rect, UI_BORDER_COLOR)
     }
 
     return Scroll_Container_End_Result{
         scroll_y_out = scroll_y_out,
         state_out = state_out,
-        has_scrollbar = has_scrollbar,
-        track_rect = track_rect,
-        thumb_rect = thumb_rect,
+        has_scrollbar = scrollbar.has_scrollbar,
+        track_rect = scrollbar.track_rect,
+        thumb_rect = scrollbar.thumb_rect,
     }
 }
 
@@ -380,10 +445,10 @@ build_vertical_scrollbar :: proc(
     scroll_y: f32,
     max_scroll: f32,
     scrollbar_width: f32,
-    thumb_min_height: f32) -> (rl.Rectangle, rl.Rectangle, f32, bool) {
+    thumb_min_height: f32) -> Vertical_Scrollbar_Geometry {
 
     if max_scroll <= 0 {
-        return rl.Rectangle{}, rl.Rectangle{}, 0, false
+        return Vertical_Scrollbar_Geometry{rl.Rectangle{}, rl.Rectangle{}, 0, false}
     }
 
     track := rl.Rectangle{
@@ -396,43 +461,34 @@ build_vertical_scrollbar :: proc(
     thumb_h := scrollbar_thumb_height(panel.height, content_h, thumb_min_height)
     thumb_y := scrollbar_thumb_y(panel.y, panel.height, thumb_h, scroll_y, max_scroll)
     thumb := rl.Rectangle{track.x, thumb_y, scrollbar_width, thumb_h}
-    return track, thumb, thumb_h, true
+    return Vertical_Scrollbar_Geometry{track, thumb, thumb_h, true}
 }
 
 //   Handle drag lifecycle and update scroll offset from thumb drag.
-handle_scrollbar_drag :: proc(
-    mouse_input: Mouse_Input_State,
-    thumb: rl.Rectangle,
-    panel_y,
-    panel_height: f32,
-    thumb_h,
-    max_scroll: f32,
-    scroll_y: ^f32,
-    dragging: ^bool,
-    drag_off: ^f32,
-    drag_epsilon: f32) {
+handle_scrollbar_drag :: proc(ctx: Scrollbar_Drag_Context) {
 
-    if mouse_input.left_pressed && rl.CheckCollisionPointRec(mouse_input.position, thumb) {
-        dragging^ = true
-        drag_off^ = mouse_input.position.y - thumb.y
+    if ctx.mouse_input.left_pressed &&
+        rl.CheckCollisionPointRec(ctx.mouse_input.position, ctx.thumb) {
+        ctx.dragging^ = true
+        ctx.drag_off^ = ctx.mouse_input.position.y - ctx.thumb.y
     }
 
-    if !dragging^ {
+    if !ctx.dragging^ {
         return
     }
 
-    if !mouse_input.left_down {
-        dragging^ = false
+    if !ctx.mouse_input.left_down {
+        ctx.dragging^ = false
         return
     }
 
-    thumb_range := panel_height - thumb_h
-    if thumb_range <= drag_epsilon || max_scroll <= 0 {
-        scroll_y^ = 0
+    thumb_range := ctx.panel_height - ctx.thumb_h
+    if thumb_range <= ctx.drag_epsilon || ctx.max_scroll <= 0 {
+        ctx.scroll_y^ = 0
         return
     }
 
-    new_thumb_y := mouse_input.position.y - drag_off^
-    t := (new_thumb_y - panel_y) / thumb_range
-    scroll_y^ = clamp(t, 0, 1) * max_scroll
+    new_thumb_y := ctx.mouse_input.position.y - ctx.drag_off^
+    t := (new_thumb_y - ctx.panel_y) / thumb_range
+    ctx.scroll_y^ = clamp(t, 0, 1) * ctx.max_scroll
 }

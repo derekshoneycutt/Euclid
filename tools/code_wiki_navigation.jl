@@ -107,7 +107,8 @@ end
 function validate_managed_path_ownership(
     sections::Vector{WikiSection}, shared_paths::Vector{String})
 
-    claims = [(path, section.id) for section in sections for path in section.managed_output_paths]
+    claims = [(path, section.id)
+        for section in sections for path in section.managed_output_paths]
     append!(claims, [(path, "shared") for path in shared_paths])
     for index in eachindex(claims), other_index in index + 1:length(claims)
         path, owner = claims[index]
@@ -157,7 +158,8 @@ function wiki_output_owner(manifest::WikiManifest, path::String)
         guide.path == path && return guide.owner
     end
     for section in manifest.sections
-        any(claim -> wiki_path_contains(claim, path), section.managed_output_paths) || continue
+        any(claim -> wiki_path_contains(claim, path), section.managed_output_paths) ||
+            continue
         return section.owner
     end
     error("Unowned Wiki output path: $path")
@@ -226,10 +228,12 @@ function apply_guide_relations!(
     package_by_id = Dict(package.stable_id => package for package in packages)
     for relation in manifest.guide_relations
         package = get(package_by_id, relation.package_id, nothing)
-        package === nothing && error("Guide relation package not extracted: $(relation.package_id)")
+        package === nothing &&
+            error("Guide relation package not extracted: $(relation.package_id)")
         append!(package.authored_document_refs, relation.guide_paths)
         for symbol in package.symbols
-            any(prefix -> startswith(symbol.name, prefix), relation.symbol_prefixes) || continue
+            any(prefix -> startswith(symbol.name, prefix), relation.symbol_prefixes) ||
+                continue
             append!(symbol.authored_document_refs, relation.guide_paths)
         end
     end
@@ -433,7 +437,8 @@ function build_authored_guide_outputs(
 
     source_root = joinpath(repository_root, manifest.wiki_root)
     return [WikiOutput(owner=guide.owner, path=guide.path,
-        content=read(joinpath(source_root, guide.path), String)) for guide in manifest.guides]
+        content=read(joinpath(source_root, guide.path), String))
+        for guide in manifest.guides]
 end
 
 """Render a landing page for one section owned by the Wiki compositor."""
@@ -611,7 +616,8 @@ function rewrite_github_wiki_links(
         parts = split(target, '#'; limit=2)
         relative_target = first(parts)
         isempty(relative_target) && return matched.match
-        resolved = normalize_repo_path(normpath(joinpath(dirname(source_path), relative_target)))
+        resolved =
+            normalize_repo_path(normpath(joinpath(dirname(source_path), relative_target)))
         haskey(page_paths, resolved) || return matched.match
         fragment = length(parts) == 2 ? "#" * last(parts) : ""
         page = splitext(page_paths[resolved])[1]

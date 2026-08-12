@@ -94,6 +94,7 @@ BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE :: 6
 BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE :: 7
 BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE :: 8
 BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE :: 9
+BRIDGE_DYNVIEW_MATH_OP_MAX :: BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE
 
 BRIDGE_DYNVIEW_FONT_FLAG_NONE :: i32(core.Font_Variant_Flags.None)
 BRIDGE_DYNVIEW_FONT_FLAG_ITALIC :: i32(core.Font_Variant_Flags.Italic)
@@ -125,6 +126,10 @@ CONSTRAINT_SPEC_CHILDOFFSET :: (1 << 6)
 CONSTRAINT_SPEC_DOAPPLY :: (1 << 7)
 
 Bridge_Color :: core.Bridge_Color
+Bridge_Pentagon_Colors :: core.Bridge_Pentagon_Colors
+Bridge_Triangle_Colors :: core.Bridge_Triangle_Colors
+Bridge_Box_Edge_Colors :: core.Bridge_Box_Edge_Colors
+Bridge_Pie_Colors :: core.Bridge_Pie_Colors
 
 Bridge_Dynview_Math_Op :: struct {
     kind: i32,

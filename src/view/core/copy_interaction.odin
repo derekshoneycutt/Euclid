@@ -77,7 +77,8 @@ copy_icon_update_hover_state :: proc(
 
     if hovered_index >= 0 {
         runtime^.copy_icon_hover_active = true
-        runtime^.copy_icon_hover_block_id = cache^.copy_hit_targets[hovered_index].block_id
+        runtime^.copy_icon_hover_block_id =
+            cache^.copy_hit_targets[hovered_index].block_id
         return
     }
 
@@ -157,12 +158,14 @@ copy_icon_update_transition_values :: proc(runtime: ^core.Dynview_System, dt: f3
 }
 
 //   Compute normalized linger intensity for a specific copy-icon target.
-copy_icon_linger_t :: #force_inline proc(runtime: ^core.Dynview_System, is_linger_target: bool) -> f32 {
+copy_icon_linger_t :: #force_inline proc(
+    runtime: ^core.Dynview_System, is_linger_target: bool) -> f32 {
     if !is_linger_target || COPY_ICON_CLICK_LINGER_SECONDS <= 0 {
         return 0
     }
 
-    return clamp(runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
+    return clamp(
+        runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
 }
 
 //   Draw a copy icon button using shared icon primitives with hover/press feedback.
@@ -197,7 +200,8 @@ draw_copy_icon_button :: proc(
         }
     }
 
-    scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t - COPY_ICON_PRESS_SCALE_SUB * use_press_t
+    scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t -
+        COPY_ICON_PRESS_SCALE_SUB * use_press_t
     cx := slot_rect.x + slot_rect.width * 0.5
     cy := slot_rect.y + slot_rect.height * 0.5
     icon_w := slot_rect.width * max(0.4, scale)
@@ -246,7 +250,8 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    return draw_copy_icon_button(target.rect, hover_t, press_visual, hovered_icon, mouse_input)
+    return draw_copy_icon_button(
+        target.rect, hover_t, press_visual, hovered_icon, mouse_input)
 }
 
 //   Resolve per-frame copy-icon hover/press ownership and animation transitions.
@@ -284,7 +289,8 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
         return ""
     }
 
-    return string(cache^.compiled_copy_payload[target.payload_offset:target.payload_offset + target.payload_len])
+    return string(cache^.compiled_copy_payload[
+        target.payload_offset:target.payload_offset + target.payload_len])
 }
 
 //   Draw per-block copy icons and return whether one was clicked.

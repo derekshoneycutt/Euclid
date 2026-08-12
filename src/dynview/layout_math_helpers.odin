@@ -2,15 +2,34 @@ package dynview
 
 import "../core"
 
+//   Draw text for each delimiter kind, indexed by kind minus one.
+DELIMITER_TEXTS :: [DELIMITER_KIND_COUNT]string{
+    "(", ")", "[", "]", "{", "}", "|", "‖", "⌈", "⌉", "⌊", "⌋", "⟨", "⟩",
+}
+
 Dynview_Matrix_Column_Alignment :: core.Dynview_Matrix_Column_Alignment
 
+Script_Draw_Offsets :: struct {
+    script_font_size: f32,
+    sup_raise_px:     f32,
+    sub_drop_px:      f32,
+}
+
+Matrix_Dims :: struct {
+    rows: int,
+    cols: int,
+    ok:   bool,
+}
+
 //   Return style-adjusted horizontal advance for one column unit.
-effective_advance :: #force_inline proc(style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
+effective_advance :: #force_inline proc(
+    style: Dynview_Text_Style, wrap_advance: f32) -> f32 {
     return max(1.0, wrap_advance * max(0.5, style.wrap_scale))
 }
 
 //   Return style-aware ascent/descent estimates from active font size.
-style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
+style_ascent_descent :: #force_inline proc(
+    style: Dynview_Text_Style, font_size: f32) -> (f32, f32) {
     scale := max(0.8, style.wrap_scale)
     ascent := max(1.0, font_size * (0.74 + 0.06 * scale))
     descent := max(1.0, font_size * (0.22 + 0.02 * scale))
@@ -29,7 +48,7 @@ style_ascent_descent :: #force_inline proc(style: Dynview_Text_Style, font_size:
 
 //   Resolve script draw offsets using one shared model for layout and rendering.
 script_draw_offsets :: #force_inline proc(
-    font_size, script_scale, sup_raise, sub_drop: f32) -> (f32, f32, f32) {
+    font_size, script_scale, sup_raise, sub_drop: f32) -> Script_Draw_Offsets {
 
     script_font_size := max(1.0, font_size * max(0.2, script_scale))
     sup_vertical_bias := max(0.6, script_font_size * 0.08)
@@ -37,7 +56,7 @@ script_draw_offsets :: #force_inline proc(
     sub_lift_px := max(0.5, script_font_size * 0.06)
     sup_raise_px := max(0.0, sup_raise * font_size - sup_vertical_bias)
     sub_drop_px := max(0.0, sub_drop * font_size - sub_vertical_bias - sub_lift_px)
-    return script_font_size, sup_raise_px, sub_drop_px
+    return Script_Draw_Offsets{script_font_size, sup_raise_px, sub_drop_px}
 }
 
 //   Return conservative script padding to avoid rasterized edge truncation.
@@ -90,7 +109,8 @@ fraction_vertical_gap :: #force_inline proc(font_size: f32) -> f32 {
 }
 
 //   Return small horizontal side padding for stretch-delimiter wrappers.
-stretch_delimiter_side_padding :: #force_inline proc(font_size, base_advance: f32) -> f32 {
+stretch_delimiter_side_padding :: #force_inline proc(
+    font_size, base_advance: f32) -> f32 {
     return max(0.5, max(base_advance * 0.12, font_size * 0.08))
 }
 
@@ -123,7 +143,7 @@ parse_positive_int :: #force_inline proc(text: string) -> (int, bool) {
 //   Read matrix row/column metadata from command text fields.
 matrix_dims_from_command :: #force_inline proc(
     buffer: ^core.Dynview_Command_Buffer,
-    cmd: core.Dynview_Command) -> (int, int, bool) {
+    cmd: core.Dynview_Command) -> Matrix_Dims {
 
     rows_text := text_span_from_buffer(
         buffer,
@@ -135,7 +155,7 @@ matrix_dims_from_command :: #force_inline proc(
         cmd.script_sup_text_len)
     rows, rows_ok := parse_positive_int(rows_text)
     cols, cols_ok := parse_positive_int(cols_text)
-    return rows, cols, rows_ok && cols_ok
+    return Matrix_Dims{rows, cols, rows_ok && cols_ok}
 }
 
 //   Decode strict array alignment metadata; return all-center on any invalid shape.
@@ -165,22 +185,32 @@ decode_matrix_column_alignments :: #force_inline proc(
     }
 
     for col in 0..<cols {
-        switch preamble[col] {
-        case 'l':
-            alignments[col] = .Left
-        case 'c':
-            alignments[col] = .Center
-        case 'r':
-            alignments[col] = .Right
-        case:
+        alignment, ok := matrix_alignment_from_char(preamble[col])
+        if !ok {
             for idx in 0..<cols {
                 alignments[idx] = .Center
             }
             return alignments, false
         }
+        alignments[col] = alignment
     }
 
     return alignments, true
+}
+
+//   Map one l/c/r alignment character to its matrix column alignment.
+matrix_alignment_from_char :: #force_inline proc(
+    ch: u8) -> (Dynview_Matrix_Column_Alignment, bool) {
+
+    switch ch {
+    case 'l':
+        return .Left, true
+    case 'c':
+        return .Center, true
+    case 'r':
+        return .Right, true
+    }
+    return .Center, false
 }
 
 //   Resolve one cell x-position within a matrix column using l/c/r alignment rules.
@@ -200,37 +230,11 @@ matrix_aligned_cell_x :: #force_inline proc(
 
 //   Return delimiter draw text for one supported delimiter kind.
 delimiter_text :: #force_inline proc(delimiter_kind: i32) -> string {
-    switch delimiter_kind {
-    case DELIMITER_KIND_LEFT_PAREN:
-        return "("
-    case DELIMITER_KIND_RIGHT_PAREN:
-        return ")"
-    case DELIMITER_KIND_LEFT_BRACKET:
-        return "["
-    case DELIMITER_KIND_RIGHT_BRACKET:
-        return "]"
-    case DELIMITER_KIND_LEFT_BRACE:
-        return "{"
-    case DELIMITER_KIND_RIGHT_BRACE:
-        return "}"
-    case DELIMITER_KIND_VERT:
-        return "|"
-    case DELIMITER_KIND_DOUBLE_VERT:
-        return "‖"
-    case DELIMITER_KIND_LEFT_CEIL:
-        return "⌈"
-    case DELIMITER_KIND_RIGHT_CEIL:
-        return "⌉"
-    case DELIMITER_KIND_LEFT_FLOOR:
-        return "⌊"
-    case DELIMITER_KIND_RIGHT_FLOOR:
-        return "⌋"
-    case DELIMITER_KIND_LEFT_ANGLE:
-        return "⟨"
-    case DELIMITER_KIND_RIGHT_ANGLE:
-        return "⟩"
+    if delimiter_kind < 1 || delimiter_kind > DELIMITER_KIND_COUNT {
+        return ""
     }
-    return ""
+    texts := DELIMITER_TEXTS
+    return texts[delimiter_kind - 1]
 }
 
 //   Return family type for one delimiter kind.
@@ -271,7 +275,8 @@ delimiter_is_right :: #force_inline proc(delimiter_kind: i32) -> bool {
 }
 
 //   Return one recipe-like base width factor keyed by delimiter family.
-delimiter_base_width_factor :: #force_inline proc(family: Dynview_Delimiter_Family) -> f32 {
+delimiter_base_width_factor :: #force_inline proc(
+    family: Dynview_Delimiter_Family) -> f32 {
     switch family {
     case .Paren:
         return 0.42
@@ -378,8 +383,11 @@ style_with_block_format :: #force_inline proc(
     }
 
     merged.indent_cols = max(merged.indent_cols, block_format.indent_cols)
-    merged.paragraph_spacing_before = max(merged.paragraph_spacing_before, block_format.paragraph_spacing_before)
-    merged.paragraph_spacing_after = max(merged.paragraph_spacing_after, block_format.paragraph_spacing_after)
-    merged.line_height_multiplier = max(merged.line_height_multiplier, block_format.line_height_multiplier)
+    merged.paragraph_spacing_before =
+        max(merged.paragraph_spacing_before, block_format.paragraph_spacing_before)
+    merged.paragraph_spacing_after =
+        max(merged.paragraph_spacing_after, block_format.paragraph_spacing_after)
+    merged.line_height_multiplier =
+        max(merged.line_height_multiplier, block_format.line_height_multiplier)
     return merged
 }

@@ -34,7 +34,8 @@ draw_pause_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     bottom := rect.y + rect.height * 0.76
 
     rl.DrawRectangleRec(rl.Rectangle{left_x, top, bar_w, bottom - top}, color)
-    rl.DrawRectangleRec(rl.Rectangle{left_x + bar_w + gap, top, bar_w, bottom - top}, color)
+    rl.DrawRectangleRec(
+        rl.Rectangle{left_x + bar_w + gap, top, bar_w, bottom - top}, color)
 }
 
 //   Draw play glyph with a right-pointing triangle.
@@ -200,7 +201,8 @@ draw_books_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
 
     upper := rl.Rectangle{left, top, width, height * 0.3}
     middle := rl.Rectangle{left, top + height * 0.34, width * 0.94, height * 0.3}
-    lower := rl.Rectangle{left + width * 0.04, top + height * 0.68, width * 0.9, height * 0.3}
+    lower := rl.Rectangle{
+        left + width * 0.04, top + height * 0.68, width * 0.9, height * 0.3}
 
     rl.DrawRectangleLinesEx(upper, 1, color)
     rl.DrawRectangleLinesEx(middle, 1, color)

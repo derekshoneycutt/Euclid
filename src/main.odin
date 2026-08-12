@@ -2,6 +2,7 @@ package main
 
 import "core"
 import "files"
+import "trace"
 import "view"
 
 import "core:fmt"
@@ -19,18 +20,22 @@ main :: proc() {
 
     fmt.println("Initiating Euclid...")
 
-    view.run_window_loop(&settings)
+    trace_exit_code := view.run_window_loop(&settings)
 
     files.cleanup_packaged_assets_dir()
     free_all(context.temp_allocator)
     
     fmt.println("Euclid ended")
+    if trace_exit_code != 0 {
+        os.exit(trace_exit_code)
+    }
 }
 
 
 
 //  Parse one bounded dust-capacity option and report whether it matched.
-parse_dust_particle_max_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
+parse_dust_particle_max_param :: proc(
+    arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
     if len(arg) < len(DUST_PARTICLE_MAX_PREFIX) ||
         arg[:len(DUST_PARTICLE_MAX_PREFIX)] != DUST_PARTICLE_MAX_PREFIX {
         return false
@@ -89,7 +94,8 @@ parse_runtime_flag :: proc(arg: string, settings: ^core.Euclid_Run_Settings) -> 
 }
 
 //  Apply one lowercase short flag that enables an application setting.
-parse_short_enable_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings) -> bool {
+parse_short_enable_flag :: proc(
+    flag: rune, settings: ^core.Euclid_Run_Settings) -> bool {
     switch flag {
     case 'v':
         settings.do_vsync = true
@@ -108,7 +114,8 @@ parse_short_enable_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings)
 }
 
 //  Apply one uppercase short flag that disables an application setting.
-parse_short_disable_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings) -> bool {
+parse_short_disable_flag :: proc(
+    flag: rune, settings: ^core.Euclid_Run_Settings) -> bool {
     switch flag {
     case 'V':
         settings.do_vsync = false
@@ -128,7 +135,8 @@ parse_short_disable_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings
 
 //  Apply one short flag, including the non-setting help flag.
 parse_short_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings) -> bool {
-    if parse_short_enable_flag(flag, settings) || parse_short_disable_flag(flag, settings) {
+    if parse_short_enable_flag(flag, settings) ||
+        parse_short_disable_flag(flag, settings) {
         return true
     }
     if flag == 'h' {
@@ -140,7 +148,8 @@ parse_short_flag :: proc(flag: rune, settings: ^core.Euclid_Run_Settings) -> boo
 }
 
 //  Parse one combined short-option argument such as -vasg.
-parse_short_flags_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
+parse_short_flags_param :: proc(
+    arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
     if len(arg) < 2 || arg[0] != '-' || arg[1] == '-' {
         return false
     }
@@ -168,10 +177,16 @@ print_command_line_help :: proc() {
         core.MAX_LOW_PARTICLES))
     fmt.println("  -f, --limit-fps          Limit rendering to 60 FPS. (default)")
     fmt.println("  -F, --no-limit-fps       Disable the 60 FPS limit.")
-    fmt.println("  -s, --simd               Enable SIMD projection when available. (default)")
+    fmt.println(
+        "  -s, --simd               Enable SIMD projection when available. (default)")
     fmt.println("  -S, --no-simd            Disable SIMD projection.")
-    fmt.println("  -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)")
+    fmt.println(
+        "  -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)")
     fmt.println("  -G, --no-gpu-dust-instancing Disable GPU dust instancing.")
+    fmt.println("  --semantic-trace         Enable semantic trace output.")
+    fmt.println("  --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.")
+    fmt.println("  --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).")
+    fmt.println("  --semantic-trace-strict  Fail the run when trace overflow or serialization fails.")
     fmt.println("  -h, --help               Show this help text.")
     fmt.println("")
     fmt.println("Short options can be combined, for example: -vasg or -VAFSG")
@@ -179,7 +194,15 @@ print_command_line_help :: proc() {
 
 //  Parse a single command line argument, updating settings accordingly.
 parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) {
-    if parse_short_flags_param(arg, settings) || parse_dust_particle_max_param(arg, settings) ||
+    handled_trace, valid_trace := trace.parse_semantic_trace_argument(settings, arg)
+    if handled_trace {
+        if !valid_trace {
+            fmt.println("Invalid semantic trace parameter: ", arg)
+        }
+        return
+    }
+    if parse_short_flags_param(arg, settings) ||
+        parse_dust_particle_max_param(arg, settings) ||
         parse_window_flag(arg, settings) || parse_runtime_flag(arg, settings) {
         return
     }
@@ -201,6 +224,10 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         limit_fps = true,
         use_simd_batch_projection = true,
         use_gpu_dust_instancing = true,
+        semantic_trace_enabled = false,
+        semantic_trace_strict = false,
+        semantic_trace_output = "",
+        semantic_trace_events = "",
     }
 
     for i in 1..<len(os.args) {
@@ -213,8 +240,10 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         fmt.println("Using vsync: ", settings.do_vsync)
         fmt.println("Maximum dust particles: ", settings.dust_particle_max)
         fmt.println("Limiting FPS: ", settings.limit_fps)
-        fmt.println("Using SIMD projection when available: ", settings.use_simd_batch_projection)
-        fmt.println("Using GPU dust instancing when available: ", settings.use_gpu_dust_instancing)
+        fmt.println("Using SIMD projection when available: ",
+            settings.use_simd_batch_projection)
+        fmt.println("Using GPU dust instancing when available: ",
+            settings.use_gpu_dust_instancing)
     }
 
     return settings

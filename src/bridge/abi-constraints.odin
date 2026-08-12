@@ -93,8 +93,12 @@ get_constraint_view :: proc "c" (
 //   - Use BRIDGE_STATUS_* constants to branch on invalid indices, arguments, or graph state failures.
 @(export)
 create_constraint :: proc "c" (
-    state: ^core.Euclid_General_State, spec: Bridge_Constraint_Spec, outIndex: ^i32) -> i32 {
+    state: ^core.Euclid_General_State,
+    spec: Bridge_Constraint_Spec, outIndex: ^i32) -> i32 {
 
+    // #vet forgives(cyclomatic_complexity) — bridge constraint constructor.
+    // A short sequence of ABI argument validations then one struct init; the
+    // guards are the boundary contract, each rejecting a distinct bad input.
     context = state^.saved_context
 
     if !is_valid_constraint_kind_value(spec.traits) {
@@ -155,8 +159,12 @@ create_constraint :: proc "c" (
 //   - Use BRIDGE_STATUS_* constants to branch on invalid indices, arguments, or graph state failures.
 @(export)
 update_constraint :: proc "c" (
-    state: ^core.Euclid_General_State, index: i32, specMask: i32, spec: Bridge_Constraint_Spec) -> i32 {
+    state: ^core.Euclid_General_State, index: i32, specMask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
 
+    // #vet forgives(cyclomatic_complexity) — bridge spec-field applier.
+    // One guarded block per optional spec-mask field; the branches are the
+    // field-presence contract of the ABI, not reducible logic.
     context = state^.saved_context
 
     constraintIndex := int(index)
@@ -370,7 +378,8 @@ apply_all_constraints_bridge :: proc "c" (
 //   - If status is BRIDGE_STATUS_NON_CONVERGED, inspect final_error to decide next solver action.
 @(export)
 solve_constraints_to_error :: proc "c" (
-    state: ^core.Euclid_General_State, allowableError: f32, maxIterations: i32) -> Bridge_Solve_Result {
+    state: ^core.Euclid_General_State, allowableError: f32,
+    maxIterations: i32) -> Bridge_Solve_Result {
 
     context = state^.saved_context
 

@@ -24,7 +24,8 @@ draw_settings_particle_stats :: proc(
     view_core.ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
         UI_TEXT_COLOR, font)
-    view_core.ui_text(fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+    view_core.ui_text(fmt.tprintf(
+        "Julia animation entries added: %d", animation_entries_added),
         int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 3),
         UI_TEXT_COLOR, font)
 }
@@ -248,7 +249,8 @@ draw_settings_view :: proc(
     _ = draw_container(panel, .Grey)
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y, UI_TEXT_COLOR, font)
+    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y,
+        UI_TEXT_COLOR, font)
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -354,22 +356,28 @@ draw_settings_view :: proc(
     if state.julia_interface != nil {
         animation_entries_added = state.julia_interface.animation_count
     }
-    draw_settings_integer_slider(
-        panel,
-        slider_label_row.segment_rect.y,
-        mouse_input,
-        ui_runtime,
-        SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
-        "Maximum Dust particles",
-        &ps.use_max_dust_particles,
-        0,
-        max_particles,
-        font)
-    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps, animation_entries_added, font)
-    draw_settings_fps_checkbox(panel, fps_row.segment_rect.y, mouse_input, ui_runtime, font)
-    draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y, mouse_input, ui_runtime, font)
-    draw_settings_sound_checkbox(panel, sound_row.segment_rect.y, mouse_input, state, font)
-    draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y, mouse_input, ui_runtime, font)
+    draw_settings_integer_slider(Integer_Slider_Params{
+        panel = panel,
+        row_y = slider_label_row.segment_rect.y,
+        mouse_input = mouse_input,
+        ui_runtime = ui_runtime,
+        press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
+        label = "Maximum Dust particles",
+        value = &ps.use_max_dust_particles,
+        min_value = 0,
+        max_value = max_particles,
+        font = font,
+    })
+    draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps,
+        animation_entries_added, font)
+    draw_settings_fps_checkbox(panel, fps_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
+    draw_settings_limit_fps_checkbox(panel, limit_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
+    draw_settings_sound_checkbox(panel, sound_row.segment_rect.y,
+        mouse_input, state, font)
+    draw_settings_simd_projection_checkbox(panel, simd_row.segment_rect.y,
+        mouse_input, ui_runtime, font)
     draw_settings_gpu_dust_checkbox(
         panel,
         gpu_dust_row.segment_rect.y,

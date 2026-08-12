@@ -35,14 +35,71 @@ The core application is coded in Odin, with Raylib used for rendering.
 You must have Odin and Julia installed on your system to build from source, and both
 must be available on PATH.
 
-Clone the git repository as per usual practices and run the make script below.
+Clone the git repository, then build. Both the conventional `make` entry point
+(on Linux/macOS) and the PowerShell entry point (on Windows) run `configure`
+automatically the first time to verify the toolchain and install the required
+Julia packages. Then they build via `make.jl`.
+
+### Linux / macOS (shell + Makefile)
 
 ```bash
 git clone https://github.com/derekshoneycutt/Euclid.git
 cd Euclid
-julia make.jl
-# To run immediately: julia make.jl -r
+make            # configure (first run) + build
+make run        # build and run the application
 ```
+
+### Windows (PowerShell + make.ps1)
+
+Windows does not ship a standard `make`, so the same shortcuts are provided by
+`make.ps1`:
+
+```powershell
+git clone https://github.com/derekshoneycutt/Euclid.git
+cd Euclid
+.\make.ps1            # configure (first run) + build
+.\make.ps1 run        # build and run the application
+```
+
+### Driving the scripts directly
+
+Prefer to call the scripts yourself? That works the same everywhere:
+
+```bash
+./configure           # Linux / macOS; .\configure in Windows PowerShell
+julia tools/make.jl
+# To run immediately: julia tools/make.jl -r
+```
+
+### Build targets
+
+The `Makefile` (Linux/macOS) and `make.ps1` (Windows) are thin, conventional
+wrappers over the same commands — all real logic lives in `configure` and
+`make.jl`. Both run `configure` once (tracked by a `.configure-done` sentinel)
+before any build target, so the first bare build just works after cloning. The
+targets are identical across both entry points:
+
+| Linux / macOS | Windows | What it runs |
+| --- | --- | --- |
+| `make` / `make build` | `.\make.ps1` | `configure` (once), then `julia tools/make.jl` |
+| `make run` | `.\make.ps1 run` | `julia tools/make.jl --run` |
+| `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl --vet --test` (the verification baseline) |
+| `make vet` | `.\make.ps1 vet` | `julia tools/make.jl --vet` |
+| `make sysimage` | `.\make.ps1 sysimage` | `julia tools/make.jl --sysimage` |
+| `make harness` | `.\make.ps1 harness` | `julia tools/make.jl --harness` |
+| `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl --wiki` |
+| `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl --check-wiki` |
+| `make configure` | `.\make.ps1 configure` | re-run `configure` |
+| `make clean` | `.\make.ps1 clean` | `julia tools/make.jl --clean` (also clears the configure sentinel) |
+| `make help` | `.\make.ps1 help` | `julia tools/make.jl --help` |
+
+### The configure script
+
+The `configure` script is a polyglot (POSIX sh and PowerShell) that works on
+Linux, macOS, and Windows. It checks that `odin` and `julia` are on PATH, runs
+`Pkg.instantiate()` for the application environment (`src/julia`), and installs
+the Julia static-analysis packages (JET, JuliaSyntax, CodeComplexity) used by the
+vet tooling into the default Julia environment if they are missing.
 
 ### Windows requires a few more additions before this will work
 
@@ -50,6 +107,9 @@ julia make.jl
 - `gendef` : used in the script to bridge the fact that Julia is not built with
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
+
+On Windows, `configure` also verifies that the MSVC environment (or `cl.exe`) and
+`gendef` are available.
 
 ## Documentation
 
@@ -59,8 +119,8 @@ julia make.jl
 - [Guides](docs/wiki/Guides/ArchitectureSummary.md): canonical authored architecture, coding,
   animation, and syntax documentation.
 
-Generate the complete publishable Wiki artifact locally with `julia make.jl -w`. The artifact is
-written to ignored `bin/wiki/`. Run `julia make.jl -W` to compare it against a fresh generation
+Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`. The artifact is
+written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it against a fresh generation
 without modifying the retained artifact.
 
 ## Questions?
@@ -225,7 +285,7 @@ will draw the dust particles with the GPU and O(1) on the CPU to instance the da
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia make.jl -sr`. Ordinary build or asset commands
+executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset commands
 remove an existing sysimage to prevent stale baked code from being used.
 
 Additionally, there are some startup options that can affect application performance.
@@ -245,6 +305,10 @@ Options:
   -S, --no-simd            Disable SIMD projection.
   -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)
   -G, --no-gpu-dust-instancing Disable GPU dust instancing.
+  --semantic-trace         Enable semantic trace output.
+  --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.
+  --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).
+  --semantic-trace-strict  Fail the run when trace overflow or serialization fails.
   -h, --help               Show this help text.
 
 Short options can be combined, for example: -vasg or -VAFSG
@@ -277,8 +341,8 @@ that just make it an enjoyable experience!
 
 ### Q: Are there any more options with the make scripts?
 
-The make script (both `make.jl`) has several helpful parameters if the simple stuff above
-is not enough.
+The build driver (`tools/make.jl`, normally reached through `make` or `make.ps1`)
+has several helpful parameters if the simple stuff above is not enough.
 
 ```text
 Usage: ./make.jl [options]
@@ -289,9 +353,13 @@ Options:
     --assets, -a        Build assets.pkg. (default)
     --no-assets, -A     Skip assets.pkg build.
     --sysimage, -s      Build a custom Julia sysimage beside the application.
+    --harness, -H       Build and run the headless semantic trace harness.
+    --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
     --test, -t          Run project tests for the phased testing plan.
     --vet, -v           Build with validation flags.
+    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
+    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
 
@@ -300,6 +368,16 @@ Notes:
     - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
     - Short options can be combined, e.g. -rvas or -Ba.
 ```
+
+The harness target is intended for semantic trace and deterministic scenario work. Its
+underlying executable accepts a smaller control surface:
+
+```text
+Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
+```
+
+`julia tools/make.jl -H` builds and runs the default harness scenario and writes the resulting trace
+to `bin/semantic-trace-harness.jsonl`.
 
 ### Q: Where Should I Start If I Want In The Code?
 
@@ -325,7 +403,7 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-julia make.jl -Ba
+julia tools/make.jl -Ba
 ```
 
 Euclid will automatically notice the updated package file, unpack it, and reload all
@@ -344,25 +422,32 @@ engineering stuff. We perform several checks in the vet mode to try and improve 
 quality and performance.
 
 **FIRST**: There are dependencies in the make script for the vet mode,
-namely JET.jl, JuliaSyntax.jl, and CodeComplexity.jl. These can be added via the standard
-julia package manager.
+namely JET.jl, JuliaSyntax.jl, and CodeComplexity.jl. The `./configure` script
+installs these into the default Julia environment automatically (see
+[Building from Source](#building-from-source)). To add them manually instead:
 
 ```julia
 using Pkg
 Pkg.add("JET")
 Pkg.add("JuliaSyntax")
-pkg.add("CodeComplexity")
+Pkg.add("CodeComplexity")
 ```
 
-You should also have `lizard` installed for the static analysis of Odin code.
+Odin static analysis is performed by a purpose-built analyzer in `tools/vet`
+that is compiled automatically during vet mode; no external Odin linter is
+required.
 
-You should also have `scc` installed for broad code statistics of the codebase.
+Repository-wide statistics (line counts, complexity, COCOMO, and an LLM
+regeneration-cost estimate) are computed by a first-party `repo-metrics`
+analysis built into the vet script. No external code counter (such as `scc`)
+is required; everything is derived from the same Julia and Odin token streams
+the rest of the vet pipeline already parses.
 
 ```bash
-julia make.jl -v
+julia tools/make.jl -v
 ```
 
-NOTE: Use the combined vet+test run, `julia make.jl -vt`, as the verification baseline.
+NOTE: Use the combined vet+test run, `julia tools/make.jl -vt`, as the verification baseline.
 Running only `-v` or only `-t` is not sufficient for acceptance.
 
 #### Report Output
@@ -378,8 +463,9 @@ Report section statuses use these meanings:
 - `Skipped`: check was intentionally not run for the current context.
 - `Missing`: required external tool was not available.
 
-The report includes sections for Odin analysis, Julia syntax, Julia parser metadata, Julia
-CodeComplexity, Julia JET, Odin lizard, and repository scc.
+The report includes sections for the Odin vet build, Odin compiler dependencies,
+Julia syntax, Julia parser metadata, Julia CodeComplexity, Julia JET, Odin static
+analysis, Odin allocations, and repository metrics (`repo-metrics`).
 
 #### Odin
 
@@ -387,11 +473,22 @@ First, Odin is run with a set of vet flags that enforces style throughout the Od
 treating warnings as errors, etc. Thankfully, we can skip the tabs they require in their
 own repository in the Odin code.
 
-Additionally, we run `lizard` in C++ mode on the Odin code. If functions are especially
-long or complex, this will often catch them, even throwing a warning and stopping the
-build in vet mode.
+Additionally, vet mode compiles and runs the Odin static analyzer in
+`tools/vet`, which uses `core:odin/parser` to measure every Odin procedure
+against the coding standards: NLOC, cyclomatic complexity, and parameter count.
+Complexity at or above 15 is a blocking violation unless the procedure carries an
+inline `#vet forgives(cyclomatic_complexity)` exception; complexity 11-14 warns.
+NLOC and parameter count remain review signals. The analyzer also traces
+allocation call sites (`new`, `make`, `append`, and known allocating helpers) and
+classifies each by allocator source: a site with no explicit allocator is a
+blocking violation, and an explicit default-heap allocator (`context.allocator`)
+warns. Documented exceptions use `#vet forgives(implicit_allocator)` or
+`#vet forgives(heap_allocator)` with an explanatory comment. Sites are reported
+prominently in the `odin-allocations` report section with basic statistics
+printed on every vet run.
 
-`scc` also provides additional information (see below).
+The `repo-metrics` section (see below) provides additional repository-wide
+statistics.
 
 #### Julia
 
@@ -403,23 +500,44 @@ Additionally, we use `CodeComplexity.jl` and `JET.jl` which allows us to perform
 complexity checks and some static analysis on the code, preventing some pretty obvious
 errors before they are run.
 
-`scc` also provides additional information.
+The `repo-metrics` section (see below) provides additional repository-wide
+statistics.
 
-#### scc
+#### repo-metrics
 
-[scc](https://github.com/boyter/scc) performs a basic complexity analysis across the entire
-codebase, including COCOMO, cost to develop, etc. No warnings or errors are thrown, and
-this cannot really guarantee code quality. However, it can isolate the hotspots for logic,
-and gives some insight into how the code is structured. The Odin will typically have more
-complexity hotspots in this analysis simply due to being the ultimate arbiter of control
-for the application in many places.
+The `repo-metrics` section computes repository-wide statistics with the project's
+own toolchain, replacing the external `scc` code counter. Because it reuses the
+same parse that powers the other checks (JuliaSyntax for Julia, `core:odin/tokenizer`
+for Odin), its line and complexity figures are parse-accurate rather than
+regex/keyword estimates. It throws no warnings or errors and cannot guarantee code
+quality, but it isolates logic hotspots and shows how the code is structured. The
+Odin side will typically carry more complexity hotspots simply because it is the
+ultimate arbiter of control for the application in many places.
 
-Overall Complexity and Code measures are pulled out for both languages and divided for
-an additional `Complexity/Code` measure for Odin, Julia, and Total values. In general,
-if the Odin code remains moderately high 0.13-0.18 it is considered pretty good, and we
-generally expect the Julia code to remain low-moderate 0.05-0.13. The total thus being a
-moderate 0.09-0.13 would be a great expectation. For meaningful measures to the function
-and file, the `lizard` and `CodeComplexity.jl` outputs are more telling to small-scale
-needed attention than the `scc` outputs. Nonetheless, the `scc` outputs can indicate
-issues with stupid code decisions we should feel bad about. And make us feel like 100x
-developers or something.
+It reports, per language and per top-level directory:
+
+- **Line inventory**: Files, Lines, and the breakdown into Code, Comments, and
+  Blank lines. A line counts as *code* when it carries at least one non-comment,
+  non-string character; *comment* when it is only comment/string content; *blank*
+  when empty.
+- **Complexity**: total cyclomatic complexity per bucket, summed from the real
+  per-function measures (the Odin static analyzer and CodeComplexity.jl).
+- **COCOMO (organic)**: the classic human effort/schedule/staffing estimate,
+  including an estimated cost-to-develop in USD.
+- **LOCOMO**: an experimental LLM *regeneration*-cost estimate (input/output
+  tokens, dollar cost, iteration cycles, generation time, and human review time),
+  modeled on the same idea as `scc`'s LOCOMO but fed our parse-accurate
+  complexity density. This is a rough ballpark for what it would cost to have an
+  LLM retype code it already knows the shape of — not the cost to design it.
+
+A derived **Complexity/Code** ratio is reported for Odin, Julia, and Total. This is
+the average number of branch points per line of code. In general, if the Odin code
+remains moderately high (0.13-0.18) it is considered pretty good, and we generally
+expect the Julia code to remain low-moderate (0.05-0.13). The total being a moderate
+0.09-0.13 would be a great expectation. Treat the cross-language gap with some care:
+the two engines tokenize branch constructs slightly differently, so the ratio is most
+meaningful as a per-language trend over time rather than a precise side-by-side
+comparison. For meaningful per-function and per-file signal, the Odin static analyzer
+and `CodeComplexity.jl` outputs are more telling than these aggregate ratios.
+Nonetheless, the `repo-metrics` outputs can indicate issues with stupid code decisions
+we should feel bad about. And make us feel like 100x developers or something.

@@ -89,6 +89,54 @@ struct BridgeColor
     a::UInt8
 end
 
+"""
+Fill plus five edge colors for one inline pentagon atom.
+
+Mirrors the Odin `Bridge_Pentagon_Colors` ABI struct field-for-field.
+"""
+struct BridgePentagonColors
+    fill::BridgeColor
+    edge1::BridgeColor
+    edge2::BridgeColor
+    edge3::BridgeColor
+    edge4::BridgeColor
+    edge5::BridgeColor
+end
+
+"""
+Fill plus three edge colors for one inline triangle atom.
+
+Mirrors the Odin `Bridge_Triangle_Colors` ABI struct field-for-field.
+"""
+struct BridgeTriangleColors
+    fill::BridgeColor
+    edge1::BridgeColor
+    edge2::BridgeColor
+    edge3::BridgeColor
+end
+
+"""
+Four independent edge colors for one inline box atom.
+
+Mirrors the Odin `Bridge_Box_Edge_Colors` ABI struct field-for-field.
+"""
+struct BridgeBoxEdgeColors
+    edge1::BridgeColor
+    edge2::BridgeColor
+    edge3::BridgeColor
+    edge4::BridgeColor
+end
+
+"""
+Fill and arc colors for one inline pie-section atom.
+
+Mirrors the Odin `Bridge_Pie_Colors` ABI struct field-for-field.
+"""
+struct BridgePieColors
+    fill::BridgeColor
+    arc::BridgeColor
+end
+
 struct BridgePointView
     valid::UInt8
     index::Int64
