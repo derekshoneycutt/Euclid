@@ -736,18 +736,36 @@ input_box_update_viewport_for_caret :: #force_inline proc(
     }
 }
 
+//   Mutable text/caret state threaded through one frame of keyboard input,
+//   grouped with the per-frame outcome flags so the apply step passes one
+//   coherent value instead of a long out-parameter list.
+Input_Box_Key_State :: struct {
+    text_len:      ^int,
+    caret:         ^int,
+    viewport:      ^int,
+    moved_up:      ^bool,
+    moved_down:    ^bool,
+    paste_applied: ^bool,
+}
+
 //   Apply one frame of keyboard events to text and caret state.
 //   Side effects: mutates text_len, caret, and viewport.
 input_box_apply_keyboard_events :: proc(
     params: Input_Box_Params,
     events: Input_Box_Events,
     visible_cols: int,
-    text_len, caret, viewport: ^int,
-    moved_up, moved_down, paste_applied: ^bool) {
+    key_state: Input_Box_Key_State) {
 
     if !params.enabled || !params.has_focus {
         return
     }
+
+    text_len := key_state.text_len
+    caret := key_state.caret
+    viewport := key_state.viewport
+    moved_up := key_state.moved_up
+    moved_down := key_state.moved_down
+    paste_applied := key_state.paste_applied
 
     moved_up^ = false
     moved_down^ = false
@@ -959,12 +977,14 @@ handle_input_box :: proc(
         params,
         events,
         visible_cols,
-        &text_len,
-        &caret,
-        &viewport,
-        &moved_up,
-        &moved_down,
-        &paste_applied)
+        Input_Box_Key_State{
+            text_len = &text_len,
+            caret = &caret,
+            viewport = &viewport,
+            moved_up = &moved_up,
+            moved_down = &moved_down,
+            paste_applied = &paste_applied,
+        })
     line_start, line_end =
         input_box_current_line_bounds(params.text_buffer, text_len, caret)
 

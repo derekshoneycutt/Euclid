@@ -2,7 +2,24 @@ package dynview
 
 import "../core"
 
+//   Draw text for each delimiter kind, indexed by kind minus one.
+DELIMITER_TEXTS :: [DELIMITER_KIND_COUNT]string{
+    "(", ")", "[", "]", "{", "}", "|", "‖", "⌈", "⌉", "⌊", "⌋", "⟨", "⟩",
+}
+
 Dynview_Matrix_Column_Alignment :: core.Dynview_Matrix_Column_Alignment
+
+Script_Draw_Offsets :: struct {
+    script_font_size: f32,
+    sup_raise_px:     f32,
+    sub_drop_px:      f32,
+}
+
+Matrix_Dims :: struct {
+    rows: int,
+    cols: int,
+    ok:   bool,
+}
 
 //   Return style-adjusted horizontal advance for one column unit.
 effective_advance :: #force_inline proc(
@@ -31,7 +48,7 @@ style_ascent_descent :: #force_inline proc(
 
 //   Resolve script draw offsets using one shared model for layout and rendering.
 script_draw_offsets :: #force_inline proc(
-    font_size, script_scale, sup_raise, sub_drop: f32) -> (f32, f32, f32) {
+    font_size, script_scale, sup_raise, sub_drop: f32) -> Script_Draw_Offsets {
 
     script_font_size := max(1.0, font_size * max(0.2, script_scale))
     sup_vertical_bias := max(0.6, script_font_size * 0.08)
@@ -39,7 +56,7 @@ script_draw_offsets :: #force_inline proc(
     sub_lift_px := max(0.5, script_font_size * 0.06)
     sup_raise_px := max(0.0, sup_raise * font_size - sup_vertical_bias)
     sub_drop_px := max(0.0, sub_drop * font_size - sub_vertical_bias - sub_lift_px)
-    return script_font_size, sup_raise_px, sub_drop_px
+    return Script_Draw_Offsets{script_font_size, sup_raise_px, sub_drop_px}
 }
 
 //   Return conservative script padding to avoid rasterized edge truncation.
@@ -126,7 +143,7 @@ parse_positive_int :: #force_inline proc(text: string) -> (int, bool) {
 //   Read matrix row/column metadata from command text fields.
 matrix_dims_from_command :: #force_inline proc(
     buffer: ^core.Dynview_Command_Buffer,
-    cmd: core.Dynview_Command) -> (int, int, bool) {
+    cmd: core.Dynview_Command) -> Matrix_Dims {
 
     rows_text := text_span_from_buffer(
         buffer,
@@ -138,7 +155,7 @@ matrix_dims_from_command :: #force_inline proc(
         cmd.script_sup_text_len)
     rows, rows_ok := parse_positive_int(rows_text)
     cols, cols_ok := parse_positive_int(cols_text)
-    return rows, cols, rows_ok && cols_ok
+    return Matrix_Dims{rows, cols, rows_ok && cols_ok}
 }
 
 //   Decode strict array alignment metadata; return all-center on any invalid shape.
@@ -209,11 +226,6 @@ matrix_aligned_cell_x :: #force_inline proc(
     case .Center:
     }
     return col_x + (column_width - cell_width) * 0.5
-}
-
-//   Draw text for each delimiter kind, indexed by kind minus one.
-DELIMITER_TEXTS :: [DELIMITER_KIND_COUNT]string{
-    "(", ")", "[", "]", "{", "}", "|", "‖", "⌈", "⌉", "⌊", "⌋", "⟨", "⟩",
 }
 
 //   Return delimiter draw text for one supported delimiter kind.

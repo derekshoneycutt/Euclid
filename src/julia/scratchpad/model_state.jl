@@ -68,6 +68,13 @@ mutable struct ScratchpadSession
     next_hook_id::Int
 end
 
+mutable struct NativeErrorStyle
+    bold::Bool
+    italic::Bool
+    underline::Bool
+    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
 const ScratchpadName = "Scratchpad"
 const ParseError = Int32(0)
 const ParseIncomplete = Int32(1)
@@ -97,13 +104,6 @@ const HelpPromptColor = OdinJuliaBridge.BridgeColor(0xd9, 0xb4, 0x4a, 0xff)
 const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
-
-mutable struct NativeErrorStyle
-    bold::Bool
-    italic::Bool
-    underline::Bool
-    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
-end
 
 const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
 const next_session_id_ref = Ref(1)

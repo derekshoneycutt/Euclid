@@ -16,35 +16,52 @@ ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 
-asset_root_override := ""
+Asset_Root_Config :: struct {
+    asset_root_override: string,
+}
 
-//   Set an explicit packaged-asset root for test harnesses that do not run from bin/.
+
+Unpack_Targets :: struct {
+    archive_path: string,
+    unpack_dir:   string,
+    ok:           bool,
+}
+
+//   Construct a packaged-asset-root config that can override the executable-root lookup.
 //
 // Parameters:
 //   - root_dir: Directory that directly contains assets.pkg.
 //   - allocator: Allocator used for the retained override path.
 //
 // Returns:
-//   - none.
-set_asset_root_override :: proc(root_dir: string, allocator := context.allocator) {
-    if len(asset_root_override) > 0 {
-        delete(asset_root_override)
+//   - config: Config containing the override root when provided.
+make_asset_root_config :: proc(
+    root_dir: string, allocator := context.allocator) -> Asset_Root_Config {
+    config := Asset_Root_Config{}
+    if len(root_dir) > 0 {
+        config.asset_root_override = strings.clone(root_dir, allocator)
     }
-    asset_root_override = strings.clone(root_dir, allocator)
+    return config
 }
 
-//   Clear any explicit packaged-asset root override.
+//   Release any override path captured in a packaged-asset-root config.
 //
 // Parameters:
-//   - none.
+//   - config: Config whose override path should be freed.
+//   - allocator: Allocator used by the override path.
 //
 // Returns:
 //   - none.
-clear_asset_root_override :: proc() {
-    if len(asset_root_override) > 0 {
-        delete(asset_root_override)
+destroy_asset_root_config :: proc(
+    config: ^Asset_Root_Config, allocator := context.allocator) {
+    if config == nil {
+        return
     }
-    asset_root_override = ""
+
+    if len(config.asset_root_override) > 0 {
+        delete(config.asset_root_override, allocator)
+        config.asset_root_override = ""
+    }
 }
 
 //   Join a base directory with GIF_OUTPUT_DIR_NAME and ensure it exists.
@@ -110,8 +127,8 @@ resolve_writable_pictures_dir :: proc(
 //
 // Notes:
 //   - Safe for startup use; failures are handled internally.
-ensure_packaged_assets_unpacked_root :: proc() {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+ensure_packaged_assets_unpacked_root :: proc(config: ^Asset_Root_Config = nil) {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
     if !exe_ok {
         return
     }
@@ -122,17 +139,23 @@ ensure_packaged_assets_unpacked_root :: proc() {
 //   Force a fresh unpack of assets.pkg from the executable directory.
 //
 // Parameters:
-//   - none.
+//   - config: Optional packaged-asset root override configuration.
 //
 // Returns:
 //   - ok: true when reload succeeds and assets are ready for path resolution.
-reload_packaged_assets_root :: proc() -> bool {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+reload_packaged_assets_root :: proc(config: ^Asset_Root_Config = nil) -> bool {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
     if !exe_ok {
         return false
     }
 
     return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
+}
+
+//   Force a fresh unpack of assets.pkg from an explicit root config.
+reload_packaged_assets_root_with_config :: proc(
+    config: ^Asset_Root_Config) -> bool {
+    return reload_packaged_assets_root(config)
 }
 
 //   Read the packaged archive modification time as unix nanoseconds.
@@ -173,7 +196,15 @@ packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
 //   - asset_path: Joined absolute path when successful, otherwise "".
 packaged_asset_path :: proc(
     relative_path: string, allocator := context.allocator) -> string {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+    return packaged_asset_path_with_config(nil, relative_path, allocator)
+}
+
+//   Resolve an absolute path for a packaged asset relative path under an optional root config.
+packaged_asset_path_with_config :: proc(
+    config: ^Asset_Root_Config,
+    relative_path: string,
+    allocator := context.allocator) -> string {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
     if !exe_ok {
         return ""
     }
@@ -219,9 +250,15 @@ cleanup_packaged_assets_dir :: proc() {
 
 //   Resolve executable directory once with standard validity checks.
 resolve_executable_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+    return resolve_executable_dir_with_config(nil, allocator)
+}
 
-    if len(asset_root_override) > 0 {
-        return asset_root_override, true
+//   Resolve the executable directory while honoring an explicit asset-root config.
+resolve_executable_dir_with_config :: proc(
+    config: ^Asset_Root_Config,
+    allocator := context.temp_allocator) -> (string, bool) {
+    if config != nil && len(config.asset_root_override) > 0 {
+        return config.asset_root_override, true
     }
 
     exe_dir, exe_err := os.get_executable_directory(allocator)
@@ -327,20 +364,20 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
 //   - archive_path: Expected archive file path.
 //   - unpack_dir: Writable unpack root directory.
 //   - ok: true when both paths are valid and unpack dir can be resolved.
-resolve_unpack_targets :: proc(exe_dir: string) -> (string, string, bool) {
+resolve_unpack_targets :: proc(exe_dir: string) -> Unpack_Targets {
     archive_path, archive_ok := join_archive_path(exe_dir, context.temp_allocator)
     if !archive_ok {
         fmt.eprintln("asset unpack failed: could not build archive path")
-        return "", "", false
+        return Unpack_Targets{"", "", false}
     }
 
     unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
     if !unpack_ok {
         fmt.eprintln("asset unpack failed: could not resolve writable unpack directory")
-        return "", "", false
+        return Unpack_Targets{"", "", false}
     }
 
-    return archive_path, unpack_dir, true
+    return Unpack_Targets{archive_path, unpack_dir, true}
 }
 
 //   Decide whether unpack work is needed based on archive presence and force flag.
@@ -399,20 +436,20 @@ decode_and_extract_archive_payload :: proc(archive_path, unpack_dir: string) -> 
 //   - When force is true, existing unpacked content is removed and rebuilt.
 ensure_packaged_assets_unpacked_with_force :: proc(
     exe_dir: string, force: bool) -> bool {
-    archive_path, unpack_dir, targets_ok := resolve_unpack_targets(exe_dir)
-    if !targets_ok {
+    targets := resolve_unpack_targets(exe_dir)
+    if !targets.ok {
         return false
     }
 
     continue_unpack, early_result :=
-        should_continue_unpack(archive_path, unpack_dir, force)
+        should_continue_unpack(targets.archive_path, targets.unpack_dir, force)
     if !continue_unpack {
         return early_result
     }
 
-    if !prepare_unpack_directory(unpack_dir) {
+    if !prepare_unpack_directory(targets.unpack_dir) {
         return false
     }
 
-    return decode_and_extract_archive_payload(archive_path, unpack_dir)
+    return decode_and_extract_archive_payload(targets.archive_path, targets.unpack_dir)
 }

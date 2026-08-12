@@ -21,6 +21,12 @@ FORGIVENESS_PREFIX :: "forgives("
 //   Marker name that forgives cyclomatic complexity above the standard.
 COMPLEXITY_FORGIVENESS_MARKER :: "cyclomatic_complexity"
 
+//   Marker name that forgives parameter count above the standard.
+PARAM_COUNT_FORGIVENESS_MARKER :: "parameter_count"
+
+//   Marker name that forgives return-count above the standard.
+RETURN_COUNT_FORGIVENESS_MARKER :: "return_count"
+
 //   Marker name that forgives an allocation without an explicit allocator.
 IMPLICIT_ALLOCATOR_MARKER :: "implicit_allocator"
 
@@ -32,13 +38,16 @@ SNIPPET_MAX :: 120
 
 //   One measured procedure in the analyzed source tree.
 Proc_Metric :: struct {
-    file:     string,
-    line:     int,
-    name:     string,
-    nloc:     int,
-    ccn:      int,
-    params:   int,
-    forgiven: bool,
+    file:             string,
+    line:             int,
+    name:             string,
+    nloc:             int,
+    ccn:              int,
+    params:           int,
+    returns:          int,
+    forgiven:         bool,
+    forgiven_params:  bool,
+    forgiven_returns: bool,
 }
 
 //   One allocation call site discovered inside a procedure body.
@@ -169,6 +178,10 @@ analyze_file :: proc(root, path: string, result: ^Analysis_Result) {
             metric := measure_proc(proc_lit, name, rel, &token_lines)
             metric.forgiven = proc_has_marker(
                 value_decl, proc_lit, &marker_lines, COMPLEXITY_FORGIVENESS_MARKER)
+            metric.forgiven_params = proc_has_marker(
+                value_decl, proc_lit, &marker_lines, PARAM_COUNT_FORGIVENESS_MARKER)
+            metric.forgiven_returns = proc_has_marker(
+                value_decl, proc_lit, &marker_lines, RETURN_COUNT_FORGIVENESS_MARKER)
             append(&result.metrics, metric)
             trace_allocations(proc_lit, value_decl, name, rel, src,
                 &marker_lines, result)
@@ -225,9 +238,10 @@ comment_group_has_marker :: proc(group: ^ast.Comment_Group, name: string) -> boo
 emit_report :: proc(result: ^Analysis_Result) {
     for metric in result.metrics {
         fmt.printfln(
-            "PROC\t%s\t%d\t%s\t%d\t%d\t%d\t%v",
+            "PROC\t%s\t%d\t%s\t%d\t%d\t%d\t%d\t%v\t%v\t%v",
             metric.file, metric.line, metric.name, metric.nloc, metric.ccn,
-            metric.params, metric.forgiven)
+            metric.params, metric.returns, metric.forgiven,
+            metric.forgiven_params, metric.forgiven_returns)
     }
     for record in result.allocations {
         fmt.printfln(

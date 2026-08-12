@@ -2,6 +2,44 @@ package dynview
 
 import "../core"
 
+//   Build one layout-like child item for the command kinds supported inside math blocks.
+//   Uniform handler shape for building one math-program layout item.
+Math_Program_Item_Handler :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (core.Dynview_Layout_Item, bool)
+
+//   Dispatch table mapping each recursive math command kind to its item builder.
+//   Non-math kinds map to nil and are rejected by the caller.
+MATH_PROGRAM_ITEM_HANDLERS :: [core.Dynview_Command_Kind]Math_Program_Item_Handler{
+    .BeginBlock = nil, .EndBlock = nil, .CopyableTextRun = nil, .LineBreak = nil,
+    .Divider = nil, .MathBlock = nil, .InlineLine = nil, .InlineBox = nil,
+    .InlineCircle = nil, .InlineFilledBox = nil, .InlineFilledCircle = nil,
+    .InlinePieSection = nil, .InlinePerpendicular = nil, .InlineTriangle = nil,
+    .InlinePentagon = nil,
+    .TextRun = math_program_text_item_entry,
+    .MathGlyphRun = math_program_text_item_entry,
+    .ScriptAttachRecursive = math_program_script_item_entry,
+    .FracRecursive = math_program_recursive_fraction_item,
+    .StretchDelimiterRecursive = math_program_recursive_stretch_delimiter_item,
+    .MatrixRecursive = math_program_recursive_matrix_item,
+    .LargeOpRecursive = math_program_large_op_item_entry,
+    .AccentBarRecursive = math_program_accent_item_entry,
+    .RadicalBarRecursive = math_program_recursive_radical_item,
+}
+
+//   Aggregated per-column and per-row cell metrics for one matrix layout.
+Matrix_Cell_Dims :: struct {
+    col_widths:  [16]f32,
+    row_ascents: [16]f32,
+    row_descents: [16]f32,
+    top_pad:     f32,
+    bottom_pad:  f32,
+}
+
+// Reset a cache structure for the dynview layout engine
 layout_reset_cache :: proc(cache: ^core.Dynview_Compile_Cache) {
     cache^.layout_line_count = 0
     cache^.layout_item_count = 0
@@ -109,21 +147,25 @@ math_program_recursive_script_item :: #force_inline proc(
 
     script_style := style_by_id(cmd.script_style_id)
     script_scale := max(0.2, cmd.script_scale)
-    script_font_size, sup_raise_px, sub_drop_px := script_draw_offsets(
+    script_offsets := script_draw_offsets(
         font_size,
         script_scale,
         cmd.script_sup_raise,
         cmd.script_sub_drop)
-    script_ascent, script_descent := style_ascent_descent(script_style, script_font_size)
-    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
+    script_ascent, script_descent :=
+        style_ascent_descent(script_style, script_offsets.script_font_size)
+    script_top_pad, script_bottom_pad :=
+        script_visual_padding(script_offsets.script_font_size)
 
     ascent := child_program^.ascent
     descent := child_program^.descent
     if sup_cols > 0 {
-        ascent = max(ascent, script_ascent + sup_raise_px + script_top_pad)
+        ascent = max(ascent,
+            script_ascent + script_offsets.sup_raise_px + script_top_pad)
     }
     if sub_cols > 0 {
-        descent = max(descent, script_descent + sub_drop_px + script_bottom_pad)
+        descent = max(descent,
+            script_descent + script_offsets.sub_drop_px + script_bottom_pad)
     }
 
     script_advance := effective_advance(script_style, cache^.last_wrap_advance) *
@@ -346,15 +388,6 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     }, true
 }
 
-//   Aggregated per-column and per-row cell metrics for one matrix layout.
-Matrix_Cell_Dims :: struct {
-    col_widths:  [16]f32,
-    row_ascents: [16]f32,
-    row_descents: [16]f32,
-    top_pad:     f32,
-    bottom_pad:  f32,
-}
-
 //   Measure every matrix cell, accumulating column widths and row extents.
 measure_matrix_cells :: proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -419,8 +452,8 @@ math_program_recursive_matrix_item :: #force_inline proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
-    rows, cols, dims_ok := matrix_dims_from_command(buffer, cmd)
-    if !dims_ok || rows > 16 || cols > 16 {
+    matrix_dims := matrix_dims_from_command(buffer, cmd)
+    if !matrix_dims.ok || matrix_dims.rows > 16 || matrix_dims.cols > 16 {
         return core.Dynview_Layout_Item{}, false
     }
 
@@ -429,21 +462,24 @@ math_program_recursive_matrix_item :: #force_inline proc(
         return core.Dynview_Layout_Item{}, false
     }
 
-    cell_count := rows * cols
+    cell_count := matrix_dims.rows * matrix_dims.cols
     if cell_program^.command_count != cell_count {
         return core.Dynview_Layout_Item{}, false
     }
 
-    dims := Matrix_Cell_Dims{}
-    if !measure_matrix_cells(cache, buffer, cell_program, rows, cols,
-        font_size, &dims) {
+    cell_dims := Matrix_Cell_Dims{}
+    if !measure_matrix_cells(cache, buffer, cell_program, matrix_dims.rows, matrix_dims.cols,
+        font_size, &cell_dims) {
         return core.Dynview_Layout_Item{}, false
     }
-    top_pad := dims.top_pad
-    bottom_pad := dims.bottom_pad
+    top_pad := cell_dims.top_pad
+    bottom_pad := cell_dims.bottom_pad
 
     base_advance := effective_advance(style, cache^.last_wrap_advance)
-    draw_width, total_height := matrix_aggregate_dims(&dims, rows, cols,
+    draw_width, total_height := matrix_aggregate_dims(
+        &cell_dims,
+        matrix_dims.rows,
+        matrix_dims.cols,
         font_size, base_advance)
 
     ascent := total_height * 0.5
@@ -454,8 +490,8 @@ math_program_recursive_matrix_item :: #force_inline proc(
         math_program_id = cmd.math_program_id,
         script_sub_text_offset = cmd.script_sub_text_offset,
         script_sub_text_len = cmd.script_sub_text_len,
-        accent_mode = i32(rows),
-        radical_mode = i32(cols),
+        accent_mode = i32(matrix_dims.rows),
+        radical_mode = i32(matrix_dims.cols),
         draw_width = max(draw_width, base_advance),
         draw_height = total_height,
         ascent = ascent,
@@ -526,12 +562,13 @@ math_program_recursive_radical_item :: #force_inline proc(
 
     script_style := style_by_id(cmd.script_style_id)
     script_scale := max(0.2, cmd.script_scale)
-    script_font_size, _, _ := script_draw_offsets(
+    script_offsets := script_draw_offsets(
         font_size,
         script_scale,
         cmd.script_sup_raise,
         cmd.script_sub_drop)
-    script_top_pad, script_bottom_pad := script_visual_padding(script_font_size)
+    script_top_pad, script_bottom_pad :=
+        script_visual_padding(script_offsets.script_font_size)
     index_scale := max(0.2, script_scale)
     index_font_size := max(1.0, font_size * index_scale)
     index_ascent, index_descent := style_ascent_descent(script_style, index_font_size)
@@ -588,15 +625,6 @@ math_program_recursive_radical_item :: #force_inline proc(
     }, true
 }
 
-//   Build one layout-like child item for the command kinds supported inside math blocks.
-//   Uniform handler shape for building one math-program layout item.
-Math_Program_Item_Handler :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    buffer: ^core.Dynview_Command_Buffer,
-    cmd: core.Dynview_Command,
-    style: Dynview_Text_Style,
-    font_size: f32) -> (core.Dynview_Layout_Item, bool)
-
 //   Adapt the text-run item builder (no style-independent result) to the table.
 math_program_text_item_entry :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -635,25 +663,6 @@ math_program_large_op_item_entry :: #force_inline proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (core.Dynview_Layout_Item, bool) {
     return math_program_large_op_item(cache, buffer, cmd, style, font_size), true
-}
-
-//   Dispatch table mapping each recursive math command kind to its item builder.
-//   Non-math kinds map to nil and are rejected by the caller.
-MATH_PROGRAM_ITEM_HANDLERS :: [core.Dynview_Command_Kind]Math_Program_Item_Handler{
-    .BeginBlock = nil, .EndBlock = nil, .CopyableTextRun = nil, .LineBreak = nil,
-    .Divider = nil, .MathBlock = nil, .InlineLine = nil, .InlineBox = nil,
-    .InlineCircle = nil, .InlineFilledBox = nil, .InlineFilledCircle = nil,
-    .InlinePieSection = nil, .InlinePerpendicular = nil, .InlineTriangle = nil,
-    .InlinePentagon = nil,
-    .TextRun = math_program_text_item_entry,
-    .MathGlyphRun = math_program_text_item_entry,
-    .ScriptAttachRecursive = math_program_script_item_entry,
-    .FracRecursive = math_program_recursive_fraction_item,
-    .StretchDelimiterRecursive = math_program_recursive_stretch_delimiter_item,
-    .MatrixRecursive = math_program_recursive_matrix_item,
-    .LargeOpRecursive = math_program_large_op_item_entry,
-    .AccentBarRecursive = math_program_accent_item_entry,
-    .RadicalBarRecursive = math_program_recursive_radical_item,
 }
 
 //   Build one layout item for a math-program command using the matching builder.

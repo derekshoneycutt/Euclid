@@ -1,3 +1,13 @@
+
+struct DynviewBlockSwitchResult
+    ok::Bool
+    open_block::Bool
+    current_kind::Int32
+    block_id::Int32
+end
+
+
+
 """Return helper method names laid out in 2-3 text columns for :help output."""
 function helper_method_name_columns()
     names = sort!(collect(keys(HELPER_DOC_ALIASES)))
@@ -423,18 +433,18 @@ function dynview_switch_block!(
     state_ptr::Ptr{Cvoid}, open_block::Bool, current_kind::Int32,
     next_kind::Int32, block_id::Int32)
     if open_block && next_kind == current_kind
-        return true, open_block, current_kind, block_id
+        return DynviewBlockSwitchResult(true, open_block, current_kind, block_id)
     end
 
     if open_block && !is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
-        return false, open_block, current_kind, block_id
+        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
     end
     if !is_bridge_status_ok(
         OdinJuliaBridge.dynview_begin_block(state_ptr, next_kind, block_id))
-        return false, open_block, current_kind, block_id
+        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
     end
 
-    return true, true, next_kind, block_id + Int32(1)
+    return DynviewBlockSwitchResult(true, true, next_kind, block_id + Int32(1))
 end
 
 """Emit one optional-color text segment into the active dynview block."""
@@ -518,15 +528,18 @@ function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadS
     last_line_index = lastindex(session.output_entries)
     for i in eachindex(session.output_entries)
         entry = session.output_entries[i]
-        ok, open_block, current_kind, block_id = dynview_switch_block!(
+        switch_result = dynview_switch_block!(
             state_ptr,
             open_block,
             current_kind,
             entry.block_kind,
             block_id)
-        if !ok
+        if !switch_result.ok
             return false
         end
+        open_block = switch_result.open_block
+        current_kind = switch_result.current_kind
+        block_id = switch_result.block_id
 
         if isempty(entry.latex_source)
             if !dynview_emit_line!(state_ptr, entry, i != last_line_index)

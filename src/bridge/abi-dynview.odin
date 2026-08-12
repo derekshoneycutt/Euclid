@@ -4,6 +4,14 @@ import "../core"
 
 import rl "vendor:raylib"
 
+Dynview_Math_Text_Payloads :: struct {
+    plain_offset: int,
+    plain_count:  int,
+    blob_offset:  int,
+    blob_count:   int,
+    status:       i32,
+}
+
 //   Reset the dynview command stream for the current frame.
 //
 // Parameters:
@@ -304,22 +312,28 @@ dynview_math_block_args_valid :: proc(
 //   Append the plain-text and shared blob payloads, returning both spans.
 dynview_append_math_text_payloads :: proc(
     runtime: ^core.Dynview_System,
-    plain_text, text_blob: cstring) -> (
-        plain_offset, plain_count, blob_offset, blob_count: int, status: i32) {
+    plain_text, text_blob: cstring) -> Dynview_Math_Text_Payloads {
 
-    status = dynview_append_text_payload(
+    plain_offset, plain_count, blob_offset, blob_count: int
+    status := dynview_append_text_payload(
         runtime, string(plain_text), &plain_offset, &plain_count)
     if status != BRIDGE_STATUS_OK {
-        return 0, 0, 0, 0, status
+        return Dynview_Math_Text_Payloads{0, 0, 0, 0, status}
     }
 
     status = dynview_append_text_payload(
         runtime, string(text_blob), &blob_offset, &blob_count)
     if status != BRIDGE_STATUS_OK {
-        return 0, 0, 0, 0, status
+        return Dynview_Math_Text_Payloads{0, 0, 0, 0, status}
     }
 
-    return plain_offset, plain_count, blob_offset, blob_count, BRIDGE_STATUS_OK
+    return Dynview_Math_Text_Payloads{
+        plain_offset,
+        plain_count,
+        blob_offset,
+        blob_count,
+        BRIDGE_STATUS_OK,
+    }
 }
 
 //   Append one whole inline math block from a flat child-command payload.
@@ -372,19 +386,28 @@ dynview_math_block_from_ops :: proc "c" (
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
-    plain_offset, plain_count, blob_offset, blob_count, payload_status :=
-        dynview_append_math_text_payloads(runtime, plain_text, text_blob)
-    if payload_status != BRIDGE_STATUS_OK {
-        return payload_status
+    payloads := dynview_append_math_text_payloads(runtime, plain_text, text_blob)
+    if payloads.status != BRIDGE_STATUS_OK {
+        return payloads.status
     }
 
     program_id := cache^.math_program_count
     next_child_program_id := program_id + 1
     cursor := 0
 
-    status = dynview_import_math_program_from_ops(cache, buffer^.stream_open_block_id,
-        ops, int(op_count), &cursor, int(top_level_op_count), blob_offset, blob_count,
-        program_id, &next_child_program_id)
+    status = dynview_import_math_program_from_ops(
+        Dynview_Import_Context{
+            cache = cache,
+            block_id = buffer^.stream_open_block_id,
+            ops = ops,
+            op_count = int(op_count),
+            cursor = &cursor,
+            blob_offset = payloads.blob_offset,
+            blob_count = payloads.blob_count,
+            next_program_id = &next_child_program_id,
+        },
+        int(top_level_op_count),
+        program_id)
     if status != BRIDGE_STATUS_OK {
         return dynview_fail(runtime, status)
     }
@@ -393,8 +416,8 @@ dynview_math_block_from_ops :: proc "c" (
     }
 
     cache^.math_programs[program_id].valid = true
-    cache^.math_programs[program_id].copy_text_offset = plain_offset
-    cache^.math_programs[program_id].copy_text_len = plain_count
+    cache^.math_programs[program_id].copy_text_offset = payloads.plain_offset
+    cache^.math_programs[program_id].copy_text_len = payloads.plain_count
     cache^.math_program_count = next_child_program_id
 
     return dynview_push_command(runtime, core.Dynview_Command{
@@ -402,8 +425,8 @@ dynview_math_block_from_ops :: proc "c" (
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         math_program_id = i32(program_id),
-        text_offset = plain_offset,
-        text_len = plain_count,
+        text_offset = payloads.plain_offset,
+        text_len = payloads.plain_count,
     })
 }
 
@@ -904,7 +927,7 @@ dynview_inline_triangle :: proc "c" (
     width, height, stroke: f32,
     style_id: i32,
     filled: bool,
-    fill_color, edge1_color, edge2_color, edge3_color: Bridge_Color) -> i32 {
+    colors: Bridge_Triangle_Colors) -> i32 {
 
     context = state^.saved_context
     runtime: ^core.Dynview_System
@@ -935,13 +958,14 @@ dynview_inline_triangle :: proc "c" (
         inline_atom_stroke = stroke,
         shape_is_filled = filled,
         has_brush_color = filled,
-        brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
+        brush_color =
+            rl.Color{colors.fill.r, colors.fill.g, colors.fill.b, colors.fill.a},
         shape_edge_color_1 =
-            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+            rl.Color{colors.edge1.r, colors.edge1.g, colors.edge1.b, colors.edge1.a},
         shape_edge_color_2 =
-            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+            rl.Color{colors.edge2.r, colors.edge2.g, colors.edge2.b, colors.edge2.a},
         shape_edge_color_3 =
-            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+            rl.Color{colors.edge3.r, colors.edge3.g, colors.edge3.b, colors.edge3.a},
     })
 }
 
@@ -951,7 +975,7 @@ dynview_inline_box_edges :: proc "c" (
     state: ^core.Euclid_General_State,
     width, height, stroke: f32,
     style_id: i32,
-    edge1_color, edge2_color, edge3_color, edge4_color: Bridge_Color) -> i32 {
+    colors: Bridge_Box_Edge_Colors) -> i32 {
 
     context = state^.saved_context
     runtime: ^core.Dynview_System
@@ -981,13 +1005,13 @@ dynview_inline_box_edges :: proc "c" (
         inline_atom_stroke = stroke,
         inline_box_height = height,
         shape_edge_color_1 =
-            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+            rl.Color{colors.edge1.r, colors.edge1.g, colors.edge1.b, colors.edge1.a},
         shape_edge_color_2 =
-            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+            rl.Color{colors.edge2.r, colors.edge2.g, colors.edge2.b, colors.edge2.a},
         shape_edge_color_3 =
-            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+            rl.Color{colors.edge3.r, colors.edge3.g, colors.edge3.b, colors.edge3.a},
         shape_edge_color_4 =
-            rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+            rl.Color{colors.edge4.r, colors.edge4.g, colors.edge4.b, colors.edge4.a},
     })
 }
 
@@ -998,9 +1022,7 @@ dynview_inline_pentagon :: proc "c" (
     width, height, stroke: f32,
     style_id: i32,
     filled: bool,
-    fill_color,
-        edge1_color, edge2_color, edge3_color,
-        edge4_color, edge5_color: Bridge_Color) -> i32 {
+    colors: Bridge_Pentagon_Colors) -> i32 {
 
     context = state^.saved_context
     runtime: ^core.Dynview_System
@@ -1031,17 +1053,18 @@ dynview_inline_pentagon :: proc "c" (
         inline_atom_stroke = stroke,
         shape_is_filled = filled,
         has_brush_color = filled,
-        brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
+        brush_color =
+            rl.Color{colors.fill.r, colors.fill.g, colors.fill.b, colors.fill.a},
         shape_edge_color_1 =
-            rl.Color{edge1_color.r, edge1_color.g, edge1_color.b, edge1_color.a},
+            rl.Color{colors.edge1.r, colors.edge1.g, colors.edge1.b, colors.edge1.a},
         shape_edge_color_2 =
-            rl.Color{edge2_color.r, edge2_color.g, edge2_color.b, edge2_color.a},
+            rl.Color{colors.edge2.r, colors.edge2.g, colors.edge2.b, colors.edge2.a},
         shape_edge_color_3 =
-            rl.Color{edge3_color.r, edge3_color.g, edge3_color.b, edge3_color.a},
+            rl.Color{colors.edge3.r, colors.edge3.g, colors.edge3.b, colors.edge3.a},
         shape_edge_color_4 =
-            rl.Color{edge4_color.r, edge4_color.g, edge4_color.b, edge4_color.a},
+            rl.Color{colors.edge4.r, colors.edge4.g, colors.edge4.b, colors.edge4.a},
         shape_edge_color_5 =
-            rl.Color{edge5_color.r, edge5_color.g, edge5_color.b, edge5_color.a},
+            rl.Color{colors.edge5.r, colors.edge5.g, colors.edge5.b, colors.edge5.a},
     })
 }
 
@@ -1065,8 +1088,7 @@ dynview_inline_pie_section :: proc "c" (
     radius, start_angle_degrees, end_angle_degrees: f32,
     style_id: i32,
     filled: bool,
-    fill_color: Bridge_Color,
-    arc_color: Bridge_Color,
+    colors: Bridge_Pie_Colors,
     outline_stroke: f32) -> i32 {
 
     context = state^.saved_context
@@ -1095,13 +1117,15 @@ dynview_inline_pie_section :: proc "c" (
         style_id = style_id,
         inline_atom_dimension = radius,
         has_brush_color = true,
-        brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
+        brush_color =
+            rl.Color{colors.fill.r, colors.fill.g, colors.fill.b, colors.fill.a},
         inline_outline_stroke = outline_stroke,
         pie_start_angle_degrees = start_angle_degrees,
         pie_end_angle_degrees = end_angle_degrees,
         pie_is_filled = filled,
         has_outline_color = true,
-        outline_color = rl.Color{arc_color.r, arc_color.g, arc_color.b, arc_color.a},
+        outline_color =
+            rl.Color{colors.arc.r, colors.arc.g, colors.arc.b, colors.arc.a},
     })
 }
 

@@ -140,6 +140,15 @@ mutable struct ReplDrawSession
     managed_host_ids::Vector{Int}
 end
 
+struct ReplStatus
+    active::Bool
+    kind::Union{Nothing,Symbol}
+    elapsed::Union{Nothing,Float32}
+    duration::Union{Nothing,Float32}
+    hook_id::Union{Nothing,Int}
+    managed_shape_count::Int
+end
+
 const session_ref = Ref{Union{Nothing, ReplDrawSession}}(nothing)
 
 """Return the singleton EuclidRepl session, creating it when missing."""
@@ -817,24 +826,22 @@ function status(state_ptr::Ptr{Cvoid})
     job = session.active_job
 
     if job === nothing
-        return (
-            active = false,
-            kind = nothing,
-            elapsed = nothing,
-            duration = nothing,
-            hook_id = nothing,
-            managed_shape_count = length(session.managed_host_ids),
-        )
+        return ReplStatus(
+            false,
+            nothing,
+            nothing,
+            nothing,
+            nothing,
+            length(session.managed_host_ids))
     end
 
-    return (
-        active = true,
-        kind = job.kind,
-        elapsed = job.elapsed,
-        duration = job.duration,
-        hook_id = job.hook_id,
-        managed_shape_count = length(session.managed_host_ids),
-    )
+    return ReplStatus(
+        true,
+        job.kind,
+        job.elapsed,
+        job.duration,
+        job.hook_id,
+        length(session.managed_host_ids))
 end
 
 """

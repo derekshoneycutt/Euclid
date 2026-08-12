@@ -2,6 +2,47 @@ package bridge
 
 import "../core"
 
+Dynview_Validated_Op :: struct {
+    op:     Bridge_Dynview_Math_Op,
+    kind:   core.Dynview_Command_Kind,
+    status: i32,
+}
+
+Dynview_Imported_Children :: struct {
+    child_program_id:           i32,
+    secondary_child_program_id: i32,
+    status:                     i32,
+}
+
+//   Shared import environment for walking the flat bridge math-op stream into
+//   the dynview compile cache. Groups the cache target, source stream, cursor,
+//   blob window, and program-id allocator so the recursive import helpers pass
+//   one coherent value instead of a long positional parameter list.
+Dynview_Import_Context :: struct {
+    cache:           ^core.Dynview_Compile_Cache,
+    block_id:        i32,
+    ops:             [^]Bridge_Dynview_Math_Op,
+    op_count:        int,
+    cursor:          ^int,
+    blob_offset:     int,
+    blob_count:      int,
+    next_program_id: ^int,
+}
+
+//   Dynview command kind for each bridge math-op kind, indexed by op kind.
+BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
+    [BRIDGE_DYNVIEW_MATH_OP_MAX + 1]core.Dynview_Command_Kind{
+    BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN = .TextRun,
+    BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN = .MathGlyphRun,
+    BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE = .AccentBarRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE = .RadicalBarRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE = .ScriptAttachRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE = .LargeOpRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .FracRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .StretchDelimiterRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .MatrixRecursive,
+}
+
 //   Convert bridge decoration integer values to label decoration enum values.
 //
 // Parameters:
@@ -92,20 +133,6 @@ dynview_append_text_payload :: #force_inline proc(
     return BRIDGE_STATUS_OK
 }
 
-//   Dynview command kind for each bridge math-op kind, indexed by op kind.
-BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
-    [BRIDGE_DYNVIEW_MATH_OP_MAX + 1]core.Dynview_Command_Kind{
-    BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN = .TextRun,
-    BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN = .MathGlyphRun,
-    BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE = .AccentBarRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE = .RadicalBarRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE = .ScriptAttachRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE = .LargeOpRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .FracRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .StretchDelimiterRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .MatrixRecursive,
-}
-
 //   Convert a bridge math-op kind into the matching dynview command kind.
 //
 // Notes:
@@ -151,27 +178,20 @@ dynview_math_op_spans_valid :: #force_inline proc(
 //   - The helper reserves the next available program id and reuses the shared
 //     recursive importer to pull the requested subtree into the cache.
 dynview_import_child_program :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
-    direct_count: int,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> (program_id: i32, status: i32) {
+    ctx: Dynview_Import_Context,
+    direct_count: int) -> (program_id: i32, status: i32) {
 
-    if direct_count <= 0 || next_program_id == nil {
+    if direct_count <= 0 || ctx.next_program_id == nil {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if ctx.next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
-    host_program_id := next_program_id^
-    next_program_id^ += 1
-    child_status: i32 = dynview_import_math_program_from_ops(cache, block_id, ops,
-        op_count, cursor, direct_count, blob_offset, blob_count, host_program_id,
-        next_program_id)
+    host_program_id := ctx.next_program_id^
+    ctx.next_program_id^ += 1
+    child_status: i32 = dynview_import_math_program_from_ops(ctx,
+        direct_count, host_program_id)
     if child_status != BRIDGE_STATUS_OK {
         return 0, child_status
     }
@@ -186,40 +206,35 @@ dynview_import_child_program :: proc(
 //   - The helper advances the shared cursor and program allocation state for both
 //     children before returning the assigned program ids.
 dynview_import_fraction_children :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
-    op: Bridge_Dynview_Math_Op,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> (
-        numerator_program_id: i32, denominator_program_id: i32, status: i32) {
+    ctx: Dynview_Import_Context,
+    op: Bridge_Dynview_Math_Op) -> Dynview_Imported_Children {
 
     numerator_direct_count := int(op.child_program_id)
     denominator_direct_count := int(op.secondary_child_program_id)
     if numerator_direct_count <= 0 || denominator_direct_count <= 0 {
-        return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
+        return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
-    if next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
-        return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
+    if ctx.next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+        return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
 
-    numerator_result, numerator_status := dynview_import_child_program(cache, block_id,
-        ops, op_count, cursor, numerator_direct_count, blob_offset, blob_count,
-        next_program_id)
+    numerator_result, numerator_status := dynview_import_child_program(ctx,
+        numerator_direct_count)
     if numerator_status != BRIDGE_STATUS_OK {
-        return 0, 0, numerator_status
+        return Dynview_Imported_Children{0, 0, numerator_status}
     }
 
-    denominator_result, denominator_status := dynview_import_child_program(cache,
-        block_id, ops, op_count, cursor, denominator_direct_count,
-        blob_offset, blob_count, next_program_id)
+    denominator_result, denominator_status := dynview_import_child_program(ctx,
+        denominator_direct_count)
     if denominator_status != BRIDGE_STATUS_OK {
-        return 0, 0, denominator_status
+        return Dynview_Imported_Children{0, 0, denominator_status}
     }
 
-    return numerator_result, denominator_result, BRIDGE_STATUS_OK
+    return Dynview_Imported_Children{
+        numerator_result,
+        denominator_result,
+        BRIDGE_STATUS_OK,
+    }
 }
 
 //   Resolve the child program ids for one recursive math op.
@@ -228,48 +243,36 @@ dynview_import_fraction_children :: proc(
 //   - Child-bearing kinds import their subprograms from the shared flat stream;
 //     leaf kinds keep their incoming child id and a zero secondary id.
 dynview_import_op_children :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
+    ctx: Dynview_Import_Context,
     command_kind: core.Dynview_Command_Kind,
-    op: Bridge_Dynview_Math_Op,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> (
-        child_program_id: i32, secondary_child_program_id: i32, status: i32) {
+    op: Bridge_Dynview_Math_Op) -> Dynview_Imported_Children {
 
     child_direct_count := int(op.child_program_id)
     switch command_kind {
     case .ScriptAttachRecursive, .AccentBarRecursive, .RadicalBarRecursive,
         .MatrixRecursive:
         if child_direct_count <= 0 {
-            return 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT
+            return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
         }
-        child_id, child_status := dynview_import_child_program(cache, block_id,
-            ops, op_count, cursor, child_direct_count, blob_offset, blob_count,
-            next_program_id)
-        return child_id, 0, child_status
+        child_id, child_status := dynview_import_child_program(ctx,
+            child_direct_count)
+        return Dynview_Imported_Children{child_id, 0, child_status}
     case .FracRecursive:
-        numerator, denominator, frac_status :=
-            dynview_import_fraction_children(cache, block_id, ops, op_count, cursor,
-                op, blob_offset, blob_count, next_program_id)
-        return numerator, denominator, frac_status
+        return dynview_import_fraction_children(ctx, op)
     case .StretchDelimiterRecursive:
         if child_direct_count <= 0 {
-            return 0, 0, BRIDGE_STATUS_OK
+            return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_OK}
         }
-        child_id, child_status := dynview_import_child_program(cache, block_id,
-            ops, op_count, cursor, child_direct_count, blob_offset, blob_count,
-            next_program_id)
-        return child_id, 0, child_status
+        child_id, child_status := dynview_import_child_program(ctx,
+            child_direct_count)
+        return Dynview_Imported_Children{child_id, 0, child_status}
     case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
         .LargeOpRecursive, .CopyableTextRun, .LineBreak, .Divider,
         .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
         .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
         .InlineTriangle, .InlinePentagon:
     }
-    return i32(op.child_program_id), 0, BRIDGE_STATUS_OK
+    return Dynview_Imported_Children{i32(op.child_program_id), 0, BRIDGE_STATUS_OK}
 }
 
 //   Build the compiled dynview command record for one imported math op.
@@ -315,45 +318,37 @@ dynview_read_validated_op :: proc(
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int,
     cursor: ^int,
-    blob_count: int) -> (
-        op: Bridge_Dynview_Math_Op, kind: core.Dynview_Command_Kind, status: i32) {
+    blob_count: int) -> Dynview_Validated_Op {
 
     if cursor^ >= op_count {
-        return {}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT
+        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
 
-    op = ops[cursor^]
+    op := ops[cursor^]
     cursor^ += 1
     command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
     if !ok || !dynview_math_op_spans_valid(op, blob_count) {
-        return {}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT
+        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
-    return op, command_kind, BRIDGE_STATUS_OK
+    return Dynview_Validated_Op{op, command_kind, BRIDGE_STATUS_OK}
 }
 
 //   Import a single math op into one reserved command slot.
 dynview_import_one_op :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
-    command_kind: core.Dynview_Command_Kind,
-    op: Bridge_Dynview_Math_Op,
-    command_slot: int,
-    blob_offset, blob_count: int,
-    next_program_id: ^int) -> i32 {
+    ctx: Dynview_Import_Context,
+    validated: Dynview_Validated_Op,
+    command_slot: int) -> i32 {
 
-    child_program_id, secondary_child_program_id, status :=
-        dynview_import_op_children(cache, block_id, ops, op_count, cursor,
-            command_kind, op, blob_offset, blob_count, next_program_id)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    children := dynview_import_op_children(ctx, validated.kind, validated.op)
+    if children.status != BRIDGE_STATUS_OK {
+        return children.status
     }
 
-    cache^.math_commands[command_slot] =
-        dynview_math_command_from_op(op, command_kind, block_id,
-            child_program_id, secondary_child_program_id, blob_offset)
+    ctx.cache^.math_commands[command_slot] =
+        dynview_math_command_from_op(validated.op, validated.kind, ctx.block_id,
+            children.child_program_id,
+            children.secondary_child_program_id,
+            ctx.blob_offset)
     return BRIDGE_STATUS_OK
 }
 
@@ -363,42 +358,36 @@ dynview_import_one_op :: proc(
 //   - The helper reserves command slots for the requested subtree size and then
 //     walks the bridge ops into the dynview compile cache.
 dynview_import_math_program_from_ops :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int,
-    cursor: ^int,
+    ctx: Dynview_Import_Context,
     direct_count: int,
-    blob_offset, blob_count: int,
-    program_id: int,
-    next_program_id: ^int) -> i32 {
+    program_id: int) -> i32 {
 
-    if direct_count <= 0 || cache == nil || cursor == nil || next_program_id == nil {
+    if direct_count <= 0 || ctx.cache == nil || ctx.cursor == nil ||
+        ctx.next_program_id == nil {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
-    command_start := cache^.math_command_count
+    command_start := ctx.cache^.math_command_count
     if command_start + direct_count > core.DYNVIEW__MAX_MATH_COMMANDS {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
-    cache^.math_command_count += direct_count
+    ctx.cache^.math_command_count += direct_count
 
     for local_index in 0..<direct_count {
-        op, command_kind, read_status :=
-            dynview_read_validated_op(ops, op_count, cursor, blob_count)
-        if read_status != BRIDGE_STATUS_OK {
-            return read_status
+        validated := dynview_read_validated_op(ctx.ops, ctx.op_count, ctx.cursor,
+            ctx.blob_count)
+        if validated.status != BRIDGE_STATUS_OK {
+            return validated.status
         }
 
-        status := dynview_import_one_op(cache, block_id, ops, op_count, cursor,
-            command_kind, op, command_start + local_index, blob_offset,
-            blob_count, next_program_id)
+        status := dynview_import_one_op(ctx, validated,
+            command_start + local_index)
         if status != BRIDGE_STATUS_OK {
             return status
         }
     }
 
-    cache^.math_programs[program_id] = core.Dynview_Math_Program{
+    ctx.cache^.math_programs[program_id] = core.Dynview_Math_Program{
         valid = true,
         command_start = command_start,
         command_count = direct_count,

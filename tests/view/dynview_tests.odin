@@ -378,11 +378,11 @@ text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
     testing.expect_value(t, app_dynview.count_wrapped_text_rows("", 20), 1)
 
     text := "supercalifragilistic"
-    line_start, line_end, next_start := app_dynview.next_wrapped_text_span(text, 0, 4)
+    span := app_dynview.next_wrapped_text_span(text, 0, 4)
 
-    testing.expect_value(t, line_start, 0)
-    testing.expect(t, line_end > line_start)
-    testing.expect(t, next_start > line_start)
+    testing.expect_value(t, span.line_start, 0)
+    testing.expect(t, span.line_end > span.line_start)
+    testing.expect(t, span.next_start > span.line_start)
 
     rows := app_dynview.count_wrapped_text_rows("aaaa bbbb cccc", 4)
     testing.expect(t, rows >= 3)
@@ -641,12 +641,12 @@ dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
     testing.expect(t, ascent > descent)
     testing.expect(t, ascent > 8)
 
-    script_font_size, sup_raise_px, sub_drop_px := app_dynview.script_draw_offsets(12, 1.0, 0.25, 0.25)
-    top_pad, bottom_pad := app_dynview.script_visual_padding(script_font_size)
+    offsets := app_dynview.script_draw_offsets(12, 1.0, 0.25, 0.25)
+    top_pad, bottom_pad := app_dynview.script_visual_padding(offsets.script_font_size)
 
-    testing.expect(t, script_font_size > 1.0)
-    testing.expect(t, sup_raise_px >= 0)
-    testing.expect(t, sub_drop_px >= 0)
+    testing.expect(t, offsets.script_font_size > 1.0)
+    testing.expect(t, offsets.sup_raise_px >= 0)
+    testing.expect(t, offsets.sub_drop_px >= 0)
     testing.expect(t, top_pad > 0)
     testing.expect(t, bottom_pad > 0)
 }

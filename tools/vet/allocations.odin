@@ -59,6 +59,12 @@ Alloc_Visit_State :: struct {
     result:           ^Analysis_Result,
 }
 
+//   State for scanning one expression subtree for allocator references.
+Allocator_Scan :: struct {
+    class: string,
+    found: bool,
+}
+
 //   Walk one procedure body and record every allocation expression it contains.
 trace_allocations :: proc(
     lit: ^ast.Proc_Lit,
@@ -162,12 +168,6 @@ classify_call_allocator :: proc(call: ^ast.Call_Expr, family: string) -> string 
         }
     }
     return ALLOC_CLASS_IMPLICIT
-}
-
-//   State for scanning one expression subtree for allocator references.
-Allocator_Scan :: struct {
-    class: string,
-    found: bool,
 }
 
 //   Return the allocator class referenced by an expression, when it mentions one.

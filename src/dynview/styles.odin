@@ -4,36 +4,6 @@ import "../core"
 
 import rl "vendor:raylib"
 
-//   Resolve a style id using custom font flags encoded in the style id bits.
-style_from_custom_font_flags :: #force_inline proc(
-    style_id: i32) -> (Dynview_Text_Style, bool) {
-    bits := u32(style_id)
-    if (bits & u32(DYNVIEW_STYLE_CUSTOM_FONT)) == 0 {
-        return Dynview_Text_Style{}, false
-    }
-
-    flags_bits := bits & u32(DYNVIEW_STYLE_CUSTOM_FONT_MASK)
-    flags := core.Font_Variant_Flags(flags_bits)
-    if flags == .None {
-        flags = .Regular
-    }
-
-    weight := core.font_resolve_weight_from_flags(flags)
-    italic := core.font_has_flag(flags, .Italic)
-
-    _ = weight
-    wrap_scale: f32 = 1.0
-    line_height: f32 = 1.0
-
-    return Dynview_Text_Style{
-        color = UI_TEXT_COLOR,
-        italic = italic,
-        font_flags = flags,
-        wrap_scale = wrap_scale,
-        line_height_multiplier = line_height,
-    }, true
-}
-
 //   One fixed style entry: a style id and its resolved text style.
 Style_Entry :: struct {
     id:    i32,
@@ -129,6 +99,36 @@ STYLE_TABLE :: []Style_Entry{
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
     }},
+}
+
+//   Resolve a style id using custom font flags encoded in the style id bits.
+style_from_custom_font_flags :: #force_inline proc(
+    style_id: i32) -> (Dynview_Text_Style, bool) {
+    bits := u32(style_id)
+    if (bits & u32(DYNVIEW_STYLE_CUSTOM_FONT)) == 0 {
+        return Dynview_Text_Style{}, false
+    }
+
+    flags_bits := bits & u32(DYNVIEW_STYLE_CUSTOM_FONT_MASK)
+    flags := core.Font_Variant_Flags(flags_bits)
+    if flags == .None {
+        flags = .Regular
+    }
+
+    weight := core.font_resolve_weight_from_flags(flags)
+    italic := core.font_has_flag(flags, .Italic)
+
+    _ = weight
+    wrap_scale: f32 = 1.0
+    line_height: f32 = 1.0
+
+    return Dynview_Text_Style{
+        color = UI_TEXT_COLOR,
+        italic = italic,
+        font_flags = flags,
+        wrap_scale = wrap_scale,
+        line_height_multiplier = line_height,
+    }, true
 }
 
 //   Resolve one style id using the fixed host-owned style table.

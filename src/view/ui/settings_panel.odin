@@ -356,17 +356,18 @@ draw_settings_view :: proc(
     if state.julia_interface != nil {
         animation_entries_added = state.julia_interface.animation_count
     }
-    draw_settings_integer_slider(
-        panel,
-        slider_label_row.segment_rect.y,
-        mouse_input,
-        ui_runtime,
-        SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
-        "Maximum Dust particles",
-        &ps.use_max_dust_particles,
-        0,
-        max_particles,
-        font)
+    draw_settings_integer_slider(Integer_Slider_Params{
+        panel = panel,
+        row_y = slider_label_row.segment_rect.y,
+        mouse_input = mouse_input,
+        ui_runtime = ui_runtime,
+        press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
+        label = "Maximum Dust particles",
+        value = &ps.use_max_dust_particles,
+        min_value = 0,
+        max_value = max_particles,
+        font = font,
+    })
     draw_settings_particle_stats(panel, stats_row.segment_rect.y, ps,
         animation_entries_added, font)
     draw_settings_fps_checkbox(panel, fps_row.segment_rect.y,

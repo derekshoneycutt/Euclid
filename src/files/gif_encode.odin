@@ -85,6 +85,38 @@ Gif_Encode_Bitstream_State :: struct {
     end_code: int,
 }
 
+Gif_Encode_Depth_Bits :: struct {
+    rbits: int,
+    gbits: int,
+    bbits: int,
+}
+
+//   Derived per-depth quantization settings for one dither/quantize pass:
+//   channel bit depths, dither multipliers, packed-index masks, and palette size.
+Gif_Encode_Quantize_Config :: struct {
+    rbits:           int,
+    gbits:           int,
+    bbits:           int,
+    rmul:            int,
+    gmul:            int,
+    bmul:            int,
+    gmask:           int,
+    bmask:           int,
+    palette_size:    int,
+    alpha_threshold: int,
+}
+
+//   Raw frame input shared by the depth-probing cook steps: the source pixels,
+//   the scratch palette-usage buffer, and the frame geometry, grouped so the
+//   cook helpers pass one coherent value.
+Gif_Encode_Frame_Input :: struct {
+    raw_pixels: [^]u8,
+    used:       []u8,
+    width:      int,
+    height:     int,
+    pitch:      int,
+}
+
 //   Allocate all per-frame encoder buffers on the arena; frees state on failure.
 gif_encode_allocate_buffers :: proc(state: ^Gif_Encode_State) -> bool {
     state.lzw_mem = make([]i16,
@@ -199,8 +231,15 @@ gif_encode_frame :: proc(
         quality_clamped, state.frames_submitted, state.previous_frame.depth,
         state.previous_frame.count)
 
-    gif_encode_cook_frame(&state.current_frame, raw, state.used_mem, state.width,
-        state.height, pitch, state.use_bgra, state.alpha_threshold, next_depth)
+    gif_encode_cook_frame(&state.current_frame,
+        Gif_Encode_Frame_Input{
+            raw_pixels = raw,
+            used = state.used_mem,
+            width = state.width,
+            height = state.height,
+            pitch = pitch,
+        },
+        state.use_bgra, state.alpha_threshold, next_depth)
 
     node, ok := gif_encode_compress_frame(
         state, state.current_frame, centiseconds_per_frame)
@@ -509,7 +548,7 @@ gif_encode_write_u16le :: #force_inline proc(dst: []u8, offset: int, value: int)
 
 //   Resolve per-channel quantization bit depths for a chosen GIF palette depth.
 gif_encode_depth_bits :: #force_inline proc(
-    depth: int, use_bgra: bool) -> (int, int, int) {
+    depth: int, use_bgra: bool) -> Gif_Encode_Depth_Bits {
     rdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{
         0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5}
     gdepths := [GIF_COLOR_DEPTH_TABLE_SIZE]int{
@@ -518,9 +557,9 @@ gif_encode_depth_bits :: #force_inline proc(
         0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5}
 
     if use_bgra {
-        return bdepths[depth], gdepths[depth], rdepths[depth]
+        return Gif_Encode_Depth_Bits{bdepths[depth], gdepths[depth], rdepths[depth]}
     }
-    return rdepths[depth], gdepths[depth], bdepths[depth]
+    return Gif_Encode_Depth_Bits{rdepths[depth], gdepths[depth], bdepths[depth]}
 }
 
 //   Return ordered-dither kernel value for a tile-relative pixel position.
@@ -543,9 +582,8 @@ gif_encode_clear_used_entries :: #force_inline proc(used: []u8, palette_size: in
 gif_encode_dither_and_quantize_pixels :: proc(
     cooked: []u32,
     raw_pixels: [^]u8,
-    width, height, pitch, rbits, gbits, bbits, palette_size: int,
-    rmul, gmul, bmul, gmask, bmask: int,
-    alpha_threshold: int) {
+    width, height, pitch: int,
+    quantize: Gif_Encode_Quantize_Config) {
 
     for y := 0; y < height; y += 1 {
         for x := 0; x < width; x += 1 {
@@ -555,8 +593,8 @@ gif_encode_dither_and_quantize_pixels :: proc(
             p2 := int(raw_pixels[pixel_idx + 2])
             p3 := int(raw_pixels[pixel_idx + 3])
 
-            if p3 < alpha_threshold {
-                cooked[y * width + x] = u32(palette_size - 1)
+            if p3 < quantize.alpha_threshold {
+                cooked[y * width + x] = u32(quantize.palette_size - 1)
                 continue
             }
 
@@ -565,11 +603,13 @@ gif_encode_dither_and_quantize_pixels :: proc(
             k := gif_encode_dither_kernel_value(dx, dy)
 
             bq := (
-                min(65535, p2 * bmul + (k >> u32(bbits))) >>
-                    u32(16 - rbits - gbits - bbits)) & bmask
-            gq := (min(65535, p1 * gmul + (k >> u32(gbits))) >>
-                u32(16 - rbits - gbits)) & gmask
-            rq := (min(65535, p0 * rmul + (k >> u32(rbits))) >> u32(16 - rbits))
+                min(65535, p2 * quantize.bmul + (k >> u32(quantize.bbits))) >>
+                    u32(16 - quantize.rbits - quantize.gbits - quantize.bbits)) &
+                quantize.bmask
+            gq := (min(65535, p1 * quantize.gmul + (k >> u32(quantize.gbits))) >>
+                u32(16 - quantize.rbits - quantize.gbits)) & quantize.gmask
+            rq := (min(65535, p0 * quantize.rmul + (k >> u32(quantize.rbits))) >>
+                u32(16 - quantize.rbits))
 
             cooked[y * width + x] = u32(bq | gq | rq)
         }
@@ -654,57 +694,61 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
 //   - Produces palette usage counts used by depth backoff logic.
 gif_encode_try_cook_depth :: proc(
     frame: ^GifEncodeFrame,
-    raw_pixels: [^]u8,
-    used: []u8,
-    width, height, pitch, current_depth, alpha_threshold: int,
+    input: Gif_Encode_Frame_Input,
+    current_depth, alpha_threshold: int,
     use_bgra: bool) -> Gif_Encode_Cook_Attempt {
 
-    rbits, gbits, bbits := gif_encode_depth_bits(current_depth, use_bgra)
+    depth_bits := gif_encode_depth_bits(current_depth, use_bgra)
 
-    palette_size := (1 << u32(rbits + gbits + bbits)) + 1
-    gif_encode_clear_used_entries(used, palette_size)
+    palette_size :=
+        (1 << u32(depth_bits.rbits + depth_bits.gbits + depth_bits.bbits)) + 1
+    gif_encode_clear_used_entries(input.used, palette_size)
 
-    rdiff := (1 << u32(8 - rbits)) - 1
-    gdiff := (1 << u32(8 - gbits)) - 1
-    bdiff := (1 << u32(8 - bbits)) - 1
+    rdiff := (1 << u32(8 - depth_bits.rbits)) - 1
+    gdiff := (1 << u32(8 - depth_bits.gbits)) - 1
+    bdiff := (1 << u32(8 - depth_bits.bbits)) - 1
 
-    rmul := int((255.0 - f64(rdiff)) / 255.0 * 257.0)
-    gmul := int((255.0 - f64(gdiff)) / 255.0 * 257.0)
-    bmul := int((255.0 - f64(bdiff)) / 255.0 * 257.0)
+    quantize := Gif_Encode_Quantize_Config{
+        rbits = depth_bits.rbits,
+        gbits = depth_bits.gbits,
+        bbits = depth_bits.bbits,
+        rmul = int((255.0 - f64(rdiff)) / 255.0 * 257.0),
+        gmul = int((255.0 - f64(gdiff)) / 255.0 * 257.0),
+        bmul = int((255.0 - f64(bdiff)) / 255.0 * 257.0),
+        gmask = ((1 << u32(depth_bits.gbits)) - 1) << u32(depth_bits.rbits),
+        bmask = ((1 << u32(depth_bits.bbits)) - 1) <<
+            u32(depth_bits.rbits + depth_bits.gbits),
+        palette_size = palette_size,
+        alpha_threshold = alpha_threshold,
+    }
 
-    gmask := ((1 << u32(gbits)) - 1) << u32(rbits)
-    bmask := ((1 << u32(bbits)) - 1) << u32(rbits + gbits)
+    gif_encode_dither_and_quantize_pixels(frame.pixels, input.raw_pixels,
+        input.width, input.height, input.pitch, quantize)
 
-    gif_encode_dither_and_quantize_pixels(frame.pixels, raw_pixels, width, height, pitch,
-        rbits, gbits, bbits, palette_size, rmul, gmul, bmul, gmask, bmask,
-        alpha_threshold)
-
-    total_pixels := width * height
-    gif_encode_mark_used_palette_entries(frame.pixels, used, total_pixels)
+    total_pixels := input.width * input.height
+    gif_encode_mark_used_palette_entries(frame.pixels, input.used, total_pixels)
 
     return Gif_Encode_Cook_Attempt{
-        used_count = gif_encode_count_used_palette_entries(used, palette_size),
+        used_count = gif_encode_count_used_palette_entries(input.used, palette_size),
         depth = current_depth,
-        r_bits = rbits,
-        g_bits = gbits,
-        b_bits = bbits,
+        r_bits = depth_bits.rbits,
+        g_bits = depth_bits.gbits,
+        b_bits = depth_bits.bbits,
     }
 }
 
 //   Cook one frame by reducing depth until palette usage fits GIF limits.
 gif_encode_cook_frame :: proc(
     frame: ^GifEncodeFrame,
-    raw_pixels: [^]u8,
-    used: []u8,
-    width, height, pitch: int,
+    input: Gif_Encode_Frame_Input,
     use_bgra: bool,
     alpha_threshold, depth: int) {
 
     current_depth := depth
 
     for {
-        attempt := gif_encode_try_cook_depth(frame, raw_pixels, used, width, height,
-            pitch, current_depth, alpha_threshold, use_bgra)
+        attempt := gif_encode_try_cook_depth(frame, input, current_depth,
+            alpha_threshold, use_bgra)
 
         if !(attempt.used_count >= 256 && current_depth > 1) {
             frame.depth = attempt.depth
@@ -753,6 +797,92 @@ gif_encode_begin_lzw_bitstream :: proc(
     return true
 }
 
+//   Emit one new LZW code, extending or evicting the string table as needed.
+//   Returns the running code to continue from (the current color), or false on
+//   stream overflow.
+gif_encode_lzw_emit_new_code :: proc(
+    lzw_mem: []i16,
+    lzw: ^Gif_Lzw_State,
+    table_size: int,
+    entry_idx: int,
+    last_code: int,
+    color: int,
+    bs: ^Gif_Encode_Bitstream_State) -> (int, bool) {
+
+    code_bits := gif_encode_bit_log(lzw.length - 1)
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, last_code, code_bits) {
+        return last_code, false
+    }
+
+    if lzw.length > (GIF_LZW_TABLE_CAPACITY - 1) {
+        if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length,
+            &bs.bit_accum, &bs.bit_count, bs.clear_code, code_bits) {
+            return last_code, false
+        }
+        gif_encode_lzw_reset(lzw_mem, lzw, table_size, GIF_LZW_STRIDE)
+    } else {
+        lzw_mem[entry_idx] = i16(lzw.length)
+        lzw.length += 1
+    }
+
+    return color, true
+}
+
+//   Process one cooked pixel against the LZW string table, emitting codes and
+//   advancing the running code. Returns the updated running code and false on a
+//   bounds or stream-overflow failure.
+gif_encode_lzw_step_pixel :: proc(
+    lzw_mem: []i16,
+    lzw: ^Gif_Lzw_State,
+    table_size: int,
+    color: int,
+    last_code: int,
+    bs: ^Gif_Encode_Bitstream_State) -> (int, bool) {
+
+    if color < 0 || color >= lzw.stride {
+        return last_code, false
+    }
+    if last_code < 0 || last_code >= GIF_LZW_TABLE_CAPACITY {
+        return last_code, false
+    }
+
+    entry_idx := last_code * lzw.stride + color
+    if entry_idx < 0 || entry_idx >= len(lzw_mem) {
+        return last_code, false
+    }
+    code := int(lzw_mem[entry_idx])
+
+    if code >= 0 {
+        return code, true
+    }
+
+    return gif_encode_lzw_emit_new_code(lzw_mem, lzw, table_size, entry_idx,
+        last_code, color, bs)
+}
+
+//   Emit the final running code and the end code, then flush buffered bits.
+gif_encode_lzw_finish_stream :: proc(
+    lzw: ^Gif_Lzw_State,
+    last_code: int,
+    bs: ^Gif_Encode_Bitstream_State) -> bool {
+
+    last_width := min(12, gif_encode_bit_log(lzw.length - 1))
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, last_code, last_width) {
+        return false
+    }
+
+    end_width := min(12, gif_encode_bit_log(lzw.length))
+    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
+        &bs.bit_count, bs.end_code, end_width) {
+        return false
+    }
+
+    return gif_encode_flush_code_bits(bs.buffer, &bs.stream_length,
+        &bs.bit_accum, &bs.bit_count)
+}
+
 //   Walk cooked frame pixels and emit LZW codes into the bitstream.
 //
 // Notes:
@@ -764,10 +894,6 @@ gif_encode_lzw_walk_pixels :: proc(
     frames_compatible: bool,
     bs: ^Gif_Encode_Bitstream_State) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — this is the LZW encoder inner loop.
-    // The branches are load-bearing (bounds guards, table eviction, frame-compat
-    // fast path) and it is a hot per-pixel path; decomposition would hurt clarity
-    // and speed without reducing real coupling.
     lzw_mem := state.lzw_mem
     lzw := Gif_Lzw_State{}
     gif_encode_lzw_reset(lzw_mem, &lzw, table_size, GIF_LZW_STRIDE)
@@ -791,59 +917,15 @@ gif_encode_lzw_walk_pixels :: proc(
             color = 0
         }
 
-        if color < 0 || color >= lzw.stride {
+        next_code, ok := gif_encode_lzw_step_pixel(lzw_mem, &lzw, table_size,
+            color, last_code, bs)
+        if !ok {
             return false
         }
-        if last_code < 0 || last_code >= GIF_LZW_TABLE_CAPACITY {
-            return false
-        }
-
-        entry_idx := last_code * lzw.stride + color
-        if entry_idx < 0 || entry_idx >= len(lzw_mem) {
-            return false
-        }
-        code := int(lzw_mem[entry_idx])
-
-        if code < 0 {
-            code_bits := gif_encode_bit_log(lzw.length - 1)
-            if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
-                &bs.bit_count, last_code, code_bits) {
-
-                return false
-            }
-
-            if lzw.length > (GIF_LZW_TABLE_CAPACITY - 1) {
-                if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length,
-                    &bs.bit_accum, &bs.bit_count, bs.clear_code, code_bits) {
-
-                    return false
-                }
-                gif_encode_lzw_reset(lzw_mem, &lzw, table_size, GIF_LZW_STRIDE)
-            } else {
-                lzw_mem[entry_idx] = i16(lzw.length)
-                lzw.length += 1
-            }
-
-            last_code = color
-        } else {
-            last_code = code
-        }
+        last_code = next_code
     }
 
-    last_width := min(12, gif_encode_bit_log(lzw.length - 1))
-    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
-        &bs.bit_count, last_code, last_width) {
-        return false
-    }
-
-    end_width := min(12, gif_encode_bit_log(lzw.length))
-    if !gif_encode_write_code_bits(bs.buffer, &bs.stream_length, &bs.bit_accum,
-        &bs.bit_count, bs.end_code, end_width) {
-        return false
-    }
-
-    return gif_encode_flush_code_bits(bs.buffer, &bs.stream_length,
-        &bs.bit_accum, &bs.bit_count)
+    return gif_encode_lzw_finish_stream(&lzw, last_code, bs)
 }
 
 //   Build local color table and lookup mapping for a cooked frame.

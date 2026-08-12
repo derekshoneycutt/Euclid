@@ -20,8 +20,10 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(t: ^
     bin_dir, bin_join_err := filepath.join([]string{cwd, "bin"}, context.allocator)
     testing.expect(t, bin_join_err == nil)
     defer delete(bin_dir)
-    app_files.set_asset_root_override(bin_dir)
-    defer app_files.clear_asset_root_override()
+    asset_root_config := app_files.make_asset_root_config(bin_dir)
+    defer app_files.destroy_asset_root_config(&asset_root_config)
+    testing.expect(t, app_files.reload_packaged_assets_root_with_config(
+        &asset_root_config))
 
     settings := app_core.Euclid_Run_Settings{
         do_run = true,

@@ -1,3 +1,17 @@
+struct MathBlockModeCodes
+    accent_mode::Int32
+    radical_mode::Int32
+    large_op_kind::Int32
+end
+
+struct BridgeMathBlockPayload
+    plain_text::String
+    text_blob::String
+    ops::Vector{OdinJuliaBridge.BridgeDynviewMathOp}
+    top_level_count::Int
+end
+
+
 """Replay a compiled recursive program to the currently open dynview block."""
 function replay_emit_program!(
     state_ptr::Ptr{Cvoid},
@@ -219,8 +233,10 @@ end
 
 """Return one recursive matrix payload op from one structured run."""
 function matrix_payload_op(run::LatexRun)
-    rows, cols, ok = parse_matrix_dims_text(run.text)
-    if !ok || rows <= 0 || cols <= 0
+    dims = parse_matrix_dims_text(run.text)
+    rows = dims.rows
+    cols = dims.cols
+    if !dims.ok || rows <= 0 || cols <= 0
         rows = 1
         cols = max(1, length(run.children))
     end
@@ -335,7 +351,7 @@ function bridge_math_payload_op(
     sub_offset, sub_len = append_math_block_blob!(io, op.sub_text)
     base_style = math_payload_style_id(op.kind,
         op.style_role, text_style, math_style, mathbb_style)
-    accent_mode, radical_mode, large_op_kind = math_block_mode_codes(op)
+    mode_codes = math_block_mode_codes(op)
 
     return OdinJuliaBridge.BridgeDynviewMathOp(
         op.kind,
@@ -344,9 +360,9 @@ function bridge_math_payload_op(
         secondary_child_direct_count,
         Int32(math_style),
         base_style,
-        accent_mode,
-        radical_mode,
-        large_op_kind,
+        mode_codes.accent_mode,
+        mode_codes.radical_mode,
+        mode_codes.large_op_kind,
         text_offset,
         text_len,
         index_offset,
@@ -406,9 +422,10 @@ end
 """Return bridge accent/radical mode codes for one payload op."""
 function math_block_mode_codes(op::MathPayloadOp)
     if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
-        return bridge_delimiter_kind(op.radical_index_text),
+        return MathBlockModeCodes(
+            bridge_delimiter_kind(op.radical_index_text),
             bridge_delimiter_kind(op.sup_text),
-            Int32(0)
+            Int32(0))
     end
 
     accent_mode = op.accent_mode == :overline ? 
@@ -430,7 +447,8 @@ function math_block_mode_codes(op::MathPayloadOp)
                     (op.large_op_kind == LARGE_OP_KIND_LIM ?
                         OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :
                         Int32(0))))
-    return Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind)
+    return MathBlockModeCodes(
+        Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind))
 end
 
 """Encode one recursive payload program as recursive bridge ops plus shared text blob."""
@@ -447,7 +465,11 @@ function bridge_math_block_payload(
         text_style,
         math_style,
         mathbb_style)
-    return plain_text_for_program(program), String(take!(blob)), ops, top_level_count
+    return BridgeMathBlockPayload(
+        plain_text_for_program(program),
+        String(take!(blob)),
+        ops,
+        top_level_count)
 end
 
 """Encode one normalized LaTeX run tree as recursive bridge ops plus shared text blob."""
@@ -465,7 +487,11 @@ function bridge_math_block_payload(
         text_style,
         math_style,
         mathbb_style)
-    return plain_text_for_runs(runs), String(take!(blob)), ops, top_level_count
+    return BridgeMathBlockPayload(
+        plain_text_for_runs(runs),
+        String(take!(blob)),
+        ops,
+        top_level_count)
 end
 
 """Replay a compiled recursive program as one atomic non-wrapping math block."""
@@ -477,18 +503,18 @@ function replay_emit_math_block!(
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
         OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
-    plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
+    payload = bridge_math_block_payload(
         program;
         text_style=text_style,
         math_style=math_style,
         mathbb_style=mathbb_style)
     status = OdinJuliaBridge.dynview_math_block_from_ops(
         state_ptr,
-        plain_text,
+        payload.plain_text,
         math_style,
-        ops,
-        top_level_count,
-        text_blob)
+        payload.ops,
+        payload.top_level_count,
+        payload.text_blob)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -503,18 +529,18 @@ function replay_emit_math_block!(
         OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
     entry = resolve_cache_entry(source; style_profile=style_profile)
-    plain_text, text_blob, ops, top_level_count = bridge_math_block_payload(
+    payload = bridge_math_block_payload(
         entry.normalized_ast;
         text_style=text_style,
         math_style=math_style,
         mathbb_style=mathbb_style)
     status = OdinJuliaBridge.dynview_math_block_from_ops(
         state_ptr,
-        plain_text,
+        payload.plain_text,
         math_style,
-        ops,
-        top_level_count,
-        text_blob)
+        payload.ops,
+        payload.top_level_count,
+        payload.text_blob)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 

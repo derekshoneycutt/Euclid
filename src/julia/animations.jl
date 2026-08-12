@@ -60,6 +60,12 @@ const ReplDescendShare = 0.2f0
 const ReplDrawShare = 0.6f0
 const TransformEps = 1f-6
 
+struct ReflectedAngleMarkerPose
+    center::Vector{Float32}
+    start_point::Vector{Float32}
+    end_point::Vector{Float32}
+end
+
 
 """
 Normalize elapsed time into `[0, 1]` progress.
@@ -646,10 +652,12 @@ function reflected_angle_marker_pose_xy(
     end
 
     if swap_boundary_points
-        return reflected_center, reflected_end, reflected_start
+        return ReflectedAngleMarkerPose(
+            reflected_center, reflected_end, reflected_start)
     end
 
-    return reflected_center, reflected_start, reflected_end
+    return ReflectedAngleMarkerPose(
+        reflected_center, reflected_start, reflected_end)
 end
 
 

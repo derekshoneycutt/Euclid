@@ -8,7 +8,7 @@ package main
 
 import "core:odin/ast"
 
-//   Measure line span, cyclomatic complexity, and parameter count of a procedure.
+//   Measure line span, cyclomatic complexity, and declared arity of a procedure.
 measure_proc :: proc(
     lit: ^ast.Proc_Lit,
     name, file: string,
@@ -31,6 +31,7 @@ measure_proc :: proc(
         nloc = nloc,
         ccn = ccn,
         params = count_params(lit.type),
+        returns = count_returns(lit.type),
     }
 }
 
@@ -63,6 +64,18 @@ count_params :: proc(proc_type: ^ast.Proc_Type) -> int {
     }
     count := 0
     for field in proc_type.params.list {
+        count += max(len(field.names), 1)
+    }
+    return count
+}
+
+//   Count the declared result values of a procedure type.
+count_returns :: proc(proc_type: ^ast.Proc_Type) -> int {
+    if proc_type == nil || proc_type.results == nil {
+        return 0
+    }
+    count := 0
+    for field in proc_type.results.list {
         count += max(len(field.names), 1)
     }
     return count

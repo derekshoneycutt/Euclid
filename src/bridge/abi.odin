@@ -126,6 +126,10 @@ CONSTRAINT_SPEC_CHILDOFFSET :: (1 << 6)
 CONSTRAINT_SPEC_DOAPPLY :: (1 << 7)
 
 Bridge_Color :: core.Bridge_Color
+Bridge_Pentagon_Colors :: core.Bridge_Pentagon_Colors
+Bridge_Triangle_Colors :: core.Bridge_Triangle_Colors
+Bridge_Box_Edge_Colors :: core.Bridge_Box_Edge_Colors
+Bridge_Pie_Colors :: core.Bridge_Pie_Colors
 
 Bridge_Dynview_Math_Op :: struct {
     kind: i32,

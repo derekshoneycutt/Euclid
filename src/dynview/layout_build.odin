@@ -6,6 +6,80 @@ import "core:math"
 
 import rl "vendor:raylib"
 
+//   Uniform handler shape for one inline-shape layout command.
+Layout_Inline_Shape_Handler :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (i32, int)
+
+//   Dispatch table mapping each inline-shape command kind to its layout handler.
+//   Non-inline-shape kinds map to nil and are rejected by the caller.
+LAYOUT_INLINE_SHAPE_HANDLERS ::
+    [core.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
+    .BeginBlock = nil, .EndBlock = nil, .TextRun = nil, .MathGlyphRun = nil,
+    .MathBlock = nil, .ScriptAttachRecursive = nil, .FracRecursive = nil,
+    .StretchDelimiterRecursive = nil, .MatrixRecursive = nil,
+    .LargeOpRecursive = nil, .AccentBarRecursive = nil, .RadicalBarRecursive = nil,
+    .CopyableTextRun = nil, .LineBreak = nil, .Divider = nil,
+    .InlineLine = layout_consume_inline_line,
+    .InlineBox = layout_consume_inline_box,
+    .InlineCircle = layout_consume_inline_circle,
+    .InlineFilledBox = layout_consume_inline_filled_box,
+    .InlineFilledCircle = layout_consume_inline_filled_circle,
+    .InlinePieSection = layout_consume_inline_pie_section,
+    .InlinePerpendicular = layout_consume_inline_perpendicular,
+    .InlineTriangle = layout_consume_inline_triangle,
+    .InlinePentagon = layout_consume_inline_pentagon,
+}
+
+Inline_Line_Metrics :: struct {
+    ascent:      f32,
+    descent:     f32,
+    draw_height: f32,
+}
+
+Layout_Item_Line_Span :: struct {
+    first_line:        int,
+    last_line:         int,
+    has_visible_items: bool,
+}
+
+Pie_Section_Bounds :: struct {
+    x_min: f32,
+    x_max: f32,
+    y_min: f32,
+    y_max: f32,
+}
+
+//   Per-segment wrapped line metrics: byte span within the source text, column
+//   span on the layout grid, and the line box vertical extents.
+Wrapped_Line_Metrics :: struct {
+    byte_start: int,
+    byte_len:   int,
+    col_span:   int,
+    ascent:     f32,
+    descent:    f32,
+}
+
+//   Shared environment for wrapping one text run into layout lines. Groups the
+//   cache/state/accumulator targets with the source command, text, style, and
+//   typography metrics so the wrap helpers pass one coherent value.
+Text_Wrap_Context :: struct {
+    cache:    ^core.Dynview_Compile_Cache,
+    state:    ^Dynview_Layout_State,
+    acc:      ^Dynview_Layout_Line_Accumulator,
+    cmd:      core.Dynview_Command,
+    text:     string,
+    style:    Dynview_Text_Style,
+    max_cols: int,
+    ascent:   f32,
+    descent:  f32,
+}
+
+// Accumulate information based on a layout seed
 layout_seed_line_accumulator :: #force_inline proc(
     acc: ^Dynview_Layout_Line_Accumulator,
     item_start: int,
@@ -178,19 +252,18 @@ layout_push_wrapped_text_segment :: proc(
     acc: ^Dynview_Layout_Line_Accumulator,
     cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
-    line_start, line_byte_len, line_col_span: int,
-    should_break: bool,
-    ascent, descent: f32) -> i32 {
+    metrics: Wrapped_Line_Metrics,
+    should_break: bool) -> i32 {
 
     item := text_run_item(
         cmd,
         style,
         cache^.last_wrap_advance,
-        line_start,
-        line_byte_len,
-        line_col_span,
-        ascent,
-        descent)
+        metrics.byte_start,
+        metrics.byte_len,
+        metrics.col_span,
+        metrics.ascent,
+        metrics.descent)
 
     status := layout_push_item(cache, state, acc, item)
     if status != DYNVIEW_STATUS_OK {
@@ -198,7 +271,8 @@ layout_push_wrapped_text_segment :: proc(
     }
 
     if should_break {
-        return layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+        return layout_finalize_for_wrap(cache, state, acc, metrics.ascent,
+            metrics.descent)
     }
 
     return DYNVIEW_STATUS_OK
@@ -230,71 +304,75 @@ layout_consume_text_run :: proc(
 
     max_cols := layout_max_cols(cache, style)
     ascent, descent := style_ascent_descent(style, font_size)
-    return layout_wrap_text_run(cache, state, acc, cmd, text, style,
-        max_cols, ascent, descent)
+    return layout_wrap_text_run(Text_Wrap_Context{
+        cache = cache,
+        state = state,
+        acc = acc,
+        cmd = cmd,
+        text = text,
+        style = style,
+        max_cols = max_cols,
+        ascent = ascent,
+        descent = descent,
+    })
 }
 
 //   Wrap one text segment at `start`, finalizing full rows, and return the next
 //   start index. A returned next_start <= start signals the loop should stop.
 layout_wrap_one_segment :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    state: ^Dynview_Layout_State,
-    acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Dynview_Command,
-    text: string,
-    style: Dynview_Text_Style,
-    max_cols: int,
-    start: int,
-    ascent, descent: f32) -> (int, i32) {
+    ctx: Text_Wrap_Context,
+    start: int) -> (int, i32) {
 
-    if state^.col >= max_cols {
-        status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+    if ctx.state^.col >= ctx.max_cols {
+        status := layout_finalize_for_wrap(ctx.cache, ctx.state, ctx.acc,
+            ctx.ascent, ctx.descent)
         if status != DYNVIEW_STATUS_OK {
             return start, status
         }
     }
 
-    available := max_cols - state^.col
+    available := ctx.max_cols - ctx.state^.col
     if available <= 0 {
-        status := layout_finalize_for_wrap(cache, state, acc, ascent, descent)
+        status := layout_finalize_for_wrap(ctx.cache, ctx.state, ctx.acc,
+            ctx.ascent, ctx.descent)
         if status != DYNVIEW_STATUS_OK {
             return start, status
         }
         return start, DYNVIEW_STATUS_OK
     }
 
-    line_start, line_end, next_start := next_wrapped_text_span(text, start, available)
-    line_col_span := text_codepoint_count_span(text, line_start, line_end)
-    line_byte_len := line_end - line_start
+    span := next_wrapped_text_span(ctx.text, start, available)
+    line_col_span := text_codepoint_count_span(ctx.text, span.line_start, span.line_end)
+    line_byte_len := span.line_end - span.line_start
     if line_col_span <= 0 || line_byte_len <= 0 {
         return start, DYNVIEW_STATUS_OK
     }
 
     status := layout_push_wrapped_text_segment(
-        cache, state, acc, cmd, style, line_start, line_byte_len, line_col_span,
-        next_start < len(text), ascent, descent)
+        ctx.cache, ctx.state, ctx.acc, ctx.cmd, ctx.style,
+        Wrapped_Line_Metrics{
+            byte_start = span.line_start,
+            byte_len = line_byte_len,
+            col_span = line_col_span,
+            ascent = ctx.ascent,
+            descent = ctx.descent,
+        },
+        span.next_start < len(ctx.text))
     if status != DYNVIEW_STATUS_OK {
         return start, status
     }
-    return next_start, DYNVIEW_STATUS_OK
+    return span.next_start, DYNVIEW_STATUS_OK
 }
 
 //   Wrap one text run into layout lines, finalizing a row whenever the line is full.
-layout_wrap_text_run :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    state: ^Dynview_Layout_State,
-    acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Dynview_Command,
-    text: string,
-    style: Dynview_Text_Style,
-    max_cols: int,
-    ascent, descent: f32) -> (i32, int) {
+layout_wrap_text_run :: proc(ctx: Text_Wrap_Context) -> (i32, int) {
 
+    state := ctx.state
+    text := ctx.text
     last_line := -1
     start := 0
     for start < len(text) {
-        next_start, status := layout_wrap_one_segment(cache, state, acc, cmd,
-            text, style, max_cols, start, ascent, descent)
+        next_start, status := layout_wrap_one_segment(ctx, start)
         if status != DYNVIEW_STATUS_OK {
             return status, last_line
         }
@@ -393,14 +471,14 @@ layout_consume_math_block :: proc(
 
 //   Compute line-style inline stroke metrics centered on baseline zone.
 inline_line_metrics :: #force_inline proc(
-    thickness, text_ascent, text_descent: f32) -> (f32, f32, f32) {
+    thickness, text_ascent, text_descent: f32) -> Inline_Line_Metrics {
 
     center := (text_descent - text_ascent) * 0.5
     top := center - thickness * 0.5
     bottom := center + thickness * 0.5
     ascent := max(0.0, -top)
     descent := max(0.0, bottom)
-    return ascent, descent, thickness
+    return Inline_Line_Metrics{ascent, descent, thickness}
 }
 
 //   Finalize line before placing one inline item if current row overflows.
@@ -474,8 +552,7 @@ layout_consume_inline_line :: proc(
     }
 
     thickness := max(1.0, cmd.inline_atom_stroke)
-    ascent, descent, draw_height :=
-        inline_line_metrics(thickness, text_ascent, text_descent)
+    metrics := inline_line_metrics(thickness, text_ascent, text_descent)
     item := core.Dynview_Layout_Item{
         kind = .InlineLine,
         style_id = cmd.style_id,
@@ -485,9 +562,9 @@ layout_consume_inline_line :: proc(
         has_brush_color = cmd.has_brush_color,
         brush_color = cmd.brush_color,
         draw_width = f32(cols) * effective_advance(style, cache^.last_wrap_advance),
-        draw_height = draw_height,
-        ascent = max(ascent, text_ascent * 0.08),
-        descent = max(descent, text_descent * 0.08),
+        draw_height = metrics.draw_height,
+        ascent = max(metrics.ascent, text_ascent * 0.08),
+        descent = max(metrics.descent, text_descent * 0.08),
     }
 
     status = layout_push_item(cache, state, acc, item)
@@ -810,14 +887,14 @@ inline_pie_section_item :: #force_inline proc(
     // not only its surrounding horizontal span.
     requested_radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
 
-    x_min, x_max, y_min, y_max := pie_section_bounds(
+    bounds := pie_section_bounds(
         requested_radius,
         cmd.pie_start_angle_degrees,
         cmd.pie_end_angle_degrees)
-    draw_width := max(1.0, x_max - x_min)
-    draw_height := max(1.0, y_max - y_min)
-    center_offset_x := -x_min
-    center_offset_y := -y_min
+    draw_width := max(1.0, bounds.x_max - bounds.x_min)
+    draw_height := max(1.0, bounds.y_max - bounds.y_min)
+    center_offset_x := -bounds.x_min
+    center_offset_y := -bounds.y_min
 
     // Keep draw width inside the reserved layout span in edge-rounding cases.
     if draw_width > reserved_width {
@@ -1237,35 +1314,6 @@ layout_consume_structured_math_command :: #force_inline proc(
     return status
 }
 
-//   Uniform handler shape for one inline-shape layout command.
-Layout_Inline_Shape_Handler :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    state: ^Dynview_Layout_State,
-    acc: ^Dynview_Layout_Line_Accumulator,
-    cmd: core.Dynview_Command,
-    style: Dynview_Text_Style,
-    font_size: f32) -> (i32, int)
-
-//   Dispatch table mapping each inline-shape command kind to its layout handler.
-//   Non-inline-shape kinds map to nil and are rejected by the caller.
-LAYOUT_INLINE_SHAPE_HANDLERS ::
-    [core.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
-    .BeginBlock = nil, .EndBlock = nil, .TextRun = nil, .MathGlyphRun = nil,
-    .MathBlock = nil, .ScriptAttachRecursive = nil, .FracRecursive = nil,
-    .StretchDelimiterRecursive = nil, .MatrixRecursive = nil,
-    .LargeOpRecursive = nil, .AccentBarRecursive = nil, .RadicalBarRecursive = nil,
-    .CopyableTextRun = nil, .LineBreak = nil, .Divider = nil,
-    .InlineLine = layout_consume_inline_line,
-    .InlineBox = layout_consume_inline_box,
-    .InlineCircle = layout_consume_inline_circle,
-    .InlineFilledBox = layout_consume_inline_filled_box,
-    .InlineFilledCircle = layout_consume_inline_filled_circle,
-    .InlinePieSection = layout_consume_inline_pie_section,
-    .InlinePerpendicular = layout_consume_inline_perpendicular,
-    .InlineTriangle = layout_consume_inline_triangle,
-    .InlinePentagon = layout_consume_inline_pentagon,
-}
-
 //   Consume one visible inline-shape command using the matching layout helper.
 layout_consume_inline_shape_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
@@ -1387,7 +1435,7 @@ rebuild_layout_cache :: proc(runtime: ^core.Dynview_System) -> i32 {
 //   Return the first/last layout line indices that contain visible items for block_id.
 layout_item_line_span_for_block :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
-    block_id: i32) -> (int, int, bool) {
+    block_id: i32) -> Layout_Item_Line_Span {
 
     first_line := -1
     last_line := -1
@@ -1406,10 +1454,10 @@ layout_item_line_span_for_block :: #force_inline proc(
     }
 
     if first_line < 0 || last_line < first_line {
-        return 0, 0, false
+        return Layout_Item_Line_Span{0, 0, false}
     }
 
-    return first_line, last_line, true
+    return Layout_Item_Line_Span{first_line, last_line, true}
 }
 
 //   Extract a text span from the shared dynview byte buffer using explicit offset/length.
@@ -1585,7 +1633,7 @@ pie_angle_in_sweep :: #force_inline proc(
 pie_section_bounds :: #force_inline proc(
     radius,
     start_degrees,
-    end_degrees: f32) -> (f32, f32, f32, f32) {
+    end_degrees: f32) -> Pie_Section_Bounds {
 
     start_n := pie_normalize_angle_degrees(start_degrees)
     end_n := pie_normalize_angle_degrees(end_degrees)
@@ -1618,7 +1666,7 @@ pie_section_bounds :: #force_inline proc(
         }
     }
 
-    return x_min, x_max, y_min, y_max
+    return Pie_Section_Bounds{x_min, x_max, y_min, y_max}
 }
 
 //   Measure inline pie-section command using tight wedge horizontal bounds.
@@ -1637,11 +1685,11 @@ inline_pie_section_cols :: #force_inline proc(
     }
     radius_scaled := radius_in_cols * max(0.5, style.wrap_scale)
 
-    x_min, x_max, _, _ := pie_section_bounds(
+    bounds := pie_section_bounds(
         radius_scaled,
         cmd.pie_start_angle_degrees,
         cmd.pie_end_angle_degrees)
-    width_in_cols := max(1.0, x_max - x_min)
+    width_in_cols := max(1.0, bounds.x_max - bounds.x_min)
 
     cols := int(math.ceil(f64(width_in_cols)))
     if cols < 1 {

@@ -51,6 +51,33 @@ FONT_CODEPOINT_CAPACITY :: 8192
 BASELINE_FONT_VARIANT_COUNT :: 3
 FONT_GLYPH_PADDING :: 4
 
+MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+TOOL_LENGTH :: core.TOOL_LENGTH
+
+Vector2 :: core.Vector2
+Vector3 :: core.Vector3
+Iso_Scale :: core.Iso_Scale
+Shapes_Point_Type :: core.Shapes_Point_Type
+Shapes_Point :: core.Shapes_Point
+Shapes_Constraint :: core.Shapes_Constraint
+Shapes_Point_System :: core.Shapes_Point_System
+Particle :: core.Particle
+Particle_System :: core.Particle_System
+Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
+Euclid_General_State :: core.Euclid_General_State
+Euclid_Run_Settings :: core.Euclid_Run_Settings
+
+//   Static JuliaMono filenames indexed by weight and italic style.
+FONT_VARIANT_FILENAMES :: [core.Font_Weight][2]string{
+	.Light = {"JuliaMono-Light.ttf", "JuliaMono-LightItalic.ttf"},
+	.Regular = {"JuliaMono-Regular.ttf", "JuliaMono-RegularItalic.ttf"},
+	.Medium = {"JuliaMono-Medium.ttf", "JuliaMono-MediumItalic.ttf"},
+	.SemiBold = {"JuliaMono-SemiBold.ttf", "JuliaMono-SemiBoldItalic.ttf"},
+	.Bold = {"JuliaMono-Bold.ttf", "JuliaMono-BoldItalic.ttf"},
+	.ExtraBold = {"JuliaMono-ExtraBold.ttf", "JuliaMono-ExtraBoldItalic.ttf"},
+	.Black = {"JuliaMono-Black.ttf", "JuliaMono-BlackItalic.ttf"},
+}
+
 Font_Codepoint_Range :: struct {
 	first: rune,
 	last: rune,
@@ -59,6 +86,16 @@ Font_Codepoint_Range :: struct {
 Font_Codepoint_Set :: struct {
 	values: [FONT_CODEPOINT_CAPACITY]rune,
 	count: i32,
+}
+
+Prepared_Font :: struct {
+	font: rl.Font,
+	atlas: rl.Image,
+	ready: bool,
+}
+
+Baseline_Font_Preparation :: struct {
+	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
 }
 
 // Keep broad language and mathematical coverage while avoiding terminal-only
@@ -87,16 +124,6 @@ FONT_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
 	{0xfffd, 0xfffd},
 	{0x1d400, 0x1d7ff},
 	{0x1ee00, 0x1ee0b},
-}
-
-Prepared_Font :: struct {
-	font: rl.Font,
-	atlas: rl.Image,
-	ready: bool,
-}
-
-Baseline_Font_Preparation :: struct {
-	variants: [BASELINE_FONT_VARIANT_COUNT]Prepared_Font,
 }
 
 //   Build the immutable JuliaMono codepoint policy in raylib's required flat form.
@@ -133,33 +160,6 @@ font_rasterization_begin :: proc() {
 //   Restore normal raylib diagnostics immediately after font rasterization.
 font_rasterization_end :: proc() {
 	rl.SetTraceLogLevel(.INFO)
-}
-
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
-TOOL_LENGTH :: core.TOOL_LENGTH
-
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Iso_Scale :: core.Iso_Scale
-Shapes_Point_Type :: core.Shapes_Point_Type
-Shapes_Point :: core.Shapes_Point
-Shapes_Constraint :: core.Shapes_Constraint
-Shapes_Point_System :: core.Shapes_Point_System
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
-Euclid_General_State :: core.Euclid_General_State
-Euclid_Run_Settings :: core.Euclid_Run_Settings
-
-//   Static JuliaMono filenames indexed by weight and italic style.
-FONT_VARIANT_FILENAMES :: [core.Font_Weight][2]string{
-	.Light = {"JuliaMono-Light.ttf", "JuliaMono-LightItalic.ttf"},
-	.Regular = {"JuliaMono-Regular.ttf", "JuliaMono-RegularItalic.ttf"},
-	.Medium = {"JuliaMono-Medium.ttf", "JuliaMono-MediumItalic.ttf"},
-	.SemiBold = {"JuliaMono-SemiBold.ttf", "JuliaMono-SemiBoldItalic.ttf"},
-	.Bold = {"JuliaMono-Bold.ttf", "JuliaMono-BoldItalic.ttf"},
-	.ExtraBold = {"JuliaMono-ExtraBold.ttf", "JuliaMono-ExtraBoldItalic.ttf"},
-	.Black = {"JuliaMono-Black.ttf", "JuliaMono-BlackItalic.ttf"},
 }
 
 //   Resolve one static JuliaMono filename from weight and italic style.

@@ -65,6 +65,8 @@ ANIMATION_TICK_SLOT_COUNT :: 2
 SCENE_COMMAND_BATCH_CAPACITY :: 64
 SCENE_COMMAND_POINT_BATCH_CAPACITY :: 8
 
+JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
+
 
 /****
     Starting with the Julia Animation tree and runtime structures
@@ -75,6 +77,42 @@ Bridge_Color :: struct {
     g: u8,
     b: u8,
     a: u8,
+}
+
+//   Fill plus five edge colors for one inline pentagon atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Pentagon_Colors :: struct {
+    fill:  Bridge_Color,
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+    edge4: Bridge_Color,
+    edge5: Bridge_Color,
+}
+
+//   Fill plus three edge colors for one inline triangle atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Triangle_Colors :: struct {
+    fill:  Bridge_Color,
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+}
+
+//   Four independent edge colors for one inline box atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Box_Edge_Colors :: struct {
+    edge1: Bridge_Color,
+    edge2: Bridge_Color,
+    edge3: Bridge_Color,
+    edge4: Bridge_Color,
+}
+
+//   Fill and arc colors for one inline pie-section atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Pie_Colors :: struct {
+    fill: Bridge_Color,
+    arc:  Bridge_Color,
 }
 
 Scene_Command_Kind :: enum u8 {
@@ -333,8 +371,6 @@ Euclid_Julia_Animation_Lookup_Entry :: struct {
 Euclid_Julia_Animation_Iterator :: struct {
     current : ^Euclid_Julia_Animation_Interface,
 }
-
-JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
 
 Euclid_Julia_Interface :: struct {
     init_scripts : ^julialib.jl_value_t,

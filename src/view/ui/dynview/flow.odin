@@ -8,6 +8,44 @@ import "core:math"
 
 import rl "vendor:raylib"
 
+//   Uniform handler shape for one flow command; the style is resolved by the caller.
+//   Handlers that do not need the command buffer receive nil for it.
+Flow_Command_Handler :: proc(
+    cmd: core.Dynview_Command,
+    buffer: ^core.Dynview_Command_Buffer,
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context)
+
+//   Dispatch table mapping each dynview command kind to its flow handler.
+//   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
+FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
+    .BeginBlock = nil,
+    .EndBlock = nil,
+    .CopyableTextRun = nil,
+    .LineBreak = nil,
+    .Divider = nil,
+    .TextRun = consume_text_based_command,
+    .MathGlyphRun = consume_text_based_command,
+    .MathBlock = consume_text_based_command,
+    .ScriptAttachRecursive = consume_text_based_command,
+    .FracRecursive = consume_text_based_command,
+    .StretchDelimiterRecursive = consume_text_based_command,
+    .MatrixRecursive = consume_text_based_command,
+    .LargeOpRecursive = consume_large_op_command,
+    .AccentBarRecursive = consume_text_based_command,
+    .RadicalBarRecursive = consume_text_based_command,
+    .InlineLine = flow_handle_inline_line,
+    .InlineBox = flow_handle_inline_box,
+    .InlineCircle = flow_handle_inline_circle,
+    .InlineFilledBox = flow_handle_inline_filled_box,
+    .InlineFilledCircle = flow_handle_inline_filled_circle,
+    .InlinePieSection = flow_handle_inline_pie_section,
+    .InlinePerpendicular = flow_handle_inline_perpendicular,
+    .InlineTriangle = flow_handle_inline_triangle,
+    .InlinePentagon = flow_handle_inline_pentagon,
+}
+
 Dynview_Flow_State :: struct {
     row: int,
     col: int,
@@ -52,6 +90,13 @@ Inline_Shape_Frame :: struct {
     cols: int,
     max_cols: int,
     visible: bool,
+}
+
+Pie_Section_Bounds :: struct {
+    x_min: f32,
+    x_max: f32,
+    y_min: f32,
+    y_max: f32,
 }
 
 style_font :: #force_inline proc(
@@ -147,7 +192,7 @@ pie_angle_in_sweep :: #force_inline proc(
 pie_section_bounds :: #force_inline proc(
     radius,
     start_degrees,
-    end_degrees: f32) -> (f32, f32, f32, f32) {
+    end_degrees: f32) -> Pie_Section_Bounds {
 
     start_n := normalize_angle_degrees(start_degrees)
     end_n := normalize_angle_degrees(end_degrees)
@@ -180,7 +225,7 @@ pie_section_bounds :: #force_inline proc(
         }
     }
 
-    return x_min, x_max, y_min, y_max
+    return Pie_Section_Bounds{x_min, x_max, y_min, y_max}
 }
 
 //   Draw a filled pie section using a deterministic triangle fan.
@@ -378,9 +423,8 @@ flow_consume_text_run :: proc(
             continue
         }
 
-        line_start, line_end, next_start :=
-            dynview.next_wrapped_text_span(text, start, available)
-        line_text := text[line_start:line_end]
+        span := dynview.next_wrapped_text_span(text, start, available)
+        line_text := text[span.line_start:span.line_end]
         line_len := dynview.text_codepoint_count_span(line_text, 0, len(line_text))
         if line_len <= 0 {
             break
@@ -391,15 +435,15 @@ flow_consume_text_run :: proc(
         flow^.had_visible = true
         flow^.col += line_len
 
-        if next_start < len(text) {
+        if span.next_start < len(text) {
             flow^.row += 1
             flow^.col = 0
         }
 
-        if next_start <= start {
+        if span.next_start <= start {
             break
         }
-        start = next_start
+        start = span.next_start
     }
 }
 
@@ -733,14 +777,14 @@ flow_consume_inline_pie_section :: proc(
             atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
                 f32(flow^.col) * effective_advance
             radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
-            x_min, _, y_min, y_max := pie_section_bounds(
+            bounds := pie_section_bounds(
                 radius,
                 cmd.pie_start_angle_degrees,
                 cmd.pie_end_angle_degrees)
-            wedge_height := max(1.0, y_max - y_min)
+            wedge_height := max(1.0, bounds.y_max - bounds.y_min)
             center := rl.Vector2{
-                atom_x + (-x_min),
-                row_y + draw_ctx^.text_row_height * 0.58 - wedge_height * 0.5 + (-y_min),
+                atom_x + (-bounds.x_min),
+                row_y + draw_ctx^.text_row_height * 0.58 - wedge_height * 0.5 + (-bounds.y_min),
             }
             fill_color := command_draw_color(cmd, style)
             outline_color := cmd.has_outline_color ? cmd.outline_color : style.color
@@ -909,15 +953,6 @@ consume_linebreak :: proc(
     flow.col = 0
 }
 
-//   Uniform handler shape for one flow command; the style is resolved by the caller.
-//   Handlers that do not need the command buffer receive nil for it.
-Flow_Command_Handler :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
-    flow: ^Dynview_Flow_State,
-    style: Dynview_Text_Style,
-    draw_ctx: ^Dynview_Draw_Context)
-
 //   Adapt flow_consume_inline_line to the uniform table handler shape.
 flow_handle_inline_line :: proc(
     cmd: core.Dynview_Command,
@@ -1008,35 +1043,6 @@ flow_handle_inline_pentagon :: proc(
     flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
 }
 
-//   Dispatch table mapping each dynview command kind to its flow handler.
-//   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
-FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
-    .BeginBlock = nil,
-    .EndBlock = nil,
-    .CopyableTextRun = nil,
-    .LineBreak = nil,
-    .Divider = nil,
-    .TextRun = consume_text_based_command,
-    .MathGlyphRun = consume_text_based_command,
-    .MathBlock = consume_text_based_command,
-    .ScriptAttachRecursive = consume_text_based_command,
-    .FracRecursive = consume_text_based_command,
-    .StretchDelimiterRecursive = consume_text_based_command,
-    .MatrixRecursive = consume_text_based_command,
-    .LargeOpRecursive = consume_large_op_command,
-    .AccentBarRecursive = consume_text_based_command,
-    .RadicalBarRecursive = consume_text_based_command,
-    .InlineLine = flow_handle_inline_line,
-    .InlineBox = flow_handle_inline_box,
-    .InlineCircle = flow_handle_inline_circle,
-    .InlineFilledBox = flow_handle_inline_filled_box,
-    .InlineFilledCircle = flow_handle_inline_filled_circle,
-    .InlinePieSection = flow_handle_inline_pie_section,
-    .InlinePerpendicular = flow_handle_inline_perpendicular,
-    .InlineTriangle = flow_handle_inline_triangle,
-    .InlinePentagon = flow_handle_inline_pentagon,
-}
-
 //   Consume a single command in the current run of the given flow.
 //   Handlers are dispatched from a static table indexed by command kind.
 consume_flow_command :: proc(
@@ -1092,13 +1098,24 @@ count_styled_rows :: proc(
     return flow.row + 1
 }
 
+//   Draw environment for styled wrapped dynview content: the target panel,
+//   scroll offset, typography metrics, and fallback font, grouped so the entry
+//   point passes one coherent value.
+Styled_Content_Params :: struct {
+    panel:           rl.Rectangle,
+    scroll_y:        f32,
+    text_padding:    f32,
+    text_row_height: f32,
+    wrap_advance:    f32,
+    font_size:       f32,
+    font:            rl.Font,
+}
+
 //   Draw style-aware wrapped dynview text content clipped by caller scissor.
 draw_styled_content :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    scroll_y, text_padding, text_row_height, wrap_advance, font_size: f32,
-    font: rl.Font) {
+    params: Styled_Content_Params) {
 
     if runtime == nil {
         return
@@ -1109,13 +1126,13 @@ draw_styled_content :: proc(
     draw_ctx := Dynview_Draw_Context{
         enabled = true,
         state = state,
-        panel = panel,
-        scroll_y = scroll_y,
-        text_padding = text_padding,
-        text_row_height = text_row_height,
-        wrap_advance = wrap_advance,
-        font_size = font_size,
-        fallback_font = font,
+        panel = params.panel,
+        scroll_y = params.scroll_y,
+        text_padding = params.text_padding,
+        text_row_height = params.text_row_height,
+        wrap_advance = params.wrap_advance,
+        font_size = params.font_size,
+        fallback_font = params.font,
     }
     for i in 0..<buffer^.command_count {
         cmd := buffer^.commands[i]

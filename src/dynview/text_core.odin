@@ -1,5 +1,11 @@
 package dynview
 
+Wrapped_Text_Span :: struct {
+    line_start: int,
+    line_end:   int,
+    next_start: int,
+}
+
 //   Return whether one byte is a UTF-8 continuation byte (10xxxxxx).
 text_is_utf8_trailing_byte :: #force_inline proc(b: u8) -> bool {
     return (b & 0xC0) == 0x80
@@ -66,10 +72,10 @@ chars_per_text_row :: #force_inline proc(width, wrap_advance: f32) -> int {
 
 //   Compute the next wrapped line span and next-start index.
 next_wrapped_text_span :: proc(
-    text: string, start: int, max_chars: int) -> (int, int, int) {
+    text: string, start: int, max_chars: int) -> Wrapped_Text_Span {
 
     if start >= len(text) {
-        return start, start, start
+        return Wrapped_Text_Span{start, start, start}
     }
 
     line_end := scan_wrapped_line_end(text, start, max_chars)
@@ -84,7 +90,7 @@ next_wrapped_text_span :: proc(
     }
 
     next_start := next_wrapped_line_start(text, line_end)
-    return start, line_end, next_start
+    return Wrapped_Text_Span{start, line_end, next_start}
 }
 
 //   Scan forward from start to the byte index that ends the current wrapped line.
@@ -140,12 +146,12 @@ count_wrapped_text_rows :: proc(text: string, max_chars: int) -> int {
     rows := 0
     start := 0
     for start < len(text) {
-        _, _, next_start := next_wrapped_text_span(text, start, max_chars)
+        span := next_wrapped_text_span(text, start, max_chars)
         rows += 1
-        if next_start <= start {
+        if span.next_start <= start {
             break
         }
-        start = next_start
+        start = span.next_start
     }
 
     return rows

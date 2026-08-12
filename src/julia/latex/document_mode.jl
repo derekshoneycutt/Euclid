@@ -16,8 +16,50 @@ end
 function whole_math_source(source::String)
     isempty(source) && return nothing
     parser = LatexDocumentParser(source, firstindex(source))
-    math_source, _, ok = consume_document_math!(parser)
-    return ok && parser.index > lastindex(source) ? math_source : nothing
+    result = consume_document_math!(parser)
+    return result.ok && parser.index > lastindex(source) ? result.content : nothing
+end
+
+struct DocumentMathDelimiterInfo
+    opener::String
+    closer::String
+    run_kind::Symbol
+end
+
+struct DocumentMathConsumptionResult
+    content::String
+    run_kind::Symbol
+    ok::Bool
+end
+
+struct DocumentShapeDimensions
+    width::Float32
+    height::Float32
+    thickness::Float32
+    filled::Bool
+end
+
+struct DocumentTriangleColors
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
+struct DocumentBoxEdgeColors
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge4_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+end
+
+struct DocumentPentagonColors
+    fill_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge1_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge2_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge3_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge4_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
+    edge5_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
 """Append text while merging adjacent document runs with the same style and color."""
@@ -95,35 +137,39 @@ end
 """Return delimiters and document run kind for math at the parser cursor."""
 function document_math_delimiters(parser::LatexDocumentParser)
     tail = SubString(parser.source, parser.index)
-    startswith(tail, "\$\$") && return "\$\$", "\$\$", :math_display
-    startswith(tail, "\$") && return "\$", "\$", :math_inline
-    startswith(tail, "\\(") && return "\\(", "\\)", :math_inline
-    startswith(tail, "\\[") && return "\\[", "\\]", :math_display
-    return "", "", :none
+    startswith(tail, "\$\$") &&
+        return DocumentMathDelimiterInfo("\$\$", "\$\$", :math_display)
+    startswith(tail, "\$") &&
+        return DocumentMathDelimiterInfo("\$", "\$", :math_inline)
+    startswith(tail, "\\(") &&
+        return DocumentMathDelimiterInfo("\\(", "\\)", :math_inline)
+    startswith(tail, "\\[") &&
+        return DocumentMathDelimiterInfo("\\[", "\\]", :math_display)
+    return DocumentMathDelimiterInfo("", "", :none)
 end
 
 """Return true when the document parser is at a supported math opener."""
 function document_math_starts_at_cursor(parser::LatexDocumentParser)
-    opener, _, _ = document_math_delimiters(parser)
-    return !isempty(opener)
+    delimiters = document_math_delimiters(parser)
+    return !isempty(delimiters.opener)
 end
 
 """Read a delimited math fragment and its document run kind at the parser cursor."""
 function consume_document_math!(parser::LatexDocumentParser)
-    opener, closer, run_kind = document_math_delimiters(parser)
-    if isempty(opener)
-        return "", :none, false
+    delimiters = document_math_delimiters(parser)
+    if isempty(delimiters.opener)
+        return DocumentMathConsumptionResult("", :none, false)
     end
 
-    content_start = parser.index + ncodeunits(opener)
-    close_index = findnext(closer, parser.source, content_start)
+    content_start = parser.index + ncodeunits(delimiters.opener)
+    close_index = findnext(delimiters.closer, parser.source, content_start)
     if close_index === nothing
-        return "", :none, false
+        return DocumentMathConsumptionResult("", :none, false)
     end
     content_end = prevind(parser.source, first(close_index))
     parser.index = nextind(parser.source, last(close_index))
     content = content_start > content_end ? "" : parser.source[content_start:content_end]
-    return content, run_kind, true
+    return DocumentMathConsumptionResult(String(content), delimiters.run_kind, true)
 end
 
 """Consume document whitespace beginning with a source newline."""
@@ -418,7 +464,7 @@ function document_shape_triangle_dimensions(options::Dict{String,String})
     (width === nothing || height === nothing || thickness === nothing ||
         filled === nothing) &&
         return nothing
-    return width, height, thickness, filled
+    return DocumentShapeDimensions(width, height, thickness, filled)
 end
 
 """Resolve the four triangle colors from parsed options."""
@@ -435,7 +481,7 @@ function document_shape_triangle_colors(options::Dict{String,String}, default_co
     edge3_color, edge3_ok =
         document_shape_option_color_or(options, "edge3_color", default_color)
     edge3_ok || return nothing
-    return fill_color, edge1_color, edge2_color, edge3_color
+    return DocumentTriangleColors(fill_color, edge1_color, edge2_color, edge3_color)
 end
 
 """Build one validated Euclid triangle payload from parsed options."""
@@ -446,12 +492,12 @@ function document_shape_payload_triangle(options::Dict{String,String})
     color_ok || return nothing
     dims = document_shape_triangle_dimensions(options)
     dims === nothing && return nothing
-    width, height, thickness, filled = dims
     colors = document_shape_triangle_colors(options, color)
     colors === nothing && return nothing
-    fill_color, edge1_color, edge2_color, edge3_color = colors
-    return LatexDocumentShape(:triangle, color, width, height, thickness, filled,
-        0f0, 0f0, fill_color, nothing, edge1_color, edge2_color, edge3_color,
+    return LatexDocumentShape(
+        :triangle, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, colors.fill_color, nothing, colors.edge1_color,
+        colors.edge2_color, colors.edge3_color,
         nothing, nothing)
 end
 
@@ -464,7 +510,7 @@ function document_shape_box_dimensions(options::Dict{String,String})
     (width === nothing || height === nothing ||
         thickness === nothing || filled === nothing) &&
         return nothing
-    return width, height, thickness, filled
+    return DocumentShapeDimensions(width, height, thickness, filled)
 end
 
 """Resolve four edge colors with per-key fallback to default color."""
@@ -477,7 +523,7 @@ function document_shape_box_edge_colors(options::Dict{String,String}, default_co
     edge3_ok || return nothing
     edge4_color, edge4_ok = document_shape_option_color_or(options, "edge4_color", default_color)
     edge4_ok || return nothing
-    return edge1_color, edge2_color, edge3_color, edge4_color
+    return DocumentBoxEdgeColors(edge1_color, edge2_color, edge3_color, edge4_color)
 end
 
 """Build one validated Euclid box payload from parsed options."""
@@ -488,14 +534,15 @@ function document_shape_payload_box(options::Dict{String,String})
     color_ok || return nothing
     dims = document_shape_box_dimensions(options)
     dims === nothing && return nothing
-    width, height, thickness, filled = dims
 
     edge_colors = document_shape_box_edge_colors(options, color)
     edge_colors === nothing && return nothing
-    edge1_color, edge2_color, edge3_color, edge4_color = edge_colors
 
-    return LatexDocumentShape(:box, color, width, height, thickness, filled, 0f0, 0f0,
-        nothing, nothing, edge1_color, edge2_color, edge3_color, edge4_color, nothing)
+    return LatexDocumentShape(
+        :box, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, nothing, nothing, edge_colors.edge1_color,
+        edge_colors.edge2_color, edge_colors.edge3_color,
+        edge_colors.edge4_color, nothing)
 end
 
 """Resolve pentagon width/height/thickness/filled values."""
@@ -507,7 +554,7 @@ function document_shape_pentagon_dimensions(options::Dict{String,String})
     (width === nothing || height === nothing ||
         thickness === nothing || filled === nothing) &&
         return nothing
-    return width, height, thickness, filled
+    return DocumentShapeDimensions(width, height, thickness, filled)
 end
 
 """Resolve pentagon fill and edge colors with per-key fallback."""
@@ -530,7 +577,8 @@ function document_shape_pentagon_colors(options::Dict{String,String}, default_co
     edge5_color, edge5_ok =
         document_shape_option_color_or(options, "edge5_color", default_color)
     edge5_ok || return nothing
-    return fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color
+    return DocumentPentagonColors(
+        fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color)
 end
 
 """Build one validated Euclid pentagon payload from parsed options."""
@@ -541,15 +589,15 @@ function document_shape_payload_pentagon(options::Dict{String,String})
     color_ok || return nothing
     dims = document_shape_pentagon_dimensions(options)
     dims === nothing && return nothing
-    width, height, thickness, filled = dims
 
     colors = document_shape_pentagon_colors(options, color)
     colors === nothing && return nothing
-    fill_color, edge1_color, edge2_color, edge3_color, edge4_color, edge5_color = colors
 
-    return LatexDocumentShape(:pentagon, color, width, height, thickness, filled,
-        0f0, 0f0, fill_color, nothing, edge1_color, edge2_color, edge3_color,
-        edge4_color, edge5_color)
+    return LatexDocumentShape(
+        :pentagon, color, dims.width, dims.height, dims.thickness, dims.filled,
+        0f0, 0f0, colors.fill_color, nothing, colors.edge1_color,
+        colors.edge2_color, colors.edge3_color, colors.edge4_color,
+        colors.edge5_color)
 end
 
 """Build one validated Euclid shape payload from parsed options for basic shapes."""
@@ -642,12 +690,13 @@ function consume_document_math_run!(
     runs::Vector{LatexDocumentRun},
     color::Union{Nothing,OdinJuliaBridge.BridgeColor})
 
-    math_source, run_kind, ok = consume_document_math!(parser)
-    if !ok || isempty(strip(math_source))
+    result = consume_document_math!(parser)
+    if !result.ok || isempty(strip(result.content))
         return false
     end
     push!(runs, LatexDocumentRun(
-        run_kind, String(strip(math_source)), DOCUMENT_STYLE_REGULAR, nothing, color))
+        result.run_kind, String(strip(result.content)), DOCUMENT_STYLE_REGULAR,
+        nothing, color))
     return true
 end
 

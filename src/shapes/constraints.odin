@@ -7,6 +7,38 @@ package shapes
 import "core:math"
 import "core:math/linalg"
 
+//   Uniform handler shape for computing one constraint's error from its targets.
+Constraint_Error_Handler :: proc(
+    constraint: ^Shapes_Constraint,
+    targets: ^Constraint_Targets) -> f32
+
+//   Dispatch table mapping each constraint kind to its error handler.
+CONSTRAINT_ERROR_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Error_Handler{
+    .Floor = get_constraint_error_floor_entry,
+    .SnapToFloor = get_constraint_error_snaptofloor_entry,
+    .SnapPoint = get_constraint_error_snappoint_entry,
+    .Distance = get_constraint_error_distance_entry,
+    .MaxAngle = get_constraint_error_maxangle_entry,
+    .MinAngle = get_constraint_error_minangle_entry,
+    .CenterPivot = get_constraint_error_centerpivot_entry,
+}
+
+//   Uniform handler shape for applying one constraint mutation to its targets.
+Constraint_Apply_Handler :: proc(
+    constraint: ^Shapes_Constraint,
+    targets: ^Constraint_Targets)
+
+//   Dispatch table mapping each constraint kind to its apply handler.
+CONSTRAINT_APPLY_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Apply_Handler{
+    .Floor = apply_constraint_floor_entry,
+    .SnapToFloor = apply_constraint_snaptofloor_entry,
+    .SnapPoint = apply_constraint_snappoint_entry,
+    .Distance = apply_constraint_distance_entry,
+    .MaxAngle = apply_constraint_maxangle_entry,
+    .MinAngle = apply_constraint_minangle_entry,
+    .CenterPivot = apply_constraint_centerpivot_entry,
+}
+
 //   Local resolved constraint targets used by get/apply constraint logic.
 Constraint_Targets :: struct {
     host: ^Shapes_Point,
@@ -87,11 +119,6 @@ apply_all_constraints_to_error :: proc(
     }
 }
 
-//   Uniform handler shape for computing one constraint's error from its targets.
-Constraint_Error_Handler :: proc(
-    constraint: ^Shapes_Constraint,
-    targets: ^Constraint_Targets) -> f32
-
 //   Adapt a single-host constraint error handler to the uniform target shape.
 get_constraint_error_floor_entry :: proc(
     constraint: ^Shapes_Constraint, targets: ^Constraint_Targets) -> f32 {
@@ -150,17 +177,6 @@ get_constraint_error_centerpivot_entry :: proc(
         targets.children[0], targets.children[1], targets.children[2])
 }
 
-//   Dispatch table mapping each constraint kind to its error handler.
-CONSTRAINT_ERROR_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Error_Handler{
-    .Floor = get_constraint_error_floor_entry,
-    .SnapToFloor = get_constraint_error_snaptofloor_entry,
-    .SnapPoint = get_constraint_error_snappoint_entry,
-    .Distance = get_constraint_error_distance_entry,
-    .MaxAngle = get_constraint_error_maxangle_entry,
-    .MinAngle = get_constraint_error_minangle_entry,
-    .CenterPivot = get_constraint_error_centerpivot_entry,
-}
-
 //   Compute the error contribution of a single constraint against system points.
 //
 // Parameters:
@@ -189,11 +205,6 @@ get_constraint_error :: proc(
     }
     return handler(constraint, &targets)
 }
-
-//   Uniform handler shape for applying one constraint mutation to its targets.
-Constraint_Apply_Handler :: proc(
-    constraint: ^Shapes_Constraint,
-    targets: ^Constraint_Targets)
 
 //   Adapt a single-host floor constraint applier to the uniform target shape.
 apply_constraint_floor_entry :: proc(
@@ -250,17 +261,6 @@ apply_constraint_centerpivot_entry :: proc(
     }
     apply_constraint_centerpivot(constraint,
         targets.children[0], targets.children[1], targets.children[2])
-}
-
-//   Dispatch table mapping each constraint kind to its apply handler.
-CONSTRAINT_APPLY_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Apply_Handler{
-    .Floor = apply_constraint_floor_entry,
-    .SnapToFloor = apply_constraint_snaptofloor_entry,
-    .SnapPoint = apply_constraint_snappoint_entry,
-    .Distance = apply_constraint_distance_entry,
-    .MaxAngle = apply_constraint_maxangle_entry,
-    .MinAngle = apply_constraint_minangle_entry,
-    .CenterPivot = apply_constraint_centerpivot_entry,
 }
 
 //   Apply one constraint mutation pass to the referenced points.

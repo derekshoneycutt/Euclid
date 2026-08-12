@@ -45,6 +45,14 @@ Shapes_Pen_Draw :: core.Shapes_Pen_Draw
 Shapes_Compass_Draw :: core.Shapes_Compass_Draw
 Shapes_Draw_Cache_Item :: core.Shapes_Draw_Cache_Item
 
+
+Polygon_Cache_Range_Reservation :: struct {
+    first_vertex:       int,
+    first_triangle:     int,
+    max_triangle_count: int,
+    ok:                 bool,
+}
+
 //   Snapshot current point positions into per-point previous_position for interpolation.
 //
 // Parameters:
@@ -739,13 +747,13 @@ triangulate_polygon_ear_clip :: proc(
 //   Reserve vertex and triangle cache ranges for one polygon draw item.
 reserve_polygon_cache_ranges :: #force_inline proc(
     point_system: ^Shapes_Point_System,
-    vertex_count: int) -> (int, int, int, bool) {
+    vertex_count: int) -> Polygon_Cache_Range_Reservation {
 
     first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices(
         point_system,
         vertex_count)
     if !has_vertex_space {
-        return 0, 0, 0, false
+        return Polygon_Cache_Range_Reservation{0, 0, 0, false}
     }
 
     max_triangle_count := vertex_count - 2
@@ -754,10 +762,15 @@ reserve_polygon_cache_ranges :: #force_inline proc(
         max_triangle_count)
     if !has_triangle_space {
         point_system^.draw_cache.polygon_vertex_count -= vertex_count
-        return 0, 0, 0, false
+        return Polygon_Cache_Range_Reservation{0, 0, 0, false}
     }
 
-    return first_vertex, first_triangle, max_triangle_count, true
+    return Polygon_Cache_Range_Reservation{
+        first_vertex,
+        first_triangle,
+        max_triangle_count,
+        true,
+    }
 }
 
 //   Roll back previously reserved polygon cache ranges.
@@ -959,27 +972,31 @@ cache_push_polygon :: proc(
         return
     }
 
-    first_vertex, first_triangle, max_triangle_count, ok := reserve_polygon_cache_ranges(
-        point_system,
-        vertex_count)
-    if !ok {
+    reservation := reserve_polygon_cache_ranges(point_system, vertex_count)
+    if !reservation.ok {
         return
     }
 
     vertices := point_system^.draw_cache.polygon_vertices[
-        first_vertex:first_vertex + vertex_count]
+        reservation.first_vertex:reservation.first_vertex + vertex_count]
     if !lerped_child_positions(point_system, src, alpha, vertices) {
-        rollback_polygon_cache_ranges(point_system, vertex_count, max_triangle_count)
+        rollback_polygon_cache_ranges(
+            point_system,
+            vertex_count,
+            reservation.max_triangle_count)
         return
     }
 
     triangle_count := triangulate_polygon_ear_clip(
         point_system,
-        first_vertex,
+        reservation.first_vertex,
         vertices,
-        first_triangle)
+        reservation.first_triangle)
 
-    finalize_polygon_triangle_reservation(point_system, first_triangle, triangle_count)
+    finalize_polygon_triangle_reservation(
+        point_system,
+        reservation.first_triangle,
+        triangle_count)
 
     slot, has_slot := draw_cache_next_item_slot(point_system)
     if !has_slot {
@@ -989,9 +1006,9 @@ cache_push_polygon :: proc(
 
     point := Shapes_Polygon_Draw{
         make_draw_base(source_index, src),
-        first_vertex,
+        reservation.first_vertex,
         vertex_count,
-        first_triangle,
+        reservation.first_triangle,
         triangle_count,
     }
     slot^ = point

@@ -27,6 +27,30 @@ Trace_Configuration :: struct {
     output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
 }
 
+//   One CLI category token mapped to its trace category.
+Trace_Category_Token :: struct {
+    name:     string,
+    category: core.Trace_Category,
+}
+
+//   CLI category tokens accepted in the comma-separated selection list.
+TRACE_CATEGORY_TOKENS :: []Trace_Category_Token{
+    {"runtime", .Runtime},
+    {"animation", .Animation},
+    {"geometry", .Geometry},
+    {"tools", .Tools},
+    {"particles", .Particles},
+    {"view", .View},
+}
+
+JSON_ESCAPE_SHORT :: [0x20]string{
+    '\b' = "\\b",
+    '\f' = "\\f",
+    '\n' = "\\n",
+    '\r' = "\\r",
+    '\t' = "\\t",
+}
+
 //   Report whether trace collection is currently enabled and available.
 //
 // Parameters:
@@ -147,25 +171,6 @@ append_builder_text :: proc(buffer: []u8, length: ^int, text: string) -> bool {
     copy(buffer[length^:length^ + len(text_bytes)], text_bytes)
     length^ += len(text_bytes)
     return true
-}
-
-//   Append one JSON-escaped string body without surrounding quotes.
-//
-// Parameters:
-//   - buffer: Destination byte buffer.
-//   - length: Current valid length, updated on success.
-//   - text: Source text to escape and append.
-//
-// Returns:
-//   - ok: true when the escaped body fit and was appended.
-//   Fixed escape sequences for the control characters below 0x20 that have a
-//   short form. Indexed by the control character; empty entries use \u00XX.
-JSON_ESCAPE_SHORT :: [0x20]string{
-    '\b' = "\\b",
-    '\f' = "\\f",
-    '\n' = "\\n",
-    '\r' = "\\r",
-    '\t' = "\\t",
 }
 
 //   Append one JSON string body with escaping, without surrounding quotes.
@@ -553,22 +558,6 @@ assign_run_id :: proc(state: ^core.Trace_State) -> bool {
     state^.run_id_len = copy_trace_text(
         state^.run_id[:], fmt.tprintf("run-%d-%d", pid, timestamp))
     return state^.run_id_len > 0
-}
-
-//   One CLI category token mapped to its trace category.
-Trace_Category_Token :: struct {
-    name:     string,
-    category: core.Trace_Category,
-}
-
-//   CLI category tokens accepted in the comma-separated selection list.
-TRACE_CATEGORY_TOKENS :: []Trace_Category_Token{
-    {"runtime", .Runtime},
-    {"animation", .Animation},
-    {"geometry", .Geometry},
-    {"tools", .Tools},
-    {"particles", .Particles},
-    {"view", .View},
 }
 
 //   Look up one CLI category token, returning false when unrecognized.
@@ -1338,31 +1327,43 @@ append_optional_color_field :: proc(
 //   - brush_size: Optional committed brush size.
 //   - offset: Optional committed offset.
 //   - color: Optional committed color.
+//   Optional fields for one committed point state transition. Each Maybe field
+//   is emitted only when set, so unrelated events leave them nil.
+Trace_Point_Event_Fields :: struct {
+    from_position: Maybe(core.Vector3),
+    to_position:   Maybe(core.Vector3),
+    visible:       Maybe(bool),
+    brush_size:    Maybe(f32),
+    offset:        Maybe(f32),
+    color:         Maybe(core.Bridge_Color),
+}
+
+//   Append optional point-event fields to one payload buffer.
+//
+// Parameters:
+//   - payload_buffer: Destination payload buffer.
+//   - payload_len: Current payload length, updated on success.
+//   - fields: Optional point-event field values.
 //
 // Returns:
 //   - ok: true when all present optional fields were appended.
 append_point_event_optional_fields :: proc(
     payload_buffer: []u8,
     payload_len: ^int,
-    from_position: Maybe(core.Vector3),
-    to_position: Maybe(core.Vector3),
-    visible: Maybe(bool),
-    brush_size: Maybe(f32),
-    offset: Maybe(f32),
-    color: Maybe(core.Bridge_Color)) -> bool {
+    fields: Trace_Point_Event_Fields) -> bool {
 
     return append_optional_vector_field(payload_buffer, payload_len,
-            "from", from_position) &&
+            "from", fields.from_position) &&
         append_optional_vector_field(payload_buffer, payload_len,
-            "to", to_position) &&
+            "to", fields.to_position) &&
         append_optional_bool_field(payload_buffer, payload_len,
-            "visible", visible) &&
+            "visible", fields.visible) &&
         append_optional_float_field(payload_buffer, payload_len,
-            "brush_size", brush_size) &&
+            "brush_size", fields.brush_size) &&
         append_optional_float_field(payload_buffer, payload_len,
-            "offset", offset) &&
+            "offset", fields.offset) &&
         append_optional_color_field(payload_buffer, payload_len,
-            "color", color)
+            "color", fields.color)
 }
 
 //   Record one committed point state transition.
@@ -1384,12 +1385,7 @@ record_point_event :: proc(
     state: ^core.Trace_State,
     event_name: string,
     index: int,
-    from_position: Maybe(core.Vector3),
-    to_position: Maybe(core.Vector3),
-    visible: Maybe(bool),
-    brush_size: Maybe(f32),
-    offset: Maybe(f32),
-    color: Maybe(core.Bridge_Color)) -> bool {
+    fields: Trace_Point_Event_Fields) -> bool {
 
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
@@ -1398,12 +1394,7 @@ record_point_event :: proc(
         !append_point_event_optional_fields(
             payload_buffer,
             &payload_len,
-            from_position,
-            to_position,
-            visible,
-            brush_size,
-            offset,
-            color) ||
+            fields) ||
         !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }

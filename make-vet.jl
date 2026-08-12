@@ -52,6 +52,14 @@ struct JuliaFunctionMetadata
     signature_preview::String
 end
 
+struct JuliaReturnShapeIssue
+    file::String
+    function_name::String
+    line::Int
+    return_count::Int
+    signature_preview::String
+end
+
 struct JuliaComplexityRow
     severity::String
     status::String
@@ -70,7 +78,10 @@ mutable struct OdinProcRow
     nloc::Int
     ccn::Int
     params::Int
+    returns::Int
     forgiven::Bool
+    forgiven_params::Bool
+    forgiven_returns::Bool
     severity::String
     status::String
 end
@@ -119,6 +130,8 @@ const LINE_LENGTH_EXCEPTION_PATTERNS = [
 const ODIN_ANALYZER_PACKAGE = joinpath("tools", "vet")
 const ODIN_COMPLEXITY_BLOCK_THRESHOLD = 15
 const ODIN_COMPLEXITY_WARN_THRESHOLD = 10
+const ODIN_PARAM_BLOCK_THRESHOLD = 8
+const ODIN_RETURN_BLOCK_THRESHOLD = 2
 const ODIN_NLOC_REVIEW_THRESHOLD = 20
 const ODIN_PARAM_REVIEW_THRESHOLD = 5
 
@@ -443,6 +456,20 @@ end
 """Extract function metadata from a JuliaSyntax function node."""
 function metadata_from_function_node(node, rel_file::String)
     function_text = String(JuliaSyntax.sourcetext(node))
+    function_expr, signature = function_expr_and_signature(function_text)
+
+    name, param_count = extract_signature_details(signature)
+    start_line = Int(first(JuliaSyntax.source_location(node)))
+    line_span_count = max(1, length(split(function_text, '\n')))
+    end_line = start_line + line_span_count - 1
+    nloc = max(1, count_nonempty_lines(function_text))
+
+    return JuliaFunctionMetadata(name, rel_file, start_line, end_line, nloc, param_count,
+        short_signature_preview(signature))
+end
+
+"""Return parsed function expression and signature for one function text block."""
+function function_expr_and_signature(function_text::String)
     parsed = JuliaSyntax.parseall(Expr, function_text)
     function_expr = first_parsed_expr(parsed)
 
@@ -454,14 +481,174 @@ function metadata_from_function_node(node, rel_file::String)
         signature = function_expr.args[1]
     end
 
-    name, param_count = extract_signature_details(signature)
-    start_line = Int(first(JuliaSyntax.source_location(node)))
-    line_span_count = max(1, length(split(function_text, '\n')))
-    end_line = start_line + line_span_count - 1
-    nloc = max(1, count_nonempty_lines(function_text))
+    return function_expr, signature
+end
 
-    return JuliaFunctionMetadata(name, rel_file, start_line, end_line, nloc, param_count,
-        short_signature_preview(signature))
+mutable struct JuliaReturnScanState
+    file::String
+    function_name::String
+    function_start_line::Int
+    signature_preview::String
+    current_line::Int
+    issues::Vector{JuliaReturnShapeIssue}
+end
+
+"""Return true when an expression is an explicit positional tuple with arity > 0."""
+function is_positional_tuple_expr(expr)
+    return expr isa Expr && expr.head == :tuple
+end
+
+"""Append explicit tuple-return issues for one function expression."""
+function collect_explicit_tuple_return_issues!(expr, state::JuliaReturnScanState;
+    is_root::Bool=false)
+    if expr isa LineNumberNode
+        state.current_line = Int(expr.line)
+        return
+    end
+
+    if !(expr isa Expr)
+        return
+    end
+
+    if !is_root && (expr.head == :function || is_short_function_assignment(expr))
+        return
+    end
+
+    if expr.head == :return && !isempty(expr.args)
+        value = expr.args[1]
+        if is_positional_tuple_expr(value) && length(value.args) > 2
+            issue_line = state.current_line > 0 ?
+                state.function_start_line + state.current_line - 1 :
+                state.function_start_line
+            push!(state.issues, JuliaReturnShapeIssue(
+                state.file,
+                state.function_name,
+                issue_line,
+                length(value.args),
+                state.signature_preview))
+        end
+    end
+
+    for arg in expr.args
+        if arg isa LineNumberNode
+            state.current_line = Int(arg.line)
+            continue
+        end
+
+        if arg isa Expr
+            collect_explicit_tuple_return_issues!(arg, state)
+        end
+    end
+end
+
+"""Return explicit positional tuple-return issues for one Julia function node."""
+function return_shape_issues_from_function_node(node, rel_file::String)
+    function_text = String(JuliaSyntax.sourcetext(node))
+    function_expr, signature = function_expr_and_signature(function_text)
+    metadata = metadata_from_function_node(node, rel_file)
+    issues = JuliaReturnShapeIssue[]
+    state = JuliaReturnScanState(
+        rel_file,
+        metadata.name,
+        metadata.start_line,
+        short_signature_preview(signature),
+        1,
+        issues)
+
+    if function_expr isa Expr && is_short_function_assignment(function_expr)
+        rhs = function_expr.args[2]
+        if is_positional_tuple_expr(rhs) && length(rhs.args) > 2
+            push!(issues, JuliaReturnShapeIssue(
+                rel_file,
+                metadata.name,
+                metadata.start_line,
+                length(rhs.args),
+                metadata.signature_preview))
+        end
+        return issues
+    end
+
+    collect_explicit_tuple_return_issues!(function_expr, state; is_root=true)
+    return issues
+end
+
+"""Collect explicit tuple-return issues for Julia functions under src/julia."""
+function collect_julia_return_shape_issues(src_dir::String, script_dir::String)
+    julia_root = joinpath(src_dir, "julia")
+    julia_files = sort([path for path in collect_paths(julia_root) if endswith(path, ".jl")])
+    issues = JuliaReturnShapeIssue[]
+    parse_errors = ParserFileError[]
+    function_count = 0
+
+    for file_path in julia_files
+        rel_file = relpath(file_path, script_dir)
+        source = read(file_path, String)
+
+        try
+            syntax_tree = JuliaSyntax.parseall(JuliaSyntax.SyntaxNode, source)
+            function_nodes = Any[]
+            collect_juliasyntax_function_nodes!(syntax_tree, function_nodes)
+            function_count += length(function_nodes)
+
+            for node in function_nodes
+                append!(issues, return_shape_issues_from_function_node(node, rel_file))
+            end
+        catch err
+            push!(parse_errors, ParserFileError(rel_file, sprint(showerror, err)))
+            println("Warning: return-shape scan skipped " * rel_file)
+        end
+    end
+
+    sort!(issues, by=issue -> (issue.file, issue.line, issue.function_name, issue.return_count))
+    return issues, length(julia_files), function_count, parse_errors
+end
+
+"""Render explicit Julia tuple-return issues for vet output."""
+function render_julia_return_shape_issues(issues::Vector{JuliaReturnShapeIssue})
+    lines = String[]
+    push!(lines, "Julia explicit tuple-return table:")
+    push!(lines, "ARITY  FUNCTION  FILE:LINE  SIGNATURE")
+
+    for issue in issues
+        file_line = issue.file * ":" * string(issue.line)
+        push!(lines,
+            lpad(string(issue.return_count), 5) * "  " *
+            issue.function_name * "  " *
+            file_line * "  " *
+            issue.signature_preview)
+    end
+
+    return join(lines, '\n')
+end
+
+"""Run explicit Julia tuple-return analysis and block on arity above 2."""
+function run_julia_return_shape_analysis(src_dir::String, script_dir::String)
+    issues, file_count, function_count, parse_errors =
+        collect_julia_return_shape_issues(src_dir, script_dir)
+
+    if !isempty(issues)
+        println(render_julia_return_shape_issues(issues))
+    else
+        println("Julia explicit tuple-return table: no issues")
+    end
+
+    if !isempty(parse_errors)
+        println("Return-shape parse failures: $(length(parse_errors))")
+        show_count = min(5, length(parse_errors))
+        for index in 1:show_count
+            issue = parse_errors[index]
+            println("  - " * issue.file * " | " * issue.details)
+        end
+        if length(parse_errors) > show_count
+            println("  - ... and $(length(parse_errors) - show_count) more parse failure(s)")
+        end
+    end
+
+    return Dict{String,Any}(
+        "files" => file_count,
+        "functions" => function_count,
+        "issue_count" => length(issues),
+        "parse_failure_count" => length(parse_errors))
 end
 
 """Collect all JuliaSyntax function nodes from a syntax tree."""
@@ -1549,6 +1736,42 @@ function run_julia_parser_metadata_section(src_dir::String, script_dir::String)
         false, false, false, false)
 end
 
+"""Run the explicit Julia tuple-return section and return structured output."""
+function run_julia_return_shape_section(src_dir::String, script_dir::String)
+    value, stdout_text, stderr_text, caught_error = run_captured() do
+        run_julia_return_shape_analysis(src_dir, script_dir)
+    end
+
+    metrics = value isa Dict{String,Any} ? value : Dict{String,Any}()
+    if caught_error !== nothing
+        return build_internal_section_result("julia-return-shape",
+            "Julia return-shape analysis passed.",
+            "Julia return-shape analysis failed to execute.",
+            metrics, stdout_text, stderr_text, caught_error)
+    end
+
+    parse_failure_count = get(metrics, "parse_failure_count", 0)
+    issue_count = get(metrics, "issue_count", 0)
+    if parse_failure_count > 0
+        return VetSectionResult("julia-return-shape", "Fail",
+            "Julia return-shape analysis completed with parse failures.",
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            true, false, false, false)
+    end
+
+    if issue_count > 0
+        return VetSectionResult("julia-return-shape", "Fail",
+            "Julia return-shape analysis found explicit tuple returns above arity 2.",
+            "ok", nothing, stdout_text, stderr_text, metrics,
+            true, false, false, false)
+    end
+
+    return VetSectionResult("julia-return-shape", "Pass",
+        "Julia return-shape analysis passed.",
+        "ok", nothing, stdout_text, stderr_text, metrics,
+        false, false, false, false)
+end
+
 """Run the Julia CodeComplexity section and return structured section output."""
 function run_codecomplexity_section(src_dir::String, script_dir::String)
     value, stdout_text, stderr_text, caught_error = run_captured() do
@@ -1641,11 +1864,25 @@ function parse_odin_analyzer_output(text::String)
     for line in split(text, '\n')
         fields = split(line, '\t')
         tag = fields[1]
-        if tag == "PROC" && length(fields) >= 8
+        if tag == "PROC" && length(fields) >= 11
             push!(proc_rows, OdinProcRow(
                 String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
                 Base.parse(Int, fields[5]), Base.parse(Int, fields[6]),
-                Base.parse(Int, fields[7]), fields[8] == "true", "INFO", "PASS"))
+                Base.parse(Int, fields[7]), Base.parse(Int, fields[8]),
+                fields[9] == "true", fields[10] == "true", fields[11] == "true",
+                "INFO", "PASS"))
+        elseif tag == "PROC" && length(fields) >= 9
+            push!(proc_rows, OdinProcRow(
+                String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
+                Base.parse(Int, fields[5]), Base.parse(Int, fields[6]),
+                Base.parse(Int, fields[7]), Base.parse(Int, fields[8]),
+                fields[9] == "true", false, false, "INFO", "PASS"))
+        elseif tag == "PROC" && length(fields) >= 8
+            push!(proc_rows, OdinProcRow(
+                String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
+                Base.parse(Int, fields[5]), Base.parse(Int, fields[6]),
+                Base.parse(Int, fields[7]), 0,
+                fields[8] == "true", false, false, "INFO", "PASS"))
         elseif tag == "ALLOC" && length(fields) >= 8
             push!(alloc_rows, OdinAllocRow(
                 String(fields[2]), Base.parse(Int, fields[3]), String(fields[4]),
@@ -1664,20 +1901,42 @@ function classify_odin_proc_rows!(rows::Vector{OdinProcRow})
     blocking_count = 0
     warning_count = 0
     forgiven_count = 0
+    param_blocking_count = 0
+    return_blocking_count = 0
 
     for row in rows
-        if row.ccn > ODIN_COMPLEXITY_WARN_THRESHOLD && row.forgiven
+        complexity_warning = row.ccn > ODIN_COMPLEXITY_WARN_THRESHOLD
+        complexity_blocking = row.ccn >= ODIN_COMPLEXITY_BLOCK_THRESHOLD
+        param_blocking = row.params > ODIN_PARAM_BLOCK_THRESHOLD && !row.forgiven_params
+        return_blocking = row.returns > ODIN_RETURN_BLOCK_THRESHOLD &&
+            !row.forgiven_returns
+        has_forgiven_policy =
+            (complexity_warning && row.forgiven) ||
+            (row.params > ODIN_PARAM_BLOCK_THRESHOLD && row.forgiven_params) ||
+            (row.returns > ODIN_RETURN_BLOCK_THRESHOLD && row.forgiven_returns)
+
+        if complexity_warning && row.forgiven && !param_blocking && !return_blocking
             row.severity = "INFO"
             row.status = "FORGIVEN"
             forgiven_count += 1
-        elseif row.ccn >= ODIN_COMPLEXITY_BLOCK_THRESHOLD
+        elseif complexity_blocking || param_blocking || return_blocking
             row.severity = "BLOCK"
             row.status = "FAIL"
             blocking_count += 1
-        elseif row.ccn > ODIN_COMPLEXITY_WARN_THRESHOLD
+            if param_blocking
+                param_blocking_count += 1
+            end
+            if return_blocking
+                return_blocking_count += 1
+            end
+        elseif complexity_warning
             row.severity = "WARN"
             row.status = "WARN"
             warning_count += 1
+        elseif has_forgiven_policy
+            row.severity = "INFO"
+            row.status = "FORGIVEN"
+            forgiven_count += 1
         end
     end
 
@@ -1692,14 +1951,16 @@ function classify_odin_proc_rows!(rows::Vector{OdinProcRow})
     return Dict{String,Any}(
         "blocking_count" => blocking_count,
         "warning_count" => warning_count,
-        "forgiven_count" => forgiven_count)
+        "forgiven_count" => forgiven_count,
+        "param_blocking_count" => param_blocking_count,
+        "return_blocking_count" => return_blocking_count)
 end
 
 """Render the Odin static analysis table for report/console capture."""
 function render_odin_static_table(rows::Vector{OdinProcRow})
     lines = String[]
     push!(lines, "Odin static analysis table:")
-    push!(lines, "SEV  STATUS  NLOC  CCN  PARAM  PROCEDURE  FILE:LINE")
+    push!(lines, "SEV  STATUS  NLOC  CCN  PARAM  RETURN  PROCEDURE  FILE:LINE")
 
     for row in rows
         file_line = "src/" * row.file * ":" * string(row.line)
@@ -1709,6 +1970,7 @@ function render_odin_static_table(rows::Vector{OdinProcRow})
             lpad(string(row.nloc), 5) * " " *
             lpad(string(row.ccn), 4) * " " *
             lpad(string(row.params), 6) * "  " *
+            lpad(string(row.returns), 6) * "  " *
             row.name * "  " *
             file_line)
     end
@@ -1864,8 +2126,10 @@ function run_odin_static_analysis_sections(src_dir::String, script_dir::String)
         "parse_failure_count" => length(parse_failures),
         "over_nloc_review_count" =>
             count(r -> r.nloc > ODIN_NLOC_REVIEW_THRESHOLD, proc_rows),
-        "over_param_review_count" =>
-            count(r -> r.params > ODIN_PARAM_REVIEW_THRESHOLD, proc_rows),
+        "over_param_block_count" =>
+            count(r -> r.params > ODIN_PARAM_BLOCK_THRESHOLD, proc_rows),
+        "over_return_block_count" =>
+            count(r -> r.returns > ODIN_RETURN_BLOCK_THRESHOLD, proc_rows),
         "max_ccn" => isempty(proc_rows) ? 0 : maximum(r -> r.ccn, proc_rows),
         "exit_code" => run_result.exit_code), class_metrics)
 
@@ -1884,7 +2148,7 @@ function run_odin_static_analysis_sections(src_dir::String, script_dir::String)
     elseif blocking_count > 0
         VetSectionResult(analysis_key, "Fail",
             "Odin static analysis reported $blocking_count blocking " *
-            "complexity violation(s).",
+            "policy violation(s) (complexity/params/returns).",
             "ok", run_result.exit_code, analysis_stdout, run_result.stderr,
             analysis_metrics, true, false, false, false)
     elseif warning_count > 0
@@ -2003,6 +2267,9 @@ function run_vet_analysis(script_dir::String, src_dir::String, odin_build_result
 
     println("Running Julia parser metadata extraction...")
     push!(sections, run_julia_parser_metadata_section(src_dir, script_dir))
+
+    println("Running Julia return-shape analysis...")
+    push!(sections, run_julia_return_shape_section(src_dir, script_dir))
 
     println("Running CodeComplexity analysis...")
     push!(sections, run_codecomplexity_section(src_dir, script_dir))

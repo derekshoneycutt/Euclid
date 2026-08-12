@@ -1,3 +1,19 @@
+
+struct MatrixDimsParseResult
+    rows::Int
+    cols::Int
+    ok::Bool
+end
+
+
+struct MatrixRowSeparatorResult
+    consumed::Bool
+    row_cells::Vector{Vector{LatexRun}}
+    cell_runs::Vector{LatexRun}
+    pending_break::Bool
+end
+
+
 """Tokenize source into command/group/script/plain-text tokens."""
 function tokenize_latex(source::String)
     tokens = LatexToken[]
@@ -347,12 +363,12 @@ end
 function parse_matrix_dims_text(text::String)
     parts = split(text, ","; limit=2)
     if length(parts) != 2
-        return 0, 0, false
+        return MatrixDimsParseResult(0, 0, false)
     end
 
     rows, rows_ok = parse_positive_int(parts[1])
     cols, cols_ok = parse_positive_int(parts[2])
-    return rows, cols, rows_ok && cols_ok
+    return MatrixDimsParseResult(rows, cols, rows_ok && cols_ok)
 end
 
 """Return fallback atom used when environment parsing fails."""
@@ -633,16 +649,16 @@ function consume_matrix_row_separator!(
     cell_runs::Vector{LatexRun})
 
     if token.kind != :command || token.text != "\\\\"
-        return false, row_cells, cell_runs, false
+        return MatrixRowSeparatorResult(false, row_cells, cell_runs, false)
     end
 
     idx[] += 1
     if matrix_builders_empty(row_cells, cell_runs)
-        return true, row_cells, cell_runs, true
+        return MatrixRowSeparatorResult(true, row_cells, cell_runs, true)
     end
 
     row_cells, cell_runs = push_matrix_row!(matrix_rows, row_cells, cell_runs)
-    return true, row_cells, cell_runs, true
+    return MatrixRowSeparatorResult(true, row_cells, cell_runs, true)
 end
 
 """Consume one matrix environment end marker and finalize builders when valid."""
@@ -707,12 +723,12 @@ function parse_matrix_rows(
             return matrix_rows, end_ok
         end
 
-        consumed_row_sep, next_row_cells, next_cell_runs, saw_pending_break =
+        separator_result =
             consume_matrix_row_separator!(token, idx, matrix_rows, row_cells, cell_runs)
-        if consumed_row_sep
-            row_cells = next_row_cells
-            cell_runs = next_cell_runs
-            pending_row_break = saw_pending_break
+        if separator_result.consumed
+            row_cells = separator_result.row_cells
+            cell_runs = separator_result.cell_runs
+            pending_row_break = separator_result.pending_break
             continue
         end
 
@@ -930,8 +946,10 @@ end
 
 """Serialize matrix-like run, preserving environment kind and validated dimensions."""
 function serialize_matrix_like_run(run::LatexRun)
-    rows, cols, ok = parse_matrix_dims_text(run.text)
-    if !ok || rows <= 0 || cols <= 0
+    dims = parse_matrix_dims_text(run.text)
+    rows = dims.rows
+    cols = dims.cols
+    if !dims.ok || rows <= 0 || cols <= 0
         if run.segment == :array
             return "\\begin{array}{c}\\end{array}"
         end

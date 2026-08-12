@@ -488,6 +488,7 @@ function dynview_inline_pie_section(
     arc_color::BridgeColor=fill_color,
     outline_stroke::Real=0)
 
+    colors = BridgePieColors(fill_color, arc_color)
     @ccall dynview_inline_pie_section(
         state_ptr::Ptr{Cvoid},
         Cfloat(radius)::Cfloat,
@@ -495,8 +496,7 @@ function dynview_inline_pie_section(
         Cfloat(end_angle_degrees)::Cfloat,
         Int32(style_id)::Int32,
         filled::Bool,
-        fill_color::BridgeColor,
-        arc_color::BridgeColor,
+        colors::BridgePieColors,
         Cfloat(outline_stroke)::Cfloat)::Int32
 end
 function dynview_inline_pie_section(
@@ -558,6 +558,7 @@ function dynview_inline_triangle(
     edge2_color::BridgeColor,
     edge3_color::BridgeColor)
 
+    colors = BridgeTriangleColors(fill_color, edge1_color, edge2_color, edge3_color)
     @ccall dynview_inline_triangle(
         state_ptr::Ptr{Cvoid},
         Cfloat(width)::Cfloat,
@@ -565,10 +566,7 @@ function dynview_inline_triangle(
         Cfloat(stroke)::Cfloat,
         Int32(style_id)::Int32,
         filled::Bool,
-        fill_color::BridgeColor,
-        edge1_color::BridgeColor,
-        edge2_color::BridgeColor,
-        edge3_color::BridgeColor)::Int32
+        colors::BridgeTriangleColors)::Int32
 end
 
 """
@@ -588,16 +586,14 @@ function dynview_inline_box_edges(
     edge3_color::BridgeColor,
     edge4_color::BridgeColor)
 
+    colors = BridgeBoxEdgeColors(edge1_color, edge2_color, edge3_color, edge4_color)
     @ccall dynview_inline_box_edges(
         state_ptr::Ptr{Cvoid},
         Cfloat(width)::Cfloat,
         Cfloat(height)::Cfloat,
         Cfloat(stroke)::Cfloat,
         Int32(style_id)::Int32,
-        edge1_color::BridgeColor,
-        edge2_color::BridgeColor,
-        edge3_color::BridgeColor,
-        edge4_color::BridgeColor)::Int32
+        colors::BridgeBoxEdgeColors)::Int32
 end
 
 """
@@ -620,6 +616,8 @@ function dynview_inline_pentagon(
     edge4_color::BridgeColor,
     edge5_color::BridgeColor)
 
+    colors = BridgePentagonColors(fill_color, edge1_color, edge2_color,
+        edge3_color, edge4_color, edge5_color)
     @ccall dynview_inline_pentagon(
         state_ptr::Ptr{Cvoid},
         Cfloat(width)::Cfloat,
@@ -627,12 +625,7 @@ function dynview_inline_pentagon(
         Cfloat(stroke)::Cfloat,
         Int32(style_id)::Int32,
         filled::Bool,
-        fill_color::BridgeColor,
-        edge1_color::BridgeColor,
-        edge2_color::BridgeColor,
-        edge3_color::BridgeColor,
-        edge4_color::BridgeColor,
-        edge5_color::BridgeColor)::Int32
+        colors::BridgePentagonColors)::Int32
 end
 function dynview_inline_pie_section(
     state_ptr::Ptr{Cvoid},

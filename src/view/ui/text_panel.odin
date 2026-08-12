@@ -49,10 +49,18 @@ draw_view_text_panel :: proc(
         is_dragging_thumb = ui_runtime.text_scroll_dragging,
         drag_offset_y = ui_runtime.text_scroll_drag_off,
     }
-    text_scroll_begin := scroll_container_begin(1001, text_panel,
-        state^.ui_runtime.view_text_scroll_y, content_h, mouse_input,
-        rl.Vector2{}, text_panel, scroll_step * WHEEL_SCROLL_MULTIPLIER,
-        &ui_runtime^.ui_press_owner, text_scroll_state)
+    text_scroll_begin := scroll_container_begin(Scroll_Container_Begin_Params{
+        id = 1001,
+        rect = text_panel,
+        scroll_y_in = state^.ui_runtime.view_text_scroll_y,
+        content_height_hint = content_h,
+        mouse_input = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = text_panel,
+        wheel_step = scroll_step * WHEEL_SCROLL_MULTIPLIER,
+        press_owner = &ui_runtime^.ui_press_owner,
+        state_in = text_scroll_state,
+    })
     text_panel = text_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = text_scroll_begin.scroll_y_out
 
@@ -63,8 +71,12 @@ draw_view_text_panel :: proc(
 
     ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime, view_text,
         text_panel, state^.ui_runtime.view_text_scroll_y,
-        state.font, TEXT_PADDING, TEXT_ROW_HEIGHT, TEXT_WRAP_ADVANCE,
-        TREE_FONT_SIZE, UI_TEXT_COLOR)
+        state.font, ui_dynview.Wrapped_Text_Metrics{
+            padding = TEXT_PADDING,
+            row_height = TEXT_ROW_HEIGHT,
+            wrap_advance = TEXT_WRAP_ADVANCE,
+            font_size = TREE_FONT_SIZE,
+        }, UI_TEXT_COLOR)
 
     _ = view_core.draw_copy_icons(&state^.dynview, text_panel, mouse_input)
 

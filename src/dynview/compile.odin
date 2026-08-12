@@ -4,6 +4,40 @@ import "../core"
 
 import rl "vendor:raylib"
 
+//   Uniform handler shape for one dynview command kind during compilation.
+Compile_Command_Handler ::
+    proc(cache: ^core.Dynview_Compile_Cache, buffer: ^core.Dynview_Command_Buffer,
+        state: ^Dynview_Compile_State, cmd: core.Dynview_Command) -> i32
+
+//   Dispatch table mapping each dynview command kind to its compile handler.
+COMPILE_COMMAND_HANDLERS ::
+    [core.Dynview_Command_Kind]Compile_Command_Handler{
+    .BeginBlock = compile_handle_begin_block,
+    .EndBlock = compile_handle_end_block,
+    .TextRun = compile_text_run,
+    .MathGlyphRun = compile_text_run,
+    .MathBlock = compile_text_run,
+    .ScriptAttachRecursive = compile_script_attach_recursive,
+    .FracRecursive = compile_text_run,
+    .StretchDelimiterRecursive = compile_text_run,
+    .MatrixRecursive = compile_text_run,
+    .LargeOpRecursive = compile_large_op_recursive,
+    .AccentBarRecursive = compile_text_run,
+    .RadicalBarRecursive = compile_text_run,
+    .CopyableTextRun = compile_copyable_text_run,
+    .LineBreak = compile_handle_newline,
+    .Divider = compile_handle_newline,
+    .InlineLine = compile_handle_inline_line,
+    .InlineBox = compile_handle_inline_box,
+    .InlineCircle = compile_handle_inline_circle,
+    .InlineFilledBox = compile_handle_inline_filled_box,
+    .InlineFilledCircle = compile_handle_inline_filled_circle,
+    .InlinePieSection = compile_handle_inline_pie_section,
+    .InlinePerpendicular = compile_handle_inline_box,
+    .InlineTriangle = compile_handle_inline_box,
+    .InlinePentagon = compile_handle_inline_box,
+}
+
 //  Append a compiled byte information to the give cache
 append_compiled_byte :: proc(cache: ^core.Dynview_Compile_Cache, b: u8) -> i32 {
     if cache^.compiled_plain_text_len >= len(cache^.compiled_plain_text) {
@@ -421,11 +455,6 @@ compile_newline_command :: #force_inline proc(
     return DYNVIEW_STATUS_OK
 }
 
-//   Uniform handler shape for one dynview command kind during compilation.
-Compile_Command_Handler ::
-    proc(cache: ^core.Dynview_Compile_Cache, buffer: ^core.Dynview_Command_Buffer,
-        state: ^Dynview_Compile_State, cmd: core.Dynview_Command) -> i32
-
 //   Adapt compile_begin_block (no command buffer) to the uniform table shape.
 compile_handle_begin_block :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -505,35 +534,6 @@ compile_handle_inline_pie_section :: #force_inline proc(
     state: ^Dynview_Compile_State,
     cmd: core.Dynview_Command) -> i32 {
     return compile_inline_pie_section(state, cmd)
-}
-
-//   Dispatch table mapping each dynview command kind to its compile handler.
-COMPILE_COMMAND_HANDLERS ::
-    [core.Dynview_Command_Kind]Compile_Command_Handler{
-    .BeginBlock = compile_handle_begin_block,
-    .EndBlock = compile_handle_end_block,
-    .TextRun = compile_text_run,
-    .MathGlyphRun = compile_text_run,
-    .MathBlock = compile_text_run,
-    .ScriptAttachRecursive = compile_script_attach_recursive,
-    .FracRecursive = compile_text_run,
-    .StretchDelimiterRecursive = compile_text_run,
-    .MatrixRecursive = compile_text_run,
-    .LargeOpRecursive = compile_large_op_recursive,
-    .AccentBarRecursive = compile_text_run,
-    .RadicalBarRecursive = compile_text_run,
-    .CopyableTextRun = compile_copyable_text_run,
-    .LineBreak = compile_handle_newline,
-    .Divider = compile_handle_newline,
-    .InlineLine = compile_handle_inline_line,
-    .InlineBox = compile_handle_inline_box,
-    .InlineCircle = compile_handle_inline_circle,
-    .InlineFilledBox = compile_handle_inline_filled_box,
-    .InlineFilledCircle = compile_handle_inline_filled_circle,
-    .InlinePieSection = compile_handle_inline_pie_section,
-    .InlinePerpendicular = compile_handle_inline_box,
-    .InlineTriangle = compile_handle_inline_box,
-    .InlinePentagon = compile_handle_inline_box,
 }
 
 //   Compile one command into cache and enforce the ordering contract.
@@ -617,16 +617,15 @@ rebuild_one_copy_hit_target :: proc(
     scroll_y, text_padding, icon_size, icon_x_pad: f32,
     last_hover_bottom: f32) -> f32 {
 
-    row_start, row_end, has_visible_items :=
-        layout_item_line_span_for_block(cache, block.block_id)
-    if !has_visible_items || row_end >= cache^.layout_line_count {
+    line_span := layout_item_line_span_for_block(cache, block.block_id)
+    if !line_span.has_visible_items || line_span.last_line >= cache^.layout_line_count {
         return last_hover_bottom
     }
 
     panel_top := panel.y
     panel_bottom := panel.y + panel.height
-    start_line := cache^.layout_lines[row_start]
-    end_line := cache^.layout_lines[row_end]
+    start_line := cache^.layout_lines[line_span.first_line]
+    end_line := cache^.layout_lines[line_span.last_line]
     row_top := panel.y + text_padding + start_line.y_offset - scroll_y
     row_bottom := panel.y + text_padding + end_line.y_offset +
         end_line.line_height - scroll_y

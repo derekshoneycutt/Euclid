@@ -244,12 +244,10 @@ trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
         state,
         "point.position_changed",
         14,
-        app_core.Vector3{0.25, 0.40, 0.0},
-        app_core.Vector3{0.50, 0.40, 0.0},
-        nil,
-        nil,
-        nil,
-        nil))
+        app_trace.Trace_Point_Event_Fields{
+            from_position = app_core.Vector3{0.25, 0.40, 0.0},
+            to_position = app_core.Vector3{0.50, 0.40, 0.0},
+        }))
     testing.expect(t, app_trace.record_tool_event(
         state,
         "pen.visibility_changed",

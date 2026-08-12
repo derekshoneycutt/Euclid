@@ -11,6 +11,70 @@ import "../trace"
 SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
 SCENE_COMMAND_POINT_BATCH_CAPACITY :: core.SCENE_COMMAND_POINT_BATCH_CAPACITY
 
+//   Per-kind validator shape: report whether one command is valid against state.
+Scene_Command_Validator :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool
+
+//   Dispatch table mapping each scene command kind to its validator. The enum key
+//   makes the table exhaustive at compile time.
+SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
+    .Set_Point_Position = validate_command_point_index,
+    .Set_Point_Color = validate_command_point_index,
+    .Set_Point_Brush = validate_command_point_index,
+    .Set_Point_Offset = validate_command_point_index,
+    .Show_Point = validate_command_point_index,
+    .Hide_Point = validate_command_point_index,
+    .Hide_Point_Batch = validate_command_hide_point_batch,
+    .Lock_Pen_Joint1 = validate_command_lock_pen_joint1,
+    .Move_Pen_Joint2 = validate_command_move_pen_joint2,
+    .Set_Pen_Active = validate_command_pen_host,
+    .Show_Pen = validate_command_pen_host,
+    .Hide_Pen = validate_command_pen_host,
+    .Hide_Compass = validate_command_compass_host,
+    .Show_Compass = validate_command_compass_host,
+    .Set_Compass_Active = validate_command_compass_host,
+    .Lock_Compass_Joint1 = validate_command_lock_compass_joint1,
+    .Lock_Compass_Joint2 = validate_command_lock_compass_joint2,
+    .Set_Animation_Meta = validate_command_animation_meta,
+    .Set_Drawing_Sound_Enabled = validate_command_noop,
+    .Simulate_Drawing_Sound = validate_command_noop,
+    .Emit_Trailing_Particle = validate_command_noop,
+    .Emit_Flicker_Particle = validate_command_noop,
+    .Notify_Animation_Cycle_Boundary = validate_command_noop,
+}
+
+//   Per-kind applier shape: apply one validated command against canonical state.
+Scene_Command_Applier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command)
+
+//   Dispatch table mapping each scene command kind to its applier. The enum key
+//   makes the table exhaustive at compile time.
+SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
+    .Set_Point_Position = apply_set_point_position,
+    .Set_Point_Color = apply_set_point_color,
+    .Set_Point_Brush = apply_set_point_brush,
+    .Set_Point_Offset = apply_set_point_offset,
+    .Show_Point = apply_show_point,
+    .Hide_Point = apply_hide_point,
+    .Hide_Point_Batch = apply_hide_point_batch,
+    .Lock_Pen_Joint1 = apply_lock_pen_joint1,
+    .Move_Pen_Joint2 = apply_move_pen_joint2,
+    .Set_Pen_Active = apply_set_pen_active,
+    .Show_Pen = apply_show_pen,
+    .Hide_Pen = apply_hide_pen,
+    .Hide_Compass = apply_hide_compass,
+    .Show_Compass = apply_show_compass,
+    .Set_Compass_Active = apply_set_compass_active,
+    .Lock_Compass_Joint1 = apply_lock_compass_joint1,
+    .Lock_Compass_Joint2 = apply_lock_compass_joint2,
+    .Set_Animation_Meta = apply_set_animation_meta,
+    .Set_Drawing_Sound_Enabled = apply_set_drawing_sound_enabled,
+    .Simulate_Drawing_Sound = apply_simulate_drawing_sound,
+    .Emit_Trailing_Particle = apply_emit_trailing_particle,
+    .Emit_Flicker_Particle = apply_emit_flicker_particle,
+    .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
+}
+
 // Core owns these data shapes because they are referenced by Euclid_General_State.
 // Bridge owns their capture, validation, and commit behavior.
 Scene_Command_Kind :: core.Scene_Command_Kind
@@ -344,38 +408,6 @@ validate_command_noop :: proc(
     return true
 }
 
-//   Per-kind validator shape: report whether one command is valid against state.
-Scene_Command_Validator :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool
-
-//   Dispatch table mapping each scene command kind to its validator. The enum key
-//   makes the table exhaustive at compile time.
-SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
-    .Set_Point_Position = validate_command_point_index,
-    .Set_Point_Color = validate_command_point_index,
-    .Set_Point_Brush = validate_command_point_index,
-    .Set_Point_Offset = validate_command_point_index,
-    .Show_Point = validate_command_point_index,
-    .Hide_Point = validate_command_point_index,
-    .Hide_Point_Batch = validate_command_hide_point_batch,
-    .Lock_Pen_Joint1 = validate_command_lock_pen_joint1,
-    .Move_Pen_Joint2 = validate_command_move_pen_joint2,
-    .Set_Pen_Active = validate_command_pen_host,
-    .Show_Pen = validate_command_pen_host,
-    .Hide_Pen = validate_command_pen_host,
-    .Hide_Compass = validate_command_compass_host,
-    .Show_Compass = validate_command_compass_host,
-    .Set_Compass_Active = validate_command_compass_host,
-    .Lock_Compass_Joint1 = validate_command_lock_compass_joint1,
-    .Lock_Compass_Joint2 = validate_command_lock_compass_joint2,
-    .Set_Animation_Meta = validate_command_animation_meta,
-    .Set_Drawing_Sound_Enabled = validate_command_noop,
-    .Simulate_Drawing_Sound = validate_command_noop,
-    .Emit_Trailing_Particle = validate_command_noop,
-    .Emit_Flicker_Particle = validate_command_noop,
-    .Notify_Animation_Cycle_Boundary = validate_command_noop,
-}
-
 //   Report whether a batch is structurally usable before per-command validation.
 // Rejects nil inputs, stale animation identity, truncated lists, and overflow.
 scene_command_batch_wellformed :: proc(
@@ -420,7 +452,10 @@ apply_set_point_position :: proc(
         state, command^.point_index, command^.position)
     _ = trace.record_point_event(
         &state^.trace_state, "point.position_changed", command^.point_index,
-        previous_position, command^.position, nil, nil, nil, nil)
+        trace.Trace_Point_Event_Fields{
+            from_position = previous_position,
+            to_position = command^.position,
+        })
 }
 
 //   Apply one set-point-color command and record its style-change event.
@@ -429,7 +464,7 @@ apply_set_point_color :: proc(
     set_point_color(state, i32(command^.point_index), command^.color)
     _ = trace.record_point_event(
         &state^.trace_state, "point.style_changed", command^.point_index,
-        nil, nil, nil, nil, nil, command^.color)
+        trace.Trace_Point_Event_Fields{color = command^.color})
 }
 
 //   Apply one set-point-brush command and record its style-change event.
@@ -438,7 +473,7 @@ apply_set_point_brush :: proc(
     set_point_brush(state, i32(command^.point_index), command^.scalar)
     _ = trace.record_point_event(
         &state^.trace_state, "point.style_changed", command^.point_index,
-        nil, nil, nil, command^.scalar, nil, nil)
+        trace.Trace_Point_Event_Fields{brush_size = command^.scalar})
 }
 
 //   Apply one set-point-offset command and record its style-change event.
@@ -447,7 +482,7 @@ apply_set_point_offset :: proc(
     _ = set_point_offset(state, i32(command^.point_index), command^.scalar)
     _ = trace.record_point_event(
         &state^.trace_state, "point.style_changed", command^.point_index,
-        nil, nil, nil, nil, command^.scalar, nil)
+        trace.Trace_Point_Event_Fields{offset = command^.scalar})
 }
 
 //   Apply one show-point command and record its visibility-change event.
@@ -456,7 +491,7 @@ apply_show_point :: proc(
     show_point(state, i32(command^.point_index))
     _ = trace.record_point_event(
         &state^.trace_state, "point.visibility_changed", command^.point_index,
-        nil, nil, true, nil, nil, nil)
+        trace.Trace_Point_Event_Fields{visible = true})
 }
 
 //   Apply one hide-point command and record its visibility-change event.
@@ -465,7 +500,7 @@ apply_hide_point :: proc(
     hide_point(state, i32(command^.point_index))
     _ = trace.record_point_event(
         &state^.trace_state, "point.visibility_changed", command^.point_index,
-        nil, nil, false, nil, nil, nil)
+        trace.Trace_Point_Event_Fields{visible = false})
 }
 
 //   Apply one hide-point-batch command.
@@ -603,38 +638,6 @@ apply_emit_flicker_particle :: proc(
 apply_notify_animation_cycle_boundary :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     notify_animation_cycle_boundary_local(state)
-}
-
-//   Per-kind applier shape: apply one validated command against canonical state.
-Scene_Command_Applier :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command)
-
-//   Dispatch table mapping each scene command kind to its applier. The enum key
-//   makes the table exhaustive at compile time.
-SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
-    .Set_Point_Position = apply_set_point_position,
-    .Set_Point_Color = apply_set_point_color,
-    .Set_Point_Brush = apply_set_point_brush,
-    .Set_Point_Offset = apply_set_point_offset,
-    .Show_Point = apply_show_point,
-    .Hide_Point = apply_hide_point,
-    .Hide_Point_Batch = apply_hide_point_batch,
-    .Lock_Pen_Joint1 = apply_lock_pen_joint1,
-    .Move_Pen_Joint2 = apply_move_pen_joint2,
-    .Set_Pen_Active = apply_set_pen_active,
-    .Show_Pen = apply_show_pen,
-    .Hide_Pen = apply_hide_pen,
-    .Hide_Compass = apply_hide_compass,
-    .Show_Compass = apply_show_compass,
-    .Set_Compass_Active = apply_set_compass_active,
-    .Lock_Compass_Joint1 = apply_lock_compass_joint1,
-    .Lock_Compass_Joint2 = apply_lock_compass_joint2,
-    .Set_Animation_Meta = apply_set_animation_meta,
-    .Set_Drawing_Sound_Enabled = apply_set_drawing_sound_enabled,
-    .Simulate_Drawing_Sound = apply_simulate_drawing_sound,
-    .Emit_Trailing_Particle = apply_emit_trailing_particle,
-    .Emit_Flicker_Particle = apply_emit_flicker_particle,
-    .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
 }
 
 //   Validate and apply one completed batch in original callback order.

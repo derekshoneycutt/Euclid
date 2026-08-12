@@ -18,6 +18,21 @@ Harness_Options :: struct {
     steps: int,
 }
 
+//   One `--name=value` harness option mapped to its setter.
+Harness_Option :: struct {
+    prefix: string,
+    set:    Harness_Option_Setter,
+}
+
+//   All recognized harness options, matched by prefix.
+HARNESS_OPTIONS :: []Harness_Option{
+    {"--asset-root=", set_asset_root_option},
+    {"--animation-id=", set_animation_id_option},
+    {"--trace-output=", set_trace_output_option},
+    {"--scenario=", set_scenario_option},
+    {"--steps=", set_steps_option},
+}
+
 //   Print the supported headless harness options.
 print_usage :: proc() {
     fmt.println(
@@ -70,21 +85,6 @@ set_steps_option :: proc(options: ^Harness_Options, value: string) -> bool {
     return true
 }
 
-//   One `--name=value` harness option mapped to its setter.
-Harness_Option :: struct {
-    prefix: string,
-    set:    Harness_Option_Setter,
-}
-
-//   All recognized harness options, matched by prefix.
-HARNESS_OPTIONS :: []Harness_Option{
-    {"--asset-root=", set_asset_root_option},
-    {"--animation-id=", set_animation_id_option},
-    {"--trace-output=", set_trace_output_option},
-    {"--scenario=", set_scenario_option},
-    {"--steps=", set_steps_option},
-}
-
 //   Apply one argument to the options block, returning false when unrecognized.
 apply_harness_arg :: proc(options: ^Harness_Options, arg: string) -> bool {
     for option in HARNESS_OPTIONS {
@@ -120,9 +120,9 @@ main :: proc() {
         os.exit(1)
     }
 
-    files.set_asset_root_override(options.asset_root)
-    defer files.clear_asset_root_override()
-    if !files.reload_packaged_assets_root() {
+    asset_root_config := files.make_asset_root_config(options.asset_root)
+    defer files.destroy_asset_root_config(&asset_root_config)
+    if !files.reload_packaged_assets_root_with_config(&asset_root_config) {
         fmt.eprintln("Failed to refresh packaged assets for harness run.")
         os.exit(1)
     }

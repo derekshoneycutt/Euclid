@@ -184,19 +184,36 @@ slider_knob_draw_style :: proc(
 }
 
 
-//   Render and update a reusable integer slider control.
-draw_settings_integer_slider :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
+//   Inputs for one reusable integer slider control: placement, pointer input,
+//   shared UI/press state, label, value cell, and the allowed range, grouped so
+//   the draw call passes one coherent value.
+Integer_Slider_Params :: struct {
+    panel:       rl.Rectangle,
+    row_y:       f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    press_id: int,
-    label: string,
-    value: ^int,
-    min_value, max_value: int,
-    font: rl.Font) {
+    ui_runtime:  ^core.Euclid_UI_Runtime_State,
+    press_id:    int,
+    label:       string,
+    value:       ^int,
+    min_value:   int,
+    max_value:   int,
+    font:        rl.Font,
+}
 
-    view_core.ui_text(label, int(panel.x + SETTINGS_PANEL_INSET),
+//   Render and update a reusable integer slider control.
+draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
+
+    panel := params.panel
+    row_y := params.row_y
+    mouse_input := params.mouse_input
+    ui_runtime := params.ui_runtime
+    press_id := params.press_id
+    value := params.value
+    min_value := params.min_value
+    max_value := params.max_value
+    font := params.font
+
+    view_core.ui_text(params.label, int(panel.x + SETTINGS_PANEL_INSET),
         int(row_y), UI_TEXT_COLOR, font)
 
     track := slider_track_rect(panel, row_y)

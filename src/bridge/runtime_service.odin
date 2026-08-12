@@ -22,6 +22,18 @@ VIEW_SNAPSHOT_TEXT_CAPACITY :: core.VIEW_SNAPSHOT_TEXT_CAPACITY
 ANIMATION_TICK_SLOT_COUNT :: core.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
 
+//   Dispatch table mapping each Julia event kind to its completion handler.
+//   Initialized and Invoke_Complete need no handler and map to nil.
+JULIA_EVENT_HANDLERS ::
+    [Julia_Event_Kind]proc(service: ^Julia_Runtime_Service, event: Julia_Event){
+    .Initialized = nil,
+    .Invoke_Complete = nil,
+    .Scratchpad_Complete = julia_event_on_scratchpad,
+    .View_Snapshot_Complete = julia_event_on_view_snapshot,
+    .Animation_Tick_Complete = julia_event_on_animation_tick,
+    .Shutdown_Complete = julia_event_on_shutdown,
+}
+
 // Core owns service storage because Euclid_General_State holds a concrete service pointer.
 // This package owns queue policy, worker behavior, publication, and lifecycle transitions.
 Julia_Request_Kind :: core.Julia_Request_Kind
@@ -713,18 +725,6 @@ julia_event_on_view_snapshot :: proc(
 julia_event_on_animation_tick :: proc(
     service: ^Julia_Runtime_Service, event: Julia_Event) {
     service^.animation_tick_pending = false
-}
-
-//   Dispatch table mapping each Julia event kind to its completion handler.
-//   Initialized and Invoke_Complete need no handler and map to nil.
-JULIA_EVENT_HANDLERS ::
-    [Julia_Event_Kind]proc(service: ^Julia_Runtime_Service, event: Julia_Event){
-    .Initialized = nil,
-    .Invoke_Complete = nil,
-    .Scratchpad_Complete = julia_event_on_scratchpad,
-    .View_Snapshot_Complete = julia_event_on_view_snapshot,
-    .Animation_Tick_Complete = julia_event_on_animation_tick,
-    .Shutdown_Complete = julia_event_on_shutdown,
 }
 
 //   Record a failed Julia event and fail the lifecycle on terminal events.
