@@ -271,6 +271,61 @@ include_packaged_script_failure :: proc(exit_on_failure: bool) -> bool {
     return false
 }
 
+//   Resolve the packaged Julia project directory that owns Project.toml.
+resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, bool) {
+    project_path := files.packaged_asset_path("julia", context.temp_allocator)
+    if len(project_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia project path.")
+        fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
+        return "", include_packaged_script_failure(exit_on_failure)
+    }
+
+    return project_path, true
+}
+
+//   Resolve the Julia `Pkg.activate` function used to activate the packaged project.
+resolve_pkg_activate_function :: proc(
+    exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
+    pkg_value := julialib.jl_eval_string("import Pkg; Pkg")
+    if pkg_value == nil || julialib.jl_exception_occurred() != nil {
+        fmt.eprintln("Failed to resolve Julia Pkg module.")
+        print_julia_exception("resolve Julia Pkg module")
+        return nil, include_packaged_script_failure(exit_on_failure)
+    }
+
+    pkg_module := (^julialib.jl_module_t)(pkg_value)
+    activate_fn := julialib.jl_get_function(pkg_module, "activate")
+    if activate_fn == nil {
+        fmt.eprintln("Failed to resolve Pkg.activate from the Julia Pkg module.")
+        return nil, include_packaged_script_failure(exit_on_failure)
+    }
+
+    return activate_fn, true
+}
+
+//   Activate the packaged Julia project before loading script.jl through Main.include.
+activate_packaged_julia_project :: proc(
+    project_path: string,
+    exit_on_failure: bool) -> bool {
+
+    activate_fn, activate_ok := resolve_pkg_activate_function(exit_on_failure)
+    if !activate_ok {
+        return false
+    }
+
+    project_cstr := strings.clone_to_cstring(project_path, context.temp_allocator)
+    project_value := julialib.jl_cstr_to_string(project_cstr)
+    activate_result := julialib.jl_call1(activate_fn, project_value)
+    if julialib.jl_exception_occurred() != nil || activate_result == nil {
+        fmt.eprintln("Failed to activate packaged Julia project via Pkg.activate(path).")
+        fmt.eprintln("Resolved project path: ", project_path)
+        print_julia_exception("activate packaged Julia project")
+        return include_packaged_script_failure(exit_on_failure)
+    }
+
+    return true
+}
+
 //   Resolve the packaged Julia script path needed for Main.include.
 resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
     script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
@@ -326,6 +381,14 @@ call_include_packaged_script :: proc(
 // Notes:
 //   - When exit_on_failure is true, unrecoverable include errors terminate the process.
 include_packaged_script :: proc(exit_on_failure: bool) -> bool {
+    project_path, project_ok := resolve_packaged_julia_project_path(exit_on_failure)
+    if !project_ok {
+        return false
+    }
+    if !activate_packaged_julia_project(project_path, exit_on_failure) {
+        return false
+    }
+
     script_path, path_ok := resolve_packaged_script_include_path(exit_on_failure)
     if !path_ok {
         return false
