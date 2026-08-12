@@ -119,7 +119,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Of quadrilateral figures, a square is that which is both equilateral and right-angled; ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Square}
 
-Of quadrilateral figures, a square is that which is both equilateral and right-angled; ..."""
+Of quadrilateral figures, a square \euclidbox[height=2,width=2,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=palevioletred1,edge4_color=palevioletred1] is that which is both equilateral \euclidline[color=palevioletred1,length=3,thickness=4] and right-angled \euclidangle[color=steelblue,radius=2,thickness=2]; ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

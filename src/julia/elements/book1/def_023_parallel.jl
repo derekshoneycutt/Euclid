@@ -46,7 +46,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Parallel straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Parallel Straight Lines}
 
-Parallel straight lines are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
+Parallel straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4] are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -73,7 +73,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Further, of trilateral figures, ... an obtuse-angled triangle that which has an obtuse angle, ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse-Angled Triangle}
 
-Further, of trilateral figures, ... an obtuse-angled triangle that which has an obtuse angle, ..."""
+Further, of trilateral figures, ... an obtuse-angled triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=khaki3] that which has an obtuse angle \euclidangle[color=steelblue,radius=2,end=120,filled], ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

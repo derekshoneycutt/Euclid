@@ -81,7 +81,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Rectilineal figures are those which are contained by straight lines, trilateral figures being those contained by three..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Trilateral}
 
-Rectilineal figures are those which are contained by straight lines, trilateral figures being those contained by three..."""
+Rectilineal figures are those which are contained by straight lines, trilateral figures \euclidtriangle[height=2,width=3,color=steelblue,filled] being those contained by three..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

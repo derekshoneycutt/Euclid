@@ -47,7 +47,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Of trilateral figures, ... and a scalene triangle that which has its three sides unequal."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Scalene Triangle}
 
-Of trilateral figures, ... and a scalene triangle that which has its three sides unequal."""
+Of trilateral figures, ... and a scalene triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3] that which has its three sides \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4] unequal."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

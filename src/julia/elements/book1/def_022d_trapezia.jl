@@ -43,7 +43,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 And let quadrilateral figures besides these be called trapezia."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Trapezia}
 
-And let quadrilateral figures besides these be called trapezia."""
+And let quadrilateral figures besides these be called trapezia \euclidbox[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=grey60]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

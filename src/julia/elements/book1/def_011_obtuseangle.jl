@@ -74,7 +74,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 An obtuse angle is an angle greater than a right angle."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse Angle}
 
-An obtuse angle \euclidangle[color=khaki3,radius=2,end=120,filled]  is an angle greater than a right angle."""
+An obtuse angle \euclidangle[color=khaki3,radius=2,end=120,filled] is an angle greater than a right angle."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

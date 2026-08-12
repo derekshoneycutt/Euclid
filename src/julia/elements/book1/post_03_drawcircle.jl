@@ -55,7 +55,7 @@ To describe a circle with any center and distance."""
 
 \textit{Let the following be postulated:}
 
-To describe a circle\euclidcircle[color=steelblue,size=1,thickness=2] with any center \euclidpoint[color=palevioletred1,size=1] and distance."""
+To describe a circle \euclidcircle[color=steelblue,size=1,thickness=2] with any center \euclidpoint[color=palevioletred1,size=1] and distance."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -341,7 +341,7 @@ draw_pentagon_shape :: proc(
 
     if filled {
         for i in 1..<4 {
-            rl.DrawTriangle(points[0], points[i], points[i + 1], colors.fill)
+            rl.DrawTriangle(points[i], points[0], points[i + 1], colors.fill)
         }
     }
 

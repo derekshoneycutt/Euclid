@@ -119,7 +119,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Of quadrilateral figures, ... an oblong that which is right-angled but not equilateral; ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Oblong}
 
-Of quadrilateral figures, ... an oblong that which is right-angled but not equilateral; ..."""
+Of quadrilateral figures, ... an oblong \euclidbox[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=palevioletred1] that which is right-angled \euclidangle[color=steelblue,radius=2,thickness=2] but not equilateral \euclidline[color=palevioletred1,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4]; ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

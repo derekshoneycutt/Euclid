@@ -130,7 +130,7 @@ That all right angles are equal to one another."""
 
 \textit{Let the following be postulated:}
 
-That all right angles are equal to one another."""
+That all right angles \euclidangle[color=grey60,radius=2,thickness=2] are equal to one another."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -131,7 +131,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Further, of trilateral figures, ... an acute-angled triangle that which has its three angles acute."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Acute-Angled Triangle}
 
-Further, of trilateral figures, ... an acute-angled triangle that which has its three angles acute."""
+Further, of trilateral figures, ... an acute-angled triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=palevioletred1] that which has its three angles acute \euclidangle[color=steelblue,radius=2,end=60,filled]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

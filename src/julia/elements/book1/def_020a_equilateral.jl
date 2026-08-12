@@ -51,7 +51,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Of trilateral figures, an equilateral triangle is that which has its three sides equal, ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Equilateral Triangle}
 
-Of trilateral figures, an equilateral triangle is that which has its three sides equal, ..."""
+Of trilateral figures, an equilateral triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=steelblue,edge3_color=steelblue]  is that which has its three sides equal \euclidline[color=steelblue,length=3,thickness=4], ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

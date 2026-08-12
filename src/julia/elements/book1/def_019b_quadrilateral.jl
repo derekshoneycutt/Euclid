@@ -82,7 +82,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Rectilineal figures are those which are contained by straight lines, ... quadrilateral those contained by four, ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Quadrilateral}
 
-Rectilineal figures are those which are contained by straight lines, ... quadrilateral those contained by four, ..."""
+Rectilineal figures are those which are contained by straight lines, ... quadrilateral \euclidbox[height=2,width=2,color=steelblue,filled] those contained by four, ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

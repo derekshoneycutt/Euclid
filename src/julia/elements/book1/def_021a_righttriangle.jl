@@ -68,7 +68,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Further, of trilateral figures, a right-angled triangle is that which has a right angle, ..."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Right-Angled Triangle}
 
-Further, of trilateral figures, a right-angled triangle is that which has a right angle, ..."""
+Further, of trilateral figures, a right-angled triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=khaki3] is that which has a right angle \euclidangle[color=steelblue,radius=2,thickness=2], ..."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

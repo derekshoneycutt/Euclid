@@ -1512,28 +1512,26 @@ draw_cached_inline_advanced_item :: #force_inline proc(
             Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
     case .InlineTriangle:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-        base_color := item.brush_color
         draw_triangle_shape(rect,
             item.shape_is_filled,
             Triangle_Colors{
-                base_color,
-                shape_edge_color_or(item.shape_edge_color_1, base_color),
-                shape_edge_color_or(item.shape_edge_color_2, base_color),
-                shape_edge_color_or(item.shape_edge_color_3, base_color),
+                color,
+                shape_edge_color_or(item.shape_edge_color_1, color),
+                shape_edge_color_or(item.shape_edge_color_2, color),
+                shape_edge_color_or(item.shape_edge_color_3, color),
             },
             max(1.0, item.inline_atom_stroke))
     case .InlinePentagon:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-        base_color := item.brush_color
         draw_pentagon_shape(rect,
             item.shape_is_filled,
             Pentagon_Colors{
-                base_color,
-                shape_edge_color_or(item.shape_edge_color_1, base_color),
-                shape_edge_color_or(item.shape_edge_color_2, base_color),
-                shape_edge_color_or(item.shape_edge_color_3, base_color),
-                shape_edge_color_or(item.shape_edge_color_4, base_color),
-                shape_edge_color_or(item.shape_edge_color_5, base_color),
+                color,
+                shape_edge_color_or(item.shape_edge_color_1, color),
+                shape_edge_color_or(item.shape_edge_color_2, color),
+                shape_edge_color_or(item.shape_edge_color_3, color),
+                shape_edge_color_or(item.shape_edge_color_4, color),
+                shape_edge_color_or(item.shape_edge_color_5, color),
             },
             max(1.0, item.inline_atom_stroke))
     case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
