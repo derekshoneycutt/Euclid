@@ -784,7 +784,8 @@ flow_consume_inline_pie_section :: proc(
             wedge_height := max(1.0, bounds.y_max - bounds.y_min)
             center := rl.Vector2{
                 atom_x + (-bounds.x_min),
-                row_y + draw_ctx^.text_row_height * 0.58 - wedge_height * 0.5 + (-bounds.y_min),
+                row_y + draw_ctx^.text_row_height * 0.58 -
+                    wedge_height * 0.5 + (-bounds.y_min),
             }
             fill_color := command_draw_color(cmd, style)
             outline_color := cmd.has_outline_color ? cmd.outline_color : style.color

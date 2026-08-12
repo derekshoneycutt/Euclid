@@ -800,7 +800,8 @@ draw_stretch_delimiter_text_fallback :: #force_inline proc(
     stretch_scale := max(1.0, params.content_height / max(1.0, params.font_size))
     delimiter_font_size := max(1.0, params.font_size * stretch_scale)
     delim_ascent, _ := dynview.style_ascent_descent(params.style, delimiter_font_size)
-    resolved_font := resolve_font_for_style(params.state, params.style, params.fallback_font)
+    resolved_font :=
+        resolve_font_for_style(params.state, params.style, params.fallback_font)
     view_core.ui_text_f32(delimiter, params.draw_x, params.baseline_y - delim_ascent,
         params.style.color, resolved_font, delimiter_font_size)
     _ = width

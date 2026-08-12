@@ -5,7 +5,9 @@ on:
     paths:
       - ".github/workflows/wiki.yml"
       - "docs/wiki/Guides/**"
-      - "make.jl"
+      - "Makefile"
+      - "make.ps1"
+      - "configure"
       - "src/**"
       - "tools/**"
   push:
@@ -14,7 +16,9 @@ on:
     paths:
       - ".github/workflows/wiki.yml"
       - "docs/wiki/Guides/**"
-      - "make.jl"
+      - "Makefile"
+      - "make.ps1"
+      - "configure"
       - "src/**"
       - "tools/**"
   workflow_dispatch:
@@ -62,10 +66,10 @@ jobs:
             include("src/julia/test/code_wiki_bridge_tests.jl")'
 
       - name: Generate Wiki artifact
-        run: julia make.jl -w
+        run: julia tools/make.jl -w
 
       - name: Check Wiki artifact
-        run: julia make.jl -W
+        run: julia tools/make.jl -W
 
       - name: Upload Wiki artifact
         uses: actions/upload-artifact@v4

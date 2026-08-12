@@ -468,8 +468,8 @@ math_program_recursive_matrix_item :: #force_inline proc(
     }
 
     cell_dims := Matrix_Cell_Dims{}
-    if !measure_matrix_cells(cache, buffer, cell_program, matrix_dims.rows, matrix_dims.cols,
-        font_size, &cell_dims) {
+    if !measure_matrix_cells(cache, buffer, cell_program,
+        matrix_dims.rows, matrix_dims.cols, font_size, &cell_dims) {
         return core.Dynview_Layout_Item{}, false
     }
     top_pad := cell_dims.top_pad

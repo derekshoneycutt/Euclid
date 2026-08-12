@@ -79,7 +79,8 @@ scratchpad_parse_non_negative_int :: proc(text: string) -> (int, bool) {
 }
 
 //   Decode a generic completion payload encoded as `start\nend\nreplacement`.
-scratchpad_parse_completion_payload :: proc(payload: string) -> Scratchpad_Completion_Payload {
+scratchpad_parse_completion_payload :: proc(
+    payload: string) -> Scratchpad_Completion_Payload {
     if len(payload) <= 0 {
         return Scratchpad_Completion_Payload{0, 0, "", false}
     }

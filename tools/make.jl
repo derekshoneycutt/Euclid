@@ -4,6 +4,7 @@
 function show_help()
     return """
 Usage: ./make.jl [options]
+       (normally invoked via `make <target>` or `make.ps1 <target>`)
 
 Options:
     --build, -b         Build the project. (default)
@@ -60,8 +61,9 @@ struct JuliaPackageDep
     version::String
 end
 
-
-const SCRIPT_DIR = abspath(@__DIR__)
+# The driver lives in tools/; the repository root (which owns src/, bin/,
+# tests/, and the other build inputs) is its parent directory.
+const SCRIPT_DIR = abspath(joinpath(@__DIR__, ".."))
 const SRC_DIR = joinpath(SCRIPT_DIR, "src")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
@@ -826,9 +828,9 @@ function run_harness(julia_linker_flags::String)
     println("Wrote $(relpath(HARNESS_TRACE_PATH, SCRIPT_DIR))")
 end
 
-"""Include and run externalized vet analysis from make-vet.jl."""
+"""Include and run externalized vet analysis from tools/make-vet.jl."""
 function run_vet_analysis(odin_build_result=nothing)
-    vet_script_path = joinpath(SCRIPT_DIR, "make-vet.jl")
+    vet_script_path = joinpath(SCRIPT_DIR, "tools", "make-vet.jl")
     if !isfile(vet_script_path)
         error("Vet script missing at $(relpath(vet_script_path, SCRIPT_DIR)).")
     end

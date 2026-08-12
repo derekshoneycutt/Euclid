@@ -162,8 +162,8 @@ The harness binary accepts explicit runtime arguments for:
 - trace output path;
 - optional scenario callback name.
 
-The build system also provides a convenience target that builds and runs the default harness
-scenario and writes a trace artifact for review.
+The build system also provides a convenience target, `make harness`, that builds and
+runs the default harness scenario and writes a trace artifact for review.
 
 ## Scenario Authoring
 

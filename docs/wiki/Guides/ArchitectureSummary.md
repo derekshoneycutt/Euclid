@@ -418,6 +418,11 @@ This policy is strict by design.
 
 ## Build and Packaging Model
 
+- The `Makefile` is the standard entry point on systems that support `make`. It runs
+  the `configure` script once (toolchain check + Julia dependency install) and then
+  drives `make.jl`. Bare `make` builds; `make test` runs the full verification gate.
+- `configure` (polyglot sh/PowerShell) verifies the toolchain and installs Julia
+  dependencies; `make.jl` is the build/test/vet driver that both wrap.
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
 - Packaged assets include:
   - `src/julia/**` scripts

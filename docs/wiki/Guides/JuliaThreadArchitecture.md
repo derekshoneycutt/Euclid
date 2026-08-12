@@ -584,11 +584,15 @@ completion selection, stale-view clearing, stale Scratchpad reply rejection,
 and repeated host worker-pool joins.
 
 Julia tests cover Scratchpad, bridge helpers, geometry, LaTeX, and
-runtime-facing content behavior. The required repository gate is:
+runtime-facing content behavior. The required repository gate is the standard
+Makefile target:
 
 ```sh
-julia make.jl -vt
+make test
 ```
+
+This runs the validated build, vet analysis, and all tests (equivalent to
+`julia make.jl -vt`).
 
 Automated tests do not prove visual timing, responsiveness during an arbitrary
 stuck Julia C call, or platform-specific embedding behavior. Release validation
