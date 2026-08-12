@@ -753,6 +753,7 @@ end
 """Build the Odin application and optionally run strict vet and Julia syntax validation."""
 function build_odin(do_vet::Bool, julia_linker_flags::String)
     println("Building Odin...")
+    mkpath(BIN_DIR)
 
     out_flag = is_windows() ? "-out:../bin/euclid.exe" : "-out:../bin/euclid"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
@@ -798,6 +799,7 @@ end
 """Build and run the deterministic headless harness target."""
 function run_harness(julia_linker_flags::String)
     println("Running headless harness...")
+    mkpath(BIN_DIR)
 
     cmd_parts = [
         "odin",
