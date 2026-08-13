@@ -185,7 +185,14 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 IV, 5. If the angle (h, k) is congruent to the angle (h', k') and to the angle (h'', k''), then the angle (h', k') is congruent to the angle (h'', k''); that is to say, if ∠(h, k) ≡ ∠(h', k') and ∠(h, k) ≡ ∠(h'', k''), then ∠(h', k') ≡ ∠(h'', k'')."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,5}
 
-\textbf{IV, 5.} If the angle $(h, k)$ is congruent to the angle $(h', k')$ and to the angle $(h'', k'')$, then the angle $(h', k')$ is congruent to the angle $(h'', k'')$; that is to say, if $\angle(h, k) \equiv \angle(h', k')$ and $\angle(h, k) \equiv \angle(h'', k'')$, then $\angle(h', k') \equiv \angle(h'', k'')$."""
+\textbf{IV, 5.} If the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] is
+congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] and to
+the angle $(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled], then the angle
+$(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] is congruent to the angle
+$(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]; that is to say, if
+$\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled]
+and $\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled],
+then $\angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -145,17 +145,17 @@ or
 We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,4}
 
-\textbf{IV, 4.} Let an angle $(h, k)$ be given in the plane $\alpha$ and let a straight line $a'$ be given in a plane $\alpha'$. Suppose also that, in the plane $\alpha$, a definite side of the straight line $a'$ be assigned. Denote by $h'$ a half-ray of the straight line $a'$ emanating from a point $O'$ of this line. Then in the plane $\alpha'$ there is one and only one half-ray $k'$ such that the angle $(h, k)$, or $(k, h)$, is congruent to the angle $(h', k')$ and that at the same time all interior points of the angle $(h', k')$ lie upon the given side of $a'$. We express this relation by means of the notation
+\textbf{IV, 4.} Let an angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] be given in the plane $\alpha$ and let a straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] be given in a plane $\alpha'$. Suppose also that, in the plane $\alpha$, a definite side of the straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] be assigned. Denote by $h'$ \euclidline[color=steelblue,length=3,thickness=4] a half-ray of the straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] emanating from a point $O'$ \euclidpoint[color=plum1,size=0.5] of this line. Then in the plane $\alpha'$ there is one and only one half-ray $k'$ \euclidline[color=grey60,length=3,thickness=4] such that the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled], or $(k, h)$ \euclidangle[color=khaki3,radius=2,end=60,filled], is congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] and that at the same time all interior points of the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] lie upon the given side of $a'$ \euclidline[color=steelblue,length=3,thickness=4]. We express this relation by means of the notation
 
-$\angle(h, k) \equiv \angle(h', k')$
+$\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled]
 
 Every angle is congruent to itself; that is,
 
-$\angle(h, k) \equiv \angle(h, k)$
+$\angle(h, k) \equiv \angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled]
 
 or
 
-$\angle(h, k) \equiv \angle(k, h)$
+$\angle(h, k) \equiv \angle(k, h)$ \euclidangle[color=khaki3,radius=2,end=60,filled]
 
 We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)

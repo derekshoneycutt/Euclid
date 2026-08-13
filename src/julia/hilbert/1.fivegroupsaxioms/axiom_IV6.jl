@@ -260,7 +260,13 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 IV, 6. If, in the two triangles ABC and A'B'C' the congruences AB ≡ A'B', AC ≡ A'C', ∠BAC ≡ ∠B'A'C' hold, then the congruences ∠ABC ≡ ∠A'B'C' and ∠ACB ≡ ∠A'C'B' also hold."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,6}
 
-\textbf{IV, 6.} If, in the two triangles $ABC$ and $A'B'C'$ the congruences $AB \equiv A'B'$, $AC \equiv A'C'$, $\angle BAC \equiv \angle B'A'C'$ hold, then the congruences $\angle ABC \equiv \angle A'B'C'$ and $\angle ACB \equiv \angle A'C'B'$ also hold."""
+\textbf{IV, 6.} If, in the two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3]
+and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=grey60,edge3_color=palevioletred1]
+the congruences $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=grey60,length=3,thickness=4],
+$AC$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv A'C'$ \euclidline[color=steelblue,length=3,thickness=4],
+$\angle BAC$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle B'A'C'$ \euclidangle[color=khaki3,radius=2,end=60,filled] hold,
+then the congruences $\angle ABC$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'B'C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
+and $\angle ACB$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'C'B'$ \euclidangle[color=lightgreen,radius=2,end=60,filled] also hold."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

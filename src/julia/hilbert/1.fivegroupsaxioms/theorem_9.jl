@@ -138,7 +138,13 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 If the first of two congruent series of points A, B, C, D, ..., K, L and A', B', C', D', ..., K', L' is so arranged that B lies between A and C, D, ..., K, L, and C between A, B and D, ..., K, L, etc., then the points A', B', C', D', ..., K', L' of the second series are arranged in a similar way; that is to say, B' lies between A' and C', D', ..., K', L', and C' lies between A', B' and D', ..., K', L', etc."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 9}
 
-If the first of two congruent series of points $A, B, C, D, ..., K, L$ and $A', B', C', D', ..., K', L'$ is so arranged that $B$ lies between $A$ and $C, D, ..., K, L$, and $C$ between $A, B and D, ..., K, L$, etc., then the points $A', B', C', D', ..., K', L'$ of the second series are arranged in a similar way; that is to say, $B'$ lies between $A'$ and $C', D', ..., K', L'$, and $C'$ lies between $A', B'$ and $D', ..., K', L'$, etc."""
+If the first of two congruent series of points $A, B, C, D, ..., K, L$ \euclidline[color=steelblue,length=3,thickness=4]
+and $A', B', C', D', ..., K', L'$ \euclidline[color=steelblue,length=3,thickness=4] is so arranged that
+$B$ \euclidpoint[color=khaki3,size=1] lies between $A$ \euclidpoint[color=palevioletred1,size=1] and $C, D, ..., K, L$, and $C$ \euclidpoint[color=palevioletred1,size=1] between
+$A, B$ and $D, ..., K, L$, etc., then the points $A', B', C', D', ..., K', L'$ of the second series are arranged
+in a similar way; that is to say, $B'$ \euclidpoint[color=khaki3,size=1]
+lies between $A'$ \euclidpoint[color=palevioletred1,size=1] and $C', D', ..., K', L'$,
+and $C'$ \euclidpoint[color=palevioletred1,size=1] lies between $A', B'$ and $D', ..., K', L'$, etc."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

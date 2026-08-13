@@ -120,7 +120,14 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 IV, 2. If a segment AB is congruent to the segment A'B' and also to the segment A''B'', then the segment A'B' is congruent to the segment A''B''; that is, if AB ≡ A'B' and AB ≡ A''B'', then A'B' ≡ A''B''."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,2}
 
-\textbf{IV, 2.} If a segment $AB$ is congruent to the segment $A'B'$ and also to the segment $A''B''$, then the segment $A'B'$ is congruent to the segment $A''B''$; that is, if $AB \equiv A'B'$ and $AB \equiv A''B''$, then $A'B' \equiv A''B''$."""
+\textbf{IV, 2.} If a segment $AB$ \euclidline[color=steelblue,length=3,thickness=4] is
+congruent to the segment $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] and
+also to the segment $A''B''$ \euclidline[color=khaki3,length=3,thickness=4], then the
+segment $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] is congruent to the
+segment $A''B''$ \euclidline[color=khaki3,length=3,thickness=4]; that is, if
+$AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4]
+and $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A''B''$ \euclidline[color=khaki3,length=3,thickness=4],
+then $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv A''B''$ \euclidline[color=khaki3,length=3,thickness=4]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
