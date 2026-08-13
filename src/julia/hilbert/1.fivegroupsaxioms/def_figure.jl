@@ -85,7 +85,7 @@ Two figures are said to be congruent if their points can be arranged in a one-to
 Congruent figures have, as may be seen from theorems 9 and 12, the following properties. Three points of a figure lying in a straight line are likewise in a straight line in every figure congruent to it. In congruent figures, the arrangement of the points in corresponding planes with respect to corresponding lines is always the same. The same is true of the sequence of corresponding points situated on corresponding lines."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Figure}
 
-Any finite number of points is called a figure. If all the points lie in a plane, the figure is called a plane figure.
+Any finite number of points is called a figure \euclidtriangle[color=steelblue,height=2,width=3,filled]. If all the points lie in a plane, the figure is called a plane figure.
 
 Two figures are said to be congruent if their points can be arranged in a one-to-one correspondence so that the corresponding segments and the corresponding angles of the two figures are in every case congruent to each other.
 

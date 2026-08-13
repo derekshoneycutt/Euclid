@@ -97,11 +97,19 @@ Let A₁ be any point upon a straight line between the arbitrarily chosen points
 be equal to one another. Then, among this series of points, there always exists a certain point Aₙ such that B lies between A and Aₙ."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom V}
 
-Let $A_1$ be any point upon a straight line between the arbitrarily chosen points $A$ and $B$. Take the points $A_2$, $A_3$, $A_4$, ... so that $A_1$ lies between $A$ and $A_2$, $A_2$ between $A_1$ and $A_3$, $A_3$ between $A_2$ and $A_4$, etc. Moreover, let the segments
+Let $A_1$ \euclidpoint[color=grey60,size=1] be any point upon a straight line \euclidline[color=khaki3,length=3,thickness=4] between the arbitrarily chosen points
+$A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1]. Take the points
+$A_2$ \euclidpoint[color=grey60,size=1], $A_3$ \euclidpoint[color=grey60,size=1], $A_4$ \euclidpoint[color=grey60,size=1],
+... so that $A_1$ \euclidpoint[color=grey60,size=1] lies between $A$ \euclidpoint[color=steelblue,size=1] and
+$A_2$ \euclidpoint[color=grey60,size=1], $A_2$ \euclidpoint[color=grey60,size=1] between $A_1$ \euclidpoint[color=grey60,size=1]
+and $A_3$ \euclidpoint[color=grey60,size=1], $A_3$ \euclidpoint[color=grey60,size=1] between $A_2$ \euclidpoint[color=grey60,size=1]
+and $A_4$ \euclidpoint[color=grey60,size=1], etc. Moreover, let the segments
 
-    $AA_1$, $A_1A_2$, $A_2A_3$, $A_3A_4$, ...
+    $AA_1$ \euclidline[color=khaki3,length=3,thickness=4], $A_1A_2$ \euclidline[color=khaki3,length=3,thickness=4], $A_2A_3$ \euclidline[color=khaki3,length=3,thickness=4], $A_3A_4$ \euclidline[color=khaki3,length=3,thickness=4], ...
 
-be equal to one another. Then, among this series of points, there always exists a certain point $A_n$ such that $B$ lies between $A$ and $A_n$."""
+be equal to one another. Then, among this series of points, there always exists a certain point
+$A_n$ \euclidpoint[color=grey60,size=1] such that $B$ \euclidpoint[color=palevioletred1,size=1] lies between
+$A$ \euclidpoint[color=steelblue,size=1] and $A_n$ \euclidpoint[color=grey60,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

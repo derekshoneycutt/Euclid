@@ -138,7 +138,9 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 If two parallel lines are cut by a third straight line, the alternate-interior angles and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 19}
 
-If two parallel lines are cut by a third straight line, the alternate-interior angles and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
+If two parallel lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4]
+are cut by a third straight line \euclidline[color=palevioletred1,length=3,thickness=4], the alternate-interior angles
+and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

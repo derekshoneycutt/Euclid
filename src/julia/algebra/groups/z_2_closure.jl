@@ -65,8 +65,8 @@ Closure means that when you perform one allowed motion after another, that is co
 
 In this example, composing reflections still produces one of the same allowed motions:
 
-1. One reflection maps the figure to its mirror image, still in the same state space.\newline
-2. Two reflections across the same axis return to the original state.\newline
+1. One reflection maps the figure to its mirror image, still in the same state space.\\
+2. Two reflections across the same axis return to the original state.\\
 3. Any allowed composition remains one of the 2 allowed motions: $e$ or $r$.
 
 So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""

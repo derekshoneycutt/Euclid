@@ -53,9 +53,13 @@ If M is an arbitrary point in the plane α, the totality of all points A, for wh
 From this definition can be easily deduced, with the help of the axioms of groups III and IV, the known properties of the circle; in particular, the possibility of constructing a circle through any three points not lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Circle}
 
-If $M$ is an arbitrary point in the plane $\alpha$, the totality of all points $A$, for which the segments $MA$ are congruent to one another, is called a circle. $M$ is called the centre of the circle.
+If $M$ \euclidpoint[color=palevioletred1,size=1] is an arbitrary point in the plane $\alpha$, the totality of all points
+$A$ \euclidpoint[color=steelblue,size=0.5], for which the segments $MA$ \euclidline[color=plum1,length=3,thickness=1] are congruent to one another, is called a circle
+\euclidcircle[color=steelblue,size=1,thickness=2]. $M$ \euclidpoint[color=palevioletred1,size=1] is called the centre of the circle.
 
-From this definition can be easily deduced, with the help of the axioms of groups III and IV, the known properties of the circle; in particular, the possibility of constructing a circle through any three points not lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
+From this definition can be easily deduced, with the help of the axioms of \textit{groups III and IV},
+the known properties of the circle; in particular, the possibility of constructing a circle through any three points not
+lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

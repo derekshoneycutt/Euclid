@@ -112,7 +112,14 @@ On a given finite straight line to construct an isosceles triangle.
 
 \textit{This follows Euclid's Elements Book I, Proposition I, with modifications.}
 
-To make an isosceles triangle he produces $AB$ in both directions to meet the respective circles in $D$, $E$ and then describes circles with $A$, $B$ as centers and $AE$, $BD$ as radii respectively. The result is an isosceles triangle with each of two sides double of the third side."""
+To make an isosceles triangle he produces $AB$ \euclidline[color=grey60,length=3,thickness=4] in both
+directions to meet the respective circles in $D$ \euclidcircle[color=khaki3,size=1,thickness=2],
+$E$ \euclidcircle[color=steelblue,size=1,thickness=2] and then describes circles with
+$A$ \euclidcircle[color=palevioletred1,size=1,thickness=2],
+$B$ \euclidcircle[color=grey60,size=1,thickness=2] as centers and
+$AE$ \euclidline[color=grey60,length=3,thickness=4],
+$BD$ \euclidline[color=grey60,length=3,thickness=4] as radii respectively.
+The result is an isosceles triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=steelblue] with each of two sides double of the third side."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

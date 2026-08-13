@@ -78,11 +78,11 @@ Let us consider three distinct systems of things. The things composing the first
 
 We think of these points, straight lines, and planes as having certain mutual relations, which we indicate by means of such words as "are situated," "between," "parallel," "congruent," "continuous," etc. The complete and exact description of these relations follows as a consequence of the axioms of geometry. These axioms may be arranged in five groups. Each of these groups expresses, by itself, certain related fundamental facts of our intuition. We will name these groups as follows:
 
-\textbf{I, 1-7.} Axioms of connection.\\
-\textbf{II, 1-5.} Axioms of order.\\
-\textbf{III.} Axiom of parallels (Euclid's axiom).\\
-\textbf{IV, 1-6.} Axioms of congruence.\\
-\textbf{V.} Axiom of continuity (Archimedes's axiom)."""
+\textbf{I, 1-7.} Axioms of \textit{connection}.\\
+\textbf{II, 1-5.} Axioms of \textit{order}.\\
+\textbf{III.} Axiom of \textit{parallels (Euclid's axiom)}.\\
+\textbf{IV, 1-6.} Axioms of \textit{congruence}.\\
+\textbf{V.} Axiom of \textit{continuity (Archimedes's axiom)}."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -95,7 +95,14 @@ On a given finite straight line to construct an scalene triangle.
 
 \textit{This follows Euclid's Elements Book I, Proposition I, with modifications.}
 
-Suppose $AC$ to be a radius of one of the two circles, and $D$ a point on $AC$ lying in that portion of the circle with center $A$ which is outside the circle with center $B$, Then, joining $BD$ as in the figure, we have a triangle which obviously has all its sides unequal, that is, a scalene triangle."""
+Suppose $AC$ \euclidline[color=palevioletred1,length=3,thickness=4] to be a radius of one of the
+two circles \euclidcircle[color=steelblue,size=1,thickness=2], and
+$D$ \euclidpoint[color=palevioletred1,size=0.5] a point on $AC$ \euclidline[color=palevioletred1,length=3,thickness=4]
+lying in that portion of the circle with center $A$ \euclidpoint[color=grey60,size=0.5] which is outside the
+circle \euclidcircle[color=palevioletred1,size=1,thickness=2] with
+center $B$ \euclidpoint[color=grey,size=0.5]. Then, joining
+$BD$ \euclidline[color=khaki3,length=3,thickness=4] as in the figure, we have a triangle which obviously has all its sides unequal, that is,
+a scalene triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -165,7 +165,14 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 If (A, B, C, ...) and (A', B', C', ...) are congruent plane figures and P is a point in the plane of the first, then it is always possible to find a point P' in the plane of the second figure so that (A, B, C, ..., P) and (A', B', C', ..., P') shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of P' can be made in only one way."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 17}
 
-If $(A, B, C, ...)$ and $(A', B', C', ...)$ are congruent plane figures and $P$ is a point in the plane of the first, then it is always possible to find a point $P'$ in the plane of the second figure so that $(A, B, C, ..., P)$ and $(A', B', C', ..., P')$ shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of $P'$ can be made in only one way."""
+If $(A, B, C, ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] and
+$(A', B', C', ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] are
+congruent plane figures and $P$ \euclidpoint[color=grey60,size=1] is a point in the plane of the first, then it is always possible to find a point
+$P'$ \euclidpoint[color=grey60,size=1] in the plane of the second figure so that
+$(A, B, C, ..., P)$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=khaki3,edge4_color=khaki3] and
+$(A', B', C', ..., P')$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=khaki3,edge4_color=khaki3]
+shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of
+$P'$ \euclidpoint[color=grey60,size=1] can be made in only one way."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

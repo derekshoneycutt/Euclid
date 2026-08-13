@@ -70,22 +70,22 @@ So this is the 2-element symmetry group of the triangle, and the two motions com
 
 const Z2LatexDocument = raw"""\textbf{The two-element symmetry group}
 
-Start with the simplest nontrivial geometry: given an equilateral triangle, either \textit{do nothing} to the triangle, or reflect it across one fixed axis.
+Start with the simplest nontrivial geometry: given an equilateral triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3], either \textit{do nothing} to the triangle, or \textit{reflect} it across one fixed axis.
 
 The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
 
 $\mathbb{Z}_2 = \{0,1\}$
 
-This is the group under addition mod 2. Let r be reflection across the fixed axis and e the identity motion.
+This is the group under addition \textit{mod 2}. Let $r$ be reflection across the fixed axis and $e$ the identity motion.
 
 $e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$
 
 \textbf{Brief proof it is a group:}
 
-\textbf{1. Closure:} composing $e$ and $r$ always gives $e$ or $r$.\\
-\textbf{2. Associativity:} composition of reflections is associative.\\
-\textbf{3. Identity:} $e$ does nothing.\\
-\textbf{4. Inverses:} $e$ and $r$ are their own inverses.
+\textbf{1. Closure}: composing $e$ and $r$ always gives $e$ or $r$.\\
+\textbf{2. Associativity}: composition of reflections is associative.\\
+\textbf{3. Identity}: $e$ does nothing.\\
+\textbf{4. Inverses}: $e$ and $r$ are their own inverses.
 
 So this is the 2-element symmetry group of the triangle, and the two motions commute."""
 

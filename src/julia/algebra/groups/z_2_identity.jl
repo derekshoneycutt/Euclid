@@ -61,10 +61,10 @@ const IdentityLatexDocument = raw"""\textbf{Identity}
 
 Identity means there is a motion that changes nothing at all.
 
-In this model, that is the do-nothing motion $e$.
+In this model, that is the \textit{do-nothing} motion $e$.
 
-1. $e \circ r = r$: doing nothing before reflection changes nothing.\newline
-2. $r \circ e = r$: doing nothing after reflection changes nothing.\newline
+1. $e \circ r = r$: doing nothing before reflection changes nothing.\\
+2. $r \circ e = r$: doing nothing after reflection changes nothing.\\
 3. The visual cue $r \circ r = e$ also reinforces that returning to start is a valid identity outcome.
 
 Formally, this means $e \circ a = a \circ e = a$ for every allowed motion $a$."""

@@ -180,13 +180,17 @@ are fulfilled, the following congruence is also valid; viz.:
     ∠(h, k) ≡ ∠(h', k')."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 14}
 
-Let $h, k, l$ and $h', k', l'$ be two sets of three half-rays, where those of each set emanate from the same point and lie in the same plane. Then, if the congruences
+Let $h$ \euclidline[color=steelblue,length=3,thickness=4], $k$ \euclidline[color=palevioletred1,length=3,thickness=4],
+$l$ \euclidline[color=grey60,length=3,thickness=4] and
+$h'$ \euclidline[color=steelblue,length=3,thickness=4], $k'$ \euclidline[color=palevioletred1,length=3,thickness=4],
+$l'$ \euclidline[color=grey60,length=3,thickness=4] be two sets of three half-rays, where those of each set emanate
+from the same point and lie in the same plane. Then, if the congruences
 
-    $\angle(h, l) \equiv \angle(h', l')$,   $\angle(k, l) \equiv \angle(k', l')$
+    $\angle(h, l) \equiv \angle(h', l')$ \euclidangle[color=lightgreen,radius=2,end=60,filled],   $\angle(k, l) \equiv \angle(k', l')$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
 
 are fulfilled, the following congruence is also valid; viz.:
 
-    $\angle(h, k) \equiv \angle(h', k')$."""
+    $\angle(h, k) \equiv \angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
