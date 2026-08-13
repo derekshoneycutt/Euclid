@@ -94,7 +94,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 If we have given any finite number of points situated upon a straight line, we can always arrange them in a sequence A, B, C, D, E, ... , K so that B shall lie between A and C, D, E, ... , K; C between A, B and D, E, ... , K; D between A, B, C and E, ... , K, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order K, ... , E, D, C, B, A."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 4}
 
-If we have given any finite number of points situated upon a straight line, we can always arrange them in a sequence $A, B, C, D, E, ... , K$ so that $B$ shall lie between $A$ and $C, D, E, ... , K$; $C$ between $A, B$ and $D, E, ... , K$; $D$ between $A, B, C$ and $E, ... , K$, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order $K, ... , E, D, C, B, A$."""
+If we have given any finite number of points situated upon a straight line \euclidline[color=grey60,length=3,thickness=4], we can always arrange them in a sequence $A, B, C, D, E, ... , K$ so that $B$ \euclidpoint[color=palevioletred1,size=1] shall lie between $A$ and $C, D, E, ... , K$; $C$ \euclidpoint[color=khaki3,size=1] between $A, B$ and $D, E, ... , K$; $D$ between $A, B, C$ and $E, ... , K$, etc. Aside from this order of sequence, there exists but one other possessing this property, namely, the reverse order $K, ... , E, D, C, B, A$."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

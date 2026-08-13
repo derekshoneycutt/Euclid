@@ -77,7 +77,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Through a straight line and a point not lying in it, or through two distinct straight lines having a common point, one and only one plane may be made to pass."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 2}
 
-Through a straight line and a point not lying in it, or through two distinct straight lines having a common point, one and only one plane may be made to pass."""
+Through a straight line \euclidline[color=steelblue,length=3,thickness=4] and a point \euclidpoint[color=palevioletred1,size=1] not lying in it, or through two distinct straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] having a common point \euclidpoint[color=grey60,size=1], one and only one plane may be made to pass."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -78,7 +78,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 II, 2. If A and C are two points of a straight line, then there exists at least one point B lying between A and C and at least one point D so situated that C lies between A and D."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,2}
 
-\textbf{II, 2.} If $A$ and $C$ are two points of a straight line, then there exists at least one point $B$ lying between $A$ and $C$ and at least one point D so situated that $C$ lies between $A$ and $D$."""
+\textbf{II, 2.} If $A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1] are two points of a straight line \euclidline[color=grey60,length=3,thickness=4], then there exists at least one point $B$ \euclidpoint[color=steelblue,size=1] lying between $A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1] and at least one point $D$ \euclidpoint[color=steelblue,size=1] so situated that $C$ \euclidpoint[color=khaki3,size=1] lies between $A$ \euclidpoint[color=palevioletred1,size=1] and $D$ \euclidpoint[color=steelblue,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

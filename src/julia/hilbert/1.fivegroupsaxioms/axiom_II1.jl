@@ -69,7 +69,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 II, 1. If A, B, C are points of a straight line and B lies between A and C, then B lies also between C and A."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,1}
 
-\textbf{II, 1.} If $A$, $B$, $$ are points of a straight line and $B$ lies between $A$ and $C$, then $B$ lies also between $C$ and $A$."""
+\textbf{II, 1.} If $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=steelblue,size=1], $C$ \euclidpoint[color=khaki3,size=1] are points of a straight line \euclidline[color=grey60,length=3,thickness=4] and $B$ \euclidpoint[color=steelblue,size=1] lies between $A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1], then $B$ \euclidpoint[color=steelblue,size=1] lies also between $C$ \euclidpoint[color=khaki3,size=1] and $A$ \euclidpoint[color=palevioletred1,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

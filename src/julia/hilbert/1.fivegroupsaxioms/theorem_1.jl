@@ -77,7 +77,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
 
-Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
+Two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] of a plane have either one point \euclidpoint[color=khaki3,size=1] or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

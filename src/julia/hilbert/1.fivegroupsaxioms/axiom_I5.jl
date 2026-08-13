@@ -68,9 +68,9 @@ I, 5. If two points A, B of a straight line a lie in a plane α, then every poin
 In this case we say: "The straight line a lies in the plane α," etc."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,5}
 
-\textbf{I, 5.} If two points $A$, $B$ of a straight line a lie in a plane $\alpha$, then every point of a lies in $\alpha$.
+\textbf{I, 5.} If two points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1] of a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4] lie in a plane $\alpha$, then every point of $a$ \euclidline[color=steelblue,length=3,thickness=4] lies in $\alpha$.
 
-In this case we say: "The straight line a lies in the plane $\alpha$," etc."""
+In this case we say: "The straight line $a$ \euclidline[color=steelblue,length=3,thickness=4] lies in the plane $\alpha$," etc."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

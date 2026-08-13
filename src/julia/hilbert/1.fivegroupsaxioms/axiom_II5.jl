@@ -86,7 +86,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 II, 5. Let A, B, C be three points not lying in the same straight line and let a be a straight line lying in the plane ABC and not passing through any of the points A, B, C. Then, if the straight line a passes through a point of the segment AB, it will also pass through either a point of the segment BC or a point of the segment AC."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,5}
 
-\textbf{II, 5.} Let $A$, $B$, $C$ be three points not lying in the same straight line and let a be a straight line lying in the plane $ABC$ and not passing through any of the points $A$, $B$, $C$. Then, if the straight line a passes through a point of the segment $AB$, it will also pass through either a point of the segment $BC$ or a point of the segment $AC$."""
+\textbf{II, 5.} Let $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1], $C$ \euclidpoint[color=khaki3,size=1] be three points not lying in the same straight line \euclidline[color=khaki3,length=3,thickness=4] and let $a$ \euclidline[color=steelblue,length=3,thickness=4] be a straight line lying in the plane $ABC$ and not passing through any of the points $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1], $C$ \euclidpoint[color=khaki3,size=1]. Then, if the straight line a passes through a point of the segment $AB$ \euclidline[color=khaki3,length=3,thickness=4], it will also pass through either a point of the segment $BC$ \euclidline[color=grey60,length=3,thickness=4] or a point of the segment $AC$ \euclidline[color=grey60,length=3,thickness=4]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -85,7 +85,18 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 II, 4. Any four points A, B, C, D of a straight line can always be so arranged that B shall lie between A and C and also between A and D, and, furthermore, that C shall lie between A and D and also between B and D."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,4}
 
-\textbf{II, 4.} Any four points $A$, $B$, $C$, $D$ of a straight line can always be so arranged that $B$ shall lie between $A$ and $C$ and also between $A$ and $D$, and, furthermore, that $C$ shall lie between $A$ and $D$ and also between $B$ and $D$."""
+\textbf{II, 4.} Any four points $A$ \euclidpoint[color=palevioletred1,size=1],
+$B$ \euclidpoint[color=steelblue,size=1], $C$ \euclidpoint[color=khaki3,size=1],
+$D$ \euclidpoint[color=palevioletred1,size=1] of a straight line
+\euclidline[color=grey60,length=3,thickness=4] can always be so arranged that
+$B$ \euclidpoint[color=steelblue,size=1] shall lie between
+$A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1]
+and also between $A$ \euclidpoint[color=palevioletred1,size=1] and
+$D$ \euclidpoint[color=palevioletred1,size=1], and, furthermore, that
+$C$ \euclidpoint[color=khaki3,size=1] shall lie between
+$A$ \euclidpoint[color=palevioletred1,size=1] and
+$D$ \euclidpoint[color=palevioletred1,size=1] and also between
+$B$ \euclidpoint[color=steelblue,size=1] and $D$ \euclidpoint[color=palevioletred1,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

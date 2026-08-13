@@ -64,7 +64,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 I, 2. Any two distinct points of a straight line completely determine that line; that is, if AB = a and AC = a, where B ≠ C, then is also BC = a."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,2}
 
-\textbf{I, 2.} Any two distinct points of a straight line completely determine that line; that is, if $AB = a$ and $AC = a$, where $B \neq C$, then is also $BC = a$."""
+\textbf{I, 2.} Any two distinct points of a straight line completely determine that line; that is, if $AB = a$ \euclidline[color=steelblue,length=3,thickness=4] and $AC = a$ \euclidline[color=steelblue,length=3,thickness=4], where $B$ \euclidpoint[color=khaki3,size=1] $\neq C$ \euclidpoint[color=grey60,size=1], then is also $BC = a$ \euclidline[color=steelblue,length=3,thickness=4]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

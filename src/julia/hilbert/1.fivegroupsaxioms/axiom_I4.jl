@@ -81,7 +81,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 I, 4. Any three points A, B, C of a plane α, which do not lie in the same straight line, completely determine that plane."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,4}
 
-\textbf{I, 4.} Any three points $A$, $B$, $C$ of a plane $\alpha$, which do not lie in the same straight line, completely determine that plane."""
+\textbf{I, 4.} Any three points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] of a plane $\alpha$, which do not lie in the same straight line \euclidline[color=steelblue,length=3,thickness=4], completely determine that plane."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

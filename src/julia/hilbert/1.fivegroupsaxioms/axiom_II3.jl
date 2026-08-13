@@ -69,7 +69,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 II, 3. Of any three points situated on a straight line, there is always one and only one which lies between the other two."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,3}
 
-\textbf{II, 3.} Of any three points situated on a straight line, there is always one and only one which lies between the other two."""
+\textbf{II, 3.} Of any three points \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=steelblue,size=1] \euclidpoint[color=khaki3,size=1] situated on a straight line \euclidline[color=grey60,length=3,thickness=4], there is always one and only one \euclidpoint[color=steelblue,size=1] which lies between the other two \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=khaki3,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

@@ -78,9 +78,9 @@ If A, A', O, B are four points of a straight line a, where O lies between A and 
 All points of a that lie on the same side of O, taken together, are called a half-ray emanating from O."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Half-rays}
 
-If $A$, $A'$, $O$, $B$ are four points of a straight line $a$, where $O$ lies between $A$ and $B$ but not between $A$ and $A'$, then points $A$ and $A'$ are on the same side of $O$, and points $A$ and $B$ are on different sides of $O$.
+If $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=steelblue,size=1], $O$ \euclidpoint[color=khaki3,size=1], $B$ \euclidpoint[color=palevioletred1,size=1] are four points of a straight line $a$ \euclidline[color=grey60,length=3,thickness=4], where $O$ \euclidpoint[color=khaki3,size=1] lies between $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] but not between $A$ \euclidpoint[color=steelblue,size=1] and $A'$ \euclidpoint[color=steelblue,size=1], then points $A$ \euclidpoint[color=steelblue,size=1] and $A'$ \euclidpoint[color=steelblue,size=1] are on the same side of $O$ \euclidpoint[color=khaki3,size=1], and points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are on different sides of $O$ \euclidpoint[color=grey60,size=1].
 
-All points of a that lie on the same side of $O$, taken together, are called a half-ray emanating from $O$."""
+All points of a that lie on the same side of $O$ \euclidpoint[color=khaki3,size=1], taken together, are called a half-ray emanating from $O$ \euclidpoint[color=khaki3,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

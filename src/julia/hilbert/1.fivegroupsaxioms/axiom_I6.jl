@@ -64,7 +64,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 I, 6. If two planes α, β have a point A in common, then they have at least a second point B in common."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,6}
 
-\textbf{I, 6.} If two planes $\alpha$, $\beta$ have a point $A$ in common, then they have at least a second point $B$ in common."""
+\textbf{I, 6.} If two planes $\alpha$, $\beta$ have a point $A$ \euclidpoint[color=steelblue,size=1] in common, then they have at least a second point $B$ \euclidpoint[color=palevioletred1,size=1] in common."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

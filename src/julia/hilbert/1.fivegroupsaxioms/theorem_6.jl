@@ -128,7 +128,15 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Every simple polygon, whose vertices all lie in a plane α, divides the points of this plane, not belonging to the broken line constituting the sides of the polygon, into two regions, an interior and an exterior, having the following properties: If A is a point of the interior region (interior point) and B a point of the exterior region (exterior point), then any broken line joining A and B must have at least one point in common with the polygon. If, on the other hand, A, A' are two points of the interior and B, B' two points of the exterior region, then there are always broken lines to be found joining A with A' and B with B' without having a point in common with the polygon. There exist straight lines in the plane α which lie entirely outside of the given polygon, but there are none which lie entirely within it."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 6}
 
-Every simple polygon, whose vertices all lie in a plane $\alpha$, divides the points of this plane, not belonging to the broken line constituting the sides of the polygon, into two regions, an interior and an exterior, having the following properties: If $A$ is a point of the interior region (interior point) and $B$ a point of the exterior region (exterior point), then any broken line joining $A$ and $B$ must have at least one point in common with the polygon. If, on the other hand, $A$, $A'$ are two points of the interior and $B$, $B'$ two points of the exterior region, then there are always broken lines to be found joining $A$ with $A'$ and $B$ with $B'$ without having a point in common with the polygon. There exist straight lines in the plane $\alpha$ which lie entirely outside of the given polygon, but there are none which lie entirely within it."""
+Every simple polygon, whose vertices all lie in a plane $\alpha$, divides the points of this plane,
+not belonging to the broken line constituting the sides of the polygon, into two regions, an
+interior and an exterior, having the following properties: If $A$ \euclidpoint[color=steelblue,size=1] is a point of the interior region
+(interior point) and $B$ \euclidpoint[color=palevioletred1,size=1] a point of the exterior region (exterior point), then any broken line \euclidline[color=steelblue,length=3,thickness=4]
+joining $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] must have at least one point in common with the polygon. If, on the other hand,
+$A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] are two points of the interior and $B$ \euclidpoint[color=palevioletred1,size=1], $B'$ \euclidpoint[color=grey60,size=1] two points of the exterior region, then there
+are always broken lines \euclidline[color=khaki3,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] to be found joining $A$ \euclidpoint[color=steelblue,size=1] with $A'$ \euclidpoint[color=khaki3,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] with $B'$ \euclidpoint[color=grey60,size=1] without having a point
+in common with the polygon. There exist straight lines in the plane $\alpha$ which lie entirely
+outside of the given polygon, but there are none which lie entirely within it."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

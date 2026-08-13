@@ -99,13 +99,13 @@ Making use of the notation of theorem 7, we may now say: The points A, A' are si
 Theorem 7 gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in group II."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 7}
 
-Every plane $\alpha$ divides the remaining points of space into two regions having the following properties: Every point $A$ of the one region determines with each point $B$ of the other region a segment $AB$, within which lies a point of $\alpha$. On the other hand, any two points $A$, $A'$ lying within the same region determine a segment $AA'$ containing no point of $\alpha$.
+Every plane $\alpha$ divides the remaining points of space into two regions having the following properties: Every point $A$ \euclidpoint[color=steelblue,size=1] of the one region determines with each point $B$ \euclidpoint[color=palevioletred1,size=1] of the other region a segment $AB$ \euclidline[color=khaki3,length=3,thickness=4], within which lies a point of $\alpha$. On the other hand, any two points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] lying within the same region determine a segment $AA'$ \euclidline[color=palevioletred1,length=3,thickness=4] containing no point of $\alpha$.
 
 ...
 
-Making use of the notation of theorem 7, we may now say: The points $A$, $A'$ are situated in space upon one and the same side of the plane $\alpha$, and the points $A$, $B$ are situated in space upon different sides of the plane $\alpha$.
+Making use of the notation of \textit{theorem 7}, we may now say: The points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] are situated in space upon one and the same side of the plane $\alpha$, and the points $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1] are situated in space upon different sides of the plane $\alpha$.
 
-Theorem 7 gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in group II."""
+\textit{Theorem 7} gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in \textit{group II}."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

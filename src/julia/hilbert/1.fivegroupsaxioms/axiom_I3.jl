@@ -83,9 +83,9 @@ I, 3. Three points A, B, C not situated in the same straight line always complet
 We employ also the expressions: A, B, C, "lie in" α; A, B, C "are points of" α, etc."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,3}
 
-\textbf{I, 3.} Three points $A$, $B$, $C$ not situated in the same straight line always completely determine a plane $\alpha$. We write $ABC = \alpha$.
+\textbf{I, 3.} Three points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] not situated in the same straight line \euclidline[color=steelblue,length=3,thickness=4] always completely determine a plane $\alpha$. We write $ABC = \alpha$.
 
-We employ also the expressions: $A$, $B$, $C$, "lie in" $\alpha$; $A$, $B$, $C$ "are points of" $\alpha$, etc."""
+We employ also the expressions: $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1], "lie in" $\alpha$; $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] "are points of" $\alpha$, etc."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

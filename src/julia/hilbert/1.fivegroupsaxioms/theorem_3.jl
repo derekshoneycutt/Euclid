@@ -51,7 +51,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Between any two points of a straight line, there always exists an unlimited number of points."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 3}
 
-Between any two points of a straight line, there always exists an unlimited number of points."""
+Between any two points \euclidpoint[color=steelblue,size=1] \euclidpoint[color=palevioletred1,size=1] of a straight line \euclidline[color=grey60,length=3,thickness=4], there always exists an unlimited number of points \euclidpoint[color=khaki3,size=1]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
