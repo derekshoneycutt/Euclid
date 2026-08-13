@@ -61,9 +61,9 @@ const ReplDrawShare = 0.6f0
 const TransformEps = 1f-6
 
 struct ReflectedAngleMarkerPose
-    center::Vector{Float32}
-    start_point::Vector{Float32}
-    end_point::Vector{Float32}
+    center::AbstractVector{<:Real}
+    start_point::AbstractVector{<:Real}
+    end_point::AbstractVector{<:Real}
 end
 
 
@@ -794,8 +794,8 @@ end
 
 
 function place_pen_at_angles(
-    state_ptr::Ptr{Cvoid}, penX::Float32, penY::Float32, baseZ::Float32,
-    floorAngle::Float32, azimuth::Float32)
+    state_ptr::Ptr{Cvoid}, penX::Real, penY::Real, baseZ::Real,
+    floorAngle::Real, azimuth::Real)
 
     horizontalLength = PenLength * Float32(cos(floorAngle))
     verticalLength = PenLength * Float32(sin(floorAngle))
@@ -810,16 +810,16 @@ end
 
 
 function place_pen_at_angles(
-    state_ptr::Ptr{Cvoid}, penpos::Vector{Float32},
-    floorAngle::Float32, azimuth::Float32)
+    state_ptr::Ptr{Cvoid}, penpos::AbstractVector{<:Real},
+    floorAngle::Real, azimuth::Real)
 
     place_pen_at_angles(state_ptr, penpos[1], penpos[2], penpos[3], floorAngle, azimuth)
 end
 
 
 function emit_filledcircle_radius_trail(
-    state_ptr::Ptr{Cvoid}, jointPoint::Vector{Float32},
-    endPoint::Vector{Float32}, color)
+    state_ptr::Ptr{Cvoid}, jointPoint::AbstractVector{<:Real},
+    endPoint::AbstractVector{<:Real}, color)
 
     for i in 0:MarkerRadialTrailSamples
         t = (Float32(i) / Float32(MarkerRadialTrailSamples)) +
@@ -851,8 +851,8 @@ Returns:
 """
 function animate_pen_descend(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz - (topz * t)
@@ -884,9 +884,9 @@ Returns:
 """
 function animate_compass_descend(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, joint1x::Float32, joint1y::Float32,
-    joint2x::Float32, joint2y::Float32)
+    timer::Real, duration::Real,
+    topz::Real, joint1x::Real, joint1y::Real,
+    joint2x::Real, joint2y::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = topz + (0f0 - topz) * t
@@ -917,8 +917,8 @@ Returns:
 """
 function animate_pen_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz * t
@@ -929,8 +929,8 @@ function animate_pen_rise(
 end
 function animate_pen_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startz::Float32, topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    startz::Real, topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     diffz = topz - startz
@@ -964,9 +964,9 @@ Returns:
 """
 function animate_compass_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, joint1x::Float32, joint1y::Float32,
-    joint2x::Float32, joint2y::Float32)
+    timer::Real, duration::Real,
+    topz::Real, joint1x::Real, joint1y::Real,
+    joint2x::Real, joint2y::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     tipZ = 0f0 + (topz - 0f0) * t
@@ -1000,9 +1000,9 @@ Returns:
 """
 function animate_pen_tilt(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penx::Float32, peny::Float32, penz::Float32,
-    startθ::Float32, endθ::Float32, azimuth::Float32)
+    timer::Real, duration::Real,
+    penx::Real, peny::Real, penz::Real,
+    startθ::Real, endθ::Real, azimuth::Real)
 
     animate_pen_tilt(state_ptr, timer, duration,
         [penx, peny, penz], startθ, endθ, azimuth)
@@ -1010,9 +1010,9 @@ end
 
 function animate_pen_tilt(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32},
-    startθ::Float32, endθ::Float32, azimuth::Float32)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real},
+    startθ::Real, endθ::Real, azimuth::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     floorAngle = startθ + (endθ - startθ) * t
@@ -1043,18 +1043,18 @@ Returns:
 """
 function animate_pen_cone(
     state_ptr::Ptr{Cvoid},
-    timer::Float32,
-    penx::Float32, peny::Float32, penz::Float32, penFloorθ::Float32,
-    spinSpeed::Float32)
+    timer::Real,
+    penx::Real, peny::Real, penz::Real, penFloorθ::Real,
+    spinSpeed::Real)
 
     animate_pen_cone(state_ptr, timer, [penx, peny, penz], penFloorθ, spinSpeed)
 end
 
 function animate_pen_cone(
     state_ptr::Ptr{Cvoid},
-    timer::Float32,
-    penpos::Vector{Float32}, penFloorθ::Float32,
-    spinSpeed::Float32)
+    timer::Real,
+    penpos::AbstractVector{<:Real}, penFloorθ::Real,
+    spinSpeed::Real)
 
     θ = timer * spinSpeed
 
@@ -1084,10 +1084,10 @@ Returns:
 """
 function animate_pen_drag(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32},
-    endpos::Vector{Float32},
-    dragθ::Float32, dragAzimuth::Float32, color)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    dragθ::Real, dragAzimuth::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1124,10 +1124,10 @@ Returns:
 """
 function animate_pen_arcmove(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32},
-    endpos::Vector{Float32},
-    height::Float32, periods::Integer, strikecolor)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    height::Real, periods::Integer, strikecolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
@@ -1144,10 +1144,10 @@ function animate_pen_arcmove(
     end
 end
 
-@inline xy_cross(ax::Float32, ay::Float32, bx::Float32, by::Float32) = ax * by - ay * bx
+@inline xy_cross(ax::Real, ay::Real, bx::Real, by::Real) = ax * by - ay * bx
 
 @inline function point_on_segment_xy(
-    a::Vector{Float32}, b::Vector{Float32}, p::Vector{Float32}, eps::Float32)
+    a::AbstractVector{<:Real}, b::AbstractVector{<:Real}, p::AbstractVector{<:Real}, eps::Real)
 
     return (
         p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
@@ -1156,10 +1156,10 @@ end
 end
 
 @inline function has_collinear_segment_overlap_xy(
-    a1::Vector{Float32}, a2::Vector{Float32},
-    b1::Vector{Float32}, b2::Vector{Float32},
-    o1::Float32, o2::Float32, o3::Float32, o4::Float32,
-    eps::Float32)
+    a1::AbstractVector{<:Real}, a2::AbstractVector{<:Real},
+    b1::AbstractVector{<:Real}, b2::AbstractVector{<:Real},
+    o1::Real, o2::Real, o3::Real, o4::Real,
+    eps::Real)
 
     return (
         (abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
@@ -1170,8 +1170,8 @@ end
 end
 
 @inline function segments_intersect_xy(
-    a1::Vector{Float32}, a2::Vector{Float32},
-    b1::Vector{Float32}, b2::Vector{Float32})
+    a1::AbstractVector{<:Real}, a2::AbstractVector{<:Real},
+    b1::AbstractVector{<:Real}, b2::AbstractVector{<:Real})
 
     eps = 1f-5
 
@@ -1189,8 +1189,8 @@ end
 end
 
 @inline function avg_radius_to_xy_center(
-    startJoint::Vector{Float32}, endJoint::Vector{Float32},
-    centerX::Float32, centerY::Float32)
+    startJoint::AbstractVector{<:Real}, endJoint::AbstractVector{<:Real},
+    centerX::Real, centerY::Real)
 
     startRadius = hypot(startJoint[1] - centerX, startJoint[2] - centerY)
     endRadius = hypot(endJoint[1] - centerX, endJoint[2] - centerY)
@@ -1198,10 +1198,10 @@ end
 end
 
 @inline function apply_xy_detour_arc!(
-    outsidePoint::Vector{Float32},
-    outsideStart::Vector{Float32}, outsideEnd::Vector{Float32},
-    insideStart::Vector{Float32}, insideEnd::Vector{Float32},
-    t::Float32)
+    outsidePoint::AbstractVector{<:Real},
+    outsideStart::AbstractVector{<:Real}, outsideEnd::AbstractVector{<:Real},
+    insideStart::AbstractVector{<:Real}, insideEnd::AbstractVector{<:Real},
+    t::Real)
 
     dirX = outsideEnd[1] - outsideStart[1]
     dirY = outsideEnd[2] - outsideStart[2]
@@ -1254,12 +1254,12 @@ Returns:
 """
 function animate_compass_arcmove(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startJoint1::Vector{Float32},
-    endJoint1::Vector{Float32},
-    startJoint2::Vector{Float32},
-    endJoint2::Vector{Float32},
-    height::Float32, periods::Integer, strikecolor)
+    timer::Real, duration::Real,
+    startJoint1::AbstractVector{<:Real},
+    endJoint1::AbstractVector{<:Real},
+    startJoint2::AbstractVector{<:Real},
+    endJoint2::AbstractVector{<:Real},
+    height::Real, periods::Integer, strikecolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
@@ -1334,8 +1334,8 @@ Returns:
 """
 function animate_pen_tilt_and_drag(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32}, color)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real}, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1379,8 +1379,8 @@ Returns:
 """
 function animate_highlight_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, pencolor)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, pencolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1426,8 +1426,8 @@ Returns:
 """
 function animate_draw_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, penbrush::Real, pencolor,
     pointId::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1462,8 +1462,8 @@ end
 
 function animate_draw_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penx::Float32, peny::Float32, penz::Float32, penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    penx::Real, peny::Real, penz::Real, penbrush::Real, pencolor,
     pointId::Integer)
 
     animate_draw_point(
@@ -1494,9 +1494,9 @@ Returns:
 """
 function animate_draw_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor,
     lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1535,9 +1535,9 @@ drawn line while still updating two independent host line primitives.
 """
 function animate_draw_two_line_segments(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor,
     line1HostId::Integer, line1Joint1Id::Integer, line1Joint2Id::Integer,
     line2HostId::Integer, line2Joint1Id::Integer, line2Joint2Id::Integer)
 
@@ -1640,9 +1640,9 @@ Returns:
 """
 function animate_extend_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor,
     lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1699,9 +1699,9 @@ Returns:
 """
 function animate_draw_circle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, brush::Real, color,
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1754,9 +1754,9 @@ Returns:
 """
 function animate_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, brush::Real, color,
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1805,9 +1805,9 @@ Returns:
 """
 function animate_compass_fill_arc_highlight(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, color)
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
     startTheta = Float32(atan(startPoint[2] - jointPoint[2],
@@ -1849,9 +1849,9 @@ Returns:
 """
 function animate_compass_arc_highlight(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, color)
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
     startTheta = Float32(atan(startPoint[2] - jointPoint[2],
@@ -1874,8 +1874,8 @@ end
 """Animate a REPL point draw with explicit pen descend, draw, and rise phases."""
 function animate_repl_draw_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, penbrush::Real, pencolor,
     pointId::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1920,9 +1920,9 @@ end
 """Animate a REPL line draw with explicit pen descend, draw, and rise phases."""
 function animate_repl_draw_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor,
     lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -1970,9 +1970,9 @@ end
 """Animate a REPL circle draw with explicit compass descend, draw, and rise phases."""
 function animate_repl_draw_circle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, brush::Real, color,
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
     fullSweep::Bool=false)
 
@@ -2041,9 +2041,9 @@ end
 """Animate a REPL filled-circle draw with explicit compass descend, draw, and rise phases."""
 function animate_repl_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
+    timer::Real, duration::Real,
+    jointPoint::AbstractVector{<:Real}, startPoint::AbstractVector{<:Real},
+    angleTheta::Real, radius::Real, brush::Real, color,
     markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
     fullSweep::Bool=false)
 

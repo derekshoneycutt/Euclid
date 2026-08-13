@@ -18,12 +18,12 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: What about AI?](#q-what-about-ai)
     1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
-    1. [Q: You Support LaTeX?](#q-you-support-latex)
-    1. [Q: Any Performance Hacks for Users?](#q-any-performance-hacks-for-users)
+    1. [Q: You support LaTeX?](#q-you-support-latex)
+    1. [Q: Any performance hacks for users?](#q-any-performance-hacks-for-users)
     1. [Q: Why 2 languages?](#q-why-2-languages)
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
-    1. [Q: What's This About Hot-Reload?](#q-whats-this-about-hot-reload)
+    1. [Q: What's this about hot-reload?](#q-whats-this-about-hot-reload)
     1. [Q: What is all this output in the make vet output?](#q-what-is-all-this-output-in-the-make-vet-output)
 
 <p align="center">
@@ -252,7 +252,7 @@ pieces of C code walking through saving a gif, and something like ffmpeg could p
 significantly improve on even that, as well as adding other formats. Such are
 considerations for the future.
 
-### Q: You Support LaTeX?
+### Q: You support LaTeX?
 
 Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
 kind of a pain in the ass for half a week, and it does not yet support everything one might
@@ -269,7 +269,7 @@ this to play with what is supported.
 
 Currently, only math mode is supported. Maybe I'll add more? Hmm...
 
-### Q: Any Performance Hacks for Users?
+### Q: Any performance hacks for users?
 
 There are a few!
 
@@ -379,7 +379,7 @@ Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-ou
 `julia tools/make.jl -H` builds and runs the default harness scenario and writes the resulting trace
 to `bin/semantic-trace-harness.jsonl`.
 
-### Q: Where Should I Start If I Want In The Code?
+### Q: Where should I start if I want in the code?
 
 I have added an initial architecture summary and coding standards that can be your guides.
 
@@ -395,7 +395,7 @@ different purpose. The result is some code not quite being as nice to the code s
 Nonetheless, the goal is to follow it moving forward, and probably fix up the bits that
 remain a bit off as I go.
 
-### Q: What's This About Hot-Reload?
+### Q: What's this about hot-reload?
 
 The project is structured to hot-reload all Julia code if the assets package is updated.
 You can simply call the make script specifying to build only the assets package. Then

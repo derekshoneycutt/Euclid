@@ -10,6 +10,8 @@ include("./z_2.jl")
 include("./z_2_closure.jl")
 include("./z_2_identity.jl")
 include("./z_2_inverse.jl")
+include("./C_n.jl")
+include("./C_n_associative.jl")
 
 const GroupsRootFallback = raw"""Algebra - Groups
     
@@ -101,6 +103,22 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 EuclidAlgebraGroupsZ2Inverse.clean,
                 "Inverse",
                 z2_id)
+        Cn_id = register_child_animation(
+            state_ptr,
+            EuclidAlgebraGroupsCn.get_view_text,
+            EuclidAlgebraGroupsCn.initialize,
+            EuclidAlgebraGroupsCn.loop,
+            EuclidAlgebraGroupsCn.clean,
+            "Cₙ",
+            groupsId)
+            register_child_animation(
+                state_ptr,
+                EuclidAlgebraGroupsCnAssociative.get_view_text,
+                EuclidAlgebraGroupsCnAssociative.initialize,
+                EuclidAlgebraGroupsCnAssociative.loop,
+                EuclidAlgebraGroupsCnAssociative.clean,
+                "Associative",
+                Cn_id)
 
 end
 

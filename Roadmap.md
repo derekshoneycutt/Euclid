@@ -7,52 +7,54 @@ there are some things that do need to start early.
 
 ## v1
 
-Core Content:
+Core Content (>163 animations; 98 complete):
 
-- [ ] Euclid Elements, Book 1 "the intro core, pythagorus"
-  - [X] Definitions
-  - [X] Postulates
-  - [X] Common Notions
-  - [ ] Propositions
+- [ ] Euclid Elements, Book 1 "the intro core, pythagorus" (85 animations; 38 complete)
+  - [X] Definitions (31 animations)
+  - [X] Postulates (5 animations)
+  - [X] Common Notions (1 animation)
+  - [ ] Propositions (48 animations)
     - [X] 1
     - [ ] 2-10
     - [ ] 11-20
     - [ ] 21-30
     - [ ] 31-40
     - [ ] 41-48
-- [ ] Commentaries and Alternatives
-  - [ ] Proclus commentaries
+- [ ] Commentaries and Alternatives (>10 animations; 2 complete)
+  - [ ] Proclus commentaries (>6 animations)
     - [X] Isosceles Triangle
     - [X] Scalene Triangle
     - [ ] Prop 2: C is on AB
     - [ ] Prop 2: Figure 1 (point A, line BC rising above; equilateral ABD drawn below BC, circle drawn on BC, BC=AB=AD=BD, finished)
     - [ ] Prop 2: Figure 2 (Same start fig1 but AB < BC)
     - [ ] Prop 2: Figure 3 (Same start fig1 but AB > BC)
+    - [ ] Prop 3: (7 figures, animations tbd)
+    - [ ] Prop 4: (1 figure, animations tbd)
     - [ ] More? (TBD)
-  - [ ] Pythagorean Alternatives
+  - [ ] Pythagorean Alternatives (3+ animations)
     - [ ] Schopenhauer's (basically a single square and 2 rotated squares based on the internal crosses in the square: <|X|>)
     - [ ] Bhaskara II's proof
     - [ ] Xuan Tu
     - [ ] Others? -- TBD --
-- [X] Hilbert, Chapter 1
-  - [X] Section 1
-  - [X] Section 2
-  - [X] Section 3
-  - [X] Section 4
-  - [X] Section 5
-  - [X] Section 6
-  - [X] Section 7
-  - [X] Section 8
-- [ ] Algebraic groups
-  - [ ] Definitions
+- [X] Hilbert, Chapter 1 (54 animations; all complete)
+  - [X] Section 1 (null animations)
+  - [X] Section 2 (9 animations)
+  - [X] Section 3 (6 animations)
+  - [X] Section 4 (10 animations)
+  - [X] Section 5 (2 animations)
+  - [X] Section 6 (8 animations)
+  - [X] Section 7 (17 animations)
+  - [X] Section 8 (2 animations)
+- [ ] Algebraic groups (14+ animations; 7 complete)
+  - [ ] Definitions (14 animations)
     - [X] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
       - [X] Closure
       - [X] Identity
       - [X] Inverse
-    - [ ] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
-      - [ ] Associativity
-      - [ ] Commutative (Abelian)
-    - [ ] $D_n$ (dihedrals, symmetry of shape with $n$ sides ; non-commutative)
+    - [X] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
+      - [X] Associativity
+      - [X] Commutative (Abelian)
+    - [ ] $D_n$ (dihedral, symmetry of shape with $n$ sides)
       - [ ] Non-Abelian
     - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
@@ -153,15 +155,15 @@ Final tasks:
 
 ## v2
 
-After v1 is complete, the following is suggestions to evaluate next.
+Content (24+ animations):
 
-- Euclid Elements, Book 2 "the algebra book"
-  - Definitions
-  - Propositions
+- Euclid Elements, Book 2 "the algebra book" (16 animations)
+  - Definitions (2 animations)
+  - Propositions (14 animations)
     - 1-5
     - 6-10
     - 11-14
-- Group theory
+- Group theory (8+ animations)
   - Klein 4 Group
   - Frieze groups
   - $Sim(2)$ (same as $E(2)$ but with scaling as well)
@@ -170,8 +172,11 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
   - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
-- Logic, Categories, Tarski?
-- More primitives (gnomons, strings--small connectors, arrows, logic)
+- Logic, Tarski, etc.?
+
+Core Features:
+
+- More primitives (gnomons, strings--small connectors, logic)
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
@@ -205,7 +210,7 @@ After v1 is complete, the following is suggestions to evaluate next.
   - $T$ (pac-man wrap around the surface, drawing line at an irrational angle like sqrt(2) and will cover it all)
   - Wallpaper groups (repeating drawings)
   - $PSL(2, R)$ (Polygon can be transformed by never crosses below a boundary)
-  - $PGL(2, C)$ (animated advanced transformation; changes center and radius because transformation preserves circles
+  - $PGL(2, C)$ (animated advanced transformation; changes center and radius because transformation preserves circles)
 - Complex numbers support handling
 - More primitives (ellipses/conic sections, spirals)
 - Scaled Cartesian coordinate system
