@@ -359,21 +359,35 @@ On the other hand, since by axiom IV, 3 the segments AD and A'D' are congruent t
 From these congruences and the consideration of the triangles BCD and B'C'D', it follows by virtue of axiom IV, 6 that the angles CBD and C'B'D' are congruent."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 12}
 
-If two angles $ABC$ and $A'B'C'$ are congruent to each other, their supplementary angles $CBD$ and $C'B'D'$ are also congruent.
+If two angles $\angle ABC$ \euclidangle[color=palevioletred1,radius=2,end=60,filled] and
+$\angle A'B'C'$ \euclidangle[color=palevioletred1,radius=2,end=60,filled] are congruent to each other,
+their supplementary angles $\angle CBD$ \euclidangle[color=steelblue,radius=2,end=60,filled]
+and $\angle C'B'D'$ \euclidangle[color=steelblue,radius=2,end=60,filled] are also congruent.
 
-Proof: Take the points $A'$, $C'$, $D'$ upon the sides passing through $B'$ in such a way that
+\textbf{Proof}: Take the points $A'$ \euclidpoint[color=plum1,size=0.5], $C'$ \euclidpoint[color=plum1,size=0.5], $D'$ \euclidpoint[color=plum1,size=0.5] upon the sides passing through $B'$ \euclidpoint[color=plum1,size=0.5] in such a way that
 
-    $A'B' \equiv AB$, $C'B' \equiv CB$, $D'B' \equiv DB$.
+    $A'B'$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv AB$ \euclidline[color=steelblue,length=3,thickness=4], $C'B'$ \euclidline[color=grey60,length=3,thickness=4] $\equiv CB$ \euclidline[color=grey60,length=3,thickness=4], $D'B'$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv DB$ \euclidline[color=khaki3,length=3,thickness=4].
 
-Then, in the two triangles $ABC$ and $A'B'C'$, the sides $AB$ and $BC$ are respectively congruent to $A'B'$ and $C'B'$. Moreover, since the angles included by these sides are congruent to each other by hypothesis, it follows from \textit{theorem 10} that these triangles are congruent; that is to say, we have the congruences
+Then, in the two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=grey60]
+and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=grey60],
+the sides $AB$ \euclidline[color=steelblue,length=3,thickness=4] and $BC$ \euclidline[color=grey60,length=3,thickness=4]
+are respectively congruent to $A'B'$ \euclidline[color=steelblue,length=3,thickness=4] and $C'B'$ \euclidline[color=grey60,length=3,thickness=4].
+Moreover, since the angles included by these sides are congruent to each other by hypothesis, it follows from \textit{theorem 10} that these triangles are congruent; that is to say, we have the congruences
 
-    $AC \equiv A'C'$, $\angle BAC \equiv \angle B'A'C'$.
+    $AC$ \euclidline[color=grey60,length=3,thickness=4] $\equiv A'C'$ \euclidline[color=grey60,length=3,thickness=4], $\angle BAC$ \euclidangle[color=palevioletred1,radius=2,end=60,filled] $\equiv \angle B'A'C'$ \euclidangle[color=palevioletred1,radius=2,end=60,filled].
 
-On the other hand, since by \textit{axiom IV}, 3 the segments $AD$ and $A'D'$ are congruent to each other, it follows again from \textit{theorem 10} that the triangles $CAD$ and $C'A'D'$ are congruent, and, consequently, we have the congruences:
+On the other hand, since by \textit{axiom IV}, 3 the segments $AD$ \euclidline[color=khaki3,length=3,thickness=4] and $A'D'$ \euclidline[color=khaki3,length=3,thickness=4]
+are congruent to each other, it follows again from \textit{theorem 10} that the triangles
+$CAD$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1]
+and $C'A'D'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1] are congruent, and, consequently, we have the congruences:
 
-    $CD \equiv C'D'$, $\angle ADC \equiv \angle A'D'C'$.
+    $CD$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv C'D'$ \euclidline[color=palevioletred1,length=3,thickness=4], $\angle ADC$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'D'C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled].
 
-From these congruences and the consideration of the triangles $BCD$ and $B'C'D'$, it follows by virtue of \textit{axiom IV, 6} that the angles $CBD$ and $C'B'D'$ are congruent."""
+From these congruences and the consideration of the triangles
+$BCD$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=grey60,edge3_color=palevioletred1]
+and $B'C'D'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=grey60,edge3_color=palevioletred1],
+it follows by virtue of \textit{axiom IV, 6} that the angles
+$\angle CBD$ \euclidangle[color=steelblue,radius=2,end=60,filled] and $\angle C'B'D'$ \euclidangle[color=steelblue,radius=2,end=60,filled] are congruent."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

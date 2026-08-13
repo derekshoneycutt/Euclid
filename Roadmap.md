@@ -9,7 +9,6 @@ there are some things that do need to start early.
 
 Core Content:
 
-- [ ] All existing animations use LaTeX rendering
 - [ ] Euclid Elements, Book 1 "the intro core, pythagorus"
   - [X] Definitions
   - [X] Postulates
@@ -128,24 +127,20 @@ Final tasks:
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity
   - [X] Headless harness with stable-UUID scenario selection and Julia assertions
-  - [ ] Running-app end-to-end harness with screenshot correlation
-- [ ] Complete testing series across animations, integrations, and end-to-end runs
+  - [ ] Running-app end-to-end harness
 - [ ] Runtime hardening
   - [ ] Julia/Odin boundary ownership and lifecycle audit
   - [ ] Bridge ABI validation and malformed-input tests
   - [ ] Shutdown, reload, cancellation, and failure-path coverage
-  - [ ] Long-running soak tests
   - [ ] Performance budgets
 - [ ] Release validation
-  - [ ] Rendering regression suite
-  - [ ] Cross-platform resource fallback validation
+  - [ ] Rendering and animation regression test suite
+  - [ ] Complete standard integration and e2e test suite
   - [ ] User-facing error and recovery review
-  - [ ] Release-mode smoke tests
   - [ ] Dependency, license, and runtime-closure audit
 - [ ] Surface cleanup
   - [ ] Freeze and document supported Julia APIs
   - [ ] Remove dead APIs, debug paths, compatibility code, and unused assets
-  - [ ] Final bounded review
 - [ ] Final editing and review (2-3 weeks)
   - [ ] Animation and content editing
   - [ ] Principal code review against documented architecture and standards

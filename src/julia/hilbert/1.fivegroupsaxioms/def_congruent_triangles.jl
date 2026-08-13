@@ -251,10 +251,11 @@ Two triangles ABC and A'B'C' are said to be congruent to one another when all of
     ∠A ≡ ∠A',    ∠B ≡ ∠B',    ∠C ≡ ∠C'."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Congruent Triangles}
 
-Two triangles $ABC$ and $A'B'C'$ are said to be congruent to one another when all of the following congruences are fulfilled:
+Two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3]
+and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=grey60,edge3_color=khaki3] are said to be congruent to one another when all of the following congruences are fulfilled:
 
-    $AB \equiv A'B'$,    $AC \equiv A'C'$,    $BC \equiv B'C'$,\\
-    $\angle A \equiv \angle A'$,    $\angle B \equiv \angle B'$,    $\angle C \equiv \angle C'$."""
+    $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=grey60,length=3,thickness=4],    $AC$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv A'C'$ \euclidline[color=steelblue,length=3,thickness=4],    $BC$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv B'C'$ \euclidline[color=palevioletred1,length=3,thickness=4],\\
+    $\angle A$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'$ \euclidangle[color=lightgreen,radius=2,end=60,filled],    $\angle B$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle B'$ \euclidangle[color=lightgreen,radius=2,end=60,filled],    $\angle C$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 

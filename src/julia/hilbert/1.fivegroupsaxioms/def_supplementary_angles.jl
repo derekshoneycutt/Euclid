@@ -71,7 +71,9 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 Two angles having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles. Two angles having a common vertex and whose sides form straight lines are called vertical angles. An angle which is congruent to its supplementary angle is called a right angle."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Supplementary Angles}
 
-Two angles having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles. Two angles having a common vertex and whose sides form straight lines are called vertical angles. An angle which is congruent to its supplementary angle is called a right angle."""
+Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles.
+Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having a common vertex and whose sides form straight lines are called vertical angles.
+An angle which is congruent to its supplementary angle is called a right angle \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
