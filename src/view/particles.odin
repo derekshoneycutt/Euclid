@@ -492,27 +492,36 @@ draw_dust_circle_tile :: proc(image: ^rl.Image, tile_x, tile_y: int) {
         }
     }
 }
-
-//   Draw one hypocycloid tile into the atlas using polygon coverage.
+// Draw one hypocycloid tile into the atlas using polygon coverage.
 draw_dust_hypocycloid_tile :: proc(image: ^rl.Image, tile_x, tile_y, k: int) {
     origin_x := tile_x * DUST_TEXTURE_SIZE
     origin_y := tile_y * DUST_TEXTURE_SIZE
+
     points: [DUST_HYPOCYCLOID_SAMPLE_COUNT]Vector2
     point_count := sample_dust_hypocycloid_points(points[:], k)
     if point_count <= 0 {
         return
     }
     samples := points[:point_count]
-    offsets := [4]f32{0.25, 0.75, 0.25, 0.75}
+
+    subpixels := [4]Vector2{
+        {0.25, 0.25},
+        {0.75, 0.25},
+        {0.25, 0.75},
+        {0.75, 0.75},
+    }
+
     center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
     inv_center := 1.0 / center
 
     for y in 0..<DUST_TEXTURE_SIZE {
         for x in 0..<DUST_TEXTURE_SIZE {
             coverage : f32 = 0.0
+
             for sample_i in 0..<4 {
-                sample_x := (f32(x) + offsets[sample_i] - center) * inv_center
-                sample_y := (f32(y) + offsets[3 - sample_i] - center) * inv_center
+                sample_x := (f32(x) + subpixels[sample_i].x - center) * inv_center
+                sample_y := (f32(y) + subpixels[sample_i].y - center) * inv_center
+
                 if point_in_polygon(Vector2{sample_x, sample_y}, samples) {
                     coverage += 1.0
                 }
@@ -522,31 +531,53 @@ draw_dust_hypocycloid_tile :: proc(image: ^rl.Image, tile_x, tile_y, k: int) {
                 continue
             }
 
-            a := u8(math.clamp(coverage * 255.0 / 4.0, 0.0, 255.0))
+            a := u8(math.clamp(coverage * 63.75, 0.0, 255.0)) 
             rl.ImageDrawPixel(image, i32(origin_x + x), i32(origin_y + y),
                 rl.Color{255, 255, 255, a})
         }
     }
 }
 
+// Test whether a point lies inside a polygon via ray casting (Jordan Curve Theorem).
+point_in_polygon :: proc(point: Vector2, polygon: []Vector2) -> bool {
+    inside := false
+    j := len(polygon) - 1
+    
+    for i in 0..<len(polygon) {
+        pi := polygon[i]
+        pj := polygon[j]
+        
+        if (pi.y > point.y) != (pj.y > point.y) {
+            if point.x < (pj.x - pi.x) * (point.y - pi.y) / (pj.y - pi.y) + pi.x {
+                inside = !inside
+            }
+        }
+        j = i
+    }
+    return inside
+}
+
 //   Sample a normalized hypocycloid curve into a fixed point buffer.
 sample_dust_hypocycloid_points :: proc(
     points: []Vector2,
     k: int) -> int {
-    if k < 3 {
+    
+    if k < 3 || len(points) < DUST_HYPOCYCLOID_SAMPLE_COUNT {
         return 0
     }
 
-    scale_count := f32(k - 1)
+    R_minus_r := f32(k - 1)
+    freq := f64(k - 1) 
+
     max_radius := f32(0.0)
 
     for i in 0..<DUST_HYPOCYCLOID_SAMPLE_COUNT {
         theta := 2.0 * math.PI * f64(i) / f64(DUST_HYPOCYCLOID_SAMPLE_COUNT)
-        x := scale_count * f32(math.cos(theta)) +
-            f32(math.cos(f64(scale_count) * theta))
-        y := scale_count * f32(math.sin(theta)) -
-            f32(math.sin(f64(scale_count) * theta))
-        radius := f32(math.sqrt(f64(x * x + y * y)))
+        
+        x := R_minus_r * f32(math.cos(theta)) + 1.0 * f32(math.cos(freq * theta))
+        y := R_minus_r * f32(math.sin(theta)) - 1.0 * f32(math.sin(freq * theta))
+        
+        radius := math.sqrt_f32(x * x + y * y)
         if radius > max_radius {
             max_radius = radius
         }
@@ -564,25 +595,6 @@ sample_dust_hypocycloid_points :: proc(
     }
 
     return DUST_HYPOCYCLOID_SAMPLE_COUNT
-}
-
-//   Test whether a point lies inside a polygon via ray casting.
-point_in_polygon :: proc(point: Vector2, polygon: []Vector2) -> bool {
-    inside := false
-    j := len(polygon) - 1
-
-    for i in 0..<len(polygon) {
-        pi := polygon[i]
-        pj := polygon[j]
-        if (pi.y > point.y) != (pj.y > point.y) &&
-            point.x < (pj.x - pi.x) * (point.y - pi.y) /
-                (pj.y - pi.y) + pi.x {
-            inside = !inside
-        }
-        j = i
-    }
-
-    return inside
 }
 
 
