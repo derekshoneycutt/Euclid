@@ -17,11 +17,17 @@ import rlgl "vendor:raylib/rlgl"
 MAX_PARTICLES :: core.MAX_PARTICLES
 MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
 DUST_TEXTURE_SIZE :: 64
+DUST_ATLAS_COLUMNS :: 3
+DUST_ATLAS_ROWS :: 3
+DUST_ATLAS_VARIANT_COUNT :: core.DUST_ATLAS_VARIANT_COUNT
+DUST_ATLAS_SIZE :: DUST_TEXTURE_SIZE * DUST_ATLAS_COLUMNS
 DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 DUST_VERTEX_POSITION_LOCATION :: 0
 DUST_VERTEX_TEXCOORD_LOCATION :: 1
 DUST_INSTANCE_GEOMETRY_LOCATION :: 2
 DUST_INSTANCE_COLOR_LOCATION :: 3
+DUST_INSTANCE_VARIANT_LOCATION :: 4
+DUST_HYPOCYCLOID_SAMPLE_COUNT :: 128
 
 DUST_QUAD_POSITIONS := [12]f32{
     -0.5, -0.5,
@@ -107,6 +113,8 @@ stage_low_particle_instances :: proc(
             f32(dust_color.b) / 255.0,
             math.clamp(alpha * 210.0 / 255.0, 0.0, 1.0),
         }
+        dust_render^.instance_sprite_indices[count] =
+            f32(ps.low_particles.dust_sprite_index[i])
         count += 1
     }
 
@@ -133,6 +141,11 @@ draw_low_particle_instances :: proc(state: ^Euclid_General_State, count: int) ->
         dust_render^.instance_color_vbo_id,
         &dust_render^.instance_colors[0][0],
         c.int(color_size),
+        0)
+    rlgl.UpdateVertexBuffer(
+        dust_render^.instance_sprite_index_vbo_id,
+        &dust_render^.instance_sprite_indices[0],
+        c.int(count * size_of(dust_render^.instance_sprite_indices[0])),
         0)
 
     if !rlgl.EnableVertexArray(dust_render^.vao_id) {
@@ -169,6 +182,8 @@ draw_low_particles_immediate :: proc(
     dust_render := &state^.dust_render
     rlgl.SetTexture(dust_render^.texture.id)
     rlgl.Begin(rlgl.QUADS)
+    tile_u := 1.0 / f32(DUST_ATLAS_COLUMNS)
+    tile_v := 1.0 / f32(DUST_ATLAS_ROWS)
 
     for screen, i in screens {
         if !ps.low_particles.alive[i] {
@@ -191,11 +206,11 @@ draw_low_particles_immediate :: proc(
 
         rlgl.TexCoord2f(0.0, 0.0)
         rlgl.Vertex2f(screen.x - radius, screen.y - radius)
-        rlgl.TexCoord2f(0.0, 1.0)
+        rlgl.TexCoord2f(0.0, tile_v)
         rlgl.Vertex2f(screen.x - radius, screen.y + radius)
-        rlgl.TexCoord2f(1.0, 1.0)
+        rlgl.TexCoord2f(tile_u, tile_v)
         rlgl.Vertex2f(screen.x + radius, screen.y + radius)
-        rlgl.TexCoord2f(1.0, 0.0)
+        rlgl.TexCoord2f(tile_u, 0.0)
         rlgl.Vertex2f(screen.x + radius, screen.y - radius)
     }
 
@@ -300,6 +315,10 @@ release_dust_instancing_resources :: proc(dust_render: ^core.Dust_Render_State) 
     if dust_render^.instance_color_vbo_id != 0 {
         rlgl.UnloadVertexBuffer(dust_render^.instance_color_vbo_id)
         dust_render^.instance_color_vbo_id = 0
+    }
+    if dust_render^.instance_sprite_index_vbo_id != 0 {
+        rlgl.UnloadVertexBuffer(dust_render^.instance_sprite_index_vbo_id)
+        dust_render^.instance_sprite_index_vbo_id = 0
     }
     if dust_render^.instance_geometry_vbo_id != 0 {
         rlgl.UnloadVertexBuffer(dust_render^.instance_geometry_vbo_id)
@@ -412,32 +431,42 @@ load_dust_instancing_buffers :: proc(dust_render: ^core.Dust_Render_State) -> bo
     rlgl.EnableVertexAttribute(DUST_INSTANCE_COLOR_LOCATION)
     rlgl.SetVertexAttributeDivisor(DUST_INSTANCE_COLOR_LOCATION, 1)
 
+    dust_render^.instance_sprite_index_vbo_id = rlgl.LoadVertexBuffer(
+        &dust_render^.instance_sprite_indices[0],
+        c.int(size_of(dust_render^.instance_sprite_indices)),
+        true)
+    rlgl.SetVertexAttribute(DUST_INSTANCE_VARIANT_LOCATION, 1, rlgl.FLOAT, false, 0, 0)
+    rlgl.EnableVertexAttribute(DUST_INSTANCE_VARIANT_LOCATION)
+    rlgl.SetVertexAttributeDivisor(DUST_INSTANCE_VARIANT_LOCATION, 1)
+
     rlgl.DisableVertexArray()
     return dust_render^.quad_positions_vbo_id != 0 &&
         dust_render^.quad_texcoords_vbo_id != 0 &&
         dust_render^.instance_geometry_vbo_id != 0 &&
-        dust_render^.instance_color_vbo_id != 0
+        dust_render^.instance_color_vbo_id != 0 &&
+        dust_render^.instance_sprite_index_vbo_id != 0
 }
 
+//   Build the dust texture atlas used by the instanced low-particle renderer.
+build_dust_texture_atlas :: proc() -> rl.Image {
+    image := rl.GenImageColor(
+        DUST_ATLAS_SIZE,
+        DUST_ATLAS_SIZE,
+        rl.Color{255, 255, 255, 0})
 
-//   Lazily create a soft circular dust texture for textured-quad rendering.
-//
-// Parameters:
-//   - state: Global app state storing particle render resources.
-//
-// Returns:
-//   - none.
-ensure_dust_texture :: proc(state: ^Euclid_General_State) {
-    if state^.dust_render.ready {
-        return
+    draw_dust_circle_tile(&image, 0, 0)
+    for variant in 1..<DUST_ATLAS_VARIANT_COUNT {
+        draw_dust_hypocycloid_tile(&image, variant % DUST_ATLAS_COLUMNS,
+            variant / DUST_ATLAS_COLUMNS, variant + 2)
     }
 
-    image := rl.GenImageColor(
-        DUST_TEXTURE_SIZE,
-        DUST_TEXTURE_SIZE,
-        rl.Color{255, 255, 255, 0})
-    defer rl.UnloadImage(image)
+    return image
+}
 
+//   Draw the soft circle tile into one atlas cell.
+draw_dust_circle_tile :: proc(image: ^rl.Image, tile_x, tile_y: int) {
+    origin_x := tile_x * DUST_TEXTURE_SIZE
+    origin_y := tile_y * DUST_TEXTURE_SIZE
     center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
     max_dist := center
 
@@ -458,10 +487,119 @@ ensure_dust_texture :: proc(state: ^Euclid_General_State) {
             }
 
             a := u8(math.clamp(alpha * 255.0, 0.0, 255.0))
-
-            rl.ImageDrawPixel(&image, i32(x), i32(y), rl.Color{255, 255, 255, a})
+            rl.ImageDrawPixel(image, i32(origin_x + x), i32(origin_y + y),
+                rl.Color{255, 255, 255, a})
         }
     }
+}
+
+//   Draw one hypocycloid tile into the atlas using polygon coverage.
+draw_dust_hypocycloid_tile :: proc(image: ^rl.Image, tile_x, tile_y, k: int) {
+    origin_x := tile_x * DUST_TEXTURE_SIZE
+    origin_y := tile_y * DUST_TEXTURE_SIZE
+    points: [DUST_HYPOCYCLOID_SAMPLE_COUNT]Vector2
+    point_count := sample_dust_hypocycloid_points(points[:], k)
+    if point_count <= 0 {
+        return
+    }
+    samples := points[:point_count]
+    offsets := [4]f32{0.25, 0.75, 0.25, 0.75}
+    center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
+    inv_center := 1.0 / center
+
+    for y in 0..<DUST_TEXTURE_SIZE {
+        for x in 0..<DUST_TEXTURE_SIZE {
+            coverage : f32 = 0.0
+            for sample_i in 0..<4 {
+                sample_x := (f32(x) + offsets[sample_i] - center) * inv_center
+                sample_y := (f32(y) + offsets[3 - sample_i] - center) * inv_center
+                if point_in_polygon(Vector2{sample_x, sample_y}, samples) {
+                    coverage += 1.0
+                }
+            }
+
+            if coverage <= 0.0 {
+                continue
+            }
+
+            a := u8(math.clamp(coverage * 255.0 / 4.0, 0.0, 255.0))
+            rl.ImageDrawPixel(image, i32(origin_x + x), i32(origin_y + y),
+                rl.Color{255, 255, 255, a})
+        }
+    }
+}
+
+//   Sample a normalized hypocycloid curve into a fixed point buffer.
+sample_dust_hypocycloid_points :: proc(
+    points: []Vector2,
+    k: int) -> int {
+    if k < 3 {
+        return 0
+    }
+
+    scale_count := f32(k - 1)
+    max_radius := f32(0.0)
+
+    for i in 0..<DUST_HYPOCYCLOID_SAMPLE_COUNT {
+        theta := 2.0 * math.PI * f64(i) / f64(DUST_HYPOCYCLOID_SAMPLE_COUNT)
+        x := scale_count * f32(math.cos(theta)) +
+            f32(math.cos(f64(scale_count) * theta))
+        y := scale_count * f32(math.sin(theta)) -
+            f32(math.sin(f64(scale_count) * theta))
+        radius := f32(math.sqrt(f64(x * x + y * y)))
+        if radius > max_radius {
+            max_radius = radius
+        }
+        points[i] = Vector2{x, y}
+    }
+
+    if max_radius <= 0.0 {
+        return 0
+    }
+
+    scale := 0.82 / max_radius
+    for i in 0..<DUST_HYPOCYCLOID_SAMPLE_COUNT {
+        points[i].x *= scale
+        points[i].y *= scale
+    }
+
+    return DUST_HYPOCYCLOID_SAMPLE_COUNT
+}
+
+//   Test whether a point lies inside a polygon via ray casting.
+point_in_polygon :: proc(point: Vector2, polygon: []Vector2) -> bool {
+    inside := false
+    j := len(polygon) - 1
+
+    for i in 0..<len(polygon) {
+        pi := polygon[i]
+        pj := polygon[j]
+        if (pi.y > point.y) != (pj.y > point.y) &&
+            point.x < (pj.x - pi.x) * (point.y - pi.y) /
+                (pj.y - pi.y) + pi.x {
+            inside = !inside
+        }
+        j = i
+    }
+
+    return inside
+}
+
+
+//   Lazily create a soft circular dust texture for textured-quad rendering.
+//
+// Parameters:
+//   - state: Global app state storing particle render resources.
+//
+// Returns:
+//   - none.
+ensure_dust_texture :: proc(state: ^Euclid_General_State) {
+    if state^.dust_render.ready {
+        return
+    }
+
+    image := build_dust_texture_atlas()
+    defer rl.UnloadImage(image)
 
     state^.dust_render.texture = rl.LoadTextureFromImage(image)
     state^.dust_render.ready = state^.dust_render.texture.id != 0

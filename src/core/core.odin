@@ -23,6 +23,7 @@ MAX_SHAPESPOINTS :: 256
 MAX_SHAPESCONSTRAINTS :: 256
 MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_SHAPESPOINTS
 MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_SHAPESPOINTS
+DUST_ATLAS_VARIANT_COUNT :: 9
 
 DUST_GRID_CELL_SIZE :: 0.02
 DUST_GRID_DIM :: 50
@@ -697,6 +698,7 @@ Particle :: struct {
     ember_size_end : f32,
     ember_white_at_birth : f32,
     color : rl.Color,
+    dust_sprite_index : u8,
     alive : bool,
     lit_frames : i16,
 }
@@ -1142,10 +1144,12 @@ Dust_Render_State :: struct {
     quad_texcoords_vbo_id: u32,
     instance_geometry_vbo_id: u32,
     instance_color_vbo_id: u32,
+    instance_sprite_index_vbo_id: u32,
     viewport_location: i32,
     texture_location: i32,
     instance_geometry: [MAX_LOW_PARTICLES][3]f32,
     instance_colors: [MAX_LOW_PARTICLES][4]f32,
+    instance_sprite_indices: [MAX_LOW_PARTICLES]f32,
 }
 
 Gif_Capture_Phase :: enum {

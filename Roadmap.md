@@ -30,6 +30,17 @@ Core Content (>163 animations; 98 complete):
     - [ ] Prop 2: Figure 3 (Same start fig1 but AB > BC)
     - [ ] Prop 3: (7 figures, animations tbd)
     - [ ] Prop 4: (1 figure, animations tbd)
+    - [ ] Prop 5: (2 figures, animations tbd)
+    - [ ] Prop 6: (2 figures, animations tbd)
+    - [ ] Prop 7: (2 figures, animations tbd)
+    - [ ] Prop 8: (3 figures, animations tbd)
+    - [ ] Prop 9: (5 figures, animations tbd)
+    - [ ] Prop 10: (1 figures, animations tbd)
+    - [ ] Prop 11: (2 figures, animations tbd)
+    - [ ] Prop 12: (? figures, animations tbd)
+    - [ ] Prop 14: (2 figures, animations tbd)
+    - [ ] Prop 15: (3 figures, animations tbd)
+    - [ ] Prop 16: (2 figures, animations tbd)
     - [ ] More? (TBD)
   - [ ] Pythagorean Alternatives (3+ animations)
     - [ ] Schopenhauer's (basically a single square and 2 rotated squares based on the internal crosses in the square: <|X|>)
@@ -47,14 +58,14 @@ Core Content (>163 animations; 98 complete):
   - [X] Section 8 (2 animations)
 - [ ] Algebraic groups (14+ animations; 7 complete)
   - [ ] Definitions (14 animations)
-    - [X] $\mathbb{Z}_2$ (irregular polygon reflecting about a line; special case of $C_n$)
+    - [X] $\mathbb{Z}_2$(irregular polygon reflecting about a line; special case of$C_n$)
       - [X] Closure
       - [X] Identity
       - [X] Inverse
-    - [X] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
+    - [X] $C_n$(cyclic group of order$n$; writing a circle in unit dividing $2\pi$)
       - [X] Associativity
       - [X] Commutative (Abelian)
-    - [ ] $D_n$ (dihedral, symmetry of shape with $n$ sides)
+    - [ ] $D_n$(dihedral, symmetry of shape with$n$ sides)
       - [ ] Non-Abelian
     - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
@@ -73,9 +84,11 @@ General features:
   - [X] Circle
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
+  - [ ] Cardioids & Limacons
   - [X] Label
   - [X] Pen
   - [X] Compass
+  - [ ] Roulette tool
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers
@@ -166,12 +179,13 @@ Content (24+ animations):
 - Group theory (8+ animations)
   - Klein 4 Group
   - Frieze groups
-  - $Sim(2)$ (same as $E(2)$ but with scaling as well)
+  - $Sim(2)$(same as$E(2)$ but with scaling as well)
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
   - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
-  - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$; where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
+  - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$; where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
+- Possibly Roulettes? (tusi couples, trochoids, cyclocloids,)
 - Logic, Tarski, etc.?
 
 Core Features:
@@ -233,6 +247,37 @@ Core Features:
 - Fields
 
 ## References
+
+Roulette can be a good basis for all cardioids, limacons, nephroids, ellipses, more
+
+Mechanically, every standard roulette can be animated using three primary components:
+
+1. A Base Circle ($C_{1}$): Center $(x_1, y_1)$, radius $R$, fixed in place.
+1. A Rolling Circle ($C_{2}$): Center $(x_2, y_2)$, radius $r$, which rotates around the base circle.
+1. A Tracing Arm ($d$): A physical extension from the center of $C_{2}$ holding the pen at distance $d$.
+
+The Universal Formula
+
+Let $\theta$ be the angle of the rolling circle's center relative to the base circle's center. The coordinates of the pen $(x, y)$ are given by:
+
+$$\begin{aligned}x&=(R\pm r)\cos (\theta )+d\cos \left(\theta \pm \frac{R}{r}\theta \right)\\
+ y&=(R\pm r)\sin (\theta )+d\sin \left(\theta \pm \frac{R}{r}\theta \right)\end{aligned}$$
+
+Use $+$ for Epitrochoids (Circle rolling on the outside of the base circle).
+
+Use $-$ for Hypotrochoids (Circle rolling on the inside of the base circle).
+
+By exposing just three variables ($R$, $r$, and $d$) we automatically get support for curves:
+
+Target | Curve | Direction | Base Radius ($R$) | Rolling Radius ($r$) | Pen Distance ($d$) | Visual Mechanical Behavior
+--- | --- | --- | --- | --- | --- | ---
+Cardioid | Outside | ($+$) | $R$ | $r = R$ | $d = r$ | Pen sits exactly on the rolling circle's rim.
+Limaçon (Inner Loop) | Outside | ($+$) | $R$ | $r = R$ | $d > r$ | Pen extends past the rolling circle's rim.
+Limaçon (Dimpled) | Outside | ($+$) | $R$ | $r = R$ | $d < r$ | Pen sits inside the rolling circle's rim.
+Nephroid | Outside | ($+$) | $R$ | $r = \frac{1}{2}R$ | $d = r$ | Two inward kidney-like cusps.
+Ellipse | Inside | ($-$) | $R$ | $r = \frac{1}{2}R$ | $d \neq r$ | Known as a Tusi Couple. A rolling circle half the size of the base circle collapses planetary motion into perfect lines/ellipses!
+
+-----------
 
 Schopenhauer uses a diagram like this, very roughly. It includes a square with the diagonals
 crossing. The top triangle made by this diagonal is shaded. On either side right/left,

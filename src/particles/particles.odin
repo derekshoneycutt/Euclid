@@ -888,6 +888,10 @@ spawn_dust_particle_index :: proc(
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
     ps.low_particles[i].life = random_f32_range(ps, DUST_LIFE_MIN, DUST_LIFE_MAX)
+    ps.low_particles[i].dust_sprite_index = u8(random_i32_range(
+        ps,
+        0,
+        core.DUST_ATLAS_VARIANT_COUNT - 1))
 
     ps.low_particles.pos_x[i] = origin.x + random_f32_range(ps, -0.0022, 0.0022)
     ps.low_particles.pos_y[i] = origin.y + random_f32_range(ps, -0.0022, 0.0022)
