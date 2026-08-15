@@ -220,11 +220,11 @@ set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enable
     state^.animation_drawing_sound_enabled = enabled
 }
 
-//   Accumulate drawing-sound activity for the current frame.
+//   Activate the steady drawing-sound texture for the current frame.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - speed: Requested speed; negative values are clamped to zero.
+//   - speed: Retained for ABI compatibility; texture level is contact-based.
 @(export)
 simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
     if capture_scalar_command(state, .Simulate_Drawing_Sound, speed) {
@@ -234,15 +234,7 @@ simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f3
         return
     }
 
-    use_speed := speed
-    if use_speed < 0 {
-        use_speed = 0
-    }
-
     state^.chalk_audio.has_contact_this_frame = true
-    if use_speed > state^.chalk_audio.accum_speed {
-        state^.chalk_audio.accum_speed = use_speed
-    }
 }
 
 //   Move pen joint1 and enable its lock constraint at the same position.

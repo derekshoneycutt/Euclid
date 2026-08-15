@@ -217,7 +217,9 @@ initialize_window_resources :: proc(
     if !rl.IsAudioDeviceReady() {
         fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
     } else {
-        audio.init_chalk_runtime(&state^.chalk_audio)
+        chalk_path := files.packaged_asset_path(
+            "Chalk On Blackboard.wav", context.temp_allocator)
+        audio.init_chalk_runtime(&state^.chalk_audio, chalk_path)
     }
 
     state^.ui_runtime.use_gpu_dust_instancing =

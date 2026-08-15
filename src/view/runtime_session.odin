@@ -135,7 +135,7 @@ initiate_animations_state :: proc(
     state^.draw_surface = drawing_surface
     state^.point_system = point_system
     state^.particle_system = particle_system
-    state^.user_drawing_sound_enabled = true
+    state^.user_drawing_sound_enabled = false
     state^.animation_drawing_sound_enabled = true
     state^.compass = compass
     state^.pen = pen
