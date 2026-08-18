@@ -54,19 +54,6 @@ Julia_Request :: core.Julia_Request
 Julia_Event :: core.Julia_Event
 Julia_Runtime_Service :: core.Julia_Runtime_Service
 
-Animation_Tick_Diagnostics :: struct {
-    queue_depth: u64,
-    queue_high_water: u64,
-    submitted: u64,
-    committed: u64,
-    coalesced: u64,
-    stale: u64,
-    dropped: u64,
-    last_committed_sequence: u64,
-    last_latency_ms: f64,
-    max_latency_ms: f64,
-}
-
 // Display-safe service diagnostics contain copied scalar state only. They never expose
 // worker-owned Julia handles or require a Julia call to inspect service health.
 Julia_Runtime_Diagnostics :: struct {
@@ -79,30 +66,6 @@ Julia_Runtime_Diagnostics :: struct {
     request_saturation_count: u64,
     reload_state: Julia_Reload_State,
     runtime_generation: u64,
-}
-
-//   Return display-safe asynchronous animation pacing diagnostics.
-// Queue depth is represented by the single replaceable in-flight tick; accumulated time
-// and fixed slot contents remain implementation details of the service.
-animation_tick_diagnostics :: proc(
-    state: ^core.Euclid_General_State) -> Animation_Tick_Diagnostics {
-
-    if state == nil || state^.julia_runtime_service == nil {
-        return {}
-    }
-    service := state^.julia_runtime_service
-    return Animation_Tick_Diagnostics{
-        queue_depth = u64(service^.animation_tick_pending ? 1 : 0),
-        queue_high_water = service^.animation_queue_high_water,
-        submitted = service^.animation_ticks_submitted,
-        committed = service^.animation_ticks_committed,
-        coalesced = service^.animation_ticks_coalesced,
-        stale = service^.animation_ticks_stale,
-        dropped = service^.animation_ticks_dropped,
-        last_committed_sequence = service^.animation_last_committed_sequence,
-        last_latency_ms = service^.animation_last_latency_ms,
-        max_latency_ms = service^.animation_max_latency_ms,
-    }
 }
 
 //   Preserve bounded elapsed time while one replaceable tick is in flight.

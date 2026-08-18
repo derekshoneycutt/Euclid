@@ -469,8 +469,8 @@ lock_compass_joint1 :: proc "c" (
             push_dust_for_compass_segment_if_floor_contact(state)
         }
     
-        point = &state^.point_system^.points[point_index]
-        pivot = &state^.point_system^.points[pivot_index]
+        point := &state^.point_system^.points[point_index]
+        pivot := &state^.point_system^.points[pivot_index]
         pointpos := point^.position.? or_else { 0, 0, 0 }
         pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
@@ -513,8 +513,8 @@ move_compass_joint1 :: proc "c" (
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        point = &state^.point_system^.points[index]
-        pivot = &state^.point_system^.points[pivot_index]
+        point := &state^.point_system^.points[index]
+        pivot := &state^.point_system^.points[pivot_index]
         pointpos := point^.position.? or_else { 0, 0, 0 }
         pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
@@ -570,8 +570,8 @@ lock_compass_joint2 :: proc "c" (
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        point = &state^.point_system^.points[point_index]
-        pivot = &state^.point_system^.points[pivot_index]
+        point := &state^.point_system^.points[point_index]
+        pivot := &state^.point_system^.points[pivot_index]
         pointpos := point^.position.? or_else { 0, 0, 0 }
         pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
@@ -614,8 +614,8 @@ move_compass_joint2 :: proc "c" (
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        point = &state^.point_system^.points[index]
-        pivot = &state^.point_system^.points[pivot_index]
+        point := &state^.point_system^.points[index]
+        pivot := &state^.point_system^.points[pivot_index]
         pointpos := point^.position.? or_else { 0, 0, 0 }
         pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {

@@ -512,6 +512,7 @@ run_harness_scenario_task :: proc(data: rawptr) -> bool {
     return julialib.jl_unbox_bool(result) != 0
 }
 
+/* TODO: Can we kill this?
 //   Clear animation registry state and reset interface selection fields to defaults.
 reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     clean_julia_interfaces(state)
@@ -521,7 +522,7 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.selected_animation = nil
     state^.julia_interface^.pending_animation_reset = false
     state^.julia_interface^.animation_reset_cooldown_remaining = 0
-}
+}*/
 
 //   Find an animation pointer by its registered stable UUID identity.
 find_animation_by_stable_id :: proc(
@@ -732,6 +733,7 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
         animation_generation, animation_tick_sequence, "", "")
 }
 
+/* TODO : Can we kill this?
 //   Consume a pending cycle-boundary notification exactly once.
 consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil {
@@ -744,7 +746,7 @@ consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> b
 
     state^.consumed_cycle_boundary_generation = state^.cycle_boundary_generation
     return true
-}
+}*/
 
 //   Parse a bridge-provided animation stable UUID string into typed identity.
 parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier, bool) {

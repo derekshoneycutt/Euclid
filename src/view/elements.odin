@@ -193,7 +193,7 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.point_system^.draw_cache.item_count {
         draw_cached_item_low(state, &state^.point_system^.draw_cache.items[i])
     }
@@ -206,7 +206,7 @@ draw_Shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     crossing := Pen_Polygon_Crossing {
         pen_index = -1,
         polygon_index = -1,
@@ -228,33 +228,6 @@ draw_Shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     }
 }
 
-//   Render cached high-layer tool visuals and active markers with stroke3d mode.
-//
-// Parameters:
-//   - state: Global app state containing pen/compass draw-cache entries.
-//
-// Returns:
-//   - none.
-draw_Shapes_points_high_cached :: proc(state: ^Euclid_General_State) {
-    if state^.point_system^.draw_cache.draw_pen {
-        draw_cached_pen_active_dot(state, &state^.point_system^.draw_cache.pen)
-    }
-    if state^.point_system^.draw_cache.draw_compass {
-        draw_cached_compass_active_dot(state, &state^.point_system^.draw_cache.compass)
-    }
-
-    begin_stroke3d_mode(state)
-
-    if state^.point_system^.draw_cache.draw_pen {
-        draw_cached_pen(state, &state^.point_system^.draw_cache.pen)
-    }
-    if state^.point_system^.draw_cache.draw_compass {
-        draw_cached_compass(state, &state^.point_system^.draw_cache.compass)
-    }
-
-    end_stroke3d_mode(state)
-}
-
 //   Render cached shadow overlays for pen and compass tool geometry.
 //
 // Parameters:
@@ -262,7 +235,7 @@ draw_Shapes_points_high_cached :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
     if state^.point_system^.draw_cache.draw_pen {
         draw_cached_pen_shadow(state, &state^.point_system^.draw_cache.pen)
     }
@@ -276,7 +249,7 @@ draw_Shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
 // Notes:
 //   - Flat and below-surface geometry draws no shadow.
 //   - Labels are intentionally excluded from the shape-shadow pass.
-draw_Shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.point_system^.draw_cache.item_count {
         draw_cached_item_shadow(state, &state^.point_system^.draw_cache.items[i])
     }
@@ -348,12 +321,6 @@ draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
 //   Return true when a cached point draw item belongs to the elevated layer.
 draw_cached_point_is_elevated :: #force_inline proc(p: ^core.Shapes_Point_Draw) -> bool {
     return shadow_point_is_elevated(p^.point1)
-}
-
-//   Return true when a cached line draw item belongs to the elevated layer.
-draw_cached_line_is_elevated :: #force_inline proc(l: ^core.Shapes_Line_Draw) -> bool {
-    line_points := [2]Vector3{l^.point1, l^.point2}
-    return has_any_elevated_shadow_point(line_points[:])
 }
 
 //   Return true when a cached circle draw item belongs to the elevated layer.
@@ -690,13 +657,6 @@ z_split_point_in_halfspace :: #force_inline proc(
         return sign > 0
     }
     return sign <= 0
-}
-
-//   Return true when one segment strictly crosses z=0.
-z_split_segment_crosses_plane :: #force_inline proc(point0, point1: Vector3) -> bool {
-    sign0 := z_split_sign(point0.z)
-    sign1 := z_split_sign(point1.z)
-    return sign0 * sign1 < 0
 }
 
 //   Compute one segment intersection point against the z=0 plane.

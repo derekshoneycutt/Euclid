@@ -179,21 +179,6 @@ ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State)
     return true
 }
 
-//   Release registry arena allocations owned by one Julia interface generation.
-//
-// Parameters:
-//   - state: Global runtime state whose Julia interface registry is being cleared.
-//
-// Notes:
-//   - This resets the generation registry arena for reuse on hot reload.
-clean_julia_interfaces :: proc(state: ^core.Euclid_General_State) {
-    if state == nil || state^.julia_interface == nil {
-        return
-    }
-
-    clean_julia_interface_instance(state^.julia_interface)
-}
-
 //   Clear one interface registry while retaining its arena for reuse.
 clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
     if iface == nil {

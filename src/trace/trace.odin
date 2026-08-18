@@ -62,17 +62,6 @@ is_enabled :: proc(state: ^core.Trace_State) -> bool {
     return state != nil && state^.enabled && !state^.invalid
 }
 
-//   Report whether strict trace validity has been lost.
-//
-// Parameters:
-//   - state: Trace state block owned by Euclid_General_State.
-//
-// Returns:
-//   - invalid: true when strict mode detected trace-invalidating loss or failure.
-is_invalid :: proc(state: ^core.Trace_State) -> bool {
-    return state != nil && state^.invalid
-}
-
 //   Report whether trace state is present and currently valid.
 //
 // Parameters:
@@ -99,38 +88,6 @@ copy_trace_text :: proc(destination: []u8, text: string) -> int {
         copy(destination[:copy_len], text_bytes[:copy_len])
     }
     return copy_len
-}
-
-//   Assign a bounded output path into trace configuration.
-//
-// Parameters:
-//   - config: Trace configuration to update.
-//   - output_path: Candidate output path text.
-//
-// Returns:
-//   - ok: true when the path was accepted into bounded storage.
-set_output_path :: proc(config: ^Trace_Configuration, output_path: string) -> bool {
-    if config == nil || len(output_path) > len(config^.output_path) {
-        return false
-    }
-
-    config^.output_path_len = copy_trace_text(config^.output_path[:], output_path)
-    return true
-}
-
-//   Return the configured output path text, or empty when unset.
-//
-// Parameters:
-//   - config: Trace configuration to inspect.
-//
-// Returns:
-//   - output_path: Current configured path text.
-configured_output_path :: proc(config: ^Trace_Configuration) -> string {
-    if config == nil || config^.output_path_len <= 0 {
-        return ""
-    }
-
-    return string(config^.output_path[:config^.output_path_len])
 }
 
 //   Report whether one category is enabled for publication.
@@ -300,23 +257,6 @@ append_json_string_field :: proc(
         return false
     }
     return append_json_string(buffer, length, value)
-}
-
-//   Append a comma when this is not the first JSON field.
-//
-// Parameters:
-//   - buffer: Destination byte buffer.
-//   - length: Current valid length, updated on success.
-//   - first_field: true before writing the first field.
-//
-// Returns:
-//   - ok: true when any separator was appended successfully.
-append_json_separator :: proc(buffer: []u8, length: ^int, first_field: bool) -> bool {
-    if first_field {
-        return true
-    }
-
-    return append_builder_text(buffer, length, ",")
 }
 
 //   Serialize one trace event envelope and payload into JSONL bytes.
@@ -1022,36 +962,6 @@ should_fail_process :: proc(state: ^core.Trace_State) -> bool {
     return state != nil && state^.enabled && state^.strict && state^.invalid
 }
 
-//   Free temporary allocations accumulated while parsing trace configuration.
-//
-// Parameters:
-//   - none.
-//
-// Returns:
-//   - none.
-release_trace_temp_allocations :: proc() {
-    free_all(context.temp_allocator)
-}
-
-//   Report trace state counters for diagnostics.
-//
-// Parameters:
-//   - state: Trace state block owned by Euclid_General_State.
-//
-// Returns:
-//   - counters: Snapshot of emitted and dropped counts.
-trace_counters :: proc(state: ^core.Trace_State) -> core.Trace_Counters {
-    if state == nil {
-        return {}
-    }
-
-    return core.Trace_Counters{
-        emitted_count = state^.emitted_count,
-        dropped_count = state^.dropped_count,
-        invalid = state^.invalid,
-    }
-}
-
 //   Record one runtime lifecycle event.
 //
 // Parameters:
@@ -1570,20 +1480,6 @@ record_constraint_solve_summary :: proc(
         .Geometry,
         "constraint.solve_summary",
         string(payload_buffer[:payload_len]))
-}
-
-//   Append one optional checkpoint point position field.
-append_checkpoint_point_position :: proc(
-    payload_buffer: []u8,
-    payload_len: ^int,
-    point: ^core.Trace_Checkpoint_Point) -> bool {
-
-    if !point^.has_position {
-        return true
-    }
-    return append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_vector3_field(payload_buffer, payload_len,
-            "position", point^.position)
 }
 
 //   Append one checkpoint point record to the payload.

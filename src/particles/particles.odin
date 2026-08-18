@@ -854,15 +854,6 @@ spawn_burnout_ember_particle :: proc(
 
 }
 
-//   Advance spawn timer without emitting particles.
-emit_silence :: proc(ps: ^Particle_System, dt: f32) {
-    ps.spawn_timer += dt
-
-    for ps.spawn_timer >= SPAWN_INTERVAL {
-        ps.spawn_timer -= SPAWN_INTERVAL
-    }
-}
-
 //   Clamp one low-layer dust particle's x/y position to dust bounds and apply bounce damping.
 clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
     if ps.low_particles.pos_x[i] < DUST_XY_MIN {

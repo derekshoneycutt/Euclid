@@ -10,7 +10,7 @@ import rl "vendor:raylib"
 
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
-Flow_Command_Handler :: proc(
+Flow_Command_Handler :: #type proc(
     cmd: core.Dynview_Command,
     buffer: ^core.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
@@ -889,35 +889,6 @@ flow_consume_inline_pentagon :: proc(
     wrap_if_full(flow, frame.max_cols)
 }
 
-//   Compute style-aware row count for one text command payload.
-count_rows_for_run :: #force_inline proc(
-    text: string,
-    panel_width, text_padding, wrap_advance: f32,
-    style: Dynview_Text_Style) -> int {
-
-    max_chars := dynview.chars_per_row_for_style(
-        panel_width, text_padding, wrap_advance, style)
-    return dynview.count_wrapped_text_rows(text, max_chars)
-}
-
-//   Draw one styled wrapped text line run with bounded visual traits.
-draw_styled_line :: #force_inline proc(
-    text: string,
-    panel: rl.Rectangle,
-    row_y, text_padding, wrap_advance, font_size: f32,
-    font: rl.Font,
-    style: Dynview_Text_Style) {
-
-    line_x := panel.x + text_padding
-    if style.alignment == .Center {
-        line_w := f32(dynview.text_codepoint_count_span(text, 0, len(text))) *
-            wrap_advance * max(0.5, style.wrap_scale)
-        line_x = panel.x + (panel.width - line_w) * 0.5
-    }
-
-    view_core.ui_text(text, int(line_x), int(row_y), style.color, font, font_size)
-}
-
 //  Consume a text based command for the given flow
 consume_text_based_command :: proc(
     cmd: core.Dynview_Command,
@@ -944,14 +915,6 @@ consume_large_op_command :: proc(
 
     text := dynview.large_op_visible_text(buffer, cmd)
     flow_consume_text_run(flow, text, style, draw_ctx)
-}
-
-//  Consume a line break for the given flow
-consume_linebreak :: proc(
-    flow: ^Dynview_Flow_State) {
-
-    flow.row += 1
-    flow.col = 0
 }
 
 //   Adapt flow_consume_inline_line to the uniform table handler shape.
@@ -1042,101 +1005,4 @@ flow_handle_inline_pentagon :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
     flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
-}
-
-//   Consume a single command in the current run of the given flow.
-//   Handlers are dispatched from a static table indexed by command kind.
-consume_flow_command :: proc(
-    runtime: ^core.Dynview_System,
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
-    flow: ^Dynview_Flow_State,
-    draw_ctx: ^Dynview_Draw_Context) {
-
-    kind := cmd.kind
-    if kind == .Line_Break || kind == .Divider {
-        consume_linebreak(flow)
-        return
-    }
-
-    style := dynview.style_by_id(cmd.style_id)
-    handlers := FLOW_COMMAND_HANDLERS
-    handler := handlers[kind]
-    if handler != nil {
-        handler(cmd, buffer, flow, style, draw_ctx)
-    }
-}
-
-//   Count total style-aware rows from validated dynview command stream.
-count_styled_rows :: proc(
-    runtime: ^core.Dynview_System,
-    panel_width, text_padding, wrap_advance: f32) -> int {
-
-    if runtime == nil {
-        return 1
-    }
-
-    buffer := &runtime^.command_buffer
-    if buffer^.command_count <= 0 {
-        return 1
-    }
-
-    flow := Dynview_Flow_State{}
-    draw_ctx := Dynview_Draw_Context{
-        panel = {0, 0, panel_width, 0},
-        text_padding = text_padding,
-        text_row_height = 1,
-        wrap_advance = wrap_advance,
-    }
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
-        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
-    }
-
-    if !flow.had_visible && flow.row == 0 {
-        return 1
-    }
-    return flow.row + 1
-}
-
-//   Draw environment for styled wrapped dynview content: the target panel,
-//   scroll offset, typography metrics, and fallback font, grouped so the entry
-//   point passes one coherent value.
-Styled_Content_Params :: struct {
-    panel:           rl.Rectangle,
-    scroll_y:        f32,
-    text_padding:    f32,
-    text_row_height: f32,
-    wrap_advance:    f32,
-    font_size:       f32,
-    font:            rl.Font,
-}
-
-//   Draw style-aware wrapped dynview text content clipped by caller scissor.
-draw_styled_content :: proc(
-    state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
-    params: Styled_Content_Params) {
-
-    if runtime == nil {
-        return
-    }
-
-    buffer := &runtime^.command_buffer
-    flow := Dynview_Flow_State{}
-    draw_ctx := Dynview_Draw_Context{
-        enabled = true,
-        state = state,
-        panel = params.panel,
-        scroll_y = params.scroll_y,
-        text_padding = params.text_padding,
-        text_row_height = params.text_row_height,
-        wrap_advance = params.wrap_advance,
-        font_size = params.font_size,
-        fallback_font = params.font,
-    }
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
-        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
-    }
 }

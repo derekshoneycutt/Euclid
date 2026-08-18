@@ -425,23 +425,6 @@ gif_encode_push_buffer :: proc(state: ^Gif_Encode_State, node: ^Gif_Encode_Buffe
     state.list_tail = node
 }
 
-//   Pop and return the head buffer node from the encoder output list.
-gif_encode_pop_head_buffer :: proc(state: ^Gif_Encode_State) -> ^Gif_Encode_Buffer {
-    if state.list_head == nil {
-        return nil
-    }
-
-    n := state.list_head
-    state.list_head = n.next
-    n.next = nil
-
-    if state.list_head == nil {
-        state.list_tail = nil
-    }
-
-    return n
-}
-
 //   Release all encoder-owned allocations and reset state fields.
 //
 // Notes:

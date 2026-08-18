@@ -188,35 +188,6 @@ scratchpad_classify_input_direct :: proc(
     return i32(julialib.jl_unbox_int32(result))
 }
 
-//   Resolve one phase-1 scratchpad backslash token to a Unicode replacement.
-//
-// Returns:
-//   - Replacement text when Julia REPL backslash completion resolves a single match.
-//   - Empty string when no completion should be applied.
-scratchpad_complete_backslash_direct :: proc(
-    state: ^core.Euclid_General_State, token: string) -> string {
-
-    if state == nil || state^.julia_interface == nil {
-        return ""
-    }
-    if state^.julia_interface^.scratchpad_complete_backslash == nil {
-        return ""
-    }
-
-    state_value := julialib.jl_box_voidpointer(state)
-    token_c := strings.clone_to_cstring(token, context.temp_allocator)
-    token_value := julialib.jl_cstr_to_string(token_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_complete_backslash,
-        state_value, token_value)
-
-    if julialib.jl_exception_occurred() != nil || result == nil {
-        print_julia_exception("scratchpad_complete_backslash")
-        return ""
-    }
-
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
-}
-
 //   Resolve one generic scratchpad completion request from full input text and caret byte offset.
 //
 // Returns:

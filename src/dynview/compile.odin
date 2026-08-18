@@ -749,25 +749,6 @@ scratchpad_text_or_fallback :: proc(
     return string(runtime^.compile_cache.compiled_plain_text[:text_len])
 }
 
-//   Compile scratchpad stream and return compiled text when validation succeeds.
-compiled_scratchpad_text_or_fallback :: proc(
-    runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    font_size, wrap_advance: f32,
-    style_revision: u64,
-    fallback_text: string) -> string {
-
-    if !runtime^.enabled {
-        return fallback_text
-    }
-
-    track_panel(runtime, panel)
-    track_font(runtime, font_size, wrap_advance)
-    track_style(runtime, style_revision)
-    compile_if_needed(runtime)
-    return scratchpad_text_or_fallback(runtime, fallback_text)
-}
-
 //   Recompute copy hit-target cache for the current scratchpad panel and scroll.
 refresh_scratchpad_copy_targets :: proc(
     runtime: ^core.Dynview_System,

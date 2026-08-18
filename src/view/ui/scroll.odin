@@ -390,26 +390,6 @@ clamp_scroll_position :: proc(scroll_y: ^f32, max_scroll: f32) {
     }
 }
 
-//   Apply mouse-wheel scrolling when cursor is over target panel.
-apply_wheel_scroll :: proc(
-    mouse_input: Mouse_Input_State,
-    panel: rl.Rectangle,
-    row_height: f32,
-    scroll_y: ^f32,
-    max_scroll: f32,
-    wheel_multiplier: f32) {
-
-    if !rl.CheckCollisionPointRec(mouse_input.position, panel) {
-        return
-    }
-
-    wheel := mouse_input.wheel_delta
-    if wheel != 0 {
-        scroll_y^ -= wheel * (row_height * wheel_multiplier)
-        clamp_scroll_position(scroll_y, max_scroll)
-    }
-}
-
 //   Compute scrollbar thumb height from content-to-panel ratio.
 scrollbar_thumb_height :: #force_inline proc(
     panel_height: f32,
@@ -462,33 +442,4 @@ build_vertical_scrollbar :: proc(
     thumb_y := scrollbar_thumb_y(panel.y, panel.height, thumb_h, scroll_y, max_scroll)
     thumb := rl.Rectangle{track.x, thumb_y, scrollbar_width, thumb_h}
     return Vertical_Scrollbar_Geometry{track, thumb, thumb_h, true}
-}
-
-//   Handle drag lifecycle and update scroll offset from thumb drag.
-handle_scrollbar_drag :: proc(ctx: Scrollbar_Drag_Context) {
-
-    if ctx.mouse_input.left_pressed &&
-        rl.CheckCollisionPointRec(ctx.mouse_input.position, ctx.thumb) {
-        ctx.dragging^ = true
-        ctx.drag_off^ = ctx.mouse_input.position.y - ctx.thumb.y
-    }
-
-    if !ctx.dragging^ {
-        return
-    }
-
-    if !ctx.mouse_input.left_down {
-        ctx.dragging^ = false
-        return
-    }
-
-    thumb_range := ctx.panel_height - ctx.thumb_h
-    if thumb_range <= ctx.drag_epsilon || ctx.max_scroll <= 0 {
-        ctx.scroll_y^ = 0
-        return
-    }
-
-    new_thumb_y := ctx.mouse_input.position.y - ctx.drag_off^
-    t := (new_thumb_y - ctx.panel_y) / thumb_range
-    ctx.scroll_y^ = clamp(t, 0, 1) * ctx.max_scroll
 }
