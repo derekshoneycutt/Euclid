@@ -1147,7 +1147,8 @@ end
 @inline xy_cross(ax::Real, ay::Real, bx::Real, by::Real) = ax * by - ay * bx
 
 @inline function point_on_segment_xy(
-    a::AbstractVector{<:Real}, b::AbstractVector{<:Real}, p::AbstractVector{<:Real}, eps::Real)
+    a::AbstractVector{<:Real}, b::AbstractVector{<:Real}, p::AbstractVector{<:Real},
+    eps::Real)
 
     return (
         p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
@@ -1536,7 +1537,8 @@ drawn line while still updating two independent host line primitives.
 function animate_draw_two_line_segments(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
-    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
     penbrush::Real, pencolor,
     line1HostId::Integer, line1Joint1Id::Integer, line1Joint2Id::Integer,
     line2HostId::Integer, line2Joint1Id::Integer, line2Joint2Id::Integer)
@@ -1641,7 +1643,8 @@ Returns:
 function animate_extend_line(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
-    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
     penbrush::Real, pencolor,
     lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
 
