@@ -118,7 +118,7 @@ Dynview_Delimiter_Family :: enum {
     Bracket,
     Brace,
     Vert,
-    DoubleVert,
+    Double_Vert,
     Ceil,
     Floor,
     Angle,

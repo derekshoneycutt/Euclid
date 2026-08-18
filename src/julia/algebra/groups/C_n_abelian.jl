@@ -142,60 +142,62 @@ Formally, this is the statement $\rho^2\rho^4 = \rho^4\rho^2$."""
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    point1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
-    point3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint3Id))
-    point4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint4Id))
-    point5Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint5Id))
-    point6Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint6Id))
-    point7Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint7Id))
-    point8Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint8Id))
-    point9Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint9Id))
-    point10Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint10Id))
-    point11Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint11Id))
-    point12Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint12Id))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
+    point3id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint3Id))
+    point4id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint4Id))
+    point5id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint5Id))
+    point6id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint6Id))
+    point7id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint7Id))
+    point8id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint8Id))
+    point9id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint9Id))
+    point10id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint10Id))
+    point11id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint11Id))
+    point12id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint12Id))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [point1Id, point2Id, point3Id, point4Id, point5Id, point6Id, point7Id, point8Id,
-         point9Id, point10Id, point11Id, point12Id, circleHostId])
+        [point1id, point2id, point3id, point4id, point5id, point6id, point7id, point8id,
+         point9id, point10id, point11id, point12id, circle_hostid])
     OdinJuliaBridge.set_point_position(
-        state_ptr, circleEndId, CircleStartPoint)
+        state_ptr, circle_endid, CircleStartPoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circleHostId, 0f0)
+        state_ptr, circle_hostid, 0f0)
 
     OdinJuliaBridge.set_point_position(
-        state_ptr, point1Id, Point1)
+        state_ptr, point1id, Point1)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point2Id, Point2)
+        state_ptr, point2id, Point2)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point3Id, Point3)
+        state_ptr, point3id, Point3)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point4Id, Point4)
+        state_ptr, point4id, Point4)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point5Id, Point5)
+        state_ptr, point5id, Point5)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point6Id, Point6)
+        state_ptr, point6id, Point6)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point7Id, Point7)
+        state_ptr, point7id, Point7)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point8Id, Point8)
+        state_ptr, point8id, Point8)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point9Id, Point9)
+        state_ptr, point9id, Point9)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point10Id, Point10)
+        state_ptr, point10id, Point10)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point11Id, Point11)
+        state_ptr, point11id, Point11)
     OdinJuliaBridge.set_point_position(
-        state_ptr, point12Id, Point12)
+        state_ptr, point12id, Point12)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
 
     OdinJuliaBridge.set_pen_active(state_ptr, 0, Point1Color)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, CircleColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
     OdinJuliaBridge.lock_compass_joint2(
         state_ptr, CircleStartPoint[1], CircleStartPoint[2], CompassTopZ)
 
@@ -233,9 +235,12 @@ function initialize(state_ptr::Ptr{Cvoid})
     point12 = OdinJuliaBridge.create_new_point(
         state_ptr, Point12, Point12Color, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.endId))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleHostId, Float32(circle.host_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleStartId, Float32(circle.start_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleEndId, Float32(circle.end_id))
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, Float32(point1.index))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, Float32(point2.index))
@@ -257,25 +262,28 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    point1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
-    point3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint3Id))
-    point4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint4Id))
-    point5Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint5Id))
-    point6Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint6Id))
-    point7Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint7Id))
-    point8Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint8Id))
-    point9Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint9Id))
-    point10Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint10Id))
-    point11Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint11Id))
-    point12Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint12Id))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleStartId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
+    point3id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint3Id))
+    point4id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint4Id))
+    point5id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint5Id))
+    point6id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint6Id))
+    point7id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint7Id))
+    point8id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint8Id))
+    point9id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint9Id))
+    point10id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint10Id))
+    point11id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint11Id))
+    point12id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint12Id))
 
-    if point1Id < 0 || point2Id < 0 || point3Id < 0 || point4Id < 0 || point5Id < 0 ||
-        point6Id < 0 ||  point7Id < 0 || point8Id < 0 || point9Id < 0 || point10Id < 0 ||
-        point11Id < 0 || point12Id < 0
+    if point1id < 0 || point2id < 0 || point3id < 0 || point4id < 0 || point5id < 0 ||
+        point6id < 0 ||  point7id < 0 || point8id < 0 || point9id < 0 || point10id < 0 ||
+        point11id < 0 || point12id < 0
         return
     end
 
@@ -296,16 +304,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, CenterPoint, CircleStartPoint,
             CircleSweepTheta, Radius, CircleBrush, CircleColor,
-            circleHostId, circleStartId, circleEndId)
+            circle_hostid, circle_startid, circle_endid)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circleEndId, CircleStartPoint)
+                state_ptr, circle_endid, CircleStartPoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circleHostId, 2f0π)
+                state_ptr, circle_hostid, 2f0π)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(
@@ -330,7 +338,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint1
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point1,
-            PointMaxBrush, Point1Color, point1Id)
+            PointMaxBrush, Point1Color, point1id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -350,7 +358,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint2
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point2,
-            PointMaxBrush, Point2Color, point2Id)
+            PointMaxBrush, Point2Color, point2id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -370,7 +378,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint3
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point3,
-            PointMaxBrush, Point3Color, point3Id)
+            PointMaxBrush, Point3Color, point3id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -390,7 +398,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint4
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point4,
-            PointMaxBrush, Point4Color, point4Id)
+            PointMaxBrush, Point4Color, point4id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -410,7 +418,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint5
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point5,
-            PointMaxBrush, Point5Color, point5Id)
+            PointMaxBrush, Point5Color, point5id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -430,7 +438,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint6
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point6,
-            PointMaxBrush, Point6Color, point6Id)
+            PointMaxBrush, Point6Color, point6id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -450,7 +458,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint7
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point7,
-            PointMaxBrush, Point7Color, point7Id)
+            PointMaxBrush, Point7Color, point7id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -470,7 +478,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint8
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point8,
-            PointMaxBrush, Point8Color, point8Id)
+            PointMaxBrush, Point8Color, point8id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -490,7 +498,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint9
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point9,
-            PointMaxBrush, Point9Color, point9Id)
+            PointMaxBrush, Point9Color, point9id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -510,7 +518,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint10
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point10,
-            PointMaxBrush, Point10Color, point10Id)
+            PointMaxBrush, Point10Color, point10id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -530,7 +538,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint11
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point11,
-            PointMaxBrush, Point11Color, point11Id)
+            PointMaxBrush, Point11Color, point11id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -550,7 +558,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawPoint12
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, Point12,
-            PointMaxBrush, Point12Color, point12Id)
+            PointMaxBrush, Point12Color, point12id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -568,29 +576,29 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseRotation1
-        EuclidAnimations.transform_rotate_point(state_ptr, point1Id, Point1,
+        EuclidAnimations.transform_rotate_point(state_ptr, point1id, Point1,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point2Id, Point2,
+        EuclidAnimations.transform_rotate_point(state_ptr, point2id, Point2,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point3Id, Point3,
+        EuclidAnimations.transform_rotate_point(state_ptr, point3id, Point3,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point4Id, Point4,
+        EuclidAnimations.transform_rotate_point(state_ptr, point4id, Point4,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point5Id, Point5,
+        EuclidAnimations.transform_rotate_point(state_ptr, point5id, Point5,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point6Id, Point6,
+        EuclidAnimations.transform_rotate_point(state_ptr, point6id, Point6,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point7Id, Point7,
+        EuclidAnimations.transform_rotate_point(state_ptr, point7id, Point7,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point8Id, Point8,
+        EuclidAnimations.transform_rotate_point(state_ptr, point8id, Point8,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point9Id, Point9,
+        EuclidAnimations.transform_rotate_point(state_ptr, point9id, Point9,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point10Id, Point10,
+        EuclidAnimations.transform_rotate_point(state_ptr, point10id, Point10,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point11Id, Point11,
+        EuclidAnimations.transform_rotate_point(state_ptr, point11id, Point11,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point12Id, Point12,
+        EuclidAnimations.transform_rotate_point(state_ptr, point12id, Point12,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/6, timer, Rotation1Duration)
 
         timer += dt
@@ -605,29 +613,29 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseRotation2
-        EuclidAnimations.transform_rotate_point(state_ptr, point1Id, Point2,
+        EuclidAnimations.transform_rotate_point(state_ptr, point1id, Point2,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point2Id, Point3,
+        EuclidAnimations.transform_rotate_point(state_ptr, point2id, Point3,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point3Id, Point4,
+        EuclidAnimations.transform_rotate_point(state_ptr, point3id, Point4,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point4Id, Point5,
+        EuclidAnimations.transform_rotate_point(state_ptr, point4id, Point5,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point5Id, Point6,
+        EuclidAnimations.transform_rotate_point(state_ptr, point5id, Point6,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point6Id, Point7,
+        EuclidAnimations.transform_rotate_point(state_ptr, point6id, Point7,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point7Id, Point8,
+        EuclidAnimations.transform_rotate_point(state_ptr, point7id, Point8,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point8Id, Point9,
+        EuclidAnimations.transform_rotate_point(state_ptr, point8id, Point9,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point9Id, Point10,
+        EuclidAnimations.transform_rotate_point(state_ptr, point9id, Point10,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point10Id, Point11,
+        EuclidAnimations.transform_rotate_point(state_ptr, point10id, Point11,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point11Id, Point12,
+        EuclidAnimations.transform_rotate_point(state_ptr, point11id, Point12,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point12Id, Point1,
+        EuclidAnimations.transform_rotate_point(state_ptr, point12id, Point1,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/3, timer, Rotation2Duration)
 
         timer += dt
@@ -642,29 +650,29 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseRotation3
-        EuclidAnimations.transform_rotate_point(state_ptr, point1Id, Point4,
+        EuclidAnimations.transform_rotate_point(state_ptr, point1id, Point4,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point2Id, Point5,
+        EuclidAnimations.transform_rotate_point(state_ptr, point2id, Point5,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point3Id, Point6,
+        EuclidAnimations.transform_rotate_point(state_ptr, point3id, Point6,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point4Id, Point7,
+        EuclidAnimations.transform_rotate_point(state_ptr, point4id, Point7,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point5Id, Point8,
+        EuclidAnimations.transform_rotate_point(state_ptr, point5id, Point8,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point6Id, Point9,
+        EuclidAnimations.transform_rotate_point(state_ptr, point6id, Point9,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point7Id, Point10,
+        EuclidAnimations.transform_rotate_point(state_ptr, point7id, Point10,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point8Id, Point11,
+        EuclidAnimations.transform_rotate_point(state_ptr, point8id, Point11,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point9Id, Point12,
+        EuclidAnimations.transform_rotate_point(state_ptr, point9id, Point12,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point10Id, Point1,
+        EuclidAnimations.transform_rotate_point(state_ptr, point10id, Point1,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point11Id, Point2,
+        EuclidAnimations.transform_rotate_point(state_ptr, point11id, Point2,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
-        EuclidAnimations.transform_rotate_point(state_ptr, point12Id, Point3,
+        EuclidAnimations.transform_rotate_point(state_ptr, point12id, Point3,
             [0.5, 0.5, 0], [0.5, 0.5, 1], π/2, timer, Rotation3Duration)
 
         timer += dt

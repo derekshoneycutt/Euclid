@@ -401,7 +401,7 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
 
     heavier := app_core.Font_Variant_Flags(
         u32(flags) |
-        u32(app_core.Font_Variant_Flags.ExtraBold) |
+        u32(app_core.Font_Variant_Flags.Extrabold) |
         u32(app_core.Font_Variant_Flags.Black))
     resolved_heavier := app_core.font_resolve_weight_from_flags(heavier)
     testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
@@ -415,7 +415,7 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     defer free(runtime)
 
     snapshot^.command_buffer.command_count = 1
-    snapshot^.command_buffer.commands[0].kind = .MathBlock
+    snapshot^.command_buffer.commands[0].kind = .Math_Block
     snapshot^.math_program_count = 1
     snapshot^.math_programs[0] = app_core.Dynview_Math_Program{
         valid = true,
@@ -423,9 +423,9 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
         node_count = 1,
     }
     snapshot^.math_node_count = 1
-    snapshot^.math_nodes[0].kind = .GlyphRun
+    snapshot^.math_nodes[0].kind = .Glyph_Run
     snapshot^.math_command_count = 1
-    snapshot^.math_commands[0].kind = .MathGlyphRun
+    snapshot^.math_commands[0].kind = .Math_Glyph_Run
     runtime^.compile_cache.is_valid = true
     runtime^.compile_cache.layout_is_valid = true
 
@@ -691,7 +691,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     buffer.text_bytes_len = 2
 
     cache^.math_commands[0] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
@@ -782,13 +782,13 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
     buffer.text_bytes_len = 3
 
     cache^.math_commands[0] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
     }
     cache^.math_commands[1] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 2,
         text_len = 1,

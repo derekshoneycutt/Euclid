@@ -38,12 +38,12 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    pointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
+    pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
-    OdinJuliaBridge.hide_point(state_ptr, pointId)
+    OdinJuliaBridge.hide_point(state_ptr, pointid)
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, PointColor)
@@ -63,8 +63,8 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    pointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
-    if pointId < 0
+    pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
+    if pointid < 0
         return
     end
 
@@ -83,7 +83,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDraw
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawDuration, Point,
-            PointMaxBrush, PointColor, pointId)
+            PointMaxBrush, PointColor, pointid)
 
         timer += dt
         if timer >= DrawDuration
@@ -97,7 +97,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= RiseDuration
             OdinJuliaBridge.hide_pen(state_ptr)
-            OdinJuliaBridge.hide_point(state_ptr, pointId)
+            OdinJuliaBridge.hide_point(state_ptr, pointid)
             reset_cycle_state(state_ptr)
             return
         end

@@ -114,29 +114,29 @@ $A$ \euclidpoint[color=steelblue,size=1] and $A_n$ \euclidpoint[color=grey60,siz
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
 
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointA1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA1Id))
-    pointA2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA2Id))
-    pointA3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA3Id))
-    pointA4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA4Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_a1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA1Id))
+    point_a2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA2Id))
+    point_a3_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA3Id))
+    point_a4_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA4Id))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelA1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA1Id))
-    labelA2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA2Id))
-    labelA3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA3Id))
-    labelA4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA4Id))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_a1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA1Id))
+    label_a2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA2Id))
+    label_a3_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA3Id))
+    label_a4_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA4Id))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [lineHostId,
-         pointAId, pointBId, pointA1Id, pointA2Id, pointA3Id, pointA4Id,
-         labelAId, labelBId, labelA1Id, labelA2Id, labelA3Id, labelA4Id])
+        [line_host_id,
+         point_a_id, point_b_id, point_a1_id, point_a2_id, point_a3_id, point_a4_id,
+         label_a_id, label_b_id, label_a1_id, label_a2_id, label_a3_id, label_a4_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id, LineStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, LineStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendStart)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -163,37 +163,37 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     baseline = OdinJuliaBridge.create_new_line(state_ptr, LineStart, LineStart, LineColor, 0f0)
 
-    pointA = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAColor, 0f0)
-    pointB = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointBColor, 0f0)
-    pointA1 = OdinJuliaBridge.create_new_point(state_ptr, PointA1, StepPointColor, 0f0)
-    pointA2 = OdinJuliaBridge.create_new_point(state_ptr, PointA2, StepPointColor, 0f0)
-    pointA3 = OdinJuliaBridge.create_new_point(state_ptr, PointA3, StepPointColor, 0f0)
-    pointA4 = OdinJuliaBridge.create_new_point(state_ptr, PointA4, StepPointColor, 0f0)
+    point_a = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAColor, 0f0)
+    point_b = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointBColor, 0f0)
+    point_a1 = OdinJuliaBridge.create_new_point(state_ptr, PointA1, StepPointColor, 0f0)
+    point_a2 = OdinJuliaBridge.create_new_point(state_ptr, PointA2, StepPointColor, 0f0)
+    point_a3 = OdinJuliaBridge.create_new_point(state_ptr, PointA3, StepPointColor, 0f0)
+    point_a4 = OdinJuliaBridge.create_new_point(state_ptr, PointA4, StepPointColor, 0f0)
 
-    labelA = OdinJuliaBridge.create_new_label(state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
-    labelB = OdinJuliaBridge.create_new_label(state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
-    labelA1 = OdinJuliaBridge.create_new_label(state_ptr, '1', LabelA1Point, LabelColor, 16f0)
-    labelA2 = OdinJuliaBridge.create_new_label(state_ptr, '2', LabelA2Point, LabelColor, 16f0)
-    labelA3 = OdinJuliaBridge.create_new_label(state_ptr, '3', LabelA3Point, LabelColor, 16f0)
-    labelA4 = OdinJuliaBridge.create_new_label(state_ptr, '4', LabelA4Point, LabelColor, 16f0)
+    label_a = OdinJuliaBridge.create_new_label(state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
+    label_b = OdinJuliaBridge.create_new_label(state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
+    label_a1 = OdinJuliaBridge.create_new_label(state_ptr, '1', LabelA1Point, LabelColor, 16f0)
+    label_a2 = OdinJuliaBridge.create_new_label(state_ptr, '2', LabelA2Point, LabelColor, 16f0)
+    label_a3 = OdinJuliaBridge.create_new_label(state_ptr, '3', LabelA3Point, LabelColor, 16f0)
+    label_a4 = OdinJuliaBridge.create_new_label(state_ptr, '4', LabelA4Point, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(baseline.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(baseline.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(baseline.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(baseline.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(baseline.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(baseline.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(pointA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(pointB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA1Id, Float32(pointA1.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA2Id, Float32(pointA2.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA3Id, Float32(pointA3.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA4Id, Float32(pointA4.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(point_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA1Id, Float32(point_a1.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA2Id, Float32(point_a2.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA3Id, Float32(point_a3.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointA4Id, Float32(point_a4.index))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(labelA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(labelB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA1Id, Float32(labelA1.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA2Id, Float32(labelA2.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA3Id, Float32(labelA3.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA4Id, Float32(labelA4.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(label_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA1Id, Float32(label_a1.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA2Id, Float32(label_a2.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA3Id, Float32(label_a3.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelA4Id, Float32(label_a4.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -202,25 +202,25 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    lineJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
 
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointA1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA1Id))
-    pointA2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA2Id))
-    pointA3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA3Id))
-    pointA4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA4Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_a1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA1Id))
+    point_a2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA2Id))
+    point_a3_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA3Id))
+    point_a4_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointA4Id))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelA1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA1Id))
-    labelA2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA2Id))
-    labelA3Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA3Id))
-    labelA4Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA4Id))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_a1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA1Id))
+    label_a2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA2Id))
+    label_a3_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA3Id))
+    label_a4_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelA4Id))
 
-    if lineHostId < 0
+    if line_host_id < 0
         return
     end
 
@@ -239,7 +239,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLine
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
-            EdgeBrush, LineColor, lineHostId, lineJoint1Id, lineJoint2Id)
+            EdgeBrush, LineColor, line_host_id, line_joint1_id, line_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             phase = PhaseArcToA
@@ -256,10 +256,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawA
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointA, PointBrush, PointAColor, pointAId)
+            state_ptr, timer, DrawPointDuration, PointA, PointBrush, PointAColor, point_a_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
             phase = PhaseArcToB
             timer = 0f0
         end
@@ -274,10 +274,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawB
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointB, PointBrush, PointBColor, pointBId)
+            state_ptr, timer, DrawPointDuration, PointB, PointBrush, PointBColor, point_b_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelBId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
             phase = PhaseArcToA1
             timer = 0f0
         end
@@ -292,10 +292,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawA1
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointA1, PointBrush, StepPointColor, pointA1Id)
+            state_ptr, timer, DrawPointDuration, PointA1, PointBrush, StepPointColor, point_a1_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelA1Id)
+            OdinJuliaBridge.show_point(state_ptr, label_a1_id)
             phase = PhaseArcToA2
             timer = 0f0
         end
@@ -310,10 +310,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawA2
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointA2, PointBrush, StepPointColor, pointA2Id)
+            state_ptr, timer, DrawPointDuration, PointA2, PointBrush, StepPointColor, point_a2_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelA2Id)
+            OdinJuliaBridge.show_point(state_ptr, label_a2_id)
             phase = PhaseArcToA3
             timer = 0f0
         end
@@ -328,10 +328,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawA3
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointA3, PointBrush, StepPointColor, pointA3Id)
+            state_ptr, timer, DrawPointDuration, PointA3, PointBrush, StepPointColor, point_a3_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelA3Id)
+            OdinJuliaBridge.show_point(state_ptr, label_a3_id)
             phase = PhaseArcToA4
             timer = 0f0
         end
@@ -346,10 +346,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawA4
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, DrawPointDuration, PointA4, PointBrush, StepPointColor, pointA4Id)
+            state_ptr, timer, DrawPointDuration, PointA4, PointBrush, StepPointColor, point_a4_id)
         timer += dt
         if timer >= DrawPointDuration
-            OdinJuliaBridge.show_point(state_ptr, labelA4Id)
+            OdinJuliaBridge.show_point(state_ptr, label_a4_id)
             phase = PhaseArcBackToA
             timer = 0f0
         end

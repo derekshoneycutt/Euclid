@@ -145,18 +145,18 @@ and also the exterior-interior angles are congruent. Conversely, if the alternat
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lowerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
-    lowerJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
-    upperHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
-    upperJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
-    transversalHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
-    transversalJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
+    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
+    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
+    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
+    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
+    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
+    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [lowerHostId, upperHostId, transversalHostId])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [lower_host_id, upper_host_id, transversal_host_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, lowerJoint2Id, LowerLineStart)
-    OdinJuliaBridge.set_point_position(state_ptr, upperJoint2Id, UpperLineStart)
-    OdinJuliaBridge.set_point_position(state_ptr, transversalJoint2Id, TransversalStart)
+    OdinJuliaBridge.set_point_position(state_ptr, lower_joint2_id, LowerLineStart)
+    OdinJuliaBridge.set_point_position(state_ptr, upper_joint2_id, UpperLineStart)
+    OdinJuliaBridge.set_point_position(state_ptr, transversal_joint2_id, TransversalStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescendLowerStart)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -182,25 +182,25 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    lowerLine = OdinJuliaBridge.create_new_line(
+    lower_line = OdinJuliaBridge.create_new_line(
         state_ptr, LowerLineStart, LowerLineStart, LowerLineColor, 0f0)
-    upperLine = OdinJuliaBridge.create_new_line(
+    upper_line = OdinJuliaBridge.create_new_line(
         state_ptr, UpperLineStart, UpperLineStart, UpperLineColor, 0f0)
     transversal = OdinJuliaBridge.create_new_line(
         state_ptr, TransversalStart, TransversalStart, TransversalColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerHostId, Float32(lowerLine.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint1Id, Float32(lowerLine.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint2Id, Float32(lowerLine.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperHostId, Float32(upperLine.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint1Id, Float32(upperLine.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint2Id, Float32(upperLine.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerHostId, Float32(lower_line.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint1Id, Float32(lower_line.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint2Id, Float32(lower_line.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperHostId, Float32(upper_line.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint1Id, Float32(upper_line.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint2Id, Float32(upper_line.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalHostId, Float32(transversal.hostId))
+        state_ptr, MetaTransversalHostId, Float32(transversal.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint1Id, Float32(transversal.joint1Id))
+        state_ptr, MetaTransversalJoint1Id, Float32(transversal.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint2Id, Float32(transversal.joint2Id))
+        state_ptr, MetaTransversalJoint2Id, Float32(transversal.joint2_id))
 
     reset_cycle_state(state_ptr)
 end
@@ -209,17 +209,17 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lowerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
-    lowerJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint1Id))
-    lowerJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
-    upperHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
-    upperJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint1Id))
-    upperJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
-    transversalHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
-    transversalJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint1Id))
-    transversalJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
+    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
+    lower_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint1Id))
+    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
+    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
+    upper_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint1Id))
+    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
+    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
+    transversal_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint1Id))
+    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
 
-    if lowerHostId < 0 || upperHostId < 0 || transversalHostId < 0
+    if lower_host_id < 0 || upper_host_id < 0 || transversal_host_id < 0
         return
     end
 
@@ -238,7 +238,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLower
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, LowerLineStart, LowerLineEnd,
-            EdgeBrush, LowerLineColor, lowerHostId, lowerJoint1Id, lowerJoint2Id)
+            EdgeBrush, LowerLineColor, lower_host_id, lower_joint1_id, lower_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhaseArcToUpper
@@ -256,7 +256,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawUpper
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, UpperLineStart, UpperLineEnd,
-            EdgeBrush, UpperLineColor, upperHostId, upperJoint1Id, upperJoint2Id)
+            EdgeBrush, UpperLineColor, upper_host_id, upper_joint1_id, upper_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhaseArcToTransversal
@@ -275,7 +275,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, TransversalStart, TransversalEnd,
             EdgeBrush, TransversalColor,
-            transversalHostId, transversalJoint1Id, transversalJoint2Id)
+            transversal_host_id, transversal_joint1_id, transversal_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhasePenRise

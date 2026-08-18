@@ -43,8 +43,8 @@ GIF_IMAGE_LOCAL_COLOR_TABLE_FLAG :: 0x80
 
 GIF_TRAILER :: 0x3B
 
-GifEncodeResult :: core.Gif_Encode_Result
-GifEncodeFrame :: core.Gif_Encode_Frame
+Gif_Encode_Result :: core.Gif_Encode_Result
+Gif_Encode_Frame :: core.Gif_Encode_Frame
 Gif_Encode_Buffer :: core.Gif_Encode_Buffer
 Gif_Encode_State :: core.Gif_Encode_State
 
@@ -57,9 +57,9 @@ Gif_Lzw_State :: struct {
 }
 
 Gif_Rgb :: struct {
-    R: u8,
-    G: u8,
-    B: u8,
+    r: u8,
+    g: u8,
+    b: u8,
 }
 
 Gif_Encode_Cook_Attempt :: struct {
@@ -269,13 +269,13 @@ gif_encode_frame :: proc(
 // Notes:
 //   - This call clears encoder state regardless of success.
 //   - data value in returned structure is allocated on the context's main allocator and must be freed manually.
-gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
+gif_encode_end :: proc(state: ^Gif_Encode_State) -> Gif_Encode_Result {
     // #vet forgives(implicit_allocator) — the output buffer is the API result;
     // ownership transfers to the caller, which must free it manually (documented
     // above), so it must come from the caller-visible default allocator rather
     // than the encoder's session arena.
     if state.list_head == nil {
-        return GifEncodeResult{}
+        return Gif_Encode_Result{}
     }
 
     total := 1
@@ -286,7 +286,7 @@ gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
     out := make([]u8, total)
     if len(out) == 0 {
         gif_encode_free_state(state)
-        return GifEncodeResult{}
+        return Gif_Encode_Result{}
     }
 
     w := 0
@@ -300,7 +300,7 @@ gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
 
     gif_encode_free_state(state)
 
-    return GifEncodeResult{
+    return Gif_Encode_Result{
         data = out,
         data_size = w,
     }
@@ -313,7 +313,7 @@ gif_encode_end :: proc(state: ^Gif_Encode_State) -> GifEncodeResult {
 //
 // Returns:
 //   - none.
-gif_encode_free :: proc(result: ^GifEncodeResult) {
+gif_encode_free :: proc(result: ^Gif_Encode_Result) {
     if result == nil {
         return
     }
@@ -693,7 +693,7 @@ gif_encode_write_logical_screen_and_netscape_ext :: proc(
 // Notes:
 //   - Produces palette usage counts used by depth backoff logic.
 gif_encode_try_cook_depth :: proc(
-    frame: ^GifEncodeFrame,
+    frame: ^Gif_Encode_Frame,
     input: Gif_Encode_Frame_Input,
     current_depth, alpha_threshold: int,
     use_bgra: bool) -> Gif_Encode_Cook_Attempt {
@@ -739,7 +739,7 @@ gif_encode_try_cook_depth :: proc(
 
 //   Cook one frame by reducing depth until palette usage fits GIF limits.
 gif_encode_cook_frame :: proc(
-    frame: ^GifEncodeFrame,
+    frame: ^Gif_Encode_Frame,
     input: Gif_Encode_Frame_Input,
     use_bgra: bool,
     alpha_threshold, depth: int) {
@@ -889,7 +889,7 @@ gif_encode_lzw_finish_stream :: proc(
 //   - Can reuse previous-frame matches when frames are marked compatible.
 gif_encode_lzw_walk_pixels :: proc(
     state: ^Gif_Encode_State,
-    frame: GifEncodeFrame,
+    frame: Gif_Encode_Frame,
     table_size: int,
     frames_compatible: bool,
     bs: ^Gif_Encode_Bitstream_State) -> bool {
@@ -931,7 +931,7 @@ gif_encode_lzw_walk_pixels :: proc(
 //   Build local color table and lookup mapping for a cooked frame.
 gif_encode_build_palette_table :: proc(
     state: ^Gif_Encode_State,
-    frame: GifEncodeFrame,
+    frame: Gif_Encode_Frame,
     table: ^[256]Gif_Rgb,
     out: ^Gif_Encode_Palette_Build) -> bool {
 
@@ -973,9 +973,9 @@ gif_encode_build_palette_table :: proc(
             (b >> u32(frame.b_bits * 3)))
 
         if state.use_bgra {
-            table^[table_idx] = Gif_Rgb{R = bb, G = gg, B = rr}
+            table^[table_idx] = Gif_Rgb{r = bb, g = gg, b = rr}
         } else {
-            table^[table_idx] = Gif_Rgb{R = rr, G = gg, B = bb}
+            table^[table_idx] = Gif_Rgb{r = rr, g = gg, b = bb}
         }
 
         table_idx += 1
@@ -990,7 +990,7 @@ gif_encode_build_palette_table :: proc(
 //   Encode cooked frame pixels into a raw LZW bitstream buffer.
 gif_encode_lzw_to_bitstream :: proc(
     state: ^Gif_Encode_State,
-    frame: GifEncodeFrame,
+    frame: Gif_Encode_Frame,
     table_size: int,
     frames_compatible: bool,
     bitstream: ^[]u8,
@@ -1062,9 +1062,9 @@ gif_encode_write_local_color_table :: proc(
     table_size: int) {
 
     for i := 0; i < table_size; i += 1 {
-        out[w^ + i * 3 + 0] = table[i].R
-        out[w^ + i * 3 + 1] = table[i].G
-        out[w^ + i * 3 + 2] = table[i].B
+        out[w^ + i * 3 + 0] = table[i].r
+        out[w^ + i * 3 + 1] = table[i].g
+        out[w^ + i * 3 + 2] = table[i].b
     }
     w^ += table_size * 3
 }
@@ -1143,7 +1143,7 @@ gif_encode_build_frame_chunk :: proc(
 //   Compress one cooked frame into a linked-list output buffer node.
 gif_encode_compress_frame :: proc(
     state: ^Gif_Encode_State,
-    frame: GifEncodeFrame,
+    frame: Gif_Encode_Frame,
     centiseconds: int) -> (^Gif_Encode_Buffer, bool) {
 
     if !frame.is_cooked {

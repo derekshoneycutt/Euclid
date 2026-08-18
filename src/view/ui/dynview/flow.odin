@@ -20,30 +20,30 @@ Flow_Command_Handler :: proc(
 //   Dispatch table mapping each dynview command kind to its flow handler.
 //   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
 FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
-    .BeginBlock = nil,
-    .EndBlock = nil,
-    .CopyableTextRun = nil,
-    .LineBreak = nil,
+    .Begin_Block = nil,
+    .End_Block = nil,
+    .Copyable_Text_Run = nil,
+    .Line_Break = nil,
     .Divider = nil,
-    .TextRun = consume_text_based_command,
-    .MathGlyphRun = consume_text_based_command,
-    .MathBlock = consume_text_based_command,
-    .ScriptAttachRecursive = consume_text_based_command,
-    .FracRecursive = consume_text_based_command,
-    .StretchDelimiterRecursive = consume_text_based_command,
-    .MatrixRecursive = consume_text_based_command,
-    .LargeOpRecursive = consume_large_op_command,
-    .AccentBarRecursive = consume_text_based_command,
-    .RadicalBarRecursive = consume_text_based_command,
-    .InlineLine = flow_handle_inline_line,
-    .InlineBox = flow_handle_inline_box,
-    .InlineCircle = flow_handle_inline_circle,
-    .InlineFilledBox = flow_handle_inline_filled_box,
-    .InlineFilledCircle = flow_handle_inline_filled_circle,
-    .InlinePieSection = flow_handle_inline_pie_section,
-    .InlinePerpendicular = flow_handle_inline_perpendicular,
-    .InlineTriangle = flow_handle_inline_triangle,
-    .InlinePentagon = flow_handle_inline_pentagon,
+    .Text_Run = consume_text_based_command,
+    .Math_Glyph_Run = consume_text_based_command,
+    .Math_Block = consume_text_based_command,
+    .Script_Attach = consume_text_based_command,
+    .Frac = consume_text_based_command,
+    .Stretch_Delimiter = consume_text_based_command,
+    .Matrix = consume_text_based_command,
+    .Large_Op = consume_large_op_command,
+    .Accent_Bar = consume_text_based_command,
+    .Radical_Bar = consume_text_based_command,
+    .Inline_Line = flow_handle_inline_line,
+    .Inline_Box = flow_handle_inline_box,
+    .Inline_Circle = flow_handle_inline_circle,
+    .Inline_Filled_Box = flow_handle_inline_filled_box,
+    .Inline_Filled_Circle = flow_handle_inline_filled_circle,
+    .Inline_Pie_Section = flow_handle_inline_pie_section,
+    .Inline_Perpendicular = flow_handle_inline_perpendicular,
+    .Inline_Triangle = flow_handle_inline_triangle,
+    .Inline_Pentagon = flow_handle_inline_pentagon,
 }
 
 Dynview_Flow_State :: struct {
@@ -1054,7 +1054,7 @@ consume_flow_command :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     kind := cmd.kind
-    if kind == .LineBreak || kind == .Divider {
+    if kind == .Line_Break || kind == .Divider {
         consume_linebreak(flow)
         return
     }

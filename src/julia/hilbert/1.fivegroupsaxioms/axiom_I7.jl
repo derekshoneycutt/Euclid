@@ -69,24 +69,24 @@ I, 7. Upon every straight line there exists at least two points, in every plane 
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    linePointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
-    linePointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
-    pointDId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointDId))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
+    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
+    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
+    point_d_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointDId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [lineHostId, pointAId, pointBId, pointCId, pointDId])
+        [line_host_id, point_a_id, point_b_id, point_c_id, point_d_id])
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.set_point_position(
-        state_ptr, linePointAId, LineStart[1], LineStart[2], LineStart[3])
+        state_ptr, line_point_a_id, LineStart[1], LineStart[2], LineStart[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, linePointBId, LineStart[1], LineStart[2], LineStart[3])
+        state_ptr, line_point_b_id, LineStart[1], LineStart[2], LineStart[3])
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor)
@@ -97,22 +97,22 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     line = OdinJuliaBridge.create_new_line(
         state_ptr, LineStart, LineStart, LineColor, 0f0)
-    pointA = OdinJuliaBridge.create_new_point(
+    point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointOnLineA, PointOnLineAColor, 0f0)
-    pointB = OdinJuliaBridge.create_new_point(
+    point_b = OdinJuliaBridge.create_new_point(
         state_ptr, PointOnLineB, PointOnLineBColor, 0f0)
-    pointC = OdinJuliaBridge.create_new_point(
+    point_c = OdinJuliaBridge.create_new_point(
         state_ptr, PointOffLine, PointOffLineColor, 0f0)
-    pointD = OdinJuliaBridge.create_new_point(
+    point_d = OdinJuliaBridge.create_new_point(
         state_ptr, PointSuspended, PointSuspendedColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointAId, Float32(line.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointBId, Float32(line.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(pointA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(pointB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointCId, Float32(pointC.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointDId, Float32(pointD.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointAId, Float32(line.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointBId, Float32(line.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(point_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointCId, Float32(point_c.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointDId, Float32(point_d.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -121,15 +121,15 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    linePointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
-    linePointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
-    pointDId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointDId))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
+    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
+    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
+    point_d_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointDId))
 
-    if lineHostId < 0
+    if line_host_id < 0
         return
     end
 
@@ -148,7 +148,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLine
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
-            LineMaxBrush, LineColor, lineHostId, linePointAId, linePointBId)
+            LineMaxBrush, LineColor, line_host_id, line_point_a_id, line_point_b_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -168,7 +168,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointTrailDuration, PointOnLineA,
-            PointMaxBrush, PointOnLineAColor, pointAId)
+            PointMaxBrush, PointOnLineAColor, point_a_id)
 
         timer += dt
         if timer >= PointTrailDuration
@@ -188,7 +188,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutPointB
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointTrailDuration, PointOnLineB,
-            PointMaxBrush, PointOnLineBColor, pointBId)
+            PointMaxBrush, PointOnLineBColor, point_b_id)
 
         timer += dt
         if timer >= PointTrailDuration
@@ -208,7 +208,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutPointC
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointTrailDuration, PointOffLine,
-            PointMaxBrush, PointOffLineColor, pointCId)
+            PointMaxBrush, PointOffLineColor, point_c_id)
 
         timer += dt
         if timer >= PointTrailDuration
@@ -228,7 +228,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutPointD
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointTrailDuration, PointSuspended,
-            PointMaxBrush, PointSuspendedColor, pointDId)
+            PointMaxBrush, PointSuspendedColor, point_d_id)
 
         timer += dt
         if timer >= PointTrailDuration

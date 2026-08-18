@@ -7,13 +7,13 @@ Get a `BridgeShapeLine` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a line shape
+- `host_id` : Host point id for a line shape
 
 Returns: `BridgeShapeLine`
 """
-function get_shape_line_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_line_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_line_view(
-        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeLine
+        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeLine
 end
 
 """
@@ -24,13 +24,13 @@ Get a `BridgeShapeCircle` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a circle shape
+- `host_id` : Host point id for a circle shape
 
 Returns: `BridgeShapeCircle`
 """
-function get_shape_circle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_circle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_circle_view(
-        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeCircle
+        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeCircle
 end
 
 """
@@ -41,13 +41,13 @@ Get a `BridgeShapeFilledCircle` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a filled circle shape
+- `host_id` : Host point id for a filled circle shape
 
 Returns: `BridgeShapeFilledCircle`
 """
-function get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_filledcircle_view(
-        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeFilledCircle
+        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeFilledCircle
 end
 
 """
@@ -58,13 +58,13 @@ Get a `BridgeShapeTriangle` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a triangle shape
+- `host_id` : Host point id for a triangle shape
 
 Returns: `BridgeShapeTriangle`
 """
-function get_shape_triangle_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_triangle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_triangle_view(state_ptr::Ptr{Cvoid},
-        Int32(hostId)::Int32)::BridgeShapeTriangle
+        Int32(host_id)::Int32)::BridgeShapeTriangle
 end
 
 """
@@ -75,13 +75,13 @@ Get a `BridgeShapeSquare` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a square shape
+- `host_id` : Host point id for a square shape
 
 Returns: `BridgeShapeSquare`
 """
-function get_shape_square_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_square_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_square_view(
-        state_ptr::Ptr{Cvoid}, Int32(hostId)::Int32)::BridgeShapeSquare
+        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeSquare
 end
 
 """
@@ -92,13 +92,13 @@ Get a `BridgeShapePentagon` view by host point id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `hostId` : Host point id for a pentagon shape
+- `host_id` : Host point id for a pentagon shape
 
 Returns: `BridgeShapePentagon`
 """
-function get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, hostId::Integer)
+function get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
     @ccall get_shape_pentagon_view(state_ptr::Ptr{Cvoid},
-        Int32(hostId)::Int32)::BridgeShapePentagon
+        Int32(host_id)::Int32)::BridgeShapePentagon
 end
 
 """

@@ -80,7 +80,7 @@ dynview_begin_block :: proc "c" (
     }
 
     status = dynview_push_command(runtime, core.Dynview_Command{
-        kind = .BeginBlock,
+        kind = .Begin_Block,
         block_id = block_id,
         style_id = block_kind,
     })
@@ -131,7 +131,7 @@ dynview_text_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -181,7 +181,7 @@ dynview_text_run_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -230,7 +230,7 @@ dynview_math_glyph_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .MathGlyphRun,
+        kind = .Math_Glyph_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -284,17 +284,17 @@ dynview_math_capacity_available :: proc(
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int) -> bool {
 
-    if cache^.math_program_count >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if cache^.math_program_count >= core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
     }
     extra_programs, extra_commands :=
         dynview_count_recursive_math_capacity(ops, op_count)
     if cache^.math_program_count + 1 + extra_programs >
-        core.DYNVIEW__MAX_MATH_PROGRAMS {
+        core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
     }
     return cache^.math_command_count + op_count + extra_commands <=
-        core.DYNVIEW__MAX_MATH_COMMANDS
+        core.DYNVIEW_MAX_MATH_COMMANDS
 }
 
 //   Report whether the math-block arguments are non-nil and non-empty.
@@ -421,7 +421,7 @@ dynview_math_block_from_ops :: proc "c" (
     cache^.math_program_count = next_child_program_id
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .MathBlock,
+        kind = .Math_Block,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         math_program_id = i32(program_id),
@@ -473,7 +473,7 @@ dynview_copyable_text_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .CopyableTextRun,
+        kind = .Copyable_Text_Run,
         block_id = buffer^.stream_open_block_id,
         copy_text_offset = offset,
         copy_text_len = count,
@@ -518,7 +518,7 @@ dynview_inline_line :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineLine,
+        kind = .Inline_Line,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = length,
@@ -565,7 +565,7 @@ dynview_inline_box :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -612,7 +612,7 @@ dynview_inline_circle :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineCircle,
+        kind = .Inline_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -660,7 +660,7 @@ dynview_inline_line_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineLine,
+        kind = .Inline_Line,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = length,
@@ -712,7 +712,7 @@ dynview_inline_box_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -764,7 +764,7 @@ dynview_inline_circle_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineCircle,
+        kind = .Inline_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -817,7 +817,7 @@ dynview_inline_filled_box :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineFilledBox,
+        kind = .Inline_Filled_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -869,7 +869,7 @@ dynview_inline_filled_circle :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineFilledCircle,
+        kind = .Inline_Filled_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -908,7 +908,7 @@ dynview_inline_perpendicular :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePerpendicular,
+        kind = .Inline_Perpendicular,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = length,
@@ -950,7 +950,7 @@ dynview_inline_triangle :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineTriangle,
+        kind = .Inline_Triangle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -998,7 +998,7 @@ dynview_inline_box_edges :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -1045,7 +1045,7 @@ dynview_inline_pentagon :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePentagon,
+        kind = .Inline_Pentagon,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -1112,7 +1112,7 @@ dynview_inline_pie_section :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePieSection,
+        kind = .Inline_Pie_Section,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -1156,7 +1156,7 @@ dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .LineBreak,
+        kind = .Line_Break,
         block_id = buffer^.stream_open_block_id,
     })
 }
@@ -1188,7 +1188,7 @@ dynview_end_block :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     }
 
     status = dynview_push_command(runtime, core.Dynview_Command{
-        kind = .EndBlock,
+        kind = .End_Block,
         block_id = buffer^.stream_open_block_id,
     })
     if status != BRIDGE_STATUS_OK {

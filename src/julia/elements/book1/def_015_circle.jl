@@ -57,14 +57,14 @@ end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     centerPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [centerPointId, circleHostId])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [centerPointId, circle_hostid])
     OdinJuliaBridge.set_point_position(
-        state_ptr, circleEndId, CircleStartPoint)
+        state_ptr, circle_endid, CircleStartPoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circleHostId, 0f0)
+        state_ptr, circle_hostid, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -90,7 +90,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, Float32(centerPoint.index))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.host_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.startId))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.endId))
 
@@ -102,9 +102,9 @@ end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     centerPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circleStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circleEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
+    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
 
     if centerPointId < 0
         return
@@ -156,16 +156,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, CenterPoint, CircleStartPoint,
             CircleSweepTheta, Radius, CircleBrush, CircleColor,
-            circleHostId, circleStartId, circleEndId)
+            circle_hostid, circle_startid, circle_endid)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circleEndId, CircleStartPoint)
+                state_ptr, circle_endid, CircleStartPoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circleHostId, 2f0π)
+                state_ptr, circle_hostid, 2f0π)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(

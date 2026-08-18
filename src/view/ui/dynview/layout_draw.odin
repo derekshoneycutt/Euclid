@@ -80,7 +80,7 @@ DELIMITER_LINE_HANDLERS ::
     .Bracket = draw_delimiter_bracket,
     .Brace = nil,
     .Vert = draw_delimiter_vert,
-    .DoubleVert = draw_delimiter_double_vert,
+    .Double_Vert = draw_delimiter_double_vert,
     .Ceil = draw_delimiter_bracket,
     .Floor = draw_delimiter_bracket,
     .Angle = draw_delimiter_angle,
@@ -840,7 +840,7 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     case .Brace:
         draw_stretch_delimiter_brace(params.style, geom, params.font_size)
         return width
-    case .Vert, .DoubleVert, .Bracket, .Ceil, .Floor, .Angle, .None:
+    case .Vert, .Double_Vert, .Bracket, .Ceil, .Floor, .Angle, .None:
     }
 
     draw_stretch_delimiter_text_fallback(params, width)
@@ -1044,24 +1044,24 @@ draw_recursive_structured_item :: #force_inline proc(
     draw_x, item_y: f32) {
 
     switch item.kind {
-    case .ScriptAttachRecursive:
+    case .Script_Attach:
         draw_recursive_script_attach_item(ctx, item, draw_x, item_y)
-    case .FracRecursive:
+    case .Frac:
         draw_recursive_fraction_item(ctx, style, item, draw_x, item_y)
-    case .StretchDelimiterRecursive:
+    case .Stretch_Delimiter:
         draw_recursive_stretch_delimiter_item(ctx, style, item, draw_x, item_y)
-    case .MatrixRecursive:
+    case .Matrix:
         draw_recursive_matrix_item(ctx, style, item, draw_x, item_y)
-    case .LargeOpRecursive:
+    case .Large_Op:
         draw_large_op_recursive_item(ctx, style, item, resolved_font, text,
             draw_x, item_y)
-    case .AccentBarRecursive:
+    case .Accent_Bar:
         draw_recursive_accent_item(ctx, style, item, draw_x, item_y)
-    case .RadicalBarRecursive:
+    case .Radical_Bar:
         draw_recursive_radical_item(ctx, item, draw_x, item_y)
-    case .TextRun, .MathGlyphRun, .MathBlock,
-        .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
-        .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+    case .Text_Run, .Math_Glyph_Run, .Math_Block,
+        .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle,
+        .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1326,13 +1326,13 @@ draw_cached_text_item :: proc(
     text_color := item.has_brush_color ? item.brush_color : style.color
 
     switch item.kind {
-    case .ScriptAttachRecursive, .FracRecursive, .StretchDelimiterRecursive,
-        .MatrixRecursive, .LargeOpRecursive, .AccentBarRecursive, .RadicalBarRecursive:
+    case .Script_Attach, .Frac, .Stretch_Delimiter,
+        .Matrix, .Large_Op, .Accent_Bar, .Radical_Bar:
         draw_recursive_structured_item(ctx, style, item, resolved_font, text,
             draw_x, item_y)
-    case .MathBlock:
+    case .Math_Block:
         draw_math_block_item(state, runtime, panel, font, font_size, item, draw_x, item_y)
-    case .TextRun, .MathGlyphRun:
+    case .Text_Run, .Math_Glyph_Run:
         draw_text_run_item(Text_Run_Draw_Params{
             runtime = runtime,
             font_size = font_size,
@@ -1344,8 +1344,8 @@ draw_cached_text_item :: proc(
             draw_x = draw_x,
             item_y = item_y,
         })
-    case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox, .InlineFilledCircle,
-        .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+    case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle,
+        .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1400,14 +1400,14 @@ draw_cached_inline_basic_item :: #force_inline proc(
     color: rl.Color) {
 
     switch item.kind {
-    case .InlineLine:
+    case .Inline_Line:
         center_y := item_y + item.draw_height * 0.5
         rl.DrawLineEx(
             rl.Vector2{item_x, center_y},
             rl.Vector2{item_x + item.draw_width, center_y},
             max(1.0, item.inline_atom_stroke),
             color)
-    case .InlineBox:
+    case .Inline_Box:
         top_left := rl.Vector2{item_x, item_y}
         top_right := rl.Vector2{item_x + item.draw_width, item_y}
         bottom_left := rl.Vector2{item_x, item_y + item.draw_height}
@@ -1421,7 +1421,7 @@ draw_cached_inline_basic_item :: #force_inline proc(
         rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
         rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
         rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
-    case .InlineCircle:
+    case .Inline_Circle:
         center := rl.Vector2{item_x + item.draw_width * 0.5,
             item_y + item.draw_height * 0.5}
         rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
@@ -1432,10 +1432,10 @@ draw_cached_inline_basic_item :: #force_inline proc(
                 max(1.0, item.draw_height * 0.5 - 1),
                 color)
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
-         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
-         .AccentBarRecursive, .RadicalBarRecursive, .InlineFilledBox, .InlineFilledCircle,
-            .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
+         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Accent_Bar, .Radical_Bar, .Inline_Filled_Box, .Inline_Filled_Circle,
+            .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1447,14 +1447,14 @@ draw_cached_inline_filled_item :: #force_inline proc(
     color: rl.Color) {
 
     switch item.kind {
-    case .InlineFilledBox:
+    case .Inline_Filled_Box:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         rl.DrawRectangleRec(rect, color)
         if item.inline_outline_stroke > 0 {
             rl.DrawRectangleLinesEx(
                 rect, max(1.0, item.inline_outline_stroke), style.color)
         }
-    case .InlineFilledCircle:
+    case .Inline_Filled_Circle:
         center := rl.Vector2{item_x + item.draw_width * 0.5,
             item_y + item.draw_height * 0.5}
         radius := item.draw_height * 0.5
@@ -1467,11 +1467,11 @@ draw_cached_inline_filled_item :: #force_inline proc(
                     max(1.0, radius - 1), style.color)
             }
         }
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
-         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
-         .AccentBarRecursive, .RadicalBarRecursive, .InlineLine, .InlineBox,
-            .InlineCircle, .InlinePieSection, .InlinePerpendicular, .InlineTriangle,
-            .InlinePentagon:
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
+         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
+            .Inline_Circle, .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle,
+            .Inline_Pentagon:
     }
 }
 
@@ -1483,7 +1483,7 @@ draw_cached_inline_advanced_item :: #force_inline proc(
     color: rl.Color) {
 
     switch item.kind {
-    case .InlinePieSection:
+    case .Inline_Pie_Section:
         center := rl.Vector2{item_x + item.pie_center_offset_x,
             item_y + item.pie_center_offset_y}
         radius := max(
@@ -1504,13 +1504,13 @@ draw_cached_inline_advanced_item :: #force_inline proc(
                 item.pie_start_angle_degrees, item.pie_end_angle_degrees,
                 stroke, outline_color)
         }
-    case .InlinePerpendicular:
+    case .Inline_Perpendicular:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         draw_perpendicular_shape(
             rect,
             max(1.0, item.inline_atom_stroke),
             Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
-    case .InlineTriangle:
+    case .Inline_Triangle:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         draw_triangle_shape(rect,
             item.shape_is_filled,
@@ -1521,7 +1521,7 @@ draw_cached_inline_advanced_item :: #force_inline proc(
                 shape_edge_color_or(item.shape_edge_color_3, color),
             },
             max(1.0, item.inline_atom_stroke))
-    case .InlinePentagon:
+    case .Inline_Pentagon:
         rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
         draw_pentagon_shape(rect,
             item.shape_is_filled,
@@ -1534,10 +1534,10 @@ draw_cached_inline_advanced_item :: #force_inline proc(
                 shape_edge_color_or(item.shape_edge_color_5, color),
             },
             max(1.0, item.inline_atom_stroke))
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
-         .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
-         .AccentBarRecursive, .RadicalBarRecursive, .InlineLine, .InlineBox,
-         .InlineCircle, .InlineFilledBox, .InlineFilledCircle:
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
+         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
+         .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle:
     }
 }
 
@@ -1549,15 +1549,15 @@ draw_cached_inline_item :: proc(
 
     color := dynview.inline_draw_color(style, item)
     switch item.kind {
-    case .InlineLine, .InlineBox, .InlineCircle:
+    case .Inline_Line, .Inline_Box, .Inline_Circle:
         draw_cached_inline_basic_item(style, item, item_x, item_y, color)
-    case .InlineFilledBox, .InlineFilledCircle:
+    case .Inline_Filled_Box, .Inline_Filled_Circle:
         draw_cached_inline_filled_item(style, item, item_x, item_y, color)
-    case .InlinePieSection, .InlinePerpendicular, .InlineTriangle, .InlinePentagon:
+    case .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
         draw_cached_inline_advanced_item(style, item, item_x, item_y, color)
-    case .TextRun, .MathGlyphRun, .MathBlock, .ScriptAttachRecursive, .FracRecursive,
-        .StretchDelimiterRecursive, .MatrixRecursive, .LargeOpRecursive,
-        .AccentBarRecursive, .RadicalBarRecursive:
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
+        .Stretch_Delimiter, .Matrix, .Large_Op,
+        .Accent_Bar, .Radical_Bar:
     }
 }
 
@@ -1584,14 +1584,14 @@ draw_cached_line :: proc(
         item_x := panel.x + text_padding + item.x_offset
         item_y := line_top + item.y_offset
 
-        if item.kind == .TextRun ||
-            item.kind == .MathBlock ||
-            item.kind == .MathGlyphRun ||
-            item.kind == .ScriptAttachRecursive ||
-            item.kind == .FracRecursive ||
-            item.kind == .StretchDelimiterRecursive ||
-            item.kind == .MatrixRecursive ||
-            item.kind == .LargeOpRecursive {
+        if item.kind == .Text_Run ||
+            item.kind == .Math_Block ||
+            item.kind == .Math_Glyph_Run ||
+            item.kind == .Script_Attach ||
+            item.kind == .Frac ||
+            item.kind == .Stretch_Delimiter ||
+            item.kind == .Matrix ||
+            item.kind == .Large_Op {
             draw_cached_text_item(ctx, style, item, item_x, item_y)
             continue
         }

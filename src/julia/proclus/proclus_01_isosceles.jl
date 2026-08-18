@@ -124,40 +124,40 @@ The result is an isosceles triangle \euclidtriangle[height=2,width=3,thickness=2
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    circle1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1HostId))
-    circle1StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1StartId))
-    circle1EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1EndId))
+    circle1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1HostId))
+    circle1_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1StartId))
+    circle1_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1EndId))
 
-    circle2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2HostId))
-    circle2StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2StartId))
-    circle2EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2EndId))
+    circle2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2HostId))
+    circle2_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2StartId))
+    circle2_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2EndId))
 
-    circle3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3HostId))
-    circle3StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3StartId))
-    circle3EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3EndId))
+    circle3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3HostId))
+    circle3_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3StartId))
+    circle3_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3EndId))
 
-    circle4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4HostId))
-    circle4StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4StartId))
-    circle4EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4EndId))
+    circle4_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4HostId))
+    circle4_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4StartId))
+    circle4_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4EndId))
 
-    lineABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
-    lineABJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint1Id))
-    lineABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
+    line_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
+    line_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint1Id))
+    line_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
 
-    lineCBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
-    lineCBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
+    line_c_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
+    line_c_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
 
-    lineCAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
-    lineCAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
+    line_c_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
+    line_c_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [labelAId, labelBId, labelCId,
-         lineABHostId, lineCBHostId, lineCAHostId,
-         circle1HostId, circle2HostId, circle3HostId, circle4HostId
+        [label_a_id, label_b_id, label_c_id,
+         line_a_b_host_id, line_c_b_host_id, line_c_a_host_id,
+         circle1_host_id, circle2_host_id, circle3_host_id, circle4_host_id
         ])
 
     OdinJuliaBridge.hide_pen(state_ptr)
@@ -167,37 +167,37 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.lock_compass_joint2(state_ptr, BPoint[1], BPoint[2], CompassTopZ)
 
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineABJoint1Id, APoint)
+        state_ptr, line_a_b_joint1_id, APoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineABJoint2Id, APoint)
+        state_ptr, line_a_b_joint2_id, APoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineCBJoint2Id, Intersection)
+        state_ptr, line_c_b_joint2_id, Intersection)
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineCAJoint2Id, Intersection)
+        state_ptr, line_c_a_joint2_id, Intersection)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle1StartId, BPoint)
+        state_ptr, circle1_start_id, BPoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle1EndId, BPoint)
+        state_ptr, circle1_end_id, BPoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circle1HostId, 0f0)
+        state_ptr, circle1_host_id, 0f0)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle2StartId, APoint)
+        state_ptr, circle2_start_id, APoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle2EndId, APoint)
+        state_ptr, circle2_end_id, APoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circle2HostId, 0f0)
+        state_ptr, circle2_host_id, 0f0)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle3StartId, ExtBPoint)
+        state_ptr, circle3_start_id, ExtBPoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle3EndId, ExtBPoint)
+        state_ptr, circle3_end_id, ExtBPoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circle3HostId, 0f0)
+        state_ptr, circle3_host_id, 0f0)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle4StartId, ExtAPoint)
+        state_ptr, circle4_start_id, ExtAPoint)
     OdinJuliaBridge.set_point_position(
-        state_ptr, circle4EndId, ExtAPoint)
+        state_ptr, circle4_end_id, ExtAPoint)
     OdinJuliaBridge.set_point_offset(
-        state_ptr, circle4HostId, 0f0)
+        state_ptr, circle4_host_id, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -206,7 +206,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    lineAB = OdinJuliaBridge.create_new_line(
+    line_a_b = OdinJuliaBridge.create_new_line(
         state_ptr, APoint, APoint, LineABColor, 0f0)
     circle1 = OdinJuliaBridge.create_new_circle(
         state_ptr, APoint, Radius, 7f0 * π / 4f0, 7f0 * π / 4f0, Circle1Color, 0f0)
@@ -216,49 +216,49 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, ExtAPoint, ExtRadius, 7f0 * π / 4f0, 7f0 * π / 4f0, Circle3Color, 0f0)
     circle4 = OdinJuliaBridge.create_new_circle(
         state_ptr, ExtBPoint, ExtRadius, 3f0 * π / 4f0, 3f0 * π / 4f0, Circle4Color, 0f0)
-    lineCB = OdinJuliaBridge.create_new_line(
+    line_c_b = OdinJuliaBridge.create_new_line(
         state_ptr, Intersection, Intersection, LineCBColor, 0f0)
-    lineCA = OdinJuliaBridge.create_new_line(
+    line_c_a = OdinJuliaBridge.create_new_line(
         state_ptr, Intersection, Intersection, LineCAColor, 0f0)
 
-    labelA = OdinJuliaBridge.create_new_label(
+    label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
-    labelB = OdinJuliaBridge.create_new_label(
+    label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
-    labelC = OdinJuliaBridge.create_new_label(
+    label_c = OdinJuliaBridge.create_new_label(
         state_ptr, 'C', CLabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(labelA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(labelB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, Float32(labelC.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(label_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, Float32(label_c.index))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABHostId, Float32(lineAB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint1Id, Float32(lineAB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint2Id, Float32(lineAB.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABHostId, Float32(line_a_b.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint1Id, Float32(line_a_b.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint2Id, Float32(line_a_b.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBHostId, Float32(lineCB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint1Id, Float32(lineCB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint2Id, Float32(lineCB.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBHostId, Float32(line_c_b.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint1Id, Float32(line_c_b.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint2Id, Float32(line_c_b.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAHostId, Float32(lineCA.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint1Id, Float32(lineCA.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint2Id, Float32(lineCA.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAHostId, Float32(line_c_a.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint1Id, Float32(line_c_a.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint2Id, Float32(line_c_a.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1HostId, Float32(circle1.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1StartId, Float32(circle1.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1EndId, Float32(circle1.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1HostId, Float32(circle1.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1StartId, Float32(circle1.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle1EndId, Float32(circle1.end_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2HostId, Float32(circle2.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2StartId, Float32(circle2.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2EndId, Float32(circle2.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2HostId, Float32(circle2.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2StartId, Float32(circle2.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle2EndId, Float32(circle2.end_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3HostId, Float32(circle3.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3StartId, Float32(circle3.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3EndId, Float32(circle3.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3HostId, Float32(circle3.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3StartId, Float32(circle3.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle3EndId, Float32(circle3.end_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4HostId, Float32(circle4.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4StartId, Float32(circle4.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4EndId, Float32(circle4.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4HostId, Float32(circle4.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4StartId, Float32(circle4.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircle4EndId, Float32(circle4.end_id))
 
     reset_cycle_state(state_ptr)
 end
@@ -267,40 +267,40 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
-    lineABJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint1Id))
-    lineABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
+    line_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
+    line_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint1Id))
+    line_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
 
-    lineCBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
-    lineCBJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint1Id))
-    lineCBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
+    line_c_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
+    line_c_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint1Id))
+    line_c_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
 
-    lineCAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
-    lineCAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint1Id))
-    lineCAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
+    line_c_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
+    line_c_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint1Id))
+    line_c_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
 
-    circle1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1HostId))
-    circle1StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1StartId))
-    circle1EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1EndId))
+    circle1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1HostId))
+    circle1_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1StartId))
+    circle1_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle1EndId))
 
-    circle2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2HostId))
-    circle2StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2StartId))
-    circle2EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2EndId))
+    circle2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2HostId))
+    circle2_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2StartId))
+    circle2_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle2EndId))
 
-    circle3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3HostId))
-    circle3StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3StartId))
-    circle3EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3EndId))
+    circle3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3HostId))
+    circle3_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3StartId))
+    circle3_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle3EndId))
 
-    circle4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4HostId))
-    circle4StartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4StartId))
-    circle4EndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4EndId))
+    circle4_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4HostId))
+    circle4_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4StartId))
+    circle4_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircle4EndId))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
 
-    if lineABHostId < 0 || lineCBHostId < 0 || lineCAHostId < 0 ||
-        circle1HostId < 0 || circle2HostId < 0 || circle3HostId < 0 || circle4HostId < 0
+    if line_a_b_host_id < 0 || line_c_b_host_id < 0 || line_c_a_host_id < 0 ||
+        circle1_host_id < 0 || circle2_host_id < 0 || circle3_host_id < 0 || circle4_host_id < 0
         return
     end
 
@@ -316,19 +316,19 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawLine
             timer = 0f0
 
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
         end
     elseif phase == PhaseDrawLine
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, LineDrawDuration, APoint, BPoint,
-            LineMaxBrush, LineABColor, lineABHostId, lineABJoint1Id, lineABJoint2Id)
+            LineMaxBrush, LineABColor, line_a_b_host_id, line_a_b_joint1_id, line_a_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
             phase = PhasePenRise
             timer = 0f0
 
-            OdinJuliaBridge.show_point(state_ptr, labelBId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
         end
     elseif phase == PhasePenRise
         EuclidAnimations.animate_pen_rise(
@@ -353,16 +353,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, APoint, BPoint,
             CircleSweepTheta, Radius, CircleBrush, Circle1Color,
-            circle1HostId, circle1StartId, circle1EndId)
+            circle1_host_id, circle1_start_id, circle1_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassArcToBA
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circle1EndId, BPoint)
+                state_ptr, circle1_end_id, BPoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circle1HostId, 2f0π)
+                state_ptr, circle1_host_id, 2f0π)
         end
     elseif phase == PhaseCompassArcToBA
         EuclidAnimations.animate_compass_arcmove(
@@ -379,16 +379,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, BPoint, APoint,
             CircleSweepTheta, Radius, CircleBrush, Circle2Color,
-            circle2HostId, circle2StartId, circle2EndId)
+            circle2_host_id, circle2_start_id, circle2_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circle2EndId, APoint)
+                state_ptr, circle2_end_id, APoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circle2HostId, 2f0π)
+                state_ptr, circle2_host_id, 2f0π)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(
@@ -414,7 +414,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_extend_line(
             state_ptr, timer, LineDrawDuration,
             BPoint, APoint, ExtAPoint, LineMaxBrush, LineABColor,
-            lineABHostId, lineABJoint2Id, lineABJoint1Id)
+            line_a_b_host_id, line_a_b_joint2_id, line_a_b_joint1_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -435,7 +435,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_extend_line(
             state_ptr, timer, LineDrawDuration,
             ExtAPoint, BPoint, ExtBPoint, LineMaxBrush, LineABColor,
-            lineABHostId, lineABJoint1Id, lineABJoint2Id)
+            line_a_b_host_id, line_a_b_joint1_id, line_a_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -465,16 +465,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, ExtAPoint, ExtBPoint,
             CircleSweepTheta, ExtRadius, CircleBrush, Circle3Color,
-            circle3HostId, circle3StartId, circle3EndId)
+            circle3_host_id, circle3_start_id, circle3_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassArcToBA2
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circle3EndId, ExtBPoint)
+                state_ptr, circle3_end_id, ExtBPoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circle3HostId, 2f0π)
+                state_ptr, circle3_host_id, 2f0π)
         end
     elseif phase == PhaseCompassArcToBA2
         EuclidAnimations.animate_compass_arcmove(
@@ -491,16 +491,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_circle(
             state_ptr, timer, CircleDrawDuration, ExtBPoint, ExtAPoint,
             CircleSweepTheta, ExtRadius, CircleBrush, Circle4Color,
-            circle4HostId, circle4StartId, circle4EndId)
+            circle4_host_id, circle4_start_id, circle4_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise2
             timer = 0f0
             OdinJuliaBridge.set_point_position(
-                state_ptr, circle4EndId, ExtAPoint)
+                state_ptr, circle4_end_id, ExtAPoint)
             OdinJuliaBridge.set_point_offset(
-                state_ptr, circle4HostId, 2f0π)
+                state_ptr, circle4_host_id, 2f0π)
         end
     elseif phase == PhaseCompassRise2
         EuclidAnimations.animate_compass_rise(
@@ -521,12 +521,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DescendDuration
             phase = PhaseDrawLineCB
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelCId)
+            OdinJuliaBridge.show_point(state_ptr, label_c_id)
         end
     elseif phase == PhaseDrawLineCB
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, LineDrawDuration, Intersection, BPoint,
-            LineMaxBrush, LineCBColor, lineCBHostId, lineCBJoint1Id, lineCBJoint2Id)
+            LineMaxBrush, LineCBColor, line_c_b_host_id, line_c_b_joint1_id, line_c_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -546,7 +546,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLineCA
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, LineDrawDuration, Intersection, APoint,
-            LineMaxBrush, LineCAColor, lineCAHostId, lineCAJoint1Id, lineCAJoint2Id)
+            LineMaxBrush, LineCAColor, line_c_a_host_id, line_c_a_joint1_id, line_c_a_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

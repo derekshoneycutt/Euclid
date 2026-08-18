@@ -15,12 +15,12 @@ Constraint_Error_Handler :: proc(
 //   Dispatch table mapping each constraint kind to its error handler.
 CONSTRAINT_ERROR_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Error_Handler{
     .Floor = get_constraint_error_floor_entry,
-    .SnapToFloor = get_constraint_error_snaptofloor_entry,
-    .SnapPoint = get_constraint_error_snappoint_entry,
+    .Snap_To_Floor = get_constraint_error_snaptofloor_entry,
+    .Snap_Point = get_constraint_error_snappoint_entry,
     .Distance = get_constraint_error_distance_entry,
-    .MaxAngle = get_constraint_error_maxangle_entry,
-    .MinAngle = get_constraint_error_minangle_entry,
-    .CenterPivot = get_constraint_error_centerpivot_entry,
+    .Max_Angle = get_constraint_error_maxangle_entry,
+    .Min_Angle = get_constraint_error_minangle_entry,
+    .Center_Pivot = get_constraint_error_centerpivot_entry,
 }
 
 //   Uniform handler shape for applying one constraint mutation to its targets.
@@ -31,12 +31,12 @@ Constraint_Apply_Handler :: proc(
 //   Dispatch table mapping each constraint kind to its apply handler.
 CONSTRAINT_APPLY_HANDLERS :: [Shapes_Constraint_Kind]Constraint_Apply_Handler{
     .Floor = apply_constraint_floor_entry,
-    .SnapToFloor = apply_constraint_snaptofloor_entry,
-    .SnapPoint = apply_constraint_snappoint_entry,
+    .Snap_To_Floor = apply_constraint_snaptofloor_entry,
+    .Snap_Point = apply_constraint_snappoint_entry,
     .Distance = apply_constraint_distance_entry,
-    .MaxAngle = apply_constraint_maxangle_entry,
-    .MinAngle = apply_constraint_minangle_entry,
-    .CenterPivot = apply_constraint_centerpivot_entry,
+    .Max_Angle = apply_constraint_maxangle_entry,
+    .Min_Angle = apply_constraint_minangle_entry,
+    .Center_Pivot = apply_constraint_centerpivot_entry,
 }
 
 //   Local resolved constraint targets used by get/apply constraint logic.

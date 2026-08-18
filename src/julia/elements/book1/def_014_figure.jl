@@ -63,7 +63,7 @@ function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector
     ]
 end
 
-function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangleHostId, alpha01)
+function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
     t = clamp(alpha01, 0f0, 1f0)
     alpha = UInt8(round(Int, Float32(TriangleBaseColor.a) * t))
     color = OdinJuliaBridge.BridgeColor(
@@ -71,7 +71,7 @@ function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangleHostId, alpha01)
         TriangleBaseColor.g,
         TriangleBaseColor.b,
         alpha)
-    OdinJuliaBridge.set_point_color(state_ptr, triangleHostId, color)
+    OdinJuliaBridge.set_point_color(state_ptr, triangle_host_id, color)
 end
 
 
@@ -86,25 +86,25 @@ A figure \euclidtriangle[color=steelblue,height=2,width=3,filled] is that which 
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    line3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
-    triangleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTriangleHostId))
+    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
+    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
+    triangle_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTriangleHostId))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [line1HostId, line2HostId, line3HostId, triangleHostId])
-    set_triangle_alpha(state_ptr, triangleHostId, 0f0)
+    OdinJuliaBridge.hide_point_batch(state_ptr, [line1_host_id, line2_host_id, line3_host_id, triangle_host_id])
+    set_triangle_alpha(state_ptr, triangle_host_id, 0f0)
 
     OdinJuliaBridge.set_point_position(
-        state_ptr, line1Joint2Id, VertexA[1], VertexA[2], VertexA[3])
+        state_ptr, line1_joint2_id, VertexA[1], VertexA[2], VertexA[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, line2Joint2Id, VertexB[1], VertexB[2], VertexB[3])
+        state_ptr, line2_joint2_id, VertexB[1], VertexB[2], VertexB[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, line3Joint2Id, VertexC[1], VertexC[2], VertexC[3])
+        state_ptr, line3_joint2_id, VertexC[1], VertexC[2], VertexC[3])
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.show_pen(state_ptr)
@@ -139,22 +139,22 @@ function initialize(state_ptr::Ptr{Cvoid})
         VertexC[1], VertexC[2], VertexC[3],
         TriangleColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3HostId, Float32(line3.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, Float32(line3.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, Float32(line3.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3HostId, Float32(line3.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, Float32(line3.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, Float32(line3.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleHostId, Float32(triangle.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint1Id, Float32(triangle.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint2Id, Float32(triangle.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint3Id, Float32(triangle.joint3Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleHostId, Float32(triangle.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint1Id, Float32(triangle.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint2Id, Float32(triangle.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTriangleJoint3Id, Float32(triangle.joint3_id))
 
     reset_cycle_state(state_ptr)
 end
@@ -163,20 +163,20 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
-    line1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
+    line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
 
-    line2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
-    line2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
+    line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
 
-    line3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint1Id))
-    line3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
-    triangleHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTriangleHostId))
+    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
+    line3_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint1Id))
+    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
+    triangle_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTriangleHostId))
 
-    if line1HostId < 0
+    if line1_host_id < 0
         return
     end
 
@@ -195,7 +195,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSide1
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, VertexA, VertexB,
-            TriangleMaxBrush, TriangleColor, line1HostId, line1Joint1Id, line1Joint2Id)
+            TriangleMaxBrush, TriangleColor, line1_host_id, line1_joint1_id, line1_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -205,7 +205,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSide2
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, VertexB, VertexC,
-            TriangleMaxBrush, TriangleColor, line2HostId, line2Joint1Id, line2Joint2Id)
+            TriangleMaxBrush, TriangleColor, line2_host_id, line2_joint1_id, line2_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -215,7 +215,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSide3
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, VertexC, VertexA,
-            TriangleMaxBrush, TriangleColor, line3HostId, line3Joint1Id, line3Joint2Id)
+            TriangleMaxBrush, TriangleColor, line3_host_id, line3_joint1_id, line3_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -223,13 +223,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseRise
-        set_triangle_alpha(state_ptr, triangleHostId, timer / FlickerDuration)
-        OdinJuliaBridge.show_point(state_ptr, triangleHostId)
+        set_triangle_alpha(state_ptr, triangle_host_id, timer / FlickerDuration)
+        OdinJuliaBridge.show_point(state_ptr, triangle_host_id)
 
         if timer <= FlickerDuration
             for _ in 1:FlickerSamplesPerFrame
-                samplePos = random_triangle_point(VertexA, VertexB, VertexC)
-                OdinJuliaBridge.emit_flicker_particle(state_ptr, samplePos, FlickerColor)
+                sample_pos = random_triangle_point(VertexA, VertexB, VertexC)
+                OdinJuliaBridge.emit_flicker_particle(state_ptr, sample_pos, FlickerColor)
             end
         end
 

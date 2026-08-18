@@ -62,15 +62,15 @@ push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.
 //   - No-op unless both compass joints are valid and near floor height.
 push_dust_for_compass_segment_if_floor_contact :: proc(
     state: ^core.Euclid_General_State) {
-    pointIndex1 := state^.compass.joint1_id
-    pointIndex2 := state^.compass.joint2_id
-    if pointIndex1 < 0 || pointIndex1 >= MAX_SHAPESPOINTS ||
-        pointIndex2 < 0 || pointIndex2 >= MAX_SHAPESPOINTS {
+    point_index1 := state^.compass.joint1_id
+    point_index2 := state^.compass.joint2_id
+    if point_index1 < 0 || point_index1 >= MAX_SHAPESPOINTS ||
+        point_index2 < 0 || point_index2 >= MAX_SHAPESPOINTS {
         return
     }
 
-    point1 := state^.point_system^.points[pointIndex1].position.? or_else {0, 0, 0}
-    point2 := state^.point_system^.points[pointIndex2].position.? or_else {0, 0, 0}
+    point1 := state^.point_system^.points[point_index1].position.? or_else {0, 0, 0}
+    point2 := state^.point_system^.points[point_index2].position.? or_else {0, 0, 0}
 
     if f32(math.abs(f64(point1.z))) > FLOOR_CONTACT_Z_EPSILON ||
         f32(math.abs(f64(point2.z))) > FLOOR_CONTACT_Z_EPSILON {

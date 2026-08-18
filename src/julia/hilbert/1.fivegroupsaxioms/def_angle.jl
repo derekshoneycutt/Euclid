@@ -110,23 +110,23 @@ are called the sides of the angle, and the point $O$ \euclidpoint[color=khaki3,s
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    halfRayHHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
-    halfRayHJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
-    halfRayKHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
-    halfRayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
-    markerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    markerEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
-    pointOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
-    labelOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
-    labelHId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    labelKId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
+    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
+    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
+    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
+    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    point_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
+    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
+    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
+    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [halfRayHHostId, halfRayKHostId, markerHostId, pointOId, labelOId, labelHId, labelKId])
+        [half_ray_h_host_id, half_ray_k_host_id, marker_host_id, point_o_id, label_o_id, label_h_id, label_k_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, halfRayHJoint2Id, HalfRayHStart)
-    OdinJuliaBridge.set_point_position(state_ptr, halfRayKJoint2Id, HalfRayKStart)
-    OdinJuliaBridge.set_point_position(state_ptr, markerEndId, MarkerStart)
+    OdinJuliaBridge.set_point_position(state_ptr, half_ray_h_joint2_id, HalfRayHStart)
+    OdinJuliaBridge.set_point_position(state_ptr, half_ray_k_joint2_id, HalfRayKStart)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, MarkerStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendToO)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -142,36 +142,36 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    halfRayH = OdinJuliaBridge.create_new_line(
+    half_ray_h = OdinJuliaBridge.create_new_line(
         state_ptr, HalfRayHStart, HalfRayHStart, HalfRayHColor, 0f0)
-    halfRayK = OdinJuliaBridge.create_new_line(
+    half_ray_k = OdinJuliaBridge.create_new_line(
         state_ptr, HalfRayKStart, HalfRayKStart, HalfRayKColor, 0f0)
     marker = OdinJuliaBridge.create_new_filledcircle(
         state_ptr,
         PointO[1], PointO[2], PointO[3],
         MarkerRadius, 0f0, 0f0,
         MarkerColor, 0f0)
-    pointO = OdinJuliaBridge.create_new_point(state_ptr, PointO, PointOColor, 0f0)
+    point_o = OdinJuliaBridge.create_new_point(state_ptr, PointO, PointOColor, 0f0)
 
-    labelO = OdinJuliaBridge.create_new_label(state_ptr, 'O', OLabelPoint, LabelColor, 16f0)
-    labelH = OdinJuliaBridge.create_new_label(state_ptr, 'h', HLabelPoint, LabelColor, 16f0)
-    labelK = OdinJuliaBridge.create_new_label(state_ptr, 'k', KLabelPoint, LabelColor, 16f0)
+    label_o = OdinJuliaBridge.create_new_label(state_ptr, 'O', OLabelPoint, LabelColor, 16f0)
+    label_h = OdinJuliaBridge.create_new_label(state_ptr, 'h', HLabelPoint, LabelColor, 16f0)
+    label_k = OdinJuliaBridge.create_new_label(state_ptr, 'k', KLabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHHostId, Float32(halfRayH.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint1Id, Float32(halfRayH.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint2Id, Float32(halfRayH.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKHostId, Float32(halfRayK.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint1Id, Float32(halfRayK.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint2Id, Float32(halfRayK.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHHostId, Float32(half_ray_h.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint1Id, Float32(half_ray_h.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint2Id, Float32(half_ray_h.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKHostId, Float32(half_ray_k.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint1Id, Float32(half_ray_k.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint2Id, Float32(half_ray_k.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.endId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.end_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointOId, Float32(pointO.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOId, Float32(labelO.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, Float32(labelH.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, Float32(labelK.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointOId, Float32(point_o.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOId, Float32(label_o.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, Float32(label_h.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, Float32(label_k.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -180,21 +180,21 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    halfRayHHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
-    halfRayHJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint1Id))
-    halfRayHJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
-    halfRayKHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
-    halfRayKJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint1Id))
-    halfRayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
-    markerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    markerStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
-    markerEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
-    pointOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
-    labelOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
-    labelHId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    labelKId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
+    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
+    half_ray_h_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint1Id))
+    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
+    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
+    half_ray_k_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint1Id))
+    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
+    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    point_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
+    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
+    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
+    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
 
-    if halfRayHHostId < 0 || halfRayKHostId < 0
+    if half_ray_h_host_id < 0 || half_ray_k_host_id < 0
         return
     end
 
@@ -209,12 +209,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DescendDuration
             phase = PhaseDrawPointO
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelOId)
+            OdinJuliaBridge.show_point(state_ptr, label_o_id)
         end
     elseif phase == PhaseDrawPointO
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration, PointO,
-            PointMaxBrush, PointOColor, pointOId)
+            PointMaxBrush, PointOColor, point_o_id)
 
         timer += dt
         if timer >= DrawPointDuration
@@ -226,13 +226,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawRayDuration, HalfRayHStart, HalfRayHEnd,
             LineMaxBrush, HalfRayHColor,
-            halfRayHHostId, halfRayHJoint1Id, halfRayHJoint2Id)
+            half_ray_h_host_id, half_ray_h_joint1_id, half_ray_h_joint2_id)
 
         timer += dt
         if timer >= DrawRayDuration
             phase = PhaseArcToOForK
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelHId)
+            OdinJuliaBridge.show_point(state_ptr, label_h_id)
         end
     elseif phase == PhaseArcToOForK
         EuclidAnimations.animate_pen_arcmove(
@@ -249,13 +249,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawRayDuration, HalfRayKStart, HalfRayKEnd,
             LineMaxBrush, HalfRayKColor,
-            halfRayKHostId, halfRayKJoint1Id, halfRayKJoint2Id)
+            half_ray_k_host_id, half_ray_k_joint1_id, half_ray_k_joint2_id)
 
         timer += dt
         if timer >= DrawRayDuration
             phase = PhasePenLiftForMarker
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelKId)
+            OdinJuliaBridge.show_point(state_ptr, label_k_id)
         end
     elseif phase == PhasePenLiftForMarker
         EuclidAnimations.animate_pen_rise(
@@ -276,7 +276,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, CompassDrawDuration,
             PointO, MarkerStart,
             AngleTheta, MarkerRadius, MarkerBrush, MarkerColor,
-            markerHostId, markerStartId, markerEndId)
+            marker_host_id, marker_start_id, marker_end_id)
 
         timer += dt
         if timer >= CompassDrawDuration

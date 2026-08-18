@@ -224,7 +224,8 @@ This delimiter-whitespace behavior is intentionally limited to
 `\angle`, `\measuredangle`, and `\sphericalangle`. That may change in the future with more
 active development on this engine.
 
-Practical rule: if a symbol matters, prefer its LaTeX command form over raw character entry.
+Practical rule: if a symbol matters, prefer its LaTeX command form over raw
+character entry.
 
 ### Greek Letter Command Coverage (Current Fixed Set)
 
@@ -289,7 +290,8 @@ Practical rule: if a symbol matters, prefer its LaTeX command form over raw char
 | `\mathbb{A}` to `\mathbb{Z}` (uppercase only) | Supported via `MATHBB_UPPERCASE_MAP` |
 | `\mathbb{a}` or other non-uppercase forms | Not supported (falls back; no lowercase map) |
 
-If a Greek letter or symbol command is not in the tables above, treat it as unsupported for now.
+If a Greek letter or symbol command is not in the tables above,
+treat it as unsupported for now.
 
 ## Matrix Support
 
@@ -309,7 +311,8 @@ crashing the frame path.
 
 ## Delimiter Support
 
-`\left ... \right` is fully structural and can wrap nested constructs like fractions, radicals, and matrices.
+`\left ... \right` is fully structural and can wrap nested constructs like
+fractions, radicals, and matrices.
 
 Examples:
 
@@ -335,7 +338,8 @@ Available cache APIs:
 - `invalidate_cache_for_style!(style_profile)`
 - `invalidate_cache_for_grammar!(grammar_version)`
 
-In normal animation usage, calling `replay_emit_math_block!` is sufficient and cache behavior is automatic.
+In normal animation usage, calling `replay_emit_math_block!` is sufficient and
+cache behavior is automatic.
 
 The current cache applies to math parsing and compiled math programs. Document
 runs are parsed per `emit_latex_view_text!` call; embedded math expressions then

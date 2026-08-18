@@ -805,7 +805,7 @@ cache_push_draw_item :: #force_inline proc(
     case .Point: cache_push_point(point_system, source_index, src, alpha)
     case .Line: cache_push_line(point_system, source_index, src, alpha)
     case .Circle: cache_push_circle(point_system, source_index, src, alpha)
-    case .FilledCircle: cache_push_filledcircle(point_system, source_index, src, alpha)
+    case .Filled_Circle: cache_push_filledcircle(point_system, source_index, src, alpha)
     case .Triangle,
         .Square,
         .Pentagon:

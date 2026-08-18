@@ -4,7 +4,7 @@ import "../core"
 
 //   Build one layout-like child item for the command kinds supported inside math blocks.
 //   Uniform handler shape for building one math-program layout item.
-Math_Program_Item_Handler :: proc(
+Math_Program_Item_Handler :: #type proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
     cmd: core.Dynview_Command,
@@ -14,20 +14,20 @@ Math_Program_Item_Handler :: proc(
 //   Dispatch table mapping each recursive math command kind to its item builder.
 //   Non-math kinds map to nil and are rejected by the caller.
 MATH_PROGRAM_ITEM_HANDLERS :: [core.Dynview_Command_Kind]Math_Program_Item_Handler{
-    .BeginBlock = nil, .EndBlock = nil, .CopyableTextRun = nil, .LineBreak = nil,
-    .Divider = nil, .MathBlock = nil, .InlineLine = nil, .InlineBox = nil,
-    .InlineCircle = nil, .InlineFilledBox = nil, .InlineFilledCircle = nil,
-    .InlinePieSection = nil, .InlinePerpendicular = nil, .InlineTriangle = nil,
-    .InlinePentagon = nil,
-    .TextRun = math_program_text_item_entry,
-    .MathGlyphRun = math_program_text_item_entry,
-    .ScriptAttachRecursive = math_program_script_item_entry,
-    .FracRecursive = math_program_recursive_fraction_item,
-    .StretchDelimiterRecursive = math_program_recursive_stretch_delimiter_item,
-    .MatrixRecursive = math_program_recursive_matrix_item,
-    .LargeOpRecursive = math_program_large_op_item_entry,
-    .AccentBarRecursive = math_program_accent_item_entry,
-    .RadicalBarRecursive = math_program_recursive_radical_item,
+    .Begin_Block = nil, .End_Block = nil, .Copyable_Text_Run = nil, .Line_Break = nil,
+    .Divider = nil, .Math_Block = nil, .Inline_Line = nil, .Inline_Box = nil,
+    .Inline_Circle = nil, .Inline_Filled_Box = nil, .Inline_Filled_Circle = nil,
+    .Inline_Pie_Section = nil, .Inline_Perpendicular = nil, .Inline_Triangle = nil,
+    .Inline_Pentagon = nil,
+    .Text_Run = math_program_text_item_entry,
+    .Math_Glyph_Run = math_program_text_item_entry,
+    .Script_Attach = math_program_script_item_entry,
+    .Frac = math_program_recursive_fraction_item,
+    .Stretch_Delimiter = math_program_recursive_stretch_delimiter_item,
+    .Matrix = math_program_recursive_matrix_item,
+    .Large_Op = math_program_large_op_item_entry,
+    .Accent_Bar = math_program_accent_item_entry,
+    .Radical_Bar = math_program_recursive_radical_item,
 }
 
 //   Aggregated per-column and per-row cell metrics for one matrix layout.
@@ -103,9 +103,9 @@ math_program_text_item :: #force_inline proc(
     text := text_for_command(buffer, cmd)
     cols := max(1, text_codepoint_count_span(text, 0, len(text)))
     ascent, descent := style_ascent_descent(style, font_size)
-    kind := core.Dynview_Layout_Item_Kind.TextRun
-    if cmd.kind == .MathGlyphRun {
-        kind = .MathGlyphRun
+    kind := core.Dynview_Layout_Item_Kind.Text_Run
+    if cmd.kind == .Math_Glyph_Run {
+        kind = .Math_Glyph_Run
     }
 
     return core.Dynview_Layout_Item{
@@ -178,7 +178,7 @@ math_program_recursive_script_item :: #force_inline proc(
     }
 
     return core.Dynview_Layout_Item{
-        kind = .ScriptAttachRecursive,
+        kind = .Script_Attach,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         script_sup_text_offset = cmd.script_sup_text_offset,
@@ -259,7 +259,7 @@ math_program_large_op_item :: #force_inline proc(
 
     draw_width := max(glyph_width, max(sup_width, sub_width))
     return core.Dynview_Layout_Item{
-        kind = .LargeOpRecursive,
+        kind = .Large_Op,
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
         text_len = cmd.text_len,
@@ -313,7 +313,7 @@ math_program_recursive_fraction_item :: #force_inline proc(
     visual_pad := max(0.6, divider_thickness * 0.5)
 
     return core.Dynview_Layout_Item{
-        kind = .FracRecursive,
+        kind = .Frac,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         secondary_math_program_id = cmd.secondary_math_program_id,
@@ -374,7 +374,7 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     draw_width := max(content_width + left_width + right_width + side_padding * 2.0,
         base_advance)
     return core.Dynview_Layout_Item{
-        kind = .StretchDelimiterRecursive,
+        kind = .Stretch_Delimiter,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         accent_mode = cmd.accent_mode,
@@ -485,7 +485,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
     ascent := total_height * 0.5
     descent := total_height - ascent
     return core.Dynview_Layout_Item{
-        kind = .MatrixRecursive,
+        kind = .Matrix,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         script_sub_text_offset = cmd.script_sub_text_offset,
@@ -525,7 +525,7 @@ math_program_recursive_accent_item :: #force_inline proc(
     }
 
     return core.Dynview_Layout_Item{
-        kind = .AccentBarRecursive,
+        kind = .Accent_Bar,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         accent_mode = cmd.accent_mode,
@@ -601,7 +601,7 @@ math_program_recursive_radical_item :: #force_inline proc(
     accent_pad := accent_script_clearance(font_size, script_scale, false)
 
     return core.Dynview_Layout_Item{
-        kind = .RadicalBarRecursive,
+        kind = .Radical_Bar,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         script_style_id = cmd.script_style_id,

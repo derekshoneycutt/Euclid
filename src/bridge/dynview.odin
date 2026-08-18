@@ -32,15 +32,15 @@ Dynview_Import_Context :: struct {
 //   Dynview command kind for each bridge math-op kind, indexed by op kind.
 BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
     [BRIDGE_DYNVIEW_MATH_OP_MAX + 1]core.Dynview_Command_Kind{
-    BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN = .TextRun,
-    BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN = .MathGlyphRun,
-    BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE = .AccentBarRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE = .RadicalBarRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE = .ScriptAttachRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE = .LargeOpRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .FracRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .StretchDelimiterRecursive,
-    BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .MatrixRecursive,
+    BRIDGE_DYNVIEW_MATH_OP_TEXT_RUN = .Text_Run,
+    BRIDGE_DYNVIEW_MATH_OP_MATH_GLYPH_RUN = .Math_Glyph_Run,
+    BRIDGE_DYNVIEW_MATH_OP_ACCENT_BAR_RECURSIVE = .Accent_Bar,
+    BRIDGE_DYNVIEW_MATH_OP_RADICAL_BAR_RECURSIVE = .Radical_Bar,
+    BRIDGE_DYNVIEW_MATH_OP_SCRIPT_ATTACH_RECURSIVE = .Script_Attach,
+    BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE = .Large_Op,
+    BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .Frac,
+    BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .Stretch_Delimiter,
+    BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .Matrix,
 }
 
 //   Convert bridge decoration integer values to label decoration enum values.
@@ -56,9 +56,9 @@ label_decoration_kind_from_i32 :: #force_inline proc(
     case BRIDGE_LABEL_DECORATION_PRIME:
         return .Prime
     case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
-        return .DoublePrime
+        return .Double_Prime
     case BRIDGE_LABEL_DECORATION_TRIPLEPRIME:
-        return .TriplePrime
+        return .Triple_Prime
     case BRIDGE_LABEL_DECORATION_HAT:
         return .Hat
     case BRIDGE_LABEL_DECORATION_BAR:
@@ -141,7 +141,7 @@ dynview_append_text_payload :: #force_inline proc(
 dynview_math_command_kind_from_bridge :: #force_inline proc(
     kind: i32) -> (core.Dynview_Command_Kind, bool) {
     if kind < 1 || kind > BRIDGE_DYNVIEW_MATH_OP_MAX {
-        return .TextRun, false
+        return .Text_Run, false
     }
     kinds := BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND
     return kinds[kind], true
@@ -184,7 +184,7 @@ dynview_import_child_program :: proc(
     if direct_count <= 0 || ctx.next_program_id == nil {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if ctx.next_program_id^ >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if ctx.next_program_id^ >= core.DYNVIEW_MAX_MATH_PROGRAMS {
         return 0, BRIDGE_STATUS_INVALID_ARGUMENT
     }
 
@@ -214,7 +214,7 @@ dynview_import_fraction_children :: proc(
     if numerator_direct_count <= 0 || denominator_direct_count <= 0 {
         return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
-    if ctx.next_program_id^ + 1 >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if ctx.next_program_id^ + 1 >= core.DYNVIEW_MAX_MATH_PROGRAMS {
         return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
 
@@ -249,28 +249,28 @@ dynview_import_op_children :: proc(
 
     child_direct_count := int(op.child_program_id)
     switch command_kind {
-    case .ScriptAttachRecursive, .AccentBarRecursive, .RadicalBarRecursive,
-        .MatrixRecursive:
+    case .Script_Attach, .Accent_Bar, .Radical_Bar,
+        .Matrix:
         if child_direct_count <= 0 {
             return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
         }
         child_id, child_status := dynview_import_child_program(ctx,
             child_direct_count)
         return Dynview_Imported_Children{child_id, 0, child_status}
-    case .FracRecursive:
+    case .Frac:
         return dynview_import_fraction_children(ctx, op)
-    case .StretchDelimiterRecursive:
+    case .Stretch_Delimiter:
         if child_direct_count <= 0 {
             return Dynview_Imported_Children{0, 0, BRIDGE_STATUS_OK}
         }
         child_id, child_status := dynview_import_child_program(ctx,
             child_direct_count)
         return Dynview_Imported_Children{child_id, 0, child_status}
-    case .BeginBlock, .EndBlock, .TextRun, .MathGlyphRun, .MathBlock,
-        .LargeOpRecursive, .CopyableTextRun, .LineBreak, .Divider,
-        .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
-        .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
-        .InlineTriangle, .InlinePentagon:
+    case .Begin_Block, .End_Block, .Text_Run, .Math_Glyph_Run, .Math_Block,
+        .Large_Op, .Copyable_Text_Run, .Line_Break, .Divider,
+        .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
+        .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
+        .Inline_Triangle, .Inline_Pentagon:
     }
     return Dynview_Imported_Children{i32(op.child_program_id), 0, BRIDGE_STATUS_OK}
 }
@@ -321,14 +321,14 @@ dynview_read_validated_op :: proc(
     blob_count: int) -> Dynview_Validated_Op {
 
     if cursor^ >= op_count {
-        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
+        return Dynview_Validated_Op{{}, .Text_Run, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
 
     op := ops[cursor^]
     cursor^ += 1
     command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
     if !ok || !dynview_math_op_spans_valid(op, blob_count) {
-        return Dynview_Validated_Op{{}, .TextRun, BRIDGE_STATUS_INVALID_ARGUMENT}
+        return Dynview_Validated_Op{{}, .Text_Run, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
     return Dynview_Validated_Op{op, command_kind, BRIDGE_STATUS_OK}
 }
@@ -368,7 +368,7 @@ dynview_import_math_program_from_ops :: proc(
     }
 
     command_start := ctx.cache^.math_command_count
-    if command_start + direct_count > core.DYNVIEW__MAX_MATH_COMMANDS {
+    if command_start + direct_count > core.DYNVIEW_MAX_MATH_COMMANDS {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
     ctx.cache^.math_command_count += direct_count

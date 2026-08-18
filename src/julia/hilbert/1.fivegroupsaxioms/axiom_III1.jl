@@ -67,23 +67,23 @@ This statement of the axiom of parallels contains two assertions. The first of t
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    parallelHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
-    parallelJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
-    parallelJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
-    labelaId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
+    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
+    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
+    labela_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [lineAHostId, pointAId, parallelHostId, labelaId, labelAId])
+        [line_a_host_id, point_a_id, parallel_host_id, labela_id, label_a_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, lineAJoint1Id, LineAStart)
-    OdinJuliaBridge.set_point_position(state_ptr, lineAJoint2Id, LineAStart)
-    OdinJuliaBridge.set_point_position(state_ptr, parallelJoint1Id, ParallelStart)
-    OdinJuliaBridge.set_point_position(state_ptr, parallelJoint2Id, ParallelStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_a_joint1_id, LineAStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_a_joint2_id, LineAStart)
+    OdinJuliaBridge.set_point_position(state_ptr, parallel_joint1_id, ParallelStart)
+    OdinJuliaBridge.set_point_position(state_ptr, parallel_joint2_id, ParallelStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -95,26 +95,26 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    lineA = OdinJuliaBridge.create_new_line(
+    line_a = OdinJuliaBridge.create_new_line(
         state_ptr, LineAStart, LineAStart, LineAColor, 0f0)
-    pointA = OdinJuliaBridge.create_new_point(
+    point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointA, PointAColor, 0f0)
-    parallelLine = OdinJuliaBridge.create_new_line(
+    parallel_line = OdinJuliaBridge.create_new_line(
         state_ptr, ParallelStart, ParallelStart, ParallelColor, 0f0)
     labela = OdinJuliaBridge.create_new_label(
         state_ptr, 'a', LineaLabelPoint, LabelColor, 16f0)
-    labelA = OdinJuliaBridge.create_new_label(
+    label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(lineA.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(lineA.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(lineA.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(pointA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelHostId, Float32(parallelLine.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint1Id, Float32(parallelLine.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint2Id, Float32(parallelLine.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(line_a.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(line_a.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(line_a.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelHostId, Float32(parallel_line.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint1Id, Float32(parallel_line.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint2Id, Float32(parallel_line.joint2_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelaId, Float32(labela.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(labelA.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -123,17 +123,17 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    parallelHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
-    parallelJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
-    parallelJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
-    labelaId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
+    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
+    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
+    labela_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
 
-    if lineAHostId < 0
+    if line_a_host_id < 0
         return
     end
 
@@ -148,12 +148,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DescendDuration
             phase = PhaseDrawLineA
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelaId)
+            OdinJuliaBridge.show_point(state_ptr, labela_id)
         end
     elseif phase == PhaseDrawLineA
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, lineAHostId, lineAJoint1Id, lineAJoint2Id)
+            LineMaxBrush, LineAColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -167,14 +167,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
             phase = PhaseDrawPointA
             timer = 0f0
         end
     elseif phase == PhaseDrawPointA
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointDrawDuration, PointA,
-            PointMaxBrush, PointAColor, pointAId)
+            PointMaxBrush, PointAColor, point_a_id)
 
         timer += dt
         if timer >= PointDrawDuration
@@ -196,7 +196,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, ParallelStart, ParallelEnd,
             LineMaxBrush, ParallelColor,
-            parallelHostId, parallelJoint1Id, parallelJoint2Id)
+            parallel_host_id, parallel_joint1_id, parallel_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

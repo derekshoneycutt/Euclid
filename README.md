@@ -113,15 +113,17 @@ On Windows, `configure` also verifies that the MSVC environment (or `cl.exe`) an
 
 ## Documentation
 
-- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki): published project documentation.
-- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home): generated Odin and
+- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki):
+ published project documentation.
+- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
+ generated Odin and
   Julia APIs.
-- [Guides](docs/wiki/Guides/ArchitectureSummary.md): canonical authored architecture, coding,
-  animation, and syntax documentation.
+- [Guides](docs/wiki/Guides/ArchitectureSummary.md):
+ canonical authored architecture, coding, animation, and syntax documentation.
 
-Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`. The artifact is
-written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it against a fresh generation
-without modifying the retained artifact.
+Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
+The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
+against a fresh generation without modifying the retained artifact.
 
 ## Questions?
 
@@ -144,17 +146,17 @@ line of code in this project myself, regardless of where that code has come from
 the old depths of stack overflow, my brain, someone else's brain, some AI tool or another,
 or some other tool.
 
-This is not going to be as strong as some would wish. For a project being released into the
-public domain, I just do not have the energy for a stronger stance in this project. The
-concerns are ethical and especially political. In that realm, this project is inherently
-hostile to copyright by its own licensing. The remaining concerns largely boil down to the
-sustainability. I feel absolutely no need to give AI any benefit of the doubt that it is
-actually sustainable enough to be worth its relatively low quality output. Otherwise,
-these concerns are difficult to address with a simple public domain geometry software
-project. A public domain project is really not the place for many of these ethical and
-political discussions. I will not be fighting that in this project. This will not be a
-project that is concerned with any stronger stance than demanding a human take full
-responsibility.
+This is not going to be as strong as some would wish. For a project being released into
+the public domain, I just do not have the energy for a stronger stance in this project.
+The concerns are ethical and especially political. In that realm, this project is
+inherently hostile to copyright by its own licensing. The remaining concerns largely boil
+down to the sustainability. I feel absolutely no need to give AI any benefit of the doubt
+that it is actually sustainable enough to be worth its relatively low quality output.
+Otherwise, these concerns are difficult to address with a simple public domain geometry
+software project. A public domain project is really not the place for many of these
+ethical and political discussions. I will not be fighting that in this project. This will
+not be a project that is concerned with any stronger stance than demanding a human take
+full responsibility.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
@@ -175,11 +177,11 @@ benefit for the tinkerers out there, I think, which is a beneficial addition.
 The code of this project is designed with a core engine coded in Odin, but all of the
 animations are executed as Julia scripts. Julia is a fast, JIT compiled language in this
 use. Julia users will also be familiar with the REPL, where they can enter in Julia code
-essentially line-by-line and see how it works in a live environment. The Scratchpad in this
-project is like this. It provides an emptied drawing surface and a line input for Julia
-code input. `2+2` will show `4` in the output directly above, for example. In fact, via
-using Julia's `REPL` package directly, even scope issues should follow similar Julia REPL
-standards for those already familiar.
+essentially line-by-line and see how it works in a live environment. The Scratchpad in
+this project is like this. It provides an emptied drawing surface and a line input for
+Julia code input. `2+2` will show `4` in the output directly above, for example. In fact,
+via using Julia's `REPL` package directly, even scope issues should follow similar Julia
+REPL standards for those already familiar.
 
 `:help` will show most of the important information for how to use the Scratchpad in
 practice. Importantly, starting a line with `?` will attempt to do a focused documentation
@@ -187,11 +189,13 @@ query.
 
 A quick cheatsheet for drawing the standard Euclidean matters:
 
-- `point!([x, y, z])` e.g. `point!([0.5f0, 0.5f0, 0f0])` : Animates drawing a single point.
-- `line!([x1, y1, z1], [x2, y2, z2])` e.g. `line!([0.1f0, 0.1f0, 0f0], [0.1f0, 0.9f0, 0f0])`
+- `point!([x, y, z])` e.g. `point!([0.5f0, 0.5f0, 0f0])`
+  : Animates drawing a single point.
+- `line!([x1, y1, z1], [x2, y2, z2])` e.g.
+  `line!([0.1f0, 0.1f0, 0f0], [0.1f0, 0.9f0, 0f0])`
   : Animates drawing a line from [x1, y1, z1] to [x2, y2, z2].
-- `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)` : Animates drawing a
-  circle centered at [x, y, z], with a radius of r.
+- `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
+  : Animates drawing a circle centered at [x, y, z], with a radius of r.
 
 For additional help:
 
@@ -200,7 +204,8 @@ For additional help:
 - Following `?` with a module name (e.g. `?OdinJuliaBridge`) will attempt to list all
   unique function names available in the name module.
 - Following `?` with a function name (e.g. `?OdinJuliaBrige.create_new_point`) will
-  attempt to display the documentation comment for that function and all parameter variants.
+  attempt to display the documentation comment for that function and all parameter
+  variants.
 
 Not so secretly, this can be a helpful way to navigate the OdinJuliaBridge most of all,
 even if not using the Scratchpad for any other purpose. Kind of like man pages.
@@ -255,12 +260,13 @@ considerations for the future.
 ### Q: You support LaTeX?
 
 Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
-kind of a pain in the ass for half a week, and it does not yet support everything one might
-hope to find in a more thorough LaTeX rendering engine. This is basically a work in
+kind of a pain in the ass for half a week, and it does not yet support everything one
+might hope to find in a more thorough LaTeX rendering engine. This is basically a work in
 progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
 shame about it, but we're just gonna sit in that and learn.
 
-Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support today.
+Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support
+today.
 
 The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
 For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
@@ -285,8 +291,8 @@ will draw the dust particles with the GPU and O(1) on the CPU to instance the da
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset commands
-remove an existing sysimage to prevent stale baked code from being used.
+executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset
+commands remove an existing sysimage to prevent stale baked code from being used.
 
 Additionally, there are some startup options that can affect application performance.
 
@@ -324,20 +330,20 @@ fit to that model, and I froze on it a bit.
 
 I had some thoughts about making a C application for this project, but I was not very
 excited about it at any given moment. Julia has lagged a bit in getting a stand-alone
-executable route, so it seemed unlikely to go purely Julia for quite a while. This has been
-changing as Julia community continues pursuing their one language paradigm, but alas, here
-I am. As I was doing another project exploring 76 different programming languages, I
+executable route, so it seemed unlikely to go purely Julia for quite a while. This has
+been changing as Julia community continues pursuing their one language paradigm, but alas,
+here I am. As I was doing another project exploring 76 different programming languages, I
 encountered Odin and enjoyed working with it. On a whim, I was playing with a basic
 kinematic system in Odin when it occurred to me it would be a great basis for this
 Euclid project.
 
 Ultimately, having a strong solid application base with manual memory management and
 potential for optimizations at a relatively low level combined with an intentionally fast,
-JIT compiled, GC managed language on the individual animation level has its own advantages.
-I probably would not actually choose this without the unique history of this project, but
-it is actually quite an enjoyable programming experience between the two. They are different
-languages, but both offer language-level tools for the kind of maths used in this project
-that just make it an enjoyable experience!
+JIT compiled, GC managed language on the individual animation level has its own
+advantages. I probably would not actually choose this without the unique history of this
+project, but it is actually quite an enjoyable programming experience between the two.
+They are different languages, but both offer language-level tools for the kind of maths
+used in this project that just make it an enjoyable experience!
 
 ### Q: Are there any more options with the make scripts?
 
@@ -376,16 +382,18 @@ underlying executable accepts a smaller control surface:
 Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
 ```
 
-`julia tools/make.jl -H` builds and runs the default harness scenario and writes the resulting trace
-to `bin/semantic-trace-harness.jsonl`.
+`julia tools/make.jl -H` builds and runs the default harness scenario and writes the
+resulting trace to `bin/semantic-trace-harness.jsonl`.
 
 ### Q: Where should I start if I want in the code?
 
 I have added an initial architecture summary and coding standards that can be your guides.
 
-- [Architecture Summary](docs/wiki/Guides/ArchitectureSummary.md): describes the several modules, boundaries,
-  etc., and how they fit together. Includes important code files to start with.
-- [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code should be written
+- [Architecture Summary](docs/wiki/Guides/ArchitectureSummary.md): describes the several
+  modules, boundaries, etc., and how they fit together. Includes important code files to
+  start with.
+- [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code
+  should be written
 
 The project was initially quite messy, without a standard and with all the artifacts of
 exploring and learning a new-to-me language, as well as me not really being a traditional
@@ -446,9 +454,6 @@ the rest of the vet pipeline already parses.
 ```bash
 julia tools/make.jl -v
 ```
-
-NOTE: Use the combined vet+test run, `julia tools/make.jl -vt`, as the verification baseline.
-Running only `-v` or only `-t` is not sufficient for acceptance.
 
 #### Report Output
 

@@ -5,37 +5,39 @@ import "../core"
 import rl "vendor:raylib"
 
 //   Uniform handler shape for one dynview command kind during compilation.
-Compile_Command_Handler ::
-    proc(cache: ^core.Dynview_Compile_Cache, buffer: ^core.Dynview_Command_Buffer,
-        state: ^Dynview_Compile_State, cmd: core.Dynview_Command) -> i32
+Compile_Command_Handler :: #type proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32
 
 //   Dispatch table mapping each dynview command kind to its compile handler.
 COMPILE_COMMAND_HANDLERS ::
     [core.Dynview_Command_Kind]Compile_Command_Handler{
-    .BeginBlock = compile_handle_begin_block,
-    .EndBlock = compile_handle_end_block,
-    .TextRun = compile_text_run,
-    .MathGlyphRun = compile_text_run,
-    .MathBlock = compile_text_run,
-    .ScriptAttachRecursive = compile_script_attach_recursive,
-    .FracRecursive = compile_text_run,
-    .StretchDelimiterRecursive = compile_text_run,
-    .MatrixRecursive = compile_text_run,
-    .LargeOpRecursive = compile_large_op_recursive,
-    .AccentBarRecursive = compile_text_run,
-    .RadicalBarRecursive = compile_text_run,
-    .CopyableTextRun = compile_copyable_text_run,
-    .LineBreak = compile_handle_newline,
+    .Begin_Block = compile_handle_begin_block,
+    .End_Block = compile_handle_end_block,
+    .Text_Run = compile_text_run,
+    .Math_Glyph_Run = compile_text_run,
+    .Math_Block = compile_text_run,
+    .Script_Attach = compile_script_attach_recursive,
+    .Frac = compile_text_run,
+    .Stretch_Delimiter = compile_text_run,
+    .Matrix = compile_text_run,
+    .Large_Op = compile_large_op_recursive,
+    .Accent_Bar = compile_text_run,
+    .Radical_Bar = compile_text_run,
+    .Copyable_Text_Run = compile_copyable_text_run,
+    .Line_Break = compile_handle_newline,
     .Divider = compile_handle_newline,
-    .InlineLine = compile_handle_inline_line,
-    .InlineBox = compile_handle_inline_box,
-    .InlineCircle = compile_handle_inline_circle,
-    .InlineFilledBox = compile_handle_inline_filled_box,
-    .InlineFilledCircle = compile_handle_inline_filled_circle,
-    .InlinePieSection = compile_handle_inline_pie_section,
-    .InlinePerpendicular = compile_handle_inline_box,
-    .InlineTriangle = compile_handle_inline_box,
-    .InlinePentagon = compile_handle_inline_box,
+    .Inline_Line = compile_handle_inline_line,
+    .Inline_Box = compile_handle_inline_box,
+    .Inline_Circle = compile_handle_inline_circle,
+    .Inline_Filled_Box = compile_handle_inline_filled_box,
+    .Inline_Filled_Circle = compile_handle_inline_filled_circle,
+    .Inline_Pie_Section = compile_handle_inline_pie_section,
+    .Inline_Perpendicular = compile_handle_inline_box,
+    .Inline_Triangle = compile_handle_inline_box,
+    .Inline_Pentagon = compile_handle_inline_box,
 }
 
 //  Append a compiled byte information to the give cache
@@ -544,7 +546,7 @@ compile_command :: #force_inline proc(
     cmd: core.Dynview_Command) -> i32 {
 
     kind := cmd.kind
-    if kind < .BeginBlock || kind > .InlinePentagon {
+    if kind < .Begin_Block || kind > .Inline_Pentagon {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
     handlers := COMPILE_COMMAND_HANDLERS

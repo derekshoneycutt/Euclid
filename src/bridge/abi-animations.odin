@@ -7,16 +7,16 @@ import "../core"
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - getViewText: Julia function pointer used to bind animation callback behavior.
+//   - get_view_text: Julia function pointer used to bind animation callback behavior.
 //   - init: Julia function pointer used to bind animation callback behavior.
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
-    getViewText, init, loop, clean: ^julialib.jl_value_t) {
+    get_view_text, init, loop, clean: ^julialib.jl_value_t) {
     
-    state^.julia_interface^.null_animation.get_view_text = getViewText
+    state^.julia_interface^.null_animation.get_view_text = get_view_text
     state^.julia_interface^.null_animation.initiate = init
     state^.julia_interface^.null_animation.loop = loop
     state^.julia_interface^.null_animation.clean = clean
@@ -26,7 +26,7 @@ set_null_animations :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - getViewText: Julia function pointer used to bind animation callback behavior.
+//   - get_view_text: Julia function pointer used to bind animation callback behavior.
 //   - init: Julia function pointer used to bind animation callback behavior.
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
@@ -39,7 +39,7 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    getViewText, init, loop, clean : ^julialib.jl_value_t,
+    get_view_text, init, loop, clean : ^julialib.jl_value_t,
     name, stable_id : cstring) -> int {
 
     context = state^.saved_context
@@ -54,7 +54,7 @@ add_root_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        getViewText,
+        get_view_text,
         init,
         loop,
         clean,
@@ -72,7 +72,7 @@ add_root_animation_interface :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - getViewText: Julia function pointer used to bind animation callback behavior.
+//   - get_view_text: Julia function pointer used to bind animation callback behavior.
 //   - init: Julia function pointer used to bind animation callback behavior.
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
@@ -86,7 +86,7 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    getViewText, init, loop, clean : ^julialib.jl_value_t,
+    get_view_text, init, loop, clean : ^julialib.jl_value_t,
     name, stable_id : cstring,
     parent_stable_id: cstring) -> int {
 
@@ -108,7 +108,7 @@ add_child_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        getViewText,
+        get_view_text,
         init,
         loop,
         clean,

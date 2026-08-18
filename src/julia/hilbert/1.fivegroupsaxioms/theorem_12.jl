@@ -392,78 +392,78 @@ $\angle CBD$ \euclidangle[color=steelblue,radius=2,end=60,filled] and $\angle C'
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    edgeACHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACHostId))
-    edgeACJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint2Id))
-    edgeCDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDHostId))
-    edgeCDJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint2Id))
-    edgeDAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAHostId))
-    edgeDAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint2Id))
-    edgeCBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBHostId))
-    edgeCBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint2Id))
+    edge_a_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACHostId))
+    edge_a_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint2Id))
+    edge_c_d_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDHostId))
+    edge_c_d_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint2Id))
+    edge_d_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAHostId))
+    edge_d_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint2Id))
+    edge_c_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBHostId))
+    edge_c_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint2Id))
 
-    edgeAPrimeCPrimeHostId = Integer(
+    edge_a_prime_c_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeAPrimeCPrimeHostId))
-    edgeAPrimeCPrimeJoint2Id = Integer(
+    edge_a_prime_c_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeAPrimeCPrimeJoint2Id))
-    edgeCPrimeDPrimeHostId = Integer(
+    edge_c_prime_d_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeDPrimeHostId))
-    edgeCPrimeDPrimeJoint2Id = Integer(
+    edge_c_prime_d_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeDPrimeJoint2Id))
-    edgeDPrimeAPrimeHostId = Integer(
+    edge_d_prime_a_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDPrimeAPrimeHostId))
-    edgeDPrimeAPrimeJoint2Id = Integer(
+    edge_d_prime_a_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDPrimeAPrimeJoint2Id))
-    edgeCPrimeBPrimeHostId = Integer(
+    edge_c_prime_b_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeBPrimeHostId))
-    edgeCPrimeBPrimeJoint2Id = Integer(
+    edge_c_prime_b_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeBPrimeJoint2Id))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    labelDId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
-    labelBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
-    labelCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
-    labelDPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDPrimeId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
+    label_d_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
+    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
+    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
+    label_d_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDPrimeId))
 
-    markerABCHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCHostId))
-    markerABCEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCEndId))
-    markerAPrimeBPrimeCPrimeHostId = Integer(
+    marker_a_b_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCHostId))
+    marker_a_b_c_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCEndId))
+    marker_a_prime_b_prime_c_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerAPrimeBPrimeCPrimeHostId))
-    markerAPrimeBPrimeCPrimeEndId = Integer(
+    marker_a_prime_b_prime_c_prime_end_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerAPrimeBPrimeCPrimeEndId))
-    markerCBDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDHostId))
-    markerCBDEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDEndId))
-    markerCPrimeBPrimeDPrimeHostId = Integer(
+    marker_c_b_d_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDHostId))
+    marker_c_b_d_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDEndId))
+    marker_c_prime_b_prime_d_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCPrimeBPrimeDPrimeHostId))
-    markerCPrimeBPrimeDPrimeEndId = Integer(
+    marker_c_prime_b_prime_d_prime_end_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCPrimeBPrimeDPrimeEndId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [edgeACHostId, edgeCDHostId, edgeDAHostId, edgeCBHostId,
-         edgeAPrimeCPrimeHostId, edgeCPrimeDPrimeHostId,
-         edgeDPrimeAPrimeHostId, edgeCPrimeBPrimeHostId,
-         markerABCHostId, markerAPrimeBPrimeCPrimeHostId,
-         markerCBDHostId, markerCPrimeBPrimeDPrimeHostId,
-         labelAId, labelBId, labelCId, labelDId,
-         labelAPrimeId, labelBPrimeId, labelCPrimeId, labelDPrimeId])
+        [edge_a_c_host_id, edge_c_d_host_id, edge_d_a_host_id, edge_c_b_host_id,
+         edge_a_prime_c_prime_host_id, edge_c_prime_d_prime_host_id,
+         edge_d_prime_a_prime_host_id, edge_c_prime_b_prime_host_id,
+         marker_a_b_c_host_id, marker_a_prime_b_prime_c_prime_host_id,
+         marker_c_b_d_host_id, marker_c_prime_b_prime_d_prime_host_id,
+         label_a_id, label_b_id, label_c_id, label_d_id,
+         label_a_prime_id, label_b_prime_id, label_c_prime_id, label_d_prime_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, edgeACJoint2Id, EdgeACStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeCDJoint2Id, EdgeCDStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeDAJoint2Id, EdgeDAStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeCBJoint2Id, EdgeCBStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeAPrimeCPrimeJoint2Id, EdgeAPrimeCPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeCPrimeDPrimeJoint2Id, EdgeCPrimeDPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeDPrimeAPrimeJoint2Id, EdgeDPrimeAPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, edgeCPrimeBPrimeJoint2Id, EdgeCPrimeBPrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_a_c_joint2_id, EdgeACStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_c_d_joint2_id, EdgeCDStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_d_a_joint2_id, EdgeDAStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_c_b_joint2_id, EdgeCBStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_a_prime_c_prime_joint2_id, EdgeAPrimeCPrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_c_prime_d_prime_joint2_id, EdgeCPrimeDPrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_d_prime_a_prime_joint2_id, EdgeDPrimeAPrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_c_prime_b_prime_joint2_id, EdgeCPrimeBPrimeStart)
 
-    OdinJuliaBridge.set_point_position(state_ptr, markerABCEndId, MarkerABCStart)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_a_b_c_end_id, MarkerABCStart)
     OdinJuliaBridge.set_point_position(
-        state_ptr, markerAPrimeBPrimeCPrimeEndId, MarkerAPrimeBPrimeCPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, markerCBDEndId, MarkerCBDStart)
+        state_ptr, marker_a_prime_b_prime_c_prime_end_id, MarkerAPrimeBPrimeCPrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_c_b_d_end_id, MarkerCBDStart)
     OdinJuliaBridge.set_point_position(
-        state_ptr, markerCPrimeBPrimeDPrimeEndId, MarkerCPrimeBPrimeDPrimeStart)
+        state_ptr, marker_c_prime_b_prime_d_prime_end_id, MarkerCPrimeBPrimeDPrimeStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendToA)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -489,124 +489,124 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    edgeAC = OdinJuliaBridge.create_new_line(state_ptr, EdgeACStart, EdgeACStart, EdgeACColor, 0f0)
-    edgeCD = OdinJuliaBridge.create_new_line(state_ptr, EdgeCDStart, EdgeCDStart, EdgeCDColor, 0f0)
-    edgeDA = OdinJuliaBridge.create_new_line(state_ptr, EdgeDAStart, EdgeDAStart, EdgeDAColor, 0f0)
-    edgeCB = OdinJuliaBridge.create_new_line(state_ptr, EdgeCBStart, EdgeCBStart, EdgeCBColor, 0f0)
+    edge_a_c = OdinJuliaBridge.create_new_line(state_ptr, EdgeACStart, EdgeACStart, EdgeACColor, 0f0)
+    edge_c_d = OdinJuliaBridge.create_new_line(state_ptr, EdgeCDStart, EdgeCDStart, EdgeCDColor, 0f0)
+    edge_d_a = OdinJuliaBridge.create_new_line(state_ptr, EdgeDAStart, EdgeDAStart, EdgeDAColor, 0f0)
+    edge_c_b = OdinJuliaBridge.create_new_line(state_ptr, EdgeCBStart, EdgeCBStart, EdgeCBColor, 0f0)
 
-    edgeAPrimeCPrime = OdinJuliaBridge.create_new_line(
+    edge_a_prime_c_prime = OdinJuliaBridge.create_new_line(
         state_ptr, EdgeAPrimeCPrimeStart, EdgeAPrimeCPrimeStart, EdgeAPrimeCPrimeColor, 0f0)
-    edgeCPrimeDPrime = OdinJuliaBridge.create_new_line(
+    edge_c_prime_d_prime = OdinJuliaBridge.create_new_line(
         state_ptr, EdgeCPrimeDPrimeStart, EdgeCPrimeDPrimeStart, EdgeCPrimeDPrimeColor, 0f0)
-    edgeDPrimeAPrime = OdinJuliaBridge.create_new_line(
+    edge_d_prime_a_prime = OdinJuliaBridge.create_new_line(
         state_ptr, EdgeDPrimeAPrimeStart, EdgeDPrimeAPrimeStart, EdgeDPrimeAPrimeColor, 0f0)
-    edgeCPrimeBPrime = OdinJuliaBridge.create_new_line(
+    edge_c_prime_b_prime = OdinJuliaBridge.create_new_line(
         state_ptr, EdgeCPrimeBPrimeStart, EdgeCPrimeBPrimeStart, EdgeCPrimeBPrimeColor, 0f0)
 
-    markerABC = OdinJuliaBridge.create_new_filledcircle(
+    marker_a_b_c = OdinJuliaBridge.create_new_filledcircle(
         state_ptr, PointB[1], PointB[2], PointB[3],
         MarkerRadius, 0f0, 0f0, MarkerPaleColor, 0f0)
-    markerAPrimeBPrimeCPrime = OdinJuliaBridge.create_new_filledcircle(
+    marker_a_prime_b_prime_c_prime = OdinJuliaBridge.create_new_filledcircle(
         state_ptr, PointBPrime[1], PointBPrime[2], PointBPrime[3],
         MarkerRadius, 0f0, 0f0, MarkerPaleColor, 0f0)
-    markerCBD = OdinJuliaBridge.create_new_filledcircle(
+    marker_c_b_d = OdinJuliaBridge.create_new_filledcircle(
         state_ptr, PointB[1], PointB[2], PointB[3],
         MarkerRadius, 0f0, 0f0, MarkerSteelColor, 0f0)
-    markerCPrimeBPrimeDPrime = OdinJuliaBridge.create_new_filledcircle(
+    marker_c_prime_b_prime_d_prime = OdinJuliaBridge.create_new_filledcircle(
         state_ptr, PointBPrime[1], PointBPrime[2], PointBPrime[3],
         MarkerRadius, 0f0, 0f0, MarkerSteelColor, 0f0)
 
-    labelA = OdinJuliaBridge.create_new_label(state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
-    labelB = OdinJuliaBridge.create_new_label(state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
-    labelC = OdinJuliaBridge.create_new_label(state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
-    labelD = OdinJuliaBridge.create_new_label(state_ptr, 'D', LabelDPoint, LabelColor, 16f0)
+    label_a = OdinJuliaBridge.create_new_label(state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
+    label_b = OdinJuliaBridge.create_new_label(state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
+    label_c = OdinJuliaBridge.create_new_label(state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
+    label_d = OdinJuliaBridge.create_new_label(state_ptr, 'D', LabelDPoint, LabelColor, 16f0)
 
-    labelAPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelAPrimePoint, LabelColor, 16f0)
-    labelBPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelBPrimePoint, LabelColor, 16f0)
-    labelCPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelCPrimePoint, LabelColor, 16f0)
-    labelDPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_d_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelDPrimePoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACHostId, Float32(edgeAC.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint1Id, Float32(edgeAC.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint2Id, Float32(edgeAC.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDHostId, Float32(edgeCD.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDJoint1Id, Float32(edgeCD.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDJoint2Id, Float32(edgeCD.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAHostId, Float32(edgeDA.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAJoint1Id, Float32(edgeDA.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAJoint2Id, Float32(edgeDA.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBHostId, Float32(edgeCB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBJoint1Id, Float32(edgeCB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBJoint2Id, Float32(edgeCB.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACHostId, Float32(edge_a_c.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint1Id, Float32(edge_a_c.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint2Id, Float32(edge_a_c.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDHostId, Float32(edge_c_d.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDJoint1Id, Float32(edge_c_d.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCDJoint2Id, Float32(edge_c_d.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAHostId, Float32(edge_d_a.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAJoint1Id, Float32(edge_d_a.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeDAJoint2Id, Float32(edge_d_a.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBHostId, Float32(edge_c_b.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBJoint1Id, Float32(edge_c_b.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeCBJoint2Id, Float32(edge_c_b.joint2_id))
 
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeAPrimeCPrimeHostId, Float32(edgeAPrimeCPrime.hostId))
+        state_ptr, MetaEdgeAPrimeCPrimeHostId, Float32(edge_a_prime_c_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeAPrimeCPrimeJoint1Id, Float32(edgeAPrimeCPrime.joint1Id))
+        state_ptr, MetaEdgeAPrimeCPrimeJoint1Id, Float32(edge_a_prime_c_prime.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeAPrimeCPrimeJoint2Id, Float32(edgeAPrimeCPrime.joint2Id))
+        state_ptr, MetaEdgeAPrimeCPrimeJoint2Id, Float32(edge_a_prime_c_prime.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeDPrimeHostId, Float32(edgeCPrimeDPrime.hostId))
+        state_ptr, MetaEdgeCPrimeDPrimeHostId, Float32(edge_c_prime_d_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeDPrimeJoint1Id, Float32(edgeCPrimeDPrime.joint1Id))
+        state_ptr, MetaEdgeCPrimeDPrimeJoint1Id, Float32(edge_c_prime_d_prime.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeDPrimeJoint2Id, Float32(edgeCPrimeDPrime.joint2Id))
+        state_ptr, MetaEdgeCPrimeDPrimeJoint2Id, Float32(edge_c_prime_d_prime.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeDPrimeAPrimeHostId, Float32(edgeDPrimeAPrime.hostId))
+        state_ptr, MetaEdgeDPrimeAPrimeHostId, Float32(edge_d_prime_a_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeDPrimeAPrimeJoint1Id, Float32(edgeDPrimeAPrime.joint1Id))
+        state_ptr, MetaEdgeDPrimeAPrimeJoint1Id, Float32(edge_d_prime_a_prime.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeDPrimeAPrimeJoint2Id, Float32(edgeDPrimeAPrime.joint2Id))
+        state_ptr, MetaEdgeDPrimeAPrimeJoint2Id, Float32(edge_d_prime_a_prime.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeBPrimeHostId, Float32(edgeCPrimeBPrime.hostId))
+        state_ptr, MetaEdgeCPrimeBPrimeHostId, Float32(edge_c_prime_b_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeBPrimeJoint1Id, Float32(edgeCPrimeBPrime.joint1Id))
+        state_ptr, MetaEdgeCPrimeBPrimeJoint1Id, Float32(edge_c_prime_b_prime.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaEdgeCPrimeBPrimeJoint2Id, Float32(edgeCPrimeBPrime.joint2Id))
+        state_ptr, MetaEdgeCPrimeBPrimeJoint2Id, Float32(edge_c_prime_b_prime.joint2_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerABCHostId, Float32(markerABC.hostId))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerABCHostId, Float32(marker_a_b_c.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaMarkerABCStartId, Float32(markerABC.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerABCEndId, Float32(markerABC.endId))
+        state_ptr, MetaMarkerABCStartId, Float32(marker_a_b_c.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerABCEndId, Float32(marker_a_b_c.end_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerAPrimeBPrimeCPrimeHostId,
-        Float32(markerAPrimeBPrimeCPrime.hostId))
+        Float32(marker_a_prime_b_prime_c_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerAPrimeBPrimeCPrimeStartId,
-        Float32(markerAPrimeBPrimeCPrime.startId))
+        Float32(marker_a_prime_b_prime_c_prime.start_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerAPrimeBPrimeCPrimeEndId,
-        Float32(markerAPrimeBPrimeCPrime.endId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerCBDHostId, Float32(markerCBD.hostId))
+        Float32(marker_a_prime_b_prime_c_prime.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerCBDHostId, Float32(marker_c_b_d.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaMarkerCBDStartId, Float32(markerCBD.startId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerCBDEndId, Float32(markerCBD.endId))
+        state_ptr, MetaMarkerCBDStartId, Float32(marker_c_b_d.start_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerCBDEndId, Float32(marker_c_b_d.end_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerCPrimeBPrimeDPrimeHostId,
-        Float32(markerCPrimeBPrimeDPrime.hostId))
+        Float32(marker_c_prime_b_prime_d_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerCPrimeBPrimeDPrimeStartId,
-        Float32(markerCPrimeBPrimeDPrime.startId))
+        Float32(marker_c_prime_b_prime_d_prime.start_id))
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaMarkerCPrimeBPrimeDPrimeEndId,
-        Float32(markerCPrimeBPrimeDPrime.endId))
+        Float32(marker_c_prime_b_prime_d_prime.end_id))
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(labelA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(labelB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, Float32(labelC.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelDId, Float32(labelD.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAPrimeId, Float32(labelAPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBPrimeId, Float32(labelBPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCPrimeId, Float32(labelCPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelDPrimeId, Float32(labelDPrime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(label_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, Float32(label_c.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelDId, Float32(label_d.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAPrimeId, Float32(label_a_prime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBPrimeId, Float32(label_b_prime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCPrimeId, Float32(label_c_prime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelDPrimeId, Float32(label_d_prime.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -615,73 +615,73 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    edgeACHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACHostId))
-    edgeACJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint1Id))
-    edgeACJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint2Id))
-    edgeCDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDHostId))
-    edgeCDJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint1Id))
-    edgeCDJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint2Id))
-    edgeDAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAHostId))
-    edgeDAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint1Id))
-    edgeDAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint2Id))
-    edgeCBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBHostId))
-    edgeCBJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint1Id))
-    edgeCBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint2Id))
+    edge_a_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACHostId))
+    edge_a_c_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint1Id))
+    edge_a_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeACJoint2Id))
+    edge_c_d_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDHostId))
+    edge_c_d_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint1Id))
+    edge_c_d_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCDJoint2Id))
+    edge_d_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAHostId))
+    edge_d_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint1Id))
+    edge_d_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDAJoint2Id))
+    edge_c_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBHostId))
+    edge_c_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint1Id))
+    edge_c_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCBJoint2Id))
 
-    edgeAPrimeCPrimeHostId = Integer(
+    edge_a_prime_c_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeAPrimeCPrimeHostId))
-    edgeAPrimeCPrimeJoint1Id = Integer(
+    edge_a_prime_c_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeAPrimeCPrimeJoint1Id))
-    edgeAPrimeCPrimeJoint2Id = Integer(
+    edge_a_prime_c_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeAPrimeCPrimeJoint2Id))
-    edgeCPrimeDPrimeHostId = Integer(
+    edge_c_prime_d_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeDPrimeHostId))
-    edgeCPrimeDPrimeJoint1Id = Integer(
+    edge_c_prime_d_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeDPrimeJoint1Id))
-    edgeCPrimeDPrimeJoint2Id = Integer(
+    edge_c_prime_d_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeDPrimeJoint2Id))
-    edgeDPrimeAPrimeHostId = Integer(
+    edge_d_prime_a_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDPrimeAPrimeHostId))
-    edgeDPrimeAPrimeJoint1Id = Integer(
+    edge_d_prime_a_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDPrimeAPrimeJoint1Id))
-    edgeDPrimeAPrimeJoint2Id = Integer(
+    edge_d_prime_a_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeDPrimeAPrimeJoint2Id))
-    edgeCPrimeBPrimeHostId = Integer(
+    edge_c_prime_b_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeBPrimeHostId))
-    edgeCPrimeBPrimeJoint1Id = Integer(
+    edge_c_prime_b_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeBPrimeJoint1Id))
-    edgeCPrimeBPrimeJoint2Id = Integer(
+    edge_c_prime_b_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdgeCPrimeBPrimeJoint2Id))
 
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    labelDId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
-    labelBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
-    labelCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
-    labelDPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDPrimeId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
+    label_d_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
+    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
+    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
+    label_d_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDPrimeId))
 
-    markerABCHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCHostId))
-    markerABCStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCStartId))
-    markerABCEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCEndId))
-    markerAPrimeBPrimeCPrimeHostId = Integer(
+    marker_a_b_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCHostId))
+    marker_a_b_c_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCStartId))
+    marker_a_b_c_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerABCEndId))
+    marker_a_prime_b_prime_c_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerAPrimeBPrimeCPrimeHostId))
-    markerAPrimeBPrimeCPrimeStartId = Integer(
+    marker_a_prime_b_prime_c_prime_start_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerAPrimeBPrimeCPrimeStartId))
-    markerAPrimeBPrimeCPrimeEndId = Integer(
+    marker_a_prime_b_prime_c_prime_end_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerAPrimeBPrimeCPrimeEndId))
-    markerCBDHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDHostId))
-    markerCBDStartId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDStartId))
-    markerCBDEndId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDEndId))
-    markerCPrimeBPrimeDPrimeHostId = Integer(
+    marker_c_b_d_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDHostId))
+    marker_c_b_d_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDStartId))
+    marker_c_b_d_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCBDEndId))
+    marker_c_prime_b_prime_d_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCPrimeBPrimeDPrimeHostId))
-    markerCPrimeBPrimeDPrimeStartId = Integer(
+    marker_c_prime_b_prime_d_prime_start_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCPrimeBPrimeDPrimeStartId))
-    markerCPrimeBPrimeDPrimeEndId = Integer(
+    marker_c_prime_b_prime_d_prime_end_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerCPrimeBPrimeDPrimeEndId))
 
-    if edgeACHostId < 0 || edgeCDHostId < 0 || edgeDAHostId < 0
+    if edge_a_c_host_id < 0 || edge_c_d_host_id < 0 || edge_d_a_host_id < 0
         return
     end
 
@@ -693,7 +693,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, DescendDuration, PenTopZ, PointA[1], PointA[2])
         timer += dt
         if timer >= DescendDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeACColor)
             phase = PhaseDrawAC
             timer = 0f0
@@ -701,10 +701,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawAC
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeACStart, EdgeACEnd,
-            EdgeBrush, EdgeACColor, edgeACHostId, edgeACJoint1Id, edgeACJoint2Id)
+            EdgeBrush, EdgeACColor, edge_a_c_host_id, edge_a_c_joint1_id, edge_a_c_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelCId)
+            OdinJuliaBridge.show_point(state_ptr, label_c_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeCDColor)
             phase = PhaseDrawCD
             timer = 0f0
@@ -712,10 +712,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawCD
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeCDStart, EdgeCDEnd,
-            EdgeBrush, EdgeCDColor, edgeCDHostId, edgeCDJoint1Id, edgeCDJoint2Id)
+            EdgeBrush, EdgeCDColor, edge_c_d_host_id, edge_c_d_joint1_id, edge_c_d_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelDId)
+            OdinJuliaBridge.show_point(state_ptr, label_d_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeDAColor)
             phase = PhaseDrawDA
             timer = 0f0
@@ -723,7 +723,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawDA
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeDAStart, EdgeDAEnd,
-            EdgeBrush, EdgeDAColor, edgeDAHostId, edgeDAJoint1Id, edgeDAJoint2Id)
+            EdgeBrush, EdgeDAColor, edge_d_a_host_id, edge_d_a_joint1_id, edge_d_a_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseArcAToC
@@ -741,10 +741,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawCB
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeCBStart, EdgeCBEnd,
-            EdgeBrush, EdgeCBColor, edgeCBHostId, edgeCBJoint1Id, edgeCBJoint2Id)
+            EdgeBrush, EdgeCBColor, edge_c_b_host_id, edge_c_b_joint1_id, edge_c_b_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelBId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
             phase = PhaseArcCToAPrime
             timer = 0f0
         end
@@ -753,7 +753,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, PointB, PointAPrime, 0.27f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeAPrimeCPrimeColor)
             phase = PhaseDrawAPrimeCPrime
             timer = 0f0
@@ -762,10 +762,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeAPrimeCPrimeStart, EdgeAPrimeCPrimeEnd,
             EdgeBrush, EdgeAPrimeCPrimeColor,
-            edgeAPrimeCPrimeHostId, edgeAPrimeCPrimeJoint1Id, edgeAPrimeCPrimeJoint2Id)
+            edge_a_prime_c_prime_host_id, edge_a_prime_c_prime_joint1_id, edge_a_prime_c_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelCPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeCPrimeDPrimeColor)
             phase = PhaseDrawCPrimeDPrime
             timer = 0f0
@@ -774,10 +774,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeCPrimeDPrimeStart, EdgeCPrimeDPrimeEnd,
             EdgeBrush, EdgeCPrimeDPrimeColor,
-            edgeCPrimeDPrimeHostId, edgeCPrimeDPrimeJoint1Id, edgeCPrimeDPrimeJoint2Id)
+            edge_c_prime_d_prime_host_id, edge_c_prime_d_prime_joint1_id, edge_c_prime_d_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelDPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_d_prime_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeDPrimeAPrimeColor)
             phase = PhaseDrawDPrimeAPrime
             timer = 0f0
@@ -786,7 +786,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeDPrimeAPrimeStart, EdgeDPrimeAPrimeEnd,
             EdgeBrush, EdgeDPrimeAPrimeColor,
-            edgeDPrimeAPrimeHostId, edgeDPrimeAPrimeJoint1Id, edgeDPrimeAPrimeJoint2Id)
+            edge_d_prime_a_prime_host_id, edge_d_prime_a_prime_joint1_id, edge_d_prime_a_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseArcAPrimeToCPrime
@@ -805,10 +805,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawEdgeDuration, EdgeCPrimeBPrimeStart, EdgeCPrimeBPrimeEnd,
             EdgeBrush, EdgeCPrimeBPrimeColor,
-            edgeCPrimeBPrimeHostId, edgeCPrimeBPrimeJoint1Id, edgeCPrimeBPrimeJoint2Id)
+            edge_c_prime_b_prime_host_id, edge_c_prime_b_prime_joint1_id, edge_c_prime_b_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelBPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
             phase = PhasePenRiseBeforeMarkers
             timer = 0f0
         end
@@ -836,7 +836,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, CompassSweepDuration,
             PointB, MarkerABCStart, AngleABCTheta,
             MarkerRadius, MarkerBrush, MarkerPaleColor,
-            markerABCHostId, markerABCStartId, markerABCEndId)
+            marker_a_b_c_host_id, marker_a_b_c_start_id, marker_a_b_c_end_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcABCToAPrimeBPrimeCPrime
@@ -858,9 +858,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             PointBPrime, MarkerAPrimeBPrimeCPrimeStart,
             AngleAPrimeBPrimeCPrimeTheta,
             MarkerRadius, MarkerBrush, MarkerPaleColor,
-            markerAPrimeBPrimeCPrimeHostId,
-            markerAPrimeBPrimeCPrimeStartId,
-            markerAPrimeBPrimeCPrimeEndId)
+            marker_a_prime_b_prime_c_prime_host_id,
+            marker_a_prime_b_prime_c_prime_start_id,
+            marker_a_prime_b_prime_c_prime_end_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcAPrimeBPrimeCPrimeToCBD
@@ -881,7 +881,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, CompassSweepDuration,
             PointB, MarkerCBDStart, AngleCBDTheta,
             MarkerRadius, MarkerBrush, MarkerSteelColor,
-            markerCBDHostId, markerCBDStartId, markerCBDEndId)
+            marker_c_b_d_host_id, marker_c_b_d_start_id, marker_c_b_d_end_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcCBDToCPrimeBPrimeDPrime
@@ -903,9 +903,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             PointBPrime, MarkerCPrimeBPrimeDPrimeStart,
             AngleCPrimeBPrimeDPrimeTheta,
             MarkerRadius, MarkerBrush, MarkerSteelColor,
-            markerCPrimeBPrimeDPrimeHostId,
-            markerCPrimeBPrimeDPrimeStartId,
-            markerCPrimeBPrimeDPrimeEndId)
+            marker_c_prime_b_prime_d_prime_host_id,
+            marker_c_prime_b_prime_d_prime_start_id,
+            marker_c_prime_b_prime_d_prime_end_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassRiseAfterMarkers

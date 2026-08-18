@@ -25,7 +25,8 @@ Core Content (>163 animations; 98 complete):
     - [X] Isosceles Triangle
     - [X] Scalene Triangle
     - [ ] Prop 2: C is on AB
-    - [ ] Prop 2: Figure 1 (point A, line BC rising above; equilateral ABD drawn below BC, circle drawn on BC, BC=AB=AD=BD, finished)
+    - [ ] Prop 2: Figure 1 (point A, line BC rising above;
+     equilateral ABD drawn below BC, circle drawn on BC, BC=AB=AD=BD, finished)
     - [ ] Prop 2: Figure 2 (Same start fig1 but AB < BC)
     - [ ] Prop 2: Figure 3 (Same start fig1 but AB > BC)
     - [ ] Prop 3: (7 figures, animations tbd)
@@ -43,7 +44,8 @@ Core Content (>163 animations; 98 complete):
     - [ ] Prop 16: (2 figures, animations tbd)
     - [ ] More? (TBD)
   - [ ] Pythagorean Alternatives (3+ animations)
-    - [ ] Schopenhauer's (basically a single square and 2 rotated squares based on the internal crosses in the square: <|X|>)
+    - [ ] Schopenhauer's (basically a single square and
+     2 rotated squares based on the internal crosses in the square: <|X|>)
     - [ ] Bhaskara II's proof
     - [ ] Xuan Tu
     - [ ] Others? -- TBD --
@@ -68,10 +70,14 @@ Core Content (>163 animations; 98 complete):
     - [ ] $D_n$(dihedral, symmetry of shape with$n$ sides)
       - [ ] Non-Abelian
     - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
-    - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations -- polygon rotating around another point)
-    - [ ] $SE(2)$ Group (translation + rotations; orientation-preserving rigid motion; can match same-handedness but not reflected)
-    - [ ] $O(2)$ Group (orthogonal group including reflection and infinite rotation fixed about center of polygon)
-    - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane -- polygons translating/rotating/reflecting around another point)
+    - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations --
+     polygon rotating around another point)
+    - [ ] $SE(2)$ Group (translation + rotations;
+     orientation-preserving rigid motion; can match same-handedness but not reflected)
+    - [ ] $O(2)$ Group (orthogonal group including reflection and
+     infinite rotation fixed about center of polygon)
+    - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
+     polygons translating/rotating/reflecting around another point)
   - [ ] Demonstrations ? Idk maybe. keep going back and forth lololololol
 
 General features:
@@ -184,7 +190,9 @@ Content (24+ animations):
   - Circle group $S^1$ (point of a circle rotating around said circle)
   - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
-  - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$; where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$, line disintegrating as drawing with new effect)
+  - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$;
+   where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$,
+   line disintegrating as drawing with new effect)
 - Possibly Roulettes? (tusi couples, trochoids, cyclocloids,)
 - Logic, Tarski, etc.?
 
@@ -196,11 +204,14 @@ Core Features:
 - More LaTeX support
 - Improved Scratchpad REPL tab completion (preview of options, etc.)
 - Improved Scratchpad highlight and clipboard support
-- Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording! ... replay_recording!)
+- Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording!
+ ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions
-- Persisting Scratchpads (runtime-only, as children in the trees of Scratchpad that can be navigated away from and returned to with persisted internal state; exit cleans REPL state and removes from tree)
+- Persisting Scratchpads (runtime-only, as children in the trees of Scratchpad
+ that can be navigated away from and returned to with persisted internal state;
+  exit cleans REPL state and removes from tree)
 - Declarative animations support
 - Animation slider
 - Transformations
@@ -218,13 +229,16 @@ Core Features:
   - Definitions
   - Propositions (37)
 - More group theory
-  - $U(1)$ (show points on a polygon all at different distance from center, spinning individually around individual circles, one at a time, dynamically)
+  - $U(1)$ (show points on a polygon all at different distance from center,
+   spinning individually around individual circles, one at a time, dynamically)
   - $\mathbb{C}^{\times}$ (literally drawing a spiral)
   - $\mathbb{Z}^2$ (pen dragging, drawing out a grid of points regularly spaced)
-  - $T$ (pac-man wrap around the surface, drawing line at an irrational angle like sqrt(2) and will cover it all)
+  - $T$ (pac-man wrap around the surface, drawing line at an irrational
+   angle like sqrt(2) and will cover it all)
   - Wallpaper groups (repeating drawings)
   - $PSL(2, R)$ (Polygon can be transformed by never crosses below a boundary)
-  - $PGL(2, C)$ (animated advanced transformation; changes center and radius because transformation preserves circles)
+  - $PGL(2, C)$ (animated advanced transformation; changes center and
+   radius because transformation preserves circles)
 - Complex numbers support handling
 - More primitives (ellipses/conic sections, spirals)
 - Scaled Cartesian coordinate system
@@ -253,21 +267,26 @@ Roulette can be a good basis for all cardioids, limacons, nephroids, ellipses, m
 Mechanically, every standard roulette can be animated using three primary components:
 
 1. A Base Circle ($C_{1}$): Center $(x_1, y_1)$, radius $R$, fixed in place.
-1. A Rolling Circle ($C_{2}$): Center $(x_2, y_2)$, radius $r$, which rotates around the base circle.
-1. A Tracing Arm ($d$): A physical extension from the center of $C_{2}$ holding the pen at distance $d$.
+1. A Rolling Circle ($C_{2}$): Center $(x_2, y_2)$, radius $r$, which rotates
+ around the base circle.
+1. A Tracing Arm ($d$): A physical extension from the center of $C_{2}$ holding
+ the pen at distance $d$.
 
 The Universal Formula
 
-Let $\theta$ be the angle of the rolling circle's center relative to the base circle's center. The coordinates of the pen $(x, y)$ are given by:
+Let $\theta$ be the angle of the rolling circle's center relative to the base circle's
+ center. The coordinates of the pen $(x, y)$ are given by:
 
-$$\begin{aligned}x&=(R\pm r)\cos (\theta )+d\cos \left(\theta \pm \frac{R}{r}\theta \right)\\
+$$\begin{aligned}x&=(R\pm r)\cos (\theta )+d\cos \left(\theta \pm
+\frac{R}{r}\theta \right)\\
  y&=(R\pm r)\sin (\theta )+d\sin \left(\theta \pm \frac{R}{r}\theta \right)\end{aligned}$$
 
 Use $+$ for Epitrochoids (Circle rolling on the outside of the base circle).
 
 Use $-$ for Hypotrochoids (Circle rolling on the inside of the base circle).
 
-By exposing just three variables ($R$, $r$, and $d$) we automatically get support for curves:
+By exposing just three variables ($R$, $r$, and $d$) we automatically get support
+for curves:
 
 Target | Curve | Direction | Base Radius ($R$) | Rolling Radius ($r$) | Pen Distance ($d$) | Visual Mechanical Behavior
 --- | --- | --- | --- | --- | --- | ---
@@ -279,10 +298,10 @@ Ellipse | Inside | ($-$) | $R$ | $r = \frac{1}{2}R$ | $d \neq r$ | Known as a Tu
 
 -----------
 
-Schopenhauer uses a diagram like this, very roughly. It includes a square with the diagonals
-crossing. The top triangle made by this diagonal is shaded. On either side right/left,
-additional triangles the same size as the inner ones extend outward, creating diagonal squares
-with the triangles mirrored inside the initial square.
+Schopenhauer uses a diagram like this, very roughly. It includes a square with the
+diagonals crossing. The top triangle made by this diagonal is shaded. On either side
+right/left, additional triangles the same size as the inner ones extend outward, creating
+diagonal squares with the triangles mirrored inside the initial square.
 
 ```text
   /\----/\

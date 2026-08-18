@@ -1211,7 +1211,7 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Dr
         }
         prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
         rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
-    case .DoublePrime:
+    case .Double_Prime:
         prime_pos := rl.Vector2{
             c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
             c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
@@ -1223,7 +1223,7 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Dr
         }
         rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
         rl.DrawTextCodepoint(state^.font, '\'', second_prime_pos, prime_size, p^.color)
-    case .TriplePrime:
+    case .Triple_Prime:
         prime_pos := rl.Vector2{
             c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
             c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,

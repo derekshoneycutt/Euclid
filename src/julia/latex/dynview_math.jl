@@ -1,4 +1,4 @@
-struct MathBlockModeCodes
+struct Math_BlockModeCodes
     accent_mode::Int32
     radical_mode::Int32
     large_op_kind::Int32
@@ -422,7 +422,7 @@ end
 """Return bridge accent/radical mode codes for one payload op."""
 function math_block_mode_codes(op::MathPayloadOp)
     if op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE
-        return MathBlockModeCodes(
+        return Math_BlockModeCodes(
             bridge_delimiter_kind(op.radical_index_text),
             bridge_delimiter_kind(op.sup_text),
             Int32(0))
@@ -447,7 +447,7 @@ function math_block_mode_codes(op::MathPayloadOp)
                     (op.large_op_kind == LARGE_OP_KIND_LIM ?
                         OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :
                         Int32(0))))
-    return MathBlockModeCodes(
+    return Math_BlockModeCodes(
         Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind))
 end
 

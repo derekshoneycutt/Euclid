@@ -1,7 +1,7 @@
 package core
 
 // Defines the core structures used in the Euclid Application.
-// The general bias is to just allocate memory upfront inside EuclidGeneralState and
+// The general bias is to just allocate memory upfront inside Euclid_General_State and
 // stick to that memory, except for a few UI helpers using temp_allocator, Julia's GC, and GIFs.
 // This creates some hard caps on e.g. the particle system, but it also prevents wildness.
 
@@ -34,13 +34,13 @@ DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 
 TOOL_LENGTH :: 0.35
 
-DYNVIEW__MAX_COMMANDS :: 1024
-DYNVIEW__MAX_TEXT_BYTES :: 32 * 1024
-DYNVIEW__MAX_LAYOUT_LINES :: 4096
-DYNVIEW__MAX_LAYOUT_ITEMS :: 8192
-DYNVIEW__MAX_MATH_PROGRAMS :: 256
-DYNVIEW__MAX_MATH_NODES :: 4096
-DYNVIEW__MAX_MATH_COMMANDS :: 4096
+DYNVIEW_MAX_COMMANDS :: 1024
+DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
+DYNVIEW_MAX_LAYOUT_LINES :: 4096
+DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
+DYNVIEW_MAX_MATH_PROGRAMS :: 256
+DYNVIEW_MAX_MATH_NODES :: 4096
+DYNVIEW_MAX_MATH_COMMANDS :: 4096
 
 TRACE_RECORD_CAPACITY :: 256
 TRACE_EVENT_NAME_CAPACITY :: 96
@@ -60,7 +60,7 @@ JULIA_EVENT_CAPACITY :: 16
 SCRATCHPAD_ASYNC_SLOT_COUNT :: 16
 SCRATCHPAD_ASYNC_TEXT_CAPACITY :: 4096
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
-VIEW_SNAPSHOT_TEXT_CAPACITY :: DYNVIEW__MAX_TEXT_BYTES
+VIEW_SNAPSHOT_TEXT_CAPACITY :: DYNVIEW_MAX_TEXT_BYTES
 ANIMATION_TICK_SLOT_COUNT :: 2
 
 SCENE_COMMAND_BATCH_CAPACITY :: 64
@@ -225,9 +225,9 @@ View_Snapshot :: struct {
     math_program_count: int,
     math_command_count: int,
     math_node_count: int,
-    math_programs: [DYNVIEW__MAX_MATH_PROGRAMS]Dynview_Math_Program,
-    math_commands: [DYNVIEW__MAX_MATH_COMMANDS]Dynview_Command,
-    math_nodes: [DYNVIEW__MAX_MATH_NODES]Dynview_Math_Node,
+    math_programs: [DYNVIEW_MAX_MATH_PROGRAMS]Dynview_Math_Program,
+    math_commands: [DYNVIEW_MAX_MATH_COMMANDS]Dynview_Command,
+    math_nodes: [DYNVIEW_MAX_MATH_NODES]Dynview_Math_Node,
 }
 
 Scratchpad_Async_Kind :: enum {
@@ -426,7 +426,7 @@ Shapes_Point_Type :: enum {
     Point,
     Line,
     Circle,
-    FilledCircle,
+    Filled_Circle,
     Triangle,
     Square,
     Pentagon,
@@ -437,8 +437,8 @@ Shapes_Point_Type :: enum {
 Shapes_Label_Decoration_Kind :: enum {
     None,
     Prime,
-    DoublePrime,
-    TriplePrime,
+    Double_Prime,
+    Triple_Prime,
     Hat,
     Bar,
 }
@@ -466,11 +466,11 @@ Shapes_Point :: struct {
 Shapes_Constraint_Kind :: enum {
     Distance,
     Floor,
-    SnapToFloor,
-    SnapPoint,
-    MaxAngle,
-    MinAngle,
-    CenterPivot,
+    Snap_To_Floor,
+    Snap_Point,
+    Max_Angle,
+    Min_Angle,
+    Center_Pivot,
 }
 
 Shapes_Constraint :: struct {
@@ -767,9 +767,9 @@ Font_Weight :: enum {
     Light,
     Regular,
     Medium,
-    SemiBold,
+    Semibold,
     Bold,
-    ExtraBold,
+    Extrabold,
     Black,
 }
 
@@ -779,9 +779,9 @@ Font_Variant_Flags :: enum u32 {
     Light = 1 << 1,
     Regular = 1 << 2,
     Medium = 1 << 3,
-    SemiBold = 1 << 4,
+    Semibold = 1 << 4,
     Bold = 1 << 5,
-    ExtraBold = 1 << 6,
+    Extrabold = 1 << 6,
     Black = 1 << 7,
 }
 
@@ -812,30 +812,30 @@ Dynview_Matrix_Column_Alignment :: enum i32 {
 }
 
 Dynview_Command_Kind :: enum {
-    BeginBlock,
-    EndBlock,
-    TextRun,
-    MathGlyphRun,
-    MathBlock,
-    ScriptAttachRecursive,
-    FracRecursive,
-    StretchDelimiterRecursive,
-    MatrixRecursive,
-    LargeOpRecursive,
-    AccentBarRecursive,
-    RadicalBarRecursive,
-    CopyableTextRun,
-    LineBreak,
+    Begin_Block,
+    End_Block,
+    Text_Run,
+    Math_Glyph_Run,
+    Math_Block,
+    Script_Attach,
+    Frac,
+    Stretch_Delimiter,
+    Matrix,
+    Large_Op,
+    Accent_Bar,
+    Radical_Bar,
+    Copyable_Text_Run,
+    Line_Break,
     Divider,
-    InlineLine,
-    InlineBox,
-    InlineCircle,
-    InlineFilledBox,
-    InlineFilledCircle,
-    InlinePieSection,
-    InlinePerpendicular,
-    InlineTriangle,
-    InlinePentagon,
+    Inline_Line,
+    Inline_Box,
+    Inline_Circle,
+    Inline_Filled_Box,
+    Inline_Filled_Circle,
+    Inline_Pie_Section,
+    Inline_Perpendicular,
+    Inline_Triangle,
+    Inline_Pentagon,
 }
 
 Dynview_Command :: struct {
@@ -904,25 +904,25 @@ Dynview_Copy_Hit_Target :: struct {
 }
 
 Dynview_Layout_Item_Kind :: enum {
-    TextRun,
-    MathGlyphRun,
-    MathBlock,
-    ScriptAttachRecursive,
-    FracRecursive,
-    StretchDelimiterRecursive,
-    MatrixRecursive,
-    LargeOpRecursive,
-    AccentBarRecursive,
-    RadicalBarRecursive,
-    InlineLine,
-    InlineBox,
-    InlineCircle,
-    InlineFilledBox,
-    InlineFilledCircle,
-    InlinePieSection,
-    InlinePerpendicular,
-    InlineTriangle,
-    InlinePentagon,
+    Text_Run,
+    Math_Glyph_Run,
+    Math_Block,
+    Script_Attach,
+    Frac,
+    Stretch_Delimiter,
+    Matrix,
+    Large_Op,
+    Accent_Bar,
+    Radical_Bar,
+    Inline_Line,
+    Inline_Box,
+    Inline_Circle,
+    Inline_Filled_Box,
+    Inline_Filled_Circle,
+    Inline_Pie_Section,
+    Inline_Perpendicular,
+    Inline_Triangle,
+    Inline_Pentagon,
 }
 
 Dynview_Layout_Item :: struct {
@@ -985,11 +985,11 @@ Dynview_Layout_Item :: struct {
 Dynview_Math_Node_Kind :: enum {
     None,
     Sequence,
-    GlyphRun,
+    Glyph_Run,
     Script,
     Radical,
     Fraction,
-    StretchDelimiter,
+    Stretch_Delimiter,
 }
 
 Dynview_Math_Node :: struct {
@@ -1047,8 +1047,8 @@ Dynview_Command_Buffer :: struct {
     stream_open_block: bool,
     stream_open_block_id: i32,
 
-    commands: [DYNVIEW__MAX_COMMANDS]Dynview_Command,
-    text_bytes: [DYNVIEW__MAX_TEXT_BYTES]u8,
+    commands: [DYNVIEW_MAX_COMMANDS]Dynview_Command,
+    text_bytes: [DYNVIEW_MAX_TEXT_BYTES]u8,
 }
 
 Dynview_Compile_Cache :: struct {
@@ -1081,15 +1081,15 @@ Dynview_Compile_Cache :: struct {
     last_invalidation_mask: u32,
     last_error_code: i32,
 
-    compiled_plain_text: [DYNVIEW__MAX_TEXT_BYTES]u8,
-    compiled_copy_payload: [DYNVIEW__MAX_TEXT_BYTES]u8,
-    copy_blocks: [DYNVIEW__MAX_COMMANDS]Dynview_Copy_Block,
-    copy_hit_targets: [DYNVIEW__MAX_COMMANDS]Dynview_Copy_Hit_Target,
-    layout_lines: [DYNVIEW__MAX_LAYOUT_LINES]Dynview_Layout_Line,
-    layout_items: [DYNVIEW__MAX_LAYOUT_ITEMS]Dynview_Layout_Item,
-    math_programs: [DYNVIEW__MAX_MATH_PROGRAMS]Dynview_Math_Program,
-    math_commands: [DYNVIEW__MAX_MATH_COMMANDS]Dynview_Command,
-    math_nodes: [DYNVIEW__MAX_MATH_NODES]Dynview_Math_Node,
+    compiled_plain_text: [DYNVIEW_MAX_TEXT_BYTES]u8,
+    compiled_copy_payload: [DYNVIEW_MAX_TEXT_BYTES]u8,
+    copy_blocks: [DYNVIEW_MAX_COMMANDS]Dynview_Copy_Block,
+    copy_hit_targets: [DYNVIEW_MAX_COMMANDS]Dynview_Copy_Hit_Target,
+    layout_lines: [DYNVIEW_MAX_LAYOUT_LINES]Dynview_Layout_Line,
+    layout_items: [DYNVIEW_MAX_LAYOUT_ITEMS]Dynview_Layout_Item,
+    math_programs: [DYNVIEW_MAX_MATH_PROGRAMS]Dynview_Math_Program,
+    math_commands: [DYNVIEW_MAX_MATH_COMMANDS]Dynview_Command,
+    math_nodes: [DYNVIEW_MAX_MATH_NODES]Dynview_Math_Node,
 }
 
 Dynview_System :: struct {

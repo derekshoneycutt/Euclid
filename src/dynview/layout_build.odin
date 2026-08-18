@@ -7,7 +7,7 @@ import "core:math"
 import rl "vendor:raylib"
 
 //   Uniform handler shape for one inline-shape layout command.
-Layout_Inline_Shape_Handler :: proc(
+Layout_Inline_Shape_Handler :: #type proc(
     cache: ^core.Dynview_Compile_Cache,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
@@ -19,20 +19,20 @@ Layout_Inline_Shape_Handler :: proc(
 //   Non-inline-shape kinds map to nil and are rejected by the caller.
 LAYOUT_INLINE_SHAPE_HANDLERS ::
     [core.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
-    .BeginBlock = nil, .EndBlock = nil, .TextRun = nil, .MathGlyphRun = nil,
-    .MathBlock = nil, .ScriptAttachRecursive = nil, .FracRecursive = nil,
-    .StretchDelimiterRecursive = nil, .MatrixRecursive = nil,
-    .LargeOpRecursive = nil, .AccentBarRecursive = nil, .RadicalBarRecursive = nil,
-    .CopyableTextRun = nil, .LineBreak = nil, .Divider = nil,
-    .InlineLine = layout_consume_inline_line,
-    .InlineBox = layout_consume_inline_box,
-    .InlineCircle = layout_consume_inline_circle,
-    .InlineFilledBox = layout_consume_inline_filled_box,
-    .InlineFilledCircle = layout_consume_inline_filled_circle,
-    .InlinePieSection = layout_consume_inline_pie_section,
-    .InlinePerpendicular = layout_consume_inline_perpendicular,
-    .InlineTriangle = layout_consume_inline_triangle,
-    .InlinePentagon = layout_consume_inline_pentagon,
+    .Begin_Block = nil, .End_Block = nil, .Text_Run = nil, .Math_Glyph_Run = nil,
+    .Math_Block = nil, .Script_Attach = nil, .Frac = nil,
+    .Stretch_Delimiter = nil, .Matrix = nil,
+    .Large_Op = nil, .Accent_Bar = nil, .Radical_Bar = nil,
+    .Copyable_Text_Run = nil, .Line_Break = nil, .Divider = nil,
+    .Inline_Line = layout_consume_inline_line,
+    .Inline_Box = layout_consume_inline_box,
+    .Inline_Circle = layout_consume_inline_circle,
+    .Inline_Filled_Box = layout_consume_inline_filled_box,
+    .Inline_Filled_Circle = layout_consume_inline_filled_circle,
+    .Inline_Pie_Section = layout_consume_inline_pie_section,
+    .Inline_Perpendicular = layout_consume_inline_perpendicular,
+    .Inline_Triangle = layout_consume_inline_triangle,
+    .Inline_Pentagon = layout_consume_inline_pentagon,
 }
 
 Inline_Line_Metrics :: struct {
@@ -232,7 +232,7 @@ text_run_item :: #force_inline proc(
     ascent, descent: f32) -> core.Dynview_Layout_Item {
 
     return core.Dynview_Layout_Item{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = cmd.style_id,
         col_span = line_col_span,
         text_offset = cmd.text_offset + line_start,
@@ -443,7 +443,7 @@ layout_consume_math_block :: proc(
     }
 
     item := core.Dynview_Layout_Item{
-        kind = .MathBlock,
+        kind = .Math_Block,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         col_span = cols,
@@ -554,7 +554,7 @@ layout_consume_inline_line :: proc(
     thickness := max(1.0, cmd.inline_atom_stroke)
     metrics := inline_line_metrics(thickness, text_ascent, text_descent)
     item := core.Dynview_Layout_Item{
-        kind = .InlineLine,
+        kind = .Inline_Line,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -596,7 +596,7 @@ inline_box_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -682,7 +682,7 @@ inline_circle_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlineCircle,
+        kind = .Inline_Circle,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -758,7 +758,7 @@ inline_filled_box_item :: #force_inline proc(
     text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     item := inline_box_item(cache, cmd, style, cols, text_ascent, text_descent)
-    item.kind = .InlineFilledBox
+    item.kind = .Inline_Filled_Box
     return item
 }
 
@@ -821,7 +821,7 @@ inline_filled_circle_item :: #force_inline proc(
     text_ascent, text_descent: f32) -> core.Dynview_Layout_Item {
 
     item := inline_circle_item(cache, cmd, style, cols, text_ascent, text_descent)
-    item.kind = .InlineFilledCircle
+    item.kind = .Inline_Filled_Circle
     return item
 }
 
@@ -908,7 +908,7 @@ inline_pie_section_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlinePieSection,
+        kind = .Inline_Pie_Section,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -945,7 +945,7 @@ inline_perpendicular_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlinePerpendicular,
+        kind = .Inline_Perpendicular,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -976,7 +976,7 @@ inline_triangle_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlineTriangle,
+        kind = .Inline_Triangle,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -1010,7 +1010,7 @@ inline_pentagon_item :: #force_inline proc(
     center := (text_descent - text_ascent) * 0.5
 
     return core.Dynview_Layout_Item{
-        kind = .InlinePentagon,
+        kind = .Inline_Pentagon,
         style_id = cmd.style_id,
         col_span = cols,
         inline_atom_dimension = cmd.inline_atom_dimension,
@@ -1259,7 +1259,7 @@ layout_handle_block_markers :: proc(
     ctx: ^Dynview_Layout_Build_Context,
     cmd: core.Dynview_Command) -> i32 {
 
-    if cmd.kind == .BeginBlock {
+    if cmd.kind == .Begin_Block {
         new_format := block_format_for_kind(cmd.style_id)
         spacing_status :=
             layout_apply_block_spacing(ctx, new_format.paragraph_spacing_before)
@@ -1273,7 +1273,7 @@ layout_handle_block_markers :: proc(
         return DYNVIEW_STATUS_OK
     }
 
-    if cmd.kind == .EndBlock {
+    if cmd.kind == .End_Block {
         spacing_status := layout_apply_block_spacing(
             ctx,
             ctx^.state^.active_block_format.paragraph_spacing_after)
@@ -1303,14 +1303,14 @@ layout_consume_text_like_command :: #force_inline proc(
 }
 
 //   Consume one visible math-structure command using the matching layout helper.
-//   Only top-level MathBlock is handled here; nested math-structure kinds are
+//   Only top-level Math_Block is handled here; nested math-structure kinds are
 //   consumed through their own recursion and are rejected at this layer.
 layout_consume_structured_math_command :: #force_inline proc(
     ctx: ^Dynview_Layout_Build_Context,
     cmd: core.Dynview_Command,
     style: Dynview_Text_Style) -> i32 {
 
-    if cmd.kind != .MathBlock {
+    if cmd.kind != .Math_Block {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
     status, _ := layout_consume_math_block(
@@ -1341,25 +1341,25 @@ layout_consume_visible_command :: proc(
 
     effective_style := style_with_block_format(style, ctx^.state^.active_block_format)
     switch cmd.kind {
-    case .TextRun, .MathGlyphRun:
+    case .Text_Run, .Math_Glyph_Run:
         return layout_consume_text_like_command(ctx, cmd, effective_style)
-    case .MathBlock, .ScriptAttachRecursive, .FracRecursive,
-        .LargeOpRecursive, .AccentBarRecursive,
-        .StretchDelimiterRecursive, .MatrixRecursive,
-        .RadicalBarRecursive:
+    case .Math_Block, .Script_Attach, .Frac,
+        .Large_Op, .Accent_Bar,
+        .Stretch_Delimiter, .Matrix,
+        .Radical_Bar:
         return layout_consume_structured_math_command(ctx, cmd, effective_style)
-    case .InlineLine, .InlineBox, .InlineCircle, .InlineFilledBox,
-        .InlineFilledCircle, .InlinePieSection, .InlinePerpendicular,
-        .InlineTriangle, .InlinePentagon:
+    case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
+        .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
+        .Inline_Triangle, .Inline_Pentagon:
         return layout_consume_inline_shape_command(ctx, cmd, effective_style)
-    case .LineBreak, .Divider:
+    case .Line_Break, .Divider:
         return layout_finalize_line(
             ctx^.cache,
             ctx^.state,
             ctx^.acc,
             ctx^.base_ascent,
             ctx^.base_descent)
-    case .BeginBlock, .EndBlock, .CopyableTextRun:
+    case .Begin_Block, .End_Block, .Copyable_Text_Run:
     }
 
     return DYNVIEW_STATUS_OK

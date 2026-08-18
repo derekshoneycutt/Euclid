@@ -804,19 +804,19 @@ end
 
 """Hide a line-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeLine)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a circle-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeCircle)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a filled-circle-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeFilledCircle)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
@@ -894,9 +894,9 @@ function line!(
         brush_value)
 
     payload = LinePayload(
-        Int(line_shape.hostId),
-        Int(line_shape.joint1Id),
-        Int(line_shape.joint2Id),
+        Int(line_shape.host_id),
+        Int(line_shape.joint1_id),
+        Int(line_shape.joint2_id),
         start_pos3,
         end_pos3,
         color,
@@ -904,7 +904,7 @@ function line!(
 
     job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(line_shape.hostId))
+    track_managed_host!(ensure_session!(), Int(line_shape.host_id))
     return line_shape
 end
 
@@ -963,9 +963,9 @@ function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::
     payload = CirclePayload(
         filled,
         full_sweep,
-        Int(shape.hostId),
-        Int(shape.startId),
-        Int(shape.endId),
+        Int(shape.host_id),
+        Int(shape.start_id),
+        Int(shape.end_id),
         center3,
         start_pos,
         end_pos,
@@ -976,7 +976,7 @@ function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
     start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(shape.hostId))
+    track_managed_host!(ensure_session!(), Int(shape.host_id))
     return shape
 end
 
@@ -1101,14 +1101,14 @@ function rotate_points!(
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
     validate_transform_batch_lengths(ids, starts)
-    axisA = vec3("axis_point_a", axis_point_a)
-    axisB = vec3("axis_point_b", axis_point_b)
+    axis_a = vec3("axis_point_a", axis_point_a)
+    axis_b = vec3("axis_point_b", axis_point_b)
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(
         ids,
         starts,
-        RotateSpec(axisA, axisB, Float32(theta)),
+        RotateSpec(axis_a, axis_b, Float32(theta)),
     )
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
@@ -1189,11 +1189,11 @@ function reflect2d_points!(
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
     validate_transform_batch_lengths(ids, starts)
-    lineA = vec3("line_point_a", line_point_a)
-    lineB = vec3("line_point_b", line_point_b)
+    line_a = vec3("line_point_a", line_point_a)
+    line_b = vec3("line_point_b", line_point_b)
     draw_duration = validated_duration(duration)
 
-    payload = TransformPayload(ids, starts, Reflect2DSpec(lineA, lineB))
+    payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return ids

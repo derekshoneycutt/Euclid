@@ -109,7 +109,7 @@ Making use of the notation of \textit{theorem 7}, we may now say: The points $A$
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function set_plane_alpha(state_ptr::Ptr{Cvoid}, hostId, alpha01)
+function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     t = clamp(alpha01, 0f0, PlaneMaxAlpha01)
     alpha = UInt8(round(Int, Float32(PlaneBaseColor.a) * t))
     color = OdinJuliaBridge.BridgeColor(
@@ -117,7 +117,7 @@ function set_plane_alpha(state_ptr::Ptr{Cvoid}, hostId, alpha01)
         PlaneBaseColor.g,
         PlaneBaseColor.b,
         alpha)
-    OdinJuliaBridge.set_point_color(state_ptr, hostId, color)
+    OdinJuliaBridge.set_point_color(state_ptr, host_id, color)
 end
 
 function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
@@ -144,42 +144,42 @@ function random_plane_point()
     random_triangle_point(PlaneEdgeLeft, PlaneTopRight, PlaneEdgeRight)
 end
 
-function show_plane(state_ptr::Ptr{Cvoid}, planeHostId)
-    set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-    OdinJuliaBridge.show_point(state_ptr, planeHostId)
+function show_plane(state_ptr::Ptr{Cvoid}, plane_host_id)
+    set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+    OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    planeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
-    dividerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerHostId))
-    dividerJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint1Id))
-    dividerJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint2Id))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
-    segmentABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
-    segmentABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
-    segmentAAPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeHostId))
-    segmentAAPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id))
-    alphaLabelId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAlphaLabelId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaALabelId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaBLabelId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAPrimeLabelId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
+    divider_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerHostId))
+    divider_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint1Id))
+    divider_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint2Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
+    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
+    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
+    segment_a_a_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeHostId))
+    segment_a_a_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id))
+    alpha_label_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAlphaLabelId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaALabelId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaBLabelId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAPrimeLabelId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [planeHostId, dividerHostId,
-         pointAId, pointBId, pointAPrimeId,
-         segmentABHostId, segmentAAPrimeHostId,
-         alphaLabelId, labelAId, labelBId, labelAPrimeId])
+        [plane_host_id, divider_host_id,
+         point_a_id, point_b_id, point_a_prime_id,
+         segment_a_b_host_id, segment_a_a_prime_host_id,
+         alpha_label_id, label_a_id, label_b_id, label_a_prime_id])
 
-    set_plane_alpha(state_ptr, planeHostId, 0f0)
+    set_plane_alpha(state_ptr, plane_host_id, 0f0)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseStartDelay)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
-    OdinJuliaBridge.set_point_position(state_ptr, dividerJoint1Id, LineStart)
-    OdinJuliaBridge.set_point_position(state_ptr, dividerJoint2Id, LineStart)
-    OdinJuliaBridge.set_point_position(state_ptr, segmentABJoint2Id, PointB)
-    OdinJuliaBridge.set_point_position(state_ptr, segmentAAPrimeJoint2Id, PointA)
+    OdinJuliaBridge.set_point_position(state_ptr, divider_joint1_id, LineStart)
+    OdinJuliaBridge.set_point_position(state_ptr, divider_joint2_id, LineStart)
+    OdinJuliaBridge.set_point_position(state_ptr, segment_a_b_joint2_id, PointB)
+    OdinJuliaBridge.set_point_position(state_ptr, segment_a_a_prime_joint2_id, PointA)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, DividerLineColor)
@@ -191,54 +191,54 @@ end
 
 function initialize(state_ptr::Ptr{Cvoid})
 
-    pointA = OdinJuliaBridge.create_new_point(
+    point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointA, PointAColor, 0f0)
-    pointB = OdinJuliaBridge.create_new_point(
+    point_b = OdinJuliaBridge.create_new_point(
         state_ptr, PointB, PointBColor, 0f0)
-    pointAPrime = OdinJuliaBridge.create_new_point(
+    point_a_prime = OdinJuliaBridge.create_new_point(
         state_ptr, PointAPrime, PointAPrimeColor, 0f0)
-    labelA = OdinJuliaBridge.create_new_label(
+    label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
-    labelB = OdinJuliaBridge.create_new_label(
+    label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
-    labelAPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         APrimeLabelPoint, LabelColor, 16f0)
 
-    dividerLine = OdinJuliaBridge.create_new_line(
+    divider_line = OdinJuliaBridge.create_new_line(
         state_ptr, LineStart, LineStart, DividerLineColor, 0f0)
-    segmentAB = OdinJuliaBridge.create_new_line(
+    segment_a_b = OdinJuliaBridge.create_new_line(
         state_ptr, PointB, PointB, SegmentABColor, 0f0)
-    segmentAAPrime = OdinJuliaBridge.create_new_line(
+    segment_a_a_prime = OdinJuliaBridge.create_new_line(
         state_ptr, PointA, PointA, SegmentAAPrimeColor, 0f0)
 
-    planeAlpha = OdinJuliaBridge.create_new_square(
+    plane_alpha = OdinJuliaBridge.create_new_square(
         state_ptr,
         PlaneEdgeLeft,
         PlaneEdgeRight,
         PlaneTopRight,
         PlaneTopLeft,
         PlaneColor)
-    alphaLabel = OdinJuliaBridge.create_new_label(
+    alpha_label = OdinJuliaBridge.create_new_label(
         state_ptr, 'α', AlphaLabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, Float32(planeAlpha.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerHostId, Float32(dividerLine.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerJoint1Id, Float32(dividerLine.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerJoint2Id, Float32(dividerLine.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(pointA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(pointB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAPrimeId, Float32(pointAPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABHostId, Float32(segmentAB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint1Id, Float32(segmentAB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint2Id, Float32(segmentAB.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeHostId, Float32(segmentAAPrime.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeJoint1Id, Float32(segmentAAPrime.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id, Float32(segmentAAPrime.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaAlphaLabelId, Float32(alphaLabel.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaALabelId, Float32(labelA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaBLabelId, Float32(labelB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaAPrimeLabelId, Float32(labelAPrime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, Float32(plane_alpha.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerHostId, Float32(divider_line.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerJoint1Id, Float32(divider_line.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDividerJoint2Id, Float32(divider_line.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(point_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAPrimeId, Float32(point_a_prime.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABHostId, Float32(segment_a_b.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint1Id, Float32(segment_a_b.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint2Id, Float32(segment_a_b.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeHostId, Float32(segment_a_a_prime.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeJoint1Id, Float32(segment_a_a_prime.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id, Float32(segment_a_a_prime.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaAlphaLabelId, Float32(alpha_label.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaALabelId, Float32(label_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaBLabelId, Float32(label_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaAPrimeLabelId, Float32(label_a_prime.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -247,25 +247,25 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    planeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
-    dividerHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerHostId))
-    dividerJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint1Id))
-    dividerJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint2Id))
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
-    segmentABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
-    segmentABJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint1Id))
-    segmentABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
-    segmentAAPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeHostId))
-    segmentAAPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint1Id))
-    segmentAAPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id))
-    alphaLabelId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAlphaLabelId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaALabelId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaBLabelId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAPrimeLabelId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
+    divider_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerHostId))
+    divider_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint1Id))
+    divider_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDividerJoint2Id))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
+    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
+    segment_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint1Id))
+    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
+    segment_a_a_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeHostId))
+    segment_a_a_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint1Id))
+    segment_a_a_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAAPrimeJoint2Id))
+    alpha_label_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAlphaLabelId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaALabelId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaBLabelId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaAPrimeLabelId))
 
-    if planeHostId < 0
+    if plane_host_id < 0
         return
     end
 
@@ -279,16 +279,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseFadeInPlane
-        set_plane_alpha(state_ptr, planeHostId, (timer / FadeInDuration) * PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, (timer / FadeInDuration) * PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         for _ in 1:FlickerSamplesPerFrame
-            samplePos = random_plane_point()
-            OdinJuliaBridge.emit_flicker_particle(state_ptr, samplePos, FlickerColor)
+            sample_pos = random_plane_point()
+            OdinJuliaBridge.emit_flicker_particle(state_ptr, sample_pos, FlickerColor)
         end
 
         if timer >= FadeInDuration * 0.35f0
-            OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
+            OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
         end
 
         timer += dt
@@ -297,8 +297,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDescendToLine
-        show_plane(state_ptr, planeHostId)
-        OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
+        show_plane(state_ptr, plane_host_id)
+        OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
         OdinJuliaBridge.show_pen(state_ptr)
 
         EuclidAnimations.animate_pen_descend(
@@ -310,13 +310,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawDividerLine
-        show_plane(state_ptr, planeHostId)
-        OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
+        show_plane(state_ptr, plane_host_id)
+        OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
 
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
             LineMaxBrush, DividerLineColor,
-            dividerHostId, dividerJoint1Id, dividerJoint2Id)
+            divider_host_id, divider_joint1_id, divider_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -324,10 +324,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseMoveToPointA
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
-        OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
+        OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
 
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
@@ -337,14 +337,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             phase = PhasePutPointA
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
         end
     elseif phase == PhasePutPointA
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration, PointA,
-            PointMaxBrush, PointAColor, pointAId)
+            PointMaxBrush, PointAColor, point_a_id)
 
         timer += dt
         if timer >= DrawPointDuration
@@ -352,27 +352,27 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseMoveToPointB
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         fade = (1f0 - (timer / ArcMoveDuration)) * PlaneMaxAlpha01
-        set_plane_alpha(state_ptr, planeHostId, fade)
+        set_plane_alpha(state_ptr, plane_host_id, fade)
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointB, 0.25f0, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration
-            set_plane_alpha(state_ptr, planeHostId, 0f0)
+            set_plane_alpha(state_ptr, plane_host_id, 0f0)
             phase = PhasePutPointB
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelBId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
         end
     elseif phase == PhasePutPointB
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration, PointB,
-            PointMaxBrush, PointBColor, pointBId)
+            PointMaxBrush, PointBColor, point_b_id)
 
         timer += dt
         if timer >= DrawPointDuration
@@ -381,26 +381,26 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, SegmentABColor)
         end
     elseif phase == PhaseDrawSegmentAB
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
-        OdinJuliaBridge.show_point(state_ptr, alphaLabelId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
+        OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
 
         fade = (timer / DrawSegmentDuration) * PlaneMaxAlpha01
-        set_plane_alpha(state_ptr, planeHostId, fade)
+        set_plane_alpha(state_ptr, plane_host_id, fade)
 
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawSegmentDuration, PointB, PointA,
             LineMaxBrush, SegmentABColor,
-            segmentABHostId, segmentABJoint1Id, segmentABJoint2Id)
+            segment_a_b_host_id, segment_a_b_joint1_id, segment_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
-            set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
+            set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
             phase = PhaseMoveToPointAPrime
             timer = 0f0
         end
     elseif phase == PhaseMoveToPointAPrime
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
@@ -410,14 +410,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             phase = PhasePutPointAPrime
             timer = 0f0
-            OdinJuliaBridge.show_point(state_ptr, labelAPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
         end
     elseif phase == PhasePutPointAPrime
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration, PointAPrime,
-            PointMaxBrush, PointAPrimeColor, pointAPrimeId)
+            PointMaxBrush, PointAPrimeColor, point_a_prime_id)
 
         timer += dt
         if timer >= DrawPointDuration
@@ -425,7 +425,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseMoveToPointAForAAPrime
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
@@ -438,12 +438,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, SegmentAAPrimeColor)
         end
     elseif phase == PhaseDrawSegmentAAPrime
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawSegmentDuration, PointA, PointAPrime,
             LineMaxBrush, SegmentAAPrimeColor,
-            segmentAAPrimeHostId, segmentAAPrimeJoint1Id, segmentAAPrimeJoint2Id)
+            segment_a_a_prime_host_id, segment_a_a_prime_joint1_id, segment_a_a_prime_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -451,7 +451,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseEndLift
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         EuclidAnimations.animate_pen_rise(
             state_ptr, timer, EndLiftDuration, PenTopZ, PointAPrime[1], PointAPrime[2])
@@ -462,7 +462,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseFinalHold
-        OdinJuliaBridge.show_point(state_ptr, dividerHostId)
+        OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
         timer += dt
         if timer >= FinalHoldDuration

@@ -12,7 +12,7 @@ SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
 SCENE_COMMAND_POINT_BATCH_CAPACITY :: core.SCENE_COMMAND_POINT_BATCH_CAPACITY
 
 //   Per-kind validator shape: report whether one command is valid against state.
-Scene_Command_Validator :: proc(
+Scene_Command_Validator :: #type proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool
 
 //   Dispatch table mapping each scene command kind to its validator. The enum key
@@ -44,7 +44,7 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
 }
 
 //   Per-kind applier shape: apply one validated command against canonical state.
-Scene_Command_Applier :: proc(
+Scene_Command_Applier :: #type proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command)
 
 //   Dispatch table mapping each scene command kind to its applier. The enum key

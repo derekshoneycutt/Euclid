@@ -446,7 +446,7 @@ is_burst_drawable_kind :: #force_inline proc(kind: Shapes_Point_Type) -> bool {
         kind == .Point ||
         kind == .Line ||
         kind == .Circle ||
-        kind == .FilledCircle ||
+        kind == .Filled_Circle ||
         kind == .Triangle ||
         kind == .Square ||
         kind == .Pentagon
@@ -520,7 +520,7 @@ emit_point_like_kind_burst :: #force_inline proc(
         emit_label_burst(ps, p, col)
     case .Point:
         emit_point_burst(ps, p, col)
-    case .Line, .Circle, .FilledCircle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
+    case .Line, .Circle, .Filled_Circle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
         return
     }
 }
@@ -568,7 +568,7 @@ emit_polygon_kind_burst :: #force_inline proc(
         emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
     case .Pentagon:
         emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-    case .Label, .Point, .Line, .Circle, .FilledCircle, .Pen, .Compass:
+    case .Label, .Point, .Line, .Circle, .Filled_Circle, .Pen, .Compass:
         return
     }
 }
@@ -602,7 +602,7 @@ emit_shapes_burst :: proc(
             col,
             CLEAR_BURST_CIRCLE_SAMPLES,
             abort_on_invalid)
-    case .FilledCircle:
+    case .Filled_Circle:
         return emit_circle_kind_burst(
             ps,
             ks,

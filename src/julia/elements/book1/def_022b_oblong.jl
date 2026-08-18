@@ -32,25 +32,25 @@ function marker_geometry(prev::Vector{Float32}, curr::Vector{Float32}, nxt::Vect
     v1 = normalize(Float32[prev[1] - curr[1], prev[2] - curr[2]])
     v2 = normalize(Float32[nxt[1] - curr[1], nxt[2] - curr[2]])
     cross = v1[1] * v2[2] - v1[2] * v2[1]
-    startVec = cross >= 0f0 ? v1 : v2
+    start_vec = cross >= 0f0 ? v1 : v2
 
     start = [
-        curr[1] + radius * startVec[1],
-        curr[2] + radius * startVec[2],
+        curr[1] + radius * start_vec[1],
+        curr[2] + radius * start_vec[2],
         0f0,
     ]
 
-    startTheta = Float32(atan(startVec[2], startVec[1]))
-    sweepTheta = Float32(acos(clamp(dot(v1, v2), -1f0, 1f0)))
-    endTheta = startTheta + sweepTheta
+    start_theta = Float32(atan(start_vec[2], start_vec[1]))
+    sweep_theta = Float32(acos(clamp(dot(v1, v2), -1f0, 1f0)))
+    end_theta = start_theta + sweep_theta
 
     finish = [
-        curr[1] + radius * Float32(cos(endTheta)),
-        curr[2] + radius * Float32(sin(endTheta)),
+        curr[1] + radius * Float32(cos(end_theta)),
+        curr[2] + radius * Float32(sin(end_theta)),
         0f0,
     ]
 
-    return MarkerGeometry(start, sweepTheta, startTheta, finish)
+    return MarkerGeometry(start, sweep_theta, start_theta, finish)
 end
 
 const MarkerGeom1 = marker_geometry(VertexD, VertexA, VertexB, MarkerRadius)
@@ -167,9 +167,9 @@ function initialize(state_ptr::Ptr{Cvoid})
             MarkerStartThetas[i], MarkerStartThetas[i],
             MarkerColors[i], 0f0)
 
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostIds[i], Float32(marker.hostId))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartIds[i], Float32(marker.startId))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndIds[i], Float32(marker.endId))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostIds[i], Float32(marker.host_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartIds[i], Float32(marker.start_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndIds[i], Float32(marker.end_id))
     end
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
@@ -178,9 +178,9 @@ function initialize(state_ptr::Ptr{Cvoid})
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
             SideColors[i], 0f0)
 
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.hostId))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1Id))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2Id))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.host_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2_id))
     end
 
     reset_cycle_state(state_ptr)
@@ -190,17 +190,17 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1]))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1]))
 
-    lineHostIds = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint1Ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
-    lineJoint2Ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    line_host_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    line_joint1_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
+    line_joint2_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
-    markerHostIds = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i])), 4)
-    markerStartIds = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartIds[i])), 4)
-    markerEndIds = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i])), 4)
+    marker_host_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i])), 4)
+    marker_start_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartIds[i])), 4)
+    marker_end_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i])), 4)
 
-    if line1HostId < 0
+    if line1_host_id < 0
         return
     end
 
@@ -217,11 +217,11 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 || phase == PhaseDrawSide3 || phase == PhaseDrawSide4
-        sideIndex = Int(phase)
+        side_index = Int(phase)
         EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, SideStarts[sideIndex], SideEnds[sideIndex],
-            TriangleMaxBrush, SideColors[sideIndex],
-            lineHostIds[sideIndex], lineJoint1Ids[sideIndex], lineJoint2Ids[sideIndex])
+            state_ptr, timer, DrawDuration, SideStarts[side_index], SideEnds[side_index],
+            TriangleMaxBrush, SideColors[side_index],
+            line_host_ids[side_index], line_joint1_ids[side_index], line_joint2_ids[side_index])
 
         timer += dt
         if timer >= DrawDuration
@@ -253,11 +253,11 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawMarker1 || phase == PhaseDrawMarker2 || phase == PhaseDrawMarker3 || phase == PhaseDrawMarker4
-        markerIndex = Int((phase - PhaseDrawMarker1) / 2f0 + 1f0)
+        marker_index = Int((phase - PhaseDrawMarker1) / 2f0 + 1f0)
         EuclidAnimations.animate_draw_circle(
-            state_ptr, timer, MarkerDrawDuration, MarkerCenters[markerIndex], MarkerStarts[markerIndex],
-            MarkerSweeps[markerIndex], MarkerRadius, MarkerBrush, MarkerColors[markerIndex],
-            markerHostIds[markerIndex], markerStartIds[markerIndex], markerEndIds[markerIndex])
+            state_ptr, timer, MarkerDrawDuration, MarkerCenters[marker_index], MarkerStarts[marker_index],
+            MarkerSweeps[marker_index], MarkerRadius, MarkerBrush, MarkerColors[marker_index],
+            marker_host_ids[marker_index], marker_start_ids[marker_index], marker_end_ids[marker_index])
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -273,12 +273,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseCompassArcToMarker2 || phase == PhaseCompassArcToMarker3 || phase == PhaseCompassArcToMarker4
-        fromIndex = Int((phase - PhaseCompassArcToMarker2) / 2f0 + 1f0)
-        toIndex = fromIndex + 1
+        from_index = Int((phase - PhaseCompassArcToMarker2) / 2f0 + 1f0)
+        to_index = from_index + 1
 
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, CompassArcMoveDuration,
-            MarkerCenters[fromIndex], MarkerCenters[toIndex], MarkerEnds[fromIndex], MarkerStarts[toIndex],
+            MarkerCenters[from_index], MarkerCenters[to_index], MarkerEnds[from_index], MarkerStarts[to_index],
             CompassArcMoveHeight, 1, :none)
 
         timer += dt

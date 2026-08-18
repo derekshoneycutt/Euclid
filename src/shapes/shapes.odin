@@ -191,7 +191,7 @@ init_filledcircle :: proc(
         center_pos.z,
     }
 
-    host_point := Shapes_Point{ .FilledCircle, center_pos, nil, color, nil,
+    host_point := Shapes_Point{ .Filled_Circle, center_pos, nil, color, nil,
         brush_size, 0, nil, .None, 1, 2, 0, 0, false }
     start_point := Shapes_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
@@ -397,9 +397,9 @@ init_pen :: proc(
     point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 },
         0, 0, 0, 0, true }
 
-    lock_point1 := Shapes_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 },
+    lock_point1 := Shapes_Constraint{ .Snap_Point, point1_id, { 0, 0, 0 },
         0, 0, 0, nil, false }
-    lock_point2 := Shapes_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 },
+    lock_point2 := Shapes_Constraint{ .Snap_Point, point2_id, { 0, 0, 0 },
         0, 0, 0, nil, false }
 
     length_id := system^.next_constraint_index
@@ -453,7 +453,7 @@ init_compass :: proc(
     point1.next_child_point = host_id + 2
     pivot.next_child_point = host_id + 3
 
-    center_pivot := Shapes_Constraint{ .CenterPivot, host_id, { 0, 0, 0 },
+    center_pivot := Shapes_Constraint{ .Center_Pivot, host_id, { 0, 0, 0 },
         0.01, 0, 0, 0, true }
 
     limb1_length := Shapes_Constraint{ .Distance, host_id, { limb_length, 0, 0 },
@@ -468,9 +468,9 @@ init_compass :: proc(
     point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 },
         0, 0, 0, 0, true }
 
-    lock_point1 := Shapes_Constraint{ .SnapPoint, point1_id, { 0, 0, 0 },
+    lock_point1 := Shapes_Constraint{ .Snap_Point, point1_id, { 0, 0, 0 },
         0, 0, 0, nil, false }
-    lock_point2 := Shapes_Constraint{ .SnapPoint, point2_id, { 0, 0, 0 },
+    lock_point2 := Shapes_Constraint{ .Snap_Point, point2_id, { 0, 0, 0 },
         0, 0, 0, nil, false }
 
     center_pivot_id := system^.next_constraint_index

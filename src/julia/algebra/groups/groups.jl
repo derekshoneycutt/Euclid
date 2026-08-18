@@ -12,6 +12,7 @@ include("./z_2_identity.jl")
 include("./z_2_inverse.jl")
 include("./C_n.jl")
 include("./C_n_associative.jl")
+include("./C_n_abelian.jl")
 
 const GroupsRootFallback = raw"""Algebra - Groups
     
@@ -53,23 +54,23 @@ function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
 end
 
 function register_child_animation(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::AbstractString,
+    state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::AbstractString,
     parent_stable_id::AbstractString)
 
     child_stable_id = stable_child_id(parent_stable_id, name)
 
     OdinJuliaBridge.add_child_animation_interface(
-        state_ptr, getViewText, init, loop, clean, String(name),
+        state_ptr, get_view_text, init, loop, clean, String(name),
         child_stable_id, String(parent_stable_id))
 
     return child_stable_id
 end
 
-function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
-    groupsId = register_child_animation(
+function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
+    groups_id = register_child_animation(
         state_ptr, get_view_text_root_groups, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
-        "Groups", rootId)
+        "Groups", root_id)
 
         z2_id = register_child_animation(
             state_ptr,
@@ -78,7 +79,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
             EuclidAlgebraGroupsZ2.loop,
             EuclidAlgebraGroupsZ2.clean,
             "ℤ₂",
-            groupsId)
+            groups_id)
             register_child_animation(
                 state_ptr,
                 EuclidAlgebraGroupsZ2Closure.get_view_text,
@@ -110,7 +111,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
             EuclidAlgebraGroupsCn.loop,
             EuclidAlgebraGroupsCn.clean,
             "Cₙ",
-            groupsId)
+            groups_id)
             register_child_animation(
                 state_ptr,
                 EuclidAlgebraGroupsCnAssociative.get_view_text,
@@ -118,6 +119,14 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, rootId)
                 EuclidAlgebraGroupsCnAssociative.loop,
                 EuclidAlgebraGroupsCnAssociative.clean,
                 "Associative",
+                Cn_id)
+            register_child_animation(
+                state_ptr,
+                EuclidAlgebraGroupsCnAbelian.get_view_text,
+                EuclidAlgebraGroupsCnAbelian.initialize,
+                EuclidAlgebraGroupsCnAbelian.loop,
+                EuclidAlgebraGroupsCnAbelian.clean,
+                "Abelian",
                 Cn_id)
 
 end

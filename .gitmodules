@@ -1,6 +1,6 @@
 [submodule "src/julialib"]
-	path = src/julialib
-	url = https://github.com/derekshoneycutt/julialib.odin
+    path = src/julialib
+    url = https://github.com/derekshoneycutt/julialib.odin
 [submodule "tools/analysis"]
-	path = tools/analysis
-	url = https://github.com/derekshoneycutt/OdinJuliaAnalysis.git
+    path = tools/analysis
+    url = https://github.com/derekshoneycutt/OdinJuliaAnalysis.git

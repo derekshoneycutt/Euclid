@@ -449,10 +449,10 @@ view_snapshot_matches_current :: proc(
 view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
     bounds := [5][2]int{
         {slot^.fallback_text_len, len(slot^.fallback_text)},
-        {slot^.command_buffer.command_count, core.DYNVIEW__MAX_COMMANDS},
-        {slot^.command_buffer.text_bytes_len, core.DYNVIEW__MAX_TEXT_BYTES},
-        {slot^.math_program_count, core.DYNVIEW__MAX_MATH_PROGRAMS},
-        {slot^.math_command_count, core.DYNVIEW__MAX_MATH_COMMANDS},
+        {slot^.command_buffer.command_count, core.DYNVIEW_MAX_COMMANDS},
+        {slot^.command_buffer.text_bytes_len, core.DYNVIEW_MAX_TEXT_BYTES},
+        {slot^.math_program_count, core.DYNVIEW_MAX_MATH_PROGRAMS},
+        {slot^.math_command_count, core.DYNVIEW_MAX_MATH_COMMANDS},
     }
     for bound in bounds {
         if bound[0] < 0 || bound[0] > bound[1] {
@@ -460,7 +460,7 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
         }
     }
     if slot^.math_node_count < 0 ||
-        slot^.math_node_count > core.DYNVIEW__MAX_MATH_NODES {
+        slot^.math_node_count > core.DYNVIEW_MAX_MATH_NODES {
         return false
     }
     return !slot^.command_buffer.has_stream_error &&

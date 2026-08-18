@@ -69,10 +69,10 @@ Parameters:
 Returns: `(status::Int32, index::Int32)` where index is -1 on failure
 """
 function create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec)
-    outIndex = Ref{Int32}(-1)
+    out_index = Ref{Int32}(-1)
     status = @ccall create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec,
-        outIndex::Ref{Int32})::Int32
-    return status, outIndex[]
+        out_index::Ref{Int32})::Int32
+    return status, out_index[]
 end
 
 """
@@ -84,15 +84,15 @@ Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
 - `index` : Constraint id to update
-- `specMask` : Field selection mask using `CONSTRAINT_SPEC_*` constants
-- `spec` : Source values for fields selected in `specMask`
+- `spec_mask` : Field selection mask using `CONSTRAINT_SPEC_*` constants
+- `spec` : Source values for fields selected in `spec_mask`
 
 Returns: `Int32` status code
 """
 function update_constraint(state_ptr::Ptr{Cvoid}, index::Integer,
-    specMask::Integer, spec::BridgeConstraintSpec)
+    spec_mask::Integer, spec::BridgeConstraintSpec)
     @ccall update_constraint(state_ptr::Ptr{Cvoid}, index::Int32,
-        Int32(specMask)::Int32, spec::BridgeConstraintSpec)::Int32
+        Int32(spec_mask)::Int32, spec::BridgeConstraintSpec)::Int32
 end
 
 """
@@ -152,15 +152,15 @@ Get the current error value for one constraint.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `constraintIndex` : Constraint id to inspect
+- `constraint_index` : Constraint id to inspect
 
 Returns: `(status::Int32, error::Cfloat)`
 """
-function get_constraint_error_bridge(state_ptr::Ptr{Cvoid}, constraintIndex::Integer)
-    outError = Ref{Cfloat}(0)
+function get_constraint_error_bridge(state_ptr::Ptr{Cvoid}, constraint_index::Integer)
+    out_error = Ref{Cfloat}(0)
     status = @ccall get_constraint_error_bridge(state_ptr::Ptr{Cvoid},
-        Int32(constraintIndex)::Int32, outError::Ref{Cfloat})::Int32
-    return status, outError[]
+        Int32(constraint_index)::Int32, out_error::Ref{Cfloat})::Int32
+    return status, out_error[]
 end
 
 """
@@ -171,13 +171,13 @@ Apply one constraint by id.
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `constraintIndex` : Constraint id to apply
+- `constraint_index` : Constraint id to apply
 
 Returns: `Int32` status code
 """
-function apply_constraint_bridge(state_ptr::Ptr{Cvoid}, constraintIndex::Integer)
+function apply_constraint_bridge(state_ptr::Ptr{Cvoid}, constraint_index::Integer)
     @ccall apply_constraint_bridge(
-        state_ptr::Ptr{Cvoid}, Int32(constraintIndex)::Int32)::Int32
+        state_ptr::Ptr{Cvoid}, Int32(constraint_index)::Int32)::Int32
 end
 
 """
@@ -205,13 +205,13 @@ Solve constraints until total error is below threshold or iteration budget is ex
 Parameters:
 
 - `state_ptr` : The Euclid application state pointer passed to the native API
-- `allowableError` : Error threshold target
-- `maxIterations` : Maximum solve iterations (native side clamps and defaults)
+- `allowable_error` : Error threshold target
+- `max_iterations` : Maximum solve iterations (native side clamps and defaults)
 
 Returns: `BridgeSolveResult`
 """
-function solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowableError::Real,
-    maxIterations::Integer)
-    @ccall solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowableError::Cfloat,
-        Int32(maxIterations)::Int32)::BridgeSolveResult
+function solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowable_error::Real,
+    max_iterations::Integer)
+    @ccall solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowable_error::Cfloat,
+        Int32(max_iterations)::Int32)::BridgeSolveResult
 end

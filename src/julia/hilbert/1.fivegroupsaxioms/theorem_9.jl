@@ -112,7 +112,7 @@ const PrimedLabelPoints = (
     LabelAPrimePoint, LabelBPrimePoint, LabelCPrimePoint,
     LabelDPrimePoint, LabelKPrimePoint, LabelLPrimePoint)
 
-# Each leg is (start, mid, end, dragColor). Drag color follows the mid point.
+# Each leg is (start, mid, end, drag_color). Drag color follows the mid point.
 const TraceLegs = (
     (PointA, PointB, PointC, PointEvenColor),
     (PointA, PointB, PointD, PointEvenColor),
@@ -149,36 +149,36 @@ and $C'$ \euclidpoint[color=palevioletred1,size=1] lies between $A', B'$ and $D'
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    linePrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeHostId))
-    linePrimeJoint1Id = Integer(
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    line_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeHostId))
+    line_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeJoint1Id))
-    linePrimeJoint2Id = Integer(
+    line_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeJoint2Id))
 
-    hideIds = Integer[lineAHostId, linePrimeHostId]
+    hide_ids = Integer[line_a_host_id, line_prime_host_id]
     for i in 1:6
-        push!(hideIds,
+        push!(hide_ids,
             Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBase + i)))
-        push!(hideIds,
+        push!(hide_ids,
             Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPrimePointBase + i)))
-        push!(hideIds,
+        push!(hide_ids,
             Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBase + i)))
-        push!(hideIds,
+        push!(hide_ids,
             Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelPrimeBase + i)))
     end
-    push!(hideIds, Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaLine)))
-    push!(hideIds,
+    push!(hide_ids, Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaLine)))
+    push!(hide_ids,
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeLine)))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, hideIds)
+    OdinJuliaBridge.hide_point_batch(state_ptr, hide_ids)
 
-    OdinJuliaBridge.set_point_position(state_ptr, lineAJoint1Id, LineAStart)
-    OdinJuliaBridge.set_point_position(state_ptr, lineAJoint2Id, LineAStart)
-    OdinJuliaBridge.set_point_position(state_ptr, linePrimeJoint1Id, LinePrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, linePrimeJoint2Id, LinePrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_a_joint1_id, LineAStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_a_joint2_id, LineAStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_prime_joint1_id, LinePrimeStart)
+    OdinJuliaBridge.set_point_position(state_ptr, line_prime_joint2_id, LinePrimeStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -192,53 +192,53 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 end
 
 function initialize(state_ptr::Ptr{Cvoid})
-    lineA = OdinJuliaBridge.create_new_line(
+    line_a = OdinJuliaBridge.create_new_line(
         state_ptr, LineAStart, LineAStart, LineColor, 0f0)
-    linePrime = OdinJuliaBridge.create_new_line(
+    line_prime = OdinJuliaBridge.create_new_line(
         state_ptr, LinePrimeStart, LinePrimeStart, LineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(lineA.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(lineA.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(lineA.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(line_a.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(line_a.joint1_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(line_a.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLinePrimeHostId, Float32(linePrime.hostId))
+        state_ptr, MetaLinePrimeHostId, Float32(line_prime.host_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLinePrimeJoint1Id, Float32(linePrime.joint1Id))
+        state_ptr, MetaLinePrimeJoint1Id, Float32(line_prime.joint1_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLinePrimeJoint2Id, Float32(linePrime.joint2Id))
+        state_ptr, MetaLinePrimeJoint2Id, Float32(line_prime.joint2_id))
 
     for i in 1:6
-        pointUnprimed = OdinJuliaBridge.create_new_point(
+        point_unprimed = OdinJuliaBridge.create_new_point(
             state_ptr, UnprimedPointPositions[i], PointColors[i], 0f0)
         OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaPointBase + i, Float32(pointUnprimed.index))
-        pointPrimed = OdinJuliaBridge.create_new_point(
+            state_ptr, MetaPointBase + i, Float32(point_unprimed.index))
+        point_primed = OdinJuliaBridge.create_new_point(
             state_ptr, PrimedPointPositions[i], PointColors[i], 0f0)
         OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaPrimePointBase + i, Float32(pointPrimed.index))
+            state_ptr, MetaPrimePointBase + i, Float32(point_primed.index))
     end
 
     for i in 1:6
-        labelUnprimed = OdinJuliaBridge.create_new_label(
+        label_unprimed = OdinJuliaBridge.create_new_label(
             state_ptr, UnprimedLabelChars[i], UnprimedLabelPoints[i], LabelColor, 16f0)
         OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaLabelBase + i, Float32(labelUnprimed.index))
-        labelPrimed = OdinJuliaBridge.create_new_label_decorated(
+            state_ptr, MetaLabelBase + i, Float32(label_unprimed.index))
+        label_primed = OdinJuliaBridge.create_new_label_decorated(
             state_ptr, UnprimedLabelChars[i], OdinJuliaBridge.LABEL_DECORATION_PRIME,
             PrimedLabelPoints[i], LabelColor, 16f0)
         OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaLabelPrimeBase + i, Float32(labelPrimed.index))
+            state_ptr, MetaLabelPrimeBase + i, Float32(label_primed.index))
     end
 
-    labelaLine = OdinJuliaBridge.create_new_label(
+    labela_line = OdinJuliaBridge.create_new_label(
         state_ptr, 'a', LabelaLinePoint, LabelColor, 16f0)
-    labelAPrimeLine = OdinJuliaBridge.create_new_label_decorated(
+    label_a_prime_line = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'a', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelAPrimeLinePoint, LabelColor, 16f0)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelaLine, Float32(labelaLine.index))
+        state_ptr, MetaLabelaLine, Float32(labela_line.index))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelAPrimeLine, Float32(labelAPrimeLine.index))
+        state_ptr, MetaLabelAPrimeLine, Float32(label_a_prime_line.index))
 
     reset_cycle_state(state_ptr)
 end
@@ -247,23 +247,23 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    linePrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeHostId))
-    linePrimeJoint1Id = Integer(
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    line_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeHostId))
+    line_prime_joint1_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeJoint1Id))
-    linePrimeJoint2Id = Integer(
+    line_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePrimeJoint2Id))
 
-    if lineAHostId < 0 || linePrimeHostId < 0
+    if line_a_host_id < 0 || line_prime_host_id < 0
         return
     end
 
     phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
     timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
-    pointIndex = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointIndex))
-    passIndex = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPassIndex))
+    point_index = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointIndex))
+    pass_index = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPassIndex))
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -278,39 +278,39 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLineA
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineColor, lineAHostId, lineAJoint1Id, lineAJoint2Id)
+            LineMaxBrush, LineColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             phase = PhaseArcToUnprimedPoint
-            pointIndex = 0
+            point_index = 0
             timer = 0f0
         end
     elseif phase == PhaseArcToUnprimedPoint
-        source = pointIndex == 0 ? LineAEnd : UnprimedPointPositions[pointIndex]
-        target = UnprimedPointPositions[pointIndex + 1]
+        source = point_index == 0 ? LineAEnd : UnprimedPointPositions[point_index]
+        target = UnprimedPointPositions[point_index + 1]
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration, source, target, 0.22f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            labelId = Integer(OdinJuliaBridge.get_animation_meta(
-                state_ptr, MetaLabelBase + pointIndex + 1))
-            OdinJuliaBridge.show_point(state_ptr, labelId)
+            label_id = Integer(OdinJuliaBridge.get_animation_meta(
+                state_ptr, MetaLabelBase + point_index + 1))
+            OdinJuliaBridge.show_point(state_ptr, label_id)
             phase = PhaseDrawUnprimedPoint
             timer = 0f0
         end
     elseif phase == PhaseDrawUnprimedPoint
-        pointId = Integer(OdinJuliaBridge.get_animation_meta(
-            state_ptr, MetaPointBase + pointIndex + 1))
+        pointid = Integer(OdinJuliaBridge.get_animation_meta(
+            state_ptr, MetaPointBase + point_index + 1))
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, PointDrawDuration, UnprimedPointPositions[pointIndex + 1],
-            PointMaxBrush, PointColors[pointIndex + 1], pointId)
+            state_ptr, timer, PointDrawDuration, UnprimedPointPositions[point_index + 1],
+            PointMaxBrush, PointColors[point_index + 1], pointid)
         timer += dt
         if timer >= PointDrawDuration
-            pointIndex += 1
+            point_index += 1
             timer = 0f0
-            if pointIndex >= 6
+            if point_index >= 6
                 phase = PhaseArcToLinePrime
-                pointIndex = 0
+                point_index = 0
             else
                 phase = PhaseArcToUnprimedPoint
             end
@@ -326,82 +326,82 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLinePrime
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawLineDuration, LinePrimeStart, LinePrimeEnd,
-            LineMaxBrush, LineColor, linePrimeHostId, linePrimeJoint1Id, linePrimeJoint2Id)
+            LineMaxBrush, LineColor, line_prime_host_id, line_prime_joint1_id, line_prime_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             OdinJuliaBridge.show_point(state_ptr,
                 Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeLine)))
             phase = PhaseArcToPrimedPoint
-            pointIndex = 0
+            point_index = 0
             timer = 0f0
         end
     elseif phase == PhaseArcToPrimedPoint
-        source = pointIndex == 0 ? LinePrimeEnd : PrimedPointPositions[pointIndex]
-        target = PrimedPointPositions[pointIndex + 1]
+        source = point_index == 0 ? LinePrimeEnd : PrimedPointPositions[point_index]
+        target = PrimedPointPositions[point_index + 1]
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration, source, target, 0.22f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            labelId = Integer(OdinJuliaBridge.get_animation_meta(
-                state_ptr, MetaLabelPrimeBase + pointIndex + 1))
-            OdinJuliaBridge.show_point(state_ptr, labelId)
+            label_id = Integer(OdinJuliaBridge.get_animation_meta(
+                state_ptr, MetaLabelPrimeBase + point_index + 1))
+            OdinJuliaBridge.show_point(state_ptr, label_id)
             phase = PhaseDrawPrimedPoint
             timer = 0f0
         end
     elseif phase == PhaseDrawPrimedPoint
-        pointId = Integer(OdinJuliaBridge.get_animation_meta(
-            state_ptr, MetaPrimePointBase + pointIndex + 1))
+        pointid = Integer(OdinJuliaBridge.get_animation_meta(
+            state_ptr, MetaPrimePointBase + point_index + 1))
         EuclidAnimations.animate_draw_point(
-            state_ptr, timer, PointDrawDuration, PrimedPointPositions[pointIndex + 1],
-            PointMaxBrush, PointColors[pointIndex + 1], pointId)
+            state_ptr, timer, PointDrawDuration, PrimedPointPositions[point_index + 1],
+            PointMaxBrush, PointColors[point_index + 1], pointid)
         timer += dt
         if timer >= PointDrawDuration
-            pointIndex += 1
+            point_index += 1
             timer = 0f0
-            if pointIndex >= 6
+            if point_index >= 6
                 phase = PhaseArcToPass
-                passIndex = 0
+                pass_index = 0
             else
                 phase = PhaseArcToPrimedPoint
             end
         end
     elseif phase == PhaseArcToPass
-        startPt, _, _, _ = TraceLegs[passIndex + 1]
-        source = passIndex == 0 ? PointLPrime : TraceLegs[passIndex][3]
+        start_pt, _, _, _ = TraceLegs[pass_index + 1]
+        source = pass_index == 0 ? PointLPrime : TraceLegs[pass_index][3]
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, source, startPt, 0.24f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration, source, start_pt, 0.24f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseTraceLeg1
             timer = 0f0
         end
     elseif phase == PhaseTraceLeg1
-        startPt, midPt, _, color = TraceLegs[passIndex + 1]
+        start_pt, mid_pt, _, color = TraceLegs[pass_index + 1]
         EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr, timer, DragLegDuration, startPt, midPt, color)
+            state_ptr, timer, DragLegDuration, start_pt, mid_pt, color)
         timer += dt
         if timer >= DragLegDuration
             phase = PhaseTraceLeg2
             timer = 0f0
         end
     elseif phase == PhaseTraceLeg2
-        _, midPt, endPt, color = TraceLegs[passIndex + 1]
+        _, mid_pt, end_pt, color = TraceLegs[pass_index + 1]
         EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr, timer, DragLegDuration, midPt, endPt, color)
+            state_ptr, timer, DragLegDuration, mid_pt, end_pt, color)
         timer += dt
         if timer >= DragLegDuration
-            passIndex += 1
+            pass_index += 1
             timer = 0f0
-            if passIndex >= TotalPassCount
+            if pass_index >= TotalPassCount
                 phase = PhaseEndLift
             else
                 phase = PhaseArcToPass
             end
         end
     elseif phase == PhaseEndLift
-        endPt = TraceLegs[TotalPassCount][3]
+        end_pt = TraceLegs[TotalPassCount][3]
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, EndLiftDuration, PenTopZ, endPt[1], endPt[2])
+            state_ptr, timer, EndLiftDuration, PenTopZ, end_pt[1], end_pt[2])
         timer += dt
         if timer >= EndLiftDuration
             phase = PhaseFinalHold
@@ -417,8 +417,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointIndex, Float32(pointIndex))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPassIndex, Float32(passIndex))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointIndex, Float32(point_index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPassIndex, Float32(pass_index))
 end
 
 end

@@ -6,16 +6,16 @@ Set the null animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `get_view_text` : A function that should be called to retrieve the view text for the animation
 - `init` : A function that should be called when the animation is being initialized
 - `loop` : A function that should be called when the animation is processing a frame of the loop
 - `clean` : A function that should be called when the animation is being cleaned and ended
 """
 function set_null_animations(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean)
+    state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean)
 
     @ccall set_null_animations(state_ptr::Ptr{Cvoid},
-        getViewText::Any, init::Any, loop::Any, clean::Any)::Cvoid
+        get_view_text::Any, init::Any, loop::Any, clean::Any)::Cvoid
 end
 
 """
@@ -26,7 +26,7 @@ Add a new root animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `get_view_text` : A function that should be called to retrieve the view text for the animation
 - `init` : A function that should be called when the animation is being initialized
 - `loop` : A function that should be called when the animation is processing a frame of the loop
 - `clean` : A function that should be called when the animation is being cleaned and ended
@@ -36,11 +36,11 @@ Parameters:
 Returns 1 on success and -1 on failure
 """
 function add_root_animation_interface(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String,
+    state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::String,
     stable_id::String)
 
     @ccall add_root_animation_interface(
-        state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
+        state_ptr::Ptr{Cvoid}, get_view_text::Any, init::Any, loop::Any, clean::Any,
         name::Cstring, stable_id::Cstring)::Int64
 end
 
@@ -52,7 +52,7 @@ Add a new child animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `getViewText` : A function that should be called to retrieve the view text for the animation
+- `get_view_text` : A function that should be called to retrieve the view text for the animation
 - `init` : A function that should be called when the animation is being initialized
 - `loop` : A function that should be called when the animation is processing a frame of the loop
 - `clean` : A function that should be called when the animation is being cleaned and ended
@@ -63,11 +63,11 @@ Parameters:
 Returns 1 on success and -1 on failure
 """
 function add_child_animation_interface(
-    state_ptr::Ptr{Cvoid}, getViewText, init, loop, clean, name::String,
+    state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::String,
     stable_id::String, parent_stable_id::String)
 
     @ccall add_child_animation_interface(
-        state_ptr::Ptr{Cvoid}, getViewText::Any, init::Any, loop::Any, clean::Any,
+        state_ptr::Ptr{Cvoid}, get_view_text::Any, init::Any, loop::Any, clean::Any,
         name::Cstring, stable_id::Cstring, parent_stable_id::Cstring)::Int64
 end
 

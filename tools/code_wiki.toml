@@ -98,40 +98,40 @@ owner = "guide_authors"
 [[guide_relations]]
 package_id = "odin:src:core"
 guide_paths = [
-	"Guides/ArchitectureSummary.md#allocation-strategy-init-first-with-explicit-exceptions",
-	"Guides/CodingStandards.md#global-rules",
+    "Guides/ArchitectureSummary.md#allocation-strategy-init-first-with-explicit-exceptions",
+    "Guides/CodingStandards.md#global-rules",
 ]
 symbol_prefixes = []
 
 [[guide_relations]]
 package_id = "julia:EuclidAnimations"
 guide_paths = [
-	"Guides/AnimationsStyle.md#motion-conventions",
-	"Guides/CodingStandards.md#julia-rules-required",
+    "Guides/AnimationsStyle.md#motion-conventions",
+    "Guides/CodingStandards.md#julia-rules-required",
 ]
 symbol_prefixes = ["animate_", "reflected_", "transform_"]
 
 [[guide_relations]]
 package_id = "julia:EuclidGeometry"
 guide_paths = [
-	"Guides/ArchitectureSummary.md#module-map-odin--julia",
-	"Guides/CodingStandards.md#julia-rules-required",
+    "Guides/ArchitectureSummary.md#module-map-odin--julia",
+    "Guides/CodingStandards.md#julia-rules-required",
 ]
 symbol_prefixes = []
 
 [[guide_relations]]
 package_id = "julia:EuclidRepl"
 guide_paths = [
-	"Guides/AnimationsStyle.md#motion-conventions",
-	"Guides/ArchitectureSummary.md#scratchpad-architecture-interactive-runtime-surface",
+    "Guides/AnimationsStyle.md#motion-conventions",
+    "Guides/ArchitectureSummary.md#scratchpad-architecture-interactive-runtime-surface",
 ]
 symbol_prefixes = ["circle!", "highlight_", "line!", "point!", "reflect", "rotate", "translate"]
 
 [[guide_relations]]
 package_id = "julia:OdinJuliaBridge"
 guide_paths = [
-	"Guides/ArchitectureSummary.md#odin-julia-bridge-how-the-boundary-works",
-	"Guides/JuliaThreadArchitecture.md#correctness-invariants",
+    "Guides/ArchitectureSummary.md#odin-julia-bridge-how-the-boundary-works",
+    "Guides/JuliaThreadArchitecture.md#correctness-invariants",
 ]
 symbol_prefixes = ["add_", "dynview_", "notify_", "set_null_"]
 
