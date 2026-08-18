@@ -9,7 +9,7 @@ import app_view "../../src/view/core"
 
 @(test)
 clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_UI_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
     defer free(ui_runtime)
 
     app_view.clear_gif_status_note(ui_runtime)
@@ -26,7 +26,7 @@ clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
 
 @(test)
 clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_UI_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
     defer free(ui_runtime)
 
     app_view.clear_last_gif_path(ui_runtime)

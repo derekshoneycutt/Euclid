@@ -54,7 +54,7 @@ is_scratchpad_selected :: proc(state: ^core.Euclid_General_State) -> bool {
 }
 
 //   Read the current scratchpad input text from the fixed-size UI buffer.
-scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> string {
+scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) -> string {
     if ui_runtime == nil || ui_runtime^.scratchpad_input_len <= 0 {
         return ""
     }
@@ -144,7 +144,7 @@ scratchpad_parse_history_payload :: proc(
 //   Submit one generic completion request without blocking the display thread.
 request_scratchpad_completion :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     tab_pressed: bool) {
 
     if !tab_pressed || state == nil || ui_runtime == nil {
@@ -187,7 +187,7 @@ scratchpad_input_columns :: proc(
 scratchpad_terminal_layout :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font,
     fallback_text: string,
     scroll_y: f32) -> Scratchpad_Terminal_Layout {
@@ -222,7 +222,7 @@ scratchpad_terminal_layout :: proc(
 //   This should only run when input-box vertical caret movement was not handled.
 apply_scratchpad_history_navigation :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     history_previous: bool,
     history_next: bool) {
 
@@ -244,7 +244,7 @@ apply_scratchpad_history_navigation :: proc(
 //   Submit current scratchpad input when parse state is complete.
 submit_scratchpad_input_if_ready :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     submit_pressed: bool) {
 
     if !submit_pressed {
@@ -271,7 +271,7 @@ submit_scratchpad_input_if_ready :: proc(
 
 //   Apply all completed Scratchpad replies at a display-frame boundary.
 apply_scratchpad_async_results :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
     for {
         slot, ok := julia.poll_scratchpad_async_result(state)
@@ -286,7 +286,7 @@ apply_scratchpad_async_results :: proc(
 
 //   Retry a required history reset until bounded worker storage accepts it.
 flush_scratchpad_history_reset :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
     if !ui_runtime^.scratchpad_history_reset_pending {
         return
@@ -301,7 +301,7 @@ flush_scratchpad_history_reset :: proc(
 
 //   Apply one current-generation reply and ignore stale UI mutations.
 apply_scratchpad_async_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.kind == .Submit &&
@@ -335,7 +335,7 @@ apply_scratchpad_async_result :: proc(
 
 //   Preserve incomplete/error input and clear only an accepted complete submit.
 apply_scratchpad_submit_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.parse_result == julia.SCRATCHPAD_PARSE_INCOMPLETE {
@@ -358,7 +358,7 @@ apply_scratchpad_submit_result :: proc(
 
 //   Apply only the newest completion request for the current input generation.
 apply_scratchpad_completion_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.request_id != ui_runtime^.scratchpad_latest_completion_request_id {
@@ -383,7 +383,7 @@ apply_scratchpad_completion_result :: proc(
 
 //   Apply Julia/Help prompt transitions after one input frame.
 apply_scratchpad_mode_transition :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     input_result: Input_Box_Result,
     previous_len, previous_cursor: int) -> bool {
 
@@ -412,7 +412,7 @@ apply_scratchpad_mode_transition :: proc(
 //   Updates the live scroll offset and re-pins the bottom when the user scrolls.
 scratchpad_sync_scroll :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     text_panel: rl.Rectangle,
     mouse_input: Mouse_Input_State,
     layout: Scratchpad_Terminal_Layout,
@@ -448,7 +448,7 @@ scratchpad_sync_scroll :: proc(
 //   Recompute the layout pinned to the bottom when bottom-pinning is active.
 scratchpad_pin_layout_to_bottom :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     terminal_panel: rl.Rectangle,
     font: rl.Font,
     output_text_legacy: string,
@@ -467,7 +467,7 @@ scratchpad_pin_layout_to_bottom :: proc(
 draw_scratchpad_output_and_prompt :: proc(
     state: ^core.Euclid_General_State,
     text_panel: rl.Rectangle,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font,
     mouse_input: Mouse_Input_State) {
 

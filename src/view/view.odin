@@ -240,7 +240,7 @@ initialize_window_resources :: proc(
         rl.UnloadImage(icon_image)
     }
 
-    init_stroke3d_shader(state)
+    init_tool_brush_shader(state)
 
     font_size: i32 = view_core.JULIA_MONO_FONT_LOAD_SIZE
     if !view_core.font_runtime_init_from_preparation(state, font_preparation, font_size) {
@@ -258,7 +258,7 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
         rl.CloseAudioDevice()
     }
     shutdown_particle_render_resources(state)
-    shutdown_stroke3d_shader(state)
+    shutdown_tool_brush_shader(state)
     view_core.font_runtime_unload_all(state)
 }
 
@@ -507,9 +507,6 @@ record_checkpoint_trace_snapshot :: proc(state: ^Euclid_General_State) {
         return
     }
 
-    // #vet forgives(implicit_allocator) — one bounded snapshot per recorded
-    // checkpoint (a rare, user-triggered/debug event), immediately freed by the
-    // defer below; the default heap is sufficient and keeps ownership obvious.
     snapshot := new(core.Trace_Checkpoint_Snapshot)
     defer free(snapshot)
     snapshot^.checkpoint_id = state^.fixed_step

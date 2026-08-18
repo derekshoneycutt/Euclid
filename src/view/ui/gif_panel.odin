@@ -12,7 +12,7 @@ draw_settings_save_gif_button :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     button := rl.Rectangle{
@@ -51,7 +51,7 @@ draw_settings_save_gif_button :: proc(
 }
 
 //   Return human-readable status text for GIF capture phase.
-gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> string {
+gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) -> string {
     switch ui_runtime.gif_capture_phase {
     case .Idle:
         return "Status: Idle"
@@ -75,7 +75,7 @@ gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> s
 draw_settings_gif_status :: proc(
     panel: rl.Rectangle,
     row_y: f32,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     view_core.ui_text(gif_capture_status_label(ui_runtime),

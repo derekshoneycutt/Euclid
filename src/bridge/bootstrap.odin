@@ -391,7 +391,7 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
 //
 // Notes:
 //   - Falls back to type-only output when Base sprint/showerror cannot be resolved.
-print_julia_exception :: proc(contextOfErr: string) {
+print_julia_exception :: proc(context_of_error: string) {
     ex_raw := julialib.jl_exception_occurred()
     if ex_raw == nil {
         return
@@ -403,7 +403,7 @@ print_julia_exception :: proc(contextOfErr: string) {
 
     base_module := resolve_base_module()
     if base_module == nil {
-        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
         return
     }
 
@@ -412,7 +412,7 @@ print_julia_exception :: proc(contextOfErr: string) {
     catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
 
     if sprint_fn == nil || showerror_fn == nil {
-        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
         fmt.println("Julia exception formatter unavailable (Base.sprint/Base.showerror).")
         return
     }
@@ -435,12 +435,12 @@ print_julia_exception :: proc(contextOfErr: string) {
     }
 
     if julialib.jl_exception_occurred() != nil || msg_val == nil {
-        fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
         fmt.println("Failed to format exception text via Base.sprint(showerror, ...).")
         return
     }
 
     msg := julialib.jl_string_ptr(msg_val)
-    fmt.println("Julia exception in ", contextOfErr, " type=", ex_type)
+    fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
     fmt.println(msg)
 }

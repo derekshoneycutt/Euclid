@@ -5,11 +5,11 @@ import "../../core"
 import rl "vendor:raylib"
 
 Tree_Toolbar_Hit :: struct {
-    RefreshRequested: bool,
-    TogglePauseRequested: bool,
-    ToggleTreeRequested: bool,
-    ToggleGifRequested: bool,
-    ToggleSettingsRequested: bool,
+    refresh_requested: bool,
+    toggle_pause_requested: bool,
+    toggle_tree_requested: bool,
+    toggle_gif_requested: bool,
+    toggle_settings_requested: bool,
 }
 
 //   Render toolbar row and report refresh/tree/gif/settings toggle hits.
@@ -137,7 +137,7 @@ draw_tree_toolbar :: proc(
         interaction_enabled = true,
         inset_scale = 1.0,
     }, press_owner)
-    hit.RefreshRequested = refresh_button.clicked
+    hit.refresh_requested = refresh_button.clicked
 
     pause_icon_id := Icon_Button_Id.Pause
     if simulation_paused {
@@ -154,7 +154,7 @@ draw_tree_toolbar :: proc(
         interaction_enabled = true,
         inset_scale = 1.0,
     }, press_owner)
-    hit.TogglePauseRequested = pause_button.clicked
+    hit.toggle_pause_requested = pause_button.clicked
 
     gif_button := draw_icon_button(Icon_Button_Params{
         id = 2003,
@@ -167,7 +167,7 @@ draw_tree_toolbar :: proc(
         interaction_enabled = true,
         inset_scale = 1.0,
     }, press_owner)
-    hit.ToggleGifRequested = gif_button.clicked
+    hit.toggle_gif_requested = gif_button.clicked
 
     tree_button := draw_icon_button(Icon_Button_Params{
         id = 2005,
@@ -180,7 +180,7 @@ draw_tree_toolbar :: proc(
         interaction_enabled = true,
         inset_scale = 1.0,
     }, press_owner)
-    hit.ToggleTreeRequested = tree_button.clicked
+    hit.toggle_tree_requested = tree_button.clicked
 
     settings_button := draw_icon_button(Icon_Button_Params{
         id = 2004,
@@ -193,6 +193,6 @@ draw_tree_toolbar :: proc(
         interaction_enabled = true,
         inset_scale = 1.0,
     }, press_owner)
-    hit.ToggleSettingsRequested = settings_button.clicked
+    hit.toggle_settings_requested = settings_button.clicked
     return hit
 }

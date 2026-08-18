@@ -29,24 +29,6 @@ DUST_INSTANCE_COLOR_LOCATION :: 3
 DUST_INSTANCE_VARIANT_LOCATION :: 4
 DUST_HYPOCYCLOID_SAMPLE_COUNT :: 128
 
-DUST_QUAD_POSITIONS := [12]f32{
-    -0.5, -0.5,
-    -0.5,  0.5,
-     0.5,  0.5,
-    -0.5, -0.5,
-     0.5,  0.5,
-     0.5, -0.5,
-}
-
-DUST_QUAD_TEXCOORDS := [12]f32{
-    0.0, 0.0,
-    0.0, 1.0,
-    1.0, 1.0,
-    0.0, 0.0,
-    1.0, 1.0,
-    1.0, 0.0,
-}
-
 //   Render alive low-layer particles and update low-layer render counters.
 //
 // Parameters:
@@ -405,13 +387,31 @@ load_dust_instancing_buffers :: proc(dust_render: ^core.Dust_Render_State) -> bo
         return false
     }
 
+    // Two triangles covering the unit quad each dust instance is stamped onto.
+    quad_positions := [12]f32{
+        -0.5, -0.5,
+        -0.5,  0.5,
+         0.5,  0.5,
+        -0.5, -0.5,
+         0.5,  0.5,
+         0.5, -0.5,
+    }
+    quad_texcoords := [12]f32{
+        0.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+        0.0, 0.0,
+        1.0, 1.0,
+        1.0, 0.0,
+    }
+
     dust_render^.quad_positions_vbo_id = rlgl.LoadVertexBuffer(
-        &DUST_QUAD_POSITIONS[0], c.int(size_of(DUST_QUAD_POSITIONS)), false)
+        &quad_positions[0], c.int(size_of(quad_positions)), false)
     rlgl.SetVertexAttribute(DUST_VERTEX_POSITION_LOCATION, 2, rlgl.FLOAT, false, 0, 0)
     rlgl.EnableVertexAttribute(DUST_VERTEX_POSITION_LOCATION)
 
     dust_render^.quad_texcoords_vbo_id = rlgl.LoadVertexBuffer(
-        &DUST_QUAD_TEXCOORDS[0], c.int(size_of(DUST_QUAD_TEXCOORDS)), false)
+        &quad_texcoords[0], c.int(size_of(quad_texcoords)), false)
     rlgl.SetVertexAttribute(DUST_VERTEX_TEXCOORD_LOCATION, 2, rlgl.FLOAT, false, 0, 0)
     rlgl.EnableVertexAttribute(DUST_VERTEX_TEXCOORD_LOCATION)
 
@@ -566,7 +566,7 @@ sample_dust_hypocycloid_points :: proc(
         return 0
     }
 
-    R_minus_r := f32(k - 1)
+    r_minus_r := f32(k - 1)
     freq := f64(k - 1) 
 
     max_radius := f32(0.0)
@@ -574,8 +574,8 @@ sample_dust_hypocycloid_points :: proc(
     for i in 0..<DUST_HYPOCYCLOID_SAMPLE_COUNT {
         theta := 2.0 * math.PI * f64(i) / f64(DUST_HYPOCYCLOID_SAMPLE_COUNT)
         
-        x := R_minus_r * f32(math.cos(theta)) + 1.0 * f32(math.cos(freq * theta))
-        y := R_minus_r * f32(math.sin(theta)) - 1.0 * f32(math.sin(freq * theta))
+        x := r_minus_r * f32(math.cos(theta)) + 1.0 * f32(math.cos(freq * theta))
+        y := r_minus_r * f32(math.sin(theta)) - 1.0 * f32(math.sin(freq * theta))
         
         radius := math.sqrt_f32(x * x + y * y)
         if radius > max_radius {

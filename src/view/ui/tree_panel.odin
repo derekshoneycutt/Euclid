@@ -6,15 +6,15 @@ import view_core "../core"
 import rl "vendor:raylib"
 
 Tree_Hit :: struct {
-    SelectedNode: ^core.Euclid_Julia_Animation_Interface,
-    ToggledNode: ^core.Euclid_Julia_Animation_Interface,
+    selected_node: ^core.Euclid_Julia_Animation_Interface,
+    toggled_node: ^core.Euclid_Julia_Animation_Interface,
 }
 
 //   Immutable per-frame tree walk inputs shared by every recursive row visit,
 //   grouped so the walk procs do not thread nine loose arguments.
 Tree_Walk_Context :: struct {
     ji:                     ^core.Euclid_Julia_Interface,
-    ui_runtime:             ^core.Euclid_UI_Runtime_State,
+    ui_runtime:             ^core.Euclid_Ui_Runtime_State,
     panel:                  rl.Rectangle,
     scroll_y:               f32,
     allow_clicks:           bool,
@@ -62,7 +62,7 @@ draw_tree_view :: proc(
 //   Cancel an in-flight GIF capture when the user refreshes while paused.
 cancel_gif_capture_if_paused_mid_capture :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
     if !ui_runtime.simulation_paused {
         return
@@ -78,33 +78,33 @@ cancel_gif_capture_if_paused_mid_capture :: proc(
 apply_tree_toolbar_hit :: proc(
     state: ^core.Euclid_General_State,
     ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     toolbar_hit: Tree_Toolbar_Hit) {
 
-    if toolbar_hit.RefreshRequested {
+    if toolbar_hit.refresh_requested {
         cancel_gif_capture_if_paused_mid_capture(state, ui_runtime)
         ui_runtime.simulation_paused = false
         ji.pending_animation_reset = true
     }
 
-    if toolbar_hit.TogglePauseRequested {
+    if toolbar_hit.toggle_pause_requested {
         ui_runtime.simulation_paused = !ui_runtime.simulation_paused
     }
 
-    if toolbar_hit.ToggleTreeRequested {
+    if toolbar_hit.toggle_tree_requested {
         ui_runtime.show_tree_gif = false
         ui_runtime.show_tree_settings = false
         ui_runtime.tree_scroll_dragging = false
     }
 
-    if toolbar_hit.ToggleSettingsRequested {
+    if toolbar_hit.toggle_settings_requested {
         ui_runtime.show_tree_settings = !ui_runtime.show_tree_settings
         ui_runtime.show_tree_gif = ui_runtime.show_tree_gif &&
             !ui_runtime.show_tree_settings
         ui_runtime.tree_scroll_dragging = false
     }
 
-    if toolbar_hit.ToggleGifRequested {
+    if toolbar_hit.toggle_gif_requested {
         ui_runtime.show_tree_gif = !ui_runtime.show_tree_gif
         ui_runtime.show_tree_settings = ui_runtime.show_tree_settings &&
             !ui_runtime.show_tree_gif
@@ -182,25 +182,25 @@ count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> i
 
 //   Merge child tree hit results into a single accumulator.
 merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
-    if src.SelectedNode != nil {
-        dst.SelectedNode = src.SelectedNode
+    if src.selected_node != nil {
+        dst.selected_node = src.selected_node
     }
-    if src.ToggledNode != nil {
-        dst.ToggledNode = src.ToggledNode
+    if src.toggled_node != nil {
+        dst.toggled_node = src.toggled_node
     }
 }
 
 //   Apply selection/expand hits and sync related UI state.
 apply_tree_hit :: proc(
     ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     hit: Tree_Hit) {
 
-    if hit.ToggledNode != nil {
-        hit.ToggledNode.is_expanded = !hit.ToggledNode.is_expanded
+    if hit.toggled_node != nil {
+        hit.toggled_node.is_expanded = !hit.toggled_node.is_expanded
     }
-    if hit.SelectedNode != nil {
-        set_selected_animation(ji, hit.SelectedNode)
+    if hit.selected_node != nil {
+        set_selected_animation(ji, hit.selected_node)
         ui_runtime.view_text_scroll_y = 0
         ui_runtime.text_scroll_dragging = false
         ui_runtime.text_scroll_drag_off = 0
@@ -308,7 +308,7 @@ draw_tree_node_row :: proc(
             color = UI_TEXT_COLOR,
         })
         if expander_result.clicked {
-            hit.ToggledNode = node
+            hit.toggled_node = node
         }
     }
 
@@ -316,7 +316,7 @@ draw_tree_node_row :: proc(
         UI_TEXT_COLOR, ctx.font)
 
     if list_item_result.clicked {
-        hit.SelectedNode = node
+        hit.selected_node = node
     }
 }
 
@@ -421,7 +421,7 @@ build_tree_view_panels :: proc(
 //   Render tree list body, scrollbars, and visible node rows.
 draw_tree_list_panel :: proc(
     ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     list_panel: rl.Rectangle,
     mouse_input: Mouse_Input_State,
     scroll_y: ^f32,

@@ -16,10 +16,9 @@ Frame_Preparation_Task_Data :: core.Frame_Preparation_Task_Data
 Simulation_Executor :: core.Simulation_Executor
 
 //   Create and start the persistent fixed-step worker pool.
-create_simulation_executor :: proc(state: ^Euclid_General_State) -> ^Simulation_Executor {
-    // #vet forgives(implicit_allocator) — the executor is a process-lifetime
-    // singleton owned by the session (freed in destroy_simulation_executor);
-    // one startup allocation on the default heap is intended.
+create_simulation_executor :: proc(
+    state: ^Euclid_General_State) -> ^Simulation_Executor {
+
     executor := new(Simulation_Executor)
     executor^.particle_task.state = state
     executor^.constraint_task.state = state

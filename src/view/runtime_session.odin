@@ -91,9 +91,6 @@ initiate_animations_state :: proc(
     julia_service: ^julia.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
 
-    // #vet forgives(implicit_allocator) — every allocation in this procedure is a
-    // process-lifetime singleton created once at session start and owned by the
-    // returned Euclid_General_State until shutdown; the default heap is intended.
     iso_scale := new(Iso_Scale)
     iso_scale^.scale = view_core.ISO_SCALE_VALUE
     iso_scale^.x_offset = view_core.ISO_X_OFFSET

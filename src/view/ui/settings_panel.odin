@@ -35,7 +35,7 @@ draw_settings_fps_checkbox :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     box := rl.Rectangle{
@@ -72,7 +72,7 @@ draw_settings_limit_fps_checkbox :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     box := rl.Rectangle{
@@ -114,7 +114,7 @@ draw_settings_simd_projection_checkbox :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     box := rl.Rectangle{
@@ -158,7 +158,7 @@ draw_settings_gpu_dust_checkbox :: proc(
     panel: rl.Rectangle,
     row_y: f32,
     mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font) {
 
     box := rl.Rectangle{

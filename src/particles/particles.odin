@@ -1169,9 +1169,6 @@ resolve_dust_collisions_on_grid :: proc(
     ps: ^Particle_System,
     cy, cx, ca, na: int, radius_sq, min_sep: f32) {
 
-    // #vet forgives(cyclomatic_complexity) — spatial-grid collision kernel.
-    // The nested neighbor/bucket loops and distance guards are the algorithm itself;
-    // this is a hot per-frame hot path where the structure mirrors the grid math.
     if na == 0 {
         return
     }

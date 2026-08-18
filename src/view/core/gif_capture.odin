@@ -21,13 +21,13 @@ Gif_Capture_Session :: core.Gif_Capture_Session
 
 
 //   Clear transient GIF status note displayed in the settings panel.
-clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
+clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.gif_status_note_len = 0
     ui_runtime.gif_status_note[0] = 0
 }
 
 //   Store a transient GIF status note displayed in the settings panel.
-set_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, note: string) {
+set_gif_status_note :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State, note: string) {
     max_len := len(ui_runtime.gif_status_note) - 1
     n := min(len(note), max_len)
 
@@ -162,7 +162,7 @@ gif_capture_update_fixed_step :: proc(
 
 //   Advance the Armed phase: begin a capture session or record the failure.
 gif_capture_advance_armed :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     if gif_capture_begin_session(state) {
         ui_runtime.gif_capture_phase = .Recording
         clear_gif_status_note(ui_runtime)
@@ -174,7 +174,7 @@ gif_capture_advance_armed :: proc(
 
 //   Advance the Recording phase: finalize the file or record the failure.
 gif_capture_advance_recording :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.gif_capture_phase = .Finalizing
     if gif_capture_finalize_session(state) {
         ui_runtime.gif_capture_phase = .Saved
@@ -227,13 +227,13 @@ gif_capture_destroy_session :: proc(session: ^Gif_Capture_Session) {
 
 
 //   Clear stored UI path text for last saved GIF output.
-clear_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
+clear_last_gif_path :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.last_gif_path_len = 0
     ui_runtime.last_gif_path[0] = 0
 }
 
 //   Store saved GIF output path into fixed UI buffer fields.
-set_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, path: string) {
+set_last_gif_path :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State, path: string) {
     max_len := len(ui_runtime.last_gif_path) - 1
     n := min(len(path), max_len)
     for i in 0..<n {

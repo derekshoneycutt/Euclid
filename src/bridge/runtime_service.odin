@@ -558,9 +558,6 @@ julia_runtime_diagnostics :: proc(
 // the returned service and must stop Julia before destroy_julia_runtime_service.
 create_julia_runtime_service :: proc() -> (
     ^Julia_Runtime_Service, runtime.Allocator_Error) {
-    // #vet forgives(implicit_allocator) — the service and its dynview staging are
-    // process-lifetime singletons allocated once at startup and freed at shutdown;
-    // the default heap is the intended owner, no per-frame churn exists here.
     service := new(Julia_Runtime_Service)
     requests, request_err := chan.create(
         chan.Chan(Julia_Request), JULIA_REQUEST_CAPACITY, context.allocator)
@@ -794,10 +791,6 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
 // Every request produces one correlated event. After each non-shutdown request, the worker
 // restores its saved Odin context and clears temporary allocations before receiving more work.
 julia_runtime_worker :: proc(data: rawptr) {
-    // #vet forgives(cyclomatic_complexity) — single-owner serializing event loop.
-    // The switch drives the Julia thread lifecycle; a dispatch table would need a
-    // shared-state side channel to carry success/kind back to the loop, which is a
-    // worse design for this hot correctness-critical path.
     service := cast(^Julia_Runtime_Service)data
     worker_context := context
     service^.owner_thread_id = os.get_current_thread_id()

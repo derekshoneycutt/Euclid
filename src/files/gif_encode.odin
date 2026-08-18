@@ -270,10 +270,6 @@ gif_encode_frame :: proc(
 //   - This call clears encoder state regardless of success.
 //   - data value in returned structure is allocated on the context's main allocator and must be freed manually.
 gif_encode_end :: proc(state: ^Gif_Encode_State) -> Gif_Encode_Result {
-    // #vet forgives(implicit_allocator) — the output buffer is the API result;
-    // ownership transfers to the caller, which must free it manually (documented
-    // above), so it must come from the caller-visible default allocator rather
-    // than the encoder's session arena.
     if state.list_head == nil {
         return Gif_Encode_Result{}
     }

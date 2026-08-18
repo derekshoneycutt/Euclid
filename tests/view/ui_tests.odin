@@ -206,7 +206,7 @@ scratchpad_history_payload_restores_mode_and_text :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_question_mark_enters_help_mode :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
     app_ui.input_box_replace_text(
         ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
         &ui_runtime.scratchpad_input_cursor, "?")
@@ -223,7 +223,7 @@ scratchpad_question_mark_enters_help_mode :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_pasted_question_mark_stays_in_julia_mode :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
     app_ui.input_box_replace_text(
         ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
         &ui_runtime.scratchpad_input_cursor, "?")
@@ -239,7 +239,7 @@ scratchpad_pasted_question_mark_stays_in_julia_mode :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_empty_backspace_exits_help_mode :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{scratchpad_input_mode = .Help}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{scratchpad_input_mode = .Help}
 
     changed := app_ui.apply_scratchpad_mode_transition(
         &ui_runtime, app_ui.Input_Box_Result{backspace_pressed = true}, 0, 0)
@@ -258,7 +258,7 @@ seed_scratchpad_async_result :: proc(
 
 @(test)
 scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
     app_ui.input_box_replace_text(
         ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
         &ui_runtime.scratchpad_input_cursor, "new input")
@@ -281,7 +281,7 @@ scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
     app_ui.input_box_replace_text(
         ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
         &ui_runtime.scratchpad_input_cursor, "begin")
@@ -301,7 +301,7 @@ scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
 
 @(test)
 scratchpad_completion_requires_latest_request :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_UI_Runtime_State{}
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
     app_ui.input_box_replace_text(
         ui_runtime.scratchpad_input[:], &ui_runtime.scratchpad_input_len,
         &ui_runtime.scratchpad_input_cursor, "EuclidRep")

@@ -30,7 +30,7 @@ Wrapped_Text_Metrics :: struct {
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
 draw_scratchpad_styled_or_fallback :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     fallback_text: string,
     panel: rl.Rectangle,
     scroll_y: f32,

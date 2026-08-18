@@ -65,23 +65,23 @@ Pen_Polygon_Crossing :: struct {
 }
 
 
-//   Initialize stroke3d shader handles and uniform locations from packaged assets.
+//   Initialize tool_brush shader handles and uniform locations from packaged assets.
 //
 // Parameters:
 //   - state: Global app state that stores shader handles and uniform locations.
 //
 // Returns:
 //   - none.
-init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     vertex_path :=
-        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
+        files.packaged_asset_path("shaders/tool_brush.vs", context.temp_allocator)
     fragment_path :=
-        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
+        files.packaged_asset_path("shaders/tool_brush.fs", context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println(
-            "stroke3d shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
+            "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
         s^.ready = false
         return
     }
@@ -90,15 +90,15 @@ init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
     fragment_cstr := strings.clone_to_cstring(fragment_path, context.temp_allocator)
 
     if !rl.FileExists(vertex_cstr) || !rl.FileExists(fragment_cstr) {
-        fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
-        fmt.println("stroke3d expected paths: vs=", vertex_path, " fs=", fragment_path)
+        fmt.println("tool_brush shader files not found; pen/compass 3D shading disabled")
+        fmt.println("tool_brush expected paths: vs=", vertex_path, " fs=", fragment_path)
         s^.ready = false
         return
     }
 
     s^.shader = rl.LoadShader(vertex_cstr, fragment_cstr)
     if s^.shader.id == 0 {
-        fmt.println("stroke3d shader failed to load; pen/compass 3D shading disabled")
+        fmt.println("tool_brush shader failed to load; pen/compass 3D shading disabled")
         s^.ready = false
         return
     }
@@ -115,8 +115,8 @@ init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
 
     if s^.loc_p0 < 0 || s^.loc_p1 < 0 || s^.loc_radius < 0 || s^.loc_viewport_height < 0 {
         fmt.println(
-            "stroke3d shader missing required uniforms; pen/compass 3D shading disabled")
-        fmt.println("stroke3d uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
+            "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
+        fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
             " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
         rl.UnloadShader(s^.shader)
         s^.ready = false
@@ -126,14 +126,14 @@ init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
     s^.ready = true
 }
 
-//   Unload stroke3d shader resources and mark shader state as unavailable.
+//   Unload tool_brush shader resources and mark shader state as unavailable.
 //
 // Parameters:
-//   - state: Global app state containing stroke3d shader state.
+//   - state: Global app state containing tool_brush shader state.
 //
 // Returns:
 //   - none.
-shutdown_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     if !s^.ready {
@@ -428,18 +428,18 @@ draw_cached_polygon_high :: #force_inline proc(
 draw_cached_pen_full :: proc(
     state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw) {
     draw_cached_pen_active_dot(state, pen)
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     draw_cached_pen(state, pen)
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 //   Render one full cached compass item for the merged higher layer.
 draw_cached_compass_full :: proc(
     state: ^Euclid_General_State, comp: ^core.Shapes_Compass_Draw) {
     draw_cached_compass_active_dot(state, comp)
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     draw_cached_compass(state, comp)
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 
@@ -447,8 +447,8 @@ draw_cached_compass_full :: proc(
 
 
 
-//   Set a float uniform on the stroke3d shader when location is valid.
-set_stroke3d_uniform_float :: #force_inline proc(
+//   Set a float uniform on the tool_brush shader when location is valid.
+set_tool_brush_uniform_float :: #force_inline proc(
     state: ^Euclid_General_State, location: i32, value: f32) {
     if location < 0 {
         return
@@ -458,8 +458,8 @@ set_stroke3d_uniform_float :: #force_inline proc(
 }
 
 
-//   Set a vec2 uniform on the stroke3d shader when location is valid.
-set_stroke3d_uniform_vec2 :: #force_inline proc(
+//   Set a vec2 uniform on the tool_brush shader when location is valid.
+set_tool_brush_uniform_vec2 :: #force_inline proc(
     state: ^Euclid_General_State, location: i32, value: Vector2) {
     if location < 0 {
         return
@@ -470,7 +470,7 @@ set_stroke3d_uniform_vec2 :: #force_inline proc(
 
 
 //   Compute render-to-screen scale factors for shader-space thickness correction.
-get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
+get_tool_brush_render_scale :: #force_inline proc() -> Vector2 {
     screen_w := f32(rl.GetScreenWidth())
     screen_h := f32(rl.GetScreenHeight())
     render_w := f32(rl.GetRenderWidth())
@@ -490,28 +490,28 @@ get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
 }
 
 
-//   Update stroke3d segment uniforms for endpoints and stroke radius.
-set_stroke3d_segment :: #force_inline proc(
+//   Update tool_brush segment uniforms for endpoints and stroke radius.
+set_tool_brush_segment :: #force_inline proc(
     state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32) {
     s := &state^.stroke_3d
-    scale := get_stroke3d_render_scale()
-    p0Scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
-    p1Scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
+    scale := get_tool_brush_render_scale()
+    p0_scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
+    p1_scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
     avg_scale := (scale.x + scale.y) * 0.5
 
-    set_stroke3d_uniform_vec2(state, s^.loc_p0, p0Scaled)
-    set_stroke3d_uniform_vec2(state, s^.loc_p1, p1Scaled)
-    set_stroke3d_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
+    set_tool_brush_uniform_vec2(state, s^.loc_p0, p0_scaled)
+    set_tool_brush_uniform_vec2(state, s^.loc_p1, p1_scaled)
+    set_tool_brush_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
 }
 
 
-//   Draw one segment with stroke3d lighting when available, else standard line draw.
-draw_stroke3d_segment :: #force_inline proc(
+//   Draw one segment with tool_brush lighting when available, else standard line draw.
+draw_tool_brush_segment :: #force_inline proc(
     state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
     s := &state^.stroke_3d
     if s^.ready {
         rlgl.DrawRenderBatchActive()
-        set_stroke3d_segment(state, p0, p1, thickness)
+        set_tool_brush_segment(state, p0, p1, thickness)
     }
     rl.DrawLineEx(p0, p1, thickness, color)
 }
@@ -548,11 +548,11 @@ compass_draw_joint1_leg_last :: #force_inline proc(
 }
 
 
-//   Bind stroke3d shader and upload per-frame lighting/render uniforms.
+//   Bind tool_brush shader and upload per-frame lighting/render uniforms.
 //
 // Notes:
-//   - Must be paired with end_stroke3d_mode in the same draw pass.
-begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+//   - Must be paired with end_tool_brush_mode in the same draw pass.
+begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     if !s^.ready {
@@ -567,22 +567,22 @@ begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
         rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
     }
 
-    set_stroke3d_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
-    set_stroke3d_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
-    set_stroke3d_uniform_float(state,
+    set_tool_brush_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
+    set_tool_brush_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
+    set_tool_brush_uniform_float(state,
         s^.loc_specular_strength, STROKE3D_SPECULAR_STRENGTH)
-    set_stroke3d_uniform_float(state, s^.loc_specular_power, STROKE3D_SPECULAR_POWER)
-    set_stroke3d_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
+    set_tool_brush_uniform_float(state, s^.loc_specular_power, STROKE3D_SPECULAR_POWER)
+    set_tool_brush_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
 
     rl.BeginShaderMode(s^.shader)
 }
 
 
-//   Flush pending batch and unbind stroke3d shader mode.
+//   Flush pending batch and unbind tool_brush shader mode.
 //
 // Notes:
-//   - Completes the begin_stroke3d_mode/end_stroke3d_mode pair.
-end_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+//   - Completes the begin_tool_brush_mode/end_tool_brush_mode pair.
+end_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     if !state^.stroke_3d.ready {
         return
     }
@@ -787,9 +787,6 @@ polygon_plane :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     plane_point, plane_normal: ^Vector3) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — polygon plane-fit kernel.
-    // The guards are triangle-index bounds and degenerate-normal rejection over the
-    // triangle list; intrinsic to the geometry, not incidental branching.
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
         return false
     }
@@ -873,7 +870,7 @@ draw_pen_segment_fragment :: #force_inline proc(
 
     c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
-    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
 
 //   Build one pen/polygon crossing event using z=0 clipping as stage one.
@@ -883,9 +880,6 @@ build_pen_polygon_crossing :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — pen/polygon clipping pipeline.
-    // The branches are half-space clip, plane-side classification, and front/back
-    // emission of a geometry crossing; each is a distinct geometric stage.
     stage0_start, stage0_end: Vector3
     if !z_split_clip_segment_halfspace(
         pen^.joint1,
@@ -997,9 +991,6 @@ find_pen_polygon_crossing :: proc(
     state: ^Euclid_General_State,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — crossing-search driver.
-    // The guards skip non-crossing candidate pairs over the merged draw cache;
-    // load-bearing filtering, not incidental control flow.
     cache := &state^.point_system^.draw_cache
     pen_index := -1
     pen := core.Shapes_Pen_Draw {}
@@ -1064,20 +1055,20 @@ draw_pen_polygon_crossing :: proc(
 
     draw_cached_pen_active_dot(state, &crossing^.pen)
 
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     if crossing^.has_back {
         draw_pen_segment_fragment(state, &crossing^.pen, crossing^.back0, crossing^.back1)
     }
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 
     draw_cached_polygon(state, &crossing^.polygon)
 
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     if crossing^.has_front {
         draw_pen_segment_fragment(state, &crossing^.pen,
             crossing^.front0, crossing^.front1)
     }
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 //   Compute average height across one point slice for shadow alpha attenuation.
@@ -1584,7 +1575,7 @@ draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw
     c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
-    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
 
 
@@ -1664,7 +1655,7 @@ draw_outside_arc_compass_cached :: proc(
         curr3d := p1 + dir * radius
         curr := view_core.iso_to_cartesian(curr3d, state^.iso_scale^)
 
-        draw_stroke3d_segment(state, prev, curr, brush_size, color)
+        draw_tool_brush_segment(state, prev, curr, brush_size, color)
         prev = curr
     }
 }
@@ -1679,11 +1670,11 @@ draw_cached_compass :: proc(
 
     draw_joint1_last := compass_draw_joint1_leg_last(comp, c0, c1, c2)
     if draw_joint1_last {
-        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
-        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
     } else {
-        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
-        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
     }
 
     draw_outside_arc_compass_cached(

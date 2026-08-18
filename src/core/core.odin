@@ -1119,7 +1119,7 @@ Dynview_System :: struct {
 */
 
 
-Stroke3D_Render_State :: struct {
+Tool_Render_State :: struct {
     shader: rl.Shader,
     ready: bool,
     loc_light_dir: i32,
@@ -1251,7 +1251,7 @@ Ui_Press_Owner_State :: struct {
     id: int,
 }
 
-Euclid_UI_Runtime_State :: struct {
+Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
     view_text_scroll_y: f32,
 
@@ -1502,9 +1502,9 @@ Euclid_General_State :: struct {
     user_drawing_sound_enabled: bool,
     animation_drawing_sound_enabled: bool,
     
-    stroke_3d: Stroke3D_Render_State,
+    stroke_3d: Tool_Render_State,
     dust_render: Dust_Render_State,
-    ui_runtime: Euclid_UI_Runtime_State,
+    ui_runtime: Euclid_Ui_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font_runtime: Euclid_Font_Runtime,
     font: rl.Font,
