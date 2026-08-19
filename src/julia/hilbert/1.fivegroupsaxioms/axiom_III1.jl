@@ -67,13 +67,19 @@ This statement of the axiom of parallels contains two assertions. The first of t
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
-    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
-    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
+    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelHostId))
+    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelJoint1Id))
+    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelJoint2Id))
     labela_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
 
@@ -106,15 +112,18 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(line_a.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(line_a.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(line_a.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelHostId, Float32(parallel_line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint1Id, Float32(parallel_line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaParallelJoint2Id, Float32(parallel_line.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelaId, Float32(labela.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, line_a.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, line_a.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, line_a.joint2_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, point_a.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaParallelHostId, parallel_line.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaParallelJoint1Id, parallel_line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaParallelJoint2Id, parallel_line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelaId, labela.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, label_a.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -123,13 +132,19 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelHostId))
-    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint1Id))
-    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaParallelJoint2Id))
+    parallel_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelHostId))
+    parallel_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelJoint1Id))
+    parallel_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaParallelJoint2Id))
     labela_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelaId))
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
 

@@ -6,6 +6,20 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
+//   Draw environment for wrapped text content: the clipping panel, scroll
+//   offset, font, and typography metrics, grouped so the draw call passes one
+//   coherent value.
+Wrapped_Text_Content_Params :: struct {
+    panel:           rl.Rectangle,
+    scroll_y:        f32,
+    font:            rl.Font,
+    text_padding:    f32,
+    text_row_height: f32,
+    text_color:      rl.Color,
+    wrap_advance:    f32,
+    font_size:       f32,
+}
+
 
 //   Draw UTF-8 UI text using temp C-string conversion.
 ui_text :: #force_inline proc(
@@ -21,20 +35,6 @@ ui_text_f32 :: #force_inline proc(
     font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
     cloned := strings.clone_to_cstring(text, context.temp_allocator)
     rl.DrawTextEx(font, cloned, rl.Vector2{x, y}, font_size, 0, color)
-}
-
-//   Draw environment for wrapped text content: the clipping panel, scroll
-//   offset, font, and typography metrics, grouped so the draw call passes one
-//   coherent value.
-Wrapped_Text_Content_Params :: struct {
-    panel:           rl.Rectangle,
-    scroll_y:        f32,
-    font:            rl.Font,
-    text_padding:    f32,
-    text_row_height: f32,
-    text_color:      rl.Color,
-    wrap_advance:    f32,
-    font_size:       f32,
 }
 
 //   Draw wrapped text rows clipped to the visible panel area.

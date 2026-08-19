@@ -445,8 +445,7 @@ function render_payload!(
             descend_duration,
             HIGHLIGHT_TOOL_TOP_Z,
             payload.start_pos[1],
-            payload.start_pos[2],
-        )
+            payload.start_pos[2])
         return
     end
 
@@ -457,8 +456,7 @@ function render_payload!(
             pass_duration,
             payload.start_pos,
             payload.end_pos,
-            payload.color,
-        )
+            payload.color)
         return
     end
 
@@ -469,8 +467,7 @@ function render_payload!(
             pass_duration,
             payload.end_pos,
             payload.start_pos,
-            payload.color,
-        )
+            payload.color)
         return
     end
 
@@ -480,8 +477,7 @@ function render_payload!(
         rise_duration,
         HIGHLIGHT_TOOL_TOP_Z,
         payload.start_pos[1],
-        payload.start_pos[2],
-    )
+        payload.start_pos[2])
 end
 
 """Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
@@ -505,8 +501,7 @@ function render_payload!(
             payload.center[1],
             payload.center[2],
             payload.start_pos[1],
-            payload.start_pos[2],
-        )
+            payload.start_pos[2])
         return
     end
 
@@ -517,8 +512,7 @@ function render_payload!(
             pass_duration,
             payload,
             payload.start_pos,
-            payload.angle_theta,
-        )
+            payload.angle_theta)
         return
     end
 
@@ -529,8 +523,7 @@ function render_payload!(
             pass_duration,
             payload,
             payload.end_pos,
-            -payload.angle_theta,
-        )
+            -payload.angle_theta)
         return
     end
 
@@ -542,8 +535,7 @@ function render_payload!(
         payload.center[1],
         payload.center[2],
         payload.start_pos[1],
-        payload.start_pos[2],
-    )
+        payload.start_pos[2])
 end
 
 """Render one compass highlight pass using filled or unfilled trail styling."""
@@ -564,8 +556,7 @@ function render_compass_highlight_pass!(
             start_pos,
             angle_theta,
             payload.radius,
-            payload.color,
-        )
+            payload.color)
         return
     end
 
@@ -577,8 +568,7 @@ function render_compass_highlight_pass!(
         start_pos,
         angle_theta,
         payload.radius,
-        payload.color,
-    )
+        payload.color)
 end
 
 """Render one frame of batch point translation."""
@@ -596,8 +586,7 @@ function render_transform_spec!(
         start_position,
         spec.displacement,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of batch point rotation."""
@@ -617,8 +606,7 @@ function render_transform_spec!(
         spec.axis_b,
         spec.theta,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of batch point 2D reflection."""
@@ -637,8 +625,7 @@ function render_transform_spec!(
         spec.line_a,
         spec.line_b,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -652,8 +639,7 @@ function render_payload!(
             duration,
             point_id,
             start_position,
-            payload.spec,
-        )
+            payload.spec)
     end
 end
 
@@ -1051,8 +1037,7 @@ function highlight_compass!(
         angle_theta32,
         radius32,
         color,
-        filled,
-    )
+        filled)
     job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return nothing
@@ -1108,8 +1093,7 @@ function rotate_points!(
     payload = TransformPayload(
         ids,
         starts,
-        RotateSpec(axis_a, axis_b, Float32(theta)),
-    )
+        RotateSpec(axis_a, axis_b, Float32(theta)))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return ids
@@ -1130,8 +1114,7 @@ function rotate_points_x!(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Rotate points around world Y axis through origin."""
@@ -1149,8 +1132,7 @@ function rotate_points_y!(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Rotate points around world Z axis through origin."""
@@ -1168,8 +1150,7 @@ function rotate_points_z!(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 0f0, 1f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """
@@ -1212,8 +1193,7 @@ function reflect2d_points_x_axis!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across world Y axis (`x=0`) on XY plane."""
@@ -1229,8 +1209,7 @@ function reflect2d_points_y_axis!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across diagonal `y=x` on XY plane."""
@@ -1246,8 +1225,7 @@ function reflect2d_points_diag_pos!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across diagonal `y=-x` on XY plane."""
@@ -1263,8 +1241,7 @@ function reflect2d_points_diag_neg!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, -1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 end

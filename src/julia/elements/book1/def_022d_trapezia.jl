@@ -48,8 +48,10 @@ And let quadrilateral figures besides these be called trapezia \euclidbox[height
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostIds_r = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint2Ids_r = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    lineHostIds_r = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    lineJoint2Ids_r = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
     OdinJuliaBridge.hide_point_batch(state_ptr, lineHostIds_r)
 
@@ -77,9 +79,12 @@ function initialize(state_ptr::Ptr{Cvoid})
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
             SideColors[i], 0f0)
 
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.host_id))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1_id))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineHostIds[i], Float32(line.host_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint1Ids[i], Float32(line.joint1_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint2Ids[i], Float32(line.joint2_id))
     end
 
     reset_cycle_state(state_ptr)
@@ -89,11 +94,15 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1]))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[1]))
 
-    line_host_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    line_joint1_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
-    line_joint2_ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    line_host_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    line_joint1_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
+    line_joint2_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
     if line1_host_id < 0
         return
@@ -104,19 +113,22 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, PenDescendDuration, PenTopZ, SideStarts[1][1], SideStarts[1][2])
+            state_ptr, timer, PenDescendDuration, PenTopZ,
+            SideStarts[1][1], SideStarts[1][2])
 
         timer += dt
         if timer >= PenDescendDuration
             phase = PhaseDrawSide1
             timer = 0f0
         end
-    elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 || phase == PhaseDrawSide3 || phase == PhaseDrawSide4
+    elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 ||
+           phase == PhaseDrawSide3 || phase == PhaseDrawSide4
         side_index = Int(phase)
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawDuration, SideStarts[side_index], SideEnds[side_index],
             QuadMaxBrush, SideColors[side_index],
-            line_host_ids[side_index], line_joint1_ids[side_index], line_joint2_ids[side_index])
+            line_host_ids[side_index], line_joint1_ids[side_index],
+            line_joint2_ids[side_index])
 
         timer += dt
         if timer >= DrawDuration
@@ -129,7 +141,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseRise
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenRiseDuration, PenTopZ, SideStarts[1][1], SideStarts[1][2])
+            state_ptr, timer, PenRiseDuration, PenTopZ,
+            SideStarts[1][1], SideStarts[1][2])
 
         timer += dt
         if timer >= PenRiseDuration

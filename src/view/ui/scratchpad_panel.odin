@@ -13,11 +13,6 @@ SCRATCHPAD_JULIA_PROMPT :: "julia> "
 SCRATCHPAD_HELP_PROMPT :: "help?> "
 SCRATCHPAD_SCROLL_BOTTOM_EPSILON :: 0.5
 
-//   Return the live terminal prompt for the active Scratchpad editor mode.
-scratchpad_prompt :: #force_inline proc(mode: core.Scratchpad_Input_Mode) -> string {
-    return mode == .Help ? SCRATCHPAD_HELP_PROMPT : SCRATCHPAD_JULIA_PROMPT
-}
-
 Scratchpad_Terminal_Layout :: struct {
     transcript_height: f32,
     input_rows: int,
@@ -37,6 +32,11 @@ Scratchpad_History_Payload :: struct {
     mode: core.Scratchpad_Input_Mode,
     text: string,
     ok:   bool,
+}
+
+//   Return the live terminal prompt for the active Scratchpad editor mode.
+scratchpad_prompt :: #force_inline proc(mode: core.Scratchpad_Input_Mode) -> string {
+    return mode == .Help ? SCRATCHPAD_HELP_PROMPT : SCRATCHPAD_JULIA_PROMPT
 }
 
 //   Return whether the currently selected tree item is the scratchpad node.

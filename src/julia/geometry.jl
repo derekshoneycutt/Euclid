@@ -10,7 +10,46 @@ module EuclidGeometry
 using LinearAlgebra
 
 export circle_circle_intersections_xy, circle_line_intersections_xy,
-    line_intersection_3d
+    line_intersection_3d, marker_geometry, reflect_about_axis_x_half
+
+struct MarkerGeometry
+    start::Vector{Float32}
+    sweep_theta::Float32
+    start_theta::Float32
+    finish::Vector{Float32}
+end
+
+"""Generate marker geometry information from vector information"""
+function marker_geometry(
+    prev::Vector{Float32}, curr::Vector{Float32}, nxt::Vector{Float32}, radius)
+    v1 = normalize(Float32[prev[1] - curr[1], prev[2] - curr[2]])
+    v2 = normalize(Float32[nxt[1] - curr[1], nxt[2] - curr[2]])
+    cross = v1[1] * v2[2] - v1[2] * v2[1]
+    start_vec = cross >= 0f0 ? v1 : v2
+
+    start = [
+        curr[1] + radius * start_vec[1],
+        curr[2] + radius * start_vec[2],
+        0f0,
+    ]
+
+    start_theta = Float32(atan(start_vec[2], start_vec[1]))
+    sweep_theta = Float32(acos(clamp(dot(v1, v2), -1f0, 1f0)))
+    end_theta = start_theta + sweep_theta
+
+    finish = [
+        curr[1] + radius * Float32(cos(end_theta)),
+        curr[2] + radius * Float32(sin(end_theta)),
+        0f0,
+    ]
+
+    return MarkerGeometry(start, sweep_theta, start_theta, finish)
+end
+
+"""Reflect a point around the x axis half"""
+function reflect_about_axis_x_half(point::AbstractVector{<:Real})
+    return [1f0 - point[1], point[2], point[3]]
+end
 
 @inline function xy_components(v::AbstractVector{<:Real})
     if length(v) < 2

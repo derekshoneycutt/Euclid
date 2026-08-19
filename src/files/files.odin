@@ -82,8 +82,7 @@ resolve_writable_gif_output_dir :: proc(
 
     output_dir, output_err := filepath.join(
         []string{base_dir, GIF_OUTPUT_DIR_NAME},
-        allocator,
-    )
+        allocator)
     if output_err != nil || !ensure_directory_exists(output_dir) {
         return "", false
     }
@@ -322,8 +321,7 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
 
     unpack_dir, unpack_err := filepath.join(
         []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR},
-        allocator,
-    )
+        allocator)
     if unpack_err != nil || len(unpack_dir) == 0 {
         return "", false
     }

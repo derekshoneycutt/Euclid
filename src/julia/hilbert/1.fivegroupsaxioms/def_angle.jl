@@ -14,16 +14,16 @@ const HalfRayHStart = PointO
 const HalfRayHEnd = [PointO[1] + HalfRayLength, PointO[2], 0f0]
 const HalfRayKStart = PointO
 const HalfRayKEnd = [
-    PointO[1] + HalfRayLength * Float32(cos(AngleTheta)),
-    PointO[2] + HalfRayLength * Float32(sin(AngleTheta)),
+    PointO[1] + HalfRayLength * cos(AngleTheta),
+    PointO[2] + HalfRayLength * sin(AngleTheta),
     0f0,
 ]
 
 const MarkerRadius = 0.16f0
 const MarkerStart = [PointO[1] + MarkerRadius, PointO[2], 0f0]
 const MarkerEnd = [
-    PointO[1] + MarkerRadius * Float32(cos(AngleTheta)),
-    PointO[2] + MarkerRadius * Float32(sin(AngleTheta)),
+    PointO[1] + MarkerRadius * cos(AngleTheta),
+    PointO[2] + MarkerRadius * sin(AngleTheta),
     0f0,
 ]
 
@@ -110,19 +110,26 @@ are called the sides of the angle, and the point $O$ \euclidpoint[color=khaki3,s
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
-    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
-    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
-    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayHHostId))
+    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayHJoint2Id))
+    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayKHostId))
+    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayKJoint2Id))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
     point_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
     label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
     label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
     label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [half_ray_h_host_id, half_ray_k_host_id, marker_host_id, point_o_id, label_o_id, label_h_id, label_k_id])
+        [half_ray_h_host_id, half_ray_k_host_id, marker_host_id,
+         point_o_id, label_o_id, label_h_id, label_k_id])
 
     OdinJuliaBridge.set_point_position(state_ptr, half_ray_h_joint2_id, HalfRayHStart)
     OdinJuliaBridge.set_point_position(state_ptr, half_ray_k_joint2_id, HalfRayKStart)
@@ -135,8 +142,10 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, PointOColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, MarkerColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, PointO[1], PointO[2], CompassTopZ)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, PointO[1], PointO[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
@@ -153,25 +162,34 @@ function initialize(state_ptr::Ptr{Cvoid})
         MarkerColor, 0f0)
     point_o = OdinJuliaBridge.create_new_point(state_ptr, PointO, PointOColor, 0f0)
 
-    label_o = OdinJuliaBridge.create_new_label(state_ptr, 'O', OLabelPoint, LabelColor, 16f0)
-    label_h = OdinJuliaBridge.create_new_label(state_ptr, 'h', HLabelPoint, LabelColor, 16f0)
-    label_k = OdinJuliaBridge.create_new_label(state_ptr, 'k', KLabelPoint, LabelColor, 16f0)
+    label_o = OdinJuliaBridge.create_new_label(
+        state_ptr, 'O', OLabelPoint, LabelColor, 16f0)
+    label_h = OdinJuliaBridge.create_new_label(
+        state_ptr, 'h', HLabelPoint, LabelColor, 16f0)
+    label_k = OdinJuliaBridge.create_new_label(
+        state_ptr, 'k', KLabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHHostId, Float32(half_ray_h.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint1Id, Float32(half_ray_h.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayHJoint2Id, Float32(half_ray_h.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKHostId, Float32(half_ray_k.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint1Id, Float32(half_ray_k.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaHalfRayKJoint2Id, Float32(half_ray_k.joint2_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayHHostId, half_ray_h.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayHJoint1Id, half_ray_h.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayHJoint2Id, half_ray_h.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayKHostId, half_ray_k.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayKJoint1Id, half_ray_k.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaHalfRayKJoint2Id, half_ray_k.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, marker.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, marker.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, marker.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointOId, Float32(point_o.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOId, Float32(label_o.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, Float32(label_h.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, Float32(label_k.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointOId, point_o.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOId, label_o.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, label_h.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, label_k.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -180,15 +198,24 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHHostId))
-    half_ray_h_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint1Id))
-    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayHJoint2Id))
-    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKHostId))
-    half_ray_k_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint1Id))
-    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaHalfRayKJoint2Id))
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    half_ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayHHostId))
+    half_ray_h_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayHJoint1Id))
+    half_ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayHJoint2Id))
+    half_ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayKHostId))
+    half_ray_k_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayKJoint1Id))
+    half_ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaHalfRayKJoint2Id))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerStartId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
     point_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOId))
     label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
     label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))

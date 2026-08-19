@@ -718,12 +718,8 @@ resolve_constraint_targets :: #force_inline proc(
         child_count = 0,
     }
 
-    first_child, has_first_child := resolve_constraint_first_child(
-        targets.host,
-        constraint,
-        points,
-        len_points,
-    )
+    first_child, has_first_child := resolve_constraint_first_child(targets.host,
+        constraint, points, len_points)
     if !has_first_child {
         return targets, true
     }

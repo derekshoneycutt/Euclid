@@ -132,22 +132,34 @@ Therefore at the given point A the straight line AL is placed equal to the given
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    #=circle_b_c_d_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHHostId))
-    circle_b_c_d_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHStartId))
-    circle_b_c_d_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHEndId))
+    #=circle_b_c_d_host_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHHostId))
+    circle_b_c_d_start_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHStartId))
+    circle_b_c_d_end_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHEndId))
 
-    circle_a_c_e_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLHostId))
-    circle_a_c_e_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLStartId))
-    circle_a_c_e_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLEndId))
+    circle_a_c_e_host_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLHostId))
+    circle_a_c_e_start_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLStartId))
+    circle_a_c_e_end_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleGKLEndId))
 
-    line_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
-    line_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
+    line_a_b_host_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABHostId))
+    line_a_b_joint2_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineABJoint2Id))
 
-    line_c_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
-    line_c_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
+    line_c_b_host_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBHostId))
+    line_c_b_joint2_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCBJoint2Id))
 
-    line_c_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
-    line_c_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
+    line_c_a_host_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAHostId))
+    line_c_a_joint2_id =
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineCAJoint2Id))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [label_a_id, label_b_id, label_c_id, label_d_id, label_e_id,
@@ -189,7 +201,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     label_l_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [label_a_id, label_b_id, label_c_id, label_d_id, label_e_id, label_f_id, label_g_id,
+        [label_a_id, label_b_id, label_c_id, label_d_id,
+         label_e_id, label_f_id, label_g_id,
          label_h_id, label_k_id, label_l_id,
         ])
 
@@ -247,25 +260,31 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, Intersection, Intersection, LineCAColor, 0f0)
 
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABHostId, Float32(line_a_b.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint1Id, Float32(line_a_b.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint2Id, Float32(line_a_b.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABHostId, line_a_b.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint1Id, line_a_b.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineABJoint2Id, line_a_b.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBHostId, Float32(line_c_b.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint1Id, Float32(line_c_b.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint2Id, Float32(line_c_b.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBHostId, line_c_b.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint1Id, line_c_b.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCBJoint2Id, line_c_b.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAHostId, Float32(line_c_a.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint1Id, Float32(line_c_a.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint2Id, Float32(line_c_a.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAHostId, line_c_a.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint1Id, line_c_a.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineCAJoint2Id, line_c_a.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHHostId, Float32(circle_b_c_d.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHStartId, Float32(circle_b_c_d.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleCGHEndId, Float32(circle_b_c_d.end_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleCGHHostId, circle_b_c_d.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleCGHStartId, circle_b_c_d.start_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleCGHEndId, circle_b_c_d.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLHostId, Float32(circle_a_c_e.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLStartId, Float32(circle_a_c_e.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleGKLEndId, Float32(circle_a_c_e.end_id))=#
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleGKLHostId, circle_a_c_e.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleGKLStartId, circle_a_c_e.start_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaCircleGKLEndId, circle_a_c_e.end_id)=#
 
     reset_cycle_state(state_ptr)
 end
@@ -280,7 +299,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     label_d_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelDId))
     label_e_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelEId))
 
-    #if line_a_b_host_id < 0 || line_c_b_host_id < 0 || line_c_a_host_id < 0 || circle_b_c_d_host_id < 0 || circle_a_c_e_host_id < 0
+    #if line_a_b_host_id < 0 || line_c_b_host_id < 0 || line_c_a_host_id < 0 || 
+    #   circle_b_c_d_host_id < 0 || circle_a_c_e_host_id < 0
     #    return
     #end
 

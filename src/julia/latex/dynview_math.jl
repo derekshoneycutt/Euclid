@@ -196,7 +196,7 @@ function fraction_payload_op(run::LatexRun)
     denominator_payloads = math_payload_ops_for_runs(run.secondary_children)
     return MathPayloadOp(MATH_OP_FRACTION_RECURSIVE,
         fraction_text(plain_text_for_runs(run.children),
-        plain_text_for_runs(run.secondary_children)),
+            plain_text_for_runs(run.secondary_children)),
         "", "", "", :none, :none, LARGE_OP_KIND_NONE, :math,
         numerator_payloads, denominator_payloads)
 end
@@ -376,8 +376,7 @@ function bridge_math_payload_op(
         SCRIPT_SUB_DROP,
         SCRIPT_GAP,
         ACCENT_BAR_THICKNESS,
-        ACCENT_BAR_OFFSET,
-    )
+        ACCENT_BAR_OFFSET)
 end
 
 """Flatten recursive payload ops into preorder bridge ops and return direct child count."""

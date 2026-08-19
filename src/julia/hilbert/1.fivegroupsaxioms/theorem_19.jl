@@ -19,13 +19,23 @@ const BottomIntersection = [0.59257144f0, 0.35f0, 0f0]
 
 const MarkerRadius = 0.08f0
 
-const ThetaTopUpperRight = Float32(atan(UpperLineEnd[2] - TopIntersection[2], UpperLineEnd[1] - TopIntersection[1]))
-const ThetaTopUpperLeft = Float32(atan(UpperLineStart[2] - TopIntersection[2], UpperLineStart[1] - TopIntersection[1]))
-const ThetaTopDown = Float32(atan(BottomIntersection[2] - TopIntersection[2], BottomIntersection[1] - TopIntersection[1]))
+const ThetaTopUpperRight =
+    atan(UpperLineEnd[2] - TopIntersection[2], UpperLineEnd[1] - TopIntersection[1])
+const ThetaTopUpperLeft =
+    atan(UpperLineStart[2] - TopIntersection[2], UpperLineStart[1] - TopIntersection[1])
+const ThetaTopDown =
+    atan(BottomIntersection[2] - TopIntersection[2],
+         BottomIntersection[1] - TopIntersection[1])
 
-const ThetaBottomLowerRight = Float32(atan(LowerLineEnd[2] - BottomIntersection[2], LowerLineEnd[1] - BottomIntersection[1]))
-const ThetaBottomLowerLeft = Float32(atan(LowerLineStart[2] - BottomIntersection[2], LowerLineStart[1] - BottomIntersection[1]))
-const ThetaBottomUp = Float32(atan(TopIntersection[2] - BottomIntersection[2], TopIntersection[1] - BottomIntersection[1]))
+const ThetaBottomLowerRight =
+    atan(LowerLineEnd[2] - BottomIntersection[2],
+         LowerLineEnd[1] - BottomIntersection[1])
+const ThetaBottomLowerLeft =
+    atan(LowerLineStart[2] - BottomIntersection[2],
+         LowerLineStart[1] - BottomIntersection[1])
+const ThetaBottomUp =
+    atan(TopIntersection[2] - BottomIntersection[2],
+         TopIntersection[1] - BottomIntersection[1])
 
 const MarkerAlt1Start = [
     TopIntersection[1] + MarkerRadius * Float32(cos(ThetaTopUpperRight)),
@@ -145,18 +155,26 @@ and also the exterior-interior angles are congruent. Conversely, if the alternat
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
-    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
-    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
-    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
-    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
-    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
+    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLowerHostId))
+    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLowerJoint2Id))
+    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaUpperHostId))
+    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaUpperJoint2Id))
+    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTransversalHostId))
+    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTransversalJoint2Id))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [lower_host_id, upper_host_id, transversal_host_id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [
+        lower_host_id, upper_host_id, transversal_host_id])
 
     OdinJuliaBridge.set_point_position(state_ptr, lower_joint2_id, LowerLineStart)
     OdinJuliaBridge.set_point_position(state_ptr, upper_joint2_id, UpperLineStart)
-    OdinJuliaBridge.set_point_position(state_ptr, transversal_joint2_id, TransversalStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, transversal_joint2_id, TransversalStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescendLowerStart)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -189,18 +207,24 @@ function initialize(state_ptr::Ptr{Cvoid})
     transversal = OdinJuliaBridge.create_new_line(
         state_ptr, TransversalStart, TransversalStart, TransversalColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerHostId, Float32(lower_line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint1Id, Float32(lower_line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLowerJoint2Id, Float32(lower_line.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperHostId, Float32(upper_line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint1Id, Float32(upper_line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaUpperJoint2Id, Float32(upper_line.joint2_id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalHostId, Float32(transversal.host_id))
+        state_ptr, MetaLowerHostId, lower_line.host_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint1Id, Float32(transversal.joint1_id))
+        state_ptr, MetaLowerJoint1Id, lower_line.joint1_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint2Id, Float32(transversal.joint2_id))
+        state_ptr, MetaLowerJoint2Id, lower_line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaUpperHostId, upper_line.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaUpperJoint1Id, upper_line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaUpperJoint2Id, upper_line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaTransversalHostId, transversal.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaTransversalJoint1Id, transversal.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaTransversalJoint2Id, transversal.joint2_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -209,15 +233,24 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerHostId))
-    lower_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint1Id))
-    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLowerJoint2Id))
-    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperHostId))
-    upper_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint1Id))
-    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaUpperJoint2Id))
-    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalHostId))
-    transversal_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint1Id))
-    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTransversalJoint2Id))
+    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLowerHostId))
+    lower_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLowerJoint1Id))
+    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLowerJoint2Id))
+    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaUpperHostId))
+    upper_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaUpperJoint1Id))
+    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaUpperJoint2Id))
+    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTransversalHostId))
+    transversal_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTransversalJoint1Id))
+    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTransversalJoint2Id))
 
     if lower_host_id < 0 || upper_host_id < 0 || transversal_host_id < 0
         return
@@ -228,7 +261,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     if phase == PhasePenDescendLowerStart
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, DescendDuration, PenTopZ, LowerLineStart[1], LowerLineStart[2])
+            state_ptr, timer, DescendDuration, PenTopZ,
+            LowerLineStart[1], LowerLineStart[2])
         timer += dt
         if timer >= DescendDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, LowerLineColor)
@@ -246,7 +280,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseArcToUpper
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, LowerLineEnd, UpperLineStart, 0.24f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration, LowerLineEnd,
+            UpperLineStart, 0.24f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, UpperLineColor)
@@ -264,7 +299,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseArcToTransversal
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, UpperLineEnd, TransversalStart, 0.24f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration, UpperLineEnd,
+            TransversalStart, 0.24f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, TransversalColor)
@@ -283,7 +319,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhasePenRise
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenLiftDuration, PenTopZ, TransversalEnd[1], TransversalEnd[2])
+            state_ptr, timer, PenLiftDuration, PenTopZ,
+            TransversalEnd[1], TransversalEnd[2])
         timer += dt
         if timer >= PenLiftDuration
             OdinJuliaBridge.hide_pen(state_ptr)
@@ -294,7 +331,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseCompassDescendAlt1
         EuclidAnimations.animate_compass_descend(
             state_ptr, timer, DescendDuration, CompassTopZ,
-            TopIntersection[1], TopIntersection[2], MarkerAlt1Start[1], MarkerAlt1Start[2])
+            TopIntersection[1], TopIntersection[2],
+            MarkerAlt1Start[1], MarkerAlt1Start[2])
         timer += dt
         if timer >= DescendDuration
             phase = PhaseAlt1Forward
@@ -303,7 +341,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseAlt1Forward
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            TopIntersection, MarkerAlt1Start, AngleAlt1Theta, MarkerRadius, HighlightColor)
+            TopIntersection, MarkerAlt1Start, AngleAlt1Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseAlt1Back
@@ -312,7 +351,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseAlt1Back
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            TopIntersection, MarkerAlt1End, -AngleAlt1Theta, MarkerRadius, HighlightColor)
+            TopIntersection, MarkerAlt1End, -AngleAlt1Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseArcToAlt2
@@ -331,7 +371,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseAlt2Forward
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            BottomIntersection, MarkerAlt2Start, AngleAlt2Theta, MarkerRadius, HighlightColor)
+            BottomIntersection, MarkerAlt2Start, AngleAlt2Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseAlt2Back
@@ -340,7 +381,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseAlt2Back
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            BottomIntersection, MarkerAlt2End, -AngleAlt2Theta, MarkerRadius, HighlightColor)
+            BottomIntersection, MarkerAlt2End, -AngleAlt2Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseArcToExtInt1
@@ -359,7 +401,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseExtInt1Forward
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            TopIntersection, MarkerExtInt1Start, AngleExtInt1Theta, MarkerRadius, HighlightColor)
+            TopIntersection, MarkerExtInt1Start, AngleExtInt1Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseExtInt1Back
@@ -368,7 +411,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseExtInt1Back
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            TopIntersection, MarkerExtInt1End, -AngleExtInt1Theta, MarkerRadius, HighlightColor)
+            TopIntersection, MarkerExtInt1End, -AngleExtInt1Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseArcToExtInt2
@@ -387,7 +431,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseExtInt2Forward
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            BottomIntersection, MarkerExtInt2Start, AngleExtInt2Theta, MarkerRadius, HighlightColor)
+            BottomIntersection, MarkerExtInt2Start, AngleExtInt2Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseExtInt2Back
@@ -396,7 +441,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseExtInt2Back
         EuclidAnimations.animate_compass_fill_arc_highlight(
             state_ptr, timer, SweepDuration,
-            BottomIntersection, MarkerExtInt2End, -AngleExtInt2Theta, MarkerRadius, HighlightColor)
+            BottomIntersection, MarkerExtInt2End, -AngleExtInt2Theta,
+            MarkerRadius, HighlightColor)
         timer += dt
         if timer >= SweepDuration
             phase = PhaseCompassRise

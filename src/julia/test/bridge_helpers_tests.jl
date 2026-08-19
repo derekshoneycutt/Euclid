@@ -60,6 +60,8 @@ end
 @testset "vector wrapper prevalidation" begin
     state_ptr = Ptr{Cvoid}(0)
 
-    @test_throws BoundsError OdinJuliaBridge.set_point_position(state_ptr, 1, Float32[1f0, 2f0])
-    @test_throws BoundsError OdinJuliaBridge.set_point_position_status(state_ptr, 1, Float32[1f0, 2f0])
+    @test_throws BoundsError OdinJuliaBridge.set_point_position(
+        state_ptr, 1, Float32[1f0, 2f0])
+    @test_throws BoundsError OdinJuliaBridge.set_point_position_status(
+        state_ptr, 1, Float32[1f0, 2f0])
 end

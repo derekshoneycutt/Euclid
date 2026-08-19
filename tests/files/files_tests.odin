@@ -35,7 +35,8 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
 
     if last_separator > 0 {
         parent_rel := rel_path[:last_separator]
-        parent_dir, parent_join_err := filepath.join([]string{root_dir, parent_rel}, context.allocator)
+        parent_dir, parent_join_err := filepath.join(
+            []string{root_dir, parent_rel}, context.allocator)
         if parent_join_err != nil {
             return false
         }
@@ -91,34 +92,41 @@ should_continue_unpack_matrix :: proc(t: ^testing.T) {
     defer _ = os.remove_all(sandbox)
     testing.expect(t, ok)
 
-    archive_path, archive_join_err := filepath.join([]string{sandbox, "assets.pkg"}, context.allocator)
-    unpack_dir, unpack_join_err := filepath.join([]string{sandbox, "unpack"}, context.allocator)
+    archive_path, archive_join_err := filepath.join(
+        []string{sandbox, "assets.pkg"}, context.allocator)
+    unpack_dir, unpack_join_err := filepath.join(
+        []string{sandbox, "unpack"}, context.allocator)
     defer delete(archive_path)
     defer delete(unpack_dir)
     testing.expect(t, archive_join_err == nil)
     testing.expect(t, unpack_join_err == nil)
 
-    continue_unpack, result := app_files.should_continue_unpack(archive_path, unpack_dir, false)
+    continue_unpack, result := app_files.should_continue_unpack(
+        archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, !result)
 
     testing.expect(t, os.make_directory_all(unpack_dir) == nil)
-    continue_unpack, result = app_files.should_continue_unpack(archive_path, unpack_dir, false)
+    continue_unpack, result = app_files.should_continue_unpack(
+        archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, result)
 
     testing.expect(t, os.write_entire_file(archive_path, []u8{'a'}) == nil)
 
-    continue_unpack, result = app_files.should_continue_unpack(archive_path, unpack_dir, false)
+    continue_unpack, result = app_files.should_continue_unpack(
+        archive_path, unpack_dir, false)
     testing.expect(t, continue_unpack)
     testing.expect(t, !result)
 
     testing.expect(t, build_ready_unpack_tree(unpack_dir))
-    continue_unpack, result = app_files.should_continue_unpack(archive_path, unpack_dir, false)
+    continue_unpack, result = app_files.should_continue_unpack(
+        archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, result)
 
-    continue_unpack, result = app_files.should_continue_unpack(archive_path, unpack_dir, true)
+    continue_unpack, result = app_files.should_continue_unpack(
+        archive_path, unpack_dir, true)
     testing.expect(t, continue_unpack)
     testing.expect(t, !result)
 }
@@ -133,7 +141,8 @@ prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
     nested_file := "inner/data.bin"
     testing.expect(t, write_required_entry(sandbox, nested_file))
 
-    nested_file_path, nested_err := filepath.join([]string{sandbox, nested_file}, context.allocator)
+    nested_file_path, nested_err := filepath.join(
+        []string{sandbox, nested_file}, context.allocator)
     defer delete(nested_file_path)
     testing.expect(t, nested_err == nil)
     testing.expect(t, os.exists(nested_file_path))
@@ -155,9 +164,7 @@ resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
     testing.expect(t, base_ok)
 
     expected_output, expected_err := filepath.join(
-        []string{base_dir, app_files.GIF_OUTPUT_DIR_NAME},
-        context.allocator,
-    )
+        []string{base_dir, app_files.GIF_OUTPUT_DIR_NAME}, context.allocator)
     defer delete(expected_output)
     testing.expect(t, expected_err == nil)
 

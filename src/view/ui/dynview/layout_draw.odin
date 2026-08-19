@@ -86,6 +86,20 @@ DELIMITER_LINE_HANDLERS ::
     .Angle = draw_delimiter_angle,
 }
 
+//   Draw inputs for one text-run item: the runtime, style, resolved font,
+//   colors, and draw position, grouped so the renderer passes one coherent value.
+Text_Run_Draw_Params :: struct {
+    runtime:       ^core.Dynview_System,
+    font_size:     f32,
+    style:         Dynview_Text_Style,
+    item:          core.Dynview_Layout_Item,
+    text:          string,
+    resolved_font: rl.Font,
+    text_color:    rl.Color,
+    draw_x:        f32,
+    item_y:        f32,
+}
+
 //   Fast vertical cull check for one layout line against panel bounds.
 //   Returns true only when the full line is strictly outside the visible span.
 layout_line_outside_panel :: #force_inline proc(
@@ -1073,20 +1087,6 @@ draw_cached_text_item :: proc(
     case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle,
         .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
-}
-
-//   Draw inputs for one text-run item: the runtime, style, resolved font,
-//   colors, and draw position, grouped so the renderer passes one coherent value.
-Text_Run_Draw_Params :: struct {
-    runtime:       ^core.Dynview_System,
-    font_size:     f32,
-    style:         Dynview_Text_Style,
-    item:          core.Dynview_Layout_Item,
-    text:          string,
-    resolved_font: rl.Font,
-    text_color:    rl.Color,
-    draw_x:        f32,
-    item_y:        f32,
 }
 
 //   Draw one cached text-run item with optional underline.

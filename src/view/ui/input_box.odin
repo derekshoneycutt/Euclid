@@ -92,6 +92,18 @@ Terminal_Input_Position :: struct {
     col: int,
 }
 
+//   Mutable text/caret state threaded through one frame of keyboard input,
+//   grouped with the per-frame outcome flags so the apply step passes one
+//   coherent value instead of a long out-parameter list.
+Input_Box_Key_State :: struct {
+    text_len:      ^int,
+    caret:         ^int,
+    viewport:      ^int,
+    moved_up:      ^bool,
+    moved_down:    ^bool,
+    paste_applied: ^bool,
+}
+
 //   Resolve whether caret should be visible for the current blink phase.
 input_box_should_draw_caret :: #force_inline proc(
     timestamp_seconds, half_period_seconds: f64) -> bool {
@@ -734,18 +746,6 @@ input_box_update_viewport_for_caret :: #force_inline proc(
     if viewport^ < 0 {
         viewport^ = 0
     }
-}
-
-//   Mutable text/caret state threaded through one frame of keyboard input,
-//   grouped with the per-frame outcome flags so the apply step passes one
-//   coherent value instead of a long out-parameter list.
-Input_Box_Key_State :: struct {
-    text_len:      ^int,
-    caret:         ^int,
-    viewport:      ^int,
-    moved_up:      ^bool,
-    moved_down:    ^bool,
-    paste_applied: ^bool,
 }
 
 //   Apply one frame of keyboard events to text and caret state.

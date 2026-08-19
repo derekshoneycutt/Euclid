@@ -458,15 +458,15 @@ const parse_cache_order = Tuple{String, Int32, Int32}[]
 const EMPTY_CHILD_RUNS = LatexRun[]
 
 """Return one normal atom run payload."""
-latex_atom_run(text::String, role::Symbol) =
+latex_atom_run(text::AbstractString, role::Symbol) =
     LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one superscript script-segment run payload."""
-latex_sup_run(text::String) =
+latex_sup_run(text::AbstractString) =
     LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one subscript script-segment run payload."""
-latex_sub_run(text::String) =
+latex_sub_run(text::AbstractString) =
     LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one overline accent run payload."""

@@ -9,6 +9,22 @@ import rl "vendor:raylib"
 
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 
+//   Inputs for one reusable integer slider control: placement, pointer input,
+//   shared UI/press state, label, value cell, and the allowed range, grouped so
+//   the draw call passes one coherent value.
+Integer_Slider_Params :: struct {
+    panel:       rl.Rectangle,
+    row_y:       f32,
+    mouse_input: Mouse_Input_State,
+    ui_runtime:  ^core.Euclid_Ui_Runtime_State,
+    press_id:    int,
+    label:       string,
+    value:       ^int,
+    min_value:   int,
+    max_value:   int,
+    font:        rl.Font,
+}
+
 //   Build knob geometry from track bounds and normalized ratio.
 build_slider_knob :: proc(
     slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
@@ -181,23 +197,6 @@ slider_knob_draw_style :: proc(
     }
 
     return knob_draw, knob_color
-}
-
-
-//   Inputs for one reusable integer slider control: placement, pointer input,
-//   shared UI/press state, label, value cell, and the allowed range, grouped so
-//   the draw call passes one coherent value.
-Integer_Slider_Params :: struct {
-    panel:       rl.Rectangle,
-    row_y:       f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime:  ^core.Euclid_Ui_Runtime_State,
-    press_id:    int,
-    label:       string,
-    value:       ^int,
-    min_value:   int,
-    max_value:   int,
-    font:        rl.Font,
 }
 
 //   Render and update a reusable integer slider control.

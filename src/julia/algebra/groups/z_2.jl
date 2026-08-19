@@ -3,6 +3,7 @@ module EuclidAlgebraGroupsZ2
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
+using ..EuclidGeometry
 
 export get_view_text, initialize, clean, loop
 
@@ -89,13 +90,9 @@ $e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$
 
 So this is the 2-element symmetry group of the triangle, and the two motions commute."""
 
-function reflect_about_axis_x_half(point::Vector{Float32})
-    return Float32[1f0 - point[1], point[2], point[3]]
-end
-
-const RefVertexA = reflect_about_axis_x_half(VertexA)
-const RefVertexB = reflect_about_axis_x_half(VertexB)
-const RefVertexC = reflect_about_axis_x_half(VertexC)
+const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
+const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
+const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
 
 const ReflectLineStartBase = (
     VertexA,
@@ -103,8 +100,7 @@ const ReflectLineStartBase = (
     VertexB,
     VertexC,
     VertexC,
-    VertexA,
-)
+    VertexA)
 
 const ReflectLineStartMirrored = (
     RefVertexA,
@@ -112,8 +108,7 @@ const ReflectLineStartMirrored = (
     RefVertexB,
     RefVertexC,
     RefVertexC,
-    RefVertexA,
-)
+    RefVertexA)
 
 const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
@@ -284,8 +279,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         Int64(line_joint1_id2),
         Int64(line_joint2_id2),
         Int64(line_joint1_id3),
-        Int64(line_joint2_id3),
-    )
+        Int64(line_joint2_id3))
 
     phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
     timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)

@@ -4,7 +4,7 @@ if length(ARGS) != 1
     error("usage: sysimage_build.jl <output-path>")
 end
 
-julia_root = @__DIR__
+const julia_root = @__DIR__
 PackageCompiler.create_sysimage(
     [:Colors, :LaTeXStrings, :Latexify];
     sysimage_path=abspath(ARGS[1]),

@@ -14,7 +14,8 @@ const PerpStartPoint = [0.5f0, 0.5f0, 0f0]
 const PerpEndPoint = [1f0, 1f0, 0f0]
 
 const MarkerRadius = 0.20f0
-const MainLineUnit = normalize(Float32[EndPoint[1] - StartPoint[1], EndPoint[2] - StartPoint[2]])
+const MainLineUnit =
+    normalize(Float32[EndPoint[1] - StartPoint[1], EndPoint[2] - StartPoint[2]])
 const MarkerStart = [
     PerpStartPoint[1] + MarkerRadius * MainLineUnit[1],
     PerpStartPoint[2] + MarkerRadius * MainLineUnit[2],
@@ -76,16 +77,23 @@ When a straight line set up on a straight line \euclidperpendicular[thickness=2,
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
 
-    perpline_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPerpLineHostId))
-    perpline_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPerpLineJoint2Id))
+    perpline_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPerpLineHostId))
+    perpline_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPerpLineJoint2Id))
 
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [marker_host_id, line_host_id, perpline_host_id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [
+        marker_host_id, line_host_id, perpline_host_id])
 
     OdinJuliaBridge.set_point_position(
         state_ptr, marker_end_id, MarkerStart[1], MarkerStart[2], MarkerStart[3])
@@ -94,14 +102,17 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(
         state_ptr, line_joint2_id, StartPoint[1], StartPoint[2], StartPoint[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, perpline_joint2_id, PerpStartPoint[1], PerpStartPoint[2], PerpStartPoint[3])
+        state_ptr, perpline_joint2_id,
+        PerpStartPoint[1], PerpStartPoint[2], PerpStartPoint[3])
 
     OdinJuliaBridge.hide_compass(state_ptr)
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, MarkerColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, PerpStartPoint[1], PerpStartPoint[2], CompassTopZ)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, PerpStartPoint[1], PerpStartPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -125,17 +136,20 @@ function initialize(state_ptr::Ptr{Cvoid})
         PerpStartPoint[1], PerpStartPoint[2], PerpStartPoint[3],
         PerpLineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(line.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, line.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, line.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPerpLineHostId, Float32(perpline.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPerpLineJoint1Id, Float32(perpline.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPerpLineJoint2Id, Float32(perpline.joint2_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPerpLineHostId, perpline.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPerpLineJoint1Id, perpline.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPerpLineJoint2Id, perpline.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, marker.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, marker.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, marker.end_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -144,17 +158,26 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
 
-    perpline_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPerpLineHostId))
-    perpline_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPerpLineJoint1Id))
-    perpline_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPerpLineJoint2Id))
+    perpline_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPerpLineHostId))
+    perpline_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPerpLineJoint1Id))
+    perpline_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPerpLineJoint2Id))
 
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerStartId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
 
     if line_host_id < 0
         return
@@ -195,7 +218,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLine2
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, LineDrawDuration, PerpStartPoint, PerpEndPoint,
-            LineMaxBrush, PerpLineColor, perpline_host_id, perpline_joint1_id, perpline_joint2_id)
+            LineMaxBrush, PerpLineColor, perpline_host_id,
+            perpline_joint1_id, perpline_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

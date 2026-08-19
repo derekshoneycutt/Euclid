@@ -297,17 +297,14 @@ function transform_translate_point(
     end
 
     displacement_vec = displacement_from_vector_and_length(
-        directionvec,
-        Float32(displacement_length),
-    )
+        directionvec, displacement_length)
     return transform_translate_point(
         state_ptr,
         point_id,
         start_position,
         displacement_vec,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -380,8 +377,7 @@ function transform_rotate_point_x(
         Float32[1f0, 0f0, 0f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -406,8 +402,7 @@ function transform_rotate_point_y(
         Float32[0f0, 1f0, 0f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -432,8 +427,7 @@ function transform_rotate_point_z(
         Float32[0f0, 0f0, 1f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -550,8 +544,7 @@ function transform_reflect2d_point_x_axis(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -574,8 +567,7 @@ function transform_reflect2d_point_y_axis(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -598,8 +590,7 @@ function transform_reflect2d_point_diag_pos(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -622,8 +613,7 @@ function transform_reflect2d_point_diag_neg(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, -1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -1150,10 +1140,8 @@ end
     a::AbstractVector{<:Real}, b::AbstractVector{<:Real}, p::AbstractVector{<:Real},
     eps::Real)
 
-    return (
-        p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
-        p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps
-    )
+    return (p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
+        p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps)
 end
 
 @inline function has_collinear_segment_overlap_xy(
@@ -1162,12 +1150,10 @@ end
     o1::Real, o2::Real, o3::Real, o4::Real,
     eps::Real)
 
-    return (
-        (abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
+    return ((abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
         (abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)) ||
         (abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)) ||
-        (abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps))
-    )
+        (abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps)))
 end
 
 @inline function segments_intersect_xy(
@@ -1293,15 +1279,13 @@ function animate_compass_arcmove(
                 use_point1,
                 start_joint1, end_joint1,
                 start_joint2, end_joint2,
-                t,
-            )
+                t)
         else
             apply_xy_detour_arc!(
                 use_point2,
                 start_joint2, end_joint2,
                 start_joint1, end_joint1,
-                t,
-            )
+                t)
         end
     end
 

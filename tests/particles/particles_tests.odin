@@ -18,12 +18,14 @@ expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
 @(test)
 normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
     theta := app_particles.normalize_theta(f32(-0.5))
-    test_helpers.expect_close(t, theta, f32(2.0 * math.PI - 0.5), "normalize_theta should wrap negatives")
+    test_helpers.expect_close(t, theta, f32(2.0 * math.PI - 0.5),
+        "normalize_theta should wrap negatives")
 
     delta := app_particles.compute_sweep_delta(
         f32(1.5 * math.PI),
         f32(0.5 * math.PI))
-    test_helpers.expect_close(t, delta, f32(math.PI), "sweep delta should wrap across zero")
+    test_helpers.expect_close(t, delta, f32(math.PI),
+        "sweep delta should wrap across zero")
 }
 
 @(test)
@@ -97,17 +99,26 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     before_bvy := ps^.low_particles.vel_y[1]
 
     min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS * app_particles.DUST_COLLISION_RADIUS
+    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
+        app_particles.DUST_COLLISION_RADIUS
     app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
-    test_helpers.expect_close(t, ps^.low_particles.pos_x[0], before_ax, "no collision should keep ax")
-    test_helpers.expect_close(t, ps^.low_particles.pos_y[0], before_ay, "no collision should keep ay")
-    test_helpers.expect_close(t, ps^.low_particles.pos_x[1], before_bx, "no collision should keep bx")
-    test_helpers.expect_close(t, ps^.low_particles.pos_y[1], before_by, "no collision should keep by")
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], before_avx, "no collision should keep avx")
-    test_helpers.expect_close(t, ps^.low_particles.vel_y[0], before_avy, "no collision should keep avy")
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], before_bvx, "no collision should keep bvx")
-    test_helpers.expect_close(t, ps^.low_particles.vel_y[1], before_bvy, "no collision should keep bvy")
+    test_helpers.expect_close(t, ps^.low_particles.pos_x[0], before_ax,
+        "no collision should keep ax")
+    test_helpers.expect_close(t, ps^.low_particles.pos_y[0], before_ay,
+        "no collision should keep ay")
+    test_helpers.expect_close(t, ps^.low_particles.pos_x[1], before_bx,
+        "no collision should keep bx")
+    test_helpers.expect_close(t, ps^.low_particles.pos_y[1], before_by,
+        "no collision should keep by")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], before_avx,
+        "no collision should keep avx")
+    test_helpers.expect_close(t, ps^.low_particles.vel_y[0], before_avy,
+        "no collision should keep avy")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], before_bvx,
+        "no collision should keep bvx")
+    test_helpers.expect_close(t, ps^.low_particles.vel_y[1], before_bvy,
+        "no collision should keep bvy")
 }
 
 @(test)
@@ -129,7 +140,8 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
     before_x1 := ps^.low_particles.pos_x[1]
 
     min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS * app_particles.DUST_COLLISION_RADIUS
+    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
+        app_particles.DUST_COLLISION_RADIUS
     app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
@@ -157,13 +169,16 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
     before_x1 := ps^.low_particles.pos_x[1]
 
     min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS * app_particles.DUST_COLLISION_RADIUS
+    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
+        app_particles.DUST_COLLISION_RADIUS
     app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], f32(-0.01), "separating vx0 should be unchanged")
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], f32(0.01), "separating vx1 should be unchanged")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], f32(-0.01),
+        "separating vx0 should be unchanged")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], f32(0.01),
+        "separating vx1 should be unchanged")
 }
 
 @(test)
@@ -264,7 +279,8 @@ emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
     app_particles.emit_shapes_hide_burst(ps, &ks, 0, false)
 
     testing.expect(t, ps^.low_particles.alive[0])
-    testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] || ps^.low_particles.alive[3])
+    testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] ||
+        ps^.low_particles.alive[3])
 }
 
 @(test)

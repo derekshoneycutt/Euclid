@@ -37,6 +37,7 @@ const Rule_Responses = Dict(
     "DUPLICATE-CODE-POLICY-DRIFT" => Fail,
     "FUNCTION-METRIC-POLICY-DRIFT" => Fail,
     "NAMING-POLICY-DRIFT" => Fail,
+    "CALL-ROOT-POLICY-DRIFT" => Fail,
     "ODIN-ALLOCATION-POLICY-DRIFT" => Fail,
     "COMMON-LINE-90" => Warn,
     "COMMON-LINE-100" => Warn,
@@ -100,4 +101,48 @@ AnalysisSettings(
     default_resource_lifetime_settings(),
     default_security_settings(),
     default_coverage_settings(),
-    default_documentation_settings())
+    default_documentation_settings(),
+    CallRootSettings([
+        CallRootEntryPoint(
+            "odin-bridge:init_euclid_scripts", :julia, "init_euclid_scripts",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:global_euclid_loop", :julia, "global_euclid_loop",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_classify_input", :julia,
+            "scratchpad_classify_input",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_complete_backslash", :julia,
+            "scratchpad_complete_backslash",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_complete_input", :julia,
+            "scratchpad_complete_input",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_queue_input", :julia, "scratchpad_queue_input",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_save_history_to_file", :julia,
+            "scratchpad_save_history_to_file",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_history_previous", :julia,
+            "scratchpad_history_previous",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_history_next", :julia, "scratchpad_history_next",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:scratchpad_history_reset_cursor", :julia,
+            "scratchpad_history_reset_cursor",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "scratchpad-repl:save_history", :julia, "create_runtime_module.save_history",
+            "the scratchpad REPL evaluates this command from user input"),
+        CallRootEntryPoint(
+            "scratchpad-repl:quit", :julia, "create_runtime_module.quit",
+            "the scratchpad REPL evaluates this command from user input"),
+    ]))

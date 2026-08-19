@@ -76,9 +76,9 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     vertex_path :=
-        files.packaged_asset_path("shaders/tool_brush.vs", context.temp_allocator)
+        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
     fragment_path :=
-        files.packaged_asset_path("shaders/tool_brush.fs", context.temp_allocator)
+        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println(
             "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
@@ -1677,14 +1677,8 @@ draw_cached_compass :: proc(
         draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
     }
 
-    draw_outside_arc_compass_cached(
-        comp^.joint1,
-        comp^.pivot,
-        comp^.joint2,
-        state,
-        comp^.brush_size,
-        comp^.color,
-    )
+    draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
+        state, comp^.brush_size, comp^.color)
 }
 
 
@@ -1807,12 +1801,6 @@ draw_cached_compass_shadow :: proc(
         rl.DrawLineEx(s1, s2, thickness, shadow_color)
     }
 
-    draw_outside_arc_compass_shadow_cached(
-        comp^.joint1,
-        comp^.pivot,
-        comp^.joint2,
-        state,
-        thickness,
-        shadow_color,
-    )
+    draw_outside_arc_compass_shadow_cached(comp^.joint1, comp^.pivot, comp^.joint2,
+        state, thickness, shadow_color)
 }

@@ -155,8 +155,7 @@ const HELPER_DOC_ALIASES = Dict(
     "reflect2d_points_diag_pos!" => (:EuclidRepl, Symbol("reflect2d_points_diag_pos!"),
         "reflect2d_points_diag_pos!(point_ids, start_positions; duration=2.5f0)"),
     "reflect2d_points_diag_neg!" => (:EuclidRepl, Symbol("reflect2d_points_diag_neg!"),
-        "reflect2d_points_diag_neg!(point_ids, start_positions; duration=2.5f0)"),
-)
+        "reflect2d_points_diag_neg!(point_ids, start_positions; duration=2.5f0)"))
 
 # REPL-callable API is centered around: classify_input, queue_input,
 # register_frame_hook/remove_frame_hook/clear_frame_hooks/list_frame_hooks,
@@ -302,8 +301,7 @@ function blocked_input_reason(text::AbstractString)
         "download(",
         "rm(",
         "mv(",
-        "cp(",
-    )
+        "cp(")
     for token in blocked_tokens
         if occursin(token, lowered)
             return "blocked token: $(token)"

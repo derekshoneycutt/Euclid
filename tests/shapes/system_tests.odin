@@ -73,9 +73,12 @@ lerped_child_positions_follows_child_chain_order :: proc(t: ^testing.T) {
     ok := shapes.lerped_child_positions(&system, &host, 0.5, out[:])
 
     testing.expect(t, ok)
-    test_helpers.expect_vec3_close(t, out[0], shapes.Vector3{0.5, 0, 0}, "child 0 should lerp")
-    test_helpers.expect_vec3_close(t, out[1], shapes.Vector3{2, 0, 0}, "child 1 should lerp")
-    test_helpers.expect_vec3_close(t, out[2], shapes.Vector3{4, 0, 0}, "child 2 should lerp")
+    test_helpers.expect_vec3_close(t, out[0], shapes.Vector3{0.5, 0, 0},
+        "child 0 should lerp")
+    test_helpers.expect_vec3_close(t, out[1], shapes.Vector3{2, 0, 0},
+        "child 1 should lerp")
+    test_helpers.expect_vec3_close(t, out[2], shapes.Vector3{4, 0, 0},
+        "child 2 should lerp")
 }
 
 @(test)
@@ -113,7 +116,8 @@ draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, first, 0)
     testing.expect_value(t, system.draw_cache.polygon_vertex_count, 2)
 
-    second, ok2 := shapes.draw_cache_reserve_polygon_vertices(&system, len(system.draw_cache.polygon_vertices))
+    second, ok2 := shapes.draw_cache_reserve_polygon_vertices(
+        &system, len(system.draw_cache.polygon_vertices))
     testing.expect(t, !ok2)
     testing.expect_value(t, second, 0)
 }
@@ -122,8 +126,10 @@ draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
 polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^testing.T) {
     vertices := [3]shapes.Vector3{{0, 0, 0}, {2, 0, 0}, {1, 2, 0}}
     testing.expect(t, shapes.polygon_signed_area_xy(vertices[:]) > 0)
-    testing.expect(t, shapes.point_in_triangle_xy({1, 1, 0}, vertices[0], vertices[1], vertices[2]))
-    testing.expect(t, shapes.point_in_triangle_xy({0, 0, 0}, vertices[0], vertices[1], vertices[2]))
+    testing.expect(t, shapes.point_in_triangle_xy(
+        {1, 1, 0}, vertices[0], vertices[1], vertices[2]))
+    testing.expect(t, shapes.point_in_triangle_xy(
+        {0, 0, 0}, vertices[0], vertices[1], vertices[2]))
 }
 
 @(test)

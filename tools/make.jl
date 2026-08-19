@@ -80,7 +80,8 @@ const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 """Return true when running on Windows."""
 is_windows() = Sys.iswindows()
 
-const HARNESS_BINARY_PATH = joinpath(BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
+const HARNESS_BINARY_PATH = joinpath(
+    BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
 const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.jsonl")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
 
@@ -364,7 +365,8 @@ function get_vswhere_path()
         error("Error: ProgramFiles(x86) environment variable is missing.")
     end
 
-    vswhere_path = joinpath(program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    vswhere_path = joinpath(
+        program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
     if !isfile(vswhere_path)
         error("Error: Could not locate vswhere.exe. Install Visual Studio Build Tools.")
     end
@@ -502,13 +504,15 @@ function collect_windows_runtime_libs(binary_path::String)
     dumpbin_path = resolve_msvc_tool_path(
         "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
         "Error: Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.")
-    result = run_command(Cmd([dumpbin_path, "/dependents", binary_path]); capture_output=true)
+    result = run_command(Cmd([dumpbin_path, "/dependents", binary_path]);
+        capture_output=true)
     if result.exit_code != 0
         return String[]
     end
 
     lines = split(result.stdout, '\n')
-    start_index = findfirst(line -> occursin("Image has the following dependencies", line), lines)
+    start_index = findfirst(line ->
+        occursin("Image has the following dependencies", line), lines)
     if start_index === nothing
         return String[]
     end
@@ -670,12 +674,15 @@ end
 Write a CycloneDX runtime SBOM for the built binary, assets archive, runtime libs,
 and Julia package dependencies.
 """
-function write_runtime_sbom(binary_path::String, assets_path::String, output_path::String, julia_project_dir::String)
+function write_runtime_sbom(
+    binary_path::String, assets_path::String,
+    output_path::String, julia_project_dir::String)
     timestamp = Dates.format(now(UTC), DateFormat("yyyy-mm-ddTHH:MM:SSZ"))
 
     serial_uuid = "00000000-0000-0000-0000-000000000000"
     if Sys.which("julia") !== nothing
-        result = run_command(Cmd([JULIA_EXE, "-e", "using UUIDs; print(uuid4())"]); capture_output=true)
+        result = run_command(
+            Cmd([JULIA_EXE, "-e", "using UUIDs; print(uuid4())"]); capture_output=true)
         if result.exit_code == 0 && !isempty(strip(result.stdout))
             serial_uuid = strip(result.stdout)
         end
@@ -764,7 +771,8 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
         push!(cmd_parts, "-extra-linker-flags:$julia_linker_flags")
     end
     if do_vet
-        append!(cmd_parts, ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
+        append!(cmd_parts, [
+            "-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     end
 
     build_result = if do_vet
@@ -782,7 +790,8 @@ function build_odin(do_vet::Bool, julia_linker_flags::String)
             println("Odin build failed with captured output:")
             print_captured_output("stdout:", build_result.stdout)
             print_captured_output("stderr:", build_result.stderr)
-            if isempty(chomp(build_result.stdout)) && isempty(chomp(build_result.stderr))
+            if isempty(chomp(build_result.stdout)) &&
+               isempty(chomp(build_result.stderr))
                 println("(No captured output from Odin process.)")
             end
         end
@@ -824,9 +833,11 @@ function run_harness(julia_linker_flags::String)
         "--trace-output=" * HARNESS_TRACE_PATH,
         "--scenario=scenario_point_after_eight_steps",
     ]
-    harness_result = run_command(Cmd([HARNESS_BINARY_PATH; harness_args...]); cwd=SCRIPT_DIR)
+    harness_result = run_command(
+        Cmd([HARNESS_BINARY_PATH; harness_args...]); cwd=SCRIPT_DIR)
     harness_result.exit_code == 0 || error("Harness execution failed.")
-    isfile(HARNESS_TRACE_PATH) || error("Harness did not produce a semantic trace artifact.")
+    isfile(HARNESS_TRACE_PATH) || error(
+        "Harness did not produce a semantic trace artifact.")
     println("Wrote $(relpath(HARNESS_TRACE_PATH, SCRIPT_DIR))")
 end
 
@@ -846,7 +857,8 @@ function copy_directory_contents(source::String, destination::String)
     for (dirpath, _, filenames) in walkdir(source)
         dirpath_root::String = dirpath
         relative_root = relpath(dirpath_root, String(source))
-        target_root::String = relative_root == "." ? destination : joinpath(destination, relative_root)
+        target_root::String = relative_root == "." ? destination :
+            joinpath(destination, relative_root)
         mkpath(target_root)
 
         for filename in filenames
@@ -857,7 +869,8 @@ end
 
 """Create the compressed assets archive from staging content."""
 function create_assets_archive()
-    result = run_command(Cmd(["tar", "-czf", ASSETS_ARCHIVE_PATH, "-C", ASSETS_STAGING_DIR, "."]))
+    result = run_command(
+        Cmd(["tar", "-czf", ASSETS_ARCHIVE_PATH, "-C", ASSETS_STAGING_DIR, "."]))
     return result.exit_code == 0
 end
 
@@ -884,8 +897,10 @@ function build_assets(do_build::Bool)
     mkpath(joinpath(ASSETS_STAGING_DIR, "julia"))
     mkpath(joinpath(ASSETS_STAGING_DIR, "shaders"))
 
-    copy_directory_contents(joinpath(SRC_DIR, "julia"), joinpath(ASSETS_STAGING_DIR, "julia"))
-    copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"), joinpath(ASSETS_STAGING_DIR, "shaders"))
+    copy_directory_contents(joinpath(SRC_DIR, "julia"),
+        joinpath(ASSETS_STAGING_DIR, "julia"))
+    copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"),
+        joinpath(ASSETS_STAGING_DIR, "shaders"))
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
 
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
@@ -967,12 +982,14 @@ function resolve_julia_linker_flags(do_build::Bool)
     end
 
     if !is_windows()
-        julia_config_path = joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl")
+        julia_config_path = joinpath(
+            Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl")
         if !isfile(julia_config_path)
             error("Error: Could not resolve julia-config.jl path.")
         end
 
-        flags_result = run_command(Cmd([JULIA_EXE, julia_config_path, "--ldflags", "--ldlibs"]);
+        flags_result = run_command(
+            Cmd([JULIA_EXE, julia_config_path, "--ldflags", "--ldlibs"]);
             capture_output=true)
         if flags_result.exit_code != 0
             error("Error: Failed to query Julia linker flags.")
@@ -1012,11 +1029,13 @@ function resolve_julia_linker_flags(do_build::Bool)
         "libopenlibm.dll",
         lib_exe_path)
 
-    return "/LIBPATH:$import_lib_dir /DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib", julia_bindir
+    return "/LIBPATH:$import_lib_dir /DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib",
+        julia_bindir
 end
 
 """Run the built Euclid binary with optional trailing run arguments."""
-function run_binary(run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString})
+function run_binary(
+    run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString})
     binary = app_binary_path()
     if !isfile(binary)
         error("Error: Built binary not found in bin/.")
@@ -1086,7 +1105,8 @@ end
 
 """Return true when any build/run action flag was explicitly requested."""
 explicit_action_requested(args::Args) =
-    args.run || args.build || args.assets || args.sysimage || args.harness || args.vet || args.test ||
+    args.run || args.build || args.assets || args.sysimage ||
+    args.harness || args.vet || args.test ||
     args.wiki || args.check_wiki || args.no_build || args.no_assets
 
 """Resolve effective build, vet, and asset steps from CLI argument combinations."""
@@ -1116,7 +1136,8 @@ function resolve_build_plan(args::Args)
         do_build = false
     end
 
-    if args.test && !args.build && !args.vet && !args.no_build && !args.assets && !args.no_assets
+    if args.test && !args.build && !args.vet &&
+       !args.no_build && !args.assets && !args.no_assets
         do_build = false
         do_assets = false
     end
@@ -1220,7 +1241,8 @@ function execute_build_plan(
     run_tests::Bool,
     run_after_build::Bool,
     run_args::Vector{String})
-    julia_flags, julia_bindir = resolve_julia_linker_flags(do_build || run_tests || run_harness_target)
+    julia_flags, julia_bindir = resolve_julia_linker_flags(
+        do_build || run_tests || run_harness_target)
     if run_after_build && is_windows() && julia_bindir === nothing
         julia_bindir = resolve_julia_bindir()
     end
@@ -1288,7 +1310,8 @@ function main()
     do_build, do_vet, do_assets = resolve_build_plan(args)
 
     try
-        args.wiki && args.check_wiki && error("Choose either --wiki or --check-wiki, not both.")
+        args.wiki && args.check_wiki && error(
+            "Choose either --wiki or --check-wiki, not both.")
         ensure_required_commands(
             do_build, do_assets, run_tests, args.wiki || args.check_wiki)
         execute_build_plan(

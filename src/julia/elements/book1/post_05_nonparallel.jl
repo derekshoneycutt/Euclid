@@ -12,27 +12,33 @@ export get_view_text, initialize, clean, loop
 const StartPoint1 = [0.25f0, 0.1f0, 0f0]
 const EndPoint1_2 = [0.51f0, 0.9f0, 0f0]
 const EndPoint1_1 = StartPoint1 + (EndPoint1_2 - StartPoint1) * 0.4f0
-const Angle1StartΘ = Float32(atan(EndPoint1_2[2] - StartPoint1[2], EndPoint1_2[1] - StartPoint1[1]))
+const Angle1StartΘ =
+    atan(EndPoint1_2[2] - StartPoint1[2], EndPoint1_2[1] - StartPoint1[1])
 
 const StartPoint2 = [0.75f0, 0.1f0, 0f0]
 const EndPoint2_2 = [0.49f0, 0.9f0, 0f0]
 const EndPoint2_1 = StartPoint2 + (EndPoint2_2 - StartPoint2) * 0.4f0
-const Angle2StartΘ = Float32(atan(EndPoint2_2[2] - StartPoint2[2], EndPoint2_2[1] - StartPoint2[1]))
+const Angle2StartΘ =
+    atan(EndPoint2_2[2] - StartPoint2[2], EndPoint2_2[1] - StartPoint2[1])
 
 const StartPoint3 = [0.15f0, 0.2f0, 0f0]
 const EndPoint3 = [0.85f0, 0.2f0, 0f0]
 
 const MarkerRadius = 0.15f0
 
-const Marker1Center = line_intersection_3d(StartPoint1, EndPoint1_1, StartPoint3, EndPoint3)
+const Marker1Center =
+    line_intersection_3d(StartPoint1, EndPoint1_1, StartPoint3, EndPoint3)
 const Marker1Start = Marker1Center + normalize(EndPoint3 - Marker1Center) * MarkerRadius
 const Marker1End = Marker1Center + normalize(EndPoint1_2 - Marker1Center) * MarkerRadius
 
-const Marker2Center = line_intersection_3d(StartPoint2, EndPoint2_1, StartPoint3, EndPoint3)
-const Marker2Start = Marker2Center + normalize(EndPoint2_2 - Marker2Center) * MarkerRadius
+const Marker2Center =
+    line_intersection_3d(StartPoint2, EndPoint2_1, StartPoint3, EndPoint3)
+const Marker2Start =
+    Marker2Center + normalize(EndPoint2_2 - Marker2Center) * MarkerRadius
 const Marker2End = Marker2Center + normalize(StartPoint3 - Marker2Center) * MarkerRadius
 
-const Intersection = line_intersection_3d(StartPoint1, EndPoint1_2, StartPoint2, EndPoint2_2)
+const Intersection =
+    line_intersection_3d(StartPoint1, EndPoint1_2, StartPoint2, EndPoint2_2)
 
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0
@@ -113,22 +119,34 @@ That, if a straight line \euclidline[color=grey60,length=3,thickness=4] falling 
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1HostId))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint2Id))
 
-    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2HostId))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint2Id))
 
-    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
+    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine3HostId))
+    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine3Joint2Id))
 
-    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1HostId))
-    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1StartId))
-    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1EndId))
+    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1HostId))
+    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1StartId))
+    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1EndId))
 
-    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2HostId))
-    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2StartId))
-    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2EndId))
+    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2HostId))
+    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2StartId))
+    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2EndId))
 
     pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
 
@@ -136,7 +154,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.hide_point_batch(
-        state_ptr, [marker1_host_id, marker2_host_id, line1_host_id, line2_host_id, line3_host_id, pointid])
+        state_ptr, [marker1_host_id, marker2_host_id, line1_host_id,
+        line2_host_id, line3_host_id, pointid])
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.set_point_position(
@@ -187,27 +206,27 @@ function initialize(state_ptr::Ptr{Cvoid})
     point = OdinJuliaBridge.create_new_point(
         state_ptr, Intersection, PointColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1HostId, Float32(marker1.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1StartId, Float32(marker1.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1EndId, Float32(marker1.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1HostId, marker1.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1StartId, marker1.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1EndId, marker1.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2HostId, Float32(marker2.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2StartId, Float32(marker2.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2EndId, Float32(marker2.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2HostId, marker2.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2StartId, marker2.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2EndId, marker2.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, line1.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, line1.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, line1.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, line2.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, line2.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, line2.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3HostId, Float32(line3.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, Float32(line3.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, Float32(line3.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3HostId, line3.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint1Id, line3.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine3Joint2Id, line3.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointId, Float32(point.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointId, point.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -216,25 +235,40 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
-    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1HostId))
+    line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint1Id))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint2Id))
 
-    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
-    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2HostId))
+    line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint1Id))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint2Id))
 
-    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3HostId))
-    line3_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint1Id))
-    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine3Joint2Id))
+    line3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine3HostId))
+    line3_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine3Joint1Id))
+    line3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine3Joint2Id))
 
-    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1HostId))
-    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1StartId))
-    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker1EndId))
+    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1HostId))
+    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1StartId))
+    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker1EndId))
 
-    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2HostId))
-    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2StartId))
-    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarker2EndId))
+    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2HostId))
+    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2StartId))
+    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarker2EndId))
 
     pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
 
@@ -249,7 +283,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, PenDescendDuration1, PenTopZ, StartPoint1[1], StartPoint1[2])
+            state_ptr, timer, PenDescendDuration1, PenTopZ,
+            StartPoint1[1], StartPoint1[2])
 
         timer += dt
         if timer >= PenDescendDuration1
@@ -358,7 +393,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker2Center[1], Marker2Center[2], Marker2End[1], Marker2End[2])
 
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, CompassRiseDuration, PenTopZ, EndPoint1_1[1], EndPoint1_1[2])
+            state_ptr, timer, CompassRiseDuration, PenTopZ,
+            EndPoint1_1[1], EndPoint1_1[2])
 
         timer += dt
         if timer >= CompassRiseDuration
@@ -418,7 +454,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhasePenLift2
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenRiseDuration1, PenTopZ, Intersection[1], Intersection[2])
+            state_ptr, timer, PenRiseDuration1, PenTopZ,
+            Intersection[1], Intersection[2])
 
         timer += dt
         if timer >= PenRiseDuration1

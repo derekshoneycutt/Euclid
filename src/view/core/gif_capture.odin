@@ -102,13 +102,8 @@ gif_capture_submit_frame :: proc(
 
     pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(
-        &state^.gif_capture.encoder,
-        image.data,
-        centiseconds,
-        GIF_CAPTURE_QUALITY,
-        pitch,
-    ) {
+    if !files.gif_encode_frame(&state^.gif_capture.encoder, image.data, centiseconds,
+        GIF_CAPTURE_QUALITY, pitch) {
         return false
     }
 
@@ -252,16 +247,8 @@ gif_output_filename :: proc() -> string {
     hour, minute, second, nanos := time.precise_clock(now)
     millis := nanos / 1_000_000
 
-    return fmt.tprintf(
-        "Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        millis,
-    )
+    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
+        year, month, day, hour, minute, second, millis)
 }
 
 //   Resolve writable output path for the next GIF export file.

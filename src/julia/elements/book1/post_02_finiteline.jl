@@ -64,14 +64,22 @@ To produce a finite straight line \euclidline[color=steelblue,length=3,thickness
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
-    init_line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineHostId))
-    init_line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineJoint1Id))
-    init_line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineJoint2Id))
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint2Id))
+    init_line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineHostId))
+    init_line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineJoint1Id))
+    init_line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -121,14 +129,22 @@ function initialize(state_ptr::Ptr{Cvoid})
         StartPoint[1], StartPoint[2], StartPoint[3],
         LineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, Float32(point1.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, Float32(point2.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaInitLineHostId, Float32(init_line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaInitLineJoint1Id, Float32(init_line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaInitLineJoint2Id, Float32(init_line.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(line.joint2_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPoint1Id, point1.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPoint2Id, point2.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaInitLineHostId, init_line.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaInitLineJoint1Id, init_line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaInitLineJoint2Id, init_line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineHostId, line.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineJoint1Id, line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineJoint2Id, line.joint2_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -137,14 +153,22 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
-    init_line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineHostId))
-    init_line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineJoint1Id))
-    init_line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaInitLineJoint2Id))
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint2Id))
+    init_line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineHostId))
+    init_line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineJoint1Id))
+    init_line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaInitLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
 
     if line_host_id < 0
         return
@@ -205,7 +229,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawInitLine
         EuclidAnimations.animate_draw_line(
             state_ptr, timer, DrawInitLineDuration, StartPoint, MidPoint,
-            LineMaxBrush, LineColor, init_line_host_id, init_line_joint1_id, init_line_joint2_id)
+            LineMaxBrush, LineColor, init_line_host_id,
+            init_line_joint1_id, init_line_joint2_id)
 
         timer += dt
         if timer >= DrawInitLineDuration

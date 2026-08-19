@@ -3,6 +3,7 @@ module EuclidAlgebraGroupsZ2Closure
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
+using ..EuclidGeometry
 
 export get_view_text, initialize, clean, loop
 
@@ -71,13 +72,9 @@ In this example, composing reflections still produces one of the same allowed mo
 
 So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
 
-function reflect_about_axis_x_half(point::Vector{Float32})
-    Float32[1f0 - point[1], point[2], point[3]]
-end
-
-const RefVertexA = reflect_about_axis_x_half(VertexA)
-const RefVertexB = reflect_about_axis_x_half(VertexB)
-const RefVertexC = reflect_about_axis_x_half(VertexC)
+const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
+const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
+const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
 
 const ReflectLineStartBase = (
     VertexA,

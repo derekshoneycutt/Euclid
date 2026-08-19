@@ -70,13 +70,19 @@ A semicircle \euclidsemicircle[color=steelblue,radius=2,thickness=2] is the figu
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    diameter_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
-    diameter_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
+    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCenterPointId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
+    diameter_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaDiameterHostId))
+    diameter_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaDiameterJoint2Id))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [center_point_id, circle_hostid, diameter_host_id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [
+        center_point_id, circle_hostid, diameter_host_id])
 
     OdinJuliaBridge.set_point_position(
         state_ptr, circle_endid,
@@ -91,7 +97,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, CenterColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, CircleColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
     OdinJuliaBridge.lock_compass_joint2(
         state_ptr, CircleStartPoint[1], CircleStartPoint[2], CompassTopZ)
 
@@ -112,15 +119,18 @@ function initialize(state_ptr::Ptr{Cvoid})
         DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3],
         DiameterColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, Float32(center_point.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, center_point.index)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, circle.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterHostId, Float32(diameter.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterJoint1Id, Float32(diameter.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaDiameterJoint2Id, Float32(diameter.joint2_id))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaDiameterHostId, diameter.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaDiameterJoint1Id, diameter.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaDiameterJoint2Id, diameter.joint2_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -129,13 +139,20 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    diameter_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterHostId))
-    diameter_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint1Id))
-    diameter_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaDiameterJoint2Id))
+    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCenterPointId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleStartId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
+    diameter_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaDiameterHostId))
+    diameter_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaDiameterJoint1Id))
+    diameter_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaDiameterJoint2Id))
 
     if center_point_id < 0
         return

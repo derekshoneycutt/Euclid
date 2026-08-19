@@ -33,6 +33,28 @@ Trace_Category_Token :: struct {
     category: core.Trace_Category,
 }
 
+//   Append optional point-event fields to one payload buffer.
+//
+// Parameters:
+//   - payload_buffer: Destination payload buffer.
+//   - payload_len: Current payload length, updated on success.
+//   - from_position: Optional prior position.
+//   - to_position: Optional committed position.
+//   - visible: Optional committed visibility state.
+//   - brush_size: Optional committed brush size.
+//   - offset: Optional committed offset.
+//   - color: Optional committed color.
+//   Optional fields for one committed point state transition. Each Maybe field
+//   is emitted only when set, so unrelated events leave them nil.
+Trace_Point_Event_Fields :: struct {
+    from_position: Maybe(core.Vector3),
+    to_position:   Maybe(core.Vector3),
+    visible:       Maybe(bool),
+    brush_size:    Maybe(f32),
+    offset:        Maybe(f32),
+    color:         Maybe(core.Bridge_Color),
+}
+
 //   CLI category tokens accepted in the comma-separated selection list.
 TRACE_CATEGORY_TOKENS :: []Trace_Category_Token{
     {"runtime", .Runtime},
@@ -1224,28 +1246,6 @@ append_optional_color_field :: proc(
     }
     return append_optional_separator(payload_buffer, payload_len, true) &&
         append_json_color_field(payload_buffer, payload_len, name, value.?)
-}
-
-//   Append optional point-event fields to one payload buffer.
-//
-// Parameters:
-//   - payload_buffer: Destination payload buffer.
-//   - payload_len: Current payload length, updated on success.
-//   - from_position: Optional prior position.
-//   - to_position: Optional committed position.
-//   - visible: Optional committed visibility state.
-//   - brush_size: Optional committed brush size.
-//   - offset: Optional committed offset.
-//   - color: Optional committed color.
-//   Optional fields for one committed point state transition. Each Maybe field
-//   is emitted only when set, so unrelated events leave them nil.
-Trace_Point_Event_Fields :: struct {
-    from_position: Maybe(core.Vector3),
-    to_position:   Maybe(core.Vector3),
-    visible:       Maybe(bool),
-    brush_size:    Maybe(f32),
-    offset:        Maybe(f32),
-    color:         Maybe(core.Bridge_Color),
 }
 
 //   Append optional point-event fields to one payload buffer.

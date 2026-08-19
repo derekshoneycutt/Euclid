@@ -82,14 +82,22 @@ Through a straight line \euclidline[color=steelblue,length=3,thickness=4] and a 
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBHostId))
-    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint1Id))
-    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint2Id))
-    point_off_line_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOffLineId))
-    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaIntersectionPointId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
+    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBHostId))
+    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint1Id))
+    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint2Id))
+    point_off_line_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointOffLineId))
+    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaIntersectionPointId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [line_a_host_id, line_b_host_id, point_off_line_id, intersection_point_id])
@@ -122,14 +130,22 @@ function initialize(state_ptr::Ptr{Cvoid})
     intersection_point = OdinJuliaBridge.create_new_point(
         state_ptr, IntersectionPoint, IntersectionColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(line_a.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(line_a.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(line_a.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBHostId, Float32(line_b.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBJoint1Id, Float32(line_b.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBJoint2Id, Float32(line_b.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointOffLineId, Float32(point_off_line.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaIntersectionPointId, Float32(intersection_point.index))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAHostId, line_a.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAJoint1Id, line_a.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAJoint2Id, line_a.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBHostId, line_b.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBJoint1Id, line_b.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBJoint2Id, line_b.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointOffLineId, point_off_line.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaIntersectionPointId, intersection_point.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -138,14 +154,22 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBHostId))
-    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint1Id))
-    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint2Id))
-    point_off_line_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointOffLineId))
-    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaIntersectionPointId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
+    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBHostId))
+    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint1Id))
+    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint2Id))
+    point_off_line_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointOffLineId))
+    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaIntersectionPointId))
 
     if line_a_host_id < 0
         return
