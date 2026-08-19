@@ -199,6 +199,7 @@ function save_history_to_file(state_ptr::Ptr{Cvoid}, path)
     end
 end
 
+"""Intercept an interactive exit/quit by resetting only the scratchpad session."""
 function intercept_exit_or_quit(state_ptr::Ptr{Cvoid})
     session = reset_session!(state_ptr)
     append_output_line!(session, "exit()/quit() intercepted; scratchpad session reset")

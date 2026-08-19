@@ -51,6 +51,7 @@ function reflect_about_axis_x_half(point::AbstractVector{<:Real})
     return [1f0 - point[1], point[2], point[3]]
 end
 
+"""Return the x and y components of a vector, requiring at least two."""
 @inline function xy_components(v::AbstractVector{<:Real})
     if length(v) < 2
         throw(ArgumentError("Expected a vector with at least x and y components."))
@@ -58,6 +59,7 @@ end
     return v[1], v[2]
 end
 
+"""Build a z-zero 3D vector from x and y components."""
 @inline vec3_xy(x::Real, y::Real) = [x, y, 0f0]
 
 """

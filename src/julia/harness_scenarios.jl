@@ -6,6 +6,9 @@ export scenario_point_after_eight_steps
 
 const ExpectedPoint = Float32[0.5f0, 0.5f0, 0f0]
 
+"""
+Check that the animated point matches the expected position after eight steps.
+"""
 function scenario_point_after_eight_steps(state_ptr::Ptr{Cvoid}, step_count::Integer)
     step_count == 8 || return false
 

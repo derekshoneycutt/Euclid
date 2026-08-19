@@ -7,7 +7,7 @@ end
 function resolve_cache_entry(
     source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
     key = (String(source), PARSER_GRAMMAR_VERSION, Int32(style_profile))
-    existing = get(parse_cache, key, nothing)
+    existing = get(PARSE_CACHE, key, nothing)
     if existing !== nothing
         cache_order_touch_key!(key)
         return existing
@@ -25,7 +25,7 @@ function resolve_cache_entry(
         ast,
         normalized_ast,
         program)
-    parse_cache[key] = entry
+    PARSE_CACHE[key] = entry
     cache_order_touch_key!(key)
     _ = prune_cache!(PARSE_CACHE_MAX_ENTRIES)
     return entry

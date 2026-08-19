@@ -2,6 +2,7 @@
 include("./proclus_01_isosceles.jl")
 include("./proclus_02_scalene.jl")
 
+"""Emit the Proclus's Commentary root view text."""
 function get_view_text_root_proclus(state_ptr::Ptr{Cvoid})
     fallback = """Proclus's Commentary
     
@@ -12,6 +13,7 @@ Proclus provided an ancient commentary on Book I of \textit{Euclid's Elements}, 
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Register the Proclus's Commentary root animation interface and its content."""
 function init_euclid_scripts_proclus(state_ptr::Ptr{Cvoid})
     root_stable_id = OdinJuliaBridge.animation_stable_id_from_key("root:Proclus's Commentary")
     OdinJuliaBridge.add_root_animation_interface(

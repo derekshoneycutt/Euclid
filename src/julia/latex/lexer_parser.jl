@@ -1182,6 +1182,7 @@ function can_merge_adjacent_atom_runs(prev::LatexRun, run::LatexRun)
            isempty(run.secondary_children)
 end
 
+"""Drop empty runs and merge adjacent mergeable atom runs into a normalized vector."""
 function normalize_runs(runs::Vector{LatexRun})
     normalized = LatexRun[]
     for run in runs

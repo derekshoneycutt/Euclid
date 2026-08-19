@@ -175,6 +175,21 @@ function euclid_rule_settings()
     ]
 end
 
+"""Return naming settings that permit Julia constructors to match their type names."""
+function euclid_naming_settings()
+    conventions = [
+        convention.language == :julia && convention.kind == :function ?
+            NamingConvention(
+                :julia, :function, convention.casing;
+                allow_leading_underscore=convention.allow_leading_underscore,
+                allow_trailing_bang=convention.allow_trailing_bang,
+                allow_constructor_names=true) :
+            convention
+        for convention in default_naming_settings().conventions
+    ]
+    return NamingSettings(conventions)
+end
+
 """Return reviewed function metric policies for animation state-machine loops."""
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
@@ -200,7 +215,7 @@ AnalysisSettings(
         ScanProfile(:aspirational, DefaultExcludes),
     ],
     euclid_rule_settings(),
-    default_naming_settings(),
+    euclid_naming_settings(),
     JetSettings([
         JetEntryPoint(
             "latex-plain-text",

@@ -49,35 +49,41 @@ include("./commonnotions.jl")
 include("./prop_01.jl")
 include("./prop_02.jl")
 
+"""Emit the Book I root view text."""
 function get_view_text_book_1(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I}"
     fallback = "Euclid Elements - Book I"
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Emit the Book I Definitions section view text."""
 function get_view_text_book_1_defs(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I - Definitions}"
     fallback = "Euclid Elements - Book I - Definitions"
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Emit the Book I Postulates section view text."""
 function get_view_text_book_1_posts(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I - Postulates}"
     fallback = "Euclid Elements - Book I - Postulates"
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Emit the Book I Propositions section view text."""
 function get_view_text_book_1_props(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I - Propositions}"
     fallback = "Euclid Elements - Book I - Propositions"
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Return the stable animation id for a named child of a parent animation."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
         "child:" * String(parent_stable_id) * ":" * String(name))
 end
 
+"""Register a named child animation under a parent and return its stable id."""
 function register_child_animation(
     state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::AbstractString,
     parent_stable_id::AbstractString)
@@ -91,6 +97,7 @@ function register_child_animation(
     return child_stable_id
 end
 
+"""Register the Book I animation tree under the Euclid's Elements root."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     book1_id = register_child_animation(
         state_ptr, get_view_text_book_1, NullAnimation.initialize,

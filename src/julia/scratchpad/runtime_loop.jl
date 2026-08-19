@@ -166,7 +166,7 @@ end
 """Prime Scratchpad parsing, completion, evaluation, formatting, and dynview emission."""
 function prime_repl!(state_ptr::Ptr{Cvoid})
     warm_session = create_session(state_ptr, -1)
-    session_ref[] = warm_session
+    SessionRef[] = warm_session
     try
         queue_input(state_ptr, "sum(1:3)") || return false
         complete_backslash(state_ptr, "\\alpha") == "α" || return false
@@ -176,21 +176,21 @@ function prime_repl!(state_ptr::Ptr{Cvoid})
         status = OdinJuliaBridge.dynview_reset_stream(state_ptr)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     finally
-        session_ref[] = create_session(state_ptr, next_session_id_ref[])
+        SessionRef[] = create_session(state_ptr, NextSessionIdRef[])
     end
 end
 
 """Initialize scratchpad session lifecycle and seed the Julia runtime banner."""
 function initialize(state_ptr::Ptr{Cvoid})
-    initialize_count_ref[] += 1
+    InitializeCountRef[] += 1
     session = ensure_session!(state_ptr)
     append_startup_banner!(session)
 end
 
 """Clean scratchpad lifecycle state when animation unloads."""
 function clean(state_ptr::Ptr{Cvoid})
-    clean_count_ref[] += 1
-    session_ref[] = nothing
+    CleanCountRef[] += 1
+    SessionRef[] = nothing
 
     if isdefined(Main, :EuclidRepl) &&
         isdefined(Main.EuclidRepl, :reset_scratchpad_session!)

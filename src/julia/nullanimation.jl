@@ -20,10 +20,12 @@ const CompassDrawColor = Color1
 const PenDrawColor1 = Color2
 const PenDrawColor2 = Color3
 
+"""Return the placeholder root view text for the null animation."""
 function get_view_text(state_ptr::Ptr{Cvoid})
     "Welcome to Euclid"
 end
 
+"""Initialize the null animation's pen, compass, and animation metadata."""
 function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_drawing_sound_enabled(state_ptr, false)
 
@@ -70,10 +72,12 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_animation_meta(state_ptr, 101, 0f0)
 end
 
+"""Clean up the null animation; Odin clears its data automatically."""
 function clean(state_ptr::Ptr{Cvoid})
     # nothing special on the julia side; our data is auto-cleared in Odin side
 end
 
+"""Animate the null animation's oscillating pen line for one frame step."""
 function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
     draw_line_flag = OdinJuliaBridge.get_animation_meta(state_ptr, 100)
     line1_host = OdinJuliaBridge.get_animation_meta(state_ptr, 4)
@@ -161,6 +165,7 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
     OdinJuliaBridge.emit_trailing_particle(state_ptr, penx1, peny1, penz1, pen_draw_color)
 end
 
+"""Animate the null animation's rotating compass circle for one frame step."""
 function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
     curr_rotation = OdinJuliaBridge.get_animation_meta(state_ptr, 1)
     curr_rotation = curr_rotation - (dt * π/2)
@@ -201,6 +206,7 @@ function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
     OdinJuliaBridge.emit_trailing_particle(state_ptr, out_pos, CompassDrawColor)
 end
 
+"""Advance the null animation by one frame, updating pen and compass."""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     draw_line(state_ptr, dt)
     draw_circle(state_ptr, dt)

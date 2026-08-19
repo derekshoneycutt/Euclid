@@ -48,13 +48,13 @@ Base.show(io::IO, ::MIME"text/plain", ::ScratchpadPlainResultMock) =
     print(io, "ScratchpadPlainResultMock()")
 
 function with_test_session(f::Function)
-    old_session = Scratchpad.session_ref[]
+    old_session = Scratchpad.SessionRef[]
     try
         session = new_session()
-        Scratchpad.session_ref[] = session
+        Scratchpad.SessionRef[] = session
         return f(session)
     finally
-        Scratchpad.session_ref[] = old_session
+        Scratchpad.SessionRef[] = old_session
     end
 end
 

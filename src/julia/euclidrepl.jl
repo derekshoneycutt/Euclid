@@ -149,14 +149,14 @@ struct ReplStatus
     managed_shape_count::Int
 end
 
-const session_ref = Ref{Union{Nothing, ReplDrawSession}}(nothing)
+const SESSION_REF = Ref{Union{Nothing, ReplDrawSession}}(nothing)
 
 """Return the singleton EuclidRepl session, creating it when missing."""
 function ensure_session!()
-    session = session_ref[]
+    session = SESSION_REF[]
     if session === nothing
         session = ReplDrawSession(nothing, Int[])
-        session_ref[] = session
+        SESSION_REF[] = session
     end
 
     return session
@@ -730,7 +730,7 @@ end
 
 """Reset EuclidRepl session state for scratchpad lifecycle transitions."""
 function reset_scratchpad_session!()
-    session_ref[] = nothing
+    SESSION_REF[] = nothing
     return nothing
 end
 
@@ -763,6 +763,7 @@ function clear!(state_ptr::Ptr{Cvoid})
     return true
 end
 
+"""Hide one bridge point, tolerating hosts that lack the hide symbol."""
 function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
     try
         OdinJuliaBridge.hide_point(state_ptr, Int(id))

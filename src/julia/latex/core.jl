@@ -437,6 +437,7 @@ struct LatexDocumentRun
     color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
+"""Construct a document run with no shape or color payload."""
 LatexDocumentRun(kind::Symbol, text::String, font_flags::Int32) =
     LatexDocumentRun(kind, text, font_flags, nothing, nothing)
 
@@ -452,8 +453,8 @@ mutable struct LatexDocumentParser
     index::Int
 end
 
-const parse_cache = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
-const parse_cache_order = Tuple{String, Int32, Int32}[]
+const PARSE_CACHE = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
+const PARSE_CACHE_ORDER = Tuple{String, Int32, Int32}[]
 
 const EMPTY_CHILD_RUNS = LatexRun[]
 
