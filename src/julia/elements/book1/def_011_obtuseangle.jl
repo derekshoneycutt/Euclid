@@ -16,16 +16,16 @@ const Line1Start = JointPoint
 const Line1End = [JointPoint[1] + LineLength, JointPoint[2], 0f0]
 const Line2Start = JointPoint
 const Line2End = [
-    JointPoint[1] + LineLength * Float32(cos(AngleTheta)),
-    JointPoint[2] + LineLength * Float32(sin(AngleTheta)),
+    JointPoint[1] + LineLength * cos(AngleTheta),
+    JointPoint[2] + LineLength * sin(AngleTheta),
     0f0,
 ]
 
 const MarkerRadius = 0.20f0
 const MarkerStart = [JointPoint[1] + MarkerRadius, JointPoint[2], 0f0]
 const MarkerEnd = [
-    JointPoint[1] + MarkerRadius * Float32(cos(AngleTheta)),
-    JointPoint[2] + MarkerRadius * Float32(sin(AngleTheta))
+    JointPoint[1] + MarkerRadius * cos(AngleTheta),
+    JointPoint[2] + MarkerRadius * sin(AngleTheta)
 ]
 
 const LineColor1 = :steelblue
@@ -80,16 +80,23 @@ end
 
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1HostId))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint2Id))
 
-    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2HostId))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint2Id))
 
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [marker_host_id, line2_host_id, line1_host_id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [
+        marker_host_id, line2_host_id, line1_host_id])
     OdinJuliaBridge.set_point_position(
         state_ptr, marker_end_id, MarkerStart[1], MarkerStart[2], MarkerStart[3])
 
@@ -102,8 +109,10 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor1)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, LineColor1)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, JointPoint[1], JointPoint[2], CompassTopZ)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, JointPoint[1], JointPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, MarkerStart[1], MarkerStart[2], CompassTopZ)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -128,17 +137,17 @@ function initialize(state_ptr::Ptr{Cvoid})
         Line2Start[1], Line2Start[2], Line2Start[3],
         LineColor2, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, Float32(line1.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, Float32(line1.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, Float32(line1.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, line1.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, line1.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint2Id, line1.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, Float32(line2.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, Float32(line2.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, Float32(line2.joint2_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2HostId, line2.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint1Id, line2.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine2Joint2Id, line2.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, Float32(marker.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, Float32(marker.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, Float32(marker.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, marker.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, marker.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, marker.end_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -147,17 +156,26 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1HostId))
-    line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint1Id))
-    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine1Joint2Id))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1HostId))
+    line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint1Id))
+    line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine1Joint2Id))
 
-    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2HostId))
-    line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint1Id))
-    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLine2Joint2Id))
+    line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2HostId))
+    line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint1Id))
+    line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLine2Joint2Id))
 
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostId))
-    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerStartId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndId))
+    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerHostId))
+    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerStartId))
+    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaMarkerEndId))
 
     if line1_host_id < 0
         return

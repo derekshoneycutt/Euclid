@@ -93,8 +93,10 @@ gif_encode_marks_current_frame_transparency_in_gce :: proc(t: ^testing.T) {
         255, 255, 255, 255,
     }
 
-    testing.expect(t, app_files.gif_encode_frame(&state, &transparent_pixels[0], 2, 10, 0))
-    testing.expect(t, app_files.gif_encode_frame(&state, &transparent_pixels[0], 2, 10, 0))
+    testing.expect(t, app_files.gif_encode_frame(
+        &state, &transparent_pixels[0], 2, 10, 0))
+    testing.expect(t, app_files.gif_encode_frame(
+        &state, &transparent_pixels[0], 2, 10, 0))
 
     result := app_files.gif_encode_end(&state)
     defer app_files.gif_encode_free(&result)

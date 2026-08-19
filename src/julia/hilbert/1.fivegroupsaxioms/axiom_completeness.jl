@@ -78,14 +78,21 @@ This axiom gives us nothing directly concerning the existence of limiting points
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
-    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTangentHostId))
-    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTangentJoint2Id))
-    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTrailHostId))
-    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTrailJoint2Id))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
+    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTangentHostId))
+    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTangentJoint2Id))
+    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTrailHostId))
+    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTrailJoint2Id))
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [circle_hostid, tangent_host_id, trail_host_id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [
+        circle_hostid, tangent_host_id, trail_host_id])
 
     OdinJuliaBridge.set_point_position(state_ptr, circle_endid, CircleStartPoint)
     OdinJuliaBridge.set_point_offset(state_ptr, circle_hostid, 0f0)
@@ -122,21 +129,21 @@ function initialize(state_ptr::Ptr{Cvoid})
     center_trail = OdinJuliaBridge.create_new_line(
         state_ptr, CircleCenter, CircleCenter, ExtensionColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, circle.end_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTangentHostId, Float32(tangent_ray.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTangentHostId, tangent_ray.host_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTangentJoint1Id, Float32(tangent_ray.joint1_id))
+        state_ptr, MetaTangentJoint1Id, tangent_ray.joint1_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTangentJoint2Id, Float32(tangent_ray.joint2_id))
+        state_ptr, MetaTangentJoint2Id, tangent_ray.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTrailHostId, Float32(center_trail.host_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTrailHostId, center_trail.host_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTrailJoint1Id, Float32(center_trail.joint1_id))
+        state_ptr, MetaTrailJoint1Id, center_trail.joint1_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTrailJoint2Id, Float32(center_trail.joint2_id))
+        state_ptr, MetaTrailJoint2Id, center_trail.joint2_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -145,17 +152,26 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleStartId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
 
-    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTangentHostId))
-    tangent_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTangentJoint1Id))
-    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTangentJoint2Id))
+    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTangentHostId))
+    tangent_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTangentJoint1Id))
+    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTangentJoint2Id))
 
-    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTrailHostId))
-    trail_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTrailJoint1Id))
-    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaTrailJoint2Id))
+    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTrailHostId))
+    trail_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTrailJoint1Id))
+    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaTrailJoint2Id))
 
     if circle_hostid < 0
         return
@@ -252,7 +268,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
                 state_ptr, ExtensionCenterEnd; sweep = false)
             OdinJuliaBridge.lock_compass_joint2(
                 state_ptr, ExtensionTipEnd; sweep = false)
-            OdinJuliaBridge.set_point_position(state_ptr, trail_joint2_id, ExtensionCenterEnd)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, trail_joint2_id, ExtensionCenterEnd)
             phase = PhaseHideInvalidExtension
             timer = 0f0
         end

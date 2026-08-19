@@ -43,7 +43,8 @@ end
     @test length(pairs) == 1
     @test length(only(pairs).julia_calls) == 2
     @test exported.symbol.related_symbol_ids == ["bridge:ping"]
-    @test_throws ErrorException CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[])
+    @test_throws ErrorException CodeWiki.pair_bridge_records(
+        [exported], BridgeJuliaCall[])
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], [bridge_test_call(parameter_type="Cfloat")])
     @test isempty(CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[], ["ping"]))

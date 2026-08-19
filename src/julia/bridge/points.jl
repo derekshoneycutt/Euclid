@@ -47,7 +47,8 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, x::Real, y::Real, z::Real,
     color::Colorant, brush_size::Real)
-    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
+    create_new_label(
+        state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
@@ -69,7 +70,8 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, x::Real, y::Real, z::Real,
     color::Symbol, brush_size::Real)
-    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
+    create_new_label(
+        state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
@@ -91,7 +93,8 @@ end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::Char, x::Real, y::Real, z::Real,
     color::AbstractString, brush_size::Real)
-    create_new_label(state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
+    create_new_label(
+        state_ptr, codepoint(label), x, y, z, bridge_color(color), brush_size)
 end
 function create_new_label(state_ptr::Ptr{Cvoid},
     label::UInt32, pos::AbstractVector{<:Real},
@@ -1022,7 +1025,8 @@ end
 function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::Symbol)
     set_point_active_color(state_ptr, id, bridge_color(color))
 end
-function set_point_active_color(state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
+function set_point_active_color(
+    state_ptr::Ptr{Cvoid}, id::Integer, color::AbstractString)
     set_point_active_color(state_ptr, id, bridge_color(color))
 end
 
@@ -1146,7 +1150,8 @@ Accepts `BridgeColor` directly; overloads also accept `Colorant`, `Symbol`, and 
 
 Returns: `Int32` status code
 """
-function set_point_color_status(state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
+function set_point_color_status(
+    state_ptr::Ptr{Cvoid}, index::Integer, color::BridgeColor)
     @ccall set_point_color_status(
         state_ptr::Ptr{Cvoid}, index::Int32, color::BridgeColor)::Int32
 end
@@ -1240,7 +1245,8 @@ Parameters:
 Returns: `Int32` status code
 """
 function set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Integer, brush::Real)
-    @ccall set_point_brush_size(state_ptr::Ptr{Cvoid}, index::Int32, brush::Cfloat)::Int32
+    @ccall set_point_brush_size(
+        state_ptr::Ptr{Cvoid}, index::Int32, brush::Cfloat)::Int32
 end
 
 """
@@ -1327,5 +1333,6 @@ Parameters:
 Returns: `Int32` status code
 """
 function validate_parent_child_chain(state_ptr::Ptr{Cvoid}, parent_index::Integer)
-    @ccall validate_parent_child_chain(state_ptr::Ptr{Cvoid}, parent_index::Int32)::Int32
+    @ccall validate_parent_child_chain(
+        state_ptr::Ptr{Cvoid}, parent_index::Int32)::Int32
 end

@@ -51,7 +51,8 @@ configure_enabled_trace :: proc(
 semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
     settings := app_core.Euclid_Run_Settings{}
 
-    handled, valid := app_trace.parse_semantic_trace_argument(&settings, "--semantic-trace")
+    handled, valid := app_trace.parse_semantic_trace_argument(
+        &settings, "--semantic-trace")
     testing.expect(t, handled)
     testing.expect(t, valid)
     testing.expect(t, settings.semantic_trace_enabled)
@@ -68,7 +69,8 @@ semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
     testing.expect(t, valid)
     testing.expect_value(t, settings.semantic_trace_output, "/tmp/euclid-trace.jsonl")
 
-    handled, valid = app_trace.parse_semantic_trace_argument(&settings, "--semantic-trace-strict")
+    handled, valid = app_trace.parse_semantic_trace_argument(
+        &settings, "--semantic-trace-strict")
     testing.expect(t, handled)
     testing.expect(t, valid)
     testing.expect(t, settings.semantic_trace_strict)
@@ -159,7 +161,8 @@ trace_file_lifecycle_writes_started_config_and_finished_records :: proc(t: ^test
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
 
-    output_path, join_err := filepath.join([]string{sandbox, "trace.jsonl"}, context.allocator)
+    output_path, join_err := filepath.join(
+        []string{sandbox, "trace.jsonl"}, context.allocator)
     defer delete(output_path)
     testing.expect(t, join_err == nil)
 
@@ -200,7 +203,8 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
 
-    output_path, join_err := filepath.join([]string{sandbox, "trace.jsonl"}, context.allocator)
+    output_path, join_err := filepath.join(
+        []string{sandbox, "trace.jsonl"}, context.allocator)
     defer delete(output_path)
     testing.expect(t, join_err == nil)
 
@@ -227,12 +231,14 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
 }
 
 @(test)
-trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(t: ^testing.T) {
+trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
+    t: ^testing.T) {
     sandbox := prepare_trace_sandbox(t, "euclid_trace_phase3")
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
 
-    output_path, join_err := filepath.join([]string{sandbox, "trace.jsonl"}, context.allocator)
+    output_path, join_err := filepath.join(
+        []string{sandbox, "trace.jsonl"}, context.allocator)
     defer delete(output_path)
     testing.expect(t, join_err == nil)
 
@@ -295,7 +301,8 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
 
-    output_path, join_err := filepath.join([]string{sandbox, "trace.jsonl"}, context.allocator)
+    output_path, join_err := filepath.join(
+        []string{sandbox, "trace.jsonl"}, context.allocator)
     defer delete(output_path)
     testing.expect(t, join_err == nil)
 
@@ -364,8 +371,10 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     testing.expect(t, strings.contains(content, "\"rejected_ticks\":5"))
     testing.expect(t, strings.contains(content, "\"failed_requests\":6"))
     testing.expect(t, strings.contains(content, "\"dropped_records\":7"))
-    testing.expect(t, strings.contains(content, "\"pen\":{\"host_index\":10,\"visible\":true,\"active_child\":2}"))
-    testing.expect(t, strings.contains(content, "\"compass\":{\"host_index\":20,\"visible\":false,\"active_child\":-1}"))
+    testing.expect(t, strings.contains(
+        content, "\"pen\":{\"host_index\":10,\"visible\":true,\"active_child\":2}"))
+    testing.expect(t, strings.contains(
+        content, "\"compass\":{\"host_index\":20,\"visible\":false,\"active_child\":-1}"))
     testing.expect(t, strings.contains(content, "\"points\":["))
     testing.expect(t, strings.contains(content, "\"index\":0"))
     testing.expect(t, strings.contains(content, "\"position\":[0.25,0.5,0]"))

@@ -16,8 +16,10 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     testing.expect(t, app_ui.validate_ui_regions(regions))
     testing.expect_value(t, regions.world_rect.width, app_ui.VIEW_WIDTH)
     testing.expect_value(t, regions.world_rect.height, app_ui.VIEW_HEIGHT)
-    testing.expect_value(t, regions.tree_rect.x, app_ui.VIEW_WIDTH + app_ui.TREE_PANEL_PADDING)
-    testing.expect_value(t, regions.text_rect.y, app_ui.VIEW_HEIGHT + app_ui.TREE_PANEL_PADDING)
+    testing.expect_value(
+        t, regions.tree_rect.x, app_ui.VIEW_WIDTH + app_ui.TREE_PANEL_PADDING)
+    testing.expect_value(
+        t, regions.text_rect.y, app_ui.VIEW_HEIGHT + app_ui.TREE_PANEL_PADDING)
     testing.expect_value(t, regions.settings_rect.width, regions.gif_rect.width)
     testing.expect_value(t, regions.settings_rect.height, regions.gif_rect.height)
     testing.expect(t, regions.scratchpad_rect.width >= 0)
@@ -149,7 +151,8 @@ terminal_input_layout_wraps_multiline_utf8_caret :: proc(t: ^testing.T) {
 
     testing.expect_value(t, first_wrap, app_ui.Terminal_Input_Position{1, 0})
     testing.expect_value(t, second_line_caret, app_ui.Terminal_Input_Position{2, 1})
-    testing.expect_value(t, app_ui.terminal_input_row_count(buffer, len(text), len(text), 4), 3)
+    testing.expect_value(
+        t, app_ui.terminal_input_row_count(buffer, len(text), len(text), 4), 3)
 }
 
 @(test)
@@ -274,7 +277,8 @@ scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
 
     app_ui.apply_scratchpad_async_result(&ui_runtime, &slot)
 
-    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+    testing.expect_value(
+        t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
         "new input")
     testing.expect_value(t, ui_runtime.scratchpad_pending_submit_request_id, u64(0))
 }
@@ -294,7 +298,8 @@ scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
 
     app_ui.apply_scratchpad_async_result(&ui_runtime, &slot)
 
-    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+    testing.expect_value(
+        t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
         "begin\n")
     testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(5))
 }
@@ -315,11 +320,13 @@ scratchpad_completion_requires_latest_request :: proc(t: ^testing.T) {
     seed_scratchpad_async_result(&latest_slot, "0\n9\nEuclidREPL")
 
     app_ui.apply_scratchpad_async_result(&ui_runtime, &stale_slot)
-    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+    testing.expect_value(
+        t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
         "EuclidRep")
 
     app_ui.apply_scratchpad_async_result(&ui_runtime, &latest_slot)
-    testing.expect_value(t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
+    testing.expect_value(
+        t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
         "EuclidREPL")
     testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(4))
 }

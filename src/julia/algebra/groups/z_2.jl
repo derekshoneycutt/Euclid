@@ -361,7 +361,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ReflectionDuration
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndBase)
+            set_reflection_pose!(
+                state_ptr, line_reflection_point_ids, ReflectLineEndBase)
             phase = PhasePauseAfterOnce
             timer = 0f0
         end
@@ -375,7 +376,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ReflectionDuration
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndMirrored)
+            set_reflection_pose!(
+                state_ptr, line_reflection_point_ids, ReflectLineEndMirrored)
             phase = PhaseReflectTwiceSecond
             timer = 0f0
         end
@@ -389,7 +391,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ReflectionDuration
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndBase)
+            set_reflection_pose!(
+                state_ptr, line_reflection_point_ids, ReflectLineEndBase)
             phase = PhasePauseAfterTwice
             timer = 0f0
         end

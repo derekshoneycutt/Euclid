@@ -76,14 +76,17 @@ end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
-    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
+    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLinePointAId))
+    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLinePointBId))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
     point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
 
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
     label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labellinea_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabellineaId))
+    labellinea_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabellineaId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [label_a_id, label_b_id, labellinea_id,
@@ -118,15 +121,15 @@ function initialize(state_ptr::Ptr{Cvoid})
     labellinea = OdinJuliaBridge.create_new_label(
         state_ptr, 'a', LineaLabelPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointAId, Float32(line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointBId, Float32(line.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(point_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, line.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointAId, line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLinePointBId, line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, point_a.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, point_b.index)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(label_b.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabellineaId, Float32(labellinea.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, label_a.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, label_b.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabellineaId, labellinea.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -136,14 +139,17 @@ end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointAId))
-    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLinePointBId))
+    line_point_a_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLinePointAId))
+    line_point_b_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLinePointBId))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
     point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
 
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
     label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labellinea_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabellineaId))
+    labellinea_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabellineaId))
 
     if line_host_id < 0
         return

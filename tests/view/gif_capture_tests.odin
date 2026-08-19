@@ -16,7 +16,8 @@ clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime^.gif_status_note_len, 0)
     testing.expect_value(t, ui_runtime^.gif_status_note[0], u8(0))
 
-    long_note := strings.repeat("x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
+    long_note := strings.repeat(
+        "x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
     app_view.set_gif_status_note(ui_runtime, long_note)
 
     expected_len := len(ui_runtime^.gif_status_note) - 1
@@ -33,7 +34,8 @@ clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime^.last_gif_path_len, 0)
     testing.expect_value(t, ui_runtime^.last_gif_path[0], u8(0))
 
-    long_path := strings.repeat("a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
+    long_path := strings.repeat(
+        "a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
     app_view.set_last_gif_path(ui_runtime, long_path)
 
     expected_len := len(ui_runtime^.last_gif_path) - 1
@@ -94,7 +96,8 @@ scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
     defer free(state^.point_system)
     state^.julia_interface = new(app_core.Euclid_Julia_Interface)
     defer free(state^.julia_interface)
-    state^.julia_interface^.current_animation = new(app_core.Euclid_Julia_Animation_Interface)
+    state^.julia_interface^.current_animation =
+        new(app_core.Euclid_Julia_Animation_Interface)
     defer free(state^.julia_interface^.current_animation)
 
     batch: app_bridge.Scene_Command_Batch

@@ -34,7 +34,8 @@ const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definit
 A point \euclidpoint[color=steelblue,size=1] is that which has no part."""
 
 function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr, DefinitionLatexDocument, DefinitionViewText)
+    EuclidLatex.emit_latex_view_text!(
+        state_ptr, DefinitionLatexDocument, DefinitionViewText)
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})

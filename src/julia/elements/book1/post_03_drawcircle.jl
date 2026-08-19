@@ -11,7 +11,7 @@ export get_view_text, initialize, clean, loop
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
 const CircleStartPoint = [CenterPoint[1] + Radius, CenterPoint[2], 0f0]
-const CircleSweepTheta = Float32(2f0 * π)
+const CircleSweepTheta = 2f0 * π
 
 const CenterColor = :palevioletred1
 const CircleColor = :steelblue
@@ -60,9 +60,12 @@ To describe a circle \euclidcircle[color=steelblue,size=1,thickness=2] with any 
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCenterPointId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [center_point_id, circle_hostid])
     OdinJuliaBridge.set_point_position(
@@ -77,7 +80,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, CenterColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, CircleColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, CenterPoint[1], CenterPoint[2], CompassTopZ)
     OdinJuliaBridge.lock_compass_joint2(
         state_ptr, CircleStartPoint[1], CircleStartPoint[2], CompassTopZ)
 
@@ -93,11 +97,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     circle = OdinJuliaBridge.create_new_circle(
         state_ptr, CenterPoint, Radius, 0f0, 0f0, CircleColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, Float32(center_point.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, center_point.index)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, Float32(circle.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, Float32(circle.start_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, Float32(circle.end_id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.start_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, circle.end_id)
 
     reset_cycle_state(state_ptr)
 end
@@ -106,10 +110,14 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleHostId))
-    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleStartId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleEndId))
+    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCenterPointId))
+    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleHostId))
+    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleStartId))
+    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaCircleEndId))
 
     if center_point_id < 0
         return
@@ -120,7 +128,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     if phase == PhasePenDescend
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, PenDescendDuration, PenTopZ, CenterPoint[1], CenterPoint[2])
+            state_ptr, timer, PenDescendDuration, PenTopZ,
+            CenterPoint[1], CenterPoint[2])
 
         timer += dt
         if timer >= PenDescendDuration

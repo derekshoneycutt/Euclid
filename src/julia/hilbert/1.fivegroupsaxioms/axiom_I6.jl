@@ -70,7 +70,7 @@ end
 
 function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     t = clamp(alpha01, 0f0, PlaneMaxAlpha01)
-    alpha = UInt8(round(Int, Float32(PlaneBaseColor.a) * t))
+    alpha = UInt8(round(Int, PlaneBaseColor.a * t))
     color = OdinJuliaBridge.BridgeColor(
         PlaneBaseColor.r,
         PlaneBaseColor.g,
@@ -79,7 +79,8 @@ function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, host_id, color)
 end
 
-function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
+function random_triangle_point(
+    a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
     u = rand(Float32)
     v = rand(Float32)
 
@@ -104,12 +105,15 @@ function random_plane_point()
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPlaneHostId))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
     point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
 
-    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAlphaId))
-    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBetaId))
+    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelAlphaId))
+    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelBetaId))
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
     label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
 
@@ -155,14 +159,14 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, Float32(plane_beta.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(point_a.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(point_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, plane_beta.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, point_a.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, point_b.index)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAlphaId, Float32(label_alpha.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBetaId, Float32(label_beta.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(label_a.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(label_b.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAlphaId, label_alpha.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBetaId, label_beta.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, label_a.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, label_b.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -171,12 +175,15 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPlaneHostId))
     point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
     point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
 
-    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAlphaId))
-    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBetaId))
+    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelAlphaId))
+    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelBetaId))
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
     label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
 
@@ -194,7 +201,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseFadeInPlane
-        set_plane_alpha(state_ptr, plane_host_id, (timer / FadeInDuration) * PlaneMaxAlpha01)
+        set_plane_alpha(
+            state_ptr, plane_host_id, (timer / FadeInDuration) * PlaneMaxAlpha01)
         OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         for _ in 1:FlickerSamplesPerFrame

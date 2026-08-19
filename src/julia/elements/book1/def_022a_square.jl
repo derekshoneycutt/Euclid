@@ -145,11 +145,11 @@ function initialize(state_ptr::Ptr{Cvoid})
             MarkerColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaMarkerHostIds[i], Float32(marker.host_id))
+            MetaMarkerHostIds[i], marker.host_id)
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaMarkerStartIds[i], Float32(marker.start_id))
+            MetaMarkerStartIds[i], marker.start_id)
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaMarkerEndIds[i], Float32(marker.end_id))
+            MetaMarkerEndIds[i], marker.end_id)
     end
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
@@ -159,11 +159,11 @@ function initialize(state_ptr::Ptr{Cvoid})
             SideColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaLineHostIds[i], Float32(line.host_id))
+            MetaLineHostIds[i], line.host_id)
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaLineJoint1Ids[i], Float32(line.joint1_id))
+            MetaLineJoint1Ids[i], line.joint1_id)
         OdinJuliaBridge.set_animation_meta(state_ptr,
-            MetaLineJoint2Ids[i], Float32(line.joint2_id))
+            MetaLineJoint2Ids[i], line.joint2_id)
     end
 
     reset_cycle_state(state_ptr)
@@ -173,7 +173,8 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1]))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[1]))
 
     line_host_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)

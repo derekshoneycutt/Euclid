@@ -13,7 +13,8 @@ import "core:testing"
 import "core:thread"
 
 @(test)
-headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(t: ^testing.T) {
+headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
+    t: ^testing.T) {
     cwd, cwd_err := os.get_working_directory(context.temp_allocator)
     testing.expect(t, cwd_err == nil)
     testing.expect(t, len(cwd) > 0)

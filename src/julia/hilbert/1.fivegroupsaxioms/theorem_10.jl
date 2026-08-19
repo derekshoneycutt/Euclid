@@ -359,7 +359,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [edge_a_b_host_id, edge_b_c_host_id, edge_c_a_host_id,
-         edge_a_prime_b_prime_host_id, edge_b_prime_c_prime_host_id, edge_c_prime_a_prime_host_id,
+         edge_a_prime_b_prime_host_id, edge_b_prime_c_prime_host_id,
+         edge_c_prime_a_prime_host_id,
          edge_d_prime_a_prime_host_id,
          label_a_id, label_b_id, label_c_id,
          label_a_prime_id, label_b_prime_id, label_c_prime_id, label_d_prime_id])

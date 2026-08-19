@@ -961,8 +961,9 @@ draw_recursive_structured_item :: #force_inline proc(
     case .Radical_Bar:
         draw_recursive_radical_item(ctx, item, draw_x, item_y)
     case .Text_Run, .Math_Glyph_Run, .Math_Block,
-        .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle,
-        .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
+        .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
+        .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
+        .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1084,8 +1085,9 @@ draw_cached_text_item :: proc(
             draw_x = draw_x,
             item_y = item_y,
         })
-    case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle,
-        .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
+    case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
+        .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
+        .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1161,7 +1163,7 @@ draw_cached_inline_basic_item :: #force_inline proc(
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
          .Stretch_Delimiter, .Matrix, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Filled_Box, .Inline_Filled_Circle,
-            .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
+         .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
 }
 
@@ -1196,8 +1198,8 @@ draw_cached_inline_filled_item :: #force_inline proc(
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
          .Stretch_Delimiter, .Matrix, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
-            .Inline_Circle, .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle,
-            .Inline_Pentagon:
+         .Inline_Circle, .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle,
+         .Inline_Pentagon:
     }
 }
 

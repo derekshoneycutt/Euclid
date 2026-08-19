@@ -29,7 +29,8 @@ make_point :: proc(x, y, z: f32) -> shapes.Shapes_Point {
     return shapes.Shapes_Point{position = shapes.Vector3{x, y, z}}
 }
 
-make_distance_constraint :: proc(depend_on: i32, req_len: f32) -> shapes.Shapes_Constraint {
+make_distance_constraint :: proc(
+    depend_on: i32, req_len: f32) -> shapes.Shapes_Constraint {
     return shapes.Shapes_Constraint{
         kind = .Distance,
         do_apply = true,
@@ -47,8 +48,10 @@ rotate_around_axis_preserves_length :: proc(t: ^testing.T) {
     input_len := linalg.length(input)
     output_len := linalg.length(output)
 
-    expect_close(t, output_len, input_len, "rotate_around_axis must preserve vector length")
-    expect_vec3_close(t, output, shapes.Vector3{-4, 3, 0}, "rotation around +Z by 90 degrees")
+    expect_close(t, output_len, input_len,
+        "rotate_around_axis must preserve vector length")
+    expect_vec3_close(t, output, shapes.Vector3{-4, 3, 0},
+        "rotation around +Z by 90 degrees")
 }
 
 @(test)

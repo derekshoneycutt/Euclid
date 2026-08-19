@@ -45,7 +45,8 @@ Some actions commute and some do not. If $a \circ b = b \circ a$ for all $a,b \i
 In this sequence, we move from simple discrete symmetries to continuous geometric motions on the Euclidean plane."""
 
 function get_view_text_root_groups(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr, GroupsRootLatexDocument, GroupsRootFallback)
+    EuclidLatex.emit_latex_view_text!(
+        state_ptr, GroupsRootLatexDocument, GroupsRootFallback)
 end
 
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)

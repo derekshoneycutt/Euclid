@@ -15,7 +15,8 @@ using LinearAlgebra
 export animate_pen_descend, animate_pen_rise, animate_compass_descend,
     animate_compass_rise, animate_pen_tilt, animate_pen_cone, animate_pen_drag,
     animate_pen_arcmove, animate_compass_arcmove, animate_highlight_point,
-    animate_extend_line, animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line,
+    animate_extend_line, animate_pen_tilt_and_drag, animate_draw_point,
+    animate_draw_line,
     animate_draw_filledcircle,
     animate_draw_two_line_segments,
     animate_draw_circle, animate_compass_fill_arc_highlight,
@@ -881,8 +882,10 @@ function animate_compass_descend(
     t = clamp(timer / duration, 0f0, 1f0)
     tip_z = topz + (0f0 - topz) * t
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tip_z, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, joint1x, joint1y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, joint2x, joint2y, tip_z, sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 end
 
@@ -961,8 +964,10 @@ function animate_compass_rise(
     t = clamp(timer / duration, 0f0, 1f0)
     tip_z = 0f0 + (topz - 0f0) * t
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tip_z, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, joint1x, joint1y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, joint2x, joint2y, tip_z, sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     OdinJuliaBridge.show_compass(state_ptr)
 end
@@ -1271,8 +1276,10 @@ function animate_compass_arcmove(
         center_y = (start_joint1[2] + start_joint2[2] + end_joint1[2] + end_joint2[2])
         center_y = center_y * 0.25f0
 
-        joint1_radius = avg_radius_to_xy_center(start_joint1, end_joint1, center_x, center_y)
-        joint2_radius = avg_radius_to_xy_center(start_joint2, end_joint2, center_x, center_y)
+        joint1_radius = avg_radius_to_xy_center(
+            start_joint1, end_joint1, center_x, center_y)
+        joint2_radius = avg_radius_to_xy_center(
+            start_joint2, end_joint2, center_x, center_y)
 
         if joint1_radius >= joint2_radius
             apply_xy_detour_arc!(

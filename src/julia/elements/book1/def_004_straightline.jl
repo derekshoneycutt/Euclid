@@ -56,9 +56,12 @@ A straight line \euclidline[color=steelblue,length=3,thickness=4] is a line whic
 end
 
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
     point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
     point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
 
@@ -96,11 +99,11 @@ function initialize(state_ptr::Ptr{Cvoid})
         StartPoint[1], StartPoint[2], StartPoint[3],
         LineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.host_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(line.joint1_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(line.joint2_id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, Float32(point1.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, Float32(point2.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, line.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, point1.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, point2.index)
 
     reset_cycle_state(state_ptr)
 end
@@ -109,9 +112,12 @@ function clean(state_ptr::Ptr{Cvoid})
 end
 
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
     point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
     point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
 
