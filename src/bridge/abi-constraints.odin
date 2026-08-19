@@ -168,49 +168,14 @@ update_constraint :: proc "c" (
 
     constraint := &state^.point_system^.constraints[constraint_index]
 
-    if spec_mask & CONSTRAINT_SPEC_TRAITS != 0 {
-        if !is_valid_constraint_kind_value(spec.traits) {
-            return BRIDGE_STATUS_INVALID_ARGUMENT
-        }
-        constraint^.kind = core.Shapes_Constraint_Kind(spec.traits)
-    }
-    if spec_mask & CONSTRAINT_SPEC_ONPOINT != 0 {
-        on_point := int(spec.on_point)
-        if !is_point_index_in_bounds(on_point) {
-            return BRIDGE_STATUS_INVALID_INDEX
-        }
-        constraint^.on_point = on_point
-    }
-    if spec_mask & CONSTRAINT_SPEC_RESTRICTION != 0 {
-        constraint^.restriction = spec.restriction
-    }
-    if spec_mask & CONSTRAINT_SPEC_BOUNCE != 0 {
-        constraint^.bounce = spec.bounce
-    }
-    if spec_mask & CONSTRAINT_SPEC_ALLOWANCE != 0 {
-        constraint^.allowance = spec.allowance
-    }
-    if spec_mask & CONSTRAINT_SPEC_DEPENDON != 0 {
-        if spec.depend_on >= 0 && !is_constraint_index_in_bounds(int(spec.depend_on)) {
-            return BRIDGE_STATUS_INVALID_INDEX
-        }
-        constraint^.depend_on = spec.depend_on
-    }
-    if spec_mask & CONSTRAINT_SPEC_CHILDOFFSET != 0 {
-        if spec.has_child_offset != 0 {
-            if spec.child_offset < 0 {
-                return BRIDGE_STATUS_INVALID_ARGUMENT
-            }
-            constraint^.child_offset = spec.child_offset
-        } else {
-            constraint^.child_offset = nil
-        }
-    }
-    if spec_mask & CONSTRAINT_SPEC_DOAPPLY != 0 {
-        constraint^.do_apply = spec.do_apply != 0
+    status := apply_constraint_spec_identity(constraint, spec_mask, spec)
+    if status != BRIDGE_STATUS_OK {
+        return status
     }
 
-    return BRIDGE_STATUS_OK
+    apply_constraint_spec_response(constraint, spec_mask, spec)
+
+    return apply_constraint_spec_links(constraint, spec_mask, spec)
 }
 
 //   Enable or disable one existing constraint.

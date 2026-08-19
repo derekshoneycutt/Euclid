@@ -49,6 +49,70 @@ constraint_view_invalid :: #force_inline proc() -> Bridge_Constraint_View {
     }
 }
 
+//   Apply the selected constraint kind and host point, rejecting invalid selections.
+apply_constraint_spec_identity :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
+
+    if spec_mask & CONSTRAINT_SPEC_TRAITS != 0 {
+        if !is_valid_constraint_kind_value(spec.traits) {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+        constraint^.kind = core.Shapes_Constraint_Kind(spec.traits)
+    }
+    if spec_mask & CONSTRAINT_SPEC_ONPOINT != 0 {
+        on_point := int(spec.on_point)
+        if !is_point_index_in_bounds(on_point) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.on_point = on_point
+    }
+    return BRIDGE_STATUS_OK
+}
+
+//   Apply the selected unvalidated solver response scalars.
+apply_constraint_spec_response :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) {
+
+    if spec_mask & CONSTRAINT_SPEC_RESTRICTION != 0 {
+        constraint^.restriction = spec.restriction
+    }
+    if spec_mask & CONSTRAINT_SPEC_BOUNCE != 0 {
+        constraint^.bounce = spec.bounce
+    }
+    if spec_mask & CONSTRAINT_SPEC_ALLOWANCE != 0 {
+        constraint^.allowance = spec.allowance
+    }
+}
+
+//   Apply the selected dependency graph links and enablement flag.
+apply_constraint_spec_links :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
+
+    if spec_mask & CONSTRAINT_SPEC_DEPENDON != 0 {
+        if spec.depend_on >= 0 && !is_constraint_index_in_bounds(int(spec.depend_on)) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.depend_on = spec.depend_on
+    }
+    if spec_mask & CONSTRAINT_SPEC_CHILDOFFSET != 0 {
+        if spec.has_child_offset != 0 {
+            if spec.child_offset < 0 {
+                return BRIDGE_STATUS_INVALID_ARGUMENT
+            }
+            constraint^.child_offset = spec.child_offset
+        } else {
+            constraint^.child_offset = nil
+        }
+    }
+    if spec_mask & CONSTRAINT_SPEC_DOAPPLY != 0 {
+        constraint^.do_apply = spec.do_apply != 0
+    }
+    return BRIDGE_STATUS_OK
+}
+
 //   Emit floor-contact dust when a point is close to the drawing plane.
 push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.Vector3) {
     if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
