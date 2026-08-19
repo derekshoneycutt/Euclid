@@ -123,15 +123,28 @@ function validate_wiki_manifest(manifest::WikiManifest)
     section_ids = [section.id for section in manifest.sections]
     length(unique(section_ids)) == length(section_ids) || error("Duplicate Wiki section ID.")
     all(wiki_path_is_safe, manifest.shared_output_paths) || error("Unsafe shared Wiki path.")
+    validate_section_paths(manifest.sections)
+    validate_managed_path_ownership(manifest.sections, manifest.shared_output_paths)
+    validate_guide_paths(manifest)
+    return manifest
+end
+
+"""Validate section output paths, landing pages, and owners."""
+function validate_section_paths(sections::Vector{WikiSection})
     all(section -> all(wiki_path_is_safe, section.managed_output_paths),
-        manifest.sections) || error("Unsafe managed Wiki path.")
+        sections) || error("Unsafe managed Wiki path.")
     all(section -> wiki_path_is_safe(section.landing_page) &&
-        wiki_path_is_safe(section.stale_boundary), manifest.sections) ||
+        wiki_path_is_safe(section.stale_boundary), sections) ||
         error("Unsafe Wiki section path.")
     all(section -> any(path -> wiki_path_contains(path, section.landing_page),
-        section.managed_output_paths), manifest.sections) ||
+        section.managed_output_paths), sections) ||
         error("Wiki landing page is outside its section ownership.")
-    validate_managed_path_ownership(manifest.sections, manifest.shared_output_paths)
+    all(section -> !isempty(strip(section.owner)), sections) ||
+        error("Wiki section owner must not be empty.")
+end
+
+"""Validate guide paths, owners, relations, and bridge exceptions."""
+function validate_guide_paths(manifest::WikiManifest)
     guide_paths = [guide.path for guide in manifest.guides]
     length(unique(guide_paths)) == length(guide_paths) || error("Duplicate Wiki Guide path.")
     all(wiki_path_is_safe, guide_paths) || error("Unsafe Wiki Guide path.")
@@ -139,15 +152,12 @@ function validate_wiki_manifest(manifest::WikiManifest)
         error("Wiki Guide owner must not be empty.")
     !isempty(strip(manifest.shared_output_owner)) ||
         error("Shared Wiki output owner must not be empty.")
-    all(section -> !isempty(strip(section.owner)), manifest.sections) ||
-        error("Wiki section owner must not be empty.")
     known_guides = Set(guide_paths)
     all(relation -> all(path -> guide_reference_path(path) in known_guides,
         relation.guide_paths),
         manifest.guide_relations) || error("Code-to-Guide relation references an unknown Guide.")
     length(unique(manifest.bridge_exceptions)) == length(manifest.bridge_exceptions) ||
         error("Duplicate bridge exception.")
-    return manifest
 end
 
 

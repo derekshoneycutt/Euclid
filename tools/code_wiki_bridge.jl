@@ -28,6 +28,17 @@ Base.@kwdef struct BridgePair
     julia_calls::Vector{BridgeJuliaCall}
 end
 
+Base.@kwdef struct JuliaCcallParts
+    abi_name::String
+    parameter_types::Vector{String}
+    return_type::String
+end
+
+Base.@kwdef struct OdinAbiParts
+    parameter_types::Vector{String}
+    return_type::String
+end
+
 """Split one compiler-normalized Odin parameter list without nested commas."""
 function split_odin_abi_parameters(parameters::AbstractString)
     isempty(strip(parameters)) && return String[]
@@ -53,7 +64,7 @@ function parse_odin_abi_signature(signature::String)
     matched === nothing && error("Malformed Odin ABI signature: $signature")
     parameters = split_odin_abi_parameters(matched.captures[1])
     return_type = matched.captures[2] === nothing ? "void" : strip(matched.captures[2])
-    return parameters, return_type
+    return OdinAbiParts(parameter_types=parameters, return_type=return_type)
 end
 
 """Build normalized bridge-export records from all project Odin packages."""
@@ -61,7 +72,9 @@ function extract_odin_bridge_exports(packages::Vector{DocumentationPackage})
     exports = BridgeOdinExport[]
     for package in packages, symbol in package.symbols
         symbol.declaration_kind == :exported_abi_procedure || continue
-        parameters, return_type = parse_odin_abi_signature(symbol.signature)
+        parts = parse_odin_abi_signature(symbol.signature)
+        parameters = parts.parameter_types
+        return_type = parts.return_type
         push!(exports, BridgeOdinExport(
             abi_name=symbol.name, signature=symbol.signature,
             parameter_types=parameters, return_type=return_type,
@@ -90,27 +103,39 @@ function parse_julia_ccall_expression(source::AbstractString)
         error("Malformed Julia @ccall expression: $source")
     expression.args[1] == Symbol("@ccall") ||
         error("Unsupported Julia bridge macro call: $source")
-    typed_call = last(expression.args)
+    call, return_type = julia_ccall_typed_call(last(expression.args), source)
+    parameter_types = julia_ccall_parameter_types(call, source)
+    return JuliaCcallParts(abi_name=String(call.args[1]),
+        parameter_types=parameter_types, return_type=return_type)
+end
+
+"""Validate and split the typed call of one `@ccall` into its call and return type."""
+function julia_ccall_typed_call(typed_call, source::AbstractString)
     typed_call isa Expr && typed_call.head == :(::) ||
         error("Julia @ccall requires an explicit return type: $source")
     call = typed_call.args[1]
     call isa Expr && call.head == :call && call.args[1] isa Symbol ||
         error("Julia bridge calls require a bare ABI symbol: $source")
+    return call, julia_abi_type_text(typed_call.args[2])
+end
+
+"""Collect the explicit type of each argument in one `@ccall` call expression."""
+function julia_ccall_parameter_types(call, source::AbstractString)
     parameter_types = String[]
     for argument in call.args[2:end]
         argument isa Expr && argument.head == :(::) ||
             error("Julia @ccall argument requires an explicit type: $source")
         push!(parameter_types, julia_abi_type_text(last(argument.args)))
     end
-    return String(call.args[1]), parameter_types,
-        julia_abi_type_text(typed_call.args[2])
+    return parameter_types
 end
 
 """Return the normalized Julia symbol that owns one wrapper declaration."""
 function bridge_wrapper_symbol(package::DocumentationPackage, wrapper_name::String)
     matches = filter(symbol -> symbol.name == wrapper_name &&
         symbol.declaration_kind == :function, package.symbols)
-    isempty(matches) && error("Julia bridge wrapper is missing from the symbol model: $wrapper_name")
+    isempty(matches) &&
+        error("Julia bridge wrapper is missing from the symbol model: $wrapper_name")
     return only(matches)
 end
 
@@ -118,20 +143,23 @@ end
 function extract_wrapper_ccalls(
     declaration, package::DocumentationPackage, source::String, source_path::String)
 
-    wrapper_name, wrapper_signature = julia_declaration_identity(declaration)
+    wrapper_identity = julia_declaration_identity(declaration)
+    wrapper_name = wrapper_identity.name
+    wrapper_signature = wrapper_identity.signature
     wrapper_symbol = bridge_wrapper_symbol(package, wrapper_name)
     macro_calls = collect_julia_syntax_kind!(Any[], declaration, :macrocall)
     calls = BridgeJuliaCall[]
     for macro_call in macro_calls
         macro_source = strip(julia_syntax_text(macro_call))
         startswith(macro_source, "@ccall ") || continue
-        abi_name, parameter_types, return_type =
-            parse_julia_ccall_expression(macro_source)
+        ccall_parts = parse_julia_ccall_expression(macro_source)
         push!(calls, BridgeJuliaCall(
-            abi_name=abi_name, wrapper_name=wrapper_name,
+            abi_name=ccall_parts.abi_name, wrapper_name=wrapper_name,
             wrapper_signature=wrapper_signature,
-            abi_signature=String(macro_source[8:end]), parameter_types=parameter_types,
-            return_type=return_type, doc_markdown=wrapper_symbol.doc_markdown,
+            abi_signature=String(macro_source[8:end]),
+            parameter_types=ccall_parts.parameter_types,
+            return_type=ccall_parts.return_type,
+            doc_markdown=wrapper_symbol.doc_markdown,
             source_path=source_path,
             source_line=julia_source_line(source, JuliaSyntax.first_byte(macro_call)),
             symbol=wrapper_symbol))
@@ -158,7 +186,7 @@ function extract_julia_bridge_calls(
         end
     end
     return sort!(calls; by=call ->
-        (call.abi_name, call.source_path, call.source_line, call.abi_signature))
+        (call.abi_name, call.source_path))
 end
 
 const ODIN_ABI_TYPE_ALIASES = Dict(
@@ -271,7 +299,8 @@ function pair_bridge_records(
         collect(intersect(Set(keys(export_by_name)), Set(keys(calls_by_name)))))
         name in exceptions && continue
         exported = export_by_name[name]
-        isempty(exported.doc_markdown) && error("Missing Odin bridge documentation: $name")
+        isempty(exported.doc_markdown) &&
+            error("Missing Odin bridge documentation: $name")
         grouped_calls = calls_by_name[name]
         all(call -> !isempty(call.doc_markdown), grouped_calls) ||
             error("Missing Julia bridge documentation: $name")
@@ -300,7 +329,8 @@ end
 function render_bridge_call_sources!(
     io::IO, calls::Vector{BridgeJuliaCall}, source_link_prefix::String)
 
-    links = ["[Source $(index)]($(source_link_prefix)$(call.source_path)#L$(call.source_line))"
+    links = [
+        "[Source $(index)]($(source_link_prefix)$(call.source_path)#L$(call.source_line))"
         for (index, call) in enumerate(calls)]
     write(io, join(links, " | "), "\n\n")
 end
@@ -321,7 +351,7 @@ function render_bridge_page(pairs::Vector{BridgePair};
         for wrapper_name in wrapper_names
             calls = sort(
                 filter(call -> call.wrapper_name == wrapper_name, pair.julia_calls);
-                by=call -> (call.source_path, call.source_line, call.abi_signature))
+                by=call -> (call.source_path, call.source_line))
             wrapper_signatures = sort!(unique(call.wrapper_signature for call in calls))
             abi_signatures = sort!(unique(call.abi_signature for call in calls))
             write(io, "\n#### `", wrapper_name, "`\n\n```julia\n",

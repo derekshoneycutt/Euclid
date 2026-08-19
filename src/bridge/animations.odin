@@ -25,6 +25,13 @@ Harness_Scenario_Task_Data :: struct {
     step_count: int,
 }
 
+Animation_Callbacks :: struct {
+    get_view_text: ^julialib.jl_value_t,
+    initiate:      ^julialib.jl_value_t,
+    loop:          ^julialib.jl_value_t,
+    clean:         ^julialib.jl_value_t,
+}
+
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
 // Parameters:
@@ -1108,7 +1115,7 @@ animation_lookup_find :: proc(
 //   Construct and register one animation node using arena storage and UUID lookup.
 add_animation_to_registry :: proc(
     state: ^core.Euclid_General_State,
-    get_view_text, initiate, loop, clean: ^julialib.jl_value_t,
+    callbacks: Animation_Callbacks,
     name: cstring,
     stable_id: uuid.Identifier,
     parent: ^core.Euclid_Julia_Animation_Interface) -> (
@@ -1128,10 +1135,10 @@ add_animation_to_registry :: proc(
         return nil, false
     }
 
-    node^.get_view_text = get_view_text
-    node^.initiate = initiate
-    node^.loop = loop
-    node^.clean = clean
+    node^.get_view_text = callbacks.get_view_text
+    node^.initiate = callbacks.initiate
+    node^.loop = callbacks.loop
+    node^.clean = callbacks.clean
     node^.name = strings.clone(string(name), ji^.animation_registry_allocator)
     node^.stable_id = stable_id
 

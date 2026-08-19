@@ -2,6 +2,11 @@ Base.@kwdef struct JuliaWikiConfig
     repository_root::String
 end
 
+Base.@kwdef struct JuliaDeclarationIdentity
+    name::String
+    signature::String
+end
+
 """Return parser children as an iterable collection for both branch and leaf nodes."""
 julia_syntax_children(node) = something(JuliaSyntax.children(node), ())
 
@@ -73,29 +78,40 @@ end
 """Return the name and display signature for one supported Julia declaration."""
 function julia_declaration_identity(declaration)
     kind = julia_syntax_kind(declaration)
-    if kind == :function
-        signature = strip(julia_syntax_text(julia_callable_signature_node(declaration)))
-        return julia_callable_name(Meta.parse(signature)), String(signature)
-    elseif kind == :macro
-        signature = strip(julia_syntax_text(julia_callable_signature_node(declaration)))
-        name = julia_callable_name(Meta.parse(signature))
-        return name, "@" * String(signature)
-    elseif kind == :struct
-        children = collect(julia_syntax_children(declaration))
-        isempty(children) && error("Julia struct declaration has no type expression.")
-        type_text = strip(julia_syntax_text(first(children)))
-        prefix = startswith(strip(julia_syntax_text(declaration)), "mutable struct") ?
-            "mutable struct " : "struct "
-        return julia_type_name(Meta.parse(type_text)), prefix * String(type_text)
-    elseif kind == :const
-        source = strip(julia_syntax_text(declaration))
-        expression = Meta.parse(source)
-        value = expression isa Expr && expression.head == :const ?
-            expression.args[1] : expression
-        name_expr = value isa Expr && value.head == :(=) ? value.args[1] : value
-        return julia_callable_name(name_expr), String(source)
-    end
+    kind == :function && return julia_callable_identity(declaration, "")
+    kind == :macro && return julia_callable_identity(declaration, "@")
+    kind == :struct && return julia_struct_identity(declaration)
+    kind == :const && return julia_const_identity(declaration)
     error("Unsupported Julia declaration kind: $kind")
+end
+
+"""Return the identity for one function or macro declaration, with a display prefix."""
+function julia_callable_identity(declaration, prefix::String)
+    signature = strip(julia_syntax_text(julia_callable_signature_node(declaration)))
+    name = julia_callable_name(Meta.parse(signature))
+    return JuliaDeclarationIdentity(name=name, signature=prefix * String(signature))
+end
+
+"""Return the identity for one struct declaration."""
+function julia_struct_identity(declaration)
+    children = collect(julia_syntax_children(declaration))
+    isempty(children) && error("Julia struct declaration has no type expression.")
+    type_text = strip(julia_syntax_text(first(children)))
+    prefix = startswith(strip(julia_syntax_text(declaration)), "mutable struct") ?
+        "mutable struct " : "struct "
+    return JuliaDeclarationIdentity(
+        name=julia_type_name(Meta.parse(type_text)), signature=prefix * String(type_text))
+end
+
+"""Return the identity for one const declaration."""
+function julia_const_identity(declaration)
+    source = strip(julia_syntax_text(declaration))
+    expression = Meta.parse(source)
+    value = expression isa Expr && expression.head == :const ?
+        expression.args[1] : expression
+    name_expr = value isa Expr && value.head == :(=) ? value.args[1] : value
+    return JuliaDeclarationIdentity(
+        name=julia_callable_name(name_expr), signature=String(source))
 end
 
 """Return a normalized declaration kind for one Julia syntax declaration."""
@@ -113,7 +129,9 @@ function parsed_julia_symbol(
     declaration, doc_markdown::String, package::DocumentationPackage,
     source::String, source_path::String, exported_names::Set{String})
 
-    name, signature = julia_declaration_identity(declaration)
+    identity = julia_declaration_identity(declaration)
+    name = identity.name
+    signature = identity.signature
     isempty(name) && error("Unable to resolve Julia declaration name: $signature")
     kind = julia_declaration_kind(declaration)
     line = julia_source_line(source, JuliaSyntax.first_byte(declaration))
@@ -230,7 +248,7 @@ function group_julia_methods!(package::DocumentationPackage)
     grouped = DocumentationSymbol[]
     for name in sort!(unique(symbol.name for symbol in functions))
         methods = sort(filter(symbol -> symbol.name == name, functions);
-            by=symbol -> (symbol.source_path, symbol.source_line, symbol.signature))
+            by=symbol -> (symbol.source_path, symbol.source_line))
         documented = filter(symbol -> !isempty(symbol.doc_markdown), methods)
         primary = isempty(documented) ? first(methods) : first(documented)
         primary.method_signatures = sort!(unique(symbol.signature for symbol in methods))

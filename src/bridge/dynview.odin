@@ -280,15 +280,15 @@ dynview_math_command_from_op :: proc(
     op: Bridge_Dynview_Math_Op,
     command_kind: core.Dynview_Command_Kind,
     block_id: i32,
-    child_program_id, secondary_child_program_id: i32,
+    children: Dynview_Imported_Children,
     blob_offset: int) -> core.Dynview_Command {
 
     return core.Dynview_Command{
         kind = command_kind,
         block_id = block_id,
         style_id = op.style_id,
-        math_program_id = child_program_id,
-        secondary_math_program_id = secondary_child_program_id,
+        math_program_id = children.child_program_id,
+        secondary_math_program_id = children.secondary_child_program_id,
         text_offset = blob_offset + int(op.text_offset),
         text_len = int(op.text_len),
         script_base_text_offset = blob_offset + int(op.text_offset),
@@ -346,8 +346,7 @@ dynview_import_one_op :: proc(
 
     ctx.cache^.math_commands[command_slot] =
         dynview_math_command_from_op(validated.op, validated.kind, ctx.block_id,
-            children.child_program_id,
-            children.secondary_child_program_id,
+            children,
             ctx.blob_offset)
     return BRIDGE_STATUS_OK
 }

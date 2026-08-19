@@ -9,6 +9,8 @@ import "core:math"
 LABEL_DUST_X_OFFSET :: -0.01
 LABEL_DUST_Y_OFFSET :: -0.03
 
+Two_Points :: [2]int
+
 //   Return whether a point index is within runtime point capacity bounds.
 is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
     return index >= 0 && index < MAX_SHAPESPOINTS
@@ -185,10 +187,11 @@ push_dust_for_connected_lines_on_floor_event :: proc(
 push_dust_for_connected_line :: proc(
     state: ^core.Euclid_General_State, point_index: int, host_index: int) {
 
-    p1, p2, endpoints_ok := connected_line_endpoints(state, host_index)
+    points, endpoints_ok := connected_line_endpoints(state, host_index)
     if !endpoints_ok {
         return
     }
+    p1, p2 := points[0], points[1]
     if p1 != point_index && p2 != point_index {
         return
     }
@@ -226,23 +229,23 @@ push_dust_for_connected_line :: proc(
 //   - p1, p2: Endpoint point indices (only valid when ok is true).
 //   - ok: true when the host is a line with two in-bounds endpoint children.
 connected_line_endpoints :: proc(
-    state: ^core.Euclid_General_State, host_index: int) -> (p1, p2: int, ok: bool) {
+    state: ^core.Euclid_General_State, host_index: int) -> (point: Two_Points, ok: bool) {
 
     next_index := state^.point_system^.next_point_index
     host := state^.point_system^.points[host_index]
     if host.kind != .Line {
-        return 0, 0, false
+        return {0, 0}, false
     }
 
-    p1 = host.child_point_head
+    p1 := host.child_point_head
     if p1 < 0 || p1 >= next_index {
-        return 0, 0, false
+        return {0, 0}, false
     }
-    p2 = state^.point_system^.points[p1].next_child_point
+    p2 := state^.point_system^.points[p1].next_child_point
     if p2 < 0 || p2 >= next_index {
-        return 0, 0, false
+        return {0, 0}, false
     }
-    return p1, p2, true
+    return {p1, p2}, true
 }
 
 //   Classify one z value relative to floor contact dead-zone.

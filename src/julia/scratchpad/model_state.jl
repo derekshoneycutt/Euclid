@@ -164,7 +164,7 @@ const HELPER_DOC_ALIASES = Dict(
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-    state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
+        state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
     OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 
@@ -173,6 +173,13 @@ function create_runtime_module(session_id::Int)
     mod_name = Symbol("EuclidScratchpadSession_", session_id)
     runtime = Module(mod_name)
 
+    import_scratchpad_modules!(runtime)
+    install_session_helpers!(runtime)
+    return runtime
+end
+
+"""Wire the shared Euclid modules and plotting libs into a scratchpad runtime module."""
+function import_scratchpad_modules!(runtime::Module)
     if !isdefined(Main, :LaTeXStrings)
         Core.eval(Main, :(using LaTeXStrings))
     end
@@ -190,7 +197,16 @@ function create_runtime_module(session_id::Int)
     Core.eval(runtime, :(const Latexify = Main.Latexify))
     Core.eval(runtime, :(using Main.LaTeXStrings))
     Core.eval(runtime, :(using Main.Latexify))
+end
 
+"""Install the session-scope hook and draw helper wrappers into a runtime module."""
+function install_session_helpers!(runtime::Module)
+    install_hook_helpers!(runtime)
+    install_draw_helpers!(runtime)
+end
+
+"""Install the session-scope hook, history, and basic draw helpers into a runtime module."""
+function install_hook_helpers!(runtime::Module)
     # Expose helpers directly in session scope so users can register/remove hooks from input.
     Core.eval(runtime, quote
         """Register a per-frame scratchpad hook with an optional label."""
@@ -205,7 +221,6 @@ function create_runtime_module(session_id::Int)
         """Save the scratchpad input history to a file."""
         save_history(path) = Scratchpad.save_history_to_file(state_ptr, path)
 
-        # Convenience wrappers for common EuclidRepl draw APIs.
         """Hide a REPL-managed geometry target."""
         hide!(args...; kwargs...) = EuclidRepl.hide!(state_ptr, args...; kwargs...)
         """List the named Euclid colors available for drawing."""
@@ -222,6 +237,19 @@ function create_runtime_module(session_id::Int)
         """Highlight a compass arc through the EuclidRepl API."""
         highlight_compass!(args...; kwargs...) =
             EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
+
+        # Intercept interactive exit/quit and reset only scratchpad session state.
+        """Exit the scratchpad session, resetting only session state."""
+        exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
+        """Quit the scratchpad session, resetting only session state."""
+        quit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
+    end)
+end
+
+"""Install the session-scope EuclidRepl draw helper wrappers into a runtime module."""
+function install_draw_helpers!(runtime::Module)
+    # Convenience wrappers for common EuclidRepl draw APIs.
+    Core.eval(runtime, quote
         """Translate points through the EuclidRepl API."""
         translate_points!(args...; kwargs...) =
             EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
@@ -252,15 +280,7 @@ function create_runtime_module(session_id::Int)
         """Reflect points across the negative diagonal through the EuclidRepl API."""
         reflect2d_points_diag_neg!(args...; kwargs...) =
             EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
-
-        # Intercept interactive exit/quit and reset only scratchpad session state.
-        """Exit the scratchpad session, resetting only session state."""
-        exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
-        """Quit the scratchpad session, resetting only session state."""
-        quit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
     end)
-
-    return runtime
 end
 
 """Create an empty scratchpad session bound to the supplied host state."""

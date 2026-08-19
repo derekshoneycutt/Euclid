@@ -174,9 +174,10 @@ request_scratchpad_completion :: proc(
     }
 
     request_id, sent := julia.try_submit_scratchpad_async(
-        state, .Complete, input_text, ui_runtime^.scratchpad_input_cursor,
-        ui_runtime^.scratchpad_input_mode,
-        ui_runtime^.scratchpad_input_generation)
+        state, .Complete, julia.get_scratchpad_submission(
+            input_text, ui_runtime^.scratchpad_input_cursor,
+            ui_runtime^.scratchpad_input_mode,
+            ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_latest_completion_request_id = request_id
     }
@@ -252,15 +253,17 @@ apply_scratchpad_history_navigation :: proc(
     if history_previous {
         _, _ = julia.try_submit_scratchpad_async(
             state, .History_Previous,
-            input_mode = ui_runtime^.scratchpad_input_mode,
-            input_generation = ui_runtime^.scratchpad_input_generation)
+            julia.get_scratchpad_submission(
+                input_mode = ui_runtime^.scratchpad_input_mode,
+                input_generation = ui_runtime^.scratchpad_input_generation))
     }
 
     if history_next {
         _, _ = julia.try_submit_scratchpad_async(
             state, .History_Next,
-            input_mode = ui_runtime^.scratchpad_input_mode,
-            input_generation = ui_runtime^.scratchpad_input_generation)
+            julia.get_scratchpad_submission(
+                input_mode = ui_runtime^.scratchpad_input_mode,
+                input_generation = ui_runtime^.scratchpad_input_generation))
     }
 }
 
@@ -284,9 +287,10 @@ submit_scratchpad_input_if_ready :: proc(
 
     ui_runtime^.scratchpad_bottom_pinned = true
     request_id, sent := julia.try_submit_scratchpad_async(
-        state, .Submit, input_text,
-        input_mode = ui_runtime^.scratchpad_input_mode,
-        input_generation = ui_runtime^.scratchpad_input_generation)
+        state, .Submit,
+        julia.get_scratchpad_submission(input_text,
+            input_mode = ui_runtime^.scratchpad_input_mode,
+            input_generation = ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_pending_submit_request_id = request_id
     }
@@ -316,7 +320,8 @@ flush_scratchpad_history_reset :: proc(
     }
     _, sent := julia.try_submit_scratchpad_async(
         state, .History_Reset,
-        input_generation = ui_runtime^.scratchpad_input_generation)
+        julia.get_scratchpad_submission(
+            input_generation = ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_history_reset_pending = false
     }

@@ -68,34 +68,9 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         sub_text = script_payload_text(script_token)
     end
 
-    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
-        return MathPayloadOp(
-            MATH_OP_SCRIPT_ATTACH_RECURSIVE,
-            op.text,
-            op.radical_index_text,
-            sup_text,
-            sub_text,
-            op.accent_mode,
-            op.radical_mode,
-            op.large_op_kind,
-            op.style_role,
-            op.children,
-            op.secondary_children)
-    end
-
-    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        return MathPayloadOp(
-            MATH_OP_LARGE_OP_RECURSIVE,
-            op.text,
-            op.radical_index_text,
-            sup_text,
-            sub_text,
-            op.accent_mode,
-            op.radical_mode,
-            op.large_op_kind,
-            op.style_role,
-            op.children,
-            op.secondary_children)
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
+            op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        return payload_op_rescripted(op, sup_text, sub_text)
     end
 
     parent_text = plain_text_for_payload(op)
@@ -111,6 +86,22 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         :math,
         [op],
         MathPayloadOp[])
+end
+
+"""Rebuild one payload op with updated script texts, preserving its kind and children."""
+function payload_op_rescripted(op::MathPayloadOp, sup_text::String, sub_text::String)
+    return MathPayloadOp(
+        op.kind,
+        op.text,
+        op.radical_index_text,
+        sup_text,
+        sub_text,
+        op.accent_mode,
+        op.radical_mode,
+        op.large_op_kind,
+        op.style_role,
+        op.children,
+        op.secondary_children)
 end
 
 """Return one plain-text fallback string for a run vector."""

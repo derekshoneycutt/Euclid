@@ -29,7 +29,7 @@ const CircleDrawDuration = 4.4f0
 const CompassRiseDuration = 2.8f0
 const HidePauseDuration = 1.5f0
 
-const Metacenter_point_id = 1
+const MetaCenterPointId = 1
 const MetaCircleHostId = 2
 const MetaCircleStartId = 3
 const MetaCircleEndId = 4
@@ -59,7 +59,7 @@ end
 """Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, Metacenter_point_id))
+        state_ptr, MetaCenterPointId))
     circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaCircleHostId))
     circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
@@ -95,7 +95,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     circle = OdinJuliaBridge.create_new_circle(
         state_ptr, CenterPoint, Radius, 0f0, 0f0, CircleColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, Metacenter_point_id, center_point.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, center_point.index)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.startId)
@@ -111,7 +111,7 @@ end
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, Metacenter_point_id))
+        state_ptr, MetaCenterPointId))
     circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaCircleHostId))
     circle_startid = Integer(OdinJuliaBridge.get_animation_meta(

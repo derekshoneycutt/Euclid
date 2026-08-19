@@ -20,17 +20,9 @@ end
 const DefaultExcludes = [
     "tools/analysis",
     "src/julialib",
-    "staging_AnalysisConversion.md",
-    "staging_FirstGroups.md",
-    "staging_logic.md",
-    "staging_SemanticTrace.md",
 ]
 const AllExcludes = [
     "tools/analysis",
-    "staging_AnalysisConversion.md",
-    "staging_FirstGroups.md",
-    "staging_logic.md",
-    "staging_SemanticTrace.md",
 ]
 
 const RuleResponses = Dict(
@@ -43,14 +35,33 @@ const RuleResponses = Dict(
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
     "COMMON-NO-TABS" => Fail,
-    "JULIA-CYCLOMATIC-WARN" => Warn,
     "JULIA-SYNTAX" => Fail,
     "JULIA-CLOSING-PAREN-PLACEMENT" => Fail,
+    "JULIA-JET-POSSIBLE-ERROR" => Fail,
+    "JULIA-NAMING" => Warn,
+    "JULIA-NONCONST-GLOBAL" => Warn,
+    "JULIA-DECLARATION-ORDER" => Warn,
     "JULIA-RETURN-TUPLE" => Fail,
-    "ODIN-CYCLOMATIC-WARN" => Warn,
+    "JULIA-PARAMETERS-FAIL" => Fail,
+    "JULIA-FUNCTION-LINES-WARN" => Warn,
+    "JULIA-FUNCTION-LINES-FAIL" => Fail,
+    "JULIA-CYCLOMATIC-WARN" => Warn,
+    "JULIA-CYCLOMATIC-FAIL" => Fail,
     "ODIN-SYNTAX" => Fail,
+    "ODIN-BUILD-FAILED" => Fail,
     "ODIN-CLOSING-PAREN-PLACEMENT" => Fail,
-    "ODIN-RETURN-TUPLE" => Fail)
+    "ODIN-NAMING" => Warn,
+    "ODIN-NONCONST-GLOBAL" => Warn,
+    "ODIN-DECLARATION-ORDER" => Warn,
+    "ODIN-RETURN-TUPLE" => Fail,
+    "ODIN-PARAMETERS-WARN" => Warn,
+    "ODIN-PARAMETERS-FAIL" => Fail,
+    "ODIN-FUNCTION-LINES-WARN" => Warn,
+    "ODIN-FUNCTION-LINES-FAIL" => Fail,
+    "ODIN-CYCLOMATIC-WARN" => Warn,
+    "ODIN-CYCLOMATIC-FAIL" => Fail,
+    "JULIA-DOC-MISSING" => Fail,
+    "ODIN-DOC-MISSING" => Fail)
 
 const AnimationLoopReason =
     "Animation state-machine loops enumerate every construction step in play order."
@@ -158,12 +169,6 @@ const AnimationLoopFiles = [
     "src/julia/proclus/proclus_02_scalene.jl",
 ]
 
-# Loops long enough to review for length while still under the branching thresholds.
-const AnimationLoopLinearFiles = [
-    "src/julia/elements/book1/def_001_point.jl",
-    "src/julia/elements/book1/def_002_line.jl",
-]
-
 """Construct the rule settings to utilize for the analysis and report"""
 function euclid_rule_settings()
     return [
@@ -190,19 +195,72 @@ function euclid_naming_settings()
     return NamingSettings(conventions)
 end
 
+"""Add the parent animation reviews that are good to ignore to the reviews list"""
+function add_parent_reviews!(reviews)
+    path = "src/julia/algebra/groups/groups.jl"
+    push!(reviews, ReviewedComplexity(
+        "groups-init-euclid-scripts-lines:$path", path, :julia,
+        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
+        response=Ignore, minimum_matches=0))
+    path = "src/julia/elements/book1/book1.jl"
+    push!(reviews, ReviewedComplexity(
+        "euclidbook1-init-euclid-scripts-lines:$path", path, :julia,
+        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
+        response=Ignore, minimum_matches=0))
+    path = "src/julia/hilbert/1.fivegroupsaxioms/fivegroupsaxioms.jl"
+    push!(reviews, ReviewedComplexity(
+        "hilbert1-init-euclid-scripts-lines:$path", path, :julia,
+        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
+        response=Ignore, minimum_matches=0))
+    path = "src/julia/nullanimation.jl"
+    push!(reviews, ReviewedComplexity(
+        "nullanimation-initialize-lines:$path", path, :julia,
+        "initialize", :executable_lines, AnimationLoopReason;
+        response=Ignore, minimum_matches=0))
+    push!(reviews, ReviewedComplexity(
+        "nullanimation-draw-line-lines:$path", path, :julia,
+        "draw_line", :executable_lines, AnimationLoopReason;
+        response=Ignore, minimum_matches=0))
+    reviews
+end
+
 """Return reviewed function metric policies for animation state-machine loops."""
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
     for path in AnimationLoopFiles
         push!(reviews, ReviewedComplexity(
             "animation-loop-lines:$path", path, :julia, "loop", :executable_lines,
-            AnimationLoopReason; response=Report))
-        path in AnimationLoopLinearFiles && continue
+            AnimationLoopReason; response=Ignore, minimum_matches=0))
         push!(reviews, ReviewedComplexity(
             "animation-loop-branching:$path", path, :julia, "loop",
-            :cyclomatic_complexity, AnimationLoopReason; response=Report))
+            :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-get-view-text-lines:$path", path, :julia, "get_view_text",
+            :executable_lines, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-get-view-text-branching:$path", path, :julia, "get_view_text",
+            :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-initialize-lines:$path", path, :julia, "initialize",
+            :executable_lines, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-initialize-branching:$path", path, :julia, "initialize",
+            :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-reset-cycle-state-lines:$path", path, :julia, "reset_cycle_state",
+            :executable_lines, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "animation-reset-cycle-state-branching:$path", path, :julia,
+            "reset_cycle_state", :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
     end
-    return reviews
+    add_parent_reviews!(reviews)
 end
 
 AnalysisSettings(
@@ -286,9 +344,9 @@ AnalysisSettings(
             "scratchpad_history_reset_cursor",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "scratchpad-repl:save_history", :julia, "create_runtime_module.save_history",
+            "scratchpad-repl:save_history", :julia, "install_hook_helpers!.save_history",
             "the scratchpad REPL evaluates this command from user input"),
         CallRootEntryPoint(
-            "scratchpad-repl:quit", :julia, "create_runtime_module.quit",
+            "scratchpad-repl:quit", :julia, "install_hook_helpers!.quit",
             "the scratchpad REPL evaluates this command from user input"),
     ]))

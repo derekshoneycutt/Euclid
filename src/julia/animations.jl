@@ -1645,7 +1645,8 @@ end
 function draw_two_segment_stroke(
     state_ptr::Ptr{Cvoid}, drag_time::Real,
     seg_durations::Tuple{<:Real,<:Real},
-    positions::Tuple{<:AbstractVector{<:Real},<:AbstractVector{<:Real},<:AbstractVector{<:Real}},
+    positions::Tuple{<:AbstractVector{<:Real},
+        <:AbstractVector{<:Real},<:AbstractVector{<:Real}},
     style::Tuple{<:Real,Any}, azimuths::Tuple{<:Real,<:Real},
     line1_ids::Tuple{<:Integer,<:Integer,<:Integer},
     line2_ids::Tuple{<:Integer,<:Integer,<:Integer})

@@ -54,10 +54,7 @@ add_root_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        get_view_text,
-        init,
-        loop,
-        clean,
+        Animation_Callbacks{get_view_text, init, loop, clean},
         name,
         parsed_stable_id,
         nil)
@@ -108,10 +105,7 @@ add_child_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        get_view_text,
-        init,
-        loop,
-        clean,
+        Animation_Callbacks{get_view_text, init, loop, clean},
         name,
         parsed_stable_id,
         parent)

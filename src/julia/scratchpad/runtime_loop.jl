@@ -65,28 +65,7 @@ function evaluate_queued_input!(
     dispatched = stripped == "?" ? ":help" : stripped
     append_input_echo!(session, text, input_mode)
 
-    if input_mode == InputModeHelp
-        append_native_help_query!(session, stripped)
-        return
-    end
-
-    if handle_help_query!(session, dispatched)
-        return
-    end
-
-    if handle_local_command!(state_ptr, dispatched)
-        return
-    end
-
-    if is_exit_command(stripped)
-        intercept_exit_or_quit(state_ptr)
-        return
-    end
-
-    reason = blocked_input_reason(stripped)
-    if reason !== nothing
-        session.metrics.blocked_commands += 1
-        append_output_line!(session, "Blocked by scratchpad safety policy: " * reason)
+    if dispatch_non_eval_input!(session, state_ptr, stripped, dispatched, input_mode)
         return
     end
 
@@ -94,6 +73,37 @@ function evaluate_queued_input!(
     if handle_parse_status!(session, status, parsed)
         return
     end
+
+    eval_scoped_input!(session, state_ptr, text)
+end
+
+"""Handle help, local, exit, and blocked inputs, returning true when one was handled."""
+function dispatch_non_eval_input!(
+    session::ScratchpadSession, state_ptr::Ptr{Cvoid},
+    stripped::AbstractString, dispatched::AbstractString, input_mode::Int32)
+
+    if input_mode == InputModeHelp
+        append_native_help_query!(session, stripped)
+        return true
+    end
+    handle_help_query!(session, dispatched) && return true
+    handle_local_command!(state_ptr, dispatched) && return true
+    if is_exit_command(stripped)
+        intercept_exit_or_quit(state_ptr)
+        return true
+    end
+    reason = blocked_input_reason(stripped)
+    if reason !== nothing
+        session.metrics.blocked_commands += 1
+        append_output_line!(session, "Blocked by scratchpad safety policy: " * reason)
+        return true
+    end
+    return false
+end
+
+"""Parse, soft-scope, and eval one input line in the session runtime, recording errors."""
+function eval_scoped_input!(
+    session::ScratchpadSession, state_ptr::Ptr{Cvoid}, text::String)
 
     runtime = session.runtime
     Core.eval(runtime, :(state_ptr = $state_ptr))

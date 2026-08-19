@@ -13,6 +13,24 @@ struct MatrixRowSeparatorResult
     pending_break::Bool
 end
 
+"""Map single punctuation characters to their token kinds."""
+const PUNCTUATION_TOKEN_KINDS = Dict{Char,Symbol}(
+    '{' => :lbrace,
+    '}' => :rbrace,
+    '^' => :sup,
+    '_' => :sub,
+    '[' => :lbracket,
+    ']' => :rbracket,
+    '&' => :amp)
+
+"""Mutable row/cell accumulation state while parsing a matrix environment."""
+mutable struct MatrixRowState
+    rows::Vector{Vector{Vector{LatexRun}}}
+    row_cells::Vector{Vector{LatexRun}}
+    cell_runs::Vector{LatexRun}
+    pending_row_break::Bool
+end
+
 
 """Tokenize source into command/group/script/plain-text tokens."""
 function tokenize_latex(source::AbstractString)
@@ -20,38 +38,9 @@ function tokenize_latex(source::AbstractString)
     i = firstindex(source)
     while i <= lastindex(source)
         c = source[i]
-        if c == '{'
-            push!(tokens, LatexToken(:lbrace, "{"))
-            i = nextind(source, i)
-            continue
-        end
-        if c == '}'
-            push!(tokens, LatexToken(:rbrace, "}"))
-            i = nextind(source, i)
-            continue
-        end
-        if c == '^'
-            push!(tokens, LatexToken(:sup, "^"))
-            i = nextind(source, i)
-            continue
-        end
-        if c == '_'
-            push!(tokens, LatexToken(:sub, "_"))
-            i = nextind(source, i)
-            continue
-        end
-        if c == '['
-            push!(tokens, LatexToken(:lbracket, "["))
-            i = nextind(source, i)
-            continue
-        end
-        if c == ']'
-            push!(tokens, LatexToken(:rbracket, "]"))
-            i = nextind(source, i)
-            continue
-        end
-        if c == '&'
-            push!(tokens, LatexToken(:amp, "&"))
+        kind = get(PUNCTUATION_TOKEN_KINDS, c, :none)
+        if kind != :none
+            push!(tokens, LatexToken(kind, string(c)))
             i = nextind(source, i)
             continue
         end
@@ -694,58 +683,72 @@ end
 """Parse matrix-like cell grid rows until matching `\\end{...}` and return row-major rows/cells."""
 function parse_matrix_rows(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int}, env_name::AbstractString)
-    matrix_rows = Vector{Vector{Vector{LatexRun}}}()
-    row_cells = Vector{Vector{LatexRun}}()
-    cell_runs = LatexRun[]
-    pending_row_break = false
+    state = MatrixRowState(
+        Vector{Vector{Vector{LatexRun}}}(), Vector{Vector{LatexRun}}(), LatexRun[], false)
     while idx[] <= length(tokens)
-        if trim_matrix_cell_start_token!(tokens, idx, cell_runs)
-            continue
-        end
-
-        token = tokens[idx[]]
-
-        if is_leading_matrix_row_whitespace(token, row_cells, cell_runs)
-            idx[] += 1
-            continue
-        end
-
-        consumed_cell_sep, next_cell_runs =
-            consume_matrix_cell_separator!(token, idx, row_cells, cell_runs)
-        if consumed_cell_sep
-            cell_runs = next_cell_runs
-            pending_row_break = false
-            continue
-        end
-
-        consumed_end, end_ok = consume_matrix_environment_end!(token, tokens, idx,
-            env_name, matrix_rows, row_cells, cell_runs, pending_row_break)
-        if consumed_end
-            return matrix_rows, end_ok
-        end
-
-        separator_result =
-            consume_matrix_row_separator!(token, idx, matrix_rows, row_cells, cell_runs)
-        if separator_result.consumed
-            row_cells = separator_result.row_cells
-            cell_runs = separator_result.cell_runs
-            pending_row_break = separator_result.pending_break
-            continue
-        end
-
-        if token.kind == :lbrace
-            idx[] += 1
-            append!(cell_runs, parse_sequence(tokens, idx, true))
-            pending_row_break = false
-            continue
-        end
-
-        append!(cell_runs, parse_atom(tokens, idx))
-        consume_scripts!(cell_runs, tokens, idx)
-        pending_row_break = false
+        finished, end_ok = step_matrix_row!(tokens, idx, env_name, state)
+        finished && return state.rows, end_ok
     end
 
-    return matrix_rows, false
+    return state.rows, false
+end
+
+"""Advance matrix-row parsing by one token, returning whether the environment closed."""
+function step_matrix_row!(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int},
+    env_name::AbstractString, state::MatrixRowState)
+
+    if trim_matrix_cell_start_token!(tokens, idx, state.cell_runs)
+        return false, false
+    end
+
+    token = tokens[idx[]]
+
+    if is_leading_matrix_row_whitespace(token, state.row_cells, state.cell_runs)
+        idx[] += 1
+        return false, false
+    end
+
+    consumed_cell_sep, next_cell_runs =
+        consume_matrix_cell_separator!(token, idx, state.row_cells, state.cell_runs)
+    if consumed_cell_sep
+        state.cell_runs = next_cell_runs
+        state.pending_row_break = false
+        return false, false
+    end
+
+    consumed_end, end_ok = consume_matrix_environment_end!(token, tokens, idx,
+        env_name, state.rows, state.row_cells, state.cell_runs, state.pending_row_break)
+    if consumed_end
+        return true, end_ok
+    end
+
+    separator_result = consume_matrix_row_separator!(
+        token, idx, state.rows, state.row_cells, state.cell_runs)
+    if separator_result.consumed
+        state.row_cells = separator_result.row_cells
+        state.cell_runs = separator_result.cell_runs
+        state.pending_row_break = separator_result.pending_break
+        return false, false
+    end
+
+    consume_matrix_atom!(tokens, idx, token, state)
+    return false, false
+end
+
+"""Append one braced group or atom to the current matrix cell."""
+function consume_matrix_atom!(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int},
+    token::LatexToken, state::MatrixRowState)
+
+    if token.kind == :lbrace
+        idx[] += 1
+        append!(state.cell_runs, parse_sequence(tokens, idx, true))
+    else
+        append!(state.cell_runs, parse_atom(tokens, idx))
+        consume_scripts!(state.cell_runs, tokens, idx)
+    end
+    state.pending_row_break = false
 end
 
 """Return true when all matrix rows are non-empty and have equal column counts."""
@@ -811,7 +814,7 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
 end
 
 """Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""
-function parse_stretch_delimiter_token(
+function parse_stretch_delimiter_token!(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     if idx[] > length(tokens)
         return "", false
@@ -839,6 +842,13 @@ function parse_stretch_delimiter_token(
     if token.kind != :text || isempty(token.text)
         return "", false
     end
+
+    return consume_text_stretch_delimiter!(tokens, idx, token)
+end
+
+"""Consume one stretch delimiter from the leading character of a text token."""
+function consume_text_stretch_delimiter!(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int}, token::LatexToken)
 
     first_char_i = firstindex(token.text)
     delimiter = string(token.text[first_char_i])
@@ -885,7 +895,7 @@ stretch_delimiter_text(
 
 """Parse one `\\left ... \\right` expression and validate delimiter tokens."""
 function parse_stretch_delimiter_run(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
-    left_delimiter, left_ok = parse_stretch_delimiter_token(tokens, idx)
+    left_delimiter, left_ok = parse_stretch_delimiter_token!(tokens, idx)
     if !left_ok
         return latex_atom_run("\\left", :math), false
     end
@@ -898,7 +908,7 @@ function parse_stretch_delimiter_run(tokens::Vector{LatexToken}, idx::Base.RefVa
     end
 
     idx[] += 1
-    right_delimiter, right_ok = parse_stretch_delimiter_token(tokens, idx)
+    right_delimiter, right_ok = parse_stretch_delimiter_token!(tokens, idx)
     if !right_ok
         return latex_atom_run(
             stretch_delimiter_text(left_delimiter, plain_text_for_runs(children),
