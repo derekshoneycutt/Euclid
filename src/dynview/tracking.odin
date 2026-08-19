@@ -4,6 +4,7 @@ import "../core"
 
 import rl "vendor:raylib"
 
+//   Toggle Dynview rendering and invalidate all cache inputs when it changes.
 set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
     if runtime^.enabled == enabled {
         return

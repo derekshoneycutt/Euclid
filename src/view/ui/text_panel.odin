@@ -41,8 +41,13 @@ draw_view_text_panel :: proc(
     }
 
     view_text := julia.current_view_snapshot_text(state)
-    content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview, text_panel,
-        TEXT_PADDING, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT, view_text)
+    content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview,
+        text_panel, {
+            text_padding = TEXT_PADDING,
+            wrap_advance = TEXT_WRAP_ADVANCE,
+            row_height = TEXT_ROW_HEIGHT,
+            text = view_text,
+        })
     scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview,
         TEXT_ROW_HEIGHT)
     text_scroll_state := Scroll_Container_State{
@@ -64,10 +69,13 @@ draw_view_text_panel :: proc(
     text_panel = text_scroll_begin.view_rect
     state^.ui_runtime.view_text_scroll_y = text_scroll_begin.scroll_y_out
 
-    dynview.refresh_scratchpad_copy_targets(&state.dynview, text_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        TEXT_PADDING, TEXT_ROW_HEIGHT,
-        DYNVIEW_COPY_ICON_SIZE, DYNVIEW_COPY_ICON_X_PAD)
+    dynview.refresh_scratchpad_copy_targets(&state.dynview, {
+        panel = text_panel,
+        scroll_y = state^.ui_runtime.view_text_scroll_y,
+        text_padding = TEXT_PADDING,
+        icon_size = DYNVIEW_COPY_ICON_SIZE,
+        icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
+    })
 
     ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime, view_text,
         text_panel, state^.ui_runtime.view_text_scroll_y,

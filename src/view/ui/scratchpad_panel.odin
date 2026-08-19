@@ -194,9 +194,13 @@ scratchpad_terminal_layout :: proc(
 
     transcript_height: f32 = TEXT_PADDING
     if len(fallback_text) > 0 {
-        transcript_height = dynview.scratchpad_content_height_or_fallback(
-            &state^.dynview, panel, TEXT_PADDING, TEXT_WRAP_ADVANCE,
-            TEXT_ROW_HEIGHT, fallback_text)
+        transcript_height = dynview.scratchpad_content_height_or_fallback(&state^.dynview,
+            panel, {
+                text_padding = TEXT_PADDING,
+                wrap_advance = TEXT_WRAP_ADVANCE,
+                row_height = TEXT_ROW_HEIGHT,
+                text = fallback_text,
+            })
     }
     columns := scratchpad_input_columns(panel, font, ui_runtime^.scratchpad_input_mode)
     input_rows := terminal_input_row_count(
@@ -496,9 +500,13 @@ draw_scratchpad_output_and_prompt :: proc(
         state, terminal_panel, ui_runtime, font, output_text_legacy,
         state^.ui_runtime.view_text_scroll_y)
 
-    dynview.refresh_scratchpad_copy_targets(&state.dynview, terminal_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        TEXT_PADDING, TEXT_ROW_HEIGHT, DYNVIEW_COPY_ICON_SIZE, DYNVIEW_COPY_ICON_X_PAD)
+    dynview.refresh_scratchpad_copy_targets(&state.dynview, {
+        panel = terminal_panel,
+        scroll_y = state^.ui_runtime.view_text_scroll_y,
+        text_padding = TEXT_PADDING,
+        icon_size = DYNVIEW_COPY_ICON_SIZE,
+        icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
+    })
 
     view_core.draw_copy_hover_backgrounds(&state^.dynview, mouse)
 

@@ -616,6 +616,8 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     cache.last_wrap_advance = 8
     cache.last_font_size = 12
 
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
     state := app_dynview.Dynview_Layout_State{}
     acc := app_dynview.Dynview_Layout_Line_Accumulator{}
     cmd := app_core.Dynview_Command{
@@ -624,15 +626,10 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
         brush_color = {64, 99, 216, 255},
     }
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
+    layout_context := app_dynview.layout_build_context(cache, buffer, &state, &acc)
 
     status, last_line := app_dynview.layout_consume_text_run(
-        cache,
-        &state,
-        &acc,
-        cmd,
-        "hello world",
-        style,
-        12)
+        &layout_context, cmd, "hello world", style)
 
     testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
     testing.expect(t, cache.layout_item_count > 0)

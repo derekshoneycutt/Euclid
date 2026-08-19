@@ -25,6 +25,7 @@ import view_core "../view/core"
 
 import "core:math"
 import "core:mem"
+import rand "core:math/rand"
 
 import rl "vendor:raylib"
 
@@ -98,6 +99,10 @@ DUST_EXISTING_XY_KICK :: 0.0011
 DUST_COLLISION_RADIUS :: 0.004
 DUST_COLLISION_RESTITUTION :: 0.42
 DUST_COLLISION_POSITION_SLOP :: 0.0001
+DUST_COLLISION_ZERO_DISTANCE_SQ :: 1e-12
+DUST_COLLISION_NORMAL_JITTER_RADIANS :: 0.18
+
+PARTICLE_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 
 DUST_GRID_CELL_SIZE :: core.DUST_GRID_CELL_SIZE
 DUST_GRID_DIM :: core.DUST_GRID_DIM
@@ -639,29 +644,28 @@ integrate_particle_positions_soa_batch :: proc(
     }
 }
 
-//   Advance deterministic particle-system random state.
-particle_random_u32 :: proc(ps: ^Particle_System) -> u32 {
-    state := ps^.rng_state
-    if state == 0 {
-        state = 0x9e3779b97f4a7c15
+//   Return the deterministic random generator owned by one particle system.
+particle_random_generator :: proc(ps: ^Particle_System) -> rand.Generator {
+    state := &ps^.rng_state
+    if (state^.s[0] | state^.s[1] | state^.s[2] | state^.s[3]) == 0 {
+        generator := rand.xoshiro256_random_generator(state)
+        rand.reset(PARTICLE_RANDOM_SEED, generator)
+        return generator
     }
-    state = state ~ (state >> 12)
-    state = state ~ (state << 25)
-    state = state ~ (state >> 27)
-    ps^.rng_state = state
-    return u32((state * 0x2545f4914f6cdd1d) >> 32)
+    return rand.xoshiro256_random_generator(state)
 }
 
-//   Generate a deterministic float in the inclusive [min_v, max_v] range.
+//   Generate a deterministic float in the half-open [min_v, max_v) range.
 random_f32_range :: proc(ps: ^Particle_System, min_v, max_v: f32) -> f32 {
-    t := f32(particle_random_u32(ps) & 0x00ffffff) / 16777215.0
-    return math.lerp(min_v, max_v, t)
+    return rand.float32_range(min_v, max_v, particle_random_generator(ps))
 }
 
 //   Generate a deterministic integer in the inclusive [min_v, max_v] range.
 random_i32_range :: proc(ps: ^Particle_System, min_v, max_v: i32) -> i32 {
-    span := u32(max_v - min_v) + 1
-    return min_v + i32(particle_random_u32(ps) % span)
+    if min_v >= max_v {
+        return min_v
+    }
+    return rand.int32_range(min_v, max_v + 1, particle_random_generator(ps))
 }
 
 //   Reset particle-system runtime counters and mark all particle slots as dead.
@@ -1113,6 +1117,22 @@ dust_grid_cell_index :: proc(x, y: f32) -> int {
     return cy * DUST_GRID_DIM + cx
 }
 
+//   Return a deterministic frame-varying hash for dense collision sampling.
+dust_collision_hash :: #force_inline proc(seed: u64) -> u64 {
+    hash := seed
+    hash = (hash ~ (hash >> 30)) * 0xbf58476d1ce4e5b9
+    hash = (hash ~ (hash >> 27)) * 0x94d049bb133111eb
+    return hash ~ (hash >> 31)
+}
+
+//   Return a bounded angular perturbation that changes each collision frame.
+dust_pair_jitter_angle :: #force_inline proc(ia, ib: int, frame: u64) -> f32 {
+    seed := u64(u32(ia)) * 0x9e3779b185ebca87 ~
+        u64(u32(ib)) * 0xc2b2ae3d27d4eb4f ~ frame * 0x94d049bb133111eb
+    unit := f32(u32(dust_collision_hash(seed) >> 32) & 0x00ffffff) / 16777215.0
+    return (unit - 0.5) * DUST_COLLISION_NORMAL_JITTER_RADIANS
+}
+
 //   Resolve one dust-particle pair collision with positional and velocity response.
 resolve_dust_pair :: proc(
     ps: ^Particle_System,
@@ -1121,12 +1141,29 @@ resolve_dust_pair :: proc(
     dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
     dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
     dist_sq := dx * dx + dy * dy
-    if dist_sq >= radius_sq || dist_sq < 1e-12 {
+    if dist_sq >= radius_sq {
         return
     }
 
-    dist   := math.sqrt(dist_sq)
-    nx, ny := dx / dist, dy / dist
+    dist := math.sqrt(dist_sq)
+    nx, ny: f32
+    if dist_sq < DUST_COLLISION_ZERO_DISTANCE_SQ {
+        angle := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame)
+        nx = f32(math.cos(angle))
+        ny = f32(math.sin(angle))
+    } else {
+        nx = dx / dist
+        ny = dy / dist
+
+        jitter := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame) *
+            math.clamp(1.0 - dist_sq / radius_sq, 0.0, 1.0)
+        if jitter != 0 {
+            cos_jitter := f32(math.cos(jitter))
+            sin_jitter := f32(math.sin(jitter))
+            nx, ny = nx * cos_jitter - ny * sin_jitter,
+                nx * sin_jitter + ny * cos_jitter
+        }
+    }
 
     pen := min_sep - dist
     if pen > DUST_COLLISION_POSITION_SLOP {
@@ -1190,7 +1227,7 @@ resolve_dust_collisions_on_grid :: proc(
                 dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
                 dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
                 dist_sq := dx * dx + dy * dy
-                if dist_sq < radius_sq && dist_sq >= 1e-12 {
+                if dist_sq < radius_sq {
                     cache_dust_collision_pair(ps, ia, ib)
                 }
             }
@@ -1206,8 +1243,10 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
 
     mem.set(&ps^.dust_buckets[0], 0, size_of(ps^.dust_buckets))
     mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
+    mem.set(&ps^.dust_seen_counts[0], 0, size_of(ps^.dust_seen_counts))
     ps^.dust_pair_count = 0
     ps^.dust_pair_dropped_count = 0
+    ps^.dust_collision_frame += 1
 
     active_cells: [DUST_GRID_DIM_SQUARED]int
     active_cell_count := 0
@@ -1217,6 +1256,7 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
             continue
         }
         c := dust_grid_cell_index(ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
+        ps^.dust_seen_counts[c] += 1
         if ps^.dust_counts[c] < i32(DUST_GRID_BUCKET_CAP) {
             if ps^.dust_counts[c] == 0 {
                 active_cells[active_cell_count] = c
@@ -1224,6 +1264,14 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
             }
             ps^.dust_buckets[c * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[c])] = i32(i)
             ps^.dust_counts[c] += 1
+        } else {
+            sample := u64(ps^.dust_seen_counts[c])
+            seed := u64(u32(c)) * 0x9e3779b185ebca87 ~
+                u64(u32(i)) * 0xc2b2ae3d27d4eb4f ~ ps^.dust_collision_frame
+            replacement := int(dust_collision_hash(seed) % sample)
+            if replacement < DUST_GRID_BUCKET_CAP {
+                ps^.dust_buckets[c * DUST_GRID_BUCKET_CAP + replacement] = i32(i)
+            }
         }
     }
 

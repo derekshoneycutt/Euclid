@@ -49,16 +49,16 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
 
     iso_scale := state^.iso_scale^
 
-    screens: [MAX_LOW_PARTICLES]Vector2
     projected_count := view_core.iso_to_cartesian_components_batch_selected(
         ps.low_particles.pos_x[:ps^.use_max_dust_particles],
         ps.low_particles.pos_y[:ps^.use_max_dust_particles],
         ps.low_particles.pos_z[:ps^.use_max_dust_particles],
-        screens[:],
+        ps.low_particle_screens[:],
         iso_scale,
         state^.ui_runtime.use_simd_batch_projection)
 
-    count_rendered := stage_low_particle_instances(ps, state, screens[:projected_count])
+    count_rendered := stage_low_particle_instances(
+        ps, state, ps.low_particle_screens[:projected_count])
     if state^.ui_runtime.use_gpu_dust_instancing &&
         state^.dust_render.instancing_ready &&
         draw_low_particle_instances(state, count_rendered) {
@@ -66,7 +66,7 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
         return
     }
 
-    draw_low_particles_immediate(ps, state, screens[:projected_count])
+    draw_low_particles_immediate(ps, state, ps.low_particle_screens[:projected_count])
     ps.last_render_low = count_rendered
 }
 

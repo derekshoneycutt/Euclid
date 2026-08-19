@@ -182,6 +182,62 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
 }
 
 @(test)
+resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_y[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.5
+    ps^.low_particles.pos_y[1] = 0.5
+
+    min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
+    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
+        app_particles.DUST_COLLISION_RADIUS
+    app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+
+    dx := ps^.low_particles.pos_x[1] - ps^.low_particles.pos_x[0]
+    dy := ps^.low_particles.pos_y[1] - ps^.low_particles.pos_y[0]
+    testing.expect(t, dx * dx + dy * dy > 0)
+}
+
+@(test)
+particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) {
+    first := new(app_core.Particle_System)
+    defer free(first)
+    second := new(app_core.Particle_System)
+    defer free(second)
+
+    testing.expect_value(t,
+        app_particles.random_f32_range(first, -1, 1),
+        app_particles.random_f32_range(second, -1, 1))
+    testing.expect_value(t,
+        app_particles.random_i32_range(first, -10, 10),
+        app_particles.random_i32_range(second, -10, 10))
+}
+
+@(test)
+resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
+    ps := new(app_core.Particle_System)
+    defer free(ps)
+
+    ps^.use_max_dust_particles = app_core.DUST_GRID_BUCKET_CAP + 8
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5
+        ps^.low_particles.pos_y[i] = 0.5
+    }
+
+    app_particles.resolve_dust_collisions(ps)
+
+    testing.expect_value(t, ps^.dust_collision_frame, u64(1))
+    testing.expect_value(t, ps^.dust_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+        i32(app_core.DUST_GRID_BUCKET_CAP))
+    testing.expect_value(t, ps^.dust_seen_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+        i32(ps^.use_max_dust_particles))
+}
+
+@(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
     defer free(ps)
