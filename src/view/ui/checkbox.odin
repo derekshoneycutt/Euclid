@@ -119,6 +119,7 @@ checkbox_mark_colors :: #force_inline proc(enabled: bool) -> (rl.Color, rl.Color
     return rl.Color{78, 78, 78, 255}, rl.Color{110, 110, 110, 255}
 }
 
+//   Return the smallest rectangle that contains both a and b.
 checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
     ax2 := a.x + a.width
     ay2 := a.y + a.height
@@ -158,19 +159,31 @@ checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     }
 }
 
-//   Draw one checkbox and resolve release-confirmed toggle interaction.
-draw_checkbox :: proc(
+//   Draw the check mark and pressed-state outline for the box.
+checkbox_draw_box_marks :: proc(
+    box_rect: rl.Rectangle, checked_out, pressed: bool, border, mark: rl.Color) {
+
+    rl.DrawRectangleLinesEx(box_rect, 1, border)
+    if checked_out {
+        p0 := rl.Vector2{box_rect.x + 3, box_rect.y + box_rect.height * 0.55}
+        p1 := rl.Vector2{box_rect.x + 6, box_rect.y + box_rect.height - 3}
+        p2 := rl.Vector2{box_rect.x + box_rect.width - 3, box_rect.y + 3}
+        rl.DrawLineEx(p0, p1, 1.6, mark)
+        rl.DrawLineEx(p1, p2, 1.6, mark)
+    }
+
+    if pressed {
+        rl.DrawRectangleLinesEx(box_rect, 2, border)
+    }
+}
+
+//   Resolve hover capture and release for one checkbox, writing toggle state.
+checkbox_resolve_interaction :: proc(
     params: Checkbox_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Checkbox_Result {
-
-    drawn_rect := clamp_non_negative_rect(params.rect)
-    box_rect := checkbox_box_drawn_rect(drawn_rect)
-    local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
-
-    hit_rect := drawn_rect
-    label_rect := rl.Rectangle{}
-    label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
-    label_color := checkbox_label_color(params.enabled)
+    press_owner: ^core.Ui_Press_Owner_State,
+    local_mouse: rl.Vector2,
+    hit_rect: rl.Rectangle,
+    out: ^Checkbox_Result) {
 
     hovered_item := rl.CheckCollisionPointRec(local_mouse, hit_rect)
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
@@ -187,37 +200,42 @@ draw_checkbox :: proc(
         hovered_item,
         &owns_press)
 
-    pressed := owns_press && params.mouse.left_down
+    out.toggled = toggled
+    out.checked_out = checked_out
+    out.hovered = hovered
+    out.pressed = owns_press && params.mouse.left_down
+}
+
+//   Draw one checkbox and resolve release-confirmed toggle interaction.
+draw_checkbox :: proc(
+    params: Checkbox_Params,
+    press_owner: ^core.Ui_Press_Owner_State) -> Checkbox_Result {
+
+    drawn_rect := clamp_non_negative_rect(params.rect)
+    box_rect := checkbox_box_drawn_rect(drawn_rect)
+    local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
+
+    hit_rect := drawn_rect
+    label_rect := rl.Rectangle{}
+    label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
+    label_color := checkbox_label_color(params.enabled)
+
+    result := Checkbox_Result{
+        box_drawn_rect = box_rect,
+        label_drawn_rect = label_rect,
+    }
+    checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
+
     border, mark := checkbox_mark_colors(params.enabled)
-
-    rl.DrawRectangleLinesEx(box_rect, 1, border)
-    if checked_out {
-        p0 := rl.Vector2{box_rect.x + 3, box_rect.y + box_rect.height * 0.55}
-        p1 := rl.Vector2{box_rect.x + 6, box_rect.y + box_rect.height - 3}
-        p2 := rl.Vector2{box_rect.x + box_rect.width - 3, box_rect.y + 3}
-        rl.DrawLineEx(p0, p1, 1.6, mark)
-        rl.DrawLineEx(p1, p2, 1.6, mark)
-    }
-
-    if pressed {
-        rl.DrawRectangleLinesEx(box_rect, 2, border)
-    }
+    checkbox_draw_box_marks(box_rect, result.checked_out, result.pressed, border, mark)
 
     if len(params.label) > 0 {
            view_core.ui_text(params.label,
             int(label_rect.x),
             int(label_rect.y),
             label_color,
-            params.font,
-            params.label_font_size)
+            view_core.Ui_Text_Font{params.font, params.label_font_size})
     }
 
-    return Checkbox_Result{
-        box_drawn_rect = box_rect,
-        label_drawn_rect = label_rect,
-        toggled = toggled,
-        checked_out = checked_out,
-        hovered = hovered,
-        pressed = pressed,
-    }
+    return result
 }

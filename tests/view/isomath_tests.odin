@@ -7,11 +7,13 @@ import app_view "../../src/view/core"
 
 TEST_EPSILON :: f32(1e-4)
 
+//   Assert that two f32 values match within TEST_EPSILON.
 expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
     testing.expectf(t, math.abs(actual - expected) <= TEST_EPSILON,
         "%s | expected=%v got=%v", msg, expected, actual)
 }
 
+//   Assert that two Vector2 values match component-wise within TEST_EPSILON.
 expect_vec2_close :: proc(
     t: ^testing.T,
     actual, expected: app_view.Vector2,
@@ -22,6 +24,7 @@ expect_vec2_close :: proc(
         "%s (y) | expected=%v got=%v", msg, expected.y, actual.y)
 }
 
+//   Build an Iso_Scale with the given scale and offsets, precomputing coefficients.
 make_iso_scale :: proc(scale, x_offset, y_offset: f32) -> app_view.Iso_Scale {
     iso := app_view.Iso_Scale{
         scale = scale,
@@ -32,6 +35,7 @@ make_iso_scale :: proc(scale, x_offset, y_offset: f32) -> app_view.Iso_Scale {
     return iso
 }
 
+//   Verify recompute_iso_scale_precompute sets the cached half/quarter coefficients.
 @(test)
 recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {
     iso := app_view.Iso_Scale{scale = 800}
@@ -42,6 +46,7 @@ recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {
     testing.expect_value(t, iso.quarter_scale, f32(200))
 }
 
+//   Verify the inline component projection matches the isometric formula.
 @(test)
 iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testing.T) {
     iso := make_iso_scale(800, 450, 450)
@@ -52,6 +57,7 @@ iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testin
         "components inline projection should match formula")
 }
 
+//   Verify the coordinate, inline, and component projection variants agree.
 @(test)
 iso_to_cartesian_variants_match_each_other :: proc(t: ^testing.T) {
     iso := make_iso_scale(640, 320, 240)
@@ -68,6 +74,7 @@ iso_to_cartesian_variants_match_each_other :: proc(t: ^testing.T) {
         "coordinate and component projection helpers should agree")
 }
 
+//   Verify the batch projection stops at the shortest input slice length.
 @(test)
 iso_to_cartesian_components_batch_respects_shortest_input_length :: proc(t: ^testing.T) {
     iso := make_iso_scale(800, 450, 450)
@@ -88,6 +95,7 @@ iso_to_cartesian_components_batch_respects_shortest_input_length :: proc(t: ^tes
         "batch projection index 1")
 }
 
+//   Verify the scalar selected projection path matches the batch projection.
 @(test)
 iso_to_cartesian_components_batch_selected_scalar_path_matches_batch :: proc(
     t: ^testing.T) {
@@ -103,7 +111,7 @@ iso_to_cartesian_components_batch_selected_scalar_path_matches_batch :: proc(
     batch_count := app_view.iso_to_cartesian_components_batch(
         xs, ys, zs, out_batch[:], iso)
     selected_count := app_view.iso_to_cartesian_components_batch_selected(
-        xs, ys, zs, out_selected[:], iso, false)
+        app_view.Iso_Batch_Projection{xs, ys, zs, out_selected[:], iso}, false)
 
     testing.expect_value(t, selected_count, batch_count)
     for i in 0..<batch_count {

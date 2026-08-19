@@ -84,6 +84,7 @@ icon_button_release_press :: proc(
     owns_press^ = false
 }
 
+//   Darken one color toward the background by a normalized press amount.
 icon_button_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Color {
     t :=  clamp(amount, 0.0, 1.0)
     factor := 1.0 - (ICON_BUTTON_PRESS_DARKEN * t)

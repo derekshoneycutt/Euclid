@@ -8,6 +8,7 @@ import app_ui "../../src/view/ui"
 
 import rl "vendor:raylib"
 
+//   Verify the baseline UI regions are valid and mutually consistent.
 @(test)
 ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     // Verifies baseline UI region construction is internally consistent and matches fixed panel sizing contracts.
@@ -26,6 +27,7 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     testing.expect(t, regions.scratchpad_rect.height >= 0)
 }
 
+//   Verify UI region validation rejects negative dimensions.
 @(test)
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     // Ensures region validation fails when any panel rectangle has negative width or height.
@@ -39,6 +41,7 @@ validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     testing.expect(t, !app_ui.validate_ui_regions(regions))
 }
 
+//   Verify the scrollbar thumb math clamps and positions correctly.
 @(test)
 scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     // Checks scrollbar thumb sizing and placement clamp correctly across top, bottom, and constructed panel geometry.
@@ -52,12 +55,14 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, y_bottom, f32(150) - thumb_h)
 
     panel := rl.Rectangle{10, 20, 200, 120}
-    scrollbar := app_ui.build_vertical_scrollbar(panel, 480, 60, 360, 8, 24)
+    scrollbar := app_ui.build_vertical_scrollbar(
+        app_ui.Vertical_Scrollbar_Input{panel, 480, 60, 360}, 8, 24)
     testing.expect(t, scrollbar.has_scrollbar)
     testing.expect_value(t, scrollbar.track_rect.x, panel.x + panel.width - 8)
     testing.expect_value(t, scrollbar.thumb_height, scrollbar.thumb_rect.height)
 }
 
+//   Seed one tree node with a name and optional children for testing.
 seed_tree_node :: proc(
     node: ^app_core.Euclid_Julia_Animation_Interface,
     parent: ^app_core.Euclid_Julia_Animation_Interface,
@@ -71,6 +76,7 @@ seed_tree_node :: proc(
     node^.is_expanded = expanded
 }
 
+//   Verify the tree row count respects each node's expansion state.
 @(test)
 tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     // Verifies visible tree row counting respects node expansion state and first-child expansion helper behavior.
@@ -100,6 +106,7 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     testing.expect_value(t, app_ui.expanded_first_child(&nodes[0]), &nodes[1])
 }
 
+//   Verify build_tree_view_panels clamps small panels to non-negative rects.
 @(test)
 build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
     // Confirms tiny tree panels still produce a fixed-height toolbar and non-negative list viewport dimensions.
@@ -111,6 +118,7 @@ build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
     testing.expect(t, list.height >= 0)
 }
 
+//   Verify the input-box UTF-8 helpers preserve codepoint boundaries.
 @(test)
 input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
     // Ensures UTF-8 cursor movement, backspace, and replacement operations preserve codepoint boundaries.
@@ -131,8 +139,7 @@ input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
 
     replaced := app_ui.input_box_replace_byte_range(
         buffer[:],
-        &text_len,
-        &caret,
+        app_ui.Input_Box_Edit_State{text_len = &text_len, caret = &caret},
         0,
         text_len,
         "γ")
@@ -141,6 +148,7 @@ input_box_utf8_helpers_preserve_codepoint_boundaries :: proc(t: ^testing.T) {
     testing.expect_value(t, caret, len("γ"))
 }
 
+//   Verify the terminal input layout wraps multiline UTF-8 caret correctly.
 @(test)
 terminal_input_layout_wraps_multiline_utf8_caret :: proc(t: ^testing.T) {
     text := "abcd\nαβγδε"
@@ -155,6 +163,7 @@ terminal_input_layout_wraps_multiline_utf8_caret :: proc(t: ^testing.T) {
         t, app_ui.terminal_input_row_count(buffer, len(text), len(text), 4), 3)
 }
 
+//   Verify a terminal input cell maps to the correct UTF-8 byte caret.
 @(test)
 terminal_input_cell_maps_to_utf8_byte_caret :: proc(t: ^testing.T) {
     text := "abcd\nαβγδε"
@@ -165,12 +174,14 @@ terminal_input_cell_maps_to_utf8_byte_caret :: proc(t: ^testing.T) {
     testing.expect_value(t, caret, len(text))
 }
 
+//   Verify scratchpad bottom detection uses the terminal epsilon.
 @(test)
 scratchpad_bottom_detection_uses_terminal_epsilon :: proc(t: ^testing.T) {
     testing.expect(t, app_ui.scratchpad_scroll_is_at_bottom(99.6, 100))
     testing.expect(t, !app_ui.scratchpad_scroll_is_at_bottom(99.0, 100))
 }
 
+//   Verify a scratchpad completion payload parses and applies to the input.
 @(test)
 scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
     // Verifies completion payload parsing extracts start, end, and replacement text from the wire format.
@@ -181,6 +192,7 @@ scratchpad_completion_payload_parses_and_applies :: proc(t: ^testing.T) {
     testing.expect_value(t, completion.replacement, "point!")
 }
 
+//   Verify scratchpad_parse_non_negative_int rejects non-digit input.
 @(test)
 scratchpad_parse_non_negative_int_rejects_non_digits :: proc(t: ^testing.T) {
     // Confirms non-digit characters invalidate scratchpad non-negative integer parsing.
@@ -188,12 +200,14 @@ scratchpad_parse_non_negative_int_rejects_non_digits :: proc(t: ^testing.T) {
     testing.expect(t, !ok)
 }
 
+//   Verify the scratchpad prompt tracks the active input mode.
 @(test)
 scratchpad_prompt_tracks_input_mode :: proc(t: ^testing.T) {
     testing.expect_value(t, app_ui.scratchpad_prompt(.Julia), "julia> ")
     testing.expect_value(t, app_ui.scratchpad_prompt(.Help), "help?> ")
 }
 
+//   Verify a history payload restores the mode and text.
 @(test)
 scratchpad_history_payload_restores_mode_and_text :: proc(t: ^testing.T) {
     history := app_ui.scratchpad_parse_history_payload("1\n@time")
@@ -207,6 +221,7 @@ scratchpad_history_payload_restores_mode_and_text :: proc(t: ^testing.T) {
     testing.expect(t, !unknown_mode.ok)
 }
 
+//   Verify a typed question mark enters help mode.
 @(test)
 scratchpad_question_mark_enters_help_mode :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{}
@@ -224,6 +239,7 @@ scratchpad_question_mark_enters_help_mode :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.scratchpad_input_cursor, 0)
 }
 
+//   Verify a pasted question mark stays in Julia mode.
 @(test)
 scratchpad_pasted_question_mark_stays_in_julia_mode :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{}
@@ -240,6 +256,7 @@ scratchpad_pasted_question_mark_stays_in_julia_mode :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.scratchpad_input_len, 1)
 }
 
+//   Verify an empty backspace exits help mode.
 @(test)
 scratchpad_empty_backspace_exits_help_mode :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{scratchpad_input_mode = .Help}
@@ -252,6 +269,7 @@ scratchpad_empty_backspace_exits_help_mode :: proc(t: ^testing.T) {
         app_core.Scratchpad_Input_Mode.Julia)
 }
 
+//   Seed one scratchpad async result slot for testing.
 seed_scratchpad_async_result :: proc(
     slot: ^app_bridge.Scratchpad_Async_Slot, text: string) {
 
@@ -259,6 +277,7 @@ seed_scratchpad_async_result :: proc(
     copy(slot^.result[:slot^.result_len], transmute([]u8)text)
 }
 
+//   Verify a stale submit preserves the newer input text.
 @(test)
 scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{}
@@ -283,6 +302,7 @@ scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.scratchpad_pending_submit_request_id, u64(0))
 }
 
+//   Verify an incomplete submit appends a trailing newline.
 @(test)
 scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{}
@@ -304,6 +324,7 @@ scratchpad_incomplete_submit_appends_newline :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(5))
 }
 
+//   Verify a completion only applies to the latest request generation.
 @(test)
 scratchpad_completion_requires_latest_request :: proc(t: ^testing.T) {
     ui_runtime := app_core.Euclid_Ui_Runtime_State{}
@@ -331,6 +352,7 @@ scratchpad_completion_requires_latest_request :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.scratchpad_input_generation, u64(4))
 }
 
+//   Verify backspace removes a multibyte codepoint at the cursor.
 @(test)
 input_box_backspace_codepoint_removes_multibyte_cursor :: proc(t: ^testing.T) {
     // Checks backspace removes one full multibyte codepoint and updates caret to the previous codepoint start.
@@ -346,6 +368,7 @@ input_box_backspace_codepoint_removes_multibyte_cursor :: proc(t: ^testing.T) {
     testing.expect_value(t, caret, 2)
 }
 
+//   Verify the tree row-count guard stops recursive walks.
 @(test)
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
     // Verifies row counting guard limits recursive traversal depth to prevent runaway tree walks.
@@ -363,6 +386,7 @@ tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
     testing.expect_value(t, app_ui.count_visible_tree_rows_limited(&ji, &nodes[0], 1), 1)
 }
 
+//   Verify insert_text_at_caret inserts in the middle of existing text.
 @(test)
 input_box_insert_text_at_caret_inserts_in_middle :: proc(t: ^testing.T) {
     // Ensures inserting text at an interior caret position shifts existing bytes and advances caret correctly.
@@ -384,6 +408,7 @@ input_box_insert_text_at_caret_inserts_in_middle :: proc(t: ^testing.T) {
     testing.expect_value(t, caret, 4)
 }
 
+//   Verify insert_text_at_caret truncates on a UTF-8 boundary at capacity.
 @(test)
 input_box_insert_text_at_caret_truncates_on_utf8_boundary :: proc(t: ^testing.T) {
     // Validates insertion truncates safely at UTF-8 boundaries when destination capacity is limited.
@@ -405,6 +430,7 @@ input_box_insert_text_at_caret_truncates_on_utf8_boundary :: proc(t: ^testing.T)
     testing.expect_value(t, caret, len("abα"))
 }
 
+//   Verify insert_text_at_caret is a no-op when there is no capacity.
 @(test)
 input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
     // Confirms insertion is rejected without mutating text when there is no remaining buffer capacity.
@@ -426,6 +452,7 @@ input_box_insert_text_at_caret_noop_when_no_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, caret, 2)
 }
 
+//   Verify byte-range replacement swaps UTF-8 content and moves the caret.
 @(test)
 input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.T) {
     // Checks byte-range replacement swaps UTF-8 content and repositions caret to the end of replacement text.
@@ -436,8 +463,7 @@ input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.
     app_ui.input_box_replace_text(buffer[:], &text_len, &caret, "αβ")
     replaced := app_ui.input_box_replace_byte_range(
         buffer[:],
-        &text_len,
-        &caret,
+        app_ui.Input_Box_Edit_State{text_len = &text_len, caret = &caret},
         0,
         text_len,
         "γ")
@@ -447,6 +473,7 @@ input_box_replace_byte_range_supports_utf8_safe_replacement :: proc(t: ^testing.
     testing.expect_value(t, caret, len("γ"))
 }
 
+//   Verify a completion payload rejects a missing separator.
 @(test)
 scratchpad_completion_payload_rejects_missing_separator :: proc(t: ^testing.T) {
     // Verifies malformed completion payloads without all required separators are rejected.

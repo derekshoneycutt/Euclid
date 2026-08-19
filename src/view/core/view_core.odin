@@ -256,19 +256,35 @@ font_prepare_variant :: proc(
         return
     }
 
-    atlas := rl.GenImageFontAtlas(
-        font.glyphs, &font.recs, font.glyphCount, font.baseSize,
-        font.glyphPadding, 0)
-    if atlas.data == nil {
+    atlas, atlas_ok := font_build_glyph_atlas(&font)
+    if !atlas_ok {
         font_discard_prepared_data(font, atlas)
         return
     }
-
-    for index in 0..<font.glyphCount {
-        rl.UnloadImage(font.glyphs[index].image)
-        font.glyphs[index].image = rl.ImageFromImage(atlas, font.recs[index])
-    }
     prepared^ = Prepared_Font{font = font, atlas = atlas, ready = true}
+}
+
+//   Build the glyph atlas for one decoded font and extract per-glyph images.
+//
+// Parameters:
+//   - font: Decoded font whose glyph images are replaced with atlas sub-images.
+//
+// Returns:
+//   - atlas: Atlas image owned by the caller; empty image on failure.
+//   - ok: true when the atlas was generated and glyph images were extracted.
+font_build_glyph_atlas :: proc(font: ^rl.Font) -> (rl.Image, bool) {
+    atlas := rl.GenImageFontAtlas(
+        font^.glyphs, &font^.recs, font^.glyphCount, font^.baseSize,
+        font^.glyphPadding, 0)
+    if atlas.data == nil {
+        return rl.Image{}, false
+    }
+
+    for index in 0..<font^.glyphCount {
+        rl.UnloadImage(font^.glyphs[index].image)
+        font^.glyphs[index].image = rl.ImageFromImage(atlas, font^.recs[index])
+    }
+    return atlas, true
 }
 
 //   Upload one prepared atlas and transfer its RAM ownership to the runtime font slot.
@@ -308,6 +324,21 @@ font_discard_prepared_data :: proc(font: rl.Font, atlas: rl.Image) {
     }
 }
 
+//   Emit a one-time fallback warning for a font variant slot.
+//
+// Parameters:
+//   - slot: Font variant slot tracking warning state.
+//   - reason: Warning message prefix.
+//   - filename: Font asset filename that failed.
+font_warn_missing_variant :: proc(
+    slot: ^core.Euclid_Font_Variant_Slot, reason, filename: string) {
+    if slot^.missing_warned {
+        return
+    }
+    slot^.missing_warned = true
+    fmt.eprintln(reason, filename)
+}
+
 //   Load one variant and return true when raylib reports a valid texture handle.
 font_load_variant :: proc(
     state: ^core.Euclid_General_State, slot_index: int,
@@ -328,11 +359,8 @@ font_load_variant :: proc(
     filename := font_variant_filename(weight, italic)
     font_path := files.packaged_asset_path(filename, context.temp_allocator)
     if len(font_path) == 0 {
-        if !slot^.missing_warned {
-            slot^.missing_warned = true
-            fmt.eprintln(
-                "font load fallback: unable to resolve asset path for ", filename)
-        }
+        font_warn_missing_variant(
+            slot, "font load fallback: unable to resolve asset path for ", filename)
         return false
     }
 
@@ -342,10 +370,7 @@ font_load_variant :: proc(
     font := rl.LoadFontEx(font_file, font_size, &codepoints.values[0], codepoints.count)
     font_rasterization_end()
     if font.texture.id == 0 {
-        if !slot^.missing_warned {
-            slot^.missing_warned = true
-            fmt.eprintln("font load fallback: failed to load ", filename)
-        }
+        font_warn_missing_variant(slot, "font load fallback: failed to load ", filename)
         return false
     }
 

@@ -7,6 +7,7 @@ import "../../src/shapes"
 
 EPS :: f32(1e-5)
 
+//   Assert that two Vector3 values match component-wise within EPS.
 expect_vec3_close :: proc(t: ^testing.T, actual, expected: shapes.Vector3, msg: string) {
     testing.expectf(t,
         math.abs(actual.x - expected.x) <= EPS &&
@@ -22,6 +23,7 @@ expect_vec3_close :: proc(t: ^testing.T, actual, expected: shapes.Vector3, msg: 
         actual.z)
 }
 
+//   Assert that two f32 values match within EPS.
 expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
     testing.expectf(t, math.abs(actual - expected) <= EPS,
         "%s | expected=%v got=%v", msg, expected, actual)

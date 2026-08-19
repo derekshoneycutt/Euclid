@@ -53,6 +53,45 @@ cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: st
     set_gif_status_note(ui_runtime, note)
 }
 
+//   Load the screen capture and normalize it to encoder dimensions.
+//
+// Parameters:
+//   - state: Global app state providing capture config and encoder state.
+//   - downsample: Integer downsample factor, 1 meaning no downsample.
+//
+// Returns:
+//   - image: Capture image owned by the caller; unload with rl.UnloadImage.
+//   - ok: true when a usable frame was captured.
+gif_capture_normalized_frame :: proc(
+    state: ^core.Euclid_General_State, downsample: int) -> (rl.Image, bool) {
+
+    capture_w, capture_h := gif_capture_source_dimensions()
+
+    image := rl.LoadImageFromScreen()
+    if image.data == nil {
+        return rl.Image{}, false
+    }
+
+    crop_w := min(capture_w, int(image.width))
+    crop_h := min(capture_h, int(image.height))
+    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
+
+    if downsample > 1 {
+        out_w := max(1, int(image.width) / downsample)
+        out_h := max(1, int(image.height) / downsample)
+        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
+    }
+
+    expected_w := state^.gif_capture.encoder.width
+    expected_h := state^.gif_capture.encoder.height
+    if int(image.width) != expected_w || int(image.height) != expected_h {
+        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
+        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
+    }
+
+    return image, true
+}
+
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -74,31 +113,12 @@ gif_capture_submit_frame :: proc(
         return true
     }
 
-    capture_w, capture_h := gif_capture_source_dimensions()
-
-    image := rl.LoadImageFromScreen()
-    if image.data == nil {
+    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
+    image, frame_ok := gif_capture_normalized_frame(state, downsample)
+    if !frame_ok {
         return false
     }
     defer rl.UnloadImage(image)
-
-    crop_w := min(capture_w, int(image.width))
-    crop_h := min(capture_h, int(image.height))
-    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
-
-    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
-    if downsample > 1 {
-        out_w := max(1, int(image.width) / downsample)
-        out_h := max(1, int(image.height) / downsample)
-        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
-    }
-
-    expected_w := state^.gif_capture.encoder.width
-    expected_h := state^.gif_capture.encoder.height
-    if int(image.width) != expected_w || int(image.height) != expected_h {
-        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
-        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
-    }
 
     pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)

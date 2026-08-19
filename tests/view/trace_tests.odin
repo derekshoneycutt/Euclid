@@ -8,14 +8,17 @@ import "core:testing"
 import app_core "../../src/core"
 import app_trace "../../src/trace"
 
+//   Set the trace run id from a string.
 set_trace_run_id :: proc(state: ^app_core.Trace_State, run_id: string) {
     state^.run_id_len = copy(state^.run_id[:], transmute([]u8)run_id)
 }
 
+//   Copy text into a fixed record buffer and return the written length.
 set_trace_record_text :: proc(destination: []u8, text: string) -> int {
     return copy(destination, transmute([]u8)text)
 }
 
+//   Create a clean per-test trace sandbox directory under the OS temp directory.
 prepare_trace_sandbox :: proc(t: ^testing.T, dir_name: string) -> string {
     temp_dir, temp_err := os.temp_directory(context.temp_allocator)
     testing.expect(t, temp_err == nil)
@@ -28,12 +31,14 @@ prepare_trace_sandbox :: proc(t: ^testing.T, dir_name: string) -> string {
     return sandbox
 }
 
+//   Read a file's full contents as a string.
 read_text_file :: proc(t: ^testing.T, path: string) -> string {
     data, read_err := os.read_entire_file(path, context.temp_allocator)
     testing.expect(t, read_err == nil)
     return string(data)
 }
 
+//   Initialize and begin a trace with the given output path and strictness.
 configure_enabled_trace :: proc(
     t: ^testing.T, state: ^app_core.Trace_State, output_path: string, strict: bool) {
 
@@ -47,6 +52,7 @@ configure_enabled_trace :: proc(
     testing.expect(t, app_trace.begin_trace(state))
 }
 
+//   Verify the semantic-trace argument parser accepts the supported flag forms.
 @(test)
 semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
     settings := app_core.Euclid_Run_Settings{}
@@ -76,6 +82,7 @@ semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
     testing.expect(t, settings.semantic_trace_strict)
 }
 
+//   Verify the semantic-trace argument parser rejects unknown categories.
 @(test)
 semantic_trace_argument_parsing_rejects_unknown_categories :: proc(t: ^testing.T) {
     settings := app_core.Euclid_Run_Settings{}
@@ -86,6 +93,7 @@ semantic_trace_argument_parsing_rejects_unknown_categories :: proc(t: ^testing.T
     testing.expect(t, !valid)
 }
 
+//   Verify trace JSON serialization escapes strings and writes the envelope.
 @(test)
 trace_json_serialization_escapes_strings_and_writes_envelope :: proc(t: ^testing.T) {
     state := new(app_core.Trace_State)
@@ -111,6 +119,7 @@ trace_json_serialization_escapes_strings_and_writes_envelope :: proc(t: ^testing
     testing.expect(t, strings.contains(line, "\"payload\":{\"note\":\"a\\nb\"}"))
 }
 
+//   Verify the trace ring wraps while preserving monotonic sequence order.
 @(test)
 trace_ring_wraps_and_preserves_monotonic_sequence_order :: proc(t: ^testing.T) {
     state := new(app_core.Trace_State)
@@ -135,6 +144,7 @@ trace_ring_wraps_and_preserves_monotonic_sequence_order :: proc(t: ^testing.T) {
     testing.expect_value(t, state^.next_sequence, u64(260))
 }
 
+//   Verify a strict trace overflow marks the state invalid.
 @(test)
 trace_strict_overflow_marks_state_invalid :: proc(t: ^testing.T) {
     state := new(app_core.Trace_State)
@@ -155,6 +165,7 @@ trace_strict_overflow_marks_state_invalid :: proc(t: ^testing.T) {
     testing.expect(t, app_trace.should_fail_process(state))
 }
 
+//   Verify the file lifecycle writes started, configuration, and finished records.
 @(test)
 trace_file_lifecycle_writes_started_config_and_finished_records :: proc(t: ^testing.T) {
     sandbox := prepare_trace_sandbox(t, "euclid_trace_phase1")
@@ -182,6 +193,7 @@ trace_file_lifecycle_writes_started_config_and_finished_records :: proc(t: ^test
     testing.expect(t, strings.contains(content, "\"dropped_count\":0"))
 }
 
+//   Verify a disabled trace is inert and emits no records.
 @(test)
 trace_disabled_state_is_inert_and_does_not_emit :: proc(t: ^testing.T) {
     state := new(app_core.Trace_State)
@@ -197,6 +209,7 @@ trace_disabled_state_is_inert_and_does_not_emit :: proc(t: ^testing.T) {
     testing.expect(t, !state^.invalid)
 }
 
+//   Verify the phase-2 structured events include the expected payload fields.
 @(test)
 trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testing.T) {
     sandbox := prepare_trace_sandbox(t, "euclid_trace_phase2")
@@ -215,7 +228,13 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
     testing.expect(t, app_trace.record_runtime_event_ex(
         state, "runtime.reload_committed", 9, 2, 77))
     testing.expect(t, app_trace.record_animation_event_ex(
-        state, "animation.tick_rejected", 8, 126, "anim-1", "stale_sequence"))
+        state, "animation.tick_rejected",
+        app_trace.Trace_Animation_Event{
+            generation = 8,
+            tick = 126,
+            animation_id = "anim-1",
+            reason = "stale_sequence",
+        }))
     testing.expect(t, app_trace.finish_trace(state))
 
     content := read_text_file(t, output_path)
@@ -230,22 +249,8 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
     testing.expect(t, strings.contains(content, "\"reason\":\"stale_sequence\""))
 }
 
-@(test)
-trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
-    t: ^testing.T) {
-    sandbox := prepare_trace_sandbox(t, "euclid_trace_phase3")
-    defer delete(sandbox)
-    defer _ = os.remove_all(sandbox)
-
-    output_path, join_err := filepath.join(
-        []string{sandbox, "trace.jsonl"}, context.allocator)
-    defer delete(output_path)
-    testing.expect(t, join_err == nil)
-
-    state := new(app_core.Trace_State)
-    defer free(state)
-    configure_enabled_trace(t, state, output_path, true)
-
+//   Record the phase-3 geometry, tool, particle, and constraint events.
+record_phase3_events :: proc(t: ^testing.T, state: ^app_core.Trace_State) {
     testing.expect(t, app_trace.record_point_event(
         state,
         "point.position_changed",
@@ -258,26 +263,26 @@ trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
         state,
         "pen.visibility_changed",
         "pen",
-        "",
-        nil,
-        true,
-        nil))
+        app_trace.Trace_Tool_Event_Fields{visible = true}))
     testing.expect(t, app_trace.record_particles_emitted(
         state,
-        "flicker",
-        "high",
-        10,
-        app_core.Vector3{0.5, 0.4, 0.0},
-        app_core.Bridge_Color{r = 70, g = 130, b = 180, a = 255}))
+        app_trace.Trace_Particle_Emission{
+            kind = "flicker",
+            layer = "high",
+            count = 10,
+            source = app_core.Vector3{0.5, 0.4, 0.0},
+            color = app_core.Bridge_Color{r = 70, g = 130, b = 180, a = 255},
+        }))
     testing.expect(t, app_trace.record_constraint_solve_summary(
         state,
         130,
         2.166667,
         12,
         18))
-    testing.expect(t, app_trace.finish_trace(state))
+}
 
-    content := read_text_file(t, output_path)
+//   Assert the phase-3 events serialized with the expected payload fields.
+expect_phase3_payload_fields :: proc(t: ^testing.T, content: string) {
     testing.expect(t, strings.contains(content, "\"event\":\"point.position_changed\""))
     testing.expect(t, strings.contains(content, "\"index\":14"))
     testing.expect(t, strings.contains(content, "\"from\":[0.25,0.4,0]"))
@@ -295,9 +300,11 @@ trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
     testing.expect(t, strings.contains(content, "\"next_constraint_index\":18"))
 }
 
+//   Verify the phase-3 summary events include geometry, tool, and particle payloads.
 @(test)
-trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing.T) {
-    sandbox := prepare_trace_sandbox(t, "euclid_trace_checkpoint")
+trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
+    t: ^testing.T) {
+    sandbox := prepare_trace_sandbox(t, "euclid_trace_phase3")
     defer delete(sandbox)
     defer _ = os.remove_all(sandbox)
 
@@ -310,6 +317,37 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     defer free(state)
     configure_enabled_trace(t, state, output_path, true)
 
+    record_phase3_events(t, state)
+    testing.expect(t, app_trace.finish_trace(state))
+
+    expect_phase3_payload_fields(t, read_text_file(t, output_path))
+}
+
+//   Seed the two checkpoint points on the snapshot.
+seed_checkpoint_points :: proc(snapshot: ^app_core.Trace_Checkpoint_Snapshot) {
+    snapshot.points[0] = app_core.Trace_Checkpoint_Point{
+        index = 0,
+        kind = .Point,
+        do_draw = true,
+        active_child = 1,
+        position = app_core.Vector3{0.25, 0.5, 0},
+        has_position = true,
+        brush_size = 2,
+        offset = 0.5,
+    }
+    snapshot.points[1] = app_core.Trace_Checkpoint_Point{
+        index = 1,
+        kind = .Pen,
+        do_draw = false,
+        active_child = -1,
+        has_position = false,
+        brush_size = 3,
+        offset = 0.75,
+    }
+}
+
+//   Build the bounded post-join checkpoint snapshot used by the test.
+seed_checkpoint_snapshot :: proc() -> app_core.Trace_Checkpoint_Snapshot {
     snapshot := app_core.Trace_Checkpoint_Snapshot{
         checkpoint_id = 7,
         fixed_step = 21,
@@ -333,30 +371,12 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     }
     snapshot.animation_name_len = set_trace_record_text(
         snapshot.animation_name[:], "Euclid's Elements")
-    snapshot.points[0] = app_core.Trace_Checkpoint_Point{
-        index = 0,
-        kind = .Point,
-        do_draw = true,
-        active_child = 1,
-        position = app_core.Vector3{0.25, 0.5, 0},
-        has_position = true,
-        brush_size = 2,
-        offset = 0.5,
-    }
-    snapshot.points[1] = app_core.Trace_Checkpoint_Point{
-        index = 1,
-        kind = .Pen,
-        do_draw = false,
-        active_child = -1,
-        has_position = false,
-        brush_size = 3,
-        offset = 0.75,
-    }
+    seed_checkpoint_points(&snapshot)
+    return snapshot
+}
 
-    testing.expect(t, app_trace.record_checkpoint_snapshot(state, &snapshot))
-    testing.expect(t, app_trace.finish_trace(state))
-
-    content := read_text_file(t, output_path)
+//   Assert the checkpoint snapshot serialized with the expected fields.
+expect_checkpoint_payload_fields :: proc(t: ^testing.T, content: string) {
     testing.expect(t, strings.contains(content, "\"event\":\"trace.checkpoint\""))
     testing.expect(t, strings.contains(content, "\"checkpoint_id\":7"))
     testing.expect(t, strings.contains(content, "\"fixed_step\":21"))
@@ -380,4 +400,27 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     testing.expect(t, strings.contains(content, "\"position\":[0.25,0.5,0]"))
     testing.expect(t, strings.contains(content, "\"brush_size\":2"))
     testing.expect(t, strings.contains(content, "\"offset\":0.5"))
+}
+
+//   Verify a checkpoint snapshot serializes the bounded post-join state.
+@(test)
+trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing.T) {
+    sandbox := prepare_trace_sandbox(t, "euclid_trace_checkpoint")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+
+    output_path, join_err := filepath.join(
+        []string{sandbox, "trace.jsonl"}, context.allocator)
+    defer delete(output_path)
+    testing.expect(t, join_err == nil)
+
+    state := new(app_core.Trace_State)
+    defer free(state)
+    configure_enabled_trace(t, state, output_path, true)
+
+    snapshot := seed_checkpoint_snapshot()
+    testing.expect(t, app_trace.record_checkpoint_snapshot(state, &snapshot))
+    testing.expect(t, app_trace.finish_trace(state))
+
+    expect_checkpoint_payload_fields(t, read_text_file(t, output_path))
 }

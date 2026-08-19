@@ -6,6 +6,7 @@ import "core:testing"
 
 import app_files "../../src/files"
 
+//   Create a clean per-test sandbox directory under the OS temp directory.
 prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
     temp_dir, temp_err := os.temp_directory(context.temp_allocator)
     if temp_err != nil || len(temp_dir) == 0 {
@@ -25,6 +26,7 @@ prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
     return path, true
 }
 
+//   Write one required file entry (with parent dirs) under a test root.
 write_required_entry :: proc(root_dir, rel_path: string) -> bool {
     last_separator := -1
     for i in 0..<len(rel_path) {
@@ -55,6 +57,7 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
     return os.write_entire_file(full_path, []u8{'x'}) == nil
 }
 
+//   Build the full required unpack tree (scripts, icon, fonts, manifest).
 build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     required := []string{
         "julia/script.jl",
@@ -72,6 +75,7 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     return true
 }
 
+//   Verify is_assets_unpack_ready reports false until every required entry exists.
 @(test)
 is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
     unpack_dir, ok := prepare_sandbox_dir("euclid_unpack_ready")
@@ -85,6 +89,7 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
     testing.expect(t, app_files.is_assets_unpack_ready(unpack_dir))
 }
 
+//   Verify should_continue_unpack across the missing/partial/complete/forced matrix.
 @(test)
 should_continue_unpack_matrix :: proc(t: ^testing.T) {
     sandbox, ok := prepare_sandbox_dir("euclid_unpack_should_continue")
@@ -131,6 +136,7 @@ should_continue_unpack_matrix :: proc(t: ^testing.T) {
     testing.expect(t, !result)
 }
 
+//   Verify prepare_unpack_directory clears stale contents and recreates the directory.
 @(test)
 prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
     sandbox, ok := prepare_sandbox_dir("euclid_prepare_unpack")
@@ -152,6 +158,7 @@ prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
     testing.expect(t, !os.exists(nested_file_path))
 }
 
+//   Verify resolve_writable_gif_output_dir rejects empty input and creates the dir.
 @(test)
 resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
     output_dir, ok := app_files.resolve_writable_gif_output_dir("")

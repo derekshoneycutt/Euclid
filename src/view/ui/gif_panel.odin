@@ -7,6 +7,12 @@ import "core:fmt"
 
 import rl "vendor:raylib"
 
+//   Row y-positions for the GIF panel's two sliders.
+Gif_Slider_Rows :: struct {
+    downsample_y: f32,
+    frame_step_y: f32,
+}
+
 //   Render and process the Save/Cancel GIF action button.
 draw_settings_save_gif_button :: proc(
     panel: rl.Rectangle,
@@ -79,7 +85,8 @@ draw_settings_gif_status :: proc(
     font: rl.Font) {
 
     view_core.ui_text(gif_capture_status_label(ui_runtime),
-        int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR, font)
+        int(panel.x + SETTINGS_PANEL_INSET), int(row_y), UI_TEXT_COLOR,
+        view_core.ui_text_font(font))
 
     if ui_runtime.gif_status_note_len > 0 {
         note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
@@ -87,7 +94,7 @@ draw_settings_gif_status :: proc(
             int(panel.x + SETTINGS_PANEL_INSET),
             int(row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET),
             UI_TEXT_COLOR,
-            font)
+            view_core.ui_text_font(font))
     }
 
     if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
@@ -96,8 +103,26 @@ draw_settings_gif_status :: proc(
             int(panel.x + SETTINGS_PANEL_INSET),
             int(row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET),
             UI_TEXT_COLOR,
-            font)
+            view_core.ui_text_font(font))
     }
+}
+
+//   Place one fixed-size GIF settings row and return it with the advanced cursor.
+gif_stack_row :: #force_inline proc(
+    rect: rl.Rectangle, segment_size: f32,
+    cursor: Stack_Panel_Cursor) -> Stack_Panel_Result {
+
+    return stack_panel_place_segment(Stack_Panel_Params{
+        origin_x = rect.x,
+        origin_y = rect.y,
+        axis = .Y,
+        direction_sign = 1,
+        rect = rect,
+        can_expand = false,
+        segment_size_is_set = true,
+        segment_size = segment_size,
+        cursor_in = cursor,
+    })
 }
 
 //   Render dedicated GIF panel and wire GIF controls.
@@ -117,7 +142,8 @@ draw_gif_view :: proc(
 
     gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
     view_core.ui_text("GIF Export",
-        int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR, font)
+        int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR,
+        view_core.ui_text_font(font))
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -128,61 +154,35 @@ draw_gif_view :: proc(
 
     stack_cursor := stack_panel_cursor_zero()
     stack_cursor.offset = SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE
+    downsample_row := gif_stack_row(stack_rect,
+        SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE, stack_cursor)
+    frame_step_row := gif_stack_row(stack_rect,
+        SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE, downsample_row.cursor_out)
+    save_button_row := gif_stack_row(stack_rect,
+        SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE, frame_step_row.cursor_out)
+    status_row := gif_stack_row(stack_rect, 0, save_button_row.cursor_out)
 
-    downsample_row := stack_panel_place_segment(Stack_Panel_Params{
-        origin_x = stack_rect.x,
-        origin_y = stack_rect.y,
-        axis = .Y,
-        direction_sign = 1,
-        rect = stack_rect,
-        can_expand = false,
-        segment_size_is_set = true,
-        segment_size = SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE,
-        cursor_in = stack_cursor,
-    })
-    stack_cursor = downsample_row.cursor_out
+    draw_gif_sliders(panel, mouse_input, ui_runtime, font,
+        Gif_Slider_Rows{downsample_row.segment_rect.y, frame_step_row.segment_rect.y})
 
-    frame_step_row := stack_panel_place_segment(Stack_Panel_Params{
-        origin_x = stack_rect.x,
-        origin_y = stack_rect.y,
-        axis = .Y,
-        direction_sign = 1,
-        rect = stack_rect,
-        can_expand = false,
-        segment_size_is_set = true,
-        segment_size = SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE,
-        cursor_in = stack_cursor,
-    })
-    stack_cursor = frame_step_row.cursor_out
+    draw_settings_save_gif_button(panel,
+        save_button_row.segment_rect.y, mouse_input, ui_runtime, font)
 
-    save_button_row := stack_panel_place_segment(Stack_Panel_Params{
-        origin_x = stack_rect.x,
-        origin_y = stack_rect.y,
-        axis = .Y,
-        direction_sign = 1,
-        rect = stack_rect,
-        can_expand = false,
-        segment_size_is_set = true,
-        segment_size = SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE,
-        cursor_in = stack_cursor,
-    })
-    stack_cursor = save_button_row.cursor_out
+    draw_settings_gif_status(panel,
+        status_row.segment_rect.y, ui_runtime, font)
+}
 
-    status_row := stack_panel_place_segment(Stack_Panel_Params{
-        origin_x = stack_rect.x,
-        origin_y = stack_rect.y,
-        axis = .Y,
-        direction_sign = 1,
-        rect = stack_rect,
-        can_expand = false,
-        segment_size_is_set = true,
-        segment_size = 0,
-        cursor_in = stack_cursor,
-    })
+//   Draw the downsample and frame-step integer sliders for the GIF panel.
+draw_gif_sliders :: proc(
+    panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    font: rl.Font,
+    rows: Gif_Slider_Rows) {
 
     draw_settings_integer_slider(Integer_Slider_Params{
         panel = panel,
-        row_y = downsample_row.segment_rect.y,
+        row_y = rows.downsample_y,
         mouse_input = mouse_input,
         ui_runtime = ui_runtime,
         press_id = 6201,
@@ -195,7 +195,7 @@ draw_gif_view :: proc(
 
     draw_settings_integer_slider(Integer_Slider_Params{
         panel = panel,
-        row_y = frame_step_row.segment_rect.y,
+        row_y = rows.frame_step_y,
         mouse_input = mouse_input,
         ui_runtime = ui_runtime,
         press_id = 6202,
@@ -205,10 +205,4 @@ draw_gif_view :: proc(
         max_value = 4,
         font = font,
     })
-
-    draw_settings_save_gif_button(panel,
-        save_button_row.segment_rect.y, mouse_input, ui_runtime, font)
-
-    draw_settings_gif_status(panel,
-        status_row.segment_rect.y, ui_runtime, font)
 }

@@ -25,6 +25,15 @@ Integer_Slider_Params :: struct {
     font:        rl.Font,
 }
 
+//   Value range and drag inputs for one slider drag update.
+Slider_Drag_Input :: struct {
+    min_value:   int,
+    max_value:   int,
+    denom:       int,
+    mouse_input: Mouse_Input_State,
+    track:       rl.Rectangle,
+}
+
 //   Build knob geometry from track bounds and normalized ratio.
 build_slider_knob :: proc(
     slider_track: rl.Rectangle, ratio: f32) -> (f32, rl.Rectangle) {
@@ -148,18 +157,17 @@ slider_release_if_needed :: proc(
 //   Apply drag position to compute slider value while this slider owns press.
 slider_apply_drag_value :: proc(
     clamped: ^int,
-    min_value, max_value: int,
-    denom: int,
-    mouse_input: Mouse_Input_State,
-    track: rl.Rectangle,
+    input: Slider_Drag_Input,
     owns_press: bool) {
 
-    if !owns_press || !mouse_input.left_down || track.width <= 0 {
+    if !owns_press || !input.mouse_input.left_down || input.track.width <= 0 {
         return
     }
 
-    t := clamp((mouse_input.position.x - track.x) / track.width, 0, 1)
-    clamped^ = clamp(min_value + int(t * f32(denom) + 0.5), min_value, max_value)
+    t := clamp((input.mouse_input.position.x - input.track.x) / input.track.width,
+        0, 1)
+    clamped^ = clamp(input.min_value + int(t * f32(input.denom) + 0.5),
+        input.min_value, input.max_value)
 }
 
 //   Build knob draw rect and color with icon-button-style hover/press feedback.
@@ -199,44 +207,54 @@ slider_knob_draw_style :: proc(
     return knob_draw, knob_color
 }
 
+//   Compute the clamped slider value after wheel/press/drag interaction.
+//
+// Returns:
+//   - clamped: The resolved value.
+//   - owns_press: true while this slider owns the press.
+slider_resolve_value :: proc(
+    params: Integer_Slider_Params,
+    track: rl.Rectangle,
+    hit: rl.Rectangle) -> (int, bool) {
+
+    clamped := clamp(params.value^, params.min_value, params.max_value)
+    denom := max(1, params.max_value - params.min_value)
+
+    slider_apply_wheel_step(&clamped, params.min_value, params.max_value,
+        params.mouse_input, hit)
+
+    hovered_hit := rl.CheckCollisionPointRec(params.mouse_input.position, hit)
+    owns_press := slider_owns_press(params.ui_runtime, params.press_id)
+    slider_try_capture_press(params.ui_runtime, params.mouse_input, params.press_id,
+        hovered_hit, &owns_press)
+    slider_release_if_needed(params.ui_runtime, params.mouse_input, &owns_press)
+    slider_apply_drag_value(&clamped,
+        Slider_Drag_Input{params.min_value, params.max_value, denom,
+            params.mouse_input, track},
+        owns_press)
+    return clamped, owns_press
+}
+
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
 
     panel := params.panel
     row_y := params.row_y
     mouse_input := params.mouse_input
-    ui_runtime := params.ui_runtime
-    press_id := params.press_id
-    value := params.value
-    min_value := params.min_value
-    max_value := params.max_value
     font := params.font
 
     view_core.ui_text(params.label, int(panel.x + SETTINGS_PANEL_INSET),
-        int(row_y), UI_TEXT_COLOR, font)
+        int(row_y), UI_TEXT_COLOR, view_core.ui_text_font(font))
 
     track := slider_track_rect(panel, row_y)
     hit := slider_hit_rect(track)
 
-    clamped := clamp(value^, min_value, max_value)
-    denom := max(1, max_value - min_value)
-    ratio := f32(clamped - min_value) / f32(denom)
+    clamped, owns_press := slider_resolve_value(params, track, hit)
+    params.value^ = clamped
+
+    denom := max(1, params.max_value - params.min_value)
+    ratio := f32(clamped - params.min_value) / f32(denom)
     knob_center_x, knob := build_slider_knob(track, ratio)
-
-    slider_apply_wheel_step(&clamped, min_value, max_value, mouse_input, hit)
-
-    hovered_hit := rl.CheckCollisionPointRec(mouse_input.position, hit)
-
-    owns_press := slider_owns_press(ui_runtime, press_id)
-    slider_try_capture_press(ui_runtime, mouse_input, press_id, hovered_hit, &owns_press)
-    slider_release_if_needed(ui_runtime, mouse_input, &owns_press)
-    slider_apply_drag_value(&clamped, min_value, max_value, denom,
-        mouse_input, track, owns_press)
-
-    value^ = clamped
-
-    ratio = f32(clamped - min_value) / f32(denom)
-    knob_center_x, knob = build_slider_knob(track, ratio)
 
     pressed_knob := owns_press && mouse_input.left_down
     knob_draw, knob_color :=
@@ -255,5 +273,5 @@ draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
 
     view_core.ui_text(fmt.tprintf("%d", clamped),
         int(panel.x + panel.width - SETTINGS_PANEL_INSET - 32), int(row_y),
-        UI_TEXT_COLOR, font)
+        UI_TEXT_COLOR, view_core.ui_text_font(font))
 }

@@ -2,22 +2,23 @@
 
 import Pkg
 
-const Repository_Root = normpath(joinpath(@__DIR__, ".."))
-const Analysis_Project = get(
+const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
+const AnalysisProject = get(
     ENV,
     "ODIN_JULIA_ANALYSIS_PROJECT",
-    joinpath(Repository_Root, "tools", "analysis"))
-const Default_Settings = joinpath(Repository_Root, "tools", "analysis_settings.jl")
+    joinpath(RepositoryRoot, "tools", "analysis"))
+const DefaultSettings = joinpath(RepositoryRoot, "tools", "analysis_settings.jl")
 
-Pkg.activate(Analysis_Project; io=devnull)
+Pkg.activate(AnalysisProject; io=devnull)
 
 using OdinJuliaAnalysis
 
+"""Construct the arguments for the analysis engine."""
 function analysis_arguments(arguments::Vector{String})
     resolved = copy(arguments)
     if !isempty(resolved) && first(resolved) == "check" &&
         !any(argument -> startswith(argument, "--settings="), resolved)
-        push!(resolved, "--settings=" * Default_Settings)
+        push!(resolved, "--settings=" * DefaultSettings)
     end
     return resolved
 end

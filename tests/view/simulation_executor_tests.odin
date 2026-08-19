@@ -12,21 +12,9 @@ import "core:strings"
 import "core:testing"
 import "core:thread"
 
-@(test)
-headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
-    t: ^testing.T) {
-    cwd, cwd_err := os.get_working_directory(context.temp_allocator)
-    testing.expect(t, cwd_err == nil)
-    testing.expect(t, len(cwd) > 0)
-    bin_dir, bin_join_err := filepath.join([]string{cwd, "bin"}, context.allocator)
-    testing.expect(t, bin_join_err == nil)
-    defer delete(bin_dir)
-    asset_root_config := app_files.make_asset_root_config(bin_dir)
-    defer app_files.destroy_asset_root_config(&asset_root_config)
-    testing.expect(t, app_files.reload_packaged_assets_root_with_config(
-        &asset_root_config))
-
-    settings := app_core.Euclid_Run_Settings{
+//   Build the run settings for one headless trace-enabled session.
+make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
+    return app_core.Euclid_Run_Settings{
         do_run = true,
         do_antialiasing = false,
         do_vsync = false,
@@ -41,13 +29,11 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
         // Exercise the trace pipeline without printing records to stdout.
         semantic_trace_sink = true,
     }
+}
 
-    session, ok := app_view.create_runtime_session(&settings)
-    testing.expect(t, ok)
-    if !ok {
-        return
-    }
-    defer app_view.shutdown_runtime_session(session)
+//   Assert the headless session started with a ready service and live state.
+expect_headless_session_ready :: proc(
+    t: ^testing.T, session: app_view.Euclid_Runtime_Session) {
 
     state := session.state
     service := session.julia_service
@@ -59,7 +45,34 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     testing.expect(t, state^.simulation_executor != nil)
     testing.expect_value(t, state^.fixed_step, u64(0))
     testing.expect_value(t, state^.simulation_time, f32(0))
+}
 
+//   Verify a headless runtime session starts, steps, and shuts down without a window.
+@(test)
+headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
+    t: ^testing.T) {
+    cwd, cwd_err := os.get_working_directory(context.temp_allocator)
+    testing.expect(t, cwd_err == nil)
+    testing.expect(t, len(cwd) > 0)
+    bin_dir, bin_join_err := filepath.join([]string{cwd, "bin"}, context.allocator)
+    testing.expect(t, bin_join_err == nil)
+    defer delete(bin_dir)
+    asset_root_config := app_files.make_asset_root_config(bin_dir)
+    defer app_files.destroy_asset_root_config(&asset_root_config)
+    testing.expect(t, app_files.reload_packaged_assets_root_with_config(
+        &asset_root_config))
+
+    settings := make_headless_trace_settings()
+    session, ok := app_view.create_runtime_session(&settings)
+    testing.expect(t, ok)
+    if !ok {
+        return
+    }
+    defer app_view.shutdown_runtime_session(session)
+
+    expect_headless_session_ready(t, session)
+
+    state := session.state
     testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
     testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
@@ -68,6 +81,7 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     testing.expect(t, app_trace.state_is_valid(&state^.trace_state))
 }
 
+//   Verify a deterministic fixed step advances identity after the worker joins.
 @(test)
 deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -110,6 +124,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     testing.expect(t, strings.contains(second_payload, "\"simulation_time\":0.05"))
 }
 
+//   Verify a deterministic fixed step emits a post-join checkpoint snapshot.
 @(test)
 deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -149,6 +164,7 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     testing.expect(t, strings.contains(payload, "\"points\":["))
 }
 
+//   Verify a parallel step joins the particle and constraint updates.
 @(test)
 parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -185,6 +201,7 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     testing.expect_value(t, position.z, f32(0))
 }
 
+//   Verify frame preparation joins the shape and dynview cache updates.
 @(test)
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)

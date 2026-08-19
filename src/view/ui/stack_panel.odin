@@ -86,6 +86,54 @@ stack_panel_accumulate_used_rect :: #force_inline proc(
     return true, rl.Rectangle{left, top, max(0.0, right - left), max(0.0, bottom - top)}
 }
 
+//   Compute the segment rect along the Y axis with clamping.
+stack_panel_segment_rect_y :: proc(
+    params: Stack_Panel_Params,
+    bounds: rl.Rectangle,
+    direction: f32,
+    segment_size: f32) -> rl.Rectangle {
+
+    segment_rect := rl.Rectangle{}
+    segment_rect.x = params.origin_x
+    segment_rect.width = bounds.width
+    segment_rect.height = segment_size
+    if direction > 0 {
+        segment_rect.y = params.origin_y + params.cursor_in.offset
+    } else {
+        segment_rect.y = params.origin_y - params.cursor_in.offset - segment_size
+    }
+
+    segment_rect = stack_panel_clamp_x(segment_rect, bounds)
+    if !params.can_expand {
+        segment_rect = stack_panel_clamp_y(segment_rect, bounds)
+    }
+    return segment_rect
+}
+
+//   Compute the segment rect along the X axis with clamping.
+stack_panel_segment_rect_x :: proc(
+    params: Stack_Panel_Params,
+    bounds: rl.Rectangle,
+    direction: f32,
+    segment_size: f32) -> rl.Rectangle {
+
+    segment_rect := rl.Rectangle{}
+    segment_rect.y = params.origin_y
+    segment_rect.height = bounds.height
+    segment_rect.width = segment_size
+    if direction > 0 {
+        segment_rect.x = params.origin_x + params.cursor_in.offset
+    } else {
+        segment_rect.x = params.origin_x - params.cursor_in.offset - segment_size
+    }
+
+    segment_rect = stack_panel_clamp_y(segment_rect, bounds)
+    if !params.can_expand {
+        segment_rect = stack_panel_clamp_x(segment_rect, bounds)
+    }
+    return segment_rect
+}
+
 //   Resolve one stack segment placement and advance cursor state.
 stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Result {
     bounds := clamp_non_negative_rect(params.rect)
@@ -95,34 +143,11 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
     segment_rect := rl.Rectangle{}
     switch params.axis {
     case .Y:
-        segment_rect.x = params.origin_x
-        segment_rect.width = bounds.width
-        segment_rect.height = segment_size
-        if direction > 0 {
-            segment_rect.y = params.origin_y + params.cursor_in.offset
-        } else {
-            segment_rect.y = params.origin_y - params.cursor_in.offset - segment_size
-        }
-
-        segment_rect = stack_panel_clamp_x(segment_rect, bounds)
-        if !params.can_expand {
-            segment_rect = stack_panel_clamp_y(segment_rect, bounds)
-        }
-
+        segment_rect = stack_panel_segment_rect_y(params, bounds, direction,
+            segment_size)
     case .X:
-        segment_rect.y = params.origin_y
-        segment_rect.height = bounds.height
-        segment_rect.width = segment_size
-        if direction > 0 {
-            segment_rect.x = params.origin_x + params.cursor_in.offset
-        } else {
-            segment_rect.x = params.origin_x - params.cursor_in.offset - segment_size
-        }
-
-        segment_rect = stack_panel_clamp_y(segment_rect, bounds)
-        if !params.can_expand {
-            segment_rect = stack_panel_clamp_x(segment_rect, bounds)
-        }
+        segment_rect = stack_panel_segment_rect_x(params, bounds, direction,
+            segment_size)
     }
 
     segment_rect = clamp_non_negative_rect(segment_rect)

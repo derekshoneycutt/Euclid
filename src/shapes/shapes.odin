@@ -8,6 +8,54 @@ import "../core"
 
 import rl "vendor:raylib"
 
+Shape_Style :: struct {
+    color: rl.Color,
+    brush_size: f32,
+}
+
+Label_Input :: struct {
+    label: rune,
+    decoration_kind: core.Shapes_Label_Decoration_Kind,
+    position: Vector3,
+    style: Shape_Style,
+}
+
+Arc_Input :: struct {
+    center: Vector3,
+    radius, start_theta, end_theta: f32,
+    style: Shape_Style,
+}
+
+Square_Input :: struct {
+    vertices: [4]Vector3,
+    color: rl.Color,
+}
+
+Pentagon_Input :: struct {
+    vertices: [5]Vector3,
+    color: rl.Color,
+}
+
+Compass_Constraint_Targets :: struct {
+    host_id, point1_id, pivot_id, point2_id: int,
+}
+
+//   Construct one distance constraint owned by a tool host.
+tool_distance_constraint :: #force_inline proc(
+    host_id: int, length: f32, depend_on: int) -> Shapes_Constraint {
+    return {.Distance, host_id, {length, 0, 0}, 0, 0, 0, i32(depend_on), true}
+}
+
+//   Construct one floor constraint for a tool point.
+tool_floor_constraint :: #force_inline proc(point_id: int) -> Shapes_Constraint {
+    return {.Floor, point_id, {0, 0, 0}, 0, 0, 0, 0, true}
+}
+
+//   Construct one disabled point lock constraint for a tool point.
+tool_lock_constraint :: #force_inline proc(point_id: int) -> Shapes_Constraint {
+    return {.Snap_Point, point_id, {0, 0, 0}, 0, 0, 0, nil, false}
+}
+
 //   Create a drawable label point and append it to the point system.
 //
 // Parameters:
@@ -22,17 +70,14 @@ import rl "vendor:raylib"
 //   - point_id: Index of the inserted point.
 init_label :: proc(
     system: ^Shapes_Point_System,
-    label: rune,
-    decoration_kind: core.Shapes_Label_Decoration_Kind,
-    pos : Vector3,
-    color: rl.Color,
-    brush_size: f32) -> (^Shapes_Point, int) {
+    input: Label_Input) -> (^Shapes_Point, int) {
 
     point_id := system^.next_point_index
     system^.points[point_id] =
-        Shapes_Point{ .Label, pos, nil, color, nil, brush_size, 0, label,
+        Shapes_Point{ .Label, input.position, nil, input.style.color, nil,
+            input.style.brush_size, 0, input.label,
             .None, 0, 0, 0, 0, false }
-    system^.points[point_id].decoration_kind = decoration_kind
+    system^.points[point_id].decoration_kind = input.decoration_kind
     system^.next_point_index += 1
 
     return &system^.points[point_id], point_id
@@ -117,25 +162,22 @@ init_line :: proc(
 //   - circle: Circle shape indices for host and child points.
 init_circle :: proc(
     system: ^Shapes_Point_System,
-    center_pos: Vector3,
-    radius: f32,
-    start_theta, end_theta: f32,
-    color: rl.Color,
-    brush_size: f32) -> Shapes_Circle {
+    input: Arc_Input) -> Shapes_Circle {
 
     start_pos := Vector3{
-        center_pos.x + radius * f32(math.cos(start_theta)),
-        center_pos.y + radius * f32(math.sin(start_theta)),
-        center_pos.z,
+        input.center.x + input.radius * f32(math.cos(input.start_theta)),
+        input.center.y + input.radius * f32(math.sin(input.start_theta)),
+        input.center.z,
     }
 
     end_pos := Vector3{
-        center_pos.x + radius * f32(math.cos(end_theta)),
-        center_pos.y + radius * f32(math.sin(end_theta)),
-        center_pos.z,
+        input.center.x + input.radius * f32(math.cos(input.end_theta)),
+        input.center.y + input.radius * f32(math.sin(input.end_theta)),
+        input.center.z,
     }
 
-    host_point := Shapes_Point{ .Circle, center_pos, nil, color, nil, brush_size, 0, nil,
+    host_point := Shapes_Point{ .Circle, input.center, nil, input.style.color, nil,
+        input.style.brush_size, 0, nil,
         .None, 1, 2, 0, 0, false }
     start_point := Shapes_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
@@ -173,26 +215,22 @@ init_circle :: proc(
 //   - filled_circle: Filled-circle shape indices for host and child points.
 init_filledcircle :: proc(
     system: ^Shapes_Point_System,
-    center_pos: Vector3,
-    radius: f32,
-    start_theta, end_theta: f32,
-    color: rl.Color,
-    brush_size: f32) -> Shapes_Filled_Circle {
+    input: Arc_Input) -> Shapes_Filled_Circle {
 
     start_pos := Vector3{
-        center_pos.x + radius * f32(math.cos(start_theta)),
-        center_pos.y + radius * f32(math.sin(start_theta)),
-        center_pos.z,
+        input.center.x + input.radius * f32(math.cos(input.start_theta)),
+        input.center.y + input.radius * f32(math.sin(input.start_theta)),
+        input.center.z,
     }
 
     end_pos := Vector3{
-        center_pos.x + radius * f32(math.cos(end_theta)),
-        center_pos.y + radius * f32(math.sin(end_theta)),
-        center_pos.z,
+        input.center.x + input.radius * f32(math.cos(input.end_theta)),
+        input.center.y + input.radius * f32(math.sin(input.end_theta)),
+        input.center.z,
     }
 
-    host_point := Shapes_Point{ .Filled_Circle, center_pos, nil, color, nil,
-        brush_size, 0, nil, .None, 1, 2, 0, 0, false }
+    host_point := Shapes_Point{ .Filled_Circle, input.center, nil, input.style.color, nil,
+        input.style.brush_size, 0, nil, .None, 1, 2, 0, 0, false }
     start_point := Shapes_Point{ .Point, start_pos, nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
     end_point := Shapes_Point{ .Point, end_pos, nil, nil, nil, 0, 0, nil,
@@ -270,18 +308,17 @@ init_triangle :: proc(
 //   - square: Square shape indices for host and child points.
 init_square :: proc(
     system: ^Shapes_Point_System,
-    point1, point2, point3, point4: Vector3,
-    color: rl.Color) -> Shapes_Square {
+    input: Square_Input) -> Shapes_Square {
 
-    host_point := Shapes_Point{ .Square, nil, nil, color, nil, 0, 0, nil,
+    host_point := Shapes_Point{ .Square, nil, nil, input.color, nil, 0, 0, nil,
         .None, 0, 4, 0, 0, false }
-    point1 := Shapes_Point{ .Point, point1, nil, nil, nil, 0, 0, nil,
+    point1 := Shapes_Point{ .Point, input.vertices[0], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point2 := Shapes_Point{ .Point, point2, nil, nil, nil, 0, 0, nil,
+    point2 := Shapes_Point{ .Point, input.vertices[1], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point3 := Shapes_Point{ .Point, point3, nil, nil, nil, 0, 0, nil,
+    point3 := Shapes_Point{ .Point, input.vertices[2], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point4 := Shapes_Point{ .Point, point4, nil, nil, nil, 0, 0, nil,
+    point4 := Shapes_Point{ .Point, input.vertices[3], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
@@ -319,20 +356,19 @@ init_square :: proc(
 //   - pentagon: Pentagon shape indices for host and child points.
 init_pentagon :: proc(
     system: ^Shapes_Point_System,
-    point1, point2, point3, point4, point5: Vector3,
-    color: rl.Color) -> Shapes_Pentagon {
+    input: Pentagon_Input) -> Shapes_Pentagon {
 
-    host_point := Shapes_Point{ .Pentagon, nil, nil, color, nil, 0, 0, nil,
+    host_point := Shapes_Point{ .Pentagon, nil, nil, input.color, nil, 0, 0, nil,
         .None, 0, 5, 0, 0, false }
-    point1 := Shapes_Point{ .Point, point1, nil, nil, nil, 0, 0, nil,
+    point1 := Shapes_Point{ .Point, input.vertices[0], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point2 := Shapes_Point{ .Point, point2, nil, nil, nil, 0, 0, nil,
+    point2 := Shapes_Point{ .Point, input.vertices[1], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point3 := Shapes_Point{ .Point, point3, nil, nil, nil, 0, 0, nil,
+    point3 := Shapes_Point{ .Point, input.vertices[2], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point4 := Shapes_Point{ .Point, point4, nil, nil, nil, 0, 0, nil,
+    point4 := Shapes_Point{ .Point, input.vertices[3], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
-    point5 := Shapes_Point{ .Point, point5, nil, nil, nil, 0, 0, nil,
+    point5 := Shapes_Point{ .Point, input.vertices[4], nil, nil, nil, 0, 0, nil,
         .None, 0, 0, 0, 0, false }
 
     host_id := system^.next_point_index
@@ -369,6 +405,27 @@ init_pentagon :: proc(
 //
 // Returns:
 //   - pen: Pen shape indices for points and related constraints.
+install_pen_constraints :: proc(
+    system: ^Shapes_Point_System,
+    host_id, point1_id, point2_id: int,
+    length_value: f32) -> int {
+
+    first := system^.next_constraint_index
+    system^.next_constraint_index += 5
+    system^.constraints[first] = Shapes_Constraint{.Distance, host_id,
+        {length_value, 0, 0}, 0, 0, 0, 0, true}
+    system^.constraints[first + 1] = Shapes_Constraint{.Floor, point1_id,
+        {0, 0, 0}, 0, 0, 0, 0, true}
+    system^.constraints[first + 2] = Shapes_Constraint{.Floor, point2_id,
+        {0, 0, 0}, 0, 0, 0, 0, true}
+    system^.constraints[first + 3] = Shapes_Constraint{.Snap_Point, point1_id,
+        {0, 0, 0}, 0, 0, 0, nil, false}
+    system^.constraints[first + 4] = Shapes_Constraint{.Snap_Point, point2_id,
+        {0, 0, 0}, 0, 0, 0, nil, false}
+    return first
+}
+
+//   Create a pen tool shape with floor and lock constraints.
 init_pen :: proc(
     system: ^Shapes_Point_System,
     length_value: f32,
@@ -389,31 +446,13 @@ init_pen :: proc(
     host_point.child_point_head = point1_id
     point1.next_child_point = point2_id
 
-    length_constraint := Shapes_Constraint{ .Distance, host_id,
-        { length_value, 0, 0 }, 0, 0, 0, 0, true }
-
-    point1_floor := Shapes_Constraint{ .Floor, point1_id, { 0, 0, 0 },
-        0, 0, 0, 0, true }
-    point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 },
-        0, 0, 0, 0, true }
-
-    lock_point1 := Shapes_Constraint{ .Snap_Point, point1_id, { 0, 0, 0 },
-        0, 0, 0, nil, false }
-    lock_point2 := Shapes_Constraint{ .Snap_Point, point2_id, { 0, 0, 0 },
-        0, 0, 0, nil, false }
-
-    length_id := system^.next_constraint_index
-    system^.next_constraint_index += 5
+    length_id := install_pen_constraints(
+        system, host_id, point1_id, point2_id, length_value)
 
     system^.points[host_id] = host_point
     system^.points[point1_id] = point1
     system^.points[point2_id] = point2
 
-    system^.constraints[length_id] = length_constraint
-    system^.constraints[length_id + 1] = point1_floor
-    system^.constraints[length_id + 2] = point2_floor
-    system^.constraints[length_id + 3] = lock_point1
-    system^.constraints[length_id + 4] = lock_point2
 
     return Shapes_Pen{ host_id, point1_id, point2_id,
         length_id, length_id + 1, length_id + 2, length_id + 3, length_id + 4 }
@@ -429,6 +468,28 @@ init_pen :: proc(
 //
 // Returns:
 //   - compass: Compass shape indices for points and related constraints.
+install_compass_constraints :: proc(
+    system: ^Shapes_Point_System,
+    targets: Compass_Constraint_Targets,
+    limb_length: f32) -> int {
+
+    first := system^.next_constraint_index
+    system^.next_constraint_index += 8
+    system^.constraints[first] = {.Center_Pivot, targets.host_id,
+        {0, 0, 0}, 0.01, 0, 0, 0, true}
+    system^.constraints[first + 1] =
+        tool_distance_constraint(targets.host_id, limb_length, 0)
+    system^.constraints[first + 2] =
+        tool_distance_constraint(targets.host_id, limb_length, 1)
+    system^.constraints[first + 3] = tool_floor_constraint(targets.point1_id)
+    system^.constraints[first + 4] = tool_floor_constraint(targets.pivot_id)
+    system^.constraints[first + 5] = tool_floor_constraint(targets.point2_id)
+    system^.constraints[first + 6] = tool_lock_constraint(targets.point1_id)
+    system^.constraints[first + 7] = tool_lock_constraint(targets.point2_id)
+    return first
+}
+
+//   Create a compass tool shape with limb, floor, center-pivot, and lock constraints.
 init_compass :: proc(
     system: ^Shapes_Point_System,
     limb_length: f32,
@@ -453,42 +514,14 @@ init_compass :: proc(
     point1.next_child_point = host_id + 2
     pivot.next_child_point = host_id + 3
 
-    center_pivot := Shapes_Constraint{ .Center_Pivot, host_id, { 0, 0, 0 },
-        0.01, 0, 0, 0, true }
-
-    limb1_length := Shapes_Constraint{ .Distance, host_id, { limb_length, 0, 0 },
-        0, 0, 0, 0, true }
-    limb2_length := Shapes_Constraint{ .Distance, host_id, { limb_length, 0, 0 },
-        0, 0, 0, 1, true }
-
-    point1_floor := Shapes_Constraint{ .Floor, point1_id, { 0, 0, 0 },
-        0, 0, 0, 0, true }
-    pivot_floor := Shapes_Constraint{ .Floor, pivot_id, { 0, 0, 0 },
-        0, 0, 0, 0, true }
-    point2_floor := Shapes_Constraint{ .Floor, point2_id, { 0, 0, 0 },
-        0, 0, 0, 0, true }
-
-    lock_point1 := Shapes_Constraint{ .Snap_Point, point1_id, { 0, 0, 0 },
-        0, 0, 0, nil, false }
-    lock_point2 := Shapes_Constraint{ .Snap_Point, point2_id, { 0, 0, 0 },
-        0, 0, 0, nil, false }
-
-    center_pivot_id := system^.next_constraint_index
-    system^.next_constraint_index += 8
+    center_pivot_id := install_compass_constraints(
+        system, {host_id, point1_id, pivot_id, point2_id}, limb_length)
 
     system^.points[host_id] = host_point
     system^.points[point1_id] = point1
     system^.points[pivot_id] = pivot
     system^.points[point2_id] = point2
 
-    system^.constraints[center_pivot_id] = center_pivot
-    system^.constraints[center_pivot_id + 1] = limb1_length
-    system^.constraints[center_pivot_id + 2] = limb2_length
-    system^.constraints[center_pivot_id + 3] = point1_floor
-    system^.constraints[center_pivot_id + 4] = pivot_floor
-    system^.constraints[center_pivot_id + 5] = point2_floor
-    system^.constraints[center_pivot_id + 6] = lock_point1
-    system^.constraints[center_pivot_id + 7] = lock_point2
 
     return Shapes_Compass{ host_id, point1_id, pivot_id, point2_id,
         center_pivot_id, center_pivot_id + 1,

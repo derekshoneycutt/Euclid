@@ -53,7 +53,7 @@ create_new_label_decorated :: proc "c" (
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     use_decoration_kind := label_decoration_kind_from_i32(decoration_kind)
     point, index := shapes.init_label(
-        state^.point_system, label, use_decoration_kind, pos, rl_color, brush_size)
+        state^.point_system, {label, use_decoration_kind, pos, {rl_color, brush_size}})
 
     use_pos, has_pos := point^.position.?
     color, has_color := point^.color.?
@@ -191,8 +191,8 @@ create_new_circle :: proc "c" (
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := shapes.init_circle(
-        state^.point_system, center, radius, start_theta, end_theta, rl_color, brush_size)
+    circle := shapes.init_circle(state^.point_system,
+        {center, radius, start_theta, end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -218,8 +218,8 @@ create_new_filledcircle :: proc "c" (
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := shapes.init_filledcircle(
-        state^.point_system, center, radius, start_theta, end_theta, rl_color, brush_size)
+    circle := shapes.init_filledcircle(state^.point_system,
+        {center, radius, start_theta, end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -269,7 +269,7 @@ create_new_square :: proc "c" (
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_square(
-        state^.point_system, point1, point2, point3, point4, rl_color)
+        state^.point_system, {{point1, point2, point3, point4}, rl_color})
 
     return line
 }
@@ -296,7 +296,7 @@ create_new_pentagon :: proc "c" (
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_pentagon(
-        state^.point_system, point1, point2, point3, point4, point5, rl_color)
+        state^.point_system, {{point1, point2, point3, point4, point5}, rl_color})
 
     return line
 }

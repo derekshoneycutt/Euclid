@@ -1,23 +1,23 @@
 using OdinJuliaAnalysis
 
-const Repository_Root = normpath(joinpath(@__DIR__, ".."))
-const Julia_Project = joinpath(Repository_Root, "src", "julia")
-const Analyzer_Root = dirname(dirname(pathof(OdinJuliaAnalysis)))
-const Base_Settings = Base.include(
-    @__MODULE__, joinpath(Analyzer_Root, "settings.jl"))
+const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
+const JuliaProject = joinpath(RepositoryRoot, "src", "julia")
+const AnalyzerRoot = dirname(dirname(pathof(OdinJuliaAnalysis)))
+const BaseSettings = Base.include(
+    @__MODULE__, joinpath(AnalyzerRoot, "settings.jl"))
 
-Julia_Project in LOAD_PATH || pushfirst!(LOAD_PATH, Julia_Project)
+JuliaProject in LOAD_PATH || pushfirst!(LOAD_PATH, JuliaProject)
 
-module Euclid_Analysis_Roots
+module EuclidAnalysisRoots
 
-const Julia_Root = normpath(joinpath(@__DIR__, "..", "src", "julia"))
+const JuliaRoot = normpath(joinpath(@__DIR__, "..", "src", "julia"))
 
-Base.include(@__MODULE__, joinpath(Julia_Root, "odin-julia-bridge.jl"))
-Base.include(@__MODULE__, joinpath(Julia_Root, "latex.jl"))
+Base.include(@__MODULE__, joinpath(JuliaRoot, "odin-julia-bridge.jl"))
+Base.include(@__MODULE__, joinpath(JuliaRoot, "latex.jl"))
 
 end
 
-const Default_Excludes = [
+const DefaultExcludes = [
     "tools/analysis",
     "src/julialib",
     "staging_AnalysisConversion.md",
@@ -25,7 +25,7 @@ const Default_Excludes = [
     "staging_logic.md",
     "staging_SemanticTrace.md",
 ]
-const All_Excludes = [
+const AllExcludes = [
     "tools/analysis",
     "staging_AnalysisConversion.md",
     "staging_FirstGroups.md",
@@ -33,7 +33,7 @@ const All_Excludes = [
     "staging_SemanticTrace.md",
 ]
 
-const Rule_Responses = Dict(
+const RuleResponses = Dict(
     "DUPLICATE-CODE-POLICY-DRIFT" => Fail,
     "FUNCTION-METRIC-POLICY-DRIFT" => Fail,
     "NAMING-POLICY-DRIFT" => Fail,
@@ -52,11 +52,11 @@ const Rule_Responses = Dict(
     "ODIN-CLOSING-PAREN-PLACEMENT" => Fail,
     "ODIN-RETURN-TUPLE" => Fail)
 
-const Animation_Loop_Reason =
+const AnimationLoopReason =
     "Animation state-machine loops enumerate every construction step in play order."
 
 # Modules whose exported `loop` drives one animation as a flat step sequence.
-const Animation_Loop_Files = [
+const AnimationLoopFiles = [
     "src/julia/algebra/groups/C_n.jl",
     "src/julia/algebra/groups/C_n_abelian.jl",
     "src/julia/algebra/groups/C_n_associative.jl",
@@ -159,7 +159,7 @@ const Animation_Loop_Files = [
 ]
 
 # Loops long enough to review for length while still under the branching thresholds.
-const Animation_Loop_Linear_Files = [
+const AnimationLoopLinearFiles = [
     "src/julia/elements/book1/def_001_point.jl",
     "src/julia/elements/book1/def_002_line.jl",
 ]
@@ -170,22 +170,22 @@ function euclid_rule_settings()
         RuleSetting(
             setting.rule_id,
             setting.enabled,
-            get(Rule_Responses, setting.rule_id, Report))
-        for setting in Base_Settings.rules
+            get(RuleResponses, setting.rule_id, Report))
+        for setting in BaseSettings.rules
     ]
 end
 
 """Return reviewed function metric policies for animation state-machine loops."""
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
-    for path in Animation_Loop_Files
+    for path in AnimationLoopFiles
         push!(reviews, ReviewedComplexity(
             "animation-loop-lines:$path", path, :julia, "loop", :executable_lines,
-            Animation_Loop_Reason; response=Report))
-        path in Animation_Loop_Linear_Files && continue
+            AnimationLoopReason; response=Report))
+        path in AnimationLoopLinearFiles && continue
         push!(reviews, ReviewedComplexity(
             "animation-loop-branching:$path", path, :julia, "loop",
-            :cyclomatic_complexity, Animation_Loop_Reason; response=Report))
+            :cyclomatic_complexity, AnimationLoopReason; response=Report))
     end
     return reviews
 end
@@ -195,9 +195,9 @@ AnalysisSettings(
     Fail,
     AnalysisThresholds(90, 100, 120, 20, 30, 5, 10, 15, 15),
     [
-        ScanProfile(:default, Default_Excludes),
-        ScanProfile(:all, All_Excludes),
-        ScanProfile(:aspirational, Default_Excludes),
+        ScanProfile(:default, DefaultExcludes),
+        ScanProfile(:all, AllExcludes),
+        ScanProfile(:aspirational, DefaultExcludes),
     ],
     euclid_rule_settings(),
     default_naming_settings(),
@@ -205,7 +205,7 @@ AnalysisSettings(
         JetEntryPoint(
             "latex-plain-text",
             "src/julia/latex.jl",
-            Euclid_Analysis_Roots.EuclidLatex.latex_to_plain_text,
+            EuclidAnalysisRoots.EuclidLatex.latex_to_plain_text,
             (String,)),
     ]),
     OdinBuildSettings(OdinBuildTarget[]),

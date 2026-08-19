@@ -10,11 +10,21 @@ import test_helpers "../helpers"
 
 EPS :: f32(1e-5)
 
+//   Snapshot one low-particle slot's position and velocity.
+Dust_Slot_Snapshot :: struct {
+    x:  f32,
+    y:  f32,
+    vx: f32,
+    vy: f32,
+}
+
+//   Assert that two f32 values match within EPS.
 expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
     testing.expectf(t, math.abs(actual - expected) <= EPS,
         "%s | expected=%v got=%v", msg, expected, actual)
 }
 
+//   Verify theta normalization and sweep delta wrap correctly across zero.
 @(test)
 normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
     theta := app_particles.normalize_theta(f32(-0.5))
@@ -28,6 +38,7 @@ normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
         "sweep delta should wrap across zero")
 }
 
+//   Verify dust_grid_cell_index clamps out-of-range coordinates to the grid.
 @(test)
 dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
     testing.expect_value(t, app_particles.dust_grid_cell_index(-1, -1), 0)
@@ -36,6 +47,7 @@ dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
     testing.expect_value(t, app_particles.dust_grid_cell_index(99, 99), max_idx)
 }
 
+//   Verify slot reservation prefers dead slots and wraps at the particle cap.
 @(test)
 reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -62,6 +74,7 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
     testing.expect_value(t, idx2, 0)
 }
 
+//   Verify the reservation ring index wraps back to zero at the cap.
 @(test)
 reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -74,6 +87,36 @@ reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.next_index, 0)
 }
 
+//   Capture one low-particle slot's current position and velocity.
+dust_slot_snapshot :: #force_inline proc(
+    ps: ^app_core.Particle_System, index: int) -> Dust_Slot_Snapshot {
+
+    return Dust_Slot_Snapshot{
+        ps^.low_particles.pos_x[index],
+        ps^.low_particles.pos_y[index],
+        ps^.low_particles.vel_x[index],
+        ps^.low_particles.vel_y[index],
+    }
+}
+
+//   Assert one low-particle slot still matches a prior snapshot.
+expect_dust_slot_unchanged :: proc(
+    t: ^testing.T,
+    ps: ^app_core.Particle_System,
+    index: int,
+    before: Dust_Slot_Snapshot) {
+
+    test_helpers.expect_close(t, ps^.low_particles.pos_x[index], before.x,
+        "no collision should keep x")
+    test_helpers.expect_close(t, ps^.low_particles.pos_y[index], before.y,
+        "no collision should keep y")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[index], before.vx,
+        "no collision should keep vx")
+    test_helpers.expect_close(t, ps^.low_particles.vel_y[index], before.vy,
+        "no collision should keep vy")
+}
+
+//   Verify a non-overlapping dust pair keeps positions and velocities unchanged.
 @(test)
 resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -89,38 +132,19 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     ps^.low_particles.vel_x[1] = -0.03
     ps^.low_particles.vel_y[1] = 0.04
 
-    before_ax := ps^.low_particles.pos_x[0]
-    before_ay := ps^.low_particles.pos_y[0]
-    before_bx := ps^.low_particles.pos_x[1]
-    before_by := ps^.low_particles.pos_y[1]
-    before_avx := ps^.low_particles.vel_x[0]
-    before_avy := ps^.low_particles.vel_y[0]
-    before_bvx := ps^.low_particles.vel_x[1]
-    before_bvy := ps^.low_particles.vel_y[1]
+    before_a := dust_slot_snapshot(ps, 0)
+    before_b := dust_slot_snapshot(ps, 1)
 
     min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
     radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
         app_particles.DUST_COLLISION_RADIUS
     app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
-    test_helpers.expect_close(t, ps^.low_particles.pos_x[0], before_ax,
-        "no collision should keep ax")
-    test_helpers.expect_close(t, ps^.low_particles.pos_y[0], before_ay,
-        "no collision should keep ay")
-    test_helpers.expect_close(t, ps^.low_particles.pos_x[1], before_bx,
-        "no collision should keep bx")
-    test_helpers.expect_close(t, ps^.low_particles.pos_y[1], before_by,
-        "no collision should keep by")
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], before_avx,
-        "no collision should keep avx")
-    test_helpers.expect_close(t, ps^.low_particles.vel_y[0], before_avy,
-        "no collision should keep avy")
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], before_bvx,
-        "no collision should keep bvx")
-    test_helpers.expect_close(t, ps^.low_particles.vel_y[1], before_bvy,
-        "no collision should keep bvy")
+    expect_dust_slot_unchanged(t, ps, 0, before_a)
+    expect_dust_slot_unchanged(t, ps, 1, before_b)
 }
 
+//   Verify an approaching overlapping pair receives a separating impulse.
 @(test)
 resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -150,6 +174,7 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
     testing.expect(t, ps^.low_particles.vel_x[1] > 0)
 }
 
+//   Verify a separating overlapping pair repositions but skips the impulse.
 @(test)
 resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -181,6 +206,7 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
         "separating vx1 should be unchanged")
 }
 
+//   Verify exactly coincident particles separate along a deterministic direction.
 @(test)
 resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -201,6 +227,7 @@ resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testin
     testing.expect(t, dx * dx + dy * dy > 0)
 }
 
+//   Verify two fresh particle systems produce identical seeded random ranges.
 @(test)
 particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) {
     first := new(app_core.Particle_System)
@@ -216,6 +243,7 @@ particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) 
         app_particles.random_i32_range(second, -10, 10))
 }
 
+//   Verify dense-bucket collision resolution rotates samples and tracks counts.
 @(test)
 resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -231,12 +259,15 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
     app_particles.resolve_dust_collisions(ps)
 
     testing.expect_value(t, ps^.dust_collision_frame, u64(1))
-    testing.expect_value(t, ps^.dust_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+    testing.expect_value(t,
+        ps^.dust_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
         i32(app_core.DUST_GRID_BUCKET_CAP))
-    testing.expect_value(t, ps^.dust_seen_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+    testing.expect_value(t,
+        ps^.dust_seen_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
         i32(ps^.use_max_dust_particles))
 }
 
+//   Verify reset_particles zeroes runtime state and marks every slot dead.
 @(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -264,6 +295,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.high_particles.age[0], 0.0)
 }
 
+//   Verify a single dust kick adds trauma and resets the screenshake clock.
 @(test)
 screenshake_on_dust_kick_adds_trauma :: proc(t: ^testing.T) {
     scale: app_core.Iso_Scale
@@ -274,6 +306,7 @@ screenshake_on_dust_kick_adds_trauma :: proc(t: ^testing.T) {
     testing.expect_value(t, scale.screenshake_elapsed, 0.0)
 }
 
+//   Verify a batched dust kick produces a stronger aggregated impulse.
 @(test)
 screenshake_on_dust_kick_batch_uses_stronger_aggregated_impulse :: proc(t: ^testing.T) {
     single: app_core.Iso_Scale
@@ -285,6 +318,7 @@ screenshake_on_dust_kick_batch_uses_stronger_aggregated_impulse :: proc(t: ^test
     testing.expect(t, batch.screenshake_trauma > single.screenshake_trauma)
 }
 
+//   Verify screenshake decays over time and clears fully at the max time.
 @(test)
 screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
     scale: app_core.Iso_Scale
@@ -305,6 +339,7 @@ screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
     testing.expect_value(t, scale.screenshake_offset_y, 0.0)
 }
 
+//   Verify slot reservation wraps to index zero when every slot is alive.
 @(test)
 reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -321,6 +356,7 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
     testing.expect_value(t, ps^.next_index, 1)
 }
 
+//   Verify a shape-hide burst spawns dust for the supported shape kinds.
 @(test)
 emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
@@ -339,6 +375,7 @@ emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
         ps^.low_particles.alive[3])
 }
 
+//   Verify out-of-bounds particles clamp to the bounds and bounce their velocity.
 @(test)
 clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)

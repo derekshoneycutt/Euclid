@@ -167,19 +167,13 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         _ = trace.record_animation_event_ex(
             &state^.trace_state,
             "animation.tick_committed",
-            service^.animation_generation,
-            slot^.sequence,
-            "",
-            "")
+            {service^.animation_generation, slot^.sequence, "", ""})
     } else {
         service^.animation_ticks_stale += 1
         _ = trace.record_animation_event_ex(
             &state^.trace_state,
             "animation.tick_rejected",
-            service^.animation_generation,
-            slot^.sequence,
-            "",
-            reject_reason)
+            {service^.animation_generation, slot^.sequence, "", reject_reason})
     }
     release_completed_animation_ticks(service)
     return committed

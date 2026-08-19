@@ -6,6 +6,7 @@ import app_core "../../src/core"
 import "../../src/shapes"
 import test_helpers "../helpers"
 
+//   Verify update_last_cache_vectors snapshots only active points.
 @(test)
 update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -28,6 +29,7 @@ update_last_cache_vectors_snapshots_active_points_only :: proc(t: ^testing.T) {
         "points past next_point_index should remain untouched")
 }
 
+//   Verify lerped_point_position blends previous and current when both exist.
 @(test)
 lerped_point_position_uses_previous_position_when_present :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -41,6 +43,7 @@ lerped_point_position_uses_previous_position_when_present :: proc(t: ^testing.T)
         "lerped_point_position should blend previous and current")
 }
 
+//   Verify lerped_point_position falls back to the current position when no previous exists.
 @(test)
 lerped_point_position_falls_back_to_current_without_previous :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -53,6 +56,7 @@ lerped_point_position_falls_back_to_current_without_previous :: proc(t: ^testing
         "lerped_point_position should fall back when previous_position is missing")
 }
 
+//   Verify lerped_child_positions follows the child chain in order.
 @(test)
 lerped_child_positions_follows_child_chain_order :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -81,6 +85,7 @@ lerped_child_positions_follows_child_chain_order :: proc(t: ^testing.T) {
         "child 2 should lerp")
 }
 
+//   Verify draw_cache_next_item_slot updates count and reports capacity limits.
 @(test)
 draw_cache_next_item_slot_updates_count_and_capacity :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -96,6 +101,7 @@ draw_cache_next_item_slot_updates_count_and_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, system.draw_cache.item_count, len(system.draw_cache.items))
 }
 
+//   Verify lerped_child_positions returns false for an invalid child chain.
 @(test)
 lerped_child_positions_returns_false_for_invalid_chain :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -107,6 +113,7 @@ lerped_child_positions_returns_false_for_invalid_chain :: proc(t: ^testing.T) {
     testing.expect(t, !ok)
 }
 
+//   Verify draw_cache_reserve_polygon_indices tracks capacity and rejects overflow.
 @(test)
 draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -122,6 +129,7 @@ draw_cache_reserve_polygon_indices_tracks_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, second, 0)
 }
 
+//   Verify polygon signed area and point-in-triangle handle orientation and edges.
 @(test)
 polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^testing.T) {
     vertices := [3]shapes.Vector3{{0, 0, 0}, {2, 0, 0}, {1, 2, 0}}
@@ -132,6 +140,7 @@ polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^test
         {0, 0, 0}, vertices[0], vertices[1], vertices[2]))
 }
 
+//   Verify clear_animation_data clears the animation-owned point and constraint slots.
 @(test)
 clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -155,6 +164,7 @@ clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
     testing.expect(t, !system.constraints[0].do_apply)
 }
 
+//   Assert each triangle index stays within the polygon's local vertex range.
 expect_polygon_triangle_indices_in_range :: proc(
     t: ^testing.T,
     triangles: []shapes.Shapes_Polygon_Triangle,
@@ -172,6 +182,7 @@ expect_polygon_triangle_indices_in_range :: proc(
     }
 }
 
+//   Seed a polygon host point with its child vertex chain.
 seed_polygon_host :: proc(
     system: ^shapes.Shapes_Point_System,
     kind: shapes.Shapes_Point_Type,
@@ -204,6 +215,7 @@ seed_polygon_host :: proc(
     system.next_point_index = len(points) + 1
 }
 
+//   Verify ear-clipping a convex hexagon emits n-2 triangles with valid indices.
 @(test)
 triangulate_polygon_ear_clip_convex_hexagon_emits_n_minus_2 :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -224,6 +236,7 @@ triangulate_polygon_ear_clip_convex_hexagon_emits_n_minus_2 :: proc(t: ^testing.
         "convex hexagon triangles should index local vertex range")
 }
 
+//   Verify ear-clipping a clockwise hexagon emits n-2 triangles with valid indices.
 @(test)
 triangulate_polygon_ear_clip_clockwise_hexagon_emits_n_minus_2 :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -244,6 +257,7 @@ triangulate_polygon_ear_clip_clockwise_hexagon_emits_n_minus_2 :: proc(t: ^testi
         "clockwise hexagon should still triangulate within vertex range")
 }
 
+//   Verify a degenerate collinear polygon falls back to a fan with valid indices.
 @(test)
 triangulate_polygon_ear_clip_collinear_uses_fallback_fan :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -263,6 +277,7 @@ triangulate_polygon_ear_clip_collinear_uses_fallback_fan :: proc(t: ^testing.T) 
         "degenerate polygon fallback should still use valid vertex indices")
 }
 
+//   Verify draw_cache_reset clears the polygon pool counters and draw flags.
 @(test)
 draw_cache_reset_clears_polygon_pool_counters :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System
@@ -281,6 +296,7 @@ draw_cache_reset_clears_polygon_pool_counters :: proc(t: ^testing.T) {
     testing.expect(t, !system.draw_cache.draw_compass)
 }
 
+//   Verify build_draw_cache routes a triangle kind into the polygon cache.
 @(test)
 build_draw_cache_routes_triangle_kind_to_polygon_cache :: proc(t: ^testing.T) {
     system: shapes.Shapes_Point_System

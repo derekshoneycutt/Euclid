@@ -8,11 +8,13 @@ import "../../src/shapes"
 
 TEST_EPSILON :: f32(1e-4)
 
+//   Assert that two f32 values match within TEST_EPSILON.
 expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
     testing.expectf(t, math.abs(actual - expected) <= TEST_EPSILON,
         "%s | expected=%v got=%v", msg, expected, actual)
 }
 
+//   Assert that two Vector3 values match component-wise within TEST_EPSILON.
 expect_vec3_close :: proc(
     t: ^testing.T,
     actual, expected: shapes.Vector3,
@@ -25,10 +27,12 @@ expect_vec3_close :: proc(
         "%s (z) | expected=%v got=%v", msg, expected.z, actual.z)
 }
 
+//   Build a test point with a fixed position.
 make_point :: proc(x, y, z: f32) -> shapes.Shapes_Point {
     return shapes.Shapes_Point{position = shapes.Vector3{x, y, z}}
 }
 
+//   Build a distance constraint with a target length and depend_on weighting.
 make_distance_constraint :: proc(
     depend_on: i32, req_len: f32) -> shapes.Shapes_Constraint {
     return shapes.Shapes_Constraint{
@@ -39,6 +43,7 @@ make_distance_constraint :: proc(
     }
 }
 
+//   Verify rotating a vector around an axis preserves its length.
 @(test)
 rotate_around_axis_preserves_length :: proc(t: ^testing.T) {
     axis := linalg.normalize(shapes.Vector3{0, 0, 1})
@@ -54,6 +59,7 @@ rotate_around_axis_preserves_length :: proc(t: ^testing.T) {
         "rotation around +Z by 90 degrees")
 }
 
+//   Verify a positive depend_on distance constraint moves only point1.
 @(test)
 apply_constraint_distance_depend_on_positive_moves_point1 :: proc(t: ^testing.T) {
     p1 := make_point(0, 0, 0)
@@ -69,6 +75,7 @@ apply_constraint_distance_depend_on_positive_moves_point1 :: proc(t: ^testing.T)
         "depend_on>0 should keep point2 fixed")
 }
 
+//   Verify a zero depend_on distance constraint splits motion between both points.
 @(test)
 apply_constraint_distance_depend_on_zero_splits_motion :: proc(t: ^testing.T) {
     p1 := make_point(-1, 0, 0)
@@ -83,6 +90,7 @@ apply_constraint_distance_depend_on_zero_splits_motion :: proc(t: ^testing.T) {
         "depend_on==0 should move point2 around midpoint")
 }
 
+//   Verify a negative depend_on distance constraint moves only point2.
 @(test)
 apply_constraint_distance_depend_on_negative_moves_point2 :: proc(t: ^testing.T) {
     p1 := make_point(0, 0, 0)
@@ -97,6 +105,7 @@ apply_constraint_distance_depend_on_negative_moves_point2 :: proc(t: ^testing.T)
         "depend_on<0 should move point2 only")
 }
 
+//   Verify resolve_constraint_targets honors a child offset in the point chain.
 @(test)
 resolve_constraint_targets_supports_child_offset :: proc(t: ^testing.T) {
     points: [shapes.MAX_SHAPESPOINTS]shapes.Shapes_Point

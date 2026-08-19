@@ -26,30 +26,53 @@ Wrapped_Text_Metrics :: struct {
     font_size:    f32,
 }
 
+//   Fallback plain-text payload for the styled-or-fallback draw path.
+Fallback_Text_Content :: struct {
+    text:  string,
+    color: rl.Color,
+}
+
+//   Panel, font, and metrics for one scratchpad draw pass.
+Scratchpad_Draw_Params :: struct {
+    panel:   rl.Rectangle,
+    scroll_y: f32,
+    font:    rl.Font,
+    metrics: Wrapped_Text_Metrics,
+}
+
+//   Baseline draw position for one child math program.
+Program_Draw_Position :: struct {
+    draw_x:     f32,
+    baseline_y: f32,
+}
+
+
+//   Draw the fallback plain-text content for one scratchpad pass.
+draw_scratchpad_fallback_text :: proc(
+    fallback: Fallback_Text_Content, params: Scratchpad_Draw_Params) {
+
+    view_core.draw_wrapped_text_content(fallback.text,
+        view_core.Wrapped_Text_Content_Params{
+            panel = params.panel,
+            scroll_y = params.scroll_y,
+            font = params.font,
+            text_padding = params.metrics.padding,
+            text_row_height = params.metrics.row_height,
+            text_color = fallback.color,
+            wrap_advance = params.metrics.wrap_advance,
+            font_size = params.metrics.font_size,
+        })
+}
 
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
 draw_scratchpad_styled_or_fallback :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    fallback_text: string,
-    panel: rl.Rectangle,
-    scroll_y: f32,
-    font: rl.Font,
-    metrics: Wrapped_Text_Metrics,
-    fallback_text_color: rl.Color) {
+    fallback: Fallback_Text_Content,
+    params: Scratchpad_Draw_Params) {
 
     if ui_runtime == nil {
-        view_core.draw_wrapped_text_content(fallback_text,
-            view_core.Wrapped_Text_Content_Params{
-                panel = panel,
-                scroll_y = scroll_y,
-                font = font,
-                text_padding = metrics.padding,
-                text_row_height = metrics.row_height,
-                text_color = fallback_text_color,
-                wrap_advance = metrics.wrap_advance,
-                font_size = metrics.font_size,
-            })
+        draw_scratchpad_fallback_text(fallback, params)
         return
     }
 
@@ -58,61 +81,41 @@ draw_scratchpad_styled_or_fallback :: proc(
         !runtime^.command_buffer.has_stream_error &&
         runtime^.command_buffer.command_count > 0 {
         if runtime^.compile_cache.layout_is_valid {
-            draw_cached_layout(state,
-                runtime,
-                panel,
-                scroll_y,
-                metrics.padding,
-                metrics.font_size,
-                font)
+            draw_cached_layout(Layout_Draw_Context{
+                state = state,
+                runtime = runtime,
+                panel = params.panel,
+                font = params.font,
+                font_size = params.metrics.font_size,
+            }, params.scroll_y, params.metrics.padding)
             return
         }
     }
 
-    view_core.draw_wrapped_text_content(fallback_text,
-        view_core.Wrapped_Text_Content_Params{
-            panel = panel,
-            scroll_y = scroll_y,
-            font = font,
-            text_padding = metrics.padding,
-            text_row_height = metrics.row_height,
-            text_color = fallback_text_color,
-            wrap_advance = metrics.wrap_advance,
-            font_size = metrics.font_size,
-        })
+    draw_scratchpad_fallback_text(fallback, params)
 }
 
 //   Draw one measured child math program with a shared baseline.
 draw_math_program_at :: proc(
-    state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    font: rl.Font,
-    font_size: f32,
+    ctx: Layout_Draw_Context,
     program: core.Dynview_Math_Program,
-    draw_x, baseline_y: f32) {
+    position: Program_Draw_Position) {
 
-    child_x := draw_x
+    runtime := ctx.runtime
+    child_x := position.draw_x
     command_end := program.command_start + program.command_count
-    ctx := Layout_Draw_Context{
-        state = state,
-        runtime = runtime,
-        panel = panel,
-        font = font,
-        font_size = font_size,
-    }
     for command_index in program.command_start..<command_end {
         cmd := runtime^.compile_cache.math_commands[command_index]
         child_item, ok := dynview.math_program_item(
             &runtime^.compile_cache,
             &runtime^.command_buffer,
             cmd,
-            font_size)
+            ctx.font_size)
         if !ok {
             continue
         }
 
-        child_y := baseline_y - child_item.ascent
+        child_y := position.baseline_y - child_item.ascent
         child_style := dynview.style_by_id(child_item.style_id)
         draw_cached_text_item(ctx, child_style, child_item, child_x, child_y)
         child_x += child_item.draw_width

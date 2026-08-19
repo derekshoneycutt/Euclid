@@ -46,6 +46,12 @@ Constraint_Targets :: struct {
     child_count: int,
 }
 
+Angle_Constraint_Limbs :: struct {
+    pivot: Vector3,
+    first, second, axis: Vector3,
+    theta: f32,
+}
+
 //   Compute the summed error across all active constraints in the point system.
 //
 // Parameters:
@@ -521,54 +527,71 @@ apply_constraint_distance :: proc(
     }
 }
 
-//   Apply max-angle constraint by rotating one or both limbs toward limit.
-apply_constraint_maxangle :: proc(
-    constraint: ^Shapes_Constraint,
-    point1, pivot, point2: ^Shapes_Point) {
+//   Apply an angle bound by rotating one or both limbs toward the requested limit.
+//   Resolve the pivot-relative limbs, axis, and included angle for one constraint.
+angle_constraint_limbs :: proc(
+    point1, pivot, point2: ^Shapes_Point) -> (Angle_Constraint_Limbs, bool) {
 
-    position1, ok := point1^.position.?
+    position1, first_ok := point1^.position.?
+    position2, second_ok := point2^.position.?
+    pivot_position, pivot_ok := pivot^.position.?
+    if !first_ok || !second_ok || !pivot_ok {
+        return {}, false
+    }
+    first := position1 - pivot_position
+    second := position2 - pivot_position
+    theta := math.acos(math.clamp(
+        linalg.dot(first, second) /
+            (linalg.length(first) * linalg.length(second)), -1, 1))
+    axis := linalg.normalize(linalg.cross(first, second))
+    return {pivot_position, first, second, axis, theta}, true
+}
+
+//   Apply an angle bound by rotating one or both limbs toward the requested limit.
+apply_constraint_angle_bound :: proc(
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point,
+    enforce_minimum: bool) {
+
+    limbs, ok := angle_constraint_limbs(point1, pivot, point2)
     if !ok {
         return
     }
-    position2, ok2 := point2^.position.?
-    if !ok2 {
-        return
-    }
-    pivot_position, ok3 := pivot^.position.?
-    if !ok3 {
-        return
-    }
-    vec1 := position1 - pivot_position
-    vec2 := position2 - pivot_position
 
-    dot := linalg.dot(vec1, vec2)
-    vec1len := linalg.length(vec1)
-    vec2len := linalg.length(vec2)
-
-    theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
-
-    if theta <= constraint^.restriction[0] {
+    limit := constraint^.restriction[0]
+    if (enforce_minimum && limbs.theta >= limit) ||
+        (!enforce_minimum && limbs.theta <= limit) {
         return
     }
 
-    overage := theta - constraint^.restriction[0]
-    halfoverage := overage / 2.0
-
-    rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
+    correction := math.abs(limbs.theta - limit)
+    direction := f32(1.0) if enforce_minimum else f32(-1.0)
+    half_correction := correction * 0.5
 
     new_vec1 := Vector3{0, 0, 0}
     new_vec2 := Vector3{0, 0, 0}
     if constraint^.depend_on > 0 {
-        new_vec1 = rotate_around_axis(vec1, rotaxis, overage)
+        new_vec1 = rotate_around_axis(
+            limbs.first, limbs.axis, -direction * correction)
     } else if constraint^.depend_on == 0 {
-        new_vec1 = rotate_around_axis(vec1, rotaxis, halfoverage)
-        new_vec2 = rotate_around_axis(vec2, rotaxis, -halfoverage)
+        new_vec1 = rotate_around_axis(
+            limbs.first, limbs.axis, -direction * half_correction)
+        new_vec2 = rotate_around_axis(
+            limbs.second, limbs.axis, direction * half_correction)
     } else {
-        new_vec2 = rotate_around_axis(vec2, rotaxis, -overage)
+        new_vec2 = rotate_around_axis(
+            limbs.second, limbs.axis, direction * correction)
     }
 
-    point1^.position = pivot_position + new_vec1
-    point2^.position = pivot_position + new_vec2
+    point1^.position = limbs.pivot + new_vec1
+    point2^.position = limbs.pivot + new_vec2
+}
+
+//   Apply max-angle constraint by rotating one or both limbs toward limit.
+apply_constraint_maxangle :: proc(
+    constraint: ^Shapes_Constraint,
+    point1, pivot, point2: ^Shapes_Point) {
+    apply_constraint_angle_bound(constraint, point1, pivot, point2, false)
 }
 
 //   Rotate a vector around an axis by a given angle in radians.
@@ -588,50 +611,7 @@ rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
 apply_constraint_minangle :: proc(
     constraint: ^Shapes_Constraint,
     point1, pivot, point2: ^Shapes_Point) {
-
-    position1, ok := point1^.position.?
-    if !ok {
-        return
-    }
-    position2, ok2 := point2^.position.?
-    if !ok2 {
-        return
-    }
-    pivot_position, ok3 := pivot^.position.?
-    if !ok3 {
-        return
-    }
-    vec1 := position1 - pivot_position
-    vec2 := position2 - pivot_position
-
-    dot := linalg.dot(vec1, vec2)
-    vec1len := linalg.length(vec1)
-    vec2len := linalg.length(vec2)
-
-    theta := math.acos(math.clamp(dot / (vec1len * vec2len), -1, 1))
-
-    if theta >= constraint^.restriction[0] {
-        return
-    }
-
-    underage := constraint^.restriction[0] - theta
-    halfunderage := underage / 2.0
-
-    rotaxis := linalg.normalize(linalg.cross(vec1, vec2))
-
-    new_vec1 := Vector3{0, 0, 0}
-    new_vec2 := Vector3{0, 0, 0}
-    if constraint^.depend_on > 0 {
-        new_vec1 = rotate_around_axis(vec1, rotaxis, -underage)
-    } else if constraint^.depend_on == 0 {
-        new_vec1 = rotate_around_axis(vec1, rotaxis, -halfunderage)
-        new_vec2 = rotate_around_axis(vec2, rotaxis, halfunderage)
-    } else {
-        new_vec2 = rotate_around_axis(vec2, rotaxis, underage)
-    }
-
-    point1^.position = pivot_position + new_vec1
-    point2^.position = pivot_position + new_vec2
+    apply_constraint_angle_bound(constraint, point1, pivot, point2, true)
 }
 
 //   Apply center-pivot constraint by moving pivot to midpoint of outer points.

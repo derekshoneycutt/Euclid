@@ -236,7 +236,7 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
     }
 
     _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_requested", current_animation_generation(state), 0, "", "")
+        "animation.reset_requested", {current_animation_generation(state), 0, "", ""})
     if !reset_current_animation_loop(state) {
         return false
     }
@@ -245,7 +245,7 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
         ANIMATION_RESET_MIN_INTERVAL
     state^.julia_interface^.pending_animation_reset = false
     _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_committed", current_animation_generation(state), 0, "", "")
+        "animation.reset_committed", {current_animation_generation(state), 0, "", ""})
     return true
 }
 
@@ -347,7 +347,7 @@ change_current_animation_loop :: proc(
         animation_generation = state^.julia_runtime_service^.animation_generation
     }
     _ = trace.record_animation_event_ex(&state^.trace_state, "animation.selected",
-        animation_generation, 0, animation^.name, "")
+        {animation_generation, 0, animation^.name, ""})
     return true
 }
 
@@ -730,7 +730,7 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
         animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
     }
     _ = trace.record_animation_event_ex(&state^.trace_state, "animation.cycle_boundary",
-        animation_generation, animation_tick_sequence, "", "")
+        {animation_generation, animation_tick_sequence, "", ""})
 }
 
 /* TODO : Can we kill this?

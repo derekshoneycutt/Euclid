@@ -85,6 +85,48 @@ JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 //
 // Returns:
 //   - exit_code: non-zero when strict trace validation failed.
+//   Submit one GIF frame while recording, aborting and noting the error on failure.
+run_gif_capture_frame :: proc(state: ^Euclid_General_State) {
+    if state^.ui_runtime.simulation_paused ||
+        state^.ui_runtime.gif_capture_phase != .Recording {
+        return
+    }
+    if view_core.gif_capture_submit_frame(state) {
+        return
+    }
+    view_core.gif_capture_abort_session(&state^.gif_capture)
+    state^.ui_runtime.gif_capture_phase = .Error
+    view_core.set_gif_status_note(&state^.ui_runtime,
+        "Error: failed to submit GIF frame.")
+}
+
+//   Run one window frame: async results, simulation update, draw, and GIF capture.
+run_window_frame :: proc(state: ^Euclid_General_State) {
+    ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
+    julia.publish_available_view_snapshot(state)
+    alpha := accumulate_and_update_systems(state)
+    run_parallel_frame_preparation(state, alpha)
+    julia.try_request_view_snapshot(state)
+    audio.update_chalk_runtime(&state^.chalk_audio)
+
+    rl.BeginDrawing()
+        draw_frame(state, alpha)
+    rl.EndDrawing()
+
+    run_gif_capture_frame(state)
+
+    _ = trace.drain_trace(&state^.trace_state)
+    free_all(context.temp_allocator)
+}
+
+//   - Owns state/window setup and teardown via deferred cleanup calls.
+//   - Resets temp allocator each frame after drawing.
+//
+// Parameters:
+//   - settings: The settings describing how to operate the window
+//
+// Returns:
+//   - exit_code: non-zero when strict trace validation failed.
 run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     open_window(settings)
     defer rl.CloseWindow()
@@ -100,29 +142,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     free_all(context.temp_allocator)
 
     for !rl.WindowShouldClose() {
-        ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
-        julia.publish_available_view_snapshot(state)
-        alpha := accumulate_and_update_systems(state)
-        run_parallel_frame_preparation(state, alpha)
-        julia.try_request_view_snapshot(state)
-        audio.update_chalk_runtime(&state^.chalk_audio)
-
-        rl.BeginDrawing()
-            draw_frame(state, alpha)
-        rl.EndDrawing()
-
-        if !state^.ui_runtime.simulation_paused &&
-            state^.ui_runtime.gif_capture_phase == .Recording {
-            if !view_core.gif_capture_submit_frame(state) {
-                view_core.gif_capture_abort_session(&state^.gif_capture)
-                state^.ui_runtime.gif_capture_phase = .Error
-                view_core.set_gif_status_note(&state^.ui_runtime,
-                    "Error: failed to submit GIF frame.")
-            }
-        }
-
-        _ = trace.drain_trace(&state^.trace_state)
-        free_all(context.temp_allocator)
+        run_window_frame(state)
     }
 
     if trace.should_fail_process(&state^.trace_state) {
@@ -263,20 +283,35 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
-update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
-    if frame_dt <= 0 {
+//   Advance the rolling FPS window by one full bucket when it completes.
+fps_advance_bucket_if_full :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
+    if ui_runtime.fps_avg_bucket_elapsed < 1.0 {
         return
     }
 
-    ui_runtime := &state^.ui_runtime
-    remaining := frame_dt
+    cursor := ui_runtime.fps_avg_bucket_cursor
+    next_cursor := (cursor + 1) % FPS_AVERAGE_BUCKET_COUNT
 
+    ui_runtime.fps_avg_rolling_seconds -=
+        ui_runtime.fps_avg_bucket_seconds[next_cursor]
+    ui_runtime.fps_avg_rolling_frames -=
+        ui_runtime.fps_avg_bucket_frames[next_cursor]
+
+    ui_runtime.fps_avg_bucket_seconds[next_cursor] = 0
+    ui_runtime.fps_avg_bucket_frames[next_cursor] = 0
+
+    ui_runtime.fps_avg_bucket_cursor = next_cursor
+    ui_runtime.fps_avg_bucket_elapsed = 0
+}
+
+//   Accumulate one frame's elapsed time into the rolling FPS buckets.
+fps_accumulate_seconds :: proc(
+    ui_runtime: ^core.Euclid_Ui_Runtime_State, frame_dt: f32) {
+
+    remaining := frame_dt
     for remaining > 0 {
         space := 1.0 - ui_runtime.fps_avg_bucket_elapsed
-        step := remaining
-        if step > space {
-            step = space
-        }
+        step := min(remaining, space)
 
         cursor := ui_runtime.fps_avg_bucket_cursor
         ui_runtime.fps_avg_bucket_seconds[cursor] += step
@@ -284,21 +319,18 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
         ui_runtime.fps_avg_bucket_elapsed += step
         remaining -= step
 
-        if ui_runtime.fps_avg_bucket_elapsed >= 1.0 {
-            next_cursor := (cursor + 1) % FPS_AVERAGE_BUCKET_COUNT
-
-            ui_runtime.fps_avg_rolling_seconds -=
-                ui_runtime.fps_avg_bucket_seconds[next_cursor]
-            ui_runtime.fps_avg_rolling_frames -=
-                ui_runtime.fps_avg_bucket_frames[next_cursor]
-
-            ui_runtime.fps_avg_bucket_seconds[next_cursor] = 0
-            ui_runtime.fps_avg_bucket_frames[next_cursor] = 0
-
-            ui_runtime.fps_avg_bucket_cursor = next_cursor
-            ui_runtime.fps_avg_bucket_elapsed = 0
-        }
+        fps_advance_bucket_if_full(ui_runtime)
     }
+}
+
+//   Update the rolling-average FPS from one frame's delta time.
+update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
+    if frame_dt <= 0 {
+        return
+    }
+
+    ui_runtime := &state^.ui_runtime
+    fps_accumulate_seconds(ui_runtime, frame_dt)
 
     cursor := ui_runtime.fps_avg_bucket_cursor
     ui_runtime.fps_avg_bucket_frames[cursor] += 1
@@ -307,9 +339,9 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
     if ui_runtime.fps_avg_rolling_seconds > 0 {
         ui_runtime.fps_avg_live =
             f32(ui_runtime.fps_avg_rolling_frames) / ui_runtime.fps_avg_rolling_seconds
-    } else {
-        ui_runtime.fps_avg_live = 0
+        return
     }
+    ui_runtime.fps_avg_live = 0
 }
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.

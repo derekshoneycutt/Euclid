@@ -5,6 +5,7 @@ import "core:testing"
 import app_core "../../src/core"
 import app_files "../../src/files"
 
+//   Verify gif_encode_begin rejects zero and oversized dimensions.
 @(test)
 gif_encode_begin_rejects_invalid_dimensions :: proc(t: ^testing.T) {
     state := app_core.Gif_Encode_State{}
@@ -14,6 +15,7 @@ gif_encode_begin_rejects_invalid_dimensions :: proc(t: ^testing.T) {
     testing.expect(t, !app_files.gif_encode_begin(&state, 70000, 10))
 }
 
+//   Verify begin+end with no frames still emits a GIF trailer byte.
 @(test)
 gif_encode_begin_and_end_produces_trailer_without_frames :: proc(t: ^testing.T) {
     state := app_core.Gif_Encode_State{}
@@ -27,6 +29,7 @@ gif_encode_begin_and_end_produces_trailer_without_frames :: proc(t: ^testing.T) 
     testing.expect_value(t, result.data[result.data_size - 1], u8(app_files.GIF_TRAILER))
 }
 
+//   Verify a small RGBA frame encodes and the stream still ends with a trailer.
 @(test)
 gif_encode_frame_round_trip_with_small_rgba_input :: proc(t: ^testing.T) {
     state := app_core.Gif_Encode_State{}
@@ -79,6 +82,7 @@ collect_gce_packed_bytes :: proc(data: []u8) -> []u8 {
     return packed
 }
 
+//   Verify frames above the alpha threshold set the GCE transparency flag.
 @(test)
 gif_encode_marks_current_frame_transparency_in_gce :: proc(t: ^testing.T) {
     state := app_core.Gif_Encode_State{}
@@ -109,6 +113,7 @@ gif_encode_marks_current_frame_transparency_in_gce :: proc(t: ^testing.T) {
     testing.expect_value(t, gce_packed[1], expected_packed)
 }
 
+//   Verify fully opaque frames leave the GCE transparency flag unset.
 @(test)
 gif_encode_opaque_frames_do_not_set_gce_transparency :: proc(t: ^testing.T) {
     state := app_core.Gif_Encode_State{}
