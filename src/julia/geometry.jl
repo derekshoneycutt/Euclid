@@ -165,7 +165,7 @@ function circle_circle_intersections_xy(
         return Vector{Vector{Float32}}()
     end
 
-    a = (radius1 * radius1 - radius2 * radius2 + d2) / (2f0 * d)
+    a = (radius1 * radius1 - radius2 * radius2 + d * d) / (2f0 * d)
     h2 = radius1 * radius1 - a * a
 
     if h2 < -atol

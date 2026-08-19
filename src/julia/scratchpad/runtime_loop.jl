@@ -187,8 +187,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     append_startup_banner!(session)
 end
 
-"""Clean scratchpad lifecycle state when animation unloads."""
-"""Clean any extra animation data at the end of performance"""
+"""Clean scratchpad lifecycle state and animation data when the animation unloads."""
 function clean(state_ptr::Ptr{Cvoid})
     CleanCountRef[] += 1
     SessionRef[] = nothing

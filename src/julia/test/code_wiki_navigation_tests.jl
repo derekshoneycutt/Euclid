@@ -5,6 +5,7 @@ end
 using .CodeWiki
 using Test
 
+"""Build a minimal navigation manifest for testing."""
 function navigation_test_manifest(; sections=nothing)
     default_sections = [
         WikiSection(
@@ -30,6 +31,7 @@ function navigation_test_manifest(; sections=nothing)
             symbol_prefixes=["run"])])
 end
 
+"""Build a minimal navigation package for testing."""
 function navigation_test_package()
     package = DocumentationPackage(
         language=:julia, stable_id="julia:Sample", display_name="Sample",

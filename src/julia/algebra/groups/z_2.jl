@@ -118,6 +118,7 @@ function get_view_text(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(state_ptr, Z2LatexDocument, Z2FallbackText)
 end
 
+"""Apply a set of reflection poses to the tracked points."""
 function set_reflection_pose!(
     state_ptr::Ptr{Cvoid},
     point_ids::NTuple{6,Int64},
@@ -128,6 +129,7 @@ function set_reflection_pose!(
     end
 end
 
+"""Animate one reflection step, interpolating points from their start poses."""
 function animate_reflection_step!(
     state_ptr::Ptr{Cvoid},
     timer::Float32,
@@ -161,6 +163,7 @@ function animate_reflection_step!(
     end
 end
 
+"""Reset the three reflection lines to their default colors."""
 function reset_line_colors!(
     state_ptr::Ptr{Cvoid},
     line_host_id1::Int,

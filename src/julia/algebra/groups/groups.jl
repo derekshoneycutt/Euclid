@@ -44,16 +44,19 @@ Some actions commute and some do not. If $a \circ b = b \circ a$ for all $a,b \i
 
 In this sequence, we move from simple discrete symmetries to continuous geometric motions on the Euclidean plane."""
 
+"""Emit the root view text for the group-theory animation sequence."""
 function get_view_text_root_groups(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(
         state_ptr, GroupsRootLatexDocument, GroupsRootFallback)
 end
 
+"""Derive a stable child animation id from a parent id and child name."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
         "child:" * String(parent_stable_id) * ":" * String(name))
 end
 
+"""Register a child animation interface under a parent stable id, returning its id."""
 function register_child_animation(
     state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::AbstractString,
     parent_stable_id::AbstractString)
@@ -67,6 +70,7 @@ function register_child_animation(
     return child_stable_id
 end
 
+"""Register the group-theory animation interfaces under the root id."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     groups_id = register_child_animation(
         state_ptr, get_view_text_root_groups, NullAnimation.initialize,

@@ -60,6 +60,7 @@ include("./axiom_V.jl")
 include("./axiom_completeness.jl")
 
 
+"""Emit the Book I overview view text for the five-groups-of-axioms sequence."""
 function get_view_text_book1(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §1 The Elements of Geometry and the Five Groups of Axioms
     
@@ -86,7 +87,8 @@ We think of these points, straight lines, and planes as having certain mutual re
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_connection(state_ptr::Ptr{Cvoid})
+"""Emit the Book I connection-axioms view text."""
+function get_view_text_book1_connection(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §2 Group I: Axioms of Connection
 
 The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
@@ -106,7 +108,8 @@ Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_order(state_ptr::Ptr{Cvoid})
+"""Emit the Book I order-axioms view text."""
+function get_view_text_book1_order(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §3 Group II: Axioms of Order
 
 The axioms of this group define the idea expressed by the word "between," and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word "between" serves to describe.
@@ -124,7 +127,8 @@ Axioms II, 1-4 contain statements concerning the points of a straight line only,
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_consequences(state_ptr::Ptr{Cvoid})
+"""Emit the Book I consequences view text."""
+function get_view_text_book1_consequences(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §4 Consequences of the Axioms of Connection and Order
 
 By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
@@ -134,7 +138,8 @@ By the aid of the four linear axioms II, 1-4, we can easily deduce several theor
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_parallels(state_ptr::Ptr{Cvoid})
+"""Emit the Book I parallels view text."""
+function get_view_text_book1_parallels(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group III: Axiom of Parallels (Euclid's Axiom)
 
 The introduction of this axiom simplifies greatly the fundamental principles of geometry and facilitates in no small degree its development.
@@ -152,7 +157,8 @@ The axiom of parallels is a plane axiom."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_congruence(state_ptr::Ptr{Cvoid})
+"""Emit the Book I congruence-axioms view text."""
+function get_view_text_book1_congruence(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §5 Group IV: Axioms of Congruence
 
 The axioms of this group define the idea of congruence or displacement.
@@ -174,7 +180,8 @@ Axioms IV, 1-3 contain statements concerning the congruence of segments of a str
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_consequences_congruence(state_ptr::Ptr{Cvoid})
+"""Emit the Book I consequences-of-congruence view text."""
+function get_view_text_book1_consequences_congruence(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §7 Consequences of the Axioms of Congruence
 
 Suppose the segment AB is congruent to the segment A'B'. Since, according to axiom IV, 1, the segment AB is congruent to itself, it follows from axiom IV, 2 that A'B' is congruent to AB; that is to say, if AB ≡ A'B', then A'B' ≡ AB. We say, then, that the two segments are congruent to one another.
@@ -192,7 +199,8 @@ From the linear axioms IV, 1-3, we can easily deduce several theorems."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function get_view_text_BookI_continuity(state_ptr::Ptr{Cvoid})
+"""Emit the Book I continuity-axioms view text."""
+function get_view_text_book1_continuity(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms §8 Group V. Axiom of Continuity. (Archimedean Axiom.)
 
 This axiom makes possible the introduction into geometry of the idea of continuity. In order to state this axiom, we must first establish a convention concerning the equality of two segments. For this purpose, we can either base our idea of equality upon the axioms relating to the congruence of segments and define as "equal" the correspondingly congruent segments, or, upon the basis of groups I and II, we may determine how, by suitable constructions (see Chap. V, Section 24), a segment is to be laid off from a point of a given straight line so that a new, definite segment is obtained "equal" to it. In conformity with such a convention, the axiom of Archimedes may be stated as follows.
@@ -214,11 +222,13 @@ Remark. To the preceding five groups of axioms, we may add the axiom of complete
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Derive a stable child animation id from a parent id and child name."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
         "child:" * String(parent_stable_id) * ":" * String(name))
 end
 
+"""Register a child animation interface under a parent stable id, returning its id."""
 function register_child_animation(
     state_ptr::Ptr{Cvoid}, get_view_text, init, loop, clean, name::AbstractString,
     parent_stable_id::AbstractString)
@@ -232,13 +242,14 @@ function register_child_animation(
     return child_stable_id
 end
 
+"""Register the five-groups-of-axioms animation interfaces under the root id."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     book1_id = register_child_animation(
         state_ptr, get_view_text_book1, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean,
         "1. The Five Groups of Axioms, §1", root_id)
         book1_sec2_id = register_child_animation(
-            state_ptr, get_view_text_BookI_connection, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_connection, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§2 Group I: Axioms of Connection", book1_id)
             book1_axiom_i1_id = register_child_animation(
@@ -288,7 +299,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Theorem 2", book1_sec2_id)
 
         book1_sec3_id = register_child_animation(
-            state_ptr, get_view_text_BookI_order, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_order, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§3 Group II: Axioms of Order", book1_id)
             book1_axiom_i_i1_id = register_child_animation(
@@ -324,7 +335,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Axiom II,5", book1_sec3_id)
 
         book1_sec4_id = register_child_animation(
-            state_ptr, get_view_text_BookI_consequences, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_consequences, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§4 Consequences after Group II", book1_id)
             book1_theorem3_id = register_child_animation(
@@ -373,7 +384,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Theorem 7", book1_sec4_id)
 
         book1_sec5_id = register_child_animation(
-            state_ptr, get_view_text_BookI_parallels, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_parallels, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§5 Group III: Axiom of Parallels", book1_id)
             book1_axiom_i_i_i1_id = register_child_animation(
@@ -390,7 +401,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Theorem 8", book1_sec5_id)
 
         book1_sec6_id = register_child_animation(
-            state_ptr, get_view_text_BookI_congruence, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_congruence, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§6 Group IV: Axioms of Congruence", book1_id)
             book1_axiom_i_v1_id = register_child_animation(
@@ -443,7 +454,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Axiom IV,6", book1_sec6_id)
 
         book1_sec7_id = register_child_animation(
-            state_ptr, get_view_text_BookI_consequences_congruence,
+            state_ptr, get_view_text_book1_consequences_congruence,
             NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§7 Consequences after Group IV", book1_id)
@@ -551,7 +562,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Definition: Circle", book1_sec7_id)
 
         book1_sec8_id = register_child_animation(
-            state_ptr, get_view_text_BookI_continuity, NullAnimation.initialize,
+            state_ptr, get_view_text_book1_continuity, NullAnimation.initialize,
             NullAnimation.loop, NullAnimation.clean,
             "§8 Group V: Axiom of Continuity", book1_id)
             book1_axiom_v_id = register_child_animation(

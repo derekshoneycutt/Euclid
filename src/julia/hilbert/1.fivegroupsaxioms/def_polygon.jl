@@ -96,6 +96,7 @@ const PhaseRise = 16f0
 const PhaseFinalHold = 17f0
 
 
+"""Pick a random interior point of the triangle with vertices a, b, and c."""
 function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
     u = rand(Float32)
     v = rand(Float32)
@@ -112,6 +113,7 @@ function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector
     ]
 end
 
+"""Pick a random interior point of the pentagon built from the current vertices."""
 function random_pentagon_point()
     t = rand(Float32)
     if t < 1f0 / 3f0
@@ -122,6 +124,7 @@ function random_pentagon_point()
     random_triangle_point(VertexA, VertexD, VertexK)
 end
 
+"""Set the pentagon's fill alpha from a normalized [0, 1] opacity."""
 function set_pentagon_alpha(state_ptr::Ptr{Cvoid}, shape_host_id, alpha01)
     t = clamp(alpha01, 0f0, 1f0)
     alpha = UInt8(round(Int, PentagonBaseColor.a * t))

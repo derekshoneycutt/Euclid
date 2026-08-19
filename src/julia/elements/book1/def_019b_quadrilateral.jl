@@ -53,6 +53,7 @@ const PhaseDrawSide4 = 4f0
 const PhaseRise = 5f0
 
 
+"""Pick a random interior point of the square defined by vertices a, b, and d."""
 function random_square_point(a::Vector{Float32}, b::Vector{Float32}, d::Vector{Float32})
     u = rand(Float32)
     v = rand(Float32)
@@ -64,6 +65,7 @@ function random_square_point(a::Vector{Float32}, b::Vector{Float32}, d::Vector{F
     ]
 end
 
+"""Set the square's fill alpha from a normalized [0, 1] opacity."""
 function set_square_alpha(state_ptr::Ptr{Cvoid}, shape_host_id, alpha01)
     t = clamp(alpha01, 0f0, 1f0)
     alpha = UInt8(round(Int, Float32(SquareBaseColor.a) * t))

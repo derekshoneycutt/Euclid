@@ -82,6 +82,7 @@ Two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Set the plane's fill alpha from a normalized [0, 1] opacity."""
 function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     t = clamp(alpha01, 0f0, PlaneMaxAlpha01)
     alpha = UInt8(round(Int, PlaneBaseColor.a * t))
@@ -93,6 +94,7 @@ function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, host_id, color)
 end
 
+"""Pick a random interior point of the triangle with vertices a, b, and c."""
 function random_triangle_point(
     a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
     u = rand(Float32)
@@ -110,6 +112,7 @@ function random_triangle_point(
     ]
 end
 
+"""Pick a random interior point of the vertical plane built from the current vertices."""
 function random_vertical_plane_point()
     if rand(Float32) < 0.5f0
         return random_triangle_point(PlaneEdgeLeft, PlaneTopLeft, PlaneTopRight)

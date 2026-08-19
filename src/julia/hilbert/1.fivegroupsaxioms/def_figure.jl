@@ -47,6 +47,7 @@ const PhaseDrawSide3 = 3f0
 const PhaseRise = 4f0
 
 
+"""Pick a random interior point of the triangle with vertices a, b, and c."""
 function random_triangle_point(
     a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
     u = rand(Float32)
@@ -64,6 +65,7 @@ function random_triangle_point(
     ]
 end
 
+"""Set the triangle's fill alpha from a normalized [0, 1] opacity."""
 function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
     t = clamp(alpha01, 0f0, 1f0)
     alpha = UInt8(round(Int, TriangleBaseColor.a * t))

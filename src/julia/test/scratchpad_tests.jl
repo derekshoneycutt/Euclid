@@ -30,23 +30,27 @@ end
 struct ScratchpadPlainResultMock
 end
 
+"""Construct a zeroed scratchpad metrics struct for testing."""
 function new_metrics()
     return Scratchpad.ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 end
 
+"""Create a fresh scratchpad session bound to the shared test state."""
 function new_session(; id::Int=TEST_SESSION_ID_REF[])
     TEST_SESSION_ID_REF[] = id + 1
     return Scratchpad.create_session(TEST_STATE_PTR, id)
 end
 
-Base.show(io::IO, ::MIME"text/plain", ::ScratchpadLatexResultMock) =
+"""Render a LaTeX result mock as plain text or LaTeX."""
+Base.show(io::IO, ::MIME"text/plain", m::ScratchpadLatexResultMock) =
     print(io, "ScratchpadLatexResultMock()")
-Base.show(io::IO, ::MIME"text/latex", ::ScratchpadLatexResultMock) =
+Base.show(io::IO, ::MIME"text/latex", m::ScratchpadLatexResultMock) =
     print(io, "\\frac{1}{2}")
 
-Base.show(io::IO, ::MIME"text/plain", ::ScratchpadPlainResultMock) =
+Base.show(io::IO, ::MIME"text/plain", m::ScratchpadPlainResultMock) =
     print(io, "ScratchpadPlainResultMock()")
 
+"""Run a function with a fresh scratchpad session installed, restoring the old one after."""
 function with_test_session(f::Function)
     old_session = Scratchpad.SessionRef[]
     try
@@ -294,7 +298,10 @@ end
 
 @testset "new runtime method candidates" begin
     runtime = Module(:ScratchpadRuntimeMethodCandidateTest)
-    Core.eval(runtime, :(f(x, y) = x + y))
+    Core.eval(runtime, quote
+        """Add two numbers; a two-argument method candidate fixture."""
+        f(x, y) = x + y
+    end)
 
     formatted = try
         Core.eval(runtime, :(f(2)))

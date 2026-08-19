@@ -48,123 +48,123 @@ const EdgeCPrimeBPrimeEnd = PointBPrime
 
 const MarkerRadius = 0.085f0
 
-const ThetaB_BA = atan(PointA[2] - PointB[2], PointA[1] - PointB[1])
-const ThetaB_BC = atan(PointC[2] - PointB[2], PointC[1] - PointB[1])
-const ThetaB_BD = atan(PointD[2] - PointB[2], PointD[1] - PointB[1])
+const ThetaBBA = atan(PointA[2] - PointB[2], PointA[1] - PointB[1])
+const ThetaBBC = atan(PointC[2] - PointB[2], PointC[1] - PointB[1])
+const ThetaBBD = atan(PointD[2] - PointB[2], PointD[1] - PointB[1])
 
-const ThetaBPrime_BA =
+const ThetaBPrimeBA =
     atan(PointAPrime[2] - PointBPrime[2], PointAPrime[1] - PointBPrime[1])
-const ThetaBPrime_BC =
+const ThetaBPrimeBC =
     atan(PointCPrime[2] - PointBPrime[2], PointCPrime[1] - PointBPrime[1])
-const ThetaBPrime_BD =
+const ThetaBPrimeBD =
     atan(PointDPrime[2] - PointBPrime[2], PointDPrime[1] - PointBPrime[1])
 
-const ThetaA_AB = atan(PointB[2] - PointA[2], PointB[1] - PointA[1])
-const ThetaA_AC = atan(PointC[2] - PointA[2], PointC[1] - PointA[1])
-const ThetaAPrime_AB =
+const ThetaAAB = atan(PointB[2] - PointA[2], PointB[1] - PointA[1])
+const ThetaAAC = atan(PointC[2] - PointA[2], PointC[1] - PointA[1])
+const ThetaAPrimeAB =
     atan(PointBPrime[2] - PointAPrime[2], PointBPrime[1] - PointAPrime[1])
-const ThetaAPrime_AC =
+const ThetaAPrimeAC =
     atan(PointCPrime[2] - PointAPrime[2], PointCPrime[1] - PointAPrime[1])
 
-const ThetaD_DA = atan(PointA[2] - PointD[2], PointA[1] - PointD[1])
-const ThetaD_DC = atan(PointC[2] - PointD[2], PointC[1] - PointD[1])
-const ThetaDPrime_DA =
+const ThetaDDA = atan(PointA[2] - PointD[2], PointA[1] - PointD[1])
+const ThetaDDC = atan(PointC[2] - PointD[2], PointC[1] - PointD[1])
+const ThetaDPrimeDA =
     atan(PointAPrime[2] - PointDPrime[2], PointAPrime[1] - PointDPrime[1])
-const ThetaDPrime_DC =
+const ThetaDPrimeDC =
     atan(PointCPrime[2] - PointDPrime[2], PointCPrime[1] - PointDPrime[1])
 
 const MarkerABCStart = [
-    PointB[1] + MarkerRadius * cos(ThetaB_BA),
-    PointB[2] + MarkerRadius * sin(ThetaB_BA),
+    PointB[1] + MarkerRadius * cos(ThetaBBA),
+    PointB[2] + MarkerRadius * sin(ThetaBBA),
     0f0,
 ]
 const MarkerABCEnd = [
-    PointB[1] + MarkerRadius * cos(ThetaB_BC),
-    PointB[2] + MarkerRadius * sin(ThetaB_BC),
+    PointB[1] + MarkerRadius * cos(ThetaBBC),
+    PointB[2] + MarkerRadius * sin(ThetaBBC),
     0f0,
 ]
 const MarkerAPrimeBPrimeCPrimeStart = [
-    PointBPrime[1] + MarkerRadius * cos(ThetaBPrime_BA),
-    PointBPrime[2] + MarkerRadius * sin(ThetaBPrime_BA),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBA),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBA),
     0f0,
 ]
 const MarkerAPrimeBPrimeCPrimeEnd = [
-    PointBPrime[1] + MarkerRadius * cos(ThetaBPrime_BC),
-    PointBPrime[2] + MarkerRadius * sin(ThetaBPrime_BC),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBC),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBC),
     0f0,
 ]
 
 const MarkerCBDStart = [
-    PointB[1] + MarkerRadius * cos(ThetaB_BC),
-    PointB[2] + MarkerRadius * sin(ThetaB_BC),
+    PointB[1] + MarkerRadius * cos(ThetaBBC),
+    PointB[2] + MarkerRadius * sin(ThetaBBC),
     0f0,
 ]
 const MarkerCBDEnd = [
-    PointB[1] + MarkerRadius * cos(ThetaB_BD),
-    PointB[2] + MarkerRadius * sin(ThetaB_BD),
+    PointB[1] + MarkerRadius * cos(ThetaBBD),
+    PointB[2] + MarkerRadius * sin(ThetaBBD),
     0f0,
 ]
 const MarkerCPrimeBPrimeDPrimeStart = [
-    PointBPrime[1] + MarkerRadius * cos(ThetaBPrime_BC),
-    PointBPrime[2] + MarkerRadius * sin(ThetaBPrime_BC),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBC),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBC),
     0f0,
 ]
 const MarkerCPrimeBPrimeDPrimeEnd = [
-    PointBPrime[1] + MarkerRadius * cos(ThetaBPrime_BD),
-    PointBPrime[2] + MarkerRadius * sin(ThetaBPrime_BD),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBD),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBD),
     0f0,
 ]
 
 const MarkerBACStart = [
-    PointA[1] + MarkerRadius * cos(ThetaA_AB),
-    PointA[2] + MarkerRadius * sin(ThetaA_AB),
+    PointA[1] + MarkerRadius * cos(ThetaAAB),
+    PointA[2] + MarkerRadius * sin(ThetaAAB),
     0f0,
 ]
 const MarkerBACEnd = [
-    PointA[1] + MarkerRadius * cos(ThetaA_AC),
-    PointA[2] + MarkerRadius * sin(ThetaA_AC),
+    PointA[1] + MarkerRadius * cos(ThetaAAC),
+    PointA[2] + MarkerRadius * sin(ThetaAAC),
     0f0,
 ]
 const MarkerBPrimeAPrimeCPrimeStart = [
-    PointAPrime[1] + MarkerRadius * cos(ThetaAPrime_AB),
-    PointAPrime[2] + MarkerRadius * sin(ThetaAPrime_AB),
+    PointAPrime[1] + MarkerRadius * cos(ThetaAPrimeAB),
+    PointAPrime[2] + MarkerRadius * sin(ThetaAPrimeAB),
     0f0,
 ]
 const MarkerBPrimeAPrimeCPrimeEnd = [
-    PointAPrime[1] + MarkerRadius * cos(ThetaAPrime_AC),
-    PointAPrime[2] + MarkerRadius * sin(ThetaAPrime_AC),
+    PointAPrime[1] + MarkerRadius * cos(ThetaAPrimeAC),
+    PointAPrime[2] + MarkerRadius * sin(ThetaAPrimeAC),
     0f0,
 ]
 
 const MarkerADCStart = [
-    PointD[1] + MarkerRadius * cos(ThetaD_DA),
-    PointD[2] + MarkerRadius * sin(ThetaD_DA),
+    PointD[1] + MarkerRadius * cos(ThetaDDA),
+    PointD[2] + MarkerRadius * sin(ThetaDDA),
     0f0,
 ]
 const MarkerADCEnd = [
-    PointD[1] + MarkerRadius * cos(ThetaD_DC),
-    PointD[2] + MarkerRadius * sin(ThetaD_DC),
+    PointD[1] + MarkerRadius * cos(ThetaDDC),
+    PointD[2] + MarkerRadius * sin(ThetaDDC),
     0f0,
 ]
 const MarkerAPrimeDPrimeCPrimeStart = [
-    PointDPrime[1] + MarkerRadius * cos(ThetaDPrime_DA),
-    PointDPrime[2] + MarkerRadius * sin(ThetaDPrime_DA),
+    PointDPrime[1] + MarkerRadius * cos(ThetaDPrimeDA),
+    PointDPrime[2] + MarkerRadius * sin(ThetaDPrimeDA),
     0f0,
 ]
 const MarkerAPrimeDPrimeCPrimeEnd = [
-    PointDPrime[1] + MarkerRadius * cos(ThetaDPrime_DC),
-    PointDPrime[2] + MarkerRadius * sin(ThetaDPrime_DC),
+    PointDPrime[1] + MarkerRadius * cos(ThetaDPrimeDC),
+    PointDPrime[2] + MarkerRadius * sin(ThetaDPrimeDC),
     0f0,
 ]
 
-const AngleABCTheta = ThetaB_BC - ThetaB_BA
-const AngleAPrimeBPrimeCPrimeTheta = ThetaBPrime_BC - ThetaBPrime_BA
-const AngleCBDTheta = ThetaB_BD - ThetaB_BC
-const AngleCPrimeBPrimeDPrimeTheta = ThetaBPrime_BD - ThetaBPrime_BC
-const AngleBACTheta = ThetaA_AC - ThetaA_AB
-const AngleBPrimeAPrimeCPrimeTheta = ThetaAPrime_AC - ThetaAPrime_AB
-const AngleADCTheta = ThetaD_DC - ThetaD_DA
-const AngleAPrimeDPrimeCPrimeTheta = ThetaDPrime_DC - ThetaDPrime_DA
+const AngleABCTheta = ThetaBBC - ThetaBBA
+const AngleAPrimeBPrimeCPrimeTheta = ThetaBPrimeBC - ThetaBPrimeBA
+const AngleCBDTheta = ThetaBBD - ThetaBBC
+const AngleCPrimeBPrimeDPrimeTheta = ThetaBPrimeBD - ThetaBPrimeBC
+const AngleBACTheta = ThetaAAC - ThetaAAB
+const AngleBPrimeAPrimeCPrimeTheta = ThetaAPrimeAC - ThetaAPrimeAB
+const AngleADCTheta = ThetaDDC - ThetaDDA
+const AngleAPrimeDPrimeCPrimeTheta = ThetaDPrimeDC - ThetaDPrimeDA
 
 const LabelColor = :plum1
 const HighlightColor = :lightgreen

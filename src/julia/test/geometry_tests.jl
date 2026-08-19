@@ -3,10 +3,12 @@ include("../geometry.jl")
 using .EuclidGeometry
 using Test
 
+"""Sort points by their x then y components for deterministic comparison."""
 function sorted_points_xy(points::Vector{Vector{Float32}})
     return sort(points; by = p -> (p[1], p[2]))
 end
 
+"""Assert a 3D point matches an expected tuple within a tolerance."""
 function assert_point3_approx(
     actual::Vector{Float32}, expected::NTuple{3,Float32}; atol::Float32=1f-5)
     @test length(actual) == 3

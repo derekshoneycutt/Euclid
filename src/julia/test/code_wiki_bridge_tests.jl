@@ -5,6 +5,7 @@ end
 using .CodeWiki
 using Test
 
+"""Build a minimal bridge export symbol payload for testing."""
 function bridge_test_export(; name="ping", parameter_type="i32", return_type="i32")
     symbol = DocumentationSymbol(
         language=:odin, stable_id="odin:bridge:exported_abi_procedure:$name",
@@ -19,6 +20,7 @@ function bridge_test_export(; name="ping", parameter_type="i32", return_type="i3
         source_path=symbol.source_path, source_line=symbol.source_line, symbol=symbol)
 end
 
+"""Build a minimal bridge call-site payload for testing."""
 function bridge_test_call(; name="ping", parameter_type="Int32", return_type="Int32")
     symbol = DocumentationSymbol(
         language=:julia, stable_id="julia:Bridge:function:$name",

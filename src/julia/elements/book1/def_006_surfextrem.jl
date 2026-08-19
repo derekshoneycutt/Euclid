@@ -62,6 +62,7 @@ The extremities of a surface are lines \euclidline[color=steelblue,length=3,thic
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Hide a line's edge and collapse it onto a corner point."""
 function hide_edge_and_collapse(
     state_ptr::Ptr{Cvoid}, host_id::Integer, joint1_id::Integer, joint2_id::Integer,
     corner::Vector{Float32})
