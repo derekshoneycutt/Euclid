@@ -188,6 +188,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 end
 
 """Clean scratchpad lifecycle state when animation unloads."""
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
     CleanCountRef[] += 1
     SessionRef[] = nothing

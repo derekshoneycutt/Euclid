@@ -158,7 +158,7 @@ const PhaseHighlightPath2BABack = 40f0
 const PhaseCompassRiseEnd = 41f0
 const PhaseFinalHold = 42f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 17
 
@@ -176,6 +176,7 @@ $P'$ \euclidpoint[color=grey60,size=1] can be made in only one way."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     edge_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaEdgeABHostId))
@@ -303,6 +304,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     edge_a_b = OdinJuliaBridge.create_new_line(state_ptr, PointA, PointA, ColorAB, 0f0)
     edge_b_c = OdinJuliaBridge.create_new_line(state_ptr, PointB, PointB, ColorBC, 0f0)
@@ -430,9 +432,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     edge_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaEdgeABHostId))

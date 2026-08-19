@@ -141,6 +141,13 @@ push_dust_for_compass_segment_if_floor_contact :: proc(
         return
     }
 
+    push_dust_along_floor_segment(state, point1, point2)
+}
+
+//   Emit sampled dust pushes along a floor-level segment between two positions.
+push_dust_along_floor_segment :: proc(
+    state: ^core.Euclid_General_State, point1, point2: core.Vector3) {
+
     samples := COMPASS_LINE_DUST_SAMPLES
     inv_samples := f32(1.0) / f32(samples)
     for i in 0..<samples {
@@ -166,62 +173,76 @@ push_dust_for_connected_lines_on_floor_event :: proc(
     }
 
     for host_index in 0..<next_index {
-        host := state^.point_system^.points[host_index]
-        if host.kind != .Line {
-            continue
-        }
-
-        p1 := host.child_point_head
-        if p1 < 0 || p1 >= next_index {
-            continue
-        }
-
-        p2 := state^.point_system^.points[p1].next_child_point
-        if p2 < 0 || p2 >= next_index {
-            continue
-        }
-
-        if p1 != point_index && p2 != point_index {
-            continue
-        }
-
-        pos1, has_pos1 := state^.point_system^.points[p1].position.?
-        pos2, has_pos2 := state^.point_system^.points[p2].position.?
-        if !has_pos1 || !has_pos2 {
-            continue
-        }
-
-        sign1 := floor_contact_sign(pos1.z)
-        sign2 := floor_contact_sign(pos2.z)
-
-        if sign1 == 0 && sign2 == 0 {
-            samples := COMPASS_LINE_DUST_SAMPLES
-            inv_samples := f32(1.0) / f32(samples)
-            for i in 0..<samples {
-                t := f32(i) * inv_samples
-                x := math.lerp(pos1.x, pos2.x, t)
-                y := math.lerp(pos1.y, pos2.y, t)
-                particles.push_dust_away_from_xy(state^.particle_system, x, y)
-            }
-            continue
-        }
-
-        if sign1 * sign2 >= 0 {
-            continue
-        }
-
-        dz := pos2.z - pos1.z
-        if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
-            continue
-        }
-
-        t := -pos1.z / dz
-        t = math.clamp(t, 0, 1)
-
-        x := math.lerp(pos1.x, pos2.x, t)
-        y := math.lerp(pos1.y, pos2.y, t)
-        particles.push_dust_away_from_xy(state^.particle_system, x, y)
+        push_dust_for_connected_line(state, point_index, host_index)
     }
+}
+
+//   Emit floor-contact dust for one line when it is connected to the event point.
+//
+// Notes:
+//   - A connected line on z=0 emits sampled pushes along the segment.
+//   - A connected line straddling z=0 emits one push at the segment crossing point.
+push_dust_for_connected_line :: proc(
+    state: ^core.Euclid_General_State, point_index: int, host_index: int) {
+
+    p1, p2, endpoints_ok := connected_line_endpoints(state, host_index)
+    if !endpoints_ok {
+        return
+    }
+    if p1 != point_index && p2 != point_index {
+        return
+    }
+
+    pos1, has_pos1 := state^.point_system^.points[p1].position.?
+    pos2, has_pos2 := state^.point_system^.points[p2].position.?
+    if !has_pos1 || !has_pos2 {
+        return
+    }
+
+    sign1 := floor_contact_sign(pos1.z)
+    sign2 := floor_contact_sign(pos2.z)
+    if sign1 == 0 && sign2 == 0 {
+        push_dust_along_floor_segment(state, pos1, pos2)
+        return
+    }
+    if sign1 * sign2 >= 0 {
+        return
+    }
+
+    dz := pos2.z - pos1.z
+    if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
+        return
+    }
+
+    t := math.clamp(-pos1.z / dz, 0, 1)
+    x := math.lerp(pos1.x, pos2.x, t)
+    y := math.lerp(pos1.y, pos2.y, t)
+    particles.push_dust_away_from_xy(state^.particle_system, x, y)
+}
+
+//   Resolve the two endpoint indices for a line host, validating both are in bounds.
+//
+// Returns:
+//   - p1, p2: Endpoint point indices (only valid when ok is true).
+//   - ok: true when the host is a line with two in-bounds endpoint children.
+connected_line_endpoints :: proc(
+    state: ^core.Euclid_General_State, host_index: int) -> (p1, p2: int, ok: bool) {
+
+    next_index := state^.point_system^.next_point_index
+    host := state^.point_system^.points[host_index]
+    if host.kind != .Line {
+        return 0, 0, false
+    }
+
+    p1 = host.child_point_head
+    if p1 < 0 || p1 >= next_index {
+        return 0, 0, false
+    }
+    p2 = state^.point_system^.points[p1].next_child_point
+    if p2 < 0 || p2 >= next_index {
+        return 0, 0, false
+    }
+    return p1, p2, true
 }
 
 //   Classify one z value relative to floor contact dead-zone.

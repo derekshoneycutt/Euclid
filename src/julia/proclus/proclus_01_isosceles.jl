@@ -97,7 +97,7 @@ const PhaseDrawLineCA = 66f0
 const PhasePenRise3 = 90f0
 const PhaseHideAll = 100f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Proclus - Isosceles Triangle
 
@@ -123,6 +123,7 @@ The result is an isosceles triangle \euclidtriangle[height=2,width=3,thickness=2
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     circle1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaCircle1HostId))
@@ -227,6 +228,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line_a_b = OdinJuliaBridge.create_new_line(
         state_ptr, APoint, APoint, LineABColor, 0f0)
@@ -285,9 +287,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLineABHostId))

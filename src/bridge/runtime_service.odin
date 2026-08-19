@@ -99,7 +99,29 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
     total_dt := min(dt + service^.animation_accumulated_dt, MAX_ACCUMULATED_ANIMATION_DT)
     service^.animation_accumulated_dt = 0
     service^.animation_tick_sequence += 1
+    fill_animation_tick_slot(
+        service, &service^.animation_tick_slots[slot_index], state, total_dt)
     slot := &service^.animation_tick_slots[slot_index]
+
+    request_id, sent := try_submit_julia_request(
+        service, .Animation_Tick, generate_animation_tick_task,
+        rawptr(slot), i32(slot_index))
+    if !sent {
+        rollback_animation_tick_slot(service, slot, total_dt)
+        return false
+    }
+    assert(slot^.request_id == request_id)
+    service^.animation_tick_pending = true
+    service^.animation_ticks_submitted += 1
+    service^.animation_queue_high_water = max(service^.animation_queue_high_water, u64(1))
+    return true
+}
+
+//   Populate one animation tick slot and snapshot its query state for the request.
+fill_animation_tick_slot :: proc(
+    service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
+    state: ^core.Euclid_General_State, total_dt: f32) {
+
     slot^ = Animation_Tick_Slot{
         state = .Pending,
         request_id = service^.next_request_id,
@@ -111,20 +133,15 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         submitted_at = time.tick_now(),
     }
     capture_animation_query_snapshot(state, &slot^.query_snapshot)
-    request_id, sent := try_submit_julia_request(
-        service, .Animation_Tick, generate_animation_tick_task,
-        rawptr(slot), i32(slot_index))
-    if !sent {
-        slot^.state = .Free
-        service^.animation_accumulated_dt = total_dt
-        service^.animation_ticks_dropped += 1
-        return false
-    }
-    assert(slot^.request_id == request_id)
-    service^.animation_tick_pending = true
-    service^.animation_ticks_submitted += 1
-    service^.animation_queue_high_water = max(service^.animation_queue_high_water, u64(1))
-    return true
+}
+
+//   Recycle a tick slot and retain its elapsed time after a failed submission.
+rollback_animation_tick_slot :: proc(
+    service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot, total_dt: f32) {
+
+    slot^.state = .Free
+    service^.animation_accumulated_dt = total_dt
+    service^.animation_ticks_dropped += 1
 }
 
 //   Commit one completed generation-matched animation batch at a frame boundary.
@@ -157,6 +174,16 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     } else {
         committed = true
     }
+    record_animation_tick_outcome(state, service, slot, committed, reject_reason)
+    release_completed_animation_ticks(service)
+    return committed
+}
+
+//   Record the commit/reject bookkeeping and trace event for one completed tick.
+record_animation_tick_outcome :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    slot: ^Animation_Tick_Slot, committed: bool, reject_reason: string) {
+
     if committed {
         service^.animation_ticks_committed += 1
         service^.animation_last_committed_sequence = slot^.sequence
@@ -168,15 +195,13 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
             &state^.trace_state,
             "animation.tick_committed",
             {service^.animation_generation, slot^.sequence, "", ""})
-    } else {
-        service^.animation_ticks_stale += 1
-        _ = trace.record_animation_event_ex(
-            &state^.trace_state,
-            "animation.tick_rejected",
-            {service^.animation_generation, slot^.sequence, "", reject_reason})
+        return
     }
-    release_completed_animation_ticks(service)
-    return committed
+    service^.animation_ticks_stale += 1
+    _ = trace.record_animation_event_ex(
+        &state^.trace_state,
+        "animation.tick_rejected",
+        {service^.animation_generation, slot^.sequence, "", reject_reason})
 }
 
 //   Classify why one completed tick was not committed against canonical state.
@@ -590,7 +615,8 @@ create_julia_runtime_service :: proc() -> (
 
 //   Receive one available worker event without blocking the display thread.
 // Successful receives also apply lifecycle and slot-completion metadata exactly once.
-try_receive_julia_event :: proc(service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+try_receive_julia_event :: proc(
+    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
     if service == nil {
         return {}, false
     }
@@ -658,14 +684,16 @@ accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) 
 }
 
 //   Mark the service stopped when a shutdown completes successfully.
-julia_event_on_shutdown :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+julia_event_on_shutdown :: proc(
+    service: ^Julia_Runtime_Service, event: Julia_Event) {
     if event.succeeded {
         service^.lifecycle = .Stopped
     }
 }
 
 //   Record a completed scratchpad slot for the polling consumer.
-julia_event_on_scratchpad :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+julia_event_on_scratchpad :: proc(
+    service: ^Julia_Runtime_Service, event: Julia_Event) {
     record_completed_scratchpad_slot(service, event.slot_index)
 }
 
@@ -682,7 +710,8 @@ julia_event_on_animation_tick :: proc(
 }
 
 //   Record a failed Julia event and fail the lifecycle on terminal events.
-record_julia_event_failure :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+record_julia_event_failure :: proc(
+    service: ^Julia_Runtime_Service, event: Julia_Event) {
     service^.failed_request_count += 1
     service^.last_failed_request_id = event.request_id
     service^.last_failed_request_kind = event.request_kind
@@ -800,40 +829,54 @@ julia_runtime_worker :: proc(data: rawptr) {
             slot_index = request.slot_index,
             succeeded = true,
         }
-        switch request.kind {
-        case .Initialize:
-            assert(os.get_current_thread_id() == service^.owner_thread_id)
-            event.succeeded = initiate_julia()
-            event.kind = .Initialized
-        case .Invoke:
-            if request.task != nil {
-                event.succeeded = request.task(request.data)
-            }
-            event.kind = .Invoke_Complete
-        case .Scratchpad:
-            if request.task != nil {
-                event.succeeded = request.task(request.data)
-            }
-            event.kind = .Scratchpad_Complete
-        case .View_Snapshot:
-            if request.task != nil {
-                event.succeeded = request.task(request.data)
-            }
-            event.kind = .View_Snapshot_Complete
-        case .Animation_Tick:
-            if request.task != nil {
-                event.succeeded = request.task(request.data)
-            }
-            event.kind = .Animation_Tick_Complete
-        case .Shutdown:
-            assert(os.get_current_thread_id() == service^.owner_thread_id)
-            end_julia()
-            event.kind = .Shutdown_Complete
-            _ = chan.send(service^.events, event)
+        if dispatch_julia_request(service, request, &event) {
             return
         }
         _ = chan.send(service^.events, event)
         context = worker_context
         free_all(context.temp_allocator)
     }
+}
+
+//   Execute one worker request, filling its completion event.
+//
+// Returns:
+//   - true when the request is Shutdown and the worker must exit after sending the event.
+dispatch_julia_request :: proc(
+    service: ^Julia_Runtime_Service,
+    request: Julia_Request, event: ^Julia_Event) -> bool {
+
+    switch request.kind {
+    case .Initialize:
+        assert(os.get_current_thread_id() == service^.owner_thread_id)
+        event^.succeeded = initiate_julia()
+        event^.kind = .Initialized
+    case .Invoke:
+        event^.kind = .Invoke_Complete
+        event^.succeeded = run_julia_request_task(request)
+    case .Scratchpad:
+        event^.kind = .Scratchpad_Complete
+        event^.succeeded = run_julia_request_task(request)
+    case .View_Snapshot:
+        event^.kind = .View_Snapshot_Complete
+        event^.succeeded = run_julia_request_task(request)
+    case .Animation_Tick:
+        event^.kind = .Animation_Tick_Complete
+        event^.succeeded = run_julia_request_task(request)
+    case .Shutdown:
+        assert(os.get_current_thread_id() == service^.owner_thread_id)
+        end_julia()
+        event^.kind = .Shutdown_Complete
+        _ = chan.send(service^.events, event^)
+        return true
+    }
+    return false
+}
+
+//   Run a request's task callback when present, preserving the prior success state.
+run_julia_request_task :: proc(request: Julia_Request) -> bool {
+    if request.task == nil {
+        return true
+    }
+    return request.task(request.data)
 }

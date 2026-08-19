@@ -89,6 +89,13 @@ prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) 
         return
     }
 
+    resolve_julia_interface_callbacks(iface, main_module)
+}
+
+//   Resolve the Julia callback function handles for one interface generation slot.
+resolve_julia_interface_callbacks :: proc(
+    iface: ^core.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
+
     iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
     iface^.scratchpad_classify_input = julialib.jl_get_function(
@@ -425,15 +432,7 @@ print_julia_exception :: proc(context_of_error: string) {
         }
     }
 
-    msg_val: ^julialib.jl_value_t = nil
-    if bt_val != nil {
-        args: [3]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex, bt_val}
-        msg_val = julialib.jl_call(sprint_fn, &args[0], 3)
-    } else {
-        args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
-        msg_val = julialib.jl_call(sprint_fn, &args[0], 2)
-    }
-
+    msg_val := format_julia_exception_message(sprint_fn, showerror_fn, ex, bt_val)
     if julialib.jl_exception_occurred() != nil || msg_val == nil {
         fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
         fmt.println("Failed to format exception text via Base.sprint(showerror, ...).")
@@ -443,4 +442,20 @@ print_julia_exception :: proc(context_of_error: string) {
     msg := julialib.jl_string_ptr(msg_val)
     fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
     fmt.println(msg)
+}
+
+//   Format a Julia exception through Base.sprint(showerror, ...), with optional backtrace.
+//
+// Returns:
+//   - Formatted message value, or nil when formatting fails or raises.
+format_julia_exception_message :: proc(
+    sprint_fn: ^julialib.jl_value_t, showerror_fn: ^julialib.jl_value_t,
+    ex: ^julialib.jl_value_t, bt_val: ^julialib.jl_value_t) -> ^julialib.jl_value_t {
+
+    if bt_val != nil {
+        args: [3]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex, bt_val}
+        return julialib.jl_call(sprint_fn, &args[0], 3)
+    }
+    args: [2]^julialib.jl_value_t = {(^julialib.jl_value_t)(showerror_fn), ex}
+    return julialib.jl_call(sprint_fn, &args[0], 2)
 }

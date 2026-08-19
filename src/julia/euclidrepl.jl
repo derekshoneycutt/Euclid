@@ -439,45 +439,25 @@ function render_payload!(
     rise_duration = max(duration - rise_start, 1f-5)
 
     if elapsed < first_pass_start
-        EuclidAnimations.animate_pen_descend(
-            state_ptr,
-            elapsed,
-            descend_duration,
-            HIGHLIGHT_TOOL_TOP_Z,
-            payload.start_pos[1],
-            payload.start_pos[2])
+        EuclidAnimations.animate_pen_descend(state_ptr, elapsed, descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z, payload.start_pos[1], payload.start_pos[2])
         return
     end
 
     if elapsed < second_pass_start
-        EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr,
-            elapsed - first_pass_start,
-            pass_duration,
-            payload.start_pos,
-            payload.end_pos,
-            payload.color)
+        EuclidAnimations.animate_pen_tilt_and_drag(state_ptr, elapsed - first_pass_start,
+            pass_duration, payload.start_pos, payload.end_pos, payload.color)
         return
     end
 
     if elapsed < rise_start
-        EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr,
-            elapsed - second_pass_start,
-            pass_duration,
-            payload.end_pos,
-            payload.start_pos,
-            payload.color)
+        EuclidAnimations.animate_pen_tilt_and_drag(state_ptr, elapsed - second_pass_start,
+            pass_duration, payload.end_pos, payload.start_pos, payload.color)
         return
     end
 
-    EuclidAnimations.animate_pen_rise(
-        state_ptr,
-        elapsed - rise_start,
-        rise_duration,
-        HIGHLIGHT_TOOL_TOP_Z,
-        payload.start_pos[1],
-        payload.start_pos[2])
+    EuclidAnimations.animate_pen_rise(state_ptr, elapsed - rise_start,
+        rise_duration, HIGHLIGHT_TOOL_TOP_Z, payload.start_pos[1], payload.start_pos[2])
 end
 
 """Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
@@ -493,49 +473,27 @@ function render_payload!(
     rise_duration = max(duration - rise_start, 1f-5)
 
     if elapsed < first_pass_start
-        EuclidAnimations.animate_compass_descend(
-            state_ptr,
-            elapsed,
-            descend_duration,
-            HIGHLIGHT_TOOL_TOP_Z,
-            payload.center[1],
-            payload.center[2],
-            payload.start_pos[1],
-            payload.start_pos[2])
+        EuclidAnimations.animate_compass_descend(state_ptr, elapsed, descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z, payload.center[1], payload.center[2],
+            payload.start_pos[1], payload.start_pos[2])
         return
     end
 
     if elapsed < second_pass_start
-        render_compass_highlight_pass!(
-            state_ptr,
-            elapsed - first_pass_start,
-            pass_duration,
-            payload,
-            payload.start_pos,
-            payload.angle_theta)
+        render_compass_highlight_pass!(state_ptr, elapsed - first_pass_start,
+            pass_duration, payload, payload.start_pos, payload.angle_theta)
         return
     end
 
     if elapsed < rise_start
-        render_compass_highlight_pass!(
-            state_ptr,
-            elapsed - second_pass_start,
-            pass_duration,
-            payload,
-            payload.end_pos,
-            -payload.angle_theta)
+        render_compass_highlight_pass!(state_ptr, elapsed - second_pass_start,
+            pass_duration, payload, payload.end_pos, -payload.angle_theta)
         return
     end
 
-    EuclidAnimations.animate_compass_rise(
-        state_ptr,
-        elapsed - rise_start,
-        rise_duration,
-        HIGHLIGHT_TOOL_TOP_Z,
-        payload.center[1],
-        payload.center[2],
-        payload.start_pos[1],
-        payload.start_pos[2])
+    EuclidAnimations.animate_compass_rise(state_ptr, elapsed - rise_start,
+        rise_duration, HIGHLIGHT_TOOL_TOP_Z, payload.center[1], payload.center[2],
+        payload.start_pos[1], payload.start_pos[2])
 end
 
 """Render one compass highlight pass using filled or unfilled trail styling."""
@@ -548,27 +506,13 @@ function render_compass_highlight_pass!(
     angle_theta::Real)
 
     if payload.filled
-        EuclidAnimations.animate_compass_fill_arc_highlight(
-            state_ptr,
-            elapsed,
-            duration,
-            payload.center,
-            start_pos,
-            angle_theta,
-            payload.radius,
-            payload.color)
+        EuclidAnimations.animate_compass_fill_arc_highlight(state_ptr, elapsed, duration,
+            payload.center, start_pos, angle_theta, payload.radius, payload.color)
         return
     end
 
-    EuclidAnimations.animate_compass_arc_highlight(
-        state_ptr,
-        elapsed,
-        duration,
-        payload.center,
-        start_pos,
-        angle_theta,
-        payload.radius,
-        payload.color)
+    EuclidAnimations.animate_compass_arc_highlight(state_ptr, elapsed, duration,
+        payload.center, start_pos, angle_theta, payload.radius, payload.color)
 end
 
 """Render one frame of batch point translation."""
@@ -928,38 +872,16 @@ function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::
     angle_theta = final_end_theta - start_theta_valid
 
     shape = if filled
-        OdinJuliaBridge.create_new_filledcircle(
-            state_ptr,
-            center3,
-            radius_valid,
-            start_theta_valid,
-            final_end_theta,
-            color,
-            brush_value)
+        OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
+            start_theta_valid, final_end_theta, color, brush_value)
     else
-        OdinJuliaBridge.create_new_circle(
-            state_ptr,
-            center3,
-            radius_valid,
-            start_theta_valid,
-            final_end_theta,
-            color,
-            brush_value)
+        OdinJuliaBridge.create_new_circle(state_ptr, center3, radius_valid,
+            start_theta_valid, final_end_theta, color, brush_value)
     end
 
-    payload = CirclePayload(
-        filled,
-        full_sweep,
-        Int(shape.host_id),
-        Int(shape.start_id),
-        Int(shape.end_id),
-        center3,
-        start_pos,
-        end_pos,
-        radius_valid,
-        angle_theta,
-        color,
-        brush_value)
+    payload = CirclePayload(filled, full_sweep, Int(shape.host_id), Int(shape.start_id),
+        Int(shape.end_id), center3, start_pos, end_pos, radius_valid, angle_theta,
+        color, brush_value)
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
     start_job!(state_ptr, job)

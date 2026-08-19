@@ -105,7 +105,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 EuclidAlgebraGroupsZ2Inverse.clean,
                 "Inverse",
                 z2_id)
-        Cn_id = register_child_animation(
+        cn_id = register_child_animation(
             state_ptr,
             EuclidAlgebraGroupsCn.get_view_text,
             EuclidAlgebraGroupsCn.initialize,
@@ -120,7 +120,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 EuclidAlgebraGroupsCnAssociative.loop,
                 EuclidAlgebraGroupsCnAssociative.clean,
                 "Associative",
-                Cn_id)
+                cn_id)
             register_child_animation(
                 state_ptr,
                 EuclidAlgebraGroupsCnAbelian.get_view_text,
@@ -128,7 +128,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 EuclidAlgebraGroupsCnAbelian.loop,
                 EuclidAlgebraGroupsCnAbelian.clean,
                 "Abelian",
-                Cn_id)
+                cn_id)
 
 end
 

@@ -86,6 +86,7 @@ const PhaseDrawMarker4 = 13f0
 const PhaseCompassRise = 14f0
 const PhaseHideAll = 15f0
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Definition: Rhombus
 
@@ -96,25 +97,26 @@ Of quadrilateral figures, ... a rhombus \euclidbox[height=2,width=2,thickness=2,
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostIds_r = ntuple(i ->
+    line_host_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint2Ids_r = ntuple(i ->
+    line_joint2_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
-    markerHostIds_r = ntuple(i ->
+    marker_host_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerHostIds[i])), 4)
-    markerEndIds_r = ntuple(i ->
+    marker_end_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaMarkerEndIds[i])), 4)
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [markerHostIds_r..., lineHostIds_r...])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [marker_host_ids..., line_host_ids...])
 
     for i in 1:4
         OdinJuliaBridge.set_point_position(
-            state_ptr, lineJoint2Ids_r[i],
+            state_ptr, line_joint2_ids[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
 
         OdinJuliaBridge.set_point_position(
-            state_ptr, markerEndIds_r[i],
+            state_ptr, marker_end_ids[i],
             MarkerStarts[i][1], MarkerStarts[i][2], MarkerStarts[i][3])
     end
 
@@ -136,6 +138,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
         marker = OdinJuliaBridge.create_new_filledcircle(
@@ -169,9 +172,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLineHostIds[1]))

@@ -37,6 +37,7 @@ const PhaseDrawSide4 = 4f0
 const PhaseRise = 5f0
 const PhaseHideAll = 6f0
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Definition: Trapezia
 
@@ -47,17 +48,18 @@ And let quadrilateral figures besides these be called trapezia \euclidbox[height
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostIds_r = ntuple(i ->
+    line_host_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint2Ids_r = ntuple(i ->
+    line_joint2_ids = ntuple(i ->
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, lineHostIds_r)
+    OdinJuliaBridge.hide_point_batch(state_ptr, line_host_ids)
 
     for i in 1:4
         OdinJuliaBridge.set_point_position(
-            state_ptr, lineJoint2Ids_r[i],
+            state_ptr, line_joint2_ids[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
     end
 
@@ -71,6 +73,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
@@ -90,9 +93,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLineHostIds[1]))

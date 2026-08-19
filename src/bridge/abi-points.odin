@@ -6,6 +6,12 @@ import "../shapes"
 
 import rl "vendor:raylib"
 
+Child_Chain_Walk :: struct {
+    tail:   int,
+    count:  int,
+    status: i32,
+}
+
 //   Create a new label shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
@@ -55,39 +61,10 @@ create_new_label_decorated :: proc "c" (
     point, index := shapes.init_label(
         state^.point_system, {label, use_decoration_kind, pos, {rl_color, brush_size}})
 
-    use_pos, has_pos := point^.position.?
-    color, has_color := point^.color.?
-    active_color, has_active_color := point^.active_color.?
-    use_label, has_label := point^.label.?
-
-    return Bridge_Point_View{
-        valid = true,
-        index = index,
-
-        point_type = 1,
-        do_draw = point^.do_draw,
-        brush_size = point^.brush_size,
-        offset = point^.offset,
-
-        has_position = has_pos,
-        position = use_pos,
-
-        has_color = has_color,
-        color = Bridge_Color{ color.r, color.g, color.b, color.a },
-
-        has_active_color = has_active_color,
-        active_color = Bridge_Color{ active_color.r, active_color.g,
-            active_color.b, active_color.a },
-
-        has_label = has_label,
-        label = use_label,
-        decoration_kind = i32(point^.decoration_kind),
-
-        active_child = point^.active_child,
-        child_count = point^.child_count,
-        child_point_head = point^.child_point_head,
-        next_child_point = point^.next_child_point,
-    }
+    view := point_view_from_point(point^, index)
+    view.point_type = 1
+    view.offset = point^.offset
+    return view
 }
 
 //   Create a new point shape in the shapes system for Julia-driven animation state.
@@ -301,6 +278,46 @@ create_new_pentagon :: proc "c" (
     return line
 }
 
+//   Map a point kind to its bridge point-type code.
+point_kind_to_type :: proc(kind: core.Shapes_Point_Type) -> int {
+    table := [?]int{ 1, 2, 3, 4, 5, 6, 7, 8, 100, 150 }
+    ordinal := int(kind)
+    if ordinal < 0 || ordinal >= len(table) {
+        return 0
+    }
+    return table[ordinal]
+}
+
+//   Build a bridge point view payload from a resolved point and index.
+point_view_from_point :: proc(point: core.Shapes_Point, index: int) -> Bridge_Point_View {
+    pos, has_pos := point.position.?
+    color, has_color := point.color.?
+    active_color, has_active_color := point.active_color.?
+    label, has_label := point.label.?
+
+    return Bridge_Point_View{
+        valid = true,
+        index = index,
+        point_type = 0,
+        do_draw = point.do_draw,
+        brush_size = point.brush_size,
+        has_position = has_pos,
+        position = pos,
+        has_color = has_color,
+        color = Bridge_Color{ color.r, color.g, color.b, color.a },
+        has_active_color = has_active_color,
+        active_color = Bridge_Color{ active_color.r, active_color.g,
+            active_color.b, active_color.a },
+        has_label = has_label,
+        label = label,
+        decoration_kind = i32(point.decoration_kind),
+        active_child = point.active_child,
+        child_count = point.child_count,
+        child_point_head = point.child_point_head,
+        next_child_point = point.next_child_point,
+    }
+}
+
 //   Build a bridge-safe snapshot of a point entry and its optional fields.
 //
 // Parameters:
@@ -314,6 +331,7 @@ get_point_view :: proc "c" (
     state: ^core.Euclid_General_State,
     index_abi: i32) -> Bridge_Point_View {
 
+    context = state^.saved_context
     index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
@@ -321,62 +339,10 @@ get_point_view :: proc "c" (
         if query_snapshot != nil {
             point = query_snapshot^.points[index]
         }
-        type: int = 0
-        switch point.kind {
-        case .Label:
-            type = 1
-        case .Point:
-            type = 2
-        case .Line:
-            type = 3
-        case .Circle:
-            type = 4
-        case .Filled_Circle:
-            type = 5
-        case .Triangle:
-            type = 6
-        case .Square:
-            type = 7
-        case .Pentagon:
-            type = 8
-        case .Pen:
-            type = 100
-        case .Compass:
-            type = 150
-        }
-        pos, has_pos := point.position.?
-        color, has_color := point.color.?
-        active_color, has_active_color := point.active_color.?
-        label, has_label := point.label.?
 
-        return Bridge_Point_View{
-            valid = true,
-            index = index,
-
-            point_type = type,
-            do_draw = point.do_draw,
-            brush_size = point.brush_size,
-
-            has_position = has_pos,
-            position = pos,
-
-            has_color = has_color,
-            color = Bridge_Color{ color.r, color.g, color.b, color.a },
-
-            has_active_color = has_active_color,
-            active_color =
-                Bridge_Color{ active_color.r, active_color.g,
-                    active_color.b, active_color.a },
-
-            has_label = has_label,
-            label = label,
-            decoration_kind = i32(point.decoration_kind),
-
-            active_child = point.active_child,
-            child_count = point.child_count,
-            child_point_head = point.child_point_head,
-            next_child_point = point.next_child_point,
-        }
+        view := point_view_from_point(point, index)
+        view.point_type = point_kind_to_type(point.kind)
+        return view
     }
 
     return Bridge_Point_View{
@@ -846,21 +812,38 @@ attach_child_point :: proc "c" (
         return BRIDGE_STATUS_OK
     }
 
+    walk := child_chain_tail(state, parent_point^.child_point_head, child)
+    if walk.status != BRIDGE_STATUS_OK {
+        return walk.status
+    }
+
+    state^.point_system^.points[walk.tail].next_child_point = child
+    parent_point^.child_count = walk.count + 1
+    return BRIDGE_STATUS_OK
+}
+
+//   Walk a child chain to its tail, rejecting cycles, bad indices, and the child.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - head: Index of the first child in the chain.
+//   - child: Child index that must not already appear in the chain.
+//
+// Returns:
+//   - Walk result with the tail index, current child count, and a status that is
+//     BRIDGE_STATUS_OK on a clean walk, otherwise BRIDGE_STATUS_INVALID_GRAPH.
+child_chain_tail :: proc(
+    state: ^core.Euclid_General_State, head: int, child: int) -> Child_Chain_Walk {
+
     visited: [MAX_SHAPESPOINTS]bool
-    current := parent_point^.child_point_head
+    current := head
     tail := current
     count := 0
     for current >= 0 {
-        if !is_point_index_in_bounds(current) {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
-        if visited[current] {
-            return BRIDGE_STATUS_INVALID_GRAPH
+        if !is_point_index_in_bounds(current) || visited[current] || current == child {
+            return Child_Chain_Walk{ tail, count, BRIDGE_STATUS_INVALID_GRAPH }
         }
         visited[current] = true
-        if current == child {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
 
         tail = current
         count += 1
@@ -870,10 +853,7 @@ attach_child_point :: proc "c" (
         }
         current = next
     }
-
-    state^.point_system^.points[tail].next_child_point = child
-    parent_point^.child_count = count + 1
-    return BRIDGE_STATUS_OK
+    return Child_Chain_Walk{ tail, count, BRIDGE_STATUS_OK }
 }
 
 //   Detach a child point from a parent's child chain.
@@ -900,47 +880,55 @@ detach_child_point :: proc "c" (
     }
 
     parent_point := &state^.point_system^.points[parent]
-    head := parent_point^.child_point_head
-    if head < 0 {
+    if parent_point^.child_point_head < 0 {
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    visited: [MAX_SHAPESPOINTS]bool
-    current := head
-    prev := -1
-    removed := false
+    if !remove_from_child_chain(state, parent_point, child) {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
 
+    _ = rebuild_child_count(state, parent_index)
+    return BRIDGE_STATUS_OK
+}
+
+//   Unlink a child from a parent's child chain, reporting whether it was removed.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - parent_point: Parent point owning the child chain.
+//   - child: Child index to remove from the chain.
+//
+// Returns:
+//   - true when the child was found and unlinked from a clean, acyclic chain.
+remove_from_child_chain :: proc(
+    state: ^core.Euclid_General_State, parent_point: ^core.Shapes_Point,
+    child: int) -> bool {
+
+    visited: [MAX_SHAPESPOINTS]bool
+    current := parent_point^.child_point_head
+    prev := -1
     for current >= 0 {
-        if !is_point_index_in_bounds(current) {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
-        if visited[current] {
-            return BRIDGE_STATUS_INVALID_GRAPH
+        if !is_point_index_in_bounds(current) || visited[current] {
+            return false
         }
         visited[current] = true
 
         next := state^.point_system^.points[current].next_child_point
         if current == child {
-            removed = true
             if prev < 0 {
                 parent_point^.child_point_head = next
             } else {
                 state^.point_system^.points[prev].next_child_point = next
             }
             state^.point_system^.points[current].next_child_point = -1
-            break
+            return true
         }
 
         prev = current
         current = next
     }
-
-    if !removed {
-        return BRIDGE_STATUS_INVALID_GRAPH
-    }
-
-    _ = rebuild_child_count(state, parent_index)
-    return BRIDGE_STATUS_OK
+    return false
 }
 
 //   Recompute and store a parent's child_count by walking its child chain.

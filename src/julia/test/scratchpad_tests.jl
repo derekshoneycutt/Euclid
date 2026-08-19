@@ -22,6 +22,8 @@ using Test
 
 const TEST_SESSION_ID_REF = Ref(1)
 
+const TEST_STATE_PTR = Ptr{Cvoid}(0)
+
 struct ScratchpadLatexResultMock
 end
 
@@ -36,8 +38,6 @@ function new_session(; id::Int=TEST_SESSION_ID_REF[])
     TEST_SESSION_ID_REF[] = id + 1
     return Scratchpad.create_session(TEST_STATE_PTR, id)
 end
-
-const TEST_STATE_PTR = Ptr{Cvoid}(0)
 
 Base.show(io::IO, ::MIME"text/plain", ::ScratchpadLatexResultMock) =
     print(io, "ScratchpadLatexResultMock()")

@@ -141,7 +141,7 @@ const PhaseExtInt2Back = 18f0
 const PhaseCompassRise = 19f0
 const PhaseFinalHold = 20f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 19
 
@@ -154,6 +154,7 @@ and also the exterior-interior angles are congruent. Conversely, if the alternat
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLowerHostId))
@@ -199,6 +200,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     lower_line = OdinJuliaBridge.create_new_line(
         state_ptr, LowerLineStart, LowerLineStart, LowerLineColor, 0f0)
@@ -229,9 +231,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLowerHostId))

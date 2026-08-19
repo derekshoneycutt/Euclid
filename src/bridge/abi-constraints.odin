@@ -98,28 +98,13 @@ create_constraint :: proc "c" (
 
     context = state^.saved_context
 
-    if !is_valid_constraint_kind_value(spec.traits) {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
+    next_index := state^.point_system^.next_constraint_index
+    status := validate_constraint_create(spec, next_index)
+    if status != BRIDGE_STATUS_OK {
+        return status
     }
 
     on_point := int(spec.on_point)
-    if !is_point_index_in_bounds(on_point) {
-        return BRIDGE_STATUS_INVALID_INDEX
-    }
-
-    if spec.depend_on >= 0 && !is_constraint_index_in_bounds(int(spec.depend_on)) {
-        return BRIDGE_STATUS_INVALID_INDEX
-    }
-
-    if spec.has_child_offset != 0 && spec.child_offset < 0 {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-
-    next_index := state^.point_system^.next_constraint_index
-    if next_index < 0 || next_index >= MAX_SHAPESCONSTRAINTS {
-        return BRIDGE_STATUS_OUT_OF_CAPACITY
-    }
-
     state^.point_system^.constraints[next_index] = core.Shapes_Constraint{
         kind = core.Shapes_Constraint_Kind(spec.traits),
         on_point = on_point,
@@ -343,13 +328,7 @@ solve_constraints_to_error :: proc "c" (
     context = state^.saved_context
 
     if allowable_error < 0 {
-        return Bridge_Solve_Result{
-            status = BRIDGE_STATUS_INVALID_ARGUMENT,
-            iterations = 0,
-            initial_error = 0,
-            final_error = 0,
-            converged = 0,
-        }
+        return make_solve_result(BRIDGE_STATUS_INVALID_ARGUMENT, 0, 0, 0, 0)
     }
 
     iteration_limit := max_iterations
@@ -362,41 +341,100 @@ solve_constraints_to_error :: proc "c" (
 
     initial_error := shapes.get_total_constraint_error(state^.point_system)
     if initial_error <= allowable_error {
-        return Bridge_Solve_Result{
-            status = BRIDGE_STATUS_OK,
-            iterations = 0,
-            initial_error = initial_error,
-            final_error = initial_error,
-            converged = 1,
-        }
+        return make_solve_result(BRIDGE_STATUS_OK, 0, initial_error, initial_error, 1)
     }
 
-    reverse := false
-    error := initial_error
-    iterations: i32 = 0
-    for iterations < iteration_limit && error > allowable_error {
-        if reverse {
-            shapes.apply_all_constraints_reverse(state^.point_system)
-        } else {
-            shapes.apply_all_constraints(state^.point_system)
-        }
-        reverse = !reverse
-        iterations += 1
-        error = shapes.get_total_constraint_error(state^.point_system)
-    }
+    iterations, error := run_constraint_iterations(
+        state^.point_system, allowable_error, iteration_limit)
 
     converged := error <= allowable_error
-    status : i32 = BRIDGE_STATUS_NON_CONVERGED
+    status := i32(BRIDGE_STATUS_NON_CONVERGED)
     if converged {
         status = BRIDGE_STATUS_OK
     }
+
+    return make_solve_result(
+        status, iterations, initial_error, error, to_u8(converged))
+}
+
+//   Validate a constraint create spec and the next available constraint index.
+//
+// Parameters:
+//   - spec: Constraint specification payload used for the create operation.
+//   - next_index: Next free constraint index in the point system.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the spec and index are valid, otherwise the matching error status.
+validate_constraint_create :: proc(spec: Bridge_Constraint_Spec, next_index: int) -> i32 {
+    if !is_valid_constraint_kind_value(spec.traits) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if !is_point_index_in_bounds(int(spec.on_point)) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if spec.depend_on >= 0 && !is_constraint_index_in_bounds(int(spec.depend_on)) {
+        return BRIDGE_STATUS_INVALID_INDEX
+    }
+    if spec.has_child_offset != 0 && spec.child_offset < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if next_index < 0 || next_index >= MAX_SHAPESCONSTRAINTS {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return BRIDGE_STATUS_OK
+}
+
+//   Build a solver outcome payload from its status, iteration, and error fields.
+//
+// Parameters:
+//   - status: Bridge status code for the solve outcome.
+//   - iterations: Number of solver iterations applied.
+//   - initial_error: Total constraint error before solving.
+//   - final_error: Total constraint error after solving.
+//   - converged: Non-zero when the solver met the allowable error target.
+//
+// Returns:
+//   - Populated bridge solve result payload.
+make_solve_result :: proc(
+    status: i32, iterations: i32, initial_error: f32, final_error: f32,
+    converged: u8) -> Bridge_Solve_Result {
 
     return Bridge_Solve_Result{
         status = status,
         iterations = iterations,
         initial_error = initial_error,
-        final_error = error,
-        converged = to_u8(converged),
+        final_error = final_error,
+        converged = converged,
     }
+}
+
+//   Run alternating forward/reverse solver passes until convergence or the limit.
+//
+// Parameters:
+//   - point_system: Point system whose constraints are applied.
+//   - allowable_error: Target maximum total constraint error.
+//   - iteration_limit: Maximum solve iterations to attempt.
+//
+// Returns:
+//   - iterations: Number of iterations applied.
+//   - error: Total constraint error after the final iteration.
+run_constraint_iterations :: proc(
+    point_system: ^core.Shapes_Point_System, allowable_error: f32,
+    iteration_limit: i32) -> (i32, f32) {
+
+    reverse := false
+    error := shapes.get_total_constraint_error(point_system)
+    iterations: i32 = 0
+    for iterations < iteration_limit && error > allowable_error {
+        if reverse {
+            shapes.apply_all_constraints_reverse(point_system)
+        } else {
+            shapes.apply_all_constraints(point_system)
+        }
+        reverse = !reverse
+        iterations += 1
+        error = shapes.get_total_constraint_error(point_system)
+    }
+    return iterations, error
 }
 

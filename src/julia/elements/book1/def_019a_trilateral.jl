@@ -75,7 +75,7 @@ function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, triangle_host_id, color)
 end
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Definition: Rectilineal Figures - Trilateral
 
@@ -86,6 +86,7 @@ Rectilineal figures are those which are contained by straight lines, trilateral 
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLine1HostId))
@@ -125,6 +126,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line1 = OdinJuliaBridge.create_new_line(
         state_ptr,
@@ -172,9 +174,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLine1HostId))

@@ -84,7 +84,7 @@ const PhaseDrawLine = 1f0
 const PhasePenRise = 2f0
 const PhaseHideAll = 100f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Proposition II
 
@@ -131,6 +131,7 @@ Therefore at the given point A the straight line AL is placed equal to the given
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     #=circle_b_c_d_host_id =
         Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaCircleCGHHostId))
@@ -215,6 +216,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
@@ -289,9 +291,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
     label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))

@@ -10,16 +10,16 @@ using LinearAlgebra
 export get_view_text, initialize, clean, loop
 
 const StartPoint1 = [0.25f0, 0.1f0, 0f0]
-const EndPoint1_2 = [0.51f0, 0.9f0, 0f0]
-const EndPoint1_1 = StartPoint1 + (EndPoint1_2 - StartPoint1) * 0.4f0
+const EndPoint12 = [0.51f0, 0.9f0, 0f0]
+const EndPoint11 = StartPoint1 + (EndPoint12 - StartPoint1) * 0.4f0
 const Angle1StartΘ =
-    atan(EndPoint1_2[2] - StartPoint1[2], EndPoint1_2[1] - StartPoint1[1])
+    atan(EndPoint12[2] - StartPoint1[2], EndPoint12[1] - StartPoint1[1])
 
 const StartPoint2 = [0.75f0, 0.1f0, 0f0]
-const EndPoint2_2 = [0.49f0, 0.9f0, 0f0]
-const EndPoint2_1 = StartPoint2 + (EndPoint2_2 - StartPoint2) * 0.4f0
+const EndPoint22 = [0.49f0, 0.9f0, 0f0]
+const EndPoint21 = StartPoint2 + (EndPoint22 - StartPoint2) * 0.4f0
 const Angle2StartΘ =
-    atan(EndPoint2_2[2] - StartPoint2[2], EndPoint2_2[1] - StartPoint2[1])
+    atan(EndPoint22[2] - StartPoint2[2], EndPoint22[1] - StartPoint2[1])
 
 const StartPoint3 = [0.15f0, 0.2f0, 0f0]
 const EndPoint3 = [0.85f0, 0.2f0, 0f0]
@@ -27,18 +27,18 @@ const EndPoint3 = [0.85f0, 0.2f0, 0f0]
 const MarkerRadius = 0.15f0
 
 const Marker1Center =
-    line_intersection_3d(StartPoint1, EndPoint1_1, StartPoint3, EndPoint3)
+    line_intersection_3d(StartPoint1, EndPoint11, StartPoint3, EndPoint3)
 const Marker1Start = Marker1Center + normalize(EndPoint3 - Marker1Center) * MarkerRadius
-const Marker1End = Marker1Center + normalize(EndPoint1_2 - Marker1Center) * MarkerRadius
+const Marker1End = Marker1Center + normalize(EndPoint12 - Marker1Center) * MarkerRadius
 
 const Marker2Center =
-    line_intersection_3d(StartPoint2, EndPoint2_1, StartPoint3, EndPoint3)
+    line_intersection_3d(StartPoint2, EndPoint21, StartPoint3, EndPoint3)
 const Marker2Start =
-    Marker2Center + normalize(EndPoint2_2 - Marker2Center) * MarkerRadius
+    Marker2Center + normalize(EndPoint22 - Marker2Center) * MarkerRadius
 const Marker2End = Marker2Center + normalize(StartPoint3 - Marker2Center) * MarkerRadius
 
 const Intersection =
-    line_intersection_3d(StartPoint1, EndPoint1_2, StartPoint2, EndPoint2_2)
+    line_intersection_3d(StartPoint1, EndPoint12, StartPoint2, EndPoint22)
 
 const PenTopZ = 1.4f0
 const CompassTopZ = 1.4f0
@@ -95,15 +95,15 @@ const PhaseDrawMarker1 = 111f0
 const PhaseCompassArcToMarker2 = 120f0
 const PhaseDrawMarker2 = 121f0
 const PhaseCompassRise = 150f0
-const PhaseDrawLine1_2 = 201f0
-const PhasePenArcToLine2_2 = 210f0
-const PhaseDrawLine2_2 = 211f0
+const PhaseDrawLine12 = 201f0
+const PhasePenArcToLine22 = 210f0
+const PhaseDrawLine22 = 211f0
 const PhasePenArcToIntersect = 220f0
 const PhaseDrawIntersect = 221f0
 const PhasePenLift2 = 250f0
 const PhaseHideAll = 500f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Postulate: Non-Parallel Lines
 
@@ -118,6 +118,7 @@ That, if a straight line \euclidline[color=grey60,length=3,thickness=4] falling 
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLine1HostId))
@@ -186,6 +187,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     marker1 = OdinJuliaBridge.create_new_filledcircle(
         state_ptr,
@@ -231,9 +233,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLine1HostId))
@@ -293,7 +297,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawLine1
         EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint1_1,
+            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint11,
             LineMaxBrush, Line1Color, line1_host_id, line1_joint1_id, line1_joint2_id)
 
         timer += dt
@@ -304,7 +308,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePenArcToLine2
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
-            EndPoint1_1, StartPoint2, ArcMoveHeight, 1, :none)
+            EndPoint11, StartPoint2, ArcMoveHeight, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration
@@ -313,7 +317,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawLine2
         EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint2_1,
+            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint21,
             LineMaxBrush, Line2Color, line2_host_id, line2_joint1_id, line2_joint2_id)
 
         timer += dt
@@ -324,7 +328,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePenArcToLine3
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
-            EndPoint2_1, StartPoint3, ArcMoveHeight, 1, :none)
+            EndPoint21, StartPoint3, ArcMoveHeight, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration
@@ -394,37 +398,37 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         EuclidAnimations.animate_pen_descend(
             state_ptr, timer, CompassRiseDuration, PenTopZ,
-            EndPoint1_1[1], EndPoint1_1[2])
+            EndPoint11[1], EndPoint11[2])
 
         timer += dt
         if timer >= CompassRiseDuration
             OdinJuliaBridge.hide_compass(state_ptr)
-            phase = PhaseDrawLine1_2
+            phase = PhaseDrawLine12
             timer = 0f0
         end
-    elseif phase == PhaseDrawLine1_2
+    elseif phase == PhaseDrawLine12
         EuclidAnimations.animate_extend_line(
-            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint1_1, EndPoint1_2,
+            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint11, EndPoint12,
             LineMaxBrush, Line1Color, line1_host_id, line1_joint1_id, line1_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
-            phase = PhasePenArcToLine2_2
+            phase = PhasePenArcToLine22
             timer = 0f0
         end
-    elseif phase == PhasePenArcToLine2_2
+    elseif phase == PhasePenArcToLine22
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
-            EndPoint1_2, EndPoint2_1, ArcMoveHeight, 1, :none)
+            EndPoint12, EndPoint21, ArcMoveHeight, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration
-            phase = PhaseDrawLine2_2
+            phase = PhaseDrawLine22
             timer = 0f0
         end
-    elseif phase == PhaseDrawLine2_2
+    elseif phase == PhaseDrawLine22
         EuclidAnimations.animate_extend_line(
-            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint2_1, EndPoint2_2,
+            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint21, EndPoint22,
             LineMaxBrush, Line2Color, line2_host_id, line2_joint1_id, line2_joint2_id)
 
         timer += dt
@@ -435,7 +439,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePenArcToIntersect
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, ArcMoveDuration,
-            EndPoint2_2, Intersection, ArcMoveHeight, 1, :none)
+            EndPoint22, Intersection, ArcMoveHeight, 1, :none)
 
         timer += dt
         if timer >= ArcMoveDuration

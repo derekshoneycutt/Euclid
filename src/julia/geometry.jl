@@ -149,8 +149,7 @@ function circle_circle_intersections_xy(
 
     dx = x2 - x1
     dy = y2 - y1
-    d2 = dx * dx + dy * dy
-    d = sqrt(d2)
+    d = sqrt(dx * dx + dy * dy)
 
     if d <= atol
         return Vector{Vector{Float32}}()

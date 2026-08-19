@@ -33,11 +33,13 @@ const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definit
 
 A point \euclidpoint[color=steelblue,size=1] is that which has no part."""
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(
         state_ptr, DefinitionLatexDocument, DefinitionViewText)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
     pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
 
@@ -52,6 +54,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     point = OdinJuliaBridge.create_new_point(
         state_ptr, Point, PointColor, 0f0)
@@ -60,9 +63,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
     if pointid < 0
