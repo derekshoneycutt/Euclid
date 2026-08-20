@@ -4,6 +4,18 @@ import "core:math"
 
 import rl "vendor:raylib"
 
+Arc_Draw_Params :: struct {
+    center: rl.Vector2,
+    radius, start_angle, end_angle, thickness: f32,
+    color: rl.Color,
+}
+
+Arc_Arrow_Params :: struct {
+    center: rl.Vector2,
+    radius, angle, size, thickness: f32,
+    color: rl.Color,
+}
+
 //   Draw the circular refresh glyph used in the tree toolbar.
 draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     cx := rect.x + rect.width * 0.5
@@ -17,11 +29,11 @@ draw_refresh_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     start2: f32 = math.PI * (11.0 / 9.0)
     end2: f32 = math.PI * (19.0 / 9.0)
 
-    draw_arc_polyline(cx, cy, radius, start1, end1, thickness, color)
-    draw_arc_arrowhead(cx, cy, radius, end1, arrow_size, thickness, color)
+    draw_arc_polyline({{cx, cy}, radius, start1, end1, thickness, color})
+    draw_arc_arrowhead({{cx, cy}, radius, end1, arrow_size, thickness, color})
 
-    draw_arc_polyline(cx, cy, radius, start2, end2, thickness, color)
-    draw_arc_arrowhead(cx, cy, radius, end2, arrow_size, thickness, color)
+    draw_arc_polyline({{cx, cy}, radius, start2, end2, thickness, color})
+    draw_arc_arrowhead({{cx, cy}, radius, end2, arrow_size, thickness, color})
 }
 
 //   Draw pause glyph with two vertical bars.
@@ -52,56 +64,49 @@ draw_play_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
 }
 
 //   Draw an approximated arc segment using connected line segments.
-draw_arc_polyline :: proc(
-    cx, cy, radius: f32,
-    start_angle, end_angle: f32,
-    thickness: f32,
-    color: rl.Color) {
+draw_arc_polyline :: proc(params: Arc_Draw_Params) {
 
     segments := 10
 
-    prev_angle := start_angle
+    prev_angle := params.start_angle
     prev := rl.Vector2{
-        cx + radius * f32(math.cos(f64(prev_angle))),
-        cy + radius * f32(math.sin(f64(prev_angle))),
+        params.center.x + params.radius * f32(math.cos(f64(prev_angle))),
+        params.center.y + params.radius * f32(math.sin(f64(prev_angle))),
     }
 
     for i in 1..<(segments + 1) {
         t := f32(i) / f32(segments)
-        angle := start_angle + (end_angle - start_angle) * t
+        angle := params.start_angle + (params.end_angle - params.start_angle) * t
         current := rl.Vector2{
-            cx + radius * f32(math.cos(f64(angle))),
-            cy + radius * f32(math.sin(f64(angle))),
+            params.center.x + params.radius * f32(math.cos(f64(angle))),
+            params.center.y + params.radius * f32(math.sin(f64(angle))),
         }
 
-        rl.DrawLineEx(prev, current, thickness, color)
+        rl.DrawLineEx(prev, current, params.thickness, params.color)
         prev = current
     }
 }
 
 //   Draw an arrowhead tangent to an arc at the provided angle.
-draw_arc_arrowhead :: proc(
-    cx, cy, radius: f32,
-    angle: f32,
-    size: f32,
-    thickness: f32,
-    color: rl.Color) {
+draw_arc_arrowhead :: proc(params: Arc_Arrow_Params) {
 
     tip := rl.Vector2{
-        cx + radius * f32(math.cos(f64(angle))),
-        cy + radius * f32(math.sin(f64(angle))),
+        params.center.x + params.radius * f32(math.cos(f64(params.angle))),
+        params.center.y + params.radius * f32(math.sin(f64(params.angle))),
     }
 
-    tangent := rl.Vector2{-f32(math.sin(f64(angle))), f32(math.cos(f64(angle)))}
-    back := rl.Vector2{tip.x - tangent.x * size, tip.y - tangent.y * size}
+    tangent := rl.Vector2{
+        -f32(math.sin(f64(params.angle))), f32(math.cos(f64(params.angle)))}
+    back := rl.Vector2{
+        tip.x - tangent.x * params.size, tip.y - tangent.y * params.size}
     perp := rl.Vector2{-tangent.y, tangent.x}
 
-    wing_scale := size * 0.55
+    wing_scale := params.size * 0.55
     left := rl.Vector2{back.x + perp.x * wing_scale, back.y + perp.y * wing_scale}
     right := rl.Vector2{back.x - perp.x * wing_scale, back.y - perp.y * wing_scale}
 
-    rl.DrawLineEx(left, tip, thickness, color)
-    rl.DrawLineEx(right, tip, thickness, color)
+    rl.DrawLineEx(left, tip, params.thickness, params.color)
+    rl.DrawLineEx(right, tip, params.thickness, params.color)
 }
 
 //   Draw expand/collapse chevron icon for tree nodes.

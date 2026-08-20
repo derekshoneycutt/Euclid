@@ -6,23 +6,6 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
-
-//   Draw UTF-8 UI text using temp C-string conversion.
-ui_text :: #force_inline proc(
-    text: string, x, y: int, color: rl.Color,
-    font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
-    cloned := strings.clone_to_cstring(text, context.temp_allocator)
-    rl.DrawTextEx(font, cloned, rl.Vector2{f32(x), f32(y)}, font_size, 0, color)
-}
-
-//   Draw UTF-8 UI text using float coordinates to avoid pixel snap artifacts.
-ui_text_f32 :: #force_inline proc(
-    text: string, x, y: f32, color: rl.Color,
-    font: rl.Font, font_size: f32 = TREE_FONT_SIZE) {
-    cloned := strings.clone_to_cstring(text, context.temp_allocator)
-    rl.DrawTextEx(font, cloned, rl.Vector2{x, y}, font_size, 0, color)
-}
-
 //   Draw environment for wrapped text content: the clipping panel, scroll
 //   offset, font, and typography metrics, grouped so the draw call passes one
 //   coherent value.
@@ -35,6 +18,34 @@ Wrapped_Text_Content_Params :: struct {
     text_color:      rl.Color,
     wrap_advance:    f32,
     font_size:       f32,
+}
+
+
+//   Font and size pair for UI text draw calls.
+Ui_Text_Font :: struct {
+    font:      rl.Font,
+    font_size: f32,
+}
+
+//   Wrap a font with the default UI text size.
+ui_text_font :: #force_inline proc(font: rl.Font) -> Ui_Text_Font {
+    return Ui_Text_Font{font = font, font_size = TREE_FONT_SIZE}
+}
+
+//   Draw UTF-8 UI text using temp C-string conversion.
+ui_text :: #force_inline proc(
+    text: string, x, y: int, color: rl.Color, font: Ui_Text_Font) {
+    cloned := strings.clone_to_cstring(text, context.temp_allocator)
+    position := rl.Vector2{f32(x), f32(y)}
+    rl.DrawTextEx(font.font, cloned, position, font.font_size, 0, color)
+}
+
+//   Draw UTF-8 UI text using float coordinates to avoid pixel snap artifacts.
+ui_text_f32 :: #force_inline proc(
+    text: string, x, y: f32, color: rl.Color, font: Ui_Text_Font) {
+    cloned := strings.clone_to_cstring(text, context.temp_allocator)
+    position := rl.Vector2{x, y}
+    rl.DrawTextEx(font.font, cloned, position, font.font_size, 0, color)
 }
 
 //   Draw wrapped text rows clipped to the visible panel area.
@@ -57,7 +68,7 @@ draw_wrapped_text_content :: proc(
 
     if len(text) == 0 {
         ui_text("", int(panel.x + text_padding), int(panel.y + text_padding),
-            text_color, font, font_size)
+            text_color, Ui_Text_Font{font, font_size})
         return
     }
 
@@ -67,7 +78,8 @@ draw_wrapped_text_content :: proc(
 
         if row_y + text_row_height >= panel.y && row_y <= panel.y + panel.height {
             ui_text(text[span.line_start:span.line_end],
-                int(panel.x + text_padding), int(row_y), text_color, font, font_size)
+                int(panel.x + text_padding), int(row_y), text_color,
+                Ui_Text_Font{font, font_size})
         }
 
         row += 1

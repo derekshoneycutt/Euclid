@@ -5,37 +5,54 @@ import "../core"
 import rl "vendor:raylib"
 
 //   Uniform handler shape for one dynview command kind during compilation.
-Compile_Command_Handler ::
-    proc(cache: ^core.Dynview_Compile_Cache, buffer: ^core.Dynview_Command_Buffer,
-        state: ^Dynview_Compile_State, cmd: core.Dynview_Command) -> i32
+Compile_Command_Handler :: #type proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    state: ^Dynview_Compile_State,
+    cmd: core.Dynview_Command) -> i32
 
 //   Dispatch table mapping each dynview command kind to its compile handler.
 COMPILE_COMMAND_HANDLERS ::
     [core.Dynview_Command_Kind]Compile_Command_Handler{
-    .BeginBlock = compile_handle_begin_block,
-    .EndBlock = compile_handle_end_block,
-    .TextRun = compile_text_run,
-    .MathGlyphRun = compile_text_run,
-    .MathBlock = compile_text_run,
-    .ScriptAttachRecursive = compile_script_attach_recursive,
-    .FracRecursive = compile_text_run,
-    .StretchDelimiterRecursive = compile_text_run,
-    .MatrixRecursive = compile_text_run,
-    .LargeOpRecursive = compile_large_op_recursive,
-    .AccentBarRecursive = compile_text_run,
-    .RadicalBarRecursive = compile_text_run,
-    .CopyableTextRun = compile_copyable_text_run,
-    .LineBreak = compile_handle_newline,
+    .Begin_Block = compile_handle_begin_block,
+    .End_Block = compile_handle_end_block,
+    .Text_Run = compile_text_run,
+    .Math_Glyph_Run = compile_text_run,
+    .Math_Block = compile_text_run,
+    .Script_Attach = compile_script_attach_recursive,
+    .Frac = compile_text_run,
+    .Stretch_Delimiter = compile_text_run,
+    .Matrix = compile_text_run,
+    .Large_Op = compile_large_op_recursive,
+    .Accent_Bar = compile_text_run,
+    .Radical_Bar = compile_text_run,
+    .Copyable_Text_Run = compile_copyable_text_run,
+    .Line_Break = compile_handle_newline,
     .Divider = compile_handle_newline,
-    .InlineLine = compile_handle_inline_line,
-    .InlineBox = compile_handle_inline_box,
-    .InlineCircle = compile_handle_inline_circle,
-    .InlineFilledBox = compile_handle_inline_filled_box,
-    .InlineFilledCircle = compile_handle_inline_filled_circle,
-    .InlinePieSection = compile_handle_inline_pie_section,
-    .InlinePerpendicular = compile_handle_inline_box,
-    .InlineTriangle = compile_handle_inline_box,
-    .InlinePentagon = compile_handle_inline_box,
+    .Inline_Line = compile_handle_inline_line,
+    .Inline_Box = compile_handle_inline_box,
+    .Inline_Circle = compile_handle_inline_circle,
+    .Inline_Filled_Box = compile_handle_inline_filled_box,
+    .Inline_Filled_Circle = compile_handle_inline_filled_circle,
+    .Inline_Pie_Section = compile_handle_inline_pie_section,
+    .Inline_Perpendicular = compile_handle_inline_box,
+    .Inline_Triangle = compile_handle_inline_box,
+    .Inline_Pentagon = compile_handle_inline_box,
+}
+
+Compiled_Optional_Group :: struct {
+    offset, count: int,
+    prefix: string,
+    close: u8,
+}
+
+Copy_Hit_Target_Layout :: struct {
+    panel: rl.Rectangle,
+    scroll_y, text_padding, icon_size, icon_x_pad: f32,
+}
+
+Visible_Copy_Block_Rows :: struct {
+    top, bottom, last_hover_bottom: f32,
 }
 
 //  Append a compiled byte information to the give cache
@@ -207,14 +224,16 @@ compile_script_attach_recursive :: #force_inline proc(
         return status
     }
 
-    status = append_compiled_optional_group(cache, buffer,
-        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}')
+    status = append_compiled_optional_group(cache, buffer, {
+        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}',
+    })
     if status != DYNVIEW_STATUS_OK {
         return status
     }
 
-    status = append_compiled_optional_group(cache, buffer,
-        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}')
+    status = append_compiled_optional_group(cache, buffer, {
+        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}',
+    })
     if status != DYNVIEW_STATUS_OK {
         return status
     }
@@ -248,15 +267,13 @@ append_compiled_group :: proc(
 append_compiled_optional_group :: proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
-    offset, count: int,
-    prefix: string,
-    close: u8) -> i32 {
+    group: Compiled_Optional_Group) -> i32 {
 
-    text := text_span_from_buffer(buffer, offset, count)
+    text := text_span_from_buffer(buffer, group.offset, group.count)
     if len(text) == 0 {
         return DYNVIEW_STATUS_OK
     }
-    return append_compiled_group(cache, prefix, text, close)
+    return append_compiled_group(cache, group.prefix, text, group.close)
 }
 
 //   Apply display-style large-operator compilation with canonical limits ordering.
@@ -279,14 +296,16 @@ compile_large_op_recursive :: #force_inline proc(
         }
     }
 
-    status = append_compiled_optional_group(cache, buffer,
-        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}')
+    status = append_compiled_optional_group(cache, buffer, {
+        cmd.script_sub_text_offset, cmd.script_sub_text_len, "_{", '}',
+    })
     if status != DYNVIEW_STATUS_OK {
         return status
     }
 
-    status = append_compiled_optional_group(cache, buffer,
-        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}')
+    status = append_compiled_optional_group(cache, buffer, {
+        cmd.script_sup_text_offset, cmd.script_sup_text_len, "^{", '}',
+    })
     if status != DYNVIEW_STATUS_OK {
         return status
     }
@@ -544,7 +563,7 @@ compile_command :: #force_inline proc(
     cmd: core.Dynview_Command) -> i32 {
 
     kind := cmd.kind
-    if kind < .BeginBlock || kind > .InlinePentagon {
+    if kind < .Begin_Block || kind > .Inline_Pentagon {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
     handlers := COMPILE_COMMAND_HANDLERS
@@ -581,14 +600,11 @@ rebuild_compiled_plain_text :: proc(runtime: ^core.Dynview_System) -> i32 {
 //   Rebuild scratchpad copy icon hit targets from compiled copy blocks.
 rebuild_copy_hit_targets :: proc(
     runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    scroll_y, text_padding, row_height, icon_size, icon_x_pad: f32) {
+    layout: Copy_Hit_Target_Layout) {
 
     if runtime == nil {
         return
     }
-
-    _ = row_height
 
     cache := &runtime^.compile_cache
     cache^.copy_hit_target_count = 0
@@ -596,15 +612,14 @@ rebuild_copy_hit_targets :: proc(
         return
     }
 
-    panel_top := panel.y
+    panel_top := layout.panel.y
     last_hover_bottom := panel_top
     for i in 0..<cache^.copy_block_count {
         if cache^.copy_hit_target_count >= len(cache^.copy_hit_targets) {
             break
         }
         last_hover_bottom = rebuild_one_copy_hit_target(cache,
-            cache^.copy_blocks[i], panel, scroll_y, text_padding, icon_size,
-            icon_x_pad, last_hover_bottom)
+            cache^.copy_blocks[i], layout, last_hover_bottom)
     }
 }
 
@@ -613,8 +628,7 @@ rebuild_copy_hit_targets :: proc(
 rebuild_one_copy_hit_target :: proc(
     cache: ^core.Dynview_Compile_Cache,
     block: core.Dynview_Copy_Block,
-    panel: rl.Rectangle,
-    scroll_y, text_padding, icon_size, icon_x_pad: f32,
+    layout: Copy_Hit_Target_Layout,
     last_hover_bottom: f32) -> f32 {
 
     line_span := layout_item_line_span_for_block(cache, block.block_id)
@@ -622,37 +636,54 @@ rebuild_one_copy_hit_target :: proc(
         return last_hover_bottom
     }
 
-    panel_top := panel.y
-    panel_bottom := panel.y + panel.height
+    panel_top := layout.panel.y
+    panel_bottom := layout.panel.y + layout.panel.height
     start_line := cache^.layout_lines[line_span.first_line]
     end_line := cache^.layout_lines[line_span.last_line]
-    row_top := panel.y + text_padding + start_line.y_offset - scroll_y
-    row_bottom := panel.y + text_padding + end_line.y_offset +
-        end_line.line_height - scroll_y
+    row_top := layout.panel.y + layout.text_padding +
+        start_line.y_offset - layout.scroll_y
+    row_bottom := layout.panel.y + layout.text_padding + end_line.y_offset +
+        end_line.line_height - layout.scroll_y
     if row_bottom < panel_top || row_top > panel_bottom {
         return last_hover_bottom
     }
 
-    visible_top := max(max(row_top, panel_top), last_hover_bottom)
-    visible_bottom := min(row_bottom, panel_bottom)
+    return append_visible_copy_hit_target(
+        cache, block, layout, {row_top, row_bottom, last_hover_bottom})
+}
+
+//   Append the hit target for a visible copy block and return its hover bottom.
+append_visible_copy_hit_target :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    block: core.Dynview_Copy_Block,
+    layout: Copy_Hit_Target_Layout,
+    rows: Visible_Copy_Block_Rows) -> f32 {
+
+    panel := layout.panel
+    panel_top := panel.y
+    panel_bottom := panel.y + panel.height
+    visible_top := max(max(rows.top, panel_top), rows.last_hover_bottom)
+    visible_bottom := min(rows.bottom, panel_bottom)
     hover_rect := rl.Rectangle{
-        panel.x + text_padding,
+        panel.x + layout.text_padding,
         visible_top,
-        max(0.0, panel.width - text_padding * 2),
+        max(0.0, panel.width - layout.text_padding * 2),
         max(0.0, visible_bottom - visible_top),
     }
     if hover_rect.height <= 0 || hover_rect.width <= 0 {
-        return last_hover_bottom
+        return rows.last_hover_bottom
     }
 
-    icon_x := panel.x + panel.width - text_padding - icon_size - icon_x_pad
-    icon_y := max(panel_top + 1, min(row_top + 2, panel_bottom - icon_size - 1))
+    icon_x := panel.x + panel.width - layout.text_padding - layout.icon_size -
+        layout.icon_x_pad
+    icon_y := max(panel_top + 1, min(
+        rows.top + 2, panel_bottom - layout.icon_size - 1))
     cache^.copy_hit_targets[cache^.copy_hit_target_count] =
         core.Dynview_Copy_Hit_Target{
             block_id = block.block_id,
             payload_offset = block.payload_offset,
             payload_len = block.payload_len,
-            rect = {icon_x, icon_y, icon_size, icon_size},
+            rect = {icon_x, icon_y, layout.icon_size, layout.icon_size},
             hover_rect = hover_rect,
         }
     cache^.copy_hit_target_count += 1
@@ -747,36 +778,15 @@ scratchpad_text_or_fallback :: proc(
     return string(runtime^.compile_cache.compiled_plain_text[:text_len])
 }
 
-//   Compile scratchpad stream and return compiled text when validation succeeds.
-compiled_scratchpad_text_or_fallback :: proc(
-    runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    font_size, wrap_advance: f32,
-    style_revision: u64,
-    fallback_text: string) -> string {
-
-    if !runtime^.enabled {
-        return fallback_text
-    }
-
-    track_panel(runtime, panel)
-    track_font(runtime, font_size, wrap_advance)
-    track_style(runtime, style_revision)
-    compile_if_needed(runtime)
-    return scratchpad_text_or_fallback(runtime, fallback_text)
-}
-
 //   Recompute copy hit-target cache for the current scratchpad panel and scroll.
 refresh_scratchpad_copy_targets :: proc(
     runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    scroll_y, text_padding, row_height, icon_size, icon_x_pad: f32) {
+    layout: Copy_Hit_Target_Layout) {
 
     if !runtime^.enabled {
         runtime^.compile_cache.copy_hit_target_count = 0
         return
     }
 
-    rebuild_copy_hit_targets(runtime,
-        panel, scroll_y, text_padding, row_height, icon_size, icon_x_pad)
+    rebuild_copy_hit_targets(runtime, layout)
 }

@@ -3,11 +3,11 @@
     Standard Windows entry point for Euclid, mirroring the Makefile.
 
 .DESCRIPTION
-    A thin, conventional wrapper around the project's real build system: the
-    `configure` script (toolchain check + Julia dependency install) and
-    `make.jl` (the actual build/test/vet driver). It exists so that Windows
-    users get the same one-word shortcuts as the Makefile provides on
-    Linux/macOS. All real logic lives in `configure` and `make.jl`.
+    A thin, conventional wrapper around the project's real build system:
+    configure (toolchain check + Julia dependency install, performed natively by
+    this script) and tools/make.jl (the actual build/test/vet driver). It exists
+    so that Windows users get the same one-word shortcuts as the Makefile
+    provides on Linux/macOS.
 
 .EXAMPLE
     .\make.ps1            # configure (first run) + build
@@ -25,14 +25,67 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 $ConfigureStamp = Join-Path $ScriptDir ".configure-done"
+$JuliaProject = Join-Path $ScriptDir "src\julia"
+$AnalysisProject = Join-Path $ScriptDir "tools\analysis"
 
-# Run the configure script and record completion so it is not re-run needlessly.
-function Invoke-Configure {
-    & (Join-Path $ScriptDir "configure")
+# Return whether a command is available on PATH, printing the result.
+function Test-Dependency ([string]$Name) {
+    $found = Get-Command $Name -ErrorAction SilentlyContinue
+    if (-not $found) {
+        Write-Host "Required dependency missing: $Name" -ForegroundColor Red
+        return $false
+    }
+    Write-Host "Found $Name at: $($found.Source)" -ForegroundColor Green
+    return $true
+}
+
+# Instantiate one Julia project, exiting when the step fails.
+function Install-JuliaProject ([string]$Project, [string]$Label) {
+    Write-Host "Installing Julia $Label dependencies..." -ForegroundColor Cyan
+    & julia "--project=$Project" -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "configure failed." -ForegroundColor Red
+        Write-Host "Failed to install Julia $Label dependencies." -ForegroundColor Red
         Exit $LASTEXITCODE
     }
+}
+
+# Verify the toolchain and install Julia dependencies, then record completion
+# so configure is not re-run needlessly.
+function Invoke-Configure {
+    Write-Host "--- Configuring Project (Windows / PowerShell) ---" -ForegroundColor Cyan
+
+    $ready = $true
+    if (-not (Test-Dependency "odin"))  { $ready = $false }
+    if (-not (Test-Dependency "julia")) { $ready = $false }
+
+    if (-not $env:VCINSTALLDIR -and -not $env:INCLUDE) {
+        Write-Warning "MSVC environment variables not detected. Checking for cl.exe..."
+        if (-not (Test-Dependency "cl")) { $ready = $false }
+    } else {
+        Write-Host "MSVC Environment detected via VCINSTALLDIR." -ForegroundColor Green
+    }
+
+    # gendef bridges the toolchain gap: Julia is not built with the toolchain
+    # Odin uses to build binaries.
+    if (-not (Test-Dependency "gendef")) { $ready = $false }
+
+    if (-not $ready) {
+        Write-Host "Configuration failed! Please install the missing tools and add them to your PATH." -ForegroundColor Red
+        Exit 1
+    }
+
+    # The analysis engine lives in a submodule; fail clearly when it is missing.
+    # Analyzer packages must stay isolated to their own project environment.
+    if (-not (Test-Path (Join-Path $AnalysisProject "Project.toml"))) {
+        Write-Host "Analysis submodule missing at tools/analysis." -ForegroundColor Red
+        Write-Host "Run: git submodule update --init --recursive" -ForegroundColor Red
+        Exit 1
+    }
+
+    Install-JuliaProject $JuliaProject "application"
+    Install-JuliaProject $AnalysisProject "analysis"
+
+    Write-Host "Configuration successful! Toolchain and Julia dependencies are ready." -ForegroundColor Green
     New-Item -ItemType File -Path $ConfigureStamp -Force | Out-Null
 }
 

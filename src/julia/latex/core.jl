@@ -437,6 +437,7 @@ struct LatexDocumentRun
     color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
+"""Construct a document run with no shape or color payload."""
 LatexDocumentRun(kind::Symbol, text::String, font_flags::Int32) =
     LatexDocumentRun(kind, text, font_flags, nothing, nothing)
 
@@ -452,21 +453,21 @@ mutable struct LatexDocumentParser
     index::Int
 end
 
-const parse_cache = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
-const parse_cache_order = Tuple{String, Int32, Int32}[]
+const PARSE_CACHE = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
+const PARSE_CACHE_ORDER = Tuple{String, Int32, Int32}[]
 
 const EMPTY_CHILD_RUNS = LatexRun[]
 
 """Return one normal atom run payload."""
-latex_atom_run(text::String, role::Symbol) =
+latex_atom_run(text::AbstractString, role::Symbol) =
     LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one superscript script-segment run payload."""
-latex_sup_run(text::String) =
+latex_sup_run(text::AbstractString) =
     LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one subscript script-segment run payload."""
-latex_sub_run(text::String) =
+latex_sub_run(text::AbstractString) =
     LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return one overline accent run payload."""

@@ -4,7 +4,8 @@ end
 if !isdefined(Main, :EuclidGeometry)
     include("../geometry.jl")
 end
-if !isdefined(Main, :EuclidAnimations) || !isdefined(Main.EuclidAnimations, :displacement_from_vector_and_length)
+if !isdefined(Main, :EuclidAnimations) ||
+   !isdefined(Main.EuclidAnimations, :displacement_from_vector_and_length)
     include("../animations.jl")
 end
 if !isdefined(Main, :EuclidLatex)
@@ -29,7 +30,8 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
     @test_throws ArgumentError EuclidRepl.validated_duration(Inf32)
 
     @test EuclidRepl.vec3("pos", Int[1, 2, 3]) == Float32[1f0, 2f0, 3f0]
-    @test EuclidAnimations.displacement_from_vector_and_length(Int[1, 0, 0], 1) == Float32[1f0, 0f0, 0f0]
+    @test EuclidAnimations.displacement_from_vector_and_length(
+        Int[1, 0, 0], 1) == Float32[1f0, 0f0, 0f0]
 
     @test_throws ArgumentError EuclidRepl.validated_brush(0f0)
     @test_throws ArgumentError EuclidRepl.validated_brush(-2f0)
@@ -59,12 +61,14 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
         Float32[4f0, 5f0, 6f0],
     ]
 
-    flat_positions = EuclidRepl.validated_start_positions(Float64[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    flat_positions = EuclidRepl.validated_start_positions(
+        Float64[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     @test flat_positions == [
         Float32[1f0, 2f0, 3f0],
         Float32[4f0, 5f0, 6f0],
     ]
-    @test_throws ArgumentError EuclidRepl.validated_start_positions(Float64[1.0, 2.0, 3.0, 4.0])
+    @test_throws ArgumentError EuclidRepl.validated_start_positions(
+        Float64[1.0, 2.0, 3.0, 4.0])
 
     @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
     @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
@@ -91,8 +95,7 @@ end
         0,
         0,
         0,
-        0,
-    )
+        0)
     line_shape = OdinJuliaBridge.BridgeShapeLine(11, 12, 13)
     circle_shape = OdinJuliaBridge.BridgeShapeCircle(21, 22, 23)
     filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(31, 32, 33)
@@ -124,30 +127,26 @@ end
     @test_throws ArgumentError EuclidRepl.highlight_pen!(
         TEST_STATE_PTR,
         Float32[0f0, 0f0],
-        Float32[1f0, 0f0, 0f0],
-    )
+        Float32[1f0, 0f0, 0f0])
 
     @test_throws ArgumentError EuclidRepl.highlight_compass!(
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         Inf32,
-        1f0,
-    )
+        1f0)
 
     @test_throws ArgumentError EuclidRepl.highlight_compass!(
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         0.5f0,
-        0f0,
-    )
+        0f0)
 
     @test isnothing(EuclidRepl.highlight_pen!(
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
-        Float32[1f0, 0f0, 0f0],
-    ))
+        Float32[1f0, 0f0, 0f0]))
 
     pen_status = EuclidRepl.status(TEST_STATE_PTR)
     @test pen_status.active == true
@@ -159,8 +158,7 @@ end
         Float32[1f0, 0f0, 0f0],
         π / 2,
         1f0,
-        filled=true,
-    ))
+        filled=true))
 
     compass_status = EuclidRepl.status(TEST_STATE_PTR)
     @test compass_status.active == true

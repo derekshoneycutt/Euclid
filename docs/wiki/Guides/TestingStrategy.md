@@ -18,22 +18,25 @@
 
 ## Purpose
 
-This document describes Euclid's testing strategy for runtime correctness, animation behavior,
-and semantic observability.
+This document describes Euclid's testing strategy for runtime correctness,
+animation behavior, and semantic observability.
 
-The foundation of that strategy is the ordinary unit and module test suite. Those tests are the
-baseline for correctness in geometry, dynview, files, particles, bridge behavior, and runtime
-invariants. Semantic tracing and deterministic harness execution build on top of that baseline;
-they do not replace it.
+The foundation of that strategy is the ordinary unit and module test suite.
+Those tests are the baseline for correctness in geometry, dynview, files,
+particles, bridge behavior, and runtime invariants. Semantic tracing and
+deterministic harness execution build on top of that baseline; they do not
+replace it.
 
-The project now has two related but distinct capabilities layered over the standard test suite:
+The project now has two related but distinct capabilities layered over the
+standard test suite:
 
 - a versioned semantic trace system for machine-readable runtime evidence;
-- a deterministic headless harness for exact-step animation and runtime scenario execution.
+- a deterministic headless harness for exact-step animation and runtime
+  scenario execution.
 
 The goal is to make behavior reviewable and reproducible without claiming that semantic
-correctness proves rendered pixel correctness. Rendering regressions, layout issues, and visual
-review remain separate concerns.
+correctness proves rendered pixel correctness. Rendering regressions, layout
+issues, and visual review remain separate concerns.
 
 ## Testing Layers
 
@@ -50,12 +53,13 @@ validated. They cover local invariants and narrow behavior:
 - configuration parsing and overflow policy.
 
 These tests should stay fast, bounded, and close to the code under test. When a bug can be
-proven at this level, it should be proven at this level before reaching for the harness or trace
-system.
+proven at this level, it should be proven at this level before reaching for the
+harness or trace system.
 
 ### Embedded Runtime Integration Tests
 
-These run the embedded Julia runtime against production host behavior without creating a window.
+These run the embedded Julia runtime against production host behavior without
+creating a window.
 They are the right place to verify:
 
 - runtime startup and shutdown;
@@ -66,8 +70,8 @@ They are the right place to verify:
 
 ### Headless Scenario Tests
 
-These run deterministic animation scenarios through the test-only harness executable. They are
-for semantic animation verification, not visual review.
+These run deterministic animation scenarios through the test-only harness
+executable. They are for semantic animation verification, not visual review.
 
 ### Running-Application End-To-End Tests
 
@@ -76,29 +80,31 @@ checkpoints with visual artifacts. This layer is planned but not yet implemented
 
 ### Visual Review
 
-Screenshots, GIFs, and manual review remain necessary. The semantic trace does not prove draw
-order, shader correctness, clipping quality, antialiasing, or label readability.
+Screenshots, GIFs, and manual review remain necessary. The semantic trace does
+not prove draw order, shader correctness, clipping quality, antialiasing, or
+label readability.
 
 ## Semantic Trace Contract
 
-The trace system is disabled by default. Enabling it must not alter runtime semantics, thread
-ownership, or publication order.
+The trace system is disabled by default. Enabling it must not alter runtime
+semantics, thread ownership, or publication order.
 
 ### Core Rule
 
 Trace committed semantics, not attempted operations.
 
-A Julia callback may create a scene-command batch, but point movement is not a traceable fact
-until the display thread validates and commits that batch. Invalid or stale work should appear
-as rejection evidence, not false movement.
+A Julia callback may create a scene-command batch, but point movement is not a
+traceable fact until the display thread validates and commits that batch.
+Invalid or stale work should appear as rejection evidence, not false movement.
 
 ### Output Model
 
-Trace output is JSON Lines. Each line is one complete JSON object with a stable schema envelope
-and monotonically increasing sequence number.
+Trace output is JSON Lines. Each line is one complete JSON object with a stable
+schema envelope and monotonically increasing sequence number.
 
-The trace starts with lifecycle records such as `trace.started` and `trace.configuration` and,
-when shutdown is orderly, ends with `trace.finished`.
+The trace starts with lifecycle records such as `trace.started` and
+`trace.configuration` and, when shutdown is orderly, ends with
+`trace.finished`.
 
 ### Ownership
 
@@ -110,15 +116,15 @@ when shutdown is orderly, ends with `trace.finished`.
 ### Overflow Policy
 
 Strict mode treats trace-invalidating overflow or serialization failure as run failure.
-Diagnostic mode may drop records, but it must count the loss and emit an overflow summary when
-capacity is available.
+Diagnostic mode may drop records, but it must count the loss and emit an
+overflow summary when capacity is available.
 
 ## Deterministic Execution Model
 
 Semantic animation testing depends on deterministic stepping, not wall-clock playback.
 
-The canonical fixed-step boundary is `run_deterministic_fixed_step`. It is the operation shared
-by the interactive runtime and the headless harness.
+The canonical fixed-step boundary is `run_deterministic_fixed_step`. It is the
+operation shared by the interactive runtime and the headless harness.
 
 That boundary currently includes:
 
@@ -129,13 +135,13 @@ That boundary currently includes:
 1. advance display-owned `fixed_step` and `simulation_time`;
 1. emit post-join trace records.
 
-The interactive app adds presentation policy around that step. The headless harness uses the
-step directly.
+The interactive app adds presentation policy around that step. The headless
+harness uses the step directly.
 
 ## Headless Harness
 
-The headless harness exists so deterministic runtime and animation scenarios can run without a
-window, renderer, audio device, or UI input path.
+The headless harness exists so deterministic runtime and animation scenarios
+can run without a window, renderer, audio device, or UI input path.
 
 ### Harness Responsibilities
 
@@ -149,8 +155,9 @@ The harness currently supports:
 
 ### Harness Boundaries
 
-The harness is a test-only executable target. It reuses production runtime modules but is not
-part of the default application build. It should not become a production control surface.
+The harness is a test-only executable target. It reuses production runtime
+modules but is not part of the default application build. It should not become
+a production control surface.
 
 ### Current Entry Points
 
@@ -175,8 +182,9 @@ The current model is intentionally narrow:
 - Julia receives a named scenario callback after deterministic stepping;
 - scenario code reads bridge-visible state and returns success or failure.
 
-That is enough for the first semantic animation scenarios. The API can grow later, but it should
-grow around stable data access and clear failure semantics rather than speculative breadth.
+That is enough for the first semantic animation scenarios. The API can grow
+later, but it should grow around stable data access and clear failure semantics
+rather than speculative breadth.
 
 ## Checkpoint Snapshots
 
@@ -184,8 +192,8 @@ Checkpoint snapshots establish canonical state at a stable post-join boundary.
 
 ### Valid Boundary
 
-A checkpoint is valid only after the deterministic fixed-step worker join completes and the
-display side has assigned current step identity.
+A checkpoint is valid only after the deterministic fixed-step worker join
+completes and the display side has assigned current step identity.
 
 ### Current Contents
 
@@ -202,9 +210,9 @@ The first checkpoint schema is deliberately bounded. It includes:
 
 ### Usage Rule
 
-The direct runtime snapshot and the serialized `trace.checkpoint` record should describe the
-same canonical state. The trace is a serialized view of the checkpoint, not a second source of
-truth.
+The direct runtime snapshot and the serialized `trace.checkpoint` record
+should describe the same canonical state. The trace is a serialized view of
+the checkpoint, not a second source of truth.
 
 ## End-To-End Direction
 
@@ -217,9 +225,10 @@ That work is not just more tracing. It requires:
 - visual artifact capture correlated by run and checkpoint identity;
 - a CI-side consumer that validates JSONL ordering and artifact completeness.
 
-The open design question is whether the built app should consume a test-only scenario manifest,
-remain launch-and-observe, or expose a narrow local control channel. The current bias is toward
-a test-only scenario manifest rather than a live control channel.
+The open design question is whether the built app should consume a test-only
+scenario manifest, remain launch-and-observe, or expose a narrow local control
+channel. The current bias is toward a test-only scenario manifest rather than
+a live control channel.
 
 ## Failure Policy
 
@@ -235,8 +244,8 @@ Expected failure modes include:
 - non-orderly runtime shutdown;
 - scenario assertion failure.
 
-Harness and end-to-end runs should return a failing process status and preserve enough trace
-output to diagnose the failure without rerunning under a debugger.
+Harness and end-to-end runs should return a failing process status and preserve
+enough trace output to diagnose the failure without rerunning under a debugger.
 
 ## Performance And Volume Controls
 
@@ -250,7 +259,8 @@ Current expectations:
 - high-volume records should be summarized or filtered rather than emitted blindly.
 
 For future E2E work, always-on checkpoint capture per fixed step is likely too chatty. The
-system should move toward explicit or phase-driven checkpoint requests for external orchestration.
+system should move toward explicit or phase-driven checkpoint requests for
+external orchestration.
 
 ## Current Coverage
 

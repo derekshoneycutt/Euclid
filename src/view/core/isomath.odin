@@ -17,6 +17,13 @@ SCREENSHAKE_MAX_TIME :: 0.24
 
 USE_SIMD_BATCH_PROJECTION :: true
 
+Iso_Batch_Projection :: struct {
+    xs, ys, zs: []f32,
+    out: []Vector2,
+    scale: Iso_Scale,
+}
+
+//   Report whether the configured build can execute hardware SIMD projection.
 simd_batch_projection_available :: proc() -> bool {
     return USE_SIMD_BATCH_PROJECTION && simd.HAS_HARDWARE_SIMD
 }
@@ -176,6 +183,20 @@ iso_to_cartesian_components_batch :: proc(
 }
 
 //   Batch-project decomposed arrays using core:simd f32x4 operations.
+store_simd_projection :: #force_inline proc(
+    out: []Vector2,
+    index: int,
+    screen_x, screen_y: simd.f32x4) {
+
+    xs := simd.to_array(screen_x)
+    ys := simd.to_array(screen_y)
+    for lane in 0..<4 {
+        out[index + lane].x = xs[lane]
+        out[index + lane].y = ys[lane]
+    }
+}
+
+//   Batch-project decomposed arrays using core:simd f32x4 operations.
 //
 // Notes:
 //   - Processes 4 elements per iteration with explicit SIMD vectors.
@@ -213,17 +234,7 @@ iso_to_cartesian_components_batch_simd :: proc(
         screen_x := (xv - yv) * half_scale + x_offset
         screen_y := -((xv + yv) * quarter_scale) + y_offset - (zv * half_scale)
 
-        screen_x_array := simd.to_array(screen_x)
-        screen_y_array := simd.to_array(screen_y)
-
-        out[i + 0].x = screen_x_array[0]
-        out[i + 0].y = screen_y_array[0]
-        out[i + 1].x = screen_x_array[1]
-        out[i + 1].y = screen_y_array[1]
-        out[i + 2].x = screen_x_array[2]
-        out[i + 2].y = screen_y_array[2]
-        out[i + 3].x = screen_x_array[3]
-        out[i + 3].y = screen_y_array[3]
+        store_simd_projection(out, i, screen_x, screen_y)
 
         i += 4
     }
@@ -235,16 +246,16 @@ iso_to_cartesian_components_batch_simd :: proc(
     return count
 }
 
-//   Select the active batch projection strategy.
+//   Select the configured scalar or SIMD batch projection strategy.
 iso_to_cartesian_components_batch_selected :: proc(
-    xs, ys, zs: []f32,
-    out: []Vector2,
-    scale: Iso_Scale,
+    batch: Iso_Batch_Projection,
     use_simd_projection: bool) -> int {
     if use_simd_projection && simd_batch_projection_available() {
-        return iso_to_cartesian_components_batch_simd(xs, ys, zs, out, scale)
+        return iso_to_cartesian_components_batch_simd(
+            batch.xs, batch.ys, batch.zs, batch.out, batch.scale)
     }
-    return iso_to_cartesian_components_batch(xs, ys, zs, out, scale)
+    return iso_to_cartesian_components_batch(
+        batch.xs, batch.ys, batch.zs, batch.out, batch.scale)
 }
 
 //   Fast force-inlined projection helper using precomputed coefficients.

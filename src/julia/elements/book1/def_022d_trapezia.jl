@@ -37,25 +37,29 @@ const PhaseDrawSide4 = 4f0
 const PhaseRise = 5f0
 const PhaseHideAll = 6f0
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Definition: Trapezia
 
 And let quadrilateral figures besides these be called trapezia."""
     latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Trapezia}
 
-And let quadrilateral figures besides these be called trapezia."""
+And let quadrilateral figures besides these be called trapezia \euclidbox[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=grey60]."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostIds_r = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint2Ids_r = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    line_host_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    line_joint2_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, lineHostIds_r)
+    OdinJuliaBridge.hide_point_batch(state_ptr, line_host_ids)
 
     for i in 1:4
         OdinJuliaBridge.set_point_position(
-            state_ptr, lineJoint2Ids_r[i],
+            state_ptr, line_joint2_ids[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
     end
 
@@ -69,33 +73,41 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
-            state_ptr,
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
+            state_ptr, SideStarts[i], SideStarts[i],
             SideColors[i], 0f0)
 
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.hostId))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1Id))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2Id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineHostIds[i], Float32(line.host_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint1Ids[i], Float32(line.joint1_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint2Ids[i], Float32(line.joint2_id))
     end
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1]))
+    line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[1]))
 
-    lineHostIds = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
-    lineJoint1Ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
-    lineJoint2Ids = ntuple(i -> Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
+    line_host_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[i])), 4)
+    line_joint1_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[i])), 4)
+    line_joint2_ids = ntuple(i ->
+        Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[i])), 4)
 
-    if line1HostId < 0
+    if line1_host_id < 0
         return
     end
 
@@ -104,19 +116,25 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
-            state_ptr, timer, PenDescendDuration, PenTopZ, SideStarts[1][1], SideStarts[1][2])
+            state_ptr, timer, PenDescendDuration, PenTopZ,
+            SideStarts[1][1], SideStarts[1][2])
 
         timer += dt
         if timer >= PenDescendDuration
             phase = PhaseDrawSide1
             timer = 0f0
         end
-    elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 || phase == PhaseDrawSide3 || phase == PhaseDrawSide4
-        sideIndex = Int(phase)
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, SideStarts[sideIndex], SideEnds[sideIndex],
-            QuadMaxBrush, SideColors[sideIndex],
-            lineHostIds[sideIndex], lineJoint1Ids[sideIndex], lineJoint2Ids[sideIndex])
+    elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 ||
+           phase == PhaseDrawSide3 || phase == PhaseDrawSide4
+        side_index = Int(phase)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            SideStarts[side_index], SideEnds[side_index];
+            penbrush=QuadMaxBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=line_host_ids[side_index],
+            line_joint1_id=line_joint1_ids[side_index],
+            line_joint2_id=line_joint2_ids[side_index])
 
         timer += dt
         if timer >= DrawDuration
@@ -129,7 +147,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseRise
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenRiseDuration, PenTopZ, SideStarts[1][1], SideStarts[1][2])
+            state_ptr, timer, PenRiseDuration, PenTopZ,
+            SideStarts[1][1], SideStarts[1][2])
 
         timer += dt
         if timer >= PenRiseDuration

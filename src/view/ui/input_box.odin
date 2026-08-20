@@ -92,6 +92,79 @@ Terminal_Input_Position :: struct {
     col: int,
 }
 
+//   Mutable text/caret state threaded through one frame of keyboard input,
+//   grouped with the per-frame outcome flags so the apply step passes one
+//   coherent value instead of a long out-parameter list.
+Input_Box_Key_State :: struct {
+    text_len:      ^int,
+    caret:         ^int,
+    viewport:      ^int,
+    moved_up:      ^bool,
+    moved_down:    ^bool,
+    paste_applied: ^bool,
+}
+
+//   Mutable caret/text state shared by input-box edit operations.
+Input_Box_Edit_State :: struct {
+    text_len: ^int,
+    caret:    ^int,
+}
+
+//   Mutable up/down movement flags produced by caret movement.
+Input_Box_Movement_Flags :: struct {
+    moved_up:   ^bool,
+    moved_down: ^bool,
+}
+
+//   Caret placement inputs for one focused non-terminal input box.
+Input_Box_Caret_Placement :: struct {
+    caret_col_in_line: int,
+    visible_start:     int,
+    visible_cols:      int,
+    content_x:         f32,
+    row_y:             f32,
+}
+
+//   Keyboard edit outcome for one input box frame.
+Input_Box_Edit_Outcome :: struct {
+    moved_up:      bool,
+    moved_down:    bool,
+    paste_applied: bool,
+    changed:       bool,
+}
+
+//   Interaction flags for one handled input box frame.
+Input_Box_Interaction_Flags :: struct {
+    owns_press:      bool,
+    mouse_left_down: bool,
+    hovered:         bool,
+}
+
+//   Mutable text/caret/viewport state threaded through one input frame.
+Input_Box_Frame_State :: struct {
+    text_len: ^int,
+    caret:    ^int,
+    viewport: ^int,
+}
+
+//   Line context for one caret click within the visible text.
+Input_Box_Click_Context :: struct {
+    visible_cols: int,
+    viewport:     int,
+    line_start:   int,
+    line_end:     int,
+}
+
+//   Mouse-click geometry for one caret placement within the visible text.
+Input_Box_Click_Geometry :: struct {
+    hovered:     bool,
+    local_mouse: rl.Vector2,
+    text_rect:   rl.Rectangle,
+    viewport:    int,
+    line_start:  int,
+    line_end:    int,
+}
+
 //   Resolve whether caret should be visible for the current blink phase.
 input_box_should_draw_caret :: #force_inline proc(
     timestamp_seconds, half_period_seconds: f64) -> bool {
@@ -440,44 +513,42 @@ input_box_content_layout :: proc(
 //   Move the caret to the clicked codepoint position on the current line.
 input_box_apply_mouse_caret_click :: proc(
     params: Input_Box_Params,
-    hovered: bool,
-    local_mouse: rl.Vector2,
-    text_rect: rl.Rectangle,
-    viewport: int,
-    line_start, line_end: int,
+    click: Input_Box_Click_Geometry,
     caret: ^int) {
 
-    if !params.enabled || !params.has_focus || !params.mouse.left_pressed || !hovered {
+    if !params.enabled || !params.has_focus || !params.mouse.left_pressed ||
+        !click.hovered {
         return
     }
 
     clicked_col :=
-        input_box_clicked_col(text_rect, local_mouse, params.char_advance, viewport)
+        input_box_clicked_col(click.text_rect, click.local_mouse, params.char_advance,
+            click.viewport)
     clicked_caret := input_box_byte_offset_for_codepoint_col(
         params.text_buffer,
-        line_start,
-        line_end,
+        click.line_start,
+        click.line_end,
         clicked_col)
-    caret^ = clamp(clicked_caret, line_start, line_end)
+    caret^ = clamp(clicked_caret, click.line_start, click.line_end)
 }
 
 //   Move the caret to a clicked terminal cell across wrapped input rows.
 input_box_apply_terminal_mouse_caret_click :: proc(
     params: Input_Box_Params,
-    hovered: bool,
-    local_mouse: rl.Vector2,
-    text_rect: rl.Rectangle,
+    click: Input_Box_Click_Geometry,
     columns: int,
     caret: ^int) {
 
-    if !params.enabled || !params.has_focus || !params.mouse.left_pressed || !hovered {
+    if !params.enabled || !params.has_focus || !params.mouse.left_pressed ||
+        !click.hovered {
         return
     }
 
     row_height := max(1.0, params.terminal_row_height)
-    clicked_row := max(0, int((local_mouse.y - text_rect.y) / row_height))
+    clicked_row := max(0, int((click.local_mouse.y - click.text_rect.y) / row_height))
     clicked_col :=
-         max(0, int((local_mouse.x - text_rect.x) / max(1.0, params.char_advance)))
+         max(0, int((click.local_mouse.x - click.text_rect.x) /
+             max(1.0, params.char_advance)))
     caret^ = terminal_input_byte_offset_at(
         params.text_buffer, params.text_len_in, columns, clicked_row, clicked_col)
 }
@@ -591,14 +662,34 @@ input_box_replace_text :: proc(buffer: []u8, text_len, caret: ^int, text: string
     caret^ = copy_len
 }
 
+//   Shift the tail bytes to make room for (or remove) the length delta.
+input_box_shift_tail :: proc(
+    buffer: []u8, tail_start, tail_len, replace_start, shift: int) {
+
+    if shift > 0 {
+        for i := tail_len; i > 0; i -= 1 {
+            buffer[tail_start + shift + i - 1] = buffer[tail_start + i - 1]
+        }
+        return
+    }
+    if shift < 0 {
+        for i in 0..<tail_len {
+            buffer[replace_start + (tail_start - replace_start) + shift + i] =
+                buffer[tail_start + i]
+        }
+    }
+}
+
 //   Replace the byte range [start, end) with replacement text and move caret to replacement end.
 //   Side effects: mutates text_len and caret.
 input_box_replace_byte_range :: proc(
     buffer: []u8,
-    text_len, caret: ^int,
+    edit: Input_Box_Edit_State,
     start, end: int,
     replacement: string) -> bool {
 
+    text_len := edit.text_len
+    caret := edit.caret
     if buffer == nil || text_len == nil || caret == nil {
         return false
     }
@@ -613,18 +704,8 @@ input_box_replace_byte_range :: proc(
         return false
     }
 
-    tail_start := replace_end
-    tail_len := clamped_len - tail_start
-    if replacement_len > replaced_len {
-        shift := replacement_len - replaced_len
-        for i := tail_len; i > 0; i -= 1 {
-            buffer[tail_start + shift + i - 1] = buffer[tail_start + i - 1]
-        }
-    } else if replacement_len < replaced_len {
-        for i in 0..<tail_len {
-            buffer[replace_start + replacement_len + i] = buffer[tail_start + i]
-        }
-    }
+    input_box_shift_tail(buffer, replace_end, clamped_len - replace_end,
+        replace_start, replacement_len - replaced_len)
 
     for i in 0..<replacement_len {
         buffer[replace_start + i] = replacement[i]
@@ -736,46 +817,16 @@ input_box_update_viewport_for_caret :: #force_inline proc(
     }
 }
 
-//   Mutable text/caret state threaded through one frame of keyboard input,
-//   grouped with the per-frame outcome flags so the apply step passes one
-//   coherent value instead of a long out-parameter list.
-Input_Box_Key_State :: struct {
-    text_len:      ^int,
-    caret:         ^int,
-    viewport:      ^int,
-    moved_up:      ^bool,
-    moved_down:    ^bool,
-    paste_applied: ^bool,
-}
-
 //   Apply one frame of keyboard events to text and caret state.
 //   Side effects: mutates text_len, caret, and viewport.
-input_box_apply_keyboard_events :: proc(
+//   Apply deletion, text-event insertion, and paste for one input frame.
+input_box_apply_edit_events :: proc(
     params: Input_Box_Params,
     events: Input_Box_Events,
-    visible_cols: int,
     key_state: Input_Box_Key_State) {
-
-    if !params.enabled || !params.has_focus {
-        return
-    }
 
     text_len := key_state.text_len
     caret := key_state.caret
-    viewport := key_state.viewport
-    moved_up := key_state.moved_up
-    moved_down := key_state.moved_down
-    paste_applied := key_state.paste_applied
-
-    moved_up^ = false
-    moved_down^ = false
-    paste_applied^ = false
-
-    input_box_apply_caret_movement(params, events, text_len^, caret,
-        moved_up, moved_down)
-
-    caret^ = input_box_clamp_cursor(caret^, text_len^)
-
     if events.backspace {
         input_box_backspace_codepoint(params.text_buffer, text_len, caret)
     }
@@ -792,12 +843,40 @@ input_box_apply_keyboard_events :: proc(
     }
 
     if events.paste_requested {
-        paste_applied^ = input_box_insert_text_at_caret(
+        key_state.paste_applied^ = input_box_insert_text_at_caret(
             params.text_buffer,
             text_len,
             caret,
             events.paste_text)
     }
+}
+
+//   Apply caret movement, edits, and paste for one keyboard-input frame.
+input_box_apply_keyboard_events :: proc(
+    params: Input_Box_Params,
+    events: Input_Box_Events,
+    visible_cols: int,
+    key_state: Input_Box_Key_State) {
+
+    if !params.enabled || !params.has_focus {
+        return
+    }
+
+    text_len := key_state.text_len
+    caret := key_state.caret
+    viewport := key_state.viewport
+    moved_up := key_state.moved_up
+    moved_down := key_state.moved_down
+
+    moved_up^ = false
+    moved_down^ = false
+    key_state.paste_applied^ = false
+
+    input_box_apply_caret_movement(params, events, text_len^, caret,
+        Input_Box_Movement_Flags{moved_up, moved_down})
+
+    caret^ = input_box_clamp_cursor(caret^, text_len^)
+    input_box_apply_edit_events(params, events, key_state)
 
     caret^ = input_box_clamp_cursor(caret^, text_len^)
     input_box_update_viewport_for_caret(caret^, visible_cols, viewport)
@@ -809,13 +888,14 @@ input_box_apply_caret_movement :: proc(
     events: Input_Box_Events,
     text_len: int,
     caret: ^int,
-    moved_up, moved_down: ^bool) {
+    moved: Input_Box_Movement_Flags) {
 
     if events.up {
-        moved_up^ = input_box_move_caret_up(params.text_buffer, text_len, caret)
+        moved.moved_up^ = input_box_move_caret_up(params.text_buffer, text_len, caret)
     }
     if events.down {
-        moved_down^ = input_box_move_caret_down(params.text_buffer, text_len, caret)
+        moved.moved_down^ =
+            input_box_move_caret_down(params.text_buffer, text_len, caret)
     }
     if events.left {
         caret^ = input_box_prev_codepoint_start(params.text_buffer, 0, caret^)
@@ -930,20 +1010,53 @@ input_box_move_caret_down :: proc(buffer: []u8, text_len: int, caret: ^int) -> b
     return true
 }
 
-//   Resolve one input frame (mouse/key handling + state updates) without drawing.
-//   Parent may inspect result and apply policy (history/submit) before drawing.
-handle_input_box :: proc(
+//   Compute the final viewport column after keyboard edits.
+input_box_final_viewport :: proc(
     params: Input_Box_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Input_Box_Result {
+    caret_col_in_line, visible_cols, line_len, viewport: int) -> int {
 
-    events := capture_input_box_events()
-    history_previous := events.up
-    history_next := events.down
-    tab_pressed := events.tab
-    submit_pressed := rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER)
+    if params.terminal_mode {
+        return 0
+    }
+    result := min(viewport, line_len)
+    input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &result)
+    return result
+}
 
-    drawn_rect := clamp_non_negative_rect(params.rect)
-    local_mouse := input_box_local_mouse(params.mouse, params.scroll_offset)
+//   Apply keyboard events for one frame, updating text/caret/viewport in place.
+//
+// Returns:
+//   - outcome: Movement/paste/change flags produced by the edits.
+input_box_run_keyboard_events :: proc(
+    params: Input_Box_Params,
+    events: Input_Box_Events,
+    visible_cols: int,
+    frame: Input_Box_Frame_State) -> Input_Box_Edit_Outcome {
+
+    outcome := Input_Box_Edit_Outcome{}
+    text_len_before := frame.text_len^
+    input_box_apply_keyboard_events(
+        params,
+        events,
+        visible_cols,
+        Input_Box_Key_State{
+            text_len = frame.text_len,
+            caret = frame.caret,
+            viewport = frame.viewport,
+            moved_up = &outcome.moved_up,
+            moved_down = &outcome.moved_down,
+            paste_applied = &outcome.paste_applied,
+        })
+    outcome.changed = frame.text_len^ != text_len_before
+    return outcome
+}
+
+//   Resolve hover state and press ownership for one input box frame.
+input_box_resolve_press :: proc(
+    params: Input_Box_Params,
+    press_owner: ^core.Ui_Press_Owner_State,
+    local_mouse: rl.Vector2,
+    drawn_rect: rl.Rectangle) -> (bool, bool) {
 
     hovered_item := rl.CheckCollisionPointRec(local_mouse, drawn_rect)
     hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
@@ -953,6 +1066,72 @@ handle_input_box :: proc(
     can_interact := params.enabled && params.interaction_enabled
     input_box_try_capture_press(params, press_owner, hovered, can_interact, &owns_press)
     input_box_release_press(params, press_owner, &owns_press)
+    return hovered, owns_press
+}
+
+//   Apply a mouse click to caret placement, dispatching on terminal mode.
+input_box_apply_mouse_click :: proc(
+    params: Input_Box_Params,
+    click: Input_Box_Click_Geometry,
+    click_ctx: Input_Box_Click_Context,
+    caret: ^int) {
+
+    if params.terminal_mode {
+        terminal_click := click
+        terminal_click.viewport = 0
+        terminal_click.line_start = 0
+        terminal_click.line_end = 0
+        input_box_apply_terminal_mouse_caret_click(
+            params, terminal_click, click_ctx.visible_cols, caret)
+        return
+    }
+
+    full_click := click
+    full_click.viewport = click_ctx.viewport
+    full_click.line_start = click_ctx.line_start
+    full_click.line_end = click_ctx.line_end
+    input_box_apply_mouse_caret_click(params, full_click, caret)
+}
+
+//   Build the result for one handled input box frame.
+input_box_build_result :: proc(
+    drawn_rect: rl.Rectangle,
+    events: Input_Box_Events,
+    outcome: Input_Box_Edit_Outcome,
+    frame: Input_Box_Frame_State,
+    interaction: Input_Box_Interaction_Flags) -> Input_Box_Result {
+
+    return Input_Box_Result{
+        drawn_rect = drawn_rect,
+        text_len_out = frame.text_len^,
+        caret_col_out = frame.caret^,
+        viewport_col_start_out = frame.viewport^,
+        changed = outcome.changed,
+        moved_up = outcome.moved_up,
+        moved_down = outcome.moved_down,
+        history_previous = events.up,
+        history_next = events.down,
+        tab_pressed = events.tab,
+        backspace_pressed = events.backspace,
+        paste_applied = outcome.paste_applied,
+        submit_pressed = rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER),
+        hovered = interaction.hovered,
+        pressed = interaction.owns_press && interaction.mouse_left_down,
+    }
+}
+
+//   Resolve one input frame (mouse/key handling + state updates) without drawing.
+//   Parent may inspect result and apply policy (history/submit) before drawing.
+handle_input_box :: proc(
+    params: Input_Box_Params,
+    press_owner: ^core.Ui_Press_Owner_State) -> Input_Box_Result {
+
+    events := capture_input_box_events()
+
+    drawn_rect := clamp_non_negative_rect(params.rect)
+    local_mouse := input_box_local_mouse(params.mouse, params.scroll_offset)
+    hovered, owns_press :=
+        input_box_resolve_press(params, press_owner, local_mouse, drawn_rect)
 
     text_len := input_box_clamp_text_len(params.text_len_in, len(params.text_buffer))
     caret := input_box_clamp_cursor(params.caret_col_in, text_len)
@@ -961,60 +1140,23 @@ handle_input_box :: proc(
     text_rect, visible_cols := input_box_content_layout(params, drawn_rect)
     line_start, line_end :=
         input_box_current_line_bounds(params.text_buffer, text_len, caret)
-    if params.terminal_mode {
-        input_box_apply_terminal_mouse_caret_click(
-            params, hovered, local_mouse, text_rect, visible_cols, &caret)
-    } else {
-        input_box_apply_mouse_caret_click(params, hovered, local_mouse, text_rect,
-            viewport, line_start, line_end, &caret)
-    }
+    input_box_apply_mouse_click(params,
+        Input_Box_Click_Geometry{hovered, local_mouse, text_rect, 0, 0, 0},
+        Input_Box_Click_Context{visible_cols, viewport, line_start, line_end}, &caret)
 
-    text_len_before := text_len
-    moved_up := false
-    moved_down := false
-    paste_applied := false
-    input_box_apply_keyboard_events(
-        params,
-        events,
-        visible_cols,
-        Input_Box_Key_State{
-            text_len = &text_len,
-            caret = &caret,
-            viewport = &viewport,
-            moved_up = &moved_up,
-            moved_down = &moved_down,
-            paste_applied = &paste_applied,
-        })
+    outcome := input_box_run_keyboard_events(params, events, visible_cols,
+        Input_Box_Frame_State{&text_len, &caret, &viewport})
     line_start, line_end =
         input_box_current_line_bounds(params.text_buffer, text_len, caret)
 
     line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
     caret_col_in_line := input_box_count_codepoints(params.text_buffer, line_start, caret)
+    viewport = input_box_final_viewport(params, caret_col_in_line, visible_cols,
+        line_len, viewport)
 
-    if params.terminal_mode {
-        viewport = 0
-    } else {
-        viewport = min(viewport, line_len)
-        input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &viewport)
-    }
-
-    return Input_Box_Result{
-        drawn_rect = drawn_rect,
-        text_len_out = text_len,
-        caret_col_out = caret,
-        viewport_col_start_out = viewport,
-        changed = text_len != text_len_before,
-        moved_up = moved_up,
-        moved_down = moved_down,
-        history_previous = history_previous,
-        history_next = history_next,
-        tab_pressed = tab_pressed,
-        backspace_pressed = events.backspace,
-        paste_applied = paste_applied,
-        submit_pressed = submit_pressed,
-        hovered = hovered,
-        pressed = owns_press && params.mouse.left_down,
-    }
+    return input_box_build_result(drawn_rect, events, outcome,
+        Input_Box_Frame_State{&text_len, &caret, &viewport},
+        Input_Box_Interaction_Flags{owns_press, params.mouse.left_down, hovered})
 }
 
 //   Draw wrapped terminal input text aligned after the first-row prompt.
@@ -1040,7 +1182,8 @@ draw_terminal_input_rows :: proc(
             if text_end > text_start {
                 view_core.ui_text(string(params.text_buffer[text_start:text_end]),
                     int(content_x), int(params.rect.y + f32(row) * row_height),
-                    display_color, params.font, params.font_size)
+                    display_color,
+                    view_core.Ui_Text_Font{params.font, params.font_size})
             }
             row += 1
         }
@@ -1080,7 +1223,7 @@ draw_terminal_input_cursor :: proc(
     next := input_box_next_codepoint_start(params.text_buffer, safe_len, caret)
     view_core.ui_text(string(params.text_buffer[caret:next]),
         int(cursor_rect.x), int(cursor_rect.y), params.terminal_background_color,
-        params.font, params.font_size)
+        view_core.Ui_Text_Font{params.font, params.font_size})
 }
 
 //   Draw all wrapped terminal input rows, prompt, and full-cell cursor.
@@ -1099,10 +1242,103 @@ draw_terminal_input_box :: proc(params: Input_Box_Draw_Params) {
 
     if len(params.prompt_prefix) > 0 {
         view_core.ui_text(params.prompt_prefix, int(drawn_rect.x), int(drawn_rect.y),
-            prompt_color, params.terminal_prompt_font, params.font_size)
+            prompt_color,
+            view_core.Ui_Text_Font{params.terminal_prompt_font, params.font_size})
     }
     draw_terminal_input_rows(params, content_x, columns, display_color)
     draw_terminal_input_cursor(params, content_x, columns, display_color)
+}
+
+//   Compute the visible text slice and clamped viewport for one non-terminal input box.
+//
+// Returns:
+//   - visible_text: The visible text slice.
+//   - visible_start: The clamped first visible column.
+input_box_visible_text :: proc(
+    params: Input_Box_Draw_Params,
+    line_start, line_end, caret_col_in_line, visible_cols: int) -> (string, int) {
+
+    line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
+    viewport := max(0, min(params.viewport_col_start, line_len))
+    input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &viewport)
+
+    visible_start := clamp(viewport, 0, line_len)
+    visible_end := clamp(visible_start + visible_cols, visible_start, line_len)
+    if visible_end <= visible_start {
+        return "", visible_start
+    }
+
+    text_start := input_box_byte_offset_for_codepoint_col(
+        params.text_buffer,
+        line_start,
+        line_end,
+        visible_start)
+    text_end := input_box_byte_offset_for_codepoint_col(
+        params.text_buffer,
+        line_start,
+        line_end,
+        visible_end)
+    return string(params.text_buffer[text_start:text_end]), visible_start
+}
+
+//   Draw the blinking caret for one focused non-terminal input box.
+input_box_draw_caret :: #force_inline proc(
+    params: Input_Box_Draw_Params,
+    placement: Input_Box_Caret_Placement,
+    color: rl.Color) {
+
+    if !params.has_focus || !params.enabled ||
+        !input_box_should_draw_caret(
+            params.mouse.timestamp_seconds,
+            params.caret_blink_half_period_seconds) {
+        return
+    }
+
+    caret_col_local := clamp(
+        placement.caret_col_in_line - placement.visible_start, 0, placement.visible_cols)
+    caret_x := placement.content_x +
+        f32(caret_col_local) * max(1.0, params.char_advance) - 4.0
+    view_core.ui_text("|", int(caret_x), int(placement.row_y), color,
+        view_core.Ui_Text_Font{params.font, params.font_size})
+}
+
+//   Measure the prompt prefix width in pixels for one input box.
+input_box_prefix_width :: #force_inline proc(params: Input_Box_Draw_Params) -> f32 {
+    if len(params.prompt_prefix) == 0 {
+        return 0
+    }
+    prefix_cstr :=
+        strings.clone_to_cstring(params.prompt_prefix, context.temp_allocator)
+    return max(0.0, rl.MeasureTextEx(params.font, prefix_cstr, params.font_size, 0).x)
+}
+
+//   Draw the visible text and prompt for one non-terminal input box.
+input_box_draw_content :: proc(
+    params: Input_Box_Draw_Params,
+    drawn_rect: rl.Rectangle,
+    visible_text: string,
+    content_x: f32) {
+
+    display_color := params.font_color
+    if !params.enabled {
+        display_color = rl.Color{110, 110, 110, 255}
+    }
+
+    if len(visible_text) > 0 {
+        view_core.ui_text(visible_text,
+            int(content_x),
+            int(drawn_rect.y),
+            display_color,
+            view_core.Ui_Text_Font{params.font, params.font_size})
+    }
+
+    if len(params.prompt_prefix) > 0 {
+        view_core.ui_text(params.prompt_prefix,
+            int(drawn_rect.x),
+            int(drawn_rect.y),
+            display_color,
+            view_core.Ui_Text_Font{params.font, params.font_size})
+    }
 }
 
 //   Draw input text and caret from caller-provided post-policy state.
@@ -1119,71 +1355,23 @@ draw_input_box :: proc(params: Input_Box_Draw_Params) {
     line_start, line_end :=
         input_box_current_line_bounds(params.text_buffer, text_len, caret)
 
-    prefix_width: f32 = 0
-    if len(params.prompt_prefix) > 0 {
-        prefix_cstr :=
-            strings.clone_to_cstring(params.prompt_prefix, context.temp_allocator)
-        prefix_width =
-            max(0.0, rl.MeasureTextEx(params.font, prefix_cstr, params.font_size, 0).x)
-    }
-
+    prefix_width := input_box_prefix_width(params)
     content_x := drawn_rect.x + prefix_width
     content_width := max(0.0, drawn_rect.width - prefix_width)
     visible_cols := input_box_visible_cols(content_width, params.char_advance)
 
-    line_len := input_box_count_codepoints(params.text_buffer, line_start, line_end)
     caret_col_in_line := input_box_count_codepoints(params.text_buffer, line_start, caret)
-    viewport := max(0, min(params.viewport_col_start, line_len))
-    input_box_update_viewport_for_caret(caret_col_in_line, visible_cols, &viewport)
+    visible_text, visible_start := input_box_visible_text(params,
+        line_start, line_end, caret_col_in_line, visible_cols)
 
-    visible_start := clamp(viewport, 0, line_len)
-    visible_end := clamp(visible_start + visible_cols, visible_start, line_len)
-    visible_text := ""
-    if visible_end > visible_start {
-        text_start := input_box_byte_offset_for_codepoint_col(
-            params.text_buffer,
-            line_start,
-            line_end,
-            visible_start)
-        text_end := input_box_byte_offset_for_codepoint_col(
-            params.text_buffer,
-            line_start,
-            line_end,
-            visible_end)
-        visible_text = string(params.text_buffer[text_start:text_end])
-    }
+    input_box_draw_content(params, drawn_rect, visible_text, content_x)
 
     display_color := params.font_color
     if !params.enabled {
         display_color = rl.Color{110, 110, 110, 255}
     }
-
-    if len(visible_text) > 0 {
-        view_core.ui_text(visible_text,
-            int(content_x),
-            int(drawn_rect.y),
-            display_color,
-            params.font,
-            params.font_size)
-    }
-
-    if len(params.prompt_prefix) > 0 {
-        view_core.ui_text(params.prompt_prefix,
-            int(drawn_rect.x),
-            int(drawn_rect.y),
-            display_color,
-            params.font,
-            params.font_size)
-    }
-
-    if params.has_focus && params.enabled &&
-        input_box_should_draw_caret(
-            params.mouse.timestamp_seconds,
-            params.caret_blink_half_period_seconds) {
-
-        caret_col_local := clamp(caret_col_in_line - visible_start, 0, visible_cols)
-        caret_x := content_x + f32(caret_col_local) * max(1.0, params.char_advance) - 4.0
-        view_core.ui_text("|", int(caret_x), int(drawn_rect.y), display_color,
-            params.font, params.font_size)
-    }
+    input_box_draw_caret(params,
+        Input_Box_Caret_Placement{
+            caret_col_in_line, visible_start, visible_cols, content_x, drawn_rect.y},
+        display_color)
 }

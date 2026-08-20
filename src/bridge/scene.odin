@@ -9,6 +9,8 @@ import "core:math"
 LABEL_DUST_X_OFFSET :: -0.01
 LABEL_DUST_Y_OFFSET :: -0.03
 
+Two_Points :: [2]int
+
 //   Return whether a point index is within runtime point capacity bounds.
 is_point_index_in_bounds :: #force_inline proc(index: int) -> bool {
     return index >= 0 && index < MAX_SHAPESPOINTS
@@ -49,6 +51,70 @@ constraint_view_invalid :: #force_inline proc() -> Bridge_Constraint_View {
     }
 }
 
+//   Apply the selected constraint kind and host point, rejecting invalid selections.
+apply_constraint_spec_identity :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
+
+    if spec_mask & CONSTRAINT_SPEC_TRAITS != 0 {
+        if !is_valid_constraint_kind_value(spec.traits) {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+        constraint^.kind = core.Shapes_Constraint_Kind(spec.traits)
+    }
+    if spec_mask & CONSTRAINT_SPEC_ONPOINT != 0 {
+        on_point := int(spec.on_point)
+        if !is_point_index_in_bounds(on_point) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.on_point = on_point
+    }
+    return BRIDGE_STATUS_OK
+}
+
+//   Apply the selected unvalidated solver response scalars.
+apply_constraint_spec_response :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) {
+
+    if spec_mask & CONSTRAINT_SPEC_RESTRICTION != 0 {
+        constraint^.restriction = spec.restriction
+    }
+    if spec_mask & CONSTRAINT_SPEC_BOUNCE != 0 {
+        constraint^.bounce = spec.bounce
+    }
+    if spec_mask & CONSTRAINT_SPEC_ALLOWANCE != 0 {
+        constraint^.allowance = spec.allowance
+    }
+}
+
+//   Apply the selected dependency graph links and enablement flag.
+apply_constraint_spec_links :: proc(
+    constraint: ^core.Shapes_Constraint, spec_mask: i32,
+    spec: Bridge_Constraint_Spec) -> i32 {
+
+    if spec_mask & CONSTRAINT_SPEC_DEPENDON != 0 {
+        if spec.depend_on >= 0 && !is_constraint_index_in_bounds(int(spec.depend_on)) {
+            return BRIDGE_STATUS_INVALID_INDEX
+        }
+        constraint^.depend_on = spec.depend_on
+    }
+    if spec_mask & CONSTRAINT_SPEC_CHILDOFFSET != 0 {
+        if spec.has_child_offset != 0 {
+            if spec.child_offset < 0 {
+                return BRIDGE_STATUS_INVALID_ARGUMENT
+            }
+            constraint^.child_offset = spec.child_offset
+        } else {
+            constraint^.child_offset = nil
+        }
+    }
+    if spec_mask & CONSTRAINT_SPEC_DOAPPLY != 0 {
+        constraint^.do_apply = spec.do_apply != 0
+    }
+    return BRIDGE_STATUS_OK
+}
+
 //   Emit floor-contact dust when a point is close to the drawing plane.
 push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.Vector3) {
     if f32(math.abs(f64(pos.z))) <= FLOOR_CONTACT_Z_EPSILON {
@@ -62,20 +128,27 @@ push_dust_if_floor_contact :: proc(state: ^core.Euclid_General_State, pos: core.
 //   - No-op unless both compass joints are valid and near floor height.
 push_dust_for_compass_segment_if_floor_contact :: proc(
     state: ^core.Euclid_General_State) {
-    pointIndex1 := state^.compass.joint1_id
-    pointIndex2 := state^.compass.joint2_id
-    if pointIndex1 < 0 || pointIndex1 >= MAX_SHAPESPOINTS ||
-        pointIndex2 < 0 || pointIndex2 >= MAX_SHAPESPOINTS {
+    point_index1 := state^.compass.joint1_id
+    point_index2 := state^.compass.joint2_id
+    if point_index1 < 0 || point_index1 >= MAX_SHAPESPOINTS ||
+        point_index2 < 0 || point_index2 >= MAX_SHAPESPOINTS {
         return
     }
 
-    point1 := state^.point_system^.points[pointIndex1].position.? or_else {0, 0, 0}
-    point2 := state^.point_system^.points[pointIndex2].position.? or_else {0, 0, 0}
+    point1 := state^.point_system^.points[point_index1].position.? or_else {0, 0, 0}
+    point2 := state^.point_system^.points[point_index2].position.? or_else {0, 0, 0}
 
     if f32(math.abs(f64(point1.z))) > FLOOR_CONTACT_Z_EPSILON ||
         f32(math.abs(f64(point2.z))) > FLOOR_CONTACT_Z_EPSILON {
         return
     }
+
+    push_dust_along_floor_segment(state, point1, point2)
+}
+
+//   Emit sampled dust pushes along a floor-level segment between two positions.
+push_dust_along_floor_segment :: proc(
+    state: ^core.Euclid_General_State, point1, point2: core.Vector3) {
 
     samples := COMPASS_LINE_DUST_SAMPLES
     inv_samples := f32(1.0) / f32(samples)
@@ -96,71 +169,83 @@ push_dust_for_connected_lines_on_floor_event :: proc(
     state: ^core.Euclid_General_State,
     point_index: int) {
 
-    // #vet forgives(cyclomatic_complexity) — per-line floor-contact dust sweep.
-    // The nested guards are load-bearing validity gates (line kind, child indices,
-    // positions present, floor-crossing sign) over a fixed grid of point pairs.
     next_index := state^.point_system^.next_point_index
     if point_index < 0 || point_index >= next_index {
         return
     }
 
     for host_index in 0..<next_index {
-        host := state^.point_system^.points[host_index]
-        if host.kind != .Line {
-            continue
-        }
-
-        p1 := host.child_point_head
-        if p1 < 0 || p1 >= next_index {
-            continue
-        }
-
-        p2 := state^.point_system^.points[p1].next_child_point
-        if p2 < 0 || p2 >= next_index {
-            continue
-        }
-
-        if p1 != point_index && p2 != point_index {
-            continue
-        }
-
-        pos1, has_pos1 := state^.point_system^.points[p1].position.?
-        pos2, has_pos2 := state^.point_system^.points[p2].position.?
-        if !has_pos1 || !has_pos2 {
-            continue
-        }
-
-        sign1 := floor_contact_sign(pos1.z)
-        sign2 := floor_contact_sign(pos2.z)
-
-        if sign1 == 0 && sign2 == 0 {
-            samples := COMPASS_LINE_DUST_SAMPLES
-            inv_samples := f32(1.0) / f32(samples)
-            for i in 0..<samples {
-                t := f32(i) * inv_samples
-                x := math.lerp(pos1.x, pos2.x, t)
-                y := math.lerp(pos1.y, pos2.y, t)
-                particles.push_dust_away_from_xy(state^.particle_system, x, y)
-            }
-            continue
-        }
-
-        if sign1 * sign2 >= 0 {
-            continue
-        }
-
-        dz := pos2.z - pos1.z
-        if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
-            continue
-        }
-
-        t := -pos1.z / dz
-        t = math.clamp(t, 0, 1)
-
-        x := math.lerp(pos1.x, pos2.x, t)
-        y := math.lerp(pos1.y, pos2.y, t)
-        particles.push_dust_away_from_xy(state^.particle_system, x, y)
+        push_dust_for_connected_line(state, point_index, host_index)
     }
+}
+
+//   Emit floor-contact dust for one line when it is connected to the event point.
+//
+// Notes:
+//   - A connected line on z=0 emits sampled pushes along the segment.
+//   - A connected line straddling z=0 emits one push at the segment crossing point.
+push_dust_for_connected_line :: proc(
+    state: ^core.Euclid_General_State, point_index: int, host_index: int) {
+
+    points, endpoints_ok := connected_line_endpoints(state, host_index)
+    if !endpoints_ok {
+        return
+    }
+    p1, p2 := points[0], points[1]
+    if p1 != point_index && p2 != point_index {
+        return
+    }
+
+    pos1, has_pos1 := state^.point_system^.points[p1].position.?
+    pos2, has_pos2 := state^.point_system^.points[p2].position.?
+    if !has_pos1 || !has_pos2 {
+        return
+    }
+
+    sign1 := floor_contact_sign(pos1.z)
+    sign2 := floor_contact_sign(pos2.z)
+    if sign1 == 0 && sign2 == 0 {
+        push_dust_along_floor_segment(state, pos1, pos2)
+        return
+    }
+    if sign1 * sign2 >= 0 {
+        return
+    }
+
+    dz := pos2.z - pos1.z
+    if math.abs(dz) <= FLOOR_CONTACT_Z_EPSILON {
+        return
+    }
+
+    t := math.clamp(-pos1.z / dz, 0, 1)
+    x := math.lerp(pos1.x, pos2.x, t)
+    y := math.lerp(pos1.y, pos2.y, t)
+    particles.push_dust_away_from_xy(state^.particle_system, x, y)
+}
+
+//   Resolve the two endpoint indices for a line host, validating both are in bounds.
+//
+// Returns:
+//   - p1, p2: Endpoint point indices (only valid when ok is true).
+//   - ok: true when the host is a line with two in-bounds endpoint children.
+connected_line_endpoints :: proc(
+    state: ^core.Euclid_General_State, host_index: int) -> (point: Two_Points, ok: bool) {
+
+    next_index := state^.point_system^.next_point_index
+    host := state^.point_system^.points[host_index]
+    if host.kind != .Line {
+        return {0, 0}, false
+    }
+
+    p1 := host.child_point_head
+    if p1 < 0 || p1 >= next_index {
+        return {0, 0}, false
+    }
+    p2 := state^.point_system^.points[p1].next_child_point
+    if p2 < 0 || p2 >= next_index {
+        return {0, 0}, false
+    }
+    return {p1, p2}, true
 }
 
 //   Classify one z value relative to floor contact dead-zone.
@@ -263,9 +348,6 @@ set_point_position_with_floor_dust_effects :: #force_inline proc(
     index: int,
     pos: core.Vector3) {
 
-    // #vet forgives(cyclomatic_complexity) — pen/compass tip audio router.
-    // The if/else-if chain routes motion to the right tip by host id; it is a flat,
-    // readable dispatch where extraction would only add indirection.
     set_point_position_with_floor_crossing_dust(state, index, pos)
     push_dust_if_floor_contact(state, pos)
 

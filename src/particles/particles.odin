@@ -25,6 +25,7 @@ import view_core "../view/core"
 
 import "core:math"
 import "core:mem"
+import rand "core:math/rand"
 
 import rl "vendor:raylib"
 
@@ -98,6 +99,10 @@ DUST_EXISTING_XY_KICK :: 0.0011
 DUST_COLLISION_RADIUS :: 0.004
 DUST_COLLISION_RESTITUTION :: 0.42
 DUST_COLLISION_POSITION_SLOP :: 0.0001
+DUST_COLLISION_ZERO_DISTANCE_SQ :: 1e-12
+DUST_COLLISION_NORMAL_JITTER_RADIANS :: 0.18
+
+PARTICLE_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 
 DUST_GRID_CELL_SIZE :: core.DUST_GRID_CELL_SIZE
 DUST_GRID_DIM :: core.DUST_GRID_DIM
@@ -118,6 +123,49 @@ CLEAR_BURST_POLYGON_FILL_DENSITY :: 900.0
 CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES :: 10
 CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 
+Particle_Emission :: struct {
+    origin: Vector3,
+    color: rl.Color,
+}
+
+Dust_Contact_Push :: struct {
+    x, y, radius, radius_sq: f32,
+}
+
+Particle_Soa_Batch :: struct {
+    pos_x, pos_y, pos_z: []f32,
+    vel_x, vel_y, vel_z: []f32,
+}
+
+Polygon_Fill_Triangles :: struct {
+    areas: [10]f32,
+    count: int,
+    total_area: f32,
+}
+
+Circle_Dust_Emission :: struct {
+    center, start, finish: Vector3,
+    offset: f32,
+    color: rl.Color,
+    sample_count: int,
+}
+
+Circle_Kind_Burst_Config :: struct {
+    color: rl.Color,
+    sample_count: int,
+    abort_on_invalid: bool,
+}
+
+Dust_Collision_Grid :: struct {
+    cell_y, cell_x, cell_index, cell_count: int,
+    radius_sq, min_sep: f32,
+}
+
+Dust_Pair_Response :: struct {
+    ia, ib: int,
+    nx, ny, penetration: f32,
+}
+
 //   Emit high-layer flicker particles at a 2D origin.
 //
 // Parameters:
@@ -130,14 +178,13 @@ CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 // Returns:
 //   - none.
 emit_flicker_particles :: proc(
-    ps: ^Particle_System, x, y, z: f32, color: rl.Color, count: int = 1) {
-    origin := Vector3{x, y, z}
+    ps: ^Particle_System, emission: Particle_Emission, count: int = 1) {
     if count <= 0 {
         return
     }
 
     for _ in 0..<count {
-        spawn_flicker_particle(ps, origin, color)
+        spawn_flicker_particle(ps, emission.origin, emission.color)
     }
 }
 
@@ -154,13 +201,14 @@ emit_flicker_particles :: proc(
 // Returns:
 //   - none.
 emit_trail_particles :: proc(
-    ps: ^Particle_System, dt, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
+    ps: ^Particle_System, dt: f32, emission: Particle_Emission) {
     ps.spawn_timer += dt
 
     for ps.spawn_timer >= SPAWN_INTERVAL {
         ps.spawn_timer -= SPAWN_INTERVAL
 
-        trail_pos, ok := spawn_ember_particle(ps, tip_x, tip_y, tip_z, tip_color)
+        trail_pos, ok := spawn_ember_particle(
+            ps, emission.origin.x, emission.origin.y, emission.origin.z, emission.color)
         if !ok {
             continue
         }
@@ -170,7 +218,9 @@ emit_trail_particles :: proc(
         }
 
         for _ in 0..<BURNOUT_PER_TRAIL_SPAWN {
-            spawn_burnout_ember_particle(ps, tip_x, tip_y, tip_z, tip_color)
+            spawn_burnout_ember_particle(
+                ps, emission.origin.x, emission.origin.y, emission.origin.z,
+                emission.color)
         }
     }
 }
@@ -185,11 +235,11 @@ emit_trail_particles :: proc(
 // Returns:
 //   - none.
 push_dust_away_from_xy_index :: proc(
-    ps: ^Particle_System, i: int, x, y, push_radius, push_radius_sq: f32) {
-    dx := ps.low_particles.pos_x[i] - x
-    dy := ps.low_particles.pos_y[i] - y
+    ps: ^Particle_System, i: int, contact: Dust_Contact_Push) {
+    dx := ps.low_particles.pos_x[i] - contact.x
+    dy := ps.low_particles.pos_y[i] - contact.y
     dist_sq := dx * dx + dy * dy
-    if dist_sq > push_radius_sq {
+    if dist_sq > contact.radius_sq {
         return
     }
 
@@ -205,7 +255,7 @@ push_dust_away_from_xy_index :: proc(
         ny = f32(math.sin(theta))
     }
 
-    falloff := f32(1.0) - math.clamp(dist / push_radius, f32(0.0), f32(1.0))
+    falloff := f32(1.0) - math.clamp(dist / contact.radius, f32(0.0), f32(1.0))
     push := DUST_CONTACT_PUSH_SPEED * falloff
 
     ps.low_particles.vel_x[i] += nx * push
@@ -230,14 +280,14 @@ push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
         return
     }
 
-    push_radius : f32 = DUST_CONTACT_PUSH_RADIUS
-    push_radius_sq : f32 = push_radius * push_radius
+    push_radius := f32(DUST_CONTACT_PUSH_RADIUS)
+    contact := Dust_Contact_Push{x, y, push_radius, push_radius * push_radius}
 
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
         }
-        push_dust_away_from_xy_index(ps, i, x, y, push_radius, push_radius_sq)
+        push_dust_away_from_xy_index(ps, i, contact)
     }
 }
 
@@ -255,14 +305,14 @@ push_dust_away_from_xy_large :: proc (ps: ^Particle_System, x, y: f32) {
         return
     }
 
-    push_radius : f32 = DUST_CONTACT_PUSH_RADIUS_LARGE
-    push_radius_sq : f32 = push_radius * push_radius
+    push_radius := f32(DUST_CONTACT_PUSH_RADIUS_LARGE)
+    contact := Dust_Contact_Push{x, y, push_radius, push_radius * push_radius}
 
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
         }
-        push_dust_away_from_xy_index(ps, i, x, y, push_radius, push_radius_sq)
+        push_dust_away_from_xy_index(ps, i, contact)
     }
 }
 
@@ -398,29 +448,32 @@ emit_shapes_clear_burst :: proc(
 // Returns:
 //   - none.
 update_particles :: proc(ps: ^Particle_System, dt: f32) {
-    integrate_particle_positions_soa_batch(
+    integrate_particle_positions_soa_batch({
         ps.low_particles.pos_x[:ps^.use_max_dust_particles],
         ps.low_particles.pos_y[:ps^.use_max_dust_particles],
         ps.low_particles.pos_z[:ps^.use_max_dust_particles],
         ps.low_particles.vel_x[:ps^.use_max_dust_particles],
         ps.low_particles.vel_y[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_z[:ps^.use_max_dust_particles])
+        ps.low_particles.vel_z[:ps^.use_max_dust_particles],
+    })
 
-    integrate_particle_positions_soa_batch(
+    integrate_particle_positions_soa_batch({
         ps.particles.pos_x[:],
         ps.particles.pos_y[:],
         ps.particles.pos_z[:],
         ps.particles.vel_x[:],
         ps.particles.vel_y[:],
-        ps.particles.vel_z[:])
+        ps.particles.vel_z[:],
+    })
 
-    integrate_particle_positions_soa_batch(
+    integrate_particle_positions_soa_batch({
         ps.high_particles.pos_x[:],
         ps.high_particles.pos_y[:],
         ps.high_particles.pos_z[:],
         ps.high_particles.vel_x[:],
         ps.high_particles.vel_y[:],
-        ps.high_particles.vel_z[:])
+        ps.high_particles.vel_z[:],
+    })
 
     for i in 0..<ps^.use_max_dust_particles {
         update_particle_dust_index(ps, i)
@@ -446,7 +499,7 @@ is_burst_drawable_kind :: #force_inline proc(kind: Shapes_Point_Type) -> bool {
         kind == .Point ||
         kind == .Line ||
         kind == .Circle ||
-        kind == .FilledCircle ||
+        kind == .Filled_Circle ||
         kind == .Triangle ||
         kind == .Square ||
         kind == .Pentagon
@@ -474,36 +527,35 @@ emit_circle_kind_burst :: proc(
     ps: ^Particle_System,
     ks: ^Shapes_Point_System,
     kp: ^Shapes_Point,
-    col: rl.Color,
-    sample_count: int,
-    abort_on_invalid: bool) -> bool {
+    config: Circle_Kind_Burst_Config) -> bool {
 
     center, center_ok := kp.position.?
     if !center_ok {
-        return abort_on_invalid
+        return config.abort_on_invalid
     }
 
     start_id := kp.child_point_head
     if start_id < 0 || start_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
+        return config.abort_on_invalid
     }
 
     end_id := ks.points[start_id].next_child_point
     if end_id < 0 || end_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
+        return config.abort_on_invalid
     }
 
     start, start_ok := ks.points[start_id].position.?
     finish, finish_ok := ks.points[end_id].position.?
     if !start_ok || !finish_ok {
-        return abort_on_invalid
+        return config.abort_on_invalid
     }
 
     if kp.active_child > 1 {
         start, finish = finish, start
     }
 
-    emit_circle_dust(ps, center, start, finish, kp.offset, col, sample_count)
+    emit_circle_dust(ps, {center, start, finish, kp.offset, config.color,
+        config.sample_count})
     return false
 }
 
@@ -520,7 +572,7 @@ emit_point_like_kind_burst :: #force_inline proc(
         emit_label_burst(ps, p, col)
     case .Point:
         emit_point_burst(ps, p, col)
-    case .Line, .Circle, .FilledCircle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
+    case .Line, .Circle, .Filled_Circle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
         return
     }
 }
@@ -568,7 +620,7 @@ emit_polygon_kind_burst :: #force_inline proc(
         emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
     case .Pentagon:
         emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-    case .Label, .Point, .Line, .Circle, .FilledCircle, .Pen, .Compass:
+    case .Label, .Point, .Line, .Circle, .Filled_Circle, .Pen, .Compass:
         return
     }
 }
@@ -596,20 +648,10 @@ emit_shapes_burst :: proc(
 
     case .Circle:
         return emit_circle_kind_burst(
-            ps,
-            ks,
-            kp,
-            col,
-            CLEAR_BURST_CIRCLE_SAMPLES,
-            abort_on_invalid)
-    case .FilledCircle:
+            ps, ks, kp, {col, CLEAR_BURST_CIRCLE_SAMPLES, abort_on_invalid})
+    case .Filled_Circle:
         return emit_circle_kind_burst(
-            ps,
-            ks,
-            kp,
-            col,
-            CLEAR_BURST_FILLED_CIRCLE_SAMPLES,
-            abort_on_invalid)
+            ps, ks, kp, {col, CLEAR_BURST_FILLED_CIRCLE_SAMPLES, abort_on_invalid})
     case .Pen, .Compass:
         return abort_on_invalid
     }
@@ -630,38 +672,36 @@ emit_shapes_burst :: proc(
 // Returns:
 //   - none.
 integrate_particle_positions_soa_batch :: proc(
-    pos_x, pos_y, pos_z: []f32,
-    vel_x, vel_y, vel_z: []f32) {
-    for i in 0..<len(pos_x) {
-        pos_x[i] += vel_x[i]
-        pos_y[i] += vel_y[i]
-        pos_z[i] += vel_z[i]
+    particles: Particle_Soa_Batch) {
+    for i in 0..<len(particles.pos_x) {
+        particles.pos_x[i] += particles.vel_x[i]
+        particles.pos_y[i] += particles.vel_y[i]
+        particles.pos_z[i] += particles.vel_z[i]
     }
 }
 
-//   Advance deterministic particle-system random state.
-particle_random_u32 :: proc(ps: ^Particle_System) -> u32 {
-    state := ps^.rng_state
-    if state == 0 {
-        state = 0x9e3779b97f4a7c15
+//   Return the deterministic random generator owned by one particle system.
+particle_random_generator :: proc(ps: ^Particle_System) -> rand.Generator {
+    state := &ps^.rng_state
+    if (state^.s[0] | state^.s[1] | state^.s[2] | state^.s[3]) == 0 {
+        generator := rand.xoshiro256_random_generator(state)
+        rand.reset(PARTICLE_RANDOM_SEED, generator)
+        return generator
     }
-    state = state ~ (state >> 12)
-    state = state ~ (state << 25)
-    state = state ~ (state >> 27)
-    ps^.rng_state = state
-    return u32((state * 0x2545f4914f6cdd1d) >> 32)
+    return rand.xoshiro256_random_generator(state)
 }
 
-//   Generate a deterministic float in the inclusive [min_v, max_v] range.
+//   Generate a deterministic float in the half-open [min_v, max_v) range.
 random_f32_range :: proc(ps: ^Particle_System, min_v, max_v: f32) -> f32 {
-    t := f32(particle_random_u32(ps) & 0x00ffffff) / 16777215.0
-    return math.lerp(min_v, max_v, t)
+    return rand.float32_range(min_v, max_v, particle_random_generator(ps))
 }
 
 //   Generate a deterministic integer in the inclusive [min_v, max_v] range.
 random_i32_range :: proc(ps: ^Particle_System, min_v, max_v: i32) -> i32 {
-    span := u32(max_v - min_v) + 1
-    return min_v + i32(particle_random_u32(ps) % span)
+    if min_v >= max_v {
+        return min_v
+    }
+    return rand.int32_range(min_v, max_v + 1, particle_random_generator(ps))
 }
 
 //   Reset particle-system runtime counters and mark all particle slots as dead.
@@ -854,15 +894,6 @@ spawn_burnout_ember_particle :: proc(
 
 }
 
-//   Advance spawn timer without emitting particles.
-emit_silence :: proc(ps: ^Particle_System, dt: f32) {
-    ps.spawn_timer += dt
-
-    for ps.spawn_timer >= SPAWN_INTERVAL {
-        ps.spawn_timer -= SPAWN_INTERVAL
-    }
-}
-
 //   Clamp one low-layer dust particle's x/y position to dust bounds and apply bounce damping.
 clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
     if ps.low_particles.pos_x[i] < DUST_XY_MIN {
@@ -888,6 +919,10 @@ spawn_dust_particle_index :: proc(
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
     ps.low_particles[i].life = random_f32_range(ps, DUST_LIFE_MIN, DUST_LIFE_MAX)
+    ps.low_particles[i].dust_sprite_index = u8(random_i32_range(
+        ps,
+        0,
+        core.DUST_ATLAS_VARIANT_COUNT - 1))
 
     ps.low_particles.pos_x[i] = origin.x + random_f32_range(ps, -0.0022, 0.0022)
     ps.low_particles.pos_y[i] = origin.y + random_f32_range(ps, -0.0022, 0.0022)
@@ -906,6 +941,7 @@ spawn_dust_particle_index :: proc(
     ps.low_particles[i].lit_frames = 0
 }
 
+//   Reserve one low-layer slot and initialize a randomized dust particle.
 spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color) {
     index, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
@@ -965,6 +1001,36 @@ sample_triangle_point :: proc(ps: ^Particle_System, a, b, c: Vector3) -> Vector3
 }
 
 //   Emit dust samples inside a polygon with area-scaled density.
+polygon_fill_triangles :: #force_inline proc(
+    vertices: ^[12]Vector3,
+    vertex_count: int) -> Polygon_Fill_Triangles {
+
+    result := Polygon_Fill_Triangles{count = vertex_count - 2}
+    for i in 0..<result.count {
+        area := triangle_area_3d(vertices[0], vertices[i + 1], vertices[i + 2])
+        result.areas[i] = area
+        result.total_area += area
+    }
+    return result
+}
+
+//   Select one triangle index using its area as the sampling weight.
+polygon_fill_triangle_index :: #force_inline proc(
+    ps: ^Particle_System,
+    triangles: Polygon_Fill_Triangles) -> int {
+
+    pick := random_f32_range(ps, 0.0, triangles.total_area)
+    accumulated: f32
+    for i in 0..<triangles.count {
+        accumulated += triangles.areas[i]
+        if pick <= accumulated {
+            return i
+        }
+    }
+    return triangles.count - 1
+}
+
+//   Emit dust samples inside a polygon with area-scaled density.
 emit_polygon_fill_dust :: proc(
     ps: ^Particle_System,
     vertices: ^[12]Vector3,
@@ -974,39 +1040,21 @@ emit_polygon_fill_dust :: proc(
         return
     }
 
-    tri_count := vertex_count - 2
-    tri_areas: [10]f32
-    total_area: f32
+    triangles := polygon_fill_triangles(vertices, vertex_count)
 
-    for i in 0..<tri_count {
-        tri_area := triangle_area_3d(vertices[0], vertices[i + 1], vertices[i + 2])
-        tri_areas[i] = tri_area
-        total_area += tri_area
-    }
-
-    if total_area <= 0 {
+    if triangles.total_area <= 0 {
         return
     }
 
-    fill_count := int(math.round(f64(total_area * CLEAR_BURST_POLYGON_FILL_DENSITY)))
+    fill_count := int(math.round(
+        f64(triangles.total_area * CLEAR_BURST_POLYGON_FILL_DENSITY)))
     fill_count = clamp(
         fill_count,
         CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES,
         CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES)
 
     for _ in 0..<fill_count {
-        pick := random_f32_range(ps, 0.0, total_area)
-        accum: f32
-        tri_index := tri_count - 1
-
-        for i in 0..<tri_count {
-            accum += tri_areas[i]
-            if pick <= accum {
-                tri_index = i
-                break
-            }
-        }
-
+        tri_index := polygon_fill_triangle_index(ps, triangles)
         sample := sample_triangle_point(
             ps, vertices[0],
             vertices[tri_index + 1],
@@ -1075,14 +1123,9 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
 }
 
 //   Emit dust samples along a circular/arc sweep between start and finish points.
-emit_circle_dust :: proc(
-    ps: ^Particle_System,
-    center, start, finish: Vector3,
-    offset: f32,
-    col: rl.Color,
-    sample_count: int) {
-    start_vec := start - center
-    end_vec := finish - center
+emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
+    start_vec := emission.start - emission.center
+    end_vec := emission.finish - emission.center
 
     start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
     end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
@@ -1092,21 +1135,21 @@ emit_circle_dust :: proc(
 
     start_theta := f32(math.atan2(start_vec.y, start_vec.x))
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + offset
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
 
-    clamped_sample_count := max(sample_count, 2)
+    clamped_sample_count := max(emission.sample_count, 2)
     denom := f32(clamped_sample_count - 1)
     for s in 0..<clamped_sample_count {
         t := f32(s) / denom
         theta := start_theta + sweep_delta * t
         radius := math.lerp(start_radius, end_radius, t)
 
-        sample := center
+        sample := emission.center
         sample.x += f32(math.cos(theta)) * radius
         sample.y += f32(math.sin(theta)) * radius
 
         for _ in 0..<2 {
-            spawn_dust_particle(ps, sample, col)
+            spawn_dust_particle(ps, sample, emission.color)
         }
     }
 }
@@ -1118,6 +1161,57 @@ dust_grid_cell_index :: proc(x, y: f32) -> int {
     return cy * DUST_GRID_DIM + cx
 }
 
+//   Return a deterministic frame-varying hash for dense collision sampling.
+dust_collision_hash :: #force_inline proc(seed: u64) -> u64 {
+    hash := seed
+    hash = (hash ~ (hash >> 30)) * 0xbf58476d1ce4e5b9
+    hash = (hash ~ (hash >> 27)) * 0x94d049bb133111eb
+    return hash ~ (hash >> 31)
+}
+
+//   Return a bounded angular perturbation that changes each collision frame.
+dust_pair_jitter_angle :: #force_inline proc(ia, ib: int, frame: u64) -> f32 {
+    seed := u64(u32(ia)) * 0x9e3779b185ebca87 ~
+        u64(u32(ib)) * 0xc2b2ae3d27d4eb4f ~ frame * 0x94d049bb133111eb
+    unit := f32(u32(dust_collision_hash(seed) >> 32) & 0x00ffffff) / 16777215.0
+    return (unit - 0.5) * DUST_COLLISION_NORMAL_JITTER_RADIANS
+}
+
+//   Apply the collision impulse when two separated particles are approaching.
+apply_dust_pair_impulse :: #force_inline proc(
+    ps: ^Particle_System,
+    ia, ib: int,
+    nx, ny: f32) {
+
+    vn := (ps.low_particles.vel_x[ib] - ps.low_particles.vel_x[ia]) * nx +
+        (ps.low_particles.vel_y[ib] - ps.low_particles.vel_y[ia]) * ny
+    if vn >= 0 {
+        return
+    }
+    impulse := -(1.0 + DUST_COLLISION_RESTITUTION) * vn * 0.5
+    ps.low_particles.vel_x[ia] -= impulse * nx
+    ps.low_particles.vel_y[ia] -= impulse * ny
+    ps.low_particles.vel_x[ib] += impulse * nx
+    ps.low_particles.vel_y[ib] += impulse * ny
+}
+
+//   Resolve one dust-particle pair collision with positional and velocity response.
+separate_dust_pair :: #force_inline proc(
+    ps: ^Particle_System,
+    response: Dust_Pair_Response) {
+
+    if response.penetration <= DUST_COLLISION_POSITION_SLOP {
+        return
+    }
+    correction := (response.penetration - DUST_COLLISION_POSITION_SLOP) * 0.5
+    ps.low_particles.pos_x[response.ia] -= response.nx * correction
+    ps.low_particles.pos_y[response.ia] -= response.ny * correction
+    ps.low_particles.pos_x[response.ib] += response.nx * correction
+    ps.low_particles.pos_y[response.ib] += response.ny * correction
+    clamp_xy_bounds_index(ps, response.ia)
+    clamp_xy_bounds_index(ps, response.ib)
+}
+
 //   Resolve one dust-particle pair collision with positional and velocity response.
 resolve_dust_pair :: proc(
     ps: ^Particle_System,
@@ -1126,35 +1220,33 @@ resolve_dust_pair :: proc(
     dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
     dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
     dist_sq := dx * dx + dy * dy
-    if dist_sq >= radius_sq || dist_sq < 1e-12 {
+    if dist_sq >= radius_sq {
         return
     }
 
-    dist   := math.sqrt(dist_sq)
-    nx, ny := dx / dist, dy / dist
+    dist := math.sqrt(dist_sq)
+    nx, ny: f32
+    if dist_sq < DUST_COLLISION_ZERO_DISTANCE_SQ {
+        angle := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame)
+        nx = f32(math.cos(angle))
+        ny = f32(math.sin(angle))
+    } else {
+        nx = dx / dist
+        ny = dy / dist
 
-    pen := min_sep - dist
-    if pen > DUST_COLLISION_POSITION_SLOP {
-        corr := (pen - DUST_COLLISION_POSITION_SLOP) * 0.5
-        ps.low_particles.pos_x[ia] -= nx * corr
-        ps.low_particles.pos_y[ia] -= ny * corr
-        ps.low_particles.pos_x[ib] += nx * corr
-        ps.low_particles.pos_y[ib] += ny * corr
-        clamp_xy_bounds_index(ps, ia)
-        clamp_xy_bounds_index(ps, ib)
+        jitter := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame) *
+            math.clamp(1.0 - dist_sq / radius_sq, 0.0, 1.0)
+        if jitter != 0 {
+            cos_jitter := f32(math.cos(jitter))
+            sin_jitter := f32(math.sin(jitter))
+            nx, ny = nx * cos_jitter - ny * sin_jitter,
+                nx * sin_jitter + ny * cos_jitter
+        }
     }
 
-    vn := (ps.low_particles.vel_x[ib] - ps.low_particles.vel_x[ia]) * nx +
-          (ps.low_particles.vel_y[ib] - ps.low_particles.vel_y[ia]) * ny
-    if vn >= 0 {
-        return
-    }
+    separate_dust_pair(ps, {ia, ib, nx, ny, min_sep - dist})
 
-    imp := -(1.0 + DUST_COLLISION_RESTITUTION) * vn * 0.5
-    ps.low_particles.vel_x[ia] -= imp * nx
-    ps.low_particles.vel_y[ia] -= imp * ny
-    ps.low_particles.vel_x[ib] += imp * nx
-    ps.low_particles.vel_y[ib] += imp * ny
+    apply_dust_pair_impulse(ps, ia, ib, nx, ny)
 }
 
 //   Cache one detected dust collision pair in the static per-frame pair list.
@@ -1172,36 +1264,65 @@ cache_dust_collision_pair :: #force_inline proc(ps: ^Particle_System, ia, ib: in
 //   Resolve dust collisions for one cell against configured neighbor cells.
 resolve_dust_collisions_on_grid :: proc(
     ps: ^Particle_System,
-    cy, cx, ca, na: int, radius_sq, min_sep: f32) {
+    grid: Dust_Collision_Grid) {
 
-    // #vet forgives(cyclomatic_complexity) — spatial-grid collision kernel.
-    // The nested neighbor/bucket loops and distance guards are the algorithm itself;
-    // this is a hot per-frame hot path where the structure mirrors the grid math.
-    if na == 0 {
+    if grid.cell_count == 0 {
         return
     }
 
     for off in DUST_GRID_NEIGHBORS {
-        ncx, ncy := cx + off[0], cy + off[1]
+        ncx, ncy := grid.cell_x + off[0], grid.cell_y + off[1]
         if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
             continue
         }
         cb := ncy * DUST_GRID_DIM + ncx
         nb := int(ps^.dust_counts[cb])
-        same_cell := ca == cb
+        same_cell := grid.cell_index == cb
 
-        for li in 0..<na {
-            ia := int(ps^.dust_buckets[ca * DUST_GRID_BUCKET_CAP + li])
+        for li in 0..<grid.cell_count {
+            ia := int(ps^.dust_buckets[grid.cell_index * DUST_GRID_BUCKET_CAP + li])
             lj_start := li + 1 if same_cell else 0
             for lj in lj_start..<nb {
                 ib := int(ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj])
                 dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
                 dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
                 dist_sq := dx * dx + dy * dy
-                if dist_sq < radius_sq && dist_sq >= 1e-12 {
+                if dist_sq < grid.radius_sq {
                     cache_dust_collision_pair(ps, ia, ib)
                 }
             }
+        }
+    }
+}
+
+//   Reset collision scratch storage and retain a fair bounded sample per active cell.
+populate_dust_collision_grid :: proc(
+    ps: ^Particle_System,
+    active_cells: ^[DUST_GRID_DIM_SQUARED]int,
+    active_cell_count: ^int) {
+
+    for i in 0..<ps^.use_max_dust_particles {
+        if !ps.low_particles[i].alive {
+            continue
+        }
+        cell := dust_grid_cell_index(ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
+        ps^.dust_seen_counts[cell] += 1
+        if ps^.dust_counts[cell] < i32(DUST_GRID_BUCKET_CAP) {
+            if ps^.dust_counts[cell] == 0 {
+                active_cells^[active_cell_count^] = cell
+                active_cell_count^ += 1
+            }
+            slot := cell * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[cell])
+            ps^.dust_buckets[slot] = i32(i)
+            ps^.dust_counts[cell] += 1
+            continue
+        }
+        sample := u64(ps^.dust_seen_counts[cell])
+        seed := u64(u32(cell)) * 0x9e3779b185ebca87 ~
+            u64(u32(i)) * 0xc2b2ae3d27d4eb4f ~ ps^.dust_collision_frame
+        replacement := int(dust_collision_hash(seed) % sample)
+        if replacement < DUST_GRID_BUCKET_CAP {
+            ps^.dust_buckets[cell * DUST_GRID_BUCKET_CAP + replacement] = i32(i)
         }
     }
 }
@@ -1214,26 +1335,15 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
 
     mem.set(&ps^.dust_buckets[0], 0, size_of(ps^.dust_buckets))
     mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
+    mem.set(&ps^.dust_seen_counts[0], 0, size_of(ps^.dust_seen_counts))
     ps^.dust_pair_count = 0
     ps^.dust_pair_dropped_count = 0
+    ps^.dust_collision_frame += 1
 
     active_cells: [DUST_GRID_DIM_SQUARED]int
     active_cell_count := 0
 
-    for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive {
-            continue
-        }
-        c := dust_grid_cell_index(ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
-        if ps^.dust_counts[c] < i32(DUST_GRID_BUCKET_CAP) {
-            if ps^.dust_counts[c] == 0 {
-                active_cells[active_cell_count] = c
-                active_cell_count += 1
-            }
-            ps^.dust_buckets[c * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[c])] = i32(i)
-            ps^.dust_counts[c] += 1
-        }
-    }
+    populate_dust_collision_grid(ps, &active_cells, &active_cell_count)
 
     radius_sq : f32 = DUST_COLLISION_RADIUS * DUST_COLLISION_RADIUS
     min_sep : f32 = DUST_COLLISION_RADIUS * 2.0
@@ -1243,7 +1353,7 @@ resolve_dust_collisions :: proc(ps: ^Particle_System) {
         na := int(ps^.dust_counts[ca])
         cy := ca / DUST_GRID_DIM
         cx := ca % DUST_GRID_DIM
-        resolve_dust_collisions_on_grid(ps, cy, cx, ca, na, radius_sq, min_sep)
+        resolve_dust_collisions_on_grid(ps, {cy, cx, ca, na, radius_sq, min_sep})
     }
 
     for i in 0..<ps^.dust_pair_count {

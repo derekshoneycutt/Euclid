@@ -2,6 +2,7 @@
 include("./1.fivegroupsaxioms/fivegroupsaxioms.jl")
 
 
+"""Emit the Hilbert Foundations of Geometry root view text."""
 function get_view_text_root_hilbert(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry ; Translated by E. J. Townsend
     
@@ -21,6 +22,7 @@ The following investigation is a new attempt to choose for geometry a simple and
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Register the Hilbert Foundations root animation interface and chapter content."""
 function init_euclid_scripts_hilbert(state_ptr::Ptr{Cvoid})
     root_stable_id = OdinJuliaBridge.animation_stable_id_from_key(
         "root:Hilbert's Foundations of Geometry")

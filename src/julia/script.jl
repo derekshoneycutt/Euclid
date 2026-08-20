@@ -21,6 +21,7 @@ include("./hilbert/hilbert.jl")
 include("./algebra/algebra.jl")
 
 
+"""Register all Euclid content animations and prime LaTeX and scratchpad."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     registration_started = time_ns()
     OdinJuliaBridge.set_null_animations(
@@ -48,15 +49,18 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid})
 
 end
 
+"""Classify one scratchpad input's parse state for the host."""
 function scratchpad_classify_input(
     state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
     Scratchpad.classify_input(state_ptr, String(text), Int32(input_mode))
 end
 
+"""Complete a LaTeX-style backslash token to its Unicode symbol."""
 function scratchpad_complete_backslash(state_ptr::Ptr{Cvoid}, token::AbstractString)
     Scratchpad.complete_backslash(state_ptr, String(token))
 end
 
+"""Compute completion candidates for the current scratchpad input."""
 function scratchpad_complete_input(
     state_ptr::Ptr{Cvoid}, text::AbstractString, caret_byte, input_mode)
 
@@ -64,26 +68,32 @@ function scratchpad_complete_input(
         state_ptr, String(text), Int(caret_byte), Int32(input_mode))
 end
 
+"""Queue one scratchpad input entry for execution."""
 function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
     Scratchpad.queue_input(state_ptr, String(text), Int32(input_mode))
 end
 
+"""Save the scratchpad input history to a file."""
 function scratchpad_save_history_to_file(state_ptr::Ptr{Cvoid}, path::AbstractString)
     Scratchpad.save_history_to_file(state_ptr, String(path))
 end
 
+"""Move the scratchpad history cursor to the previous entry."""
 function scratchpad_history_previous(state_ptr::Ptr{Cvoid}, input_mode)
     Scratchpad.history_previous(state_ptr, Int32(input_mode))
 end
 
+"""Move the scratchpad history cursor to the next entry."""
 function scratchpad_history_next(state_ptr::Ptr{Cvoid})
     Scratchpad.history_next(state_ptr)
 end
 
+"""Reset the scratchpad history cursor to the latest entry."""
 function scratchpad_history_reset_cursor(state_ptr::Ptr{Cvoid})
     Scratchpad.history_reset_cursor(state_ptr)
 end
 
+"""Run the global per-frame Euclid loop (no-op hook required by the host)."""
 function global_euclid_loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     # Nothing to do here, but is required
 end

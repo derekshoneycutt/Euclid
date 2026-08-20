@@ -472,9 +472,9 @@ function replace_wiki_artifact(
         ispath(output_root) && rm(output_root; recursive=true, force=true)
         mv(staging_root, output_root)
         return expected_paths
-    catch
+    catch e
         ispath(staging_root) && rm(staging_root; recursive=true, force=true)
-        rethrow()
+        rethrow(e)
     end
 end
 

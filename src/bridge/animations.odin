@@ -25,6 +25,13 @@ Harness_Scenario_Task_Data :: struct {
     step_count: int,
 }
 
+Animation_Callbacks :: struct {
+    get_view_text: ^julialib.jl_value_t,
+    initiate:      ^julialib.jl_value_t,
+    loop:          ^julialib.jl_value_t,
+    clean:         ^julialib.jl_value_t,
+}
+
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
 // Parameters:
@@ -236,7 +243,7 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
     }
 
     _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_requested", current_animation_generation(state), 0, "", "")
+        "animation.reset_requested", {current_animation_generation(state), 0, "", ""})
     if !reset_current_animation_loop(state) {
         return false
     }
@@ -245,7 +252,7 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
         ANIMATION_RESET_MIN_INTERVAL
     state^.julia_interface^.pending_animation_reset = false
     _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_committed", current_animation_generation(state), 0, "", "")
+        "animation.reset_committed", {current_animation_generation(state), 0, "", ""})
     return true
 }
 
@@ -312,27 +319,13 @@ change_current_animation_loop :: proc(
         animation = &state^.julia_interface^.null_animation
     }
 
+    if !clean_current_animation(state) {
+        return false
+    }
+
+    reset_animation_switch_state(state)
+
     state_value := julialib.jl_box_voidpointer(state)
-
-    if state^.julia_interface^.current_animation != nil &&
-        state^.julia_interface^.current_animation^.loop != nil {
-        julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
-
-        if julialib.jl_exception_occurred() != nil {
-            print_julia_exception("Cleaning previous animation loop")
-            return false
-        }
-    }
-
-    shapes.clear_animation_data(
-        state^.point_system, state^.particle_system, state^.iso_scale)
-    hide_pen(state)
-    hide_compass(state)
-    for i in 0..<len(state^.anim_metadata) {
-        state^.anim_metadata[i] = 0.0
-    }
-    state^.animation_drawing_sound_enabled = true
-
     if animation^.initiate != nil {
         julialib.jl_call1(animation^.initiate, state_value)
         if julialib.jl_exception_occurred() != nil {
@@ -347,8 +340,35 @@ change_current_animation_loop :: proc(
         animation_generation = state^.julia_runtime_service^.animation_generation
     }
     _ = trace.record_animation_event_ex(&state^.trace_state, "animation.selected",
-        animation_generation, 0, animation^.name, "")
+        {animation_generation, 0, animation^.name, ""})
     return true
+}
+
+//   Run the clean callback on the current animation, reporting any Julia exception.
+clean_current_animation :: proc(state: ^core.Euclid_General_State) -> bool {
+    current := state^.julia_interface^.current_animation
+    if current == nil || current^.loop == nil {
+        return true
+    }
+
+    julialib.jl_call1(current^.clean, julialib.jl_box_voidpointer(state))
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception("Cleaning previous animation loop")
+        return false
+    }
+    return true
+}
+
+//   Clear animation-owned shapes, tools, and metadata ahead of an animation switch.
+reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) {
+    shapes.clear_animation_data(
+        state^.point_system, state^.particle_system, state^.iso_scale)
+    hide_pen(state)
+    hide_compass(state)
+    for i in 0..<len(state^.anim_metadata) {
+        state^.anim_metadata[i] = 0.0
+    }
+    state^.animation_drawing_sound_enabled = true
 }
 
 //   Restart the currently selected animation by running clean then initiate callbacks.
@@ -512,6 +532,7 @@ run_harness_scenario_task :: proc(data: rawptr) -> bool {
     return julialib.jl_unbox_bool(result) != 0
 }
 
+/* TODO: Can we kill this?
 //   Clear animation registry state and reset interface selection fields to defaults.
 reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     clean_julia_interfaces(state)
@@ -521,7 +542,7 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
     state^.julia_interface^.selected_animation = nil
     state^.julia_interface^.pending_animation_reset = false
     state^.julia_interface^.animation_reset_cooldown_remaining = 0
-}
+}*/
 
 //   Find an animation pointer by its registered stable UUID identity.
 find_animation_by_stable_id :: proc(
@@ -580,11 +601,7 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
         return true
     }
 
-    if state^.julia_interface^.asset_archive_mod_time_unix_nano == 0 {
-        state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
-        return true
-    }
-    if archive_mtime == state^.julia_interface^.asset_archive_mod_time_unix_nano {
+    if asset_archive_mtime_current(state, archive_mtime) {
         return true
     }
 
@@ -596,6 +613,44 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
         service^.reload_state = .Including
     }
     record_runtime_reload_event(state, "runtime.reload_started")
+
+    if !refresh_packaged_assets(state, service, archive_mtime) {
+        return false
+    }
+
+    stable_id, has_stable_id := active_animation_stable_id(state)
+    reloaded := stage_julia_interface_reload(
+        state, archive_mtime, stable_id, has_stable_id)
+    if !reloaded {
+        record_runtime_reload_event(state, "runtime.reload_rolled_back")
+        return false
+    }
+
+    record_runtime_reload_event(state, "runtime.reload_committed")
+    return true
+}
+
+//   Track the archive mtime and report whether it already matches the active state.
+//
+// Returns:
+//   - true when the archive mtime is unchanged (or just seeded), so no reload is needed.
+asset_archive_mtime_current :: proc(
+    state: ^core.Euclid_General_State, archive_mtime: i64) -> bool {
+
+    if state^.julia_interface^.asset_archive_mod_time_unix_nano == 0 {
+        state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
+        return true
+    }
+    return archive_mtime == state^.julia_interface^.asset_archive_mod_time_unix_nano
+}
+
+//   Re-extract and re-include packaged assets, rolling back and reporting on failure.
+//
+// Returns:
+//   - true when both the re-extract and the script re-include succeed.
+refresh_packaged_assets :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service, archive_mtime: i64) -> bool {
 
     if !files.reload_packaged_assets_root() {
         fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
@@ -609,16 +664,6 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
     }
-
-    stable_id, has_stable_id := active_animation_stable_id(state)
-    reloaded := stage_julia_interface_reload(
-        state, archive_mtime, stable_id, has_stable_id)
-    if !reloaded {
-        record_runtime_reload_event(state, "runtime.reload_rolled_back")
-        return false
-    }
-
-    record_runtime_reload_event(state, "runtime.reload_committed")
     return true
 }
 
@@ -729,9 +774,10 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
         animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
     }
     _ = trace.record_animation_event_ex(&state^.trace_state, "animation.cycle_boundary",
-        animation_generation, animation_tick_sequence, "", "")
+        {animation_generation, animation_tick_sequence, "", ""})
 }
 
+/* TODO : Can we kill this?
 //   Consume a pending cycle-boundary notification exactly once.
 consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil {
@@ -744,7 +790,7 @@ consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> b
 
     state^.consumed_cycle_boundary_generation = state^.cycle_boundary_generation
     return true
-}
+}*/
 
 //   Parse a bridge-provided animation stable UUID string into typed identity.
 parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier, bool) {
@@ -955,6 +1001,18 @@ animation_lookup_grow :: proc(
         return true
     }
 
+    return rehash_animation_lookup(ji, old_entries, old_capacity)
+}
+
+//   Reinsert every occupied entry from the old lookup table into the grown one.
+//
+// Returns:
+//   - true when all occupied entries rehash without collision or overflow.
+rehash_animation_lookup :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    old_entries: []core.Euclid_Julia_Animation_Lookup_Entry,
+    old_capacity: int) -> bool {
+
     for i in 0..<old_capacity {
         entry := old_entries[i]
         if !entry.is_occupied || entry.animation == nil {
@@ -1057,7 +1115,7 @@ animation_lookup_find :: proc(
 //   Construct and register one animation node using arena storage and UUID lookup.
 add_animation_to_registry :: proc(
     state: ^core.Euclid_General_State,
-    get_view_text, initiate, loop, clean: ^julialib.jl_value_t,
+    callbacks: Animation_Callbacks,
     name: cstring,
     stable_id: uuid.Identifier,
     parent: ^core.Euclid_Julia_Animation_Interface) -> (
@@ -1077,10 +1135,10 @@ add_animation_to_registry :: proc(
         return nil, false
     }
 
-    node^.get_view_text = get_view_text
-    node^.initiate = initiate
-    node^.loop = loop
-    node^.clean = clean
+    node^.get_view_text = callbacks.get_view_text
+    node^.initiate = callbacks.initiate
+    node^.loop = callbacks.loop
+    node^.clean = callbacks.clean
     node^.name = strings.clone(string(name), ji^.animation_registry_allocator)
     node^.stable_id = stable_id
 

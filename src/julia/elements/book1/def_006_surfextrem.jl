@@ -51,6 +51,7 @@ const PhaseDrawLine4 = 4f0
 const PhaseEndLift = 13f0
 const PhaseHideLines = 14f0
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Definition: Surface Extremities
 
@@ -61,36 +62,56 @@ The extremities of a surface are lines \euclidline[color=steelblue,length=3,thic
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Hide a line's edge and collapse it onto a corner point."""
 function hide_edge_and_collapse(
-    state_ptr::Ptr{Cvoid}, hostId::Integer, joint1Id::Integer, joint2Id::Integer,
+    state_ptr::Ptr{Cvoid}, host_id::Integer, joint1_id::Integer, joint2_id::Integer,
     corner::Vector{Float32})
 
-    OdinJuliaBridge.hide_point(state_ptr, hostId)
-    OdinJuliaBridge.set_point_position(state_ptr, joint1Id, corner[1], corner[2], corner[3])
-    OdinJuliaBridge.set_point_position(state_ptr, joint2Id, corner[1], corner[2], corner[3])
+    OdinJuliaBridge.hide_point(state_ptr, host_id)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, joint1_id, corner[1], corner[2], corner[3])
+    OdinJuliaBridge.set_point_position(
+        state_ptr, joint2_id, corner[1], corner[2], corner[3])
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    edge1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
-    edge1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
-    edge1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
+    edge1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1HostId))
+    edge1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1Joint1Id))
+    edge1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1Joint2Id))
 
-    edge2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
-    edge2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
-    edge2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
+    edge2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2HostId))
+    edge2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2Joint1Id))
+    edge2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2Joint2Id))
 
-    edge3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
-    edge3Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
-    edge3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
+    edge3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3HostId))
+    edge3_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3Joint1Id))
+    edge3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3Joint2Id))
 
-    edge4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
-    edge4Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
-    edge4Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
+    edge4_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4HostId))
+    edge4_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4Joint1Id))
+    edge4_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4Joint2Id))
 
-    hide_edge_and_collapse(state_ptr, edge1HostId, edge1Joint1Id, edge1Joint2Id, Corner1)
-    hide_edge_and_collapse(state_ptr, edge2HostId, edge2Joint1Id, edge2Joint2Id, Corner2)
-    hide_edge_and_collapse(state_ptr, edge3HostId, edge3Joint1Id, edge3Joint2Id, Corner3)
-    hide_edge_and_collapse(state_ptr, edge4HostId, edge4Joint1Id, edge4Joint2Id, Corner4)
+    hide_edge_and_collapse(
+        state_ptr, edge1_host_id, edge1_joint1_id, edge1_joint2_id, Corner1)
+    hide_edge_and_collapse(
+        state_ptr, edge2_host_id, edge2_joint1_id, edge2_joint2_id, Corner2)
+    hide_edge_and_collapse(
+        state_ptr, edge3_host_id, edge3_joint1_id, edge3_joint2_id, Corner3)
+    hide_edge_and_collapse(
+        state_ptr, edge4_host_id, edge4_joint1_id, edge4_joint2_id, Corner4)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -101,68 +122,75 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     edge1 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner1[1], Corner1[2], Corner1[3],
-        Corner1[1], Corner1[2], Corner1[3],
+        state_ptr, Corner1, Corner1,
         LineColor1, 0f0)
     edge2 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner2[1], Corner2[2], Corner2[3],
-        Corner2[1], Corner2[2], Corner2[3],
+        state_ptr, Corner2, Corner2,
         LineColor2, 0f0)
     edge3 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner3[1], Corner3[2], Corner3[3],
-        Corner3[1], Corner3[2], Corner3[3],
+        state_ptr, Corner3, Corner3,
         LineColor3, 0f0)
     edge4 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner4[1], Corner4[2], Corner4[3],
-        Corner4[1], Corner4[2], Corner4[3],
+        state_ptr, Corner4, Corner4,
         LineColor4, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1HostId, Float32(edge1.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint1Id, Float32(edge1.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint2Id, Float32(edge1.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1HostId, edge1.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint1Id, edge1.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1Joint2Id, edge1.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2HostId, Float32(edge2.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint1Id, Float32(edge2.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint2Id, Float32(edge2.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2HostId, edge2.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint1Id, edge2.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge2Joint2Id, edge2.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3HostId, Float32(edge3.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint1Id, Float32(edge3.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint2Id, Float32(edge3.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3HostId, edge3.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint1Id, edge3.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge3Joint2Id, edge3.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4HostId, Float32(edge4.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint1Id, Float32(edge4.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint2Id, Float32(edge4.joint2Id))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4HostId, edge4.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint1Id, edge4.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge4Joint2Id, edge4.joint2_id)
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    edge1HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1HostId))
-    edge1Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint1Id))
-    edge1Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge1Joint2Id))
+    edge1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1HostId))
+    edge1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1Joint1Id))
+    edge1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge1Joint2Id))
 
-    edge2HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2HostId))
-    edge2Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint1Id))
-    edge2Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge2Joint2Id))
+    edge2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2HostId))
+    edge2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2Joint1Id))
+    edge2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge2Joint2Id))
 
-    edge3HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3HostId))
-    edge3Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint1Id))
-    edge3Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge3Joint2Id))
+    edge3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3HostId))
+    edge3_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3Joint1Id))
+    edge3_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge3Joint2Id))
 
-    edge4HostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4HostId))
-    edge4Joint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint1Id))
-    edge4Joint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaEdge4Joint2Id))
+    edge4_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4HostId))
+    edge4_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4Joint1Id))
+    edge4_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaEdge4Joint2Id))
 
-    if edge1HostId < 0
+    if edge1_host_id < 0
         return
     end
 
@@ -179,9 +207,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner1, Corner2,
-            LineBrush, LineColor1, edge1HostId, edge1Joint1Id, edge1Joint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner1, Corner2;
+            penbrush=LineBrush,
+            pencolor=LineColor1,
+            line_host_id=edge1_host_id,
+            line_joint1_id=edge1_joint1_id,
+            line_joint2_id=edge1_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -189,9 +222,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner2, Corner3,
-            LineBrush, LineColor2, edge2HostId, edge2Joint1Id, edge2Joint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner2, Corner3;
+            penbrush=LineBrush,
+            pencolor=LineColor2,
+            line_host_id=edge2_host_id,
+            line_joint1_id=edge2_joint1_id,
+            line_joint2_id=edge2_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -199,9 +237,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner3, Corner4,
-            LineBrush, LineColor3, edge3HostId, edge3Joint1Id, edge3Joint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner3, Corner4;
+            penbrush=LineBrush,
+            pencolor=LineColor3,
+            line_host_id=edge3_host_id,
+            line_joint1_id=edge3_joint1_id,
+            line_joint2_id=edge3_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -209,9 +252,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine4
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner4, Corner1,
-            LineBrush, LineColor4, edge4HostId, edge4Joint1Id, edge4Joint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner4, Corner1;
+            penbrush=LineBrush,
+            pencolor=LineColor4,
+            line_host_id=edge4_host_id,
+            line_joint1_id=edge4_joint1_id,
+            line_joint2_id=edge4_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -229,10 +277,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseHideLines
-        hide_edge_and_collapse(state_ptr, edge1HostId, edge1Joint1Id, edge1Joint2Id, Corner1)
-        hide_edge_and_collapse(state_ptr, edge2HostId, edge2Joint1Id, edge2Joint2Id, Corner2)
-        hide_edge_and_collapse(state_ptr, edge3HostId, edge3Joint1Id, edge3Joint2Id, Corner3)
-        hide_edge_and_collapse(state_ptr, edge4HostId, edge4Joint1Id, edge4Joint2Id, Corner4)
+        hide_edge_and_collapse(
+            state_ptr, edge1_host_id, edge1_joint1_id, edge1_joint2_id, Corner1)
+        hide_edge_and_collapse(
+            state_ptr, edge2_host_id, edge2_joint1_id, edge2_joint2_id, Corner2)
+        hide_edge_and_collapse(
+            state_ptr, edge3_host_id, edge3_joint1_id, edge3_joint2_id, Corner3)
+        hide_edge_and_collapse(
+            state_ptr, edge4_host_id, edge4_joint1_id, edge4_joint2_id, Corner4)
 
         timer += dt
         if timer >= HidePauseDuration

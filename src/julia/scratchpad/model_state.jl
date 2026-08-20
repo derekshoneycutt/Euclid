@@ -105,11 +105,11 @@ const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
 
-const session_ref = Ref{Union{Nothing, ScratchpadSession}}(nothing)
-const next_session_id_ref = Ref(1)
-const initialize_count_ref = Ref(0)
-const clean_count_ref = Ref(0)
-const reset_count_ref = Ref(0)
+const SessionRef = Ref{Union{Nothing, ScratchpadSession}}(nothing)
+const NextSessionIdRef = Ref(1)
+const InitializeCountRef = Ref(0)
+const CleanCountRef = Ref(0)
+const ResetCountRef = Ref(0)
 
 const HELPER_DOC_ALIASES = Dict(
     "register_frame_hook" => (:Scratchpad, :register_frame_hook,
@@ -155,8 +155,7 @@ const HELPER_DOC_ALIASES = Dict(
     "reflect2d_points_diag_pos!" => (:EuclidRepl, Symbol("reflect2d_points_diag_pos!"),
         "reflect2d_points_diag_pos!(point_ids, start_positions; duration=2.5f0)"),
     "reflect2d_points_diag_neg!" => (:EuclidRepl, Symbol("reflect2d_points_diag_neg!"),
-        "reflect2d_points_diag_neg!(point_ids, start_positions; duration=2.5f0)"),
-)
+        "reflect2d_points_diag_neg!(point_ids, start_positions; duration=2.5f0)"))
 
 # REPL-callable API is centered around: classify_input, queue_input,
 # register_frame_hook/remove_frame_hook/clear_frame_hooks/list_frame_hooks,
@@ -165,7 +164,7 @@ const HELPER_DOC_ALIASES = Dict(
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-    state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
+        state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
     OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 
@@ -174,6 +173,13 @@ function create_runtime_module(session_id::Int)
     mod_name = Symbol("EuclidScratchpadSession_", session_id)
     runtime = Module(mod_name)
 
+    import_scratchpad_modules!(runtime)
+    install_session_helpers!(runtime)
+    return runtime
+end
+
+"""Wire the shared Euclid modules and plotting libs into a scratchpad runtime module."""
+function import_scratchpad_modules!(runtime::Module)
     if !isdefined(Main, :LaTeXStrings)
         Core.eval(Main, :(using LaTeXStrings))
     end
@@ -191,53 +197,90 @@ function create_runtime_module(session_id::Int)
     Core.eval(runtime, :(const Latexify = Main.Latexify))
     Core.eval(runtime, :(using Main.LaTeXStrings))
     Core.eval(runtime, :(using Main.Latexify))
+end
 
+"""Install the session-scope hook and draw helper wrappers into a runtime module."""
+function install_session_helpers!(runtime::Module)
+    install_hook_helpers!(runtime)
+    install_draw_helpers!(runtime)
+end
+
+"""Install the session-scope hook, history, and basic draw helpers into a runtime module."""
+function install_hook_helpers!(runtime::Module)
     # Expose helpers directly in session scope so users can register/remove hooks from input.
     Core.eval(runtime, quote
+        """Register a per-frame scratchpad hook with an optional label."""
         register_frame_hook(fn; label="") =
             Scratchpad.register_frame_hook(state_ptr, fn; label=label)
+        """Remove a previously registered per-frame scratchpad hook."""
         remove_frame_hook(hook_id) = Scratchpad.remove_frame_hook(state_ptr, hook_id)
+        """Remove all registered per-frame scratchpad hooks."""
         clear_frame_hooks() = Scratchpad.clear_frame_hooks(state_ptr)
+        """List the registered per-frame scratchpad hooks."""
         list_frame_hooks() = Scratchpad.list_frame_hooks(state_ptr)
+        """Save the scratchpad input history to a file."""
         save_history(path) = Scratchpad.save_history_to_file(state_ptr, path)
 
-        # Convenience wrappers for common EuclidRepl draw APIs.
+        """Hide a REPL-managed geometry target."""
         hide!(args...; kwargs...) = EuclidRepl.hide!(state_ptr, args...; kwargs...)
+        """List the named Euclid colors available for drawing."""
         euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
+        """Draw a point through the EuclidRepl API."""
         point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
+        """Draw a line through the EuclidRepl API."""
         line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
+        """Draw a circle through the EuclidRepl API."""
         circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
+        """Highlight a pen stroke through the EuclidRepl API."""
         highlight_pen!(args...; kwargs...) =
             EuclidRepl.highlight_pen!(state_ptr, args...; kwargs...)
+        """Highlight a compass arc through the EuclidRepl API."""
         highlight_compass!(args...; kwargs...) =
             EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
-        translate_points!(args...; kwargs...) =
-            EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
-        rotate_points!(args...; kwargs...) =
-            EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
-        rotate_points_x!(args...; kwargs...) =
-            EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
-        rotate_points_y!(args...; kwargs...) =
-            EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
-        rotate_points_z!(args...; kwargs...) =
-            EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
-        reflect2d_points!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
-        reflect2d_points_x_axis!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
-        reflect2d_points_y_axis!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
-        reflect2d_points_diag_pos!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
-        reflect2d_points_diag_neg!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
 
         # Intercept interactive exit/quit and reset only scratchpad session state.
+        """Exit the scratchpad session, resetting only session state."""
         exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
+        """Quit the scratchpad session, resetting only session state."""
         quit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
     end)
+end
 
-    return runtime
+"""Install the session-scope EuclidRepl draw helper wrappers into a runtime module."""
+function install_draw_helpers!(runtime::Module)
+    # Convenience wrappers for common EuclidRepl draw APIs.
+    Core.eval(runtime, quote
+        """Translate points through the EuclidRepl API."""
+        translate_points!(args...; kwargs...) =
+            EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
+        """Rotate points about an axis through the EuclidRepl API."""
+        rotate_points!(args...; kwargs...) =
+            EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
+        """Rotate points about the x axis through the EuclidRepl API."""
+        rotate_points_x!(args...; kwargs...) =
+            EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
+        """Rotate points about the y axis through the EuclidRepl API."""
+        rotate_points_y!(args...; kwargs...) =
+            EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
+        """Rotate points about the z axis through the EuclidRepl API."""
+        rotate_points_z!(args...; kwargs...) =
+            EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
+        """Reflect points across a line through the EuclidRepl API."""
+        reflect2d_points!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
+        """Reflect points across the x axis through the EuclidRepl API."""
+        reflect2d_points_x_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
+        """Reflect points across the y axis through the EuclidRepl API."""
+        reflect2d_points_y_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
+        """Reflect points across the positive diagonal through the EuclidRepl API."""
+        reflect2d_points_diag_pos!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
+        """Reflect points across the negative diagonal through the EuclidRepl API."""
+        reflect2d_points_diag_neg!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
+    end)
 end
 
 """Create an empty scratchpad session bound to the supplied host state."""
@@ -302,8 +345,7 @@ function blocked_input_reason(text::AbstractString)
         "download(",
         "rm(",
         "mv(",
-        "cp(",
-    )
+        "cp(")
     for token in blocked_tokens
         if occursin(token, lowered)
             return "blocked token: $(token)"
@@ -349,7 +391,7 @@ function metrics_summary_lines(state_ptr::Ptr{Cvoid})
         "errors eval=$(m.eval_errors) hooks=$(m.hook_errors) blocked=$(m.blocked_commands)",
         "slow eval warnings=$(m.slow_eval_warnings) last_eval_ns=$(m.last_eval_ns)",
         "slow hook warnings=$(m.slow_hook_warnings) last_hook_ns=$(m.last_hook_ns)",
-        "transitions initialize=$(initialize_count_ref[]) clean=$(clean_count_ref[]) reset=$(reset_count_ref[])",
+        "transitions initialize=$(InitializeCountRef[]) clean=$(CleanCountRef[]) reset=$(ResetCountRef[])",
     ]
 end
 
@@ -360,18 +402,18 @@ function reset_session!(state_ptr::Ptr{Cvoid})
         Main.EuclidRepl.reset_scratchpad_session!()
     end
 
-    session_id = next_session_id_ref[]
-    next_session_id_ref[] = session_id + 1
-    reset_count_ref[] += 1
+    session_id = NextSessionIdRef[]
+    NextSessionIdRef[] = session_id + 1
+    ResetCountRef[] += 1
 
     session = create_session(state_ptr, session_id)
-    session_ref[] = session
+    SessionRef[] = session
     return session
 end
 
 """Return the current session or create one when missing, refreshing state_ptr binding."""
 function ensure_session!(state_ptr::Ptr{Cvoid})
-    session = session_ref[]
+    session = SessionRef[]
     if session === nothing
         return reset_session!(state_ptr)
     end
@@ -435,10 +477,12 @@ end
 function apply_softscope(runtime::Module, expr)
     try
         return REPL.softscope(runtime, expr)
-    catch
+    catch e
+        e isa Exception || rethrow()
         try
             return REPL.softscope(expr)
-        catch
+        catch inner
+            inner isa Exception || rethrow()
             return expr
         end
     end

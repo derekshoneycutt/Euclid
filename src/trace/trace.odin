@@ -33,6 +33,54 @@ Trace_Category_Token :: struct {
     category: core.Trace_Category,
 }
 
+//   Append optional point-event fields to one payload buffer.
+//
+// Parameters:
+//   - payload_buffer: Destination payload buffer.
+//   - payload_len: Current payload length, updated on success.
+//   - from_position: Optional prior position.
+//   - to_position: Optional committed position.
+//   - visible: Optional committed visibility state.
+//   - brush_size: Optional committed brush size.
+//   - offset: Optional committed offset.
+//   - color: Optional committed color.
+//   Optional fields for one committed point state transition. Each Maybe field
+//   is emitted only when set, so unrelated events leave them nil.
+Trace_Point_Event_Fields :: struct {
+    from_position: Maybe(core.Vector3),
+    to_position:   Maybe(core.Vector3),
+    visible:       Maybe(bool),
+    brush_size:    Maybe(f32),
+    offset:        Maybe(f32),
+    color:         Maybe(core.Bridge_Color),
+}
+
+Trace_Animation_Event :: struct {
+    generation, tick: u64,
+    animation_id, reason: string,
+}
+
+Trace_Tool_Event_Fields :: struct {
+    joint_name: string,
+    position: Maybe(core.Vector3),
+    visible: Maybe(bool),
+    active: Maybe(int),
+}
+
+Trace_Particle_Emission :: struct {
+    kind, layer: string,
+    count: int,
+    source: core.Vector3,
+    color: core.Bridge_Color,
+}
+
+Trace_Checkpoint_Tool :: struct {
+    name: string,
+    host_index: int,
+    visible: bool,
+    active_child: int,
+}
+
 //   CLI category tokens accepted in the comma-separated selection list.
 TRACE_CATEGORY_TOKENS :: []Trace_Category_Token{
     {"runtime", .Runtime},
@@ -62,17 +110,6 @@ is_enabled :: proc(state: ^core.Trace_State) -> bool {
     return state != nil && state^.enabled && !state^.invalid
 }
 
-//   Report whether strict trace validity has been lost.
-//
-// Parameters:
-//   - state: Trace state block owned by Euclid_General_State.
-//
-// Returns:
-//   - invalid: true when strict mode detected trace-invalidating loss or failure.
-is_invalid :: proc(state: ^core.Trace_State) -> bool {
-    return state != nil && state^.invalid
-}
-
 //   Report whether trace state is present and currently valid.
 //
 // Parameters:
@@ -99,38 +136,6 @@ copy_trace_text :: proc(destination: []u8, text: string) -> int {
         copy(destination[:copy_len], text_bytes[:copy_len])
     }
     return copy_len
-}
-
-//   Assign a bounded output path into trace configuration.
-//
-// Parameters:
-//   - config: Trace configuration to update.
-//   - output_path: Candidate output path text.
-//
-// Returns:
-//   - ok: true when the path was accepted into bounded storage.
-set_output_path :: proc(config: ^Trace_Configuration, output_path: string) -> bool {
-    if config == nil || len(output_path) > len(config^.output_path) {
-        return false
-    }
-
-    config^.output_path_len = copy_trace_text(config^.output_path[:], output_path)
-    return true
-}
-
-//   Return the configured output path text, or empty when unset.
-//
-// Parameters:
-//   - config: Trace configuration to inspect.
-//
-// Returns:
-//   - output_path: Current configured path text.
-configured_output_path :: proc(config: ^Trace_Configuration) -> string {
-    if config == nil || config^.output_path_len <= 0 {
-        return ""
-    }
-
-    return string(config^.output_path[:config^.output_path_len])
 }
 
 //   Report whether one category is enabled for publication.
@@ -300,23 +305,6 @@ append_json_string_field :: proc(
         return false
     }
     return append_json_string(buffer, length, value)
-}
-
-//   Append a comma when this is not the first JSON field.
-//
-// Parameters:
-//   - buffer: Destination byte buffer.
-//   - length: Current valid length, updated on success.
-//   - first_field: true before writing the first field.
-//
-// Returns:
-//   - ok: true when any separator was appended successfully.
-append_json_separator :: proc(buffer: []u8, length: ^int, first_field: bool) -> bool {
-    if first_field {
-        return true
-    }
-
-    return append_builder_text(buffer, length, ",")
 }
 
 //   Serialize one trace event envelope and payload into JSONL bytes.
@@ -611,6 +599,31 @@ resolve_categories :: proc(categories_text: string) -> (Trace_Category_Set, bool
     return categories, true
 }
 
+//   Apply the optional trace output path, rejecting paths that exceed capacity.
+//
+// Parameters:
+//   - state: Trace state block owned by Euclid_General_State.
+//   - path_text: Requested output path; empty leaves stdout/sink mode unchanged.
+//
+// Returns:
+//   - ok: true when the path is absent or was applied.
+apply_trace_output_path :: proc(
+    state: ^core.Trace_State, path_text: string) -> bool {
+
+    if len(path_text) == 0 {
+        return true
+    }
+    if len(path_text) > len(state^.output_path) {
+        fmt.eprintln("Invalid --semantic-trace-output value: path exceeds capacity.")
+        state^.enabled = false
+        state^.invalid = true
+        return false
+    }
+    state^.output_path_len = copy_trace_text(state^.output_path[:], path_text)
+    state^.output_mode = .File
+    return true
+}
+
 //   Configure trace state from validated command-line settings.
 //
 // Parameters:
@@ -651,16 +664,8 @@ configure_from_settings :: proc(
     if settings^.semantic_trace_sink {
         state^.output_mode = .Sink
     }
-    if len(settings^.semantic_trace_output) > 0 {
-        if len(settings^.semantic_trace_output) > len(state^.output_path) {
-            fmt.eprintln("Invalid --semantic-trace-output value: path exceeds capacity.")
-            state^.enabled = false
-            state^.invalid = true
-            return false
-        }
-        state^.output_path_len = copy_trace_text(
-            state^.output_path[:], settings^.semantic_trace_output)
-        state^.output_mode = .File
+    if !apply_trace_output_path(state, settings^.semantic_trace_output) {
+        return false
     }
 
     reset_runtime_state(state)
@@ -1022,36 +1027,6 @@ should_fail_process :: proc(state: ^core.Trace_State) -> bool {
     return state != nil && state^.enabled && state^.strict && state^.invalid
 }
 
-//   Free temporary allocations accumulated while parsing trace configuration.
-//
-// Parameters:
-//   - none.
-//
-// Returns:
-//   - none.
-release_trace_temp_allocations :: proc() {
-    free_all(context.temp_allocator)
-}
-
-//   Report trace state counters for diagnostics.
-//
-// Parameters:
-//   - state: Trace state block owned by Euclid_General_State.
-//
-// Returns:
-//   - counters: Snapshot of emitted and dropped counts.
-trace_counters :: proc(state: ^core.Trace_State) -> core.Trace_Counters {
-    if state == nil {
-        return {}
-    }
-
-    return core.Trace_Counters{
-        emitted_count = state^.emitted_count,
-        dropped_count = state^.dropped_count,
-        invalid = state^.invalid,
-    }
-}
-
 //   Record one runtime lifecycle event.
 //
 // Parameters:
@@ -1133,42 +1108,18 @@ record_runtime_event_ex :: proc(
 record_animation_event_ex :: proc(
     state: ^core.Trace_State,
     event_name: string,
-    animation_generation: u64,
-    animation_tick: u64,
-    animation_id: string,
-    reason: string) -> bool {
+    event: Trace_Animation_Event) -> bool {
 
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
     if !append_builder_text(payload_buffer, &payload_len, "{") ||
         !append_builder_text(payload_buffer, &payload_len,
-            fmt.tprintf("\"animation_generation\":%d", animation_generation)) {
+            fmt.tprintf("\"animation_generation\":%d", event.generation)) {
         return false
     }
 
-    // Optional fields, emitted only when present.
-    optional_bodies: [3]string
-    optional_count := 0
-    if animation_tick > 0 {
-        optional_bodies[optional_count] =
-            fmt.tprintf("\"animation_tick\":%d", animation_tick)
-        optional_count += 1
-    }
-    if len(animation_id) > 0 {
-        optional_bodies[optional_count] =
-            fmt.tprintf("\"animation_id\":%s", json_quote(animation_id))
-        optional_count += 1
-    }
-    if len(reason) > 0 {
-        optional_bodies[optional_count] =
-            fmt.tprintf("\"reason\":%s", json_quote(reason))
-        optional_count += 1
-    }
-    for index in 0..<optional_count {
-        if !append_json_comma_field(
-            payload_buffer, &payload_len, optional_bodies[index]) {
-            return false
-        }
+    if !append_optional_animation_fields(payload_buffer, &payload_len, event) {
+        return false
     }
 
     if !append_builder_text(payload_buffer, &payload_len, "}") {
@@ -1176,6 +1127,45 @@ record_animation_event_ex :: proc(
     }
     return record_event(state, .Animation, event_name,
         string(payload_buffer[:payload_len]))
+}
+
+//   Append optional animation payload fields that are present on the event.
+//
+// Parameters:
+//   - payload_buffer: Destination byte buffer.
+//   - payload_len: Current valid length, updated on success.
+//   - event: Animation event payload source.
+//
+// Returns:
+//   - ok: true when all present fields fit and were appended.
+append_optional_animation_fields :: proc(
+    payload_buffer: []u8, payload_len: ^int, event: Trace_Animation_Event) -> bool {
+
+    // Optional fields, emitted only when present.
+    optional_bodies: [3]string
+    optional_count := 0
+    if event.tick > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"animation_tick\":%d", event.tick)
+        optional_count += 1
+    }
+    if len(event.animation_id) > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"animation_id\":%s", json_quote(event.animation_id))
+        optional_count += 1
+    }
+    if len(event.reason) > 0 {
+        optional_bodies[optional_count] =
+            fmt.tprintf("\"reason\":%s", json_quote(event.reason))
+        optional_count += 1
+    }
+    for index in 0..<optional_count {
+        if !append_json_comma_field(
+            payload_buffer, payload_len, optional_bodies[index]) {
+            return false
+        }
+    }
+    return true
 }
 
 //   Append one JSON vector3 array field.
@@ -1321,28 +1311,6 @@ append_optional_color_field :: proc(
 // Parameters:
 //   - payload_buffer: Destination payload buffer.
 //   - payload_len: Current payload length, updated on success.
-//   - from_position: Optional prior position.
-//   - to_position: Optional committed position.
-//   - visible: Optional committed visibility state.
-//   - brush_size: Optional committed brush size.
-//   - offset: Optional committed offset.
-//   - color: Optional committed color.
-//   Optional fields for one committed point state transition. Each Maybe field
-//   is emitted only when set, so unrelated events leave them nil.
-Trace_Point_Event_Fields :: struct {
-    from_position: Maybe(core.Vector3),
-    to_position:   Maybe(core.Vector3),
-    visible:       Maybe(bool),
-    brush_size:    Maybe(f32),
-    offset:        Maybe(f32),
-    color:         Maybe(core.Bridge_Color),
-}
-
-//   Append optional point-event fields to one payload buffer.
-//
-// Parameters:
-//   - payload_buffer: Destination payload buffer.
-//   - payload_len: Current payload length, updated on success.
 //   - fields: Optional point-event field values.
 //
 // Returns:
@@ -1418,23 +1386,20 @@ record_point_event :: proc(
 append_tool_event_optional_fields :: proc(
     payload_buffer: []u8,
     payload_len: ^int,
-    joint_name: string,
-    position: Maybe(core.Vector3),
-    visible: Maybe(bool),
-    active: Maybe(int)) -> bool {
+    fields: Trace_Tool_Event_Fields) -> bool {
 
-    if len(joint_name) > 0 &&
+    if len(fields.joint_name) > 0 &&
         (!append_builder_text(payload_buffer, payload_len, ",") ||
-            !append_json_string_field(payload_buffer, payload_len, "joint", joint_name)) {
+            !append_json_string_field(payload_buffer, payload_len, "joint", fields.joint_name)) {
         return false
     }
 
     return append_optional_vector_field(payload_buffer, payload_len,
-            "position", position) &&
+            "position", fields.position) &&
         append_optional_bool_field(payload_buffer, payload_len,
-            "visible", visible) &&
+            "visible", fields.visible) &&
         append_optional_int_field(payload_buffer, payload_len,
-            "active", active)
+            "active", fields.active)
 }
 
 //   Record one committed tool state transition.
@@ -1454,10 +1419,7 @@ record_tool_event :: proc(
     state: ^core.Trace_State,
     event_name: string,
     tool_name: string,
-    joint_name: string,
-    position: Maybe(core.Vector3),
-    visible: Maybe(bool),
-    active: Maybe(int)) -> bool {
+    fields: Trace_Tool_Event_Fields) -> bool {
 
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
@@ -1466,10 +1428,7 @@ record_tool_event :: proc(
         !append_tool_event_optional_fields(
             payload_buffer,
             &payload_len,
-            joint_name,
-            position,
-            visible,
-            active) ||
+            fields) ||
         !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }
@@ -1491,25 +1450,23 @@ record_tool_event :: proc(
 //   - ok: true when the event was queued.
 record_particles_emitted :: proc(
     state: ^core.Trace_State,
-    kind: string,
-    layer: string,
-    count: int,
-    source: core.Vector3,
-    color: core.Bridge_Color) -> bool {
+    emission: Trace_Particle_Emission) -> bool {
 
     payload_len := 0
     payload_buffer := state^.serialize_buffer[:]
     if !append_builder_text(payload_buffer, &payload_len, "{") ||
-        !append_json_string_field(payload_buffer, &payload_len, "kind", kind) ||
+        !append_json_string_field(payload_buffer, &payload_len, "kind", emission.kind) ||
         !append_json_comma_field(payload_buffer, &payload_len,
-            fmt.tprintf("\"layer\":%s", json_quote(layer))) ||
+            fmt.tprintf("\"layer\":%s", json_quote(emission.layer))) ||
         !append_json_comma_field(payload_buffer, &payload_len,
-            fmt.tprintf("\"count\":%d", count)) ||
+            fmt.tprintf("\"count\":%d", emission.count)) ||
         !append_json_comma_field(payload_buffer, &payload_len,
-            fmt.tprintf("\"source\":[%g,%g,%g]", source.x, source.y, source.z)) ||
+            fmt.tprintf("\"source\":[%g,%g,%g]",
+                emission.source.x, emission.source.y, emission.source.z)) ||
         !append_json_comma_field(payload_buffer, &payload_len,
             fmt.tprintf("\"color\":[%d,%d,%d,%d]",
-                color.r, color.g, color.b, color.a)) ||
+                emission.color.r, emission.color.g,
+                emission.color.b, emission.color.a)) ||
         !append_builder_text(payload_buffer, &payload_len, "}") {
         return false
     }
@@ -1570,20 +1527,6 @@ record_constraint_solve_summary :: proc(
         .Geometry,
         "constraint.solve_summary",
         string(payload_buffer[:payload_len]))
-}
-
-//   Append one optional checkpoint point position field.
-append_checkpoint_point_position :: proc(
-    payload_buffer: []u8,
-    payload_len: ^int,
-    point: ^core.Trace_Checkpoint_Point) -> bool {
-
-    if !point^.has_position {
-        return true
-    }
-    return append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_vector3_field(payload_buffer, payload_len,
-            "position", point^.position)
 }
 
 //   Append one checkpoint point record to the payload.
@@ -1693,20 +1636,17 @@ append_checkpoint_counter_fields :: proc(
 append_checkpoint_tool_summary :: proc(
     payload_buffer: []u8,
     payload_len: ^int,
-    name: string,
-    host_index: int,
-    visible: bool,
-    active_child: int) -> bool {
+    tool: Trace_Checkpoint_Tool) -> bool {
 
-    return append_json_string(payload_buffer, payload_len, name) &&
+    return append_json_string(payload_buffer, payload_len, tool.name) &&
         append_builder_text(payload_buffer, payload_len, ":{") &&
         append_json_number_field(payload_buffer, payload_len, "host_index",
-            u64(host_index)) &&
+            u64(tool.host_index)) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
-        append_json_bool_field(payload_buffer, payload_len, "visible", visible) &&
+        append_json_bool_field(payload_buffer, payload_len, "visible", tool.visible) &&
         append_builder_text(payload_buffer, payload_len, ",") &&
         append_json_signed_field(payload_buffer, payload_len, "active_child",
-            active_child) &&
+            tool.active_child) &&
         append_builder_text(payload_buffer, payload_len, "}")
 }
 
@@ -1735,17 +1675,18 @@ append_checkpoint_points :: proc(
 append_checkpoint_pen_summary :: proc(
     payload_buffer: []u8, payload_len: ^int,
     snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
-    return append_checkpoint_tool_summary(payload_buffer, payload_len, "pen",
-        snapshot^.pen_host_index, snapshot^.pen_visible, snapshot^.pen_active_child)
+    return append_checkpoint_tool_summary(payload_buffer, payload_len,
+        {"pen", snapshot^.pen_host_index, snapshot^.pen_visible,
+            snapshot^.pen_active_child})
 }
 
 //   Append the compass tool summary section of the checkpoint payload.
 append_checkpoint_compass_summary :: proc(
     payload_buffer: []u8, payload_len: ^int,
     snapshot: ^core.Trace_Checkpoint_Snapshot) -> bool {
-    return append_checkpoint_tool_summary(payload_buffer, payload_len, "compass",
-        snapshot^.compass_host_index, snapshot^.compass_visible,
-        snapshot^.compass_active_child)
+    return append_checkpoint_tool_summary(payload_buffer, payload_len,
+        {"compass", snapshot^.compass_host_index, snapshot^.compass_visible,
+            snapshot^.compass_active_child})
 }
 
 //   Record one canonical checkpoint snapshot captured after the deterministic worker join.

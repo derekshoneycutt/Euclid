@@ -4,7 +4,7 @@ import "../core"
 
 //   Build one layout-like child item for the command kinds supported inside math blocks.
 //   Uniform handler shape for building one math-program layout item.
-Math_Program_Item_Handler :: proc(
+Math_Program_Item_Handler :: #type proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
     cmd: core.Dynview_Command,
@@ -14,20 +14,20 @@ Math_Program_Item_Handler :: proc(
 //   Dispatch table mapping each recursive math command kind to its item builder.
 //   Non-math kinds map to nil and are rejected by the caller.
 MATH_PROGRAM_ITEM_HANDLERS :: [core.Dynview_Command_Kind]Math_Program_Item_Handler{
-    .BeginBlock = nil, .EndBlock = nil, .CopyableTextRun = nil, .LineBreak = nil,
-    .Divider = nil, .MathBlock = nil, .InlineLine = nil, .InlineBox = nil,
-    .InlineCircle = nil, .InlineFilledBox = nil, .InlineFilledCircle = nil,
-    .InlinePieSection = nil, .InlinePerpendicular = nil, .InlineTriangle = nil,
-    .InlinePentagon = nil,
-    .TextRun = math_program_text_item_entry,
-    .MathGlyphRun = math_program_text_item_entry,
-    .ScriptAttachRecursive = math_program_script_item_entry,
-    .FracRecursive = math_program_recursive_fraction_item,
-    .StretchDelimiterRecursive = math_program_recursive_stretch_delimiter_item,
-    .MatrixRecursive = math_program_recursive_matrix_item,
-    .LargeOpRecursive = math_program_large_op_item_entry,
-    .AccentBarRecursive = math_program_accent_item_entry,
-    .RadicalBarRecursive = math_program_recursive_radical_item,
+    .Begin_Block = nil, .End_Block = nil, .Copyable_Text_Run = nil, .Line_Break = nil,
+    .Divider = nil, .Math_Block = nil, .Inline_Line = nil, .Inline_Box = nil,
+    .Inline_Circle = nil, .Inline_Filled_Box = nil, .Inline_Filled_Circle = nil,
+    .Inline_Pie_Section = nil, .Inline_Perpendicular = nil, .Inline_Triangle = nil,
+    .Inline_Pentagon = nil,
+    .Text_Run = math_program_text_item_entry,
+    .Math_Glyph_Run = math_program_text_item_entry,
+    .Script_Attach = math_program_script_item_entry,
+    .Frac = math_program_recursive_fraction_item,
+    .Stretch_Delimiter = math_program_recursive_stretch_delimiter_item,
+    .Matrix = math_program_recursive_matrix_item,
+    .Large_Op = math_program_large_op_item_entry,
+    .Accent_Bar = math_program_accent_item_entry,
+    .Radical_Bar = math_program_recursive_radical_item,
 }
 
 //   Aggregated per-column and per-row cell metrics for one matrix layout.
@@ -37,6 +37,84 @@ Matrix_Cell_Dims :: struct {
     row_descents: [16]f32,
     top_pad:     f32,
     bottom_pad:  f32,
+}
+
+Script_Metrics :: struct {
+    cols: int,
+    scale, ascent, descent, top_pad, bottom_pad, advance: f32,
+}
+
+Math_Measure_Context :: struct {
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    font_size: f32,
+}
+
+Stretch_Delimiter_Content :: struct {
+    width, ascent, descent, top_pad, bottom_pad: f32,
+}
+
+Radical_Geometry :: struct {
+    draw_width, ascent, descent, top_pad, bottom_pad: f32,
+}
+
+Fraction_Item_Metrics :: struct {
+    numerator, denominator: ^core.Dynview_Math_Program,
+    draw_width, ascent, descent, visual_pad: f32,
+}
+
+Script_Attach_Metrics :: struct {
+    scale, draw_width, ascent, descent, top_pad, bottom_pad: f32,
+}
+
+Large_Op_Metrics :: struct {
+    scale, draw_width, ascent, descent, top_pad, bottom_pad: f32,
+}
+
+Matrix_Item_Metrics :: struct {
+    rows, cols: int,
+    draw_width, total_height, top_pad, bottom_pad: f32,
+}
+
+Stretch_Delimiter_Dimensions :: struct {
+    font_size, content_height, content_width: f32,
+}
+
+Matrix_Program :: struct {
+    program: ^core.Dynview_Math_Program,
+    rows, cols: int,
+}
+
+Radical_Geometry_Context :: struct {
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    child: ^core.Dynview_Math_Program,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32,
+}
+
+//   Measure script text and its scaled typography for a recursive math item.
+script_metrics :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    text: string,
+    style_id: i32,
+    scale, font_size: f32) -> Script_Metrics {
+
+    resolved_scale := max(0.2, scale)
+    style := style_by_id(style_id)
+    scaled_font_size := max(1.0, font_size * resolved_scale)
+    ascent, descent := style_ascent_descent(style, scaled_font_size)
+    top_pad, bottom_pad := script_visual_padding(scaled_font_size)
+    return Script_Metrics{
+        cols = text_codepoint_count_span(text, 0, len(text)),
+        scale = resolved_scale,
+        ascent = ascent,
+        descent = descent,
+        top_pad = top_pad,
+        bottom_pad = bottom_pad,
+        advance = effective_advance(style, cache^.last_wrap_advance) * resolved_scale,
+    }
 }
 
 // Reset a cache structure for the dynview layout engine
@@ -103,9 +181,9 @@ math_program_text_item :: #force_inline proc(
     text := text_for_command(buffer, cmd)
     cols := max(1, text_codepoint_count_span(text, 0, len(text)))
     ascent, descent := style_ascent_descent(style, font_size)
-    kind := core.Dynview_Layout_Item_Kind.TextRun
-    if cmd.kind == .MathGlyphRun {
-        kind = .MathGlyphRun
+    kind := core.Dynview_Layout_Item_Kind.Text_Run
+    if cmd.kind == .Math_Glyph_Run {
+        kind = .Math_Glyph_Run
     }
 
     return core.Dynview_Layout_Item{
@@ -121,6 +199,68 @@ math_program_text_item :: #force_inline proc(
 }
 
 //   Build one layout-like item for a recursive script wrapper around a child math program.
+script_attach_item :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    metrics: Script_Attach_Metrics) -> core.Dynview_Layout_Item {
+
+    return core.Dynview_Layout_Item{
+        kind = .Script_Attach,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        script_sup_text_offset = cmd.script_sup_text_offset,
+        script_sup_text_len = cmd.script_sup_text_len,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        script_style_id = cmd.script_style_id, script_scale = metrics.scale,
+        script_sup_raise = cmd.script_sup_raise, script_sub_drop = cmd.script_sub_drop,
+        script_gap = cmd.script_gap, draw_width = metrics.draw_width,
+        draw_height = metrics.ascent + metrics.descent,
+        ascent = metrics.ascent, descent = metrics.descent,
+        visual_padding_top = metrics.top_pad,
+        visual_padding_bottom = metrics.bottom_pad,
+    }
+}
+
+//   Calculate script placement dimensions around an already measured child program.
+script_attach_metrics :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    child: ^core.Dynview_Math_Program,
+    cmd: core.Dynview_Command,
+    font_size: f32) -> Script_Attach_Metrics {
+
+    script_scale := max(0.2, cmd.script_scale)
+    offsets := script_draw_offsets(
+        font_size, script_scale, cmd.script_sup_raise, cmd.script_sub_drop)
+    sup := script_metrics(cache, text_span_from_buffer(
+        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len),
+        cmd.script_style_id, script_scale, font_size)
+    sub := script_metrics(cache, text_span_from_buffer(
+        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len),
+        cmd.script_style_id, script_scale, font_size)
+    ascent := child^.ascent
+    descent := child^.descent
+    if sup.cols > 0 {
+        ascent = max(ascent, sup.ascent + offsets.sup_raise_px + sup.top_pad)
+    }
+    if sub.cols > 0 {
+        descent = max(descent, sub.descent + offsets.sub_drop_px + sub.bottom_pad)
+    }
+    cols := max(sup.cols, sub.cols)
+    draw_width := child^.draw_width
+    if cols > 0 {
+        draw_width += max(1.0, cmd.script_gap * font_size) +
+            f32(cols) * max(sup.advance, sub.advance)
+    }
+    return {
+        scale = script_scale, draw_width = draw_width, ascent = ascent,
+        descent = descent,
+        top_pad = max(child^.visual_padding_top, sup.top_pad),
+        bottom_pad = max(child^.visual_padding_bottom, sub.bottom_pad),
+    }
+}
+
+//   Build one layout-like item for a recursive script wrapper around a child math program.
 math_program_recursive_script_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
@@ -132,74 +272,66 @@ math_program_recursive_script_item :: #force_inline proc(
         return core.Dynview_Layout_Item{}, false
     }
 
-    sup_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    sub_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
+    return script_attach_item(
+        cmd, script_attach_metrics(cache, buffer, child_program, cmd, font_size)), true
+}
 
-    sup_cols := text_codepoint_count_span(sup_text, 0, len(sup_text))
-    sub_cols := text_codepoint_count_span(sub_text, 0, len(sub_text))
-    script_cols := max(sup_cols, sub_cols)
-
-    script_style := style_by_id(cmd.script_style_id)
-    script_scale := max(0.2, cmd.script_scale)
-    script_offsets := script_draw_offsets(
-        font_size,
-        script_scale,
-        cmd.script_sup_raise,
-        cmd.script_sub_drop)
-    script_ascent, script_descent :=
-        style_ascent_descent(script_style, script_offsets.script_font_size)
-    script_top_pad, script_bottom_pad :=
-        script_visual_padding(script_offsets.script_font_size)
-
-    ascent := child_program^.ascent
-    descent := child_program^.descent
-    if sup_cols > 0 {
-        ascent = max(ascent,
-            script_ascent + script_offsets.sup_raise_px + script_top_pad)
-    }
-    if sub_cols > 0 {
-        descent = max(descent,
-            script_descent + script_offsets.sub_drop_px + script_bottom_pad)
-    }
-
-    script_advance := effective_advance(script_style, cache^.last_wrap_advance) *
-        script_scale
-    gap_px := max(1.0, cmd.script_gap * font_size)
-    script_width := f32(script_cols) * script_advance
-    draw_width := child_program^.draw_width
-    if script_cols > 0 {
-        draw_width += gap_px + script_width
-    }
+//   Build one layout-like item for a display-style large operator with stacked limits.
+large_op_item :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    metrics: Large_Op_Metrics) -> core.Dynview_Layout_Item {
 
     return core.Dynview_Layout_Item{
-        kind = .ScriptAttachRecursive,
-        style_id = cmd.style_id,
-        math_program_id = cmd.math_program_id,
-        script_sup_text_offset = cmd.script_sup_text_offset,
+        kind = .Large_Op, style_id = cmd.style_id, text_offset = cmd.text_offset,
+        text_len = cmd.text_len, script_sup_text_offset = cmd.script_sup_text_offset,
         script_sup_text_len = cmd.script_sup_text_len,
         script_sub_text_offset = cmd.script_sub_text_offset,
         script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id,
-        script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise,
-        script_sub_drop = cmd.script_sub_drop,
-        script_gap = cmd.script_gap,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = max(child_program^.visual_padding_top, script_top_pad),
-        visual_padding_bottom =
-            max(child_program^.visual_padding_bottom, script_bottom_pad),
-    }, true
+        script_style_id = cmd.script_style_id, script_scale = metrics.scale,
+        script_gap = cmd.script_gap, large_op_kind = cmd.large_op_kind,
+        draw_width = metrics.draw_width, draw_height = metrics.ascent + metrics.descent,
+        ascent = metrics.ascent, descent = metrics.descent,
+        visual_padding_top = metrics.top_pad, visual_padding_bottom = metrics.bottom_pad,
+    }
 }
 
+//   Calculate glyph and stacked-limit dimensions for one large operator.
+large_op_metrics :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> Large_Op_Metrics {
+
+    limit_scale := large_op_limit_scale(max(0.2, cmd.script_scale))
+    sup := script_metrics(cache, text_span_from_buffer(
+        buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len),
+        cmd.script_style_id, limit_scale, font_size)
+    sub := script_metrics(cache, text_span_from_buffer(
+        buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len),
+        cmd.script_style_id, limit_scale, font_size)
+    glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
+    glyph_ascent, glyph_descent := style_ascent_descent(
+        style, max(1.0, font_size * glyph_scale))
+    glyph_cols := max(1, text_codepoint_count_span(
+        text_for_command(buffer, cmd), 0, len(text_for_command(buffer, cmd))))
+    glyph_width := f32(glyph_cols) *
+        effective_advance(style, cache^.last_wrap_advance) * glyph_scale
+    gap := large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
+    ascent := glyph_ascent if sup.cols == 0 else
+        glyph_ascent + sup.ascent + sup.descent + gap
+    descent := glyph_descent if sub.cols == 0 else
+        glyph_descent + sub.ascent + sub.descent + gap
+    return {
+        scale = limit_scale,
+        draw_width = max(glyph_width, max(f32(sup.cols) * sup.advance,
+            f32(sub.cols) * sub.advance)),
+        ascent = ascent, descent = descent,
+        top_pad = sup.top_pad, bottom_pad = sub.bottom_pad,
+    }
+}
+
+//   Build one layout-like item for a display-style large operator with stacked limits.
 //   Build one layout-like item for a display-style large operator with stacked limits.
 math_program_large_op_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -208,75 +340,29 @@ math_program_large_op_item :: #force_inline proc(
     style: Dynview_Text_Style,
     font_size: f32) -> core.Dynview_Layout_Item {
 
-    base_text := text_for_command(buffer, cmd)
-    sup_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    sub_text := text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
+    return large_op_item(cmd, large_op_metrics(cache, buffer, cmd, style, font_size))
+}
 
-    glyph_cols := max(1, text_codepoint_count_span(base_text, 0, len(base_text)))
-    sup_cols := text_codepoint_count_span(sup_text, 0, len(sup_text))
-    sub_cols := text_codepoint_count_span(sub_text, 0, len(sub_text))
+//   Build one layout-like item for a recursive fraction with centered numerator and denominator.
+fraction_item :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    metrics: Fraction_Item_Metrics) -> core.Dynview_Layout_Item {
 
-    glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
-    glyph_font_size := max(1.0, font_size * glyph_scale)
-    glyph_ascent, glyph_descent := style_ascent_descent(style, glyph_font_size)
-    glyph_advance := effective_advance(style, cache^.last_wrap_advance) * glyph_scale
-    glyph_width := f32(glyph_cols) * glyph_advance
-
-    script_style := style_by_id(cmd.script_style_id)
-    limit_scale := large_op_limit_scale(max(0.2, cmd.script_scale))
-    limit_font_size := max(1.0, font_size * limit_scale)
-    limit_ascent, limit_descent := style_ascent_descent(script_style, limit_font_size)
-    limit_top_pad, limit_bottom_pad := script_visual_padding(limit_font_size)
-    limit_advance :=
-        effective_advance(script_style, cache^.last_wrap_advance) * limit_scale
-    sup_width := f32(sup_cols) * limit_advance
-    sub_width := f32(sub_cols) * limit_advance
-
-    upper_height: f32 = 0
-    if sup_cols > 0 {
-        upper_height = limit_ascent + limit_descent
-    }
-    lower_height: f32 = 0
-    if sub_cols > 0 {
-        lower_height = limit_ascent + limit_descent
-    }
-
-    limit_gap := large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
-    ascent := glyph_ascent
-    descent := glyph_descent
-    if sup_cols > 0 {
-        ascent += upper_height + limit_gap
-    }
-    if sub_cols > 0 {
-        descent += lower_height + limit_gap
-    }
-
-    draw_width := max(glyph_width, max(sup_width, sub_width))
     return core.Dynview_Layout_Item{
-        kind = .LargeOpRecursive,
+        kind = .Frac,
         style_id = cmd.style_id,
-        text_offset = cmd.text_offset,
-        text_len = cmd.text_len,
-        script_sup_text_offset = cmd.script_sup_text_offset,
-        script_sup_text_len = cmd.script_sup_text_len,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id,
-        script_scale = limit_scale,
-        script_gap = cmd.script_gap,
-        large_op_kind = cmd.large_op_kind,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = limit_top_pad,
-        visual_padding_bottom = limit_bottom_pad,
+        math_program_id = cmd.math_program_id,
+        secondary_math_program_id = cmd.secondary_math_program_id,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        draw_width = metrics.draw_width,
+        draw_height = metrics.ascent + metrics.descent,
+        ascent = metrics.ascent,
+        descent = metrics.descent,
+        visual_padding_top = max(max(metrics.numerator^.visual_padding_top,
+            metrics.denominator^.visual_padding_top), metrics.visual_pad),
+        visual_padding_bottom = max(max(metrics.numerator^.visual_padding_bottom,
+            metrics.denominator^.visual_padding_bottom), metrics.visual_pad),
     }
 }
 
@@ -312,22 +398,60 @@ math_program_recursive_fraction_item :: #force_inline proc(
         divider_gap + divider_half
     visual_pad := max(0.6, divider_thickness * 0.5)
 
-    return core.Dynview_Layout_Item{
-        kind = .FracRecursive,
-        style_id = cmd.style_id,
-        math_program_id = cmd.math_program_id,
-        secondary_math_program_id = cmd.secondary_math_program_id,
-        accent_style_id = cmd.accent_style_id,
-        accent_thickness = cmd.accent_thickness,
+    return fraction_item(cmd, {
+        numerator = numerator_program,
+        denominator = denominator_program,
         draw_width = draw_width,
-        draw_height = ascent + descent,
         ascent = ascent,
         descent = descent,
-        visual_padding_top = max(max(numerator_program^.visual_padding_top,
-            denominator_program^.visual_padding_top), visual_pad),
-        visual_padding_bottom = max(max(numerator_program^.visual_padding_bottom,
-            denominator_program^.visual_padding_bottom), visual_pad),
+        visual_pad = visual_pad,
+    }), true
+}
+
+//   Build one layout-like item for a recursive stretch-delimiter wrapper.
+stretch_delimiter_content :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> (Stretch_Delimiter_Content, bool) {
+
+    ascent, descent := style_ascent_descent(style, font_size)
+    content := Stretch_Delimiter_Content{ascent = ascent, descent = descent}
+    if cmd.math_program_id <= 0 {
+        return content, true
+    }
+
+    child_program, ok := math_program_from_command(cache, cmd)
+    if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
+        return {}, false
+    }
+    return Stretch_Delimiter_Content{
+        width = child_program^.draw_width,
+        ascent = child_program^.ascent,
+        descent = child_program^.descent,
+        top_pad = child_program^.visual_padding_top,
+        bottom_pad = child_program^.visual_padding_bottom,
     }, true
+}
+
+//   Calculate the combined width of delimiter glyphs and their content padding.
+stretch_delimiter_widths :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    dimensions: Stretch_Delimiter_Dimensions) -> f32 {
+
+    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    side_padding := stretch_delimiter_side_padding(dimensions.font_size, base_advance)
+    left_width := stretch_delimiter_width(
+        style, cache^.last_wrap_advance, dimensions.font_size,
+        dimensions.content_height, cmd.accent_mode)
+    right_width := stretch_delimiter_width(
+        style, cache^.last_wrap_advance, dimensions.font_size,
+        dimensions.content_height, cmd.radical_mode)
+    return max(dimensions.content_width + left_width + right_width + side_padding * 2.0,
+        base_advance)
 }
 
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.
@@ -338,71 +462,43 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
-    content_width: f32 = 0
-    content_ascent, content_descent := style_ascent_descent(style, font_size)
-    top_pad: f32 = 0
-    bottom_pad: f32 = 0
-
-    if cmd.math_program_id > 0 {
-        child_program, ok := math_program_from_command(cache, cmd)
-        if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
-            return core.Dynview_Layout_Item{}, false
-        }
-        content_width = child_program^.draw_width
-        content_ascent = child_program^.ascent
-        content_descent = child_program^.descent
-        top_pad = child_program^.visual_padding_top
-        bottom_pad = child_program^.visual_padding_bottom
+    content, ok := stretch_delimiter_content(cache, buffer, cmd, style, font_size)
+    if !ok {
+        return core.Dynview_Layout_Item{}, false
     }
 
-    content_height := content_ascent + content_descent
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
-    side_padding := stretch_delimiter_side_padding(font_size, base_advance)
-    left_width := stretch_delimiter_width(
-        style,
-        cache^.last_wrap_advance,
-        font_size,
-        content_height,
-        cmd.accent_mode)
-    right_width := stretch_delimiter_width(
-        style,
-        cache^.last_wrap_advance,
-        font_size,
-        content_height,
-        cmd.radical_mode)
-
-    draw_width := max(content_width + left_width + right_width + side_padding * 2.0,
-        base_advance)
+    content_height := content.ascent + content.descent
+    draw_width := stretch_delimiter_widths(
+        cache, cmd, style, {font_size, content_height, content.width})
     return core.Dynview_Layout_Item{
-        kind = .StretchDelimiterRecursive,
+        kind = .Stretch_Delimiter,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         accent_mode = cmd.accent_mode,
         radical_mode = cmd.radical_mode,
         draw_width = draw_width,
         draw_height = content_height,
-        ascent = content_ascent,
-        descent = content_descent,
-        visual_padding_top = top_pad,
-        visual_padding_bottom = bottom_pad,
+        ascent = content.ascent,
+        descent = content.descent,
+        visual_padding_top = content.top_pad,
+        visual_padding_bottom = content.bottom_pad,
     }, true
 }
 
 //   Measure every matrix cell, accumulating column widths and row extents.
 measure_matrix_cells :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    buffer: ^core.Dynview_Command_Buffer,
+    ctx: Math_Measure_Context,
     cell_program: ^core.Dynview_Math_Program,
     rows, cols: int,
-    font_size: f32,
     dims: ^Matrix_Cell_Dims) -> bool {
 
     for row in 0..<rows {
         for col in 0..<cols {
             cell_index := row * cols + col
             cmd_index := cell_program^.command_start + cell_index
-            cell_cmd := cache^.math_commands[cmd_index]
-            cell_item, cell_ok := math_program_item(cache, buffer, cell_cmd, font_size)
+            cell_cmd := ctx.cache^.math_commands[cmd_index]
+            cell_item, cell_ok := math_program_item(
+                ctx.cache, ctx.buffer, cell_cmd, ctx.font_size)
             if !cell_ok {
                 return false
             }
@@ -445,6 +541,42 @@ matrix_aggregate_dims :: proc(
 }
 
 //   Build one layout-like item for a recursive matrix with row-major child cells.
+matrix_item :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    metrics: Matrix_Item_Metrics) -> core.Dynview_Layout_Item {
+
+    ascent := metrics.total_height * 0.5
+    return core.Dynview_Layout_Item{
+        kind = .Matrix, style_id = cmd.style_id, math_program_id = cmd.math_program_id,
+        script_sub_text_offset = cmd.script_sub_text_offset,
+        script_sub_text_len = cmd.script_sub_text_len,
+        accent_mode = i32(metrics.rows), radical_mode = i32(metrics.cols),
+        draw_width = metrics.draw_width, draw_height = metrics.total_height,
+        ascent = ascent, descent = metrics.total_height - ascent,
+        visual_padding_top = metrics.top_pad, visual_padding_bottom = metrics.bottom_pad,
+    }
+}
+
+//   Resolve and measure a matrix child program with a matching row-major cell count.
+matrix_program_from_command :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    font_size: f32) -> (Matrix_Program, bool) {
+
+    dims := matrix_dims_from_command(buffer, cmd)
+    if !dims.ok || dims.rows > 16 || dims.cols > 16 {
+        return {}, false
+    }
+    program, ok := math_program_from_command(cache, cmd)
+    if !ok || !measure_math_program(cache, buffer, program, font_size) ||
+        program^.command_count != dims.rows * dims.cols {
+        return {}, false
+    }
+    return {program, dims.rows, dims.cols}, true
+}
+
+//   Build one layout-like item for a recursive matrix with row-major child cells.
 math_program_recursive_matrix_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
@@ -452,24 +584,14 @@ math_program_recursive_matrix_item :: #force_inline proc(
     style: Dynview_Text_Style,
     font_size: f32) -> (core.Dynview_Layout_Item, bool) {
 
-    matrix_dims := matrix_dims_from_command(buffer, cmd)
-    if !matrix_dims.ok || matrix_dims.rows > 16 || matrix_dims.cols > 16 {
-        return core.Dynview_Layout_Item{}, false
-    }
-
-    cell_program, ok := math_program_from_command(cache, cmd)
-    if !ok || !measure_math_program(cache, buffer, cell_program, font_size) {
-        return core.Dynview_Layout_Item{}, false
-    }
-
-    cell_count := matrix_dims.rows * matrix_dims.cols
-    if cell_program^.command_count != cell_count {
+    matrix_info, ok := matrix_program_from_command(cache, buffer, cmd, font_size)
+    if !ok {
         return core.Dynview_Layout_Item{}, false
     }
 
     cell_dims := Matrix_Cell_Dims{}
-    if !measure_matrix_cells(cache, buffer, cell_program,
-        matrix_dims.rows, matrix_dims.cols, font_size, &cell_dims) {
+    if !measure_matrix_cells({cache, buffer, font_size}, matrix_info.program,
+        matrix_info.rows, matrix_info.cols, &cell_dims) {
         return core.Dynview_Layout_Item{}, false
     }
     top_pad := cell_dims.top_pad
@@ -478,27 +600,18 @@ math_program_recursive_matrix_item :: #force_inline proc(
     base_advance := effective_advance(style, cache^.last_wrap_advance)
     draw_width, total_height := matrix_aggregate_dims(
         &cell_dims,
-        matrix_dims.rows,
-        matrix_dims.cols,
+        matrix_info.rows,
+        matrix_info.cols,
         font_size, base_advance)
 
-    ascent := total_height * 0.5
-    descent := total_height - ascent
-    return core.Dynview_Layout_Item{
-        kind = .MatrixRecursive,
-        style_id = cmd.style_id,
-        math_program_id = cmd.math_program_id,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
-        accent_mode = i32(matrix_dims.rows),
-        radical_mode = i32(matrix_dims.cols),
+    return matrix_item(cmd, {
+        rows = matrix_info.rows,
+        cols = matrix_info.cols,
         draw_width = max(draw_width, base_advance),
-        draw_height = total_height,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = top_pad,
-        visual_padding_bottom = bottom_pad,
-    }, true
+        total_height = total_height,
+        top_pad = top_pad,
+        bottom_pad = bottom_pad,
+    }), true
 }
 
 //   Build one layout-like item for a recursive accent wrapper around a child math program.
@@ -525,7 +638,7 @@ math_program_recursive_accent_item :: #force_inline proc(
     }
 
     return core.Dynview_Layout_Item{
-        kind = .AccentBarRecursive,
+        kind = .Accent_Bar,
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         accent_mode = cmd.accent_mode,
@@ -542,6 +655,65 @@ math_program_recursive_accent_item :: #force_inline proc(
 }
 
 //   Build one layout-like item for a recursive radical wrapper around a child math program.
+radical_item :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    geometry: Radical_Geometry,
+    script_scale: f32) -> core.Dynview_Layout_Item {
+
+    return core.Dynview_Layout_Item{
+        kind = .Radical_Bar,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        script_style_id = cmd.script_style_id, script_scale = script_scale,
+        script_sup_raise = cmd.script_sup_raise, script_sub_drop = cmd.script_sub_drop,
+        radical_mode = cmd.radical_mode,
+        radical_index_text_offset = cmd.radical_index_text_offset,
+        radical_index_text_len = cmd.radical_index_text_len,
+        accent_style_id = cmd.accent_style_id, accent_thickness = cmd.accent_thickness,
+        accent_offset = cmd.accent_offset, draw_width = geometry.draw_width,
+        draw_height = geometry.ascent + geometry.descent,
+        ascent = geometry.ascent, descent = geometry.descent,
+        visual_padding_top = geometry.top_pad,
+        visual_padding_bottom = geometry.bottom_pad,
+    }
+}
+
+//   Calculate radical bar, root hook, and optional index geometry around a child.
+radical_geometry :: proc(
+    ctx: Radical_Geometry_Context) -> Radical_Geometry {
+
+    scale := max(0.2, ctx.cmd.script_scale)
+    index := script_metrics(ctx.cache, text_span_from_buffer(
+        ctx.buffer, ctx.cmd.radical_index_text_offset, ctx.cmd.radical_index_text_len),
+        ctx.cmd.script_style_id, scale, ctx.font_size)
+    offsets := script_draw_offsets(ctx.font_size, scale, ctx.cmd.script_sup_raise,
+        ctx.cmd.script_sub_drop)
+    script_top, script_bottom := script_visual_padding(offsets.script_font_size)
+    stroke := max(1.0, ctx.cmd.accent_thickness * ctx.font_size)
+    ascent := max(ctx.child^.ascent, ctx.child^.ascent +
+        max(0.0, ctx.cmd.accent_offset * ctx.font_size) + stroke * 0.5)
+    root_low := radical_root_low_offset(ctx.font_size, ctx.child^.descent)
+    descent := max(ctx.child^.descent, root_low +
+        max(stroke, stroke * 1.25) * 0.5)
+    if index.cols > 0 {
+        ascent = max(ascent, ctx.child^.ascent * 0.62 + index.ascent * 0.50 + script_top)
+        descent = max(descent, index.descent * 0.2)
+    }
+    advance := effective_advance(ctx.style, ctx.cache^.last_wrap_advance)
+    lead := max(radical_lead_width(ctx.font_size, advance),
+        f32(index.cols) * index.advance + max(1.0, advance * 1.05))
+    front, back := radical_side_paddings(ctx.font_size, advance)
+    accent_pad := accent_script_clearance(ctx.font_size, scale, false)
+    return {
+        draw_width = lead + ctx.child^.draw_width + front + back,
+        ascent = ascent, descent = descent,
+        top_pad = max(ctx.child^.visual_padding_top, max(script_top, accent_pad)),
+        bottom_pad = max(
+            ctx.child^.visual_padding_bottom, max(script_bottom, accent_pad)),
+    }
+}
+
+//   Build one layout-like item for a recursive radical wrapper around a child math program.
 math_program_recursive_radical_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
@@ -554,75 +726,10 @@ math_program_recursive_radical_item :: #force_inline proc(
         return core.Dynview_Layout_Item{}, false
     }
 
-    index_text := text_span_from_buffer(
-        buffer,
-        cmd.radical_index_text_offset,
-        cmd.radical_index_text_len)
-    index_cols := text_codepoint_count_span(index_text, 0, len(index_text))
-
-    script_style := style_by_id(cmd.script_style_id)
     script_scale := max(0.2, cmd.script_scale)
-    script_offsets := script_draw_offsets(
-        font_size,
-        script_scale,
-        cmd.script_sup_raise,
-        cmd.script_sub_drop)
-    script_top_pad, script_bottom_pad :=
-        script_visual_padding(script_offsets.script_font_size)
-    index_scale := max(0.2, script_scale)
-    index_font_size := max(1.0, font_size * index_scale)
-    index_ascent, index_descent := style_ascent_descent(script_style, index_font_size)
-
-    content_ascent := child_program^.ascent
-    content_descent := child_program^.descent
-    bar_thickness := max(1.0, cmd.accent_thickness * font_size)
-    bar_offset := max(0.0, cmd.accent_offset * font_size)
-    ascent := max(content_ascent, content_ascent + bar_offset + bar_thickness * 0.5)
-    if index_cols > 0 {
-        index_top_from_baseline := content_ascent * 0.62 + index_ascent * 0.50
-        ascent = max(ascent, index_top_from_baseline + script_top_pad)
-    }
-    root_low_offset := radical_root_low_offset(font_size, content_descent)
-    hook_stroke := max(bar_thickness, bar_thickness * 1.25)
-    descent := max(content_descent, root_low_offset + hook_stroke * 0.5)
-    if index_cols > 0 {
-        descent = max(descent, index_descent * 0.2)
-    }
-
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
-    index_advance :=
-        effective_advance(script_style, cache^.last_wrap_advance) * index_scale
-    index_width := f32(index_cols) * index_advance
-    lead_width := max(
-        radical_lead_width(font_size, base_advance),
-        index_width + max(1.0, base_advance * 1.05))
-    front_padding, back_padding := radical_side_paddings(font_size, base_advance)
-    draw_width := lead_width + child_program^.draw_width + front_padding + back_padding
-    accent_pad := accent_script_clearance(font_size, script_scale, false)
-
-    return core.Dynview_Layout_Item{
-        kind = .RadicalBarRecursive,
-        style_id = cmd.style_id,
-        math_program_id = cmd.math_program_id,
-        script_style_id = cmd.script_style_id,
-        script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise,
-        script_sub_drop = cmd.script_sub_drop,
-        radical_mode = cmd.radical_mode,
-        radical_index_text_offset = cmd.radical_index_text_offset,
-        radical_index_text_len = cmd.radical_index_text_len,
-        accent_style_id = cmd.accent_style_id,
-        accent_thickness = cmd.accent_thickness,
-        accent_offset = cmd.accent_offset,
-        draw_width = draw_width,
-        draw_height = ascent + descent,
-        ascent = ascent,
-        descent = descent,
-        visual_padding_top = max(child_program^.visual_padding_top,
-            max(script_top_pad, accent_pad)),
-        visual_padding_bottom = max(child_program^.visual_padding_bottom,
-            max(script_bottom_pad, accent_pad)),
-    }, true
+    return radical_item(
+        cmd, radical_geometry({cache, buffer, child_program, cmd, style, font_size}),
+        script_scale), true
 }
 
 //   Adapt the text-run item builder (no style-independent result) to the table.
@@ -682,19 +789,24 @@ math_program_item :: #force_inline proc(
 }
 
 //   Measure one flat child-command math program and cache its deterministic outer metrics.
+math_program_is_measurable :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    program: ^core.Dynview_Math_Program) -> bool {
+
+    return cache != nil && buffer != nil && program != nil && program^.valid &&
+        program^.command_start >= 0 && program^.command_count > 0 &&
+        program^.command_start + program^.command_count <= cache^.math_command_count
+}
+
+//   Measure one flat child-command math program and cache its deterministic outer metrics.
 measure_math_program :: proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
     program: ^core.Dynview_Math_Program,
     font_size: f32) -> bool {
 
-    if cache == nil || buffer == nil || program == nil || !program^.valid {
-        return false
-    }
-    if program^.command_start < 0 || program^.command_count <= 0 {
-        return false
-    }
-    if program^.command_start + program^.command_count > cache^.math_command_count {
+    if !math_program_is_measurable(cache, buffer, program) {
         return false
     }
 

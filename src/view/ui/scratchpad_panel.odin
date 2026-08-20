@@ -13,11 +13,6 @@ SCRATCHPAD_JULIA_PROMPT :: "julia> "
 SCRATCHPAD_HELP_PROMPT :: "help?> "
 SCRATCHPAD_SCROLL_BOTTOM_EPSILON :: 0.5
 
-//   Return the live terminal prompt for the active Scratchpad editor mode.
-scratchpad_prompt :: #force_inline proc(mode: core.Scratchpad_Input_Mode) -> string {
-    return mode == .Help ? SCRATCHPAD_HELP_PROMPT : SCRATCHPAD_JULIA_PROMPT
-}
-
 Scratchpad_Terminal_Layout :: struct {
     transcript_height: f32,
     input_rows: int,
@@ -39,6 +34,19 @@ Scratchpad_History_Payload :: struct {
     ok:   bool,
 }
 
+//   Shared panel/font context for scratchpad layout and scroll operations.
+Scratchpad_Panel_Context :: struct {
+    state:      ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    panel:      rl.Rectangle,
+    font:       rl.Font,
+}
+
+//   Return the live terminal prompt for the active Scratchpad editor mode.
+scratchpad_prompt :: #force_inline proc(mode: core.Scratchpad_Input_Mode) -> string {
+    return mode == .Help ? SCRATCHPAD_HELP_PROMPT : SCRATCHPAD_JULIA_PROMPT
+}
+
 //   Return whether the currently selected tree item is the scratchpad node.
 is_scratchpad_selected :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_interface == nil {
@@ -54,7 +62,7 @@ is_scratchpad_selected :: proc(state: ^core.Euclid_General_State) -> bool {
 }
 
 //   Read the current scratchpad input text from the fixed-size UI buffer.
-scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) -> string {
+scratchpad_input_text :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) -> string {
     if ui_runtime == nil || ui_runtime^.scratchpad_input_len <= 0 {
         return ""
     }
@@ -78,6 +86,28 @@ scratchpad_parse_non_negative_int :: proc(text: string) -> (int, bool) {
     return value, true
 }
 
+//   Find the first and second newline offsets in one payload.
+//
+// Returns:
+//   - first: Offset of the first newline, or -1.
+//   - second: Offset of the second newline, or -1.
+scratchpad_find_payload_newlines :: proc(payload: string) -> (int, int) {
+    first := -1
+    second := -1
+    for i in 0..<len(payload) {
+        if payload[i] != '\n' {
+            continue
+        }
+        if first < 0 {
+            first = i
+        } else {
+            second = i
+            break
+        }
+    }
+    return first, second
+}
+
 //   Decode a generic completion payload encoded as `start\nend\nreplacement`.
 scratchpad_parse_completion_payload :: proc(
     payload: string) -> Scratchpad_Completion_Payload {
@@ -85,20 +115,7 @@ scratchpad_parse_completion_payload :: proc(
         return Scratchpad_Completion_Payload{0, 0, "", false}
     }
 
-    first_newline := -1
-    second_newline := -1
-    for i in 0..<len(payload) {
-        if payload[i] != '\n' {
-            continue
-        }
-        if first_newline < 0 {
-            first_newline = i
-        } else {
-            second_newline = i
-            break
-        }
-    }
-
+    first_newline, second_newline := scratchpad_find_payload_newlines(payload)
     if first_newline < 0 || second_newline < 0 || second_newline <= first_newline + 1 {
         return Scratchpad_Completion_Payload{0, 0, "", false}
     }
@@ -144,7 +161,7 @@ scratchpad_parse_history_payload :: proc(
 //   Submit one generic completion request without blocking the display thread.
 request_scratchpad_completion :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     tab_pressed: bool) {
 
     if !tab_pressed || state == nil || ui_runtime == nil {
@@ -157,9 +174,10 @@ request_scratchpad_completion :: proc(
     }
 
     request_id, sent := julia.try_submit_scratchpad_async(
-        state, .Complete, input_text, ui_runtime^.scratchpad_input_cursor,
-        ui_runtime^.scratchpad_input_mode,
-        ui_runtime^.scratchpad_input_generation)
+        state, .Complete, julia.get_scratchpad_submission(
+            input_text, ui_runtime^.scratchpad_input_cursor,
+            ui_runtime^.scratchpad_input_mode,
+            ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_latest_completion_request_id = request_id
     }
@@ -185,18 +203,24 @@ scratchpad_input_columns :: proc(
 
 //   Build unified transcript and live-input geometry for one terminal frame.
 scratchpad_terminal_layout :: proc(
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    font: rl.Font,
+    ctx: Scratchpad_Panel_Context,
     fallback_text: string,
     scroll_y: f32) -> Scratchpad_Terminal_Layout {
 
+    state := ctx.state
+    panel := ctx.panel
+    ui_runtime := ctx.ui_runtime
+    font := ctx.font
+
     transcript_height: f32 = TEXT_PADDING
     if len(fallback_text) > 0 {
-        transcript_height = dynview.scratchpad_content_height_or_fallback(
-            &state^.dynview, panel, TEXT_PADDING, TEXT_WRAP_ADVANCE,
-            TEXT_ROW_HEIGHT, fallback_text)
+        transcript_height = dynview.scratchpad_content_height_or_fallback(&state^.dynview,
+            panel, {
+                text_padding = TEXT_PADDING,
+                wrap_advance = TEXT_WRAP_ADVANCE,
+                row_height = TEXT_ROW_HEIGHT,
+                text = fallback_text,
+            })
     }
     columns := scratchpad_input_columns(panel, font, ui_runtime^.scratchpad_input_mode)
     input_rows := terminal_input_row_count(
@@ -222,29 +246,31 @@ scratchpad_terminal_layout :: proc(
 //   This should only run when input-box vertical caret movement was not handled.
 apply_scratchpad_history_navigation :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     history_previous: bool,
     history_next: bool) {
 
     if history_previous {
         _, _ = julia.try_submit_scratchpad_async(
             state, .History_Previous,
-            input_mode = ui_runtime^.scratchpad_input_mode,
-            input_generation = ui_runtime^.scratchpad_input_generation)
+            julia.get_scratchpad_submission(
+                input_mode = ui_runtime^.scratchpad_input_mode,
+                input_generation = ui_runtime^.scratchpad_input_generation))
     }
 
     if history_next {
         _, _ = julia.try_submit_scratchpad_async(
             state, .History_Next,
-            input_mode = ui_runtime^.scratchpad_input_mode,
-            input_generation = ui_runtime^.scratchpad_input_generation)
+            julia.get_scratchpad_submission(
+                input_mode = ui_runtime^.scratchpad_input_mode,
+                input_generation = ui_runtime^.scratchpad_input_generation))
     }
 }
 
 //   Submit current scratchpad input when parse state is complete.
 submit_scratchpad_input_if_ready :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     submit_pressed: bool) {
 
     if !submit_pressed {
@@ -261,9 +287,10 @@ submit_scratchpad_input_if_ready :: proc(
 
     ui_runtime^.scratchpad_bottom_pinned = true
     request_id, sent := julia.try_submit_scratchpad_async(
-        state, .Submit, input_text,
-        input_mode = ui_runtime^.scratchpad_input_mode,
-        input_generation = ui_runtime^.scratchpad_input_generation)
+        state, .Submit,
+        julia.get_scratchpad_submission(input_text,
+            input_mode = ui_runtime^.scratchpad_input_mode,
+            input_generation = ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_pending_submit_request_id = request_id
     }
@@ -271,7 +298,7 @@ submit_scratchpad_input_if_ready :: proc(
 
 //   Apply all completed Scratchpad replies at a display-frame boundary.
 apply_scratchpad_async_results :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
     for {
         slot, ok := julia.poll_scratchpad_async_result(state)
@@ -286,14 +313,15 @@ apply_scratchpad_async_results :: proc(
 
 //   Retry a required history reset until bounded worker storage accepts it.
 flush_scratchpad_history_reset :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
     if !ui_runtime^.scratchpad_history_reset_pending {
         return
     }
     _, sent := julia.try_submit_scratchpad_async(
         state, .History_Reset,
-        input_generation = ui_runtime^.scratchpad_input_generation)
+        julia.get_scratchpad_submission(
+            input_generation = ui_runtime^.scratchpad_input_generation))
     if sent {
         ui_runtime^.scratchpad_history_reset_pending = false
     }
@@ -301,7 +329,7 @@ flush_scratchpad_history_reset :: proc(
 
 //   Apply one current-generation reply and ignore stale UI mutations.
 apply_scratchpad_async_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.kind == .Submit &&
@@ -335,7 +363,7 @@ apply_scratchpad_async_result :: proc(
 
 //   Preserve incomplete/error input and clear only an accepted complete submit.
 apply_scratchpad_submit_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.parse_result == julia.SCRATCHPAD_PARSE_INCOMPLETE {
@@ -358,7 +386,7 @@ apply_scratchpad_submit_result :: proc(
 
 //   Apply only the newest completion request for the current input generation.
 apply_scratchpad_completion_result :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
     if slot^.request_id != ui_runtime^.scratchpad_latest_completion_request_id {
@@ -372,8 +400,11 @@ apply_scratchpad_completion_result :: proc(
         return
     }
     if input_box_replace_byte_range(
-        ui_runtime^.scratchpad_input[:], &ui_runtime^.scratchpad_input_len,
-        &ui_runtime^.scratchpad_input_cursor,
+        ui_runtime^.scratchpad_input[:],
+        Input_Box_Edit_State{
+            text_len = &ui_runtime^.scratchpad_input_len,
+            caret = &ui_runtime^.scratchpad_input_cursor,
+        },
         completion_payload.replace_start,
         completion_payload.replace_end,
         completion_payload.replacement) {
@@ -383,7 +414,7 @@ apply_scratchpad_completion_result :: proc(
 
 //   Apply Julia/Help prompt transitions after one input frame.
 apply_scratchpad_mode_transition :: proc(
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
     input_result: Input_Box_Result,
     previous_len, previous_cursor: int) -> bool {
 
@@ -400,8 +431,10 @@ apply_scratchpad_mode_transition :: proc(
 
     _ = input_box_replace_byte_range(
         ui_runtime^.scratchpad_input[:],
-        &ui_runtime^.scratchpad_input_len,
-        &ui_runtime^.scratchpad_input_cursor,
+        Input_Box_Edit_State{
+            text_len = &ui_runtime^.scratchpad_input_len,
+            caret = &ui_runtime^.scratchpad_input_cursor,
+        },
         0, 1, "")
     ui_runtime^.scratchpad_input_mode = .Help
     return true
@@ -411,13 +444,14 @@ apply_scratchpad_mode_transition :: proc(
 //   Run the scroll container for the scratchpad transcript and return its panel.
 //   Updates the live scroll offset and re-pins the bottom when the user scrolls.
 scratchpad_sync_scroll :: proc(
-    state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    text_panel: rl.Rectangle,
+    ctx: Scratchpad_Panel_Context,
     mouse_input: Mouse_Input_State,
     layout: Scratchpad_Terminal_Layout,
     scroll_step: f32) -> Scroll_Container_Begin_Result {
 
+    state := ctx.state
+    ui_runtime := ctx.ui_runtime
+    text_panel := ctx.panel
     scratch_scroll_state := Scroll_Container_State{
         is_dragging_thumb = ui_runtime.text_scroll_dragging,
         drag_offset_y = ui_runtime.text_scroll_drag_off,
@@ -447,76 +481,61 @@ scratchpad_sync_scroll :: proc(
 
 //   Recompute the layout pinned to the bottom when bottom-pinning is active.
 scratchpad_pin_layout_to_bottom :: proc(
-    state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    terminal_panel: rl.Rectangle,
-    font: rl.Font,
+    ctx: Scratchpad_Panel_Context,
     output_text_legacy: string,
     layout: Scratchpad_Terminal_Layout) -> Scratchpad_Terminal_Layout {
 
-    if !ui_runtime^.scratchpad_bottom_pinned {
+    if !ctx.ui_runtime^.scratchpad_bottom_pinned {
         return layout
     }
-    state^.ui_runtime.view_text_scroll_y = layout.max_scroll
-    return scratchpad_terminal_layout(
-        state, terminal_panel, ui_runtime, font, output_text_legacy,
-        state^.ui_runtime.view_text_scroll_y)
+    ctx.state^.ui_runtime.view_text_scroll_y = layout.max_scroll
+    return scratchpad_terminal_layout(ctx, output_text_legacy,
+        ctx.state^.ui_runtime.view_text_scroll_y)
 }
 
-//   Draw Scratchpad transcript and live input as one terminal-style scroll surface.
-draw_scratchpad_output_and_prompt :: proc(
-    state: ^core.Euclid_General_State,
-    text_panel: rl.Rectangle,
-    ui_runtime: ^core.Euclid_UI_Runtime_State,
-    font: rl.Font,
+//   Draw the transcript text and copy affordances for one scratchpad frame.
+draw_scratchpad_transcript :: proc(
+    ctx: Scratchpad_Panel_Context,
+    output_text_legacy: string,
+    terminal_panel: rl.Rectangle,
     mouse_input: Mouse_Input_State) {
 
-    output_text_legacy := julia.current_view_snapshot_text(state)
-    output_text := dynview.scratchpad_text_or_fallback(&state.dynview, output_text_legacy)
-    layout := scratchpad_terminal_layout(
-        state, text_panel, ui_runtime, font, output_text_legacy,
-        state^.ui_runtime.view_text_scroll_y)
-    scroll_step :=
-        dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
+    dynview.refresh_scratchpad_copy_targets(&ctx.state.dynview, {
+        panel = terminal_panel,
+        scroll_y = ctx.state^.ui_runtime.view_text_scroll_y,
+        text_padding = TEXT_PADDING,
+        icon_size = DYNVIEW_COPY_ICON_SIZE,
+        icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
+    })
 
-    output_len := len(output_text)
-    if output_len != ui_runtime^.scratchpad_last_output_len {
-        if ui_runtime^.scratchpad_bottom_pinned {
-            state^.ui_runtime.view_text_scroll_y = layout.max_scroll
-        }
-        ui_runtime^.scratchpad_last_output_len = output_len
-    }
+    view_core.draw_copy_hover_backgrounds(&ctx.state^.dynview, mouse_input.position)
 
-    mouse := mouse_input.position
-    scratch_scroll_begin := scratchpad_sync_scroll(state, ui_runtime,
-        text_panel, mouse_input, layout, scroll_step)
-    terminal_panel := scratch_scroll_begin.view_rect
+    ui_dynview.draw_scratchpad_styled_or_fallback(ctx.state, ctx.ui_runtime,
+        ui_dynview.Fallback_Text_Content{output_text_legacy, UI_TEXT_COLOR},
+        ui_dynview.Scratchpad_Draw_Params{
+            panel = terminal_panel,
+            scroll_y = ctx.state^.ui_runtime.view_text_scroll_y,
+            font = ctx.font,
+            metrics = ui_dynview.Wrapped_Text_Metrics{
+                padding = TEXT_PADDING,
+                row_height = TEXT_ROW_HEIGHT,
+                wrap_advance = TEXT_WRAP_ADVANCE,
+                font_size = TREE_FONT_SIZE,
+            },
+        })
 
-    layout = scratchpad_terminal_layout(
-        state, terminal_panel, ui_runtime, font, output_text_legacy,
-        state^.ui_runtime.view_text_scroll_y)
+    _ = view_core.draw_copy_icons(&ctx.state^.dynview, terminal_panel, mouse_input)
+}
 
-    dynview.refresh_scratchpad_copy_targets(&state.dynview, terminal_panel,
-        state^.ui_runtime.view_text_scroll_y,
-        TEXT_PADDING, TEXT_ROW_HEIGHT, DYNVIEW_COPY_ICON_SIZE, DYNVIEW_COPY_ICON_X_PAD)
+//   Build the input-box params for the scratchpad live terminal input.
+scratchpad_input_box_params :: #force_inline proc(
+    ctx: Scratchpad_Panel_Context,
+    layout: Scratchpad_Terminal_Layout,
+    terminal_panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State) -> Input_Box_Params {
 
-    view_core.draw_copy_hover_backgrounds(&state^.dynview, mouse)
-
-    ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime,
-        output_text_legacy, terminal_panel, state^.ui_runtime.view_text_scroll_y,
-        font, ui_dynview.Wrapped_Text_Metrics{
-            padding = TEXT_PADDING,
-            row_height = TEXT_ROW_HEIGHT,
-            wrap_advance = TEXT_WRAP_ADVANCE,
-            font_size = TREE_FONT_SIZE,
-        }, UI_TEXT_COLOR)
-
-    _ = view_core.draw_copy_icons(&state^.dynview, terminal_panel, mouse_input)
-
-    previous_input_len := ui_runtime^.scratchpad_input_len
-    previous_input_cursor := ui_runtime^.scratchpad_input_cursor
-    live_prompt := scratchpad_prompt(ui_runtime^.scratchpad_input_mode)
-    input_result := handle_input_box(Input_Box_Params{
+    ui_runtime := ctx.ui_runtime
+    return Input_Box_Params{
         id = 5001,
         rect = layout.input_rect,
         text_buffer = ui_runtime^.scratchpad_input[:],
@@ -529,16 +548,25 @@ draw_scratchpad_output_and_prompt :: proc(
         scroll_offset = rl.Vector2{},
         interaction_space_rect = terminal_panel,
         interaction_enabled = true,
-        font = font,
+        font = ctx.font,
         font_color = rl.Color{255, 255, 255, 255},
         font_size = TREE_FONT_SIZE,
         char_advance = TEXT_WRAP_ADVANCE,
-        prompt_prefix = live_prompt,
+        prompt_prefix = scratchpad_prompt(ui_runtime^.scratchpad_input_mode),
         caret_blink_half_period_seconds = SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS,
         terminal_mode = true,
         terminal_row_height = TEXT_ROW_HEIGHT,
-    }, &ui_runtime^.ui_press_owner)
+    }
+}
 
+//   Apply the side effects of one handled input frame (state commit + actions).
+apply_scratchpad_input_result :: proc(
+    ctx: Scratchpad_Panel_Context,
+    input_result: Input_Box_Result,
+    previous_input_len, previous_input_cursor: int) {
+
+    state := ctx.state
+    ui_runtime := ctx.ui_runtime
     ui_runtime^.scratchpad_input_len = input_result.text_len_out
     ui_runtime^.scratchpad_input_cursor = input_result.caret_col_out
     ui_runtime^.scratchpad_input_viewport_col_start = input_result.viewport_col_start_out
@@ -558,16 +586,35 @@ draw_scratchpad_output_and_prompt :: proc(
     request_scratchpad_completion(state, ui_runtime, input_result.tab_pressed)
 
     submit_scratchpad_input_if_ready(state, ui_runtime, input_result.submit_pressed)
+}
 
-    layout = scratchpad_terminal_layout(
-        state, terminal_panel, ui_runtime, font, output_text_legacy,
-        state^.ui_runtime.view_text_scroll_y)
-    layout = scratchpad_pin_layout_to_bottom(state, ui_runtime, terminal_panel,
-        font, output_text_legacy, layout)
+//   Handle the live input box for one scratchpad frame, applying edit side effects.
+handle_scratchpad_input :: proc(
+    ctx: Scratchpad_Panel_Context,
+    layout: Scratchpad_Terminal_Layout,
+    terminal_panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State) {
 
+    ui_runtime := ctx.ui_runtime
+    previous_input_len := ui_runtime^.scratchpad_input_len
+    previous_input_cursor := ui_runtime^.scratchpad_input_cursor
+    input_result := handle_input_box(
+        scratchpad_input_box_params(ctx, layout, terminal_panel, mouse_input),
+        &ui_runtime^.ui_press_owner)
+
+    apply_scratchpad_input_result(ctx, input_result,
+        previous_input_len, previous_input_cursor)
+}
+
+//   Draw the live input box with the resolved prompt styling.
+draw_scratchpad_input_box :: proc(
+    ctx: Scratchpad_Panel_Context,
+    layout: Scratchpad_Terminal_Layout,
+    mouse_input: Mouse_Input_State) {
+
+    ui_runtime := ctx.ui_runtime
     prompt_font := view_core.font_runtime_resolve(
-        state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
-    live_prompt = scratchpad_prompt(ui_runtime^.scratchpad_input_mode)
+        ctx.state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
     prompt_color := rl.Color{56, 152, 38, 255}
     if ui_runtime^.scratchpad_input_mode == .Help {
         prompt_color = rl.Color{217, 180, 74, 255}
@@ -582,11 +629,11 @@ draw_scratchpad_output_and_prompt :: proc(
         enabled = true,
         has_focus = true,
         mouse = mouse_input,
-        font = font,
+        font = ctx.font,
         font_color = UI_TEXT_COLOR,
         font_size = TREE_FONT_SIZE,
         char_advance = TEXT_WRAP_ADVANCE,
-        prompt_prefix = live_prompt,
+        prompt_prefix = scratchpad_prompt(ui_runtime^.scratchpad_input_mode),
         caret_blink_half_period_seconds = SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS,
         terminal_mode = true,
         terminal_row_height = TEXT_ROW_HEIGHT,
@@ -594,11 +641,28 @@ draw_scratchpad_output_and_prompt :: proc(
         terminal_prompt_color = prompt_color,
         terminal_prompt_font = prompt_font,
     })
+}
 
+//   Finalize the scroll container for one scratchpad frame, updating pin state.
+scratchpad_finish_scroll :: proc(
+    ctx: Scratchpad_Panel_Context,
+    scroll_begin: Scroll_Container_Begin_Result,
+    layout: Scratchpad_Terminal_Layout,
+    terminal_panel: rl.Rectangle,
+    mouse_input: Mouse_Input_State) {
+
+    state := ctx.state
+    ui_runtime := ctx.ui_runtime
     pre_drag_scroll := state^.ui_runtime.view_text_scroll_y
-    scratch_scroll_end := scroll_container_end(scratch_scroll_begin.scroll_ref,
-        layout.content_height, state^.ui_runtime.view_text_scroll_y, mouse_input,
-        rl.Vector2{}, terminal_panel, &ui_runtime^.ui_press_owner)
+    scratch_scroll_end := scroll_container_end(Scroll_Container_End_Params{
+        scroll_ref = scroll_begin.scroll_ref,
+        content_height_final = layout.content_height,
+        scroll_y_in = state^.ui_runtime.view_text_scroll_y,
+        mouse_input = mouse_input,
+        scroll_offset = rl.Vector2{},
+        interaction_space_rect = terminal_panel,
+        press_owner = &ui_runtime^.ui_press_owner,
+    })
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = scratch_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = scratch_scroll_end.state_out.drag_offset_y
@@ -606,4 +670,61 @@ draw_scratchpad_output_and_prompt :: proc(
         ui_runtime^.scratchpad_bottom_pinned = scratchpad_scroll_is_at_bottom(
             state^.ui_runtime.view_text_scroll_y, layout.max_scroll)
     }
+}
+
+//   Track transcript length changes and re-pin the scroll to the bottom.
+scratchpad_track_output_length :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    output_len: int,
+    max_scroll: f32) {
+
+    if output_len == ui_runtime^.scratchpad_last_output_len {
+        return
+    }
+    if ui_runtime^.scratchpad_bottom_pinned {
+        state^.ui_runtime.view_text_scroll_y = max_scroll
+    }
+    ui_runtime^.scratchpad_last_output_len = output_len
+}
+
+//   Draw Scratchpad transcript and live input as one terminal-style scroll surface.
+draw_scratchpad_output_and_prompt :: proc(
+    state: ^core.Euclid_General_State,
+    text_panel: rl.Rectangle,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    font: rl.Font,
+    mouse_input: Mouse_Input_State) {
+
+    output_text_legacy := julia.current_view_snapshot_text(state)
+    output_text := dynview.scratchpad_text_or_fallback(&state.dynview, output_text_legacy)
+    panel_ctx := Scratchpad_Panel_Context{state, ui_runtime, text_panel, font}
+    layout := scratchpad_terminal_layout(panel_ctx, output_text_legacy,
+        state^.ui_runtime.view_text_scroll_y)
+    scroll_step :=
+        dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
+    scratchpad_track_output_length(state, ui_runtime, len(output_text),
+        layout.max_scroll)
+
+    scratch_scroll_begin := scratchpad_sync_scroll(
+        panel_ctx, mouse_input, layout, scroll_step)
+    terminal_panel := scratch_scroll_begin.view_rect
+    ctx := Scratchpad_Panel_Context{state, ui_runtime, terminal_panel, font}
+
+    layout = scratchpad_terminal_layout(ctx, output_text_legacy,
+        state^.ui_runtime.view_text_scroll_y)
+
+    draw_scratchpad_transcript(panel_ctx, output_text_legacy, terminal_panel,
+        mouse_input)
+
+    handle_scratchpad_input(ctx, layout, terminal_panel, mouse_input)
+
+    layout = scratchpad_terminal_layout(ctx, output_text_legacy,
+        state^.ui_runtime.view_text_scroll_y)
+    layout = scratchpad_pin_layout_to_bottom(ctx, output_text_legacy, layout)
+
+    draw_scratchpad_input_box(ctx, layout, mouse_input)
+
+    scratchpad_finish_scroll(ctx, scratch_scroll_begin, layout, terminal_panel,
+        mouse_input)
 }

@@ -18,12 +18,12 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: What about AI?](#q-what-about-ai)
     1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
-    1. [Q: You Support LaTeX?](#q-you-support-latex)
-    1. [Q: Any Performance Hacks for Users?](#q-any-performance-hacks-for-users)
+    1. [Q: You support LaTeX?](#q-you-support-latex)
+    1. [Q: Any performance hacks for users?](#q-any-performance-hacks-for-users)
     1. [Q: Why 2 languages?](#q-why-2-languages)
     1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
-    1. [Q: What's This About Hot-Reload?](#q-whats-this-about-hot-reload)
+    1. [Q: What's this about hot-reload?](#q-whats-this-about-hot-reload)
     1. [Q: What is all this output in the make vet output?](#q-what-is-all-this-output-in-the-make-vet-output)
 
 <p align="center">
@@ -36,9 +36,9 @@ You must have Odin and Julia installed on your system to build from source, and 
 must be available on PATH.
 
 Clone the git repository, then build. Both the conventional `make` entry point
-(on Linux/macOS) and the PowerShell entry point (on Windows) run `configure`
-automatically the first time to verify the toolchain and install the required
-Julia packages. Then they build via `make.jl`.
+(on Linux/macOS) and the PowerShell entry point (on Windows) configure
+automatically the first time — verifying the toolchain and installing the
+required Julia packages — and then build via `make.jl`.
 
 ### Linux / macOS (shell + Makefile)
 
@@ -61,12 +61,13 @@ cd Euclid
 .\make.ps1 run        # build and run the application
 ```
 
-### Driving the scripts directly
+### Driving the driver directly
 
-Prefer to call the scripts yourself? That works the same everywhere:
+Prefer to call the build driver yourself? Configure first through the entry
+point for your platform, then invoke `make.jl`:
 
 ```bash
-./configure           # Linux / macOS; .\configure in Windows PowerShell
+make configure    # or: .\make.ps1 configure
 julia tools/make.jl
 # To run immediately: julia tools/make.jl -r
 ```
@@ -74,14 +75,14 @@ julia tools/make.jl
 ### Build targets
 
 The `Makefile` (Linux/macOS) and `make.ps1` (Windows) are thin, conventional
-wrappers over the same commands — all real logic lives in `configure` and
-`make.jl`. Both run `configure` once (tracked by a `.configure-done` sentinel)
-before any build target, so the first bare build just works after cloning. The
-targets are identical across both entry points:
+wrappers over the same commands — all real logic lives in `tools/configure.sh`,
+`make.ps1`, and `tools/make.jl`. Both entry points configure once (tracked by a
+`.configure-done` sentinel) before any build target, so the first bare build just
+works after cloning. The targets are identical across both entry points:
 
 | Linux / macOS | Windows | What it runs |
 | --- | --- | --- |
-| `make` / `make build` | `.\make.ps1` | `configure` (once), then `julia tools/make.jl` |
+| `make` / `make build` | `.\make.ps1` | configure (once), then `julia tools/make.jl` |
 | `make run` | `.\make.ps1 run` | `julia tools/make.jl --run` |
 | `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl --vet --test` (the verification baseline) |
 | `make vet` | `.\make.ps1 vet` | `julia tools/make.jl --vet` |
@@ -89,17 +90,18 @@ targets are identical across both entry points:
 | `make harness` | `.\make.ps1 harness` | `julia tools/make.jl --harness` |
 | `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl --wiki` |
 | `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl --check-wiki` |
-| `make configure` | `.\make.ps1 configure` | re-run `configure` |
+| `make configure` | `.\make.ps1 configure` | re-run configure |
 | `make clean` | `.\make.ps1 clean` | `julia tools/make.jl --clean` (also clears the configure sentinel) |
 | `make help` | `.\make.ps1 help` | `julia tools/make.jl --help` |
 
-### The configure script
+### Configure
 
-The `configure` script is a polyglot (POSIX sh and PowerShell) that works on
-Linux, macOS, and Windows. It checks that `odin` and `julia` are on PATH, runs
-`Pkg.instantiate()` for the application environment (`src/julia`), and installs
-the Julia static-analysis packages (JET, JuliaSyntax, CodeComplexity) used by the
-vet tooling into the default Julia environment if they are missing.
+On Linux and macOS, the Makefile runs `tools/configure.sh`, a POSIX sh script
+that checks `odin` and `julia` are on PATH, requires the `tools/analysis`
+submodule to be initialized, and instantiates the application (`src/julia`) and
+analysis (`tools/analysis`) Julia projects. On Windows, `make.ps1` performs the
+same steps natively in PowerShell; it additionally verifies the MSVC environment
+(or `cl.exe`) and `gendef`.
 
 ### Windows requires a few more additions before this will work
 
@@ -108,20 +110,19 @@ vet tooling into the default Julia environment if they are missing.
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
 
-On Windows, `configure` also verifies that the MSVC environment (or `cl.exe`) and
-`gendef` are available.
-
 ## Documentation
 
-- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki): published project documentation.
-- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home): generated Odin and
+- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki):
+ published project documentation.
+- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
+ generated Odin and
   Julia APIs.
-- [Guides](docs/wiki/Guides/ArchitectureSummary.md): canonical authored architecture, coding,
-  animation, and syntax documentation.
+- [Guides](docs/wiki/Guides/ArchitectureSummary.md):
+ canonical authored architecture, coding, animation, and syntax documentation.
 
-Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`. The artifact is
-written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it against a fresh generation
-without modifying the retained artifact.
+Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
+The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
+against a fresh generation without modifying the retained artifact.
 
 ## Questions?
 
@@ -144,17 +145,17 @@ line of code in this project myself, regardless of where that code has come from
 the old depths of stack overflow, my brain, someone else's brain, some AI tool or another,
 or some other tool.
 
-This is not going to be as strong as some would wish. For a project being released into the
-public domain, I just do not have the energy for a stronger stance in this project. The
-concerns are ethical and especially political. In that realm, this project is inherently
-hostile to copyright by its own licensing. The remaining concerns largely boil down to the
-sustainability. I feel absolutely no need to give AI any benefit of the doubt that it is
-actually sustainable enough to be worth its relatively low quality output. Otherwise,
-these concerns are difficult to address with a simple public domain geometry software
-project. A public domain project is really not the place for many of these ethical and
-political discussions. I will not be fighting that in this project. This will not be a
-project that is concerned with any stronger stance than demanding a human take full
-responsibility.
+This is not going to be as strong as some would wish. For a project being released into
+the public domain, I just do not have the energy for a stronger stance in this project.
+The concerns are ethical and especially political. In that realm, this project is
+inherently hostile to copyright by its own licensing. The remaining concerns largely boil
+down to the sustainability. I feel absolutely no need to give AI any benefit of the doubt
+that it is actually sustainable enough to be worth its relatively low quality output.
+Otherwise, these concerns are difficult to address with a simple public domain geometry
+software project. A public domain project is really not the place for many of these
+ethical and political discussions. I will not be fighting that in this project. This will
+not be a project that is concerned with any stronger stance than demanding a human take
+full responsibility.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
@@ -164,6 +165,18 @@ bridge to save my eyes via a nice long fall. My recommendation for the vibecoder
 try and program an OS with a basic text file editor to run in a VM using nothing but ASM,
 and no AI. Something difficult that you will get some taste from. Then whatever, man. Just
 read the code and fix the stupid shit.
+
+Finally, yes, there is code that has used AI in this. As the developer here, I do need to
+point out I often continue to experiment with the AIs in order to show potential employers
+that I know how to use the things. They really are not very good on their own.
+Additionally, I (Derek) am getting my Masters in Computer Science, specializing in AI. So
+yes, I do practice in this codebase. Again, my rule at the very start stands. I take full
+responsibility and hand-work on all code. Sometimes, less than other times. I have added a
+comprehensive, opinionated static analysis engine *even moreso* because I forget things
+and do embarrasingly stupid things even when I am coding by hand. If an AI driver cannot
+explain how they have gotten code through this static analysis in this project, I will
+probably ban them without warning beyond this. You can use AI, but you **do** have to take
+full responsibility for that use with me.
 
 ### Q: What is the "Scratchpad"?
 
@@ -175,11 +188,11 @@ benefit for the tinkerers out there, I think, which is a beneficial addition.
 The code of this project is designed with a core engine coded in Odin, but all of the
 animations are executed as Julia scripts. Julia is a fast, JIT compiled language in this
 use. Julia users will also be familiar with the REPL, where they can enter in Julia code
-essentially line-by-line and see how it works in a live environment. The Scratchpad in this
-project is like this. It provides an emptied drawing surface and a line input for Julia
-code input. `2+2` will show `4` in the output directly above, for example. In fact, via
-using Julia's `REPL` package directly, even scope issues should follow similar Julia REPL
-standards for those already familiar.
+essentially line-by-line and see how it works in a live environment. The Scratchpad in
+this project is like this. It provides an emptied drawing surface and a line input for
+Julia code input. `2+2` will show `4` in the output directly above, for example. In fact,
+via using Julia's `REPL` package directly, even scope issues should follow similar Julia
+REPL standards for those already familiar.
 
 `:help` will show most of the important information for how to use the Scratchpad in
 practice. Importantly, starting a line with `?` will attempt to do a focused documentation
@@ -187,11 +200,13 @@ query.
 
 A quick cheatsheet for drawing the standard Euclidean matters:
 
-- `point!([x, y, z])` e.g. `point!([0.5f0, 0.5f0, 0f0])` : Animates drawing a single point.
-- `line!([x1, y1, z1], [x2, y2, z2])` e.g. `line!([0.1f0, 0.1f0, 0f0], [0.1f0, 0.9f0, 0f0])`
+- `point!([x, y, z])` e.g. `point!([0.5f0, 0.5f0, 0f0])`
+  : Animates drawing a single point.
+- `line!([x1, y1, z1], [x2, y2, z2])` e.g.
+  `line!([0.1f0, 0.1f0, 0f0], [0.1f0, 0.9f0, 0f0])`
   : Animates drawing a line from [x1, y1, z1] to [x2, y2, z2].
-- `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)` : Animates drawing a
-  circle centered at [x, y, z], with a radius of r.
+- `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
+  : Animates drawing a circle centered at [x, y, z], with a radius of r.
 
 For additional help:
 
@@ -200,7 +215,8 @@ For additional help:
 - Following `?` with a module name (e.g. `?OdinJuliaBridge`) will attempt to list all
   unique function names available in the name module.
 - Following `?` with a function name (e.g. `?OdinJuliaBrige.create_new_point`) will
-  attempt to display the documentation comment for that function and all parameter variants.
+  attempt to display the documentation comment for that function and all parameter
+  variants.
 
 Not so secretly, this can be a helpful way to navigate the OdinJuliaBridge most of all,
 even if not using the Scratchpad for any other purpose. Kind of like man pages.
@@ -252,15 +268,16 @@ pieces of C code walking through saving a gif, and something like ffmpeg could p
 significantly improve on even that, as well as adding other formats. Such are
 considerations for the future.
 
-### Q: You Support LaTeX?
+### Q: You support LaTeX?
 
 Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
-kind of a pain in the ass for half a week, and it does not yet support everything one might
-hope to find in a more thorough LaTeX rendering engine. This is basically a work in
+kind of a pain in the ass for half a week, and it does not yet support everything one
+might hope to find in a more thorough LaTeX rendering engine. This is basically a work in
 progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
 shame about it, but we're just gonna sit in that and learn.
 
-Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support today.
+Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support
+today.
 
 The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
 For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
@@ -269,7 +286,7 @@ this to play with what is supported.
 
 Currently, only math mode is supported. Maybe I'll add more? Hmm...
 
-### Q: Any Performance Hacks for Users?
+### Q: Any performance hacks for users?
 
 There are a few!
 
@@ -285,8 +302,8 @@ will draw the dust particles with the GPU and O(1) on the CPU to instance the da
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset commands
-remove an existing sysimage to prevent stale baked code from being used.
+executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset
+commands remove an existing sysimage to prevent stale baked code from being used.
 
 Additionally, there are some startup options that can affect application performance.
 
@@ -324,20 +341,20 @@ fit to that model, and I froze on it a bit.
 
 I had some thoughts about making a C application for this project, but I was not very
 excited about it at any given moment. Julia has lagged a bit in getting a stand-alone
-executable route, so it seemed unlikely to go purely Julia for quite a while. This has been
-changing as Julia community continues pursuing their one language paradigm, but alas, here
-I am. As I was doing another project exploring 76 different programming languages, I
+executable route, so it seemed unlikely to go purely Julia for quite a while. This has
+been changing as Julia community continues pursuing their one language paradigm, but alas,
+here I am. As I was doing another project exploring 76 different programming languages, I
 encountered Odin and enjoyed working with it. On a whim, I was playing with a basic
 kinematic system in Odin when it occurred to me it would be a great basis for this
 Euclid project.
 
 Ultimately, having a strong solid application base with manual memory management and
 potential for optimizations at a relatively low level combined with an intentionally fast,
-JIT compiled, GC managed language on the individual animation level has its own advantages.
-I probably would not actually choose this without the unique history of this project, but
-it is actually quite an enjoyable programming experience between the two. They are different
-languages, but both offer language-level tools for the kind of maths used in this project
-that just make it an enjoyable experience!
+JIT compiled, GC managed language on the individual animation level has its own
+advantages. I probably would not actually choose this without the unique history of this
+project, but it is actually quite an enjoyable programming experience between the two.
+They are different languages, but both offer language-level tools for the kind of maths
+used in this project that just make it an enjoyable experience!
 
 ### Q: Are there any more options with the make scripts?
 
@@ -356,12 +373,22 @@ Options:
     --harness, -H       Build and run the headless semantic trace harness.
     --clean, -c         Delete generated build artifacts.
     --run, -r           Run bin/euclid after all other requests.
-    --test, -t          Run project tests for the phased testing plan.
-    --vet, -v           Build with validation flags.
+    --test, -t          Run application and analyzer tests.
+    --vet, -v           Build, then run repository analysis. With --test, run the
+                        full verification gate (build, tests, analyzer tests,
+                        analyzer self-analysis, and repository analysis).
     --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
     --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
     --                  Pass all remaining args directly to bin/euclid (only with --run).
     --help, -h          Show this help text.
+
+Verification options (forwarded to the analysis gate for --vet/--test):
+    --verbosity=0|1|2   Summary, details, or complete trace output.
+    --verbose           Alias for --verbosity=2.
+    --color=auto|always|never
+    --format=text|json  Select human or complete machine output.
+    --settings=PATH     Load analyzer settings from PATH.
+    --report=PATH       Write the comprehensive Markdown analysis report.
 
 Notes:
     - If no options are provided, the default is --build --assets.
@@ -376,16 +403,18 @@ underlying executable accepts a smaller control surface:
 Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
 ```
 
-`julia tools/make.jl -H` builds and runs the default harness scenario and writes the resulting trace
-to `bin/semantic-trace-harness.jsonl`.
+`julia tools/make.jl -H` builds and runs the default harness scenario and writes the
+resulting trace to `bin/semantic-trace-harness.jsonl`.
 
-### Q: Where Should I Start If I Want In The Code?
+### Q: Where should I start if I want in the code?
 
 I have added an initial architecture summary and coding standards that can be your guides.
 
-- [Architecture Summary](docs/wiki/Guides/ArchitectureSummary.md): describes the several modules, boundaries,
-  etc., and how they fit together. Includes important code files to start with.
-- [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code should be written
+- [Architecture Summary](docs/wiki/Guides/ArchitectureSummary.md): describes the several
+  modules, boundaries, etc., and how they fit together. Includes important code files to
+  start with.
+- [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code
+  should be written
 
 The project was initially quite messy, without a standard and with all the artifacts of
 exploring and learning a new-to-me language, as well as me not really being a traditional
@@ -395,7 +424,7 @@ different purpose. The result is some code not quite being as nice to the code s
 Nonetheless, the goal is to follow it moving forward, and probably fix up the bits that
 remain a bit off as I go.
 
-### Q: What's This About Hot-Reload?
+### Q: What's this about hot-reload?
 
 The project is structured to hot-reload all Julia code if the assets package is updated.
 You can simply call the make script specifying to build only the assets package. Then
@@ -421,93 +450,81 @@ Great question! A lot of this only makes any sense if you are really into the so
 engineering stuff. We perform several checks in the vet mode to try and improve code
 quality and performance.
 
-**FIRST**: There are dependencies in the make script for the vet mode,
-namely JET.jl, JuliaSyntax.jl, and CodeComplexity.jl. The `./configure` script
-installs these into the default Julia environment automatically (see
-[Building from Source](#building-from-source)). To add them manually instead:
+**FIRST**: Analysis runs through the OdinJuliaAnalysis engine in the
+`tools/analysis` submodule, with Euclid policy in `tools/analysis_settings.jl`.
+Configure (`tools/configure.sh` via the Makefile, or `make.ps1` on Windows)
+instantiates the analyzer's own Julia project (`tools/analysis/Project.toml`), so
+nothing extra is installed into Julia's default environment (see
+[Building from Source](#building-from-source)). The submodule must be initialized
+first:
 
-```julia
-using Pkg
-Pkg.add("JET")
-Pkg.add("JuliaSyntax")
-Pkg.add("CodeComplexity")
+```bash
+git submodule update --init --recursive
+make configure
 ```
 
-Odin static analysis is performed by a purpose-built analyzer in `tools/vet`
-that is compiled automatically during vet mode; no external Odin linter is
-required.
+The application build itself uses standard parameters. Compiler-validation flags
+(`-vet -strict-style -disallow-do -warnings-as-errors`) are applied by the analysis
+engine's own dedicated analytical Odin build, not by the application build.
 
 Repository-wide statistics (line counts, complexity, COCOMO, and an LLM
-regeneration-cost estimate) are computed by a first-party `repo-metrics`
-analysis built into the vet script. No external code counter (such as `scc`)
-is required; everything is derived from the same Julia and Odin token streams
-the rest of the vet pipeline already parses.
+regeneration-cost estimate) come from the analyzer's canonical report. No external
+code counter (such as `scc`) is required; everything is derived from the same parser
+streams the rest of the analysis pipeline uses.
 
 ```bash
 julia tools/make.jl -v
 ```
 
-NOTE: Use the combined vet+test run, `julia tools/make.jl -vt`, as the verification baseline.
-Running only `-v` or only `-t` is not sufficient for acceptance.
-
 #### Report Output
 
-Vet mode writes a full report to `bin/vet-report.md` on every run. Console output stays
-summary-first and points to that report for full detail.
+Vet mode writes the full analysis report to `.build/reports/analysis.md` on every
+run. Console output stays summary-first (phase table, code statistics, then any
+warnings or failures) and points to that report for full detail.
 
-Report section statuses use these meanings:
+The gate ends with a verification phase table. A phase is `PASS` when it completed
+without blocking findings and `FAIL` when it produced blocking findings or could not
+complete. `--verbose` or `--verbosity=2` replays complete captured phase output, and
+`--format=json` emits the complete machine report for automation.
 
-- `Pass`: check completed without findings requiring warning/fail status.
-- `Warn`: check completed with warning-only findings or partial analysis gaps.
-- `Fail`: blocking findings were detected.
-- `Skipped`: check was intentionally not run for the current context.
-- `Missing`: required external tool was not available.
-
-The report includes sections for the Odin vet build, Odin compiler dependencies,
-Julia syntax, Julia parser metadata, Julia CodeComplexity, Julia JET, Odin static
-analysis, Odin allocations, and repository metrics (`repo-metrics`).
+Analysis covers the Odin build, Julia and Odin syntax, naming, complexity, return
+shape, parameters, documentation, JET entry points, Odin allocations with reviewed
+policies, and repository metrics. Reviewed exceptions live in
+`tools/analysis_settings.jl` and are drift-checked, so stale suppressions fail.
 
 #### Odin
 
-First, Odin is run with a set of vet flags that enforces style throughout the Odin code,
-treating warnings as errors, etc. Thankfully, we can skip the tabs they require in their
-own repository in the Odin code.
+The analysis engine runs its own dedicated analytical Odin build with strict
+compiler flags (`-vet -strict-style -disallow-do -warnings-as-errors`) plus the
+Julia linker flags, treating warnings as errors. The application build itself uses
+standard parameters; the analytical build is the compiler-validation gate.
 
-Additionally, vet mode compiles and runs the Odin static analyzer in
-`tools/vet`, which uses `core:odin/parser` to measure every Odin procedure
-against the coding standards: NLOC, cyclomatic complexity, and parameter count.
-Complexity at or above 15 is a blocking violation unless the procedure carries an
-inline `#vet forgives(cyclomatic_complexity)` exception; complexity 11-14 warns.
-NLOC and parameter count remain review signals. The analyzer also traces
-allocation call sites (`new`, `make`, `append`, and known allocating helpers) and
-classifies each by allocator source: a site with no explicit allocator is a
-blocking violation, and an explicit default-heap allocator (`context.allocator`)
-warns. Documented exceptions use `#vet forgives(implicit_allocator)` or
-`#vet forgives(heap_allocator)` with an explanatory comment. Sites are reported
-prominently in the `odin-allocations` report section with basic statistics
-printed on every vet run.
+The engine also parses every Odin procedure and measures it against the coding
+standards: executable lines, cyclomatic complexity, and parameter count. Reviewed
+exceptions live in `tools/analysis_settings.jl` as drift-checked policies rather
+than inline markers. It additionally traces allocation call sites (`new`, `make`,
+`append`, and known allocating helpers) and classifies each by allocator source;
+sites are reported in the analysis report's allocation ledger.
 
 The `repo-metrics` section (see below) provides additional repository-wide
 statistics.
 
 #### Julia
 
-For Julia, the first thing that happens is that the make script loads the entire Julia
-source into AST to check for any obvious syntax errors. This catches many simple typos
-before it gets any further.
-
-Additionally, we use `CodeComplexity.jl` and `JET.jl` which allows us to perform both
-complexity checks and some static analysis on the code, preventing some pretty obvious
-errors before they are run.
+For Julia, the engine parses the source with JuliaSyntax to catch obvious syntax
+errors before anything runs, then measures functions (lines, cyclomatic
+complexity, parameters, return shape) and runs JET against configured entry
+points. Animation content loops and similar reviewed cases are exact exceptions in
+`tools/analysis_settings.jl`, so the blocking rules stay active everywhere else.
 
 The `repo-metrics` section (see below) provides additional repository-wide
 statistics.
 
-#### repo-metrics
+#### Repository statistics
 
-The `repo-metrics` section computes repository-wide statistics with the project's
-own toolchain, replacing the external `scc` code counter. Because it reuses the
-same parse that powers the other checks (JuliaSyntax for Julia, `core:odin/tokenizer`
+The report computes repository-wide statistics with the project's own analysis
+toolchain, replacing the external `scc` code counter. Because it reuses the same
+parsers that power the other checks (JuliaSyntax for Julia, `core:odin/parser`
 for Odin), its line and complexity figures are parse-accurate rather than
 regex/keyword estimates. It throws no warnings or errors and cannot guarantee code
 quality, but it isolates logic hotspots and shows how the code is structured. The
@@ -521,7 +538,7 @@ It reports, per language and per top-level directory:
   non-string character; *comment* when it is only comment/string content; *blank*
   when empty.
 - **Complexity**: total cyclomatic complexity per bucket, summed from the real
-  per-function measures (the Odin static analyzer and CodeComplexity.jl).
+  per-function measures.
 - **COCOMO (organic)**: the classic human effort/schedule/staffing estimate,
   including an estimated cost-to-develop in USD.
 - **LOCOMO**: an experimental LLM *regeneration*-cost estimate (input/output
@@ -537,7 +554,7 @@ expect the Julia code to remain low-moderate (0.05-0.13). The total being a mode
 0.09-0.13 would be a great expectation. Treat the cross-language gap with some care:
 the two engines tokenize branch constructs slightly differently, so the ratio is most
 meaningful as a per-language trend over time rather than a precise side-by-side
-comparison. For meaningful per-function and per-file signal, the Odin static analyzer
-and `CodeComplexity.jl` outputs are more telling than these aggregate ratios.
-Nonetheless, the `repo-metrics` outputs can indicate issues with stupid code decisions
+comparison. For meaningful per-function and per-file signal, the analyzer's
+function metric rules are more telling than these aggregate ratios.
+Nonetheless, the repository statistics can indicate issues with stupid code decisions
 we should feel bad about. And make us feel like 100x developers or something.

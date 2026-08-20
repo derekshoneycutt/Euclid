@@ -117,9 +117,9 @@ validate_shapes_graph :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     for i in 0..<MAX_SHAPESPOINTS {
         point := state^.point_system^.points[i]
         if point.child_point_head >= 0 {
-            validateStatus := validate_parent_child_chain(state, i32(i))
-            if validateStatus != BRIDGE_STATUS_OK {
-                return validateStatus
+            validate_status := validate_parent_child_chain(state, i32(i))
+            if validate_status != BRIDGE_STATUS_OK {
+                return validate_status
             }
         }
     }
@@ -187,8 +187,8 @@ set_pen_active :: proc "c" (
     }
     index := state^.pen.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
-        rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-        state^.point_system^.points[index].active_color = rlColor
+        rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+        state^.point_system^.points[index].active_color = rl_color
         state^.point_system^.points[index].active_child = active
     }
 }
@@ -220,11 +220,11 @@ set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enable
     state^.animation_drawing_sound_enabled = enabled
 }
 
-//   Accumulate drawing-sound activity for the current frame.
+//   Activate the steady drawing-sound texture for the current frame.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - speed: Requested speed; negative values are clamped to zero.
+//   - speed: Retained for ABI compatibility; texture level is contact-based.
 @(export)
 simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
     if capture_scalar_command(state, .Simulate_Drawing_Sound, speed) {
@@ -234,15 +234,7 @@ simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f3
         return
     }
 
-    use_speed := speed
-    if use_speed < 0 {
-        use_speed = 0
-    }
-
     state^.chalk_audio.has_contact_this_frame = true
-    if use_speed > state^.chalk_audio.accum_speed {
-        state^.chalk_audio.accum_speed = use_speed
-    }
 }
 
 //   Move pen joint1 and enable its lock constraint at the same position.
@@ -257,13 +249,13 @@ lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
     }
     context = state^.saved_context
     index := state^.pen.joint1_id
-    constraintIndex := state^.pen.lock_point1_id
+    constraint_index := state^.pen.lock_point1_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
-        state^.point_system^.constraints[constraintIndex].restriction = pos
-        state^.point_system^.constraints[constraintIndex].do_apply = true
+    if constraint_index >= 0 && constraint_index < MAX_SHAPESCONSTRAINTS {
+        state^.point_system^.constraints[constraint_index].restriction = pos
+        state^.point_system^.constraints[constraint_index].do_apply = true
     }
 }
 
@@ -326,13 +318,13 @@ get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
 lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
     context = state^.saved_context
     index := state^.pen.joint2_id
-    constraintIndex := state^.pen.lock_point2_id
+    constraint_index := state^.pen.lock_point2_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
-        state^.point_system^.constraints[constraintIndex].restriction = pos
-        state^.point_system^.constraints[constraintIndex].do_apply = true
+    if constraint_index >= 0 && constraint_index < MAX_SHAPESCONSTRAINTS {
+        state^.point_system^.constraints[constraint_index].restriction = pos
+        state^.point_system^.constraints[constraint_index].do_apply = true
     }
 }
 
@@ -435,8 +427,8 @@ set_compass_active :: proc "c" (
     }
     index := state^.compass.host_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
-        rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-        state^.point_system^.points[index].active_color = rlColor
+        rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+        state^.point_system^.points[index].active_color = rl_color
         state^.point_system^.points[index].active_child = active
     }
 }
@@ -468,25 +460,26 @@ lock_compass_joint1 :: proc "c" (
         return
     }
     context = state^.saved_context
-    pointIndex := state^.compass.joint1_id
-    pivotIndex := state^.compass.pivot_id
-    constraintIndex := state^.compass.lock_point1_id
-    if pointIndex > 0 && pointIndex < MAX_SHAPESPOINTS {
-        set_point_position_with_floor_dust_effects(state, pointIndex, pos)
+    point_index := state^.compass.joint1_id
+    pivot_index := state^.compass.pivot_id
+    constraint_index := state^.compass.lock_point1_id
+    if point_index > 0 && point_index < MAX_SHAPESPOINTS {
+        set_point_position_with_floor_dust_effects(state, point_index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
     
-        pointpos := state^.point_system^.points[pointIndex].position.? or_else { 0, 0, 0 }
-        pivotpos := state^.point_system^.points[pivotIndex].position.? or_else { 0, 0, 0 }
+        point := &state^.point_system^.points[point_index]
+        pivot := &state^.point_system^.points[pivot_index]
+        pointpos := point^.position.? or_else { 0, 0, 0 }
+        pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
-            state^.point_system^.points[pivotIndex].position =
-                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+            pivot^.position = core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
-        state^.point_system^.constraints[constraintIndex].restriction = pos
-        state^.point_system^.constraints[constraintIndex].do_apply = true
+    if constraint_index >= 0 && constraint_index < MAX_SHAPESCONSTRAINTS {
+        state^.point_system^.constraints[constraint_index].restriction = pos
+        state^.point_system^.constraints[constraint_index].do_apply = true
     }
 }
 
@@ -513,18 +506,19 @@ move_compass_joint1 :: proc "c" (
     state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     context = state^.saved_context
     index := state^.compass.joint1_id
-    pivotIndex := state^.compass.pivot_id
+    pivot_index := state^.compass.pivot_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        pointpos := state^.point_system^.points[index].position.? or_else { 0, 0, 0 }
-        pivotpos := state^.point_system^.points[pivotIndex].position.? or_else { 0, 0, 0 }
+        point := &state^.point_system^.points[index]
+        pivot := &state^.point_system^.points[pivot_index]
+        pointpos := point^.position.? or_else { 0, 0, 0 }
+        pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
-            state^.point_system^.points[pivotIndex].position =
-                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+            pivot^.position = core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
 }
@@ -567,25 +561,26 @@ lock_compass_joint2 :: proc "c" (
         return
     }
     context = state^.saved_context
-    pointIndex := state^.compass.joint2_id
-    pivotIndex := state^.compass.pivot_id
-    constraintIndex := state^.compass.lock_point2_id
-    if pointIndex > 0 && pointIndex < MAX_SHAPESPOINTS {
-        set_point_position_with_floor_dust_effects(state, pointIndex, pos)
+    point_index := state^.compass.joint2_id
+    pivot_index := state^.compass.pivot_id
+    constraint_index := state^.compass.lock_point2_id
+    if point_index > 0 && point_index < MAX_SHAPESPOINTS {
+        set_point_position_with_floor_dust_effects(state, point_index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        pointpos := state^.point_system^.points[pointIndex].position.? or_else { 0, 0, 0 }
-        pivotpos := state^.point_system^.points[pivotIndex].position.? or_else { 0, 0, 0 }
+        point := &state^.point_system^.points[point_index]
+        pivot := &state^.point_system^.points[pivot_index]
+        pointpos := point^.position.? or_else { 0, 0, 0 }
+        pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
-            state^.point_system^.points[pivotIndex].position =
-                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+            pivot^.position = core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
-    if constraintIndex >= 0 && constraintIndex < MAX_SHAPESCONSTRAINTS {
-        state^.point_system^.constraints[constraintIndex].restriction = pos
-        state^.point_system^.constraints[constraintIndex].do_apply = true
+    if constraint_index >= 0 && constraint_index < MAX_SHAPESCONSTRAINTS {
+        state^.point_system^.constraints[constraint_index].restriction = pos
+        state^.point_system^.constraints[constraint_index].do_apply = true
     }
 }
 
@@ -612,18 +607,19 @@ move_compass_joint2 :: proc "c" (
     state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
     context = state^.saved_context
     index := state^.compass.joint2_id
-    pivotIndex := state^.compass.pivot_id
+    pivot_index := state^.compass.pivot_id
     if index >= 0 && index < MAX_SHAPESPOINTS {
         set_point_position_with_floor_dust_effects(state, index, pos)
         if sweep {
             push_dust_for_compass_segment_if_floor_contact(state)
         }
 
-        pointpos := state^.point_system^.points[index].position.? or_else { 0, 0, 0 }
-        pivotpos := state^.point_system^.points[pivotIndex].position.? or_else { 0, 0, 0 }
+        point := &state^.point_system^.points[index]
+        pivot := &state^.point_system^.points[pivot_index]
+        pointpos := point^.position.? or_else { 0, 0, 0 }
+        pivotpos := pivot^.position.? or_else { 0, 0, 0 }
         if pointpos.z >= pivotpos.z {
-            state^.point_system^.points[pivotIndex].position =
-                core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
+            pivot^.position = core.Vector3{ pivotpos.x, pivotpos.z, pointpos.z + 0.01 }
         }
     }
 }
@@ -708,9 +704,9 @@ emit_trailing_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
-        state^.particle_system, state^.current_delta_time, pos.x, pos.y, pos.z, rlColor)
+        state^.particle_system, state^.current_delta_time, {pos, rl_color})
 }
 
 //   Emit flicker particles at a position using bridge color data.
@@ -727,7 +723,7 @@ emit_flicker_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_flicker_particles(
-        state^.particle_system, pos.x, pos.y, pos.z, rlColor, 10)
+        state^.particle_system, {pos, rl_color}, 10)
 }

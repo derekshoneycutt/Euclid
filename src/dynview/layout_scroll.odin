@@ -4,6 +4,11 @@ import "../core"
 
 import rl "vendor:raylib"
 
+Scratchpad_Fallback_Layout :: struct {
+    text_padding, wrap_advance, row_height: f32,
+    text: string,
+}
+
 //   Return fallback wrapped row count for plain-text rendering.
 fallback_row_count :: #force_inline proc(
     panel: rl.Rectangle,
@@ -18,11 +23,11 @@ fallback_row_count :: #force_inline proc(
 scratchpad_content_height_or_fallback :: proc(
     runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
-    text_padding, wrap_advance, fallback_row_height: f32,
-    fallback_text: string) -> f32 {
+    fallback: Scratchpad_Fallback_Layout) -> f32 {
 
-    fallback_rows := fallback_row_count(panel, wrap_advance, fallback_text)
-    fallback_height := text_padding * 2 + f32(fallback_rows) * fallback_row_height
+    fallback_rows := fallback_row_count(panel, fallback.wrap_advance, fallback.text)
+    fallback_height := fallback.text_padding * 2 +
+        f32(fallback_rows) * fallback.row_height
 
     if !runtime^.enabled ||
         !runtime^.compile_cache.layout_is_valid ||
@@ -31,7 +36,7 @@ scratchpad_content_height_or_fallback :: proc(
         return fallback_height
     }
 
-    return text_padding * 2 + runtime^.compile_cache.layout_total_height
+    return fallback.text_padding * 2 + runtime^.compile_cache.layout_total_height
 }
 
 //   Return scroll step derived from cached line metrics, else fallback to fixed row height.

@@ -249,7 +249,7 @@ delimiter_family :: #force_inline proc(delimiter_kind: i32) -> Dynview_Delimiter
     case DELIMITER_KIND_VERT:
         return .Vert
     case DELIMITER_KIND_DOUBLE_VERT:
-        return .DoubleVert
+        return .Double_Vert
     case DELIMITER_KIND_LEFT_CEIL, DELIMITER_KIND_RIGHT_CEIL:
         return .Ceil
     case DELIMITER_KIND_LEFT_FLOOR, DELIMITER_KIND_RIGHT_FLOOR:
@@ -286,7 +286,7 @@ delimiter_base_width_factor :: #force_inline proc(
         return 0.34
     case .Vert:
         return 0.24
-    case .DoubleVert:
+    case .Double_Vert:
         return 0.34
     case .Ceil, .Floor:
         return 0.40

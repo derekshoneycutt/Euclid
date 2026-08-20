@@ -70,13 +70,13 @@ STYLE_TABLE :: []Style_Entry{
     }},
     {DYNVIEW_STYLE_SEMIBOLD, Dynview_Text_Style{
         color = UI_TEXT_COLOR,
-        font_flags = .SemiBold,
+        font_flags = .Semibold,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
     }},
     {DYNVIEW_STYLE_EXTRABOLD, Dynview_Text_Style{
         color = UI_TEXT_COLOR,
-        font_flags = .ExtraBold,
+        font_flags = .Extrabold,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
     }},

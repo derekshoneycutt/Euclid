@@ -137,32 +137,136 @@ struct BridgePieColors
     arc::BridgeColor
 end
 
+"""
+Flat op payload for one inline math block.
+
+Mirrors the Odin `Bridge_Dynview_Math_Program` ABI struct field-for-field.
+"""
+struct BridgeDynviewMathProgram
+    ops::Ptr{BridgeDynviewMathOp}
+    op_count::Int32
+    top_level_op_count::Int32
+end
+
+"""
+Width, height, and stroke for one rectangular inline atom.
+
+Mirrors the Odin `Bridge_Inline_Box_Dims` ABI struct field-for-field.
+"""
+struct BridgeInlineBoxDims
+    width::Cfloat
+    height::Cfloat
+    stroke::Cfloat
+end
+
+"""
+Width and height for one sized inline atom.
+
+Mirrors the Odin `Bridge_Inline_Size` ABI struct field-for-field.
+"""
+struct BridgeInlineSize
+    width::Cfloat
+    height::Cfloat
+end
+
+"""
+Top-bar length, stem height, and stroke for one inline perpendicular atom.
+
+Mirrors the Odin `Bridge_Inline_Perpendicular_Dims` ABI struct field-for-field.
+"""
+struct BridgeInlinePerpendicularDims
+    length::Cfloat
+    stem_height::Cfloat
+    stroke::Cfloat
+end
+
+"""
+Top and stem colors for one inline perpendicular atom.
+
+Mirrors the Odin `Bridge_Perpendicular_Colors` ABI struct field-for-field.
+"""
+struct BridgePerpendicularColors
+    top::BridgeColor
+    stem::BridgeColor
+end
+
+"""
+Radius and sweep angles for one inline pie-section atom.
+
+Mirrors the Odin `Bridge_Pie_Section_Geometry` ABI struct field-for-field.
+"""
+struct BridgePieSectionGeometry
+    radius::Cfloat
+    start_angle_degrees::Cfloat
+    end_angle_degrees::Cfloat
+    outline_stroke::Cfloat
+end
+
+"""
+Radius and arc angle bounds for one circle shape.
+
+Mirrors the Odin `Bridge_Arc_Geometry` ABI struct field-for-field.
+"""
+struct BridgeArcGeometry
+    radius::Cfloat
+    start_theta::Cfloat
+    end_theta::Cfloat
+end
+
+"""
+Glyph and decoration for one label point.
+
+Mirrors the Odin `Bridge_Label_Glyph` ABI struct field-for-field.
+"""
+struct BridgeLabelGlyph
+    label::UInt32
+    decoration_kind::Int32
+end
+
+"""
+Four vertices for one square shape.
+
+Mirrors the Odin `Bridge_Square_Vertices` ABI struct field-for-field.
+"""
+struct BridgeSquareVertices
+    vertices::NTuple{4, NTuple{3, Cfloat}}
+end
+
+"""
+Five vertices for one pentagon shape.
+
+Mirrors the Odin `Bridge_Pentagon_Vertices` ABI struct field-for-field.
+"""
+struct BridgePentagonVertices
+    vertices::NTuple{5, NTuple{3, Cfloat}}
+end
+
 struct BridgePointView
     valid::UInt8
     index::Int64
 
-    pointType::Int64
-    doDraw::UInt8
-    brushSize::Cfloat
+    point_type::Int64
+    do_draw::UInt8
+    brush_size::Cfloat
     offset::Cfloat
 
-    hasPosition::UInt8
+    has_position::UInt8
     pos::NTuple{3, Cfloat}
 
-    hasColor::UInt8
+    has_color::UInt8
     color::BridgeColor
 
-    hasActiveColor::UInt8
-    activeColor::BridgeColor
+    has_active_color::UInt8
+    active_color::BridgeColor
 
-    hasLabel::UInt8
+    has_label::UInt8
     label::UInt32
-    decorationKind::Int32
+    decoration_kind::Int32
 
-    activeChild::Int64
-    childCount::Int64
-    childPointHead::Int64
-    nextChildPoint::Int64
+    active_child::Int64
+    child_count::Int64
+    child_point_head::Int64
+    next_child_point::Int64
 end
 
 struct BridgeConstraintView
@@ -170,104 +274,104 @@ struct BridgeConstraintView
     index::Int32
 
     traits::Int32
-    onPoint::Int32
+    on_point::Int32
     restriction::NTuple{3, Cfloat}
     bounce::Cfloat
     allowance::Cfloat
-    dependOn::Int32
-    hasChildOffset::UInt8
-    childOffset::Int32
-    doApply::UInt8
+    depend_on::Int32
+    has_child_offset::UInt8
+    child_offset::Int32
+    do_apply::UInt8
 end
 
 struct BridgeConstraintSpec
     traits::Int32
-    onPoint::Int32
+    on_point::Int32
     restriction::NTuple{3, Cfloat}
     bounce::Cfloat
     allowance::Cfloat
-    dependOn::Int32
-    hasChildOffset::UInt8
-    childOffset::Int32
-    doApply::UInt8
+    depend_on::Int32
+    has_child_offset::UInt8
+    child_offset::Int32
+    do_apply::UInt8
 end
 
 struct BridgeSolveResult
     status::Int32
     iterations::Int32
-    initialError::Cfloat
-    finalError::Cfloat
+    initial_error::Cfloat
+    final_error::Cfloat
     converged::UInt8
 end
 
 struct BridgeShapeLine
-    hostId::Int64
-    joint1Id::Int64
-    joint2Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    joint2_id::Int64
 end
 
 struct BridgeShapeCircle
-    hostId::Int64
-    startId::Int64
-    endId::Int64
+    host_id::Int64
+    start_id::Int64
+    end_id::Int64
 end
 
 struct BridgeShapeFilledCircle
-    hostId::Int64
-    startId::Int64
-    endId::Int64
+    host_id::Int64
+    start_id::Int64
+    end_id::Int64
 end
 
 struct BridgeShapeTriangle
-    hostId::Int64
-    joint1Id::Int64
-    joint2Id::Int64
-    joint3Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    joint2_id::Int64
+    joint3_id::Int64
 end
 
 struct BridgeShapeSquare
-    hostId::Int64
-    joint1Id::Int64
-    joint2Id::Int64
-    joint3Id::Int64
-    joint4Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    joint2_id::Int64
+    joint3_id::Int64
+    joint4_id::Int64
 end
 
 struct BridgeShapePentagon
-    hostId::Int64
-    joint1Id::Int64
-    joint2Id::Int64
-    joint3Id::Int64
-    joint4Id::Int64
-    joint5Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    joint2_id::Int64
+    joint3_id::Int64
+    joint4_id::Int64
+    joint5_id::Int64
 end
 
 struct BridgeShapePen
-    hostId::Int64
-    joint1Id::Int64
-    joint2Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    joint2_id::Int64
 
-    lengthConstraintId::Int64
-    point1FloorId::Int64
-    point2FloorId::Int64
-    lockPoint1Id::Int64
-    lockPoint2Id::Int64
+    length_constraint_id::Int64
+    point1_floor_id::Int64
+    point2_floor_id::Int64
+    lock_point1_id::Int64
+    lock_point2_id::Int64
 end
 
 struct BridgeShapeCompass
-    hostId::Int64
-    joint1Id::Int64
-    pivotId::Int64
-    joint2Id::Int64
+    host_id::Int64
+    joint1_id::Int64
+    pivot_id::Int64
+    joint2_id::Int64
 
-    centerPivotId::Int64
-    limb1LengthId::Int64
-    limb2LengthId::Int64
-    point1FloorId::Int64
-    pivotFloorId::Int64
-    point2FloorId::Int64
-    lockPoint1Id::Int64
-    lockPoint2Id::Int64
+    center_pivot_id::Int64
+    limb1_length_id::Int64
+    limb2_length_id::Int64
+    point1_floor_id::Int64
+    pivot_floor_id::Int64
+    point2_floor_id::Int64
+    lock_point1_id::Int64
+    lock_point2_id::Int64
 end
 
 const LABEL_DECORATION_NONE = Int32(0)

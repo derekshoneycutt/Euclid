@@ -120,14 +120,14 @@ main :: proc() {
         os.exit(1)
     }
 
-    asset_root_config := files.make_asset_root_config(options.asset_root)
-    defer files.destroy_asset_root_config(&asset_root_config)
-    if !files.reload_packaged_assets_root_with_config(&asset_root_config) {
-        fmt.eprintln("Failed to refresh packaged assets for harness run.")
+    if !run_harness(options) {
         os.exit(1)
     }
+}
 
-    settings := core.Euclid_Run_Settings{
+//   Build the fixed headless runtime settings used by every harness scenario.
+harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Settings {
+    return {
         do_run = true,
         do_antialiasing = false,
         do_vsync = false,
@@ -140,40 +140,62 @@ main :: proc() {
         semantic_trace_output = options.trace_output,
         semantic_trace_events = "",
     }
+}
 
+//   Refresh packaged assets using the root supplied by the harness invocation.
+initialize_harness_assets :: proc(asset_root: string) -> bool {
+    asset_root_config := files.make_asset_root_config(asset_root)
+    defer files.destroy_asset_root_config(&asset_root_config)
+    if files.reload_packaged_assets_root_with_config(&asset_root_config) {
+        return true
+    }
+    fmt.eprintln("Failed to refresh packaged assets for harness run.")
+    return false
+}
+
+//   Initialize one runtime session and execute the configured harness scenario.
+run_harness :: proc(options: Harness_Options) -> bool {
+
+    if !initialize_harness_assets(options.asset_root) {
+        return false
+    }
+
+    settings := harness_runtime_settings(options)
     session, session_ok := view.create_runtime_session(&settings)
     if !session_ok {
         fmt.eprintln("Failed to initialize headless runtime session.")
-        os.exit(1)
+        return false
     }
     defer view.shutdown_runtime_session(session)
 
     stable_id, read_error := uuid.read(options.animation_id_text)
     if read_error != .None {
         fmt.eprintln("Invalid animation UUID: ", options.animation_id_text)
-        os.exit(1)
+        return false
     }
     if !bridge.select_animation_by_stable_id(session.state, stable_id) {
         fmt.eprintln("Animation UUID not found: ", options.animation_id_text)
-        os.exit(1)
+        return false
     }
 
     if !run_harness_fixed_steps(session, options.steps) {
         fmt.eprintln("Deterministic fixed-step execution failed.")
-        os.exit(1)
+        return false
     }
 
     if len(options.scenario_name) > 0 &&
         !bridge.invoke_harness_scenario(
             session.state, options.scenario_name, options.steps) {
         fmt.eprintln("Harness scenario failed: ", options.scenario_name)
-        os.exit(1)
+        return false
     }
 
     if session.julia_service^.animation_ticks_stale != 0 {
         fmt.eprintln("Harness observed rejected animation ticks.")
-        os.exit(1)
+        return false
     }
+
+    return true
 }
 
 //   Run N deterministic fixed steps, returning false on the first failure.

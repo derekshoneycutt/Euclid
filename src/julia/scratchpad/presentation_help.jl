@@ -124,7 +124,8 @@ function format_result_value(value, runtime::Module)
     context = IOContext(io, :color => false, :limit => true, :module => runtime)
     try
         Base.invokelatest(show, context, MIME("text/plain"), value)
-    catch
+    catch e
+        e isa Exception || rethrow()
         truncate(io, 0)
         seekstart(io)
         Base.invokelatest(show, context, value)
@@ -148,7 +149,8 @@ function format_result_latex_source(value, runtime::Module)
     context = IOContext(io, :color => false, :limit => true, :module => runtime)
     try
         Base.invokelatest(show, context, MIME("text/latex"), value)
-    catch
+    catch e
+        e isa Exception || rethrow()
         return nothing
     end
 
@@ -227,6 +229,11 @@ end
 format_current_exception_text(runtime::Module; color::Bool=false) =
     format_exception_stack(current_exceptions(), runtime; color=color)
 
+"""Format the exception stack for one caught exception value."""
+format_current_exception_text(
+    runtime::Module, caught::Exception; color::Bool=false) =
+    format_exception_stack(current_exceptions(), runtime; color=color)
+
 """Append one submitted input line with explicit prompt and input colors."""
 function append_input_echo_line!(
     session::ScratchpadSession,
@@ -274,21 +281,6 @@ function append_output_block!(session::ScratchpadSession, text::AbstractString)
 
     for line in split(String(text), '\n'; keepempty=true)
         append_output_line!(session, line)
-    end
-end
-
-"""Append a multiline exception as independently laid-out error lines."""
-function append_error_block!(session::ScratchpadSession, text::AbstractString)
-    if isempty(text)
-        return
-    end
-
-    for line in split(String(text), '\n'; keepempty=true)
-        append_output_entry!(session, ScratchpadOutputEntry(
-            String(line),
-            OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-            DynviewStyleError,
-            ""))
     end
 end
 
@@ -557,87 +549,6 @@ function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadS
         is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
 end
 
-"""Validate one dotted help-query segment as an identifier-like token."""
-function is_valid_help_segment(segment::AbstractString)
-    if isempty(segment)
-        return false
-    end
-    first_char = first(segment)
-    if !(isletter(first_char) || first_char == '_')
-        return false
-    end
-
-    for c in segment
-        if isletter(c) || isnumeric(c) || c == '_' || c == '!'
-            continue
-        end
-        return false
-    end
-    return true
-end
-
-"""Parse `?` query text into module/binding symbol segments or return `nothing`."""
-function parse_help_segments(query::AbstractString)
-    cleaned = strip(String(query))
-    if isempty(cleaned)
-        return nothing
-    end
-
-    segments = split(cleaned, '.')
-    if isempty(segments)
-        return nothing
-    end
-
-    for segment in segments
-        if !is_valid_help_segment(segment)
-            return nothing
-        end
-    end
-
-    return Symbol.(segments)
-end
-
-"""Resolve a dotted help query into a docs binding rooted from runtime or Main."""
-function resolve_help_binding(runtime::Module, query::AbstractString)
-    segments = parse_help_segments(query)
-    if segments === nothing
-        return nothing, "help error: invalid target syntax; use dotted identifiers like OdinJuliaBridge.bridge_color"
-    end
-
-    if length(segments) == 0
-        return nothing, "help error: empty help target"
-    end
-
-    current_module = runtime
-    segment_start = 1
-    if segments[1] == :Main
-        current_module = Main
-        segment_start = 2
-    end
-
-    last_index = length(segments)
-    if segment_start > last_index
-        return nothing, "help error: missing symbol after module path"
-    end
-
-    for i in segment_start:(last_index - 1)
-        segment = segments[i]
-        if !isdefined(current_module, segment)
-            return nothing, "help error: $(current_module).$(segment) is not defined"
-        end
-
-        next_value = getfield(current_module, segment)
-        if !(next_value isa Module)
-            return nothing, "help error: $(current_module).$(segment) is not a module"
-        end
-
-        current_module = next_value
-    end
-
-    symbol_name = segments[last_index]
-    return Base.Docs.Binding(current_module, symbol_name), nothing
-end
-
 """Render docs metadata objects into plain user-facing help text."""
 function render_help_docs(doc_entry)
     if doc_entry isa Base.Docs.MultiDoc
@@ -755,7 +666,8 @@ function render_help_signatures(binding::Base.Docs.Binding)
         arg_parts = String[]
         try
             arg_parts = render_signature_parts_from_decl(method)
-        catch
+        catch e
+            e isa Exception || rethrow()
             arg_parts = render_signature_parts_from_sig(method)
         end
 
@@ -765,30 +677,6 @@ function render_help_signatures(binding::Base.Docs.Binding)
     unique!(signatures)
     sort!(signatures)
     return join(signatures, "\n")
-end
-
-"""List unique sorted public/exported function names defined by a module."""
-function list_module_function_names(module_value::Module)
-    function_names = String[]
-    for sym in names(module_value; all=false, imported=false)
-        sym_text = String(sym)
-        if startswith(sym_text, "#")
-            continue
-        end
-
-        if !isdefined(module_value, sym)
-            continue
-        end
-
-        value = getfield(module_value, sym)
-        if value isa Function
-            push!(function_names, sym_text)
-        end
-    end
-
-    unique!(function_names)
-    sort!(function_names)
-    return function_names
 end
 
 """Resolve module docs for a help binding, falling back to canonical module binding."""
@@ -812,33 +700,6 @@ function resolve_module_doc_entry(binding::Base.Docs.Binding, module_value::Modu
     end
 
     return nothing
-end
-
-"""Append module docs plus available function names and lookup hint."""
-function append_module_help!(
-    session::ScratchpadSession,
-    query::AbstractString,
-    module_value::Module,
-    binding::Base.Docs.Binding)
-    doc_entry = resolve_module_doc_entry(binding, module_value)
-    if doc_entry !== nothing
-        rendered = render_help_docs(doc_entry)
-        if rendered !== nothing && !isempty(rendered)
-            append_output_block!(session, rendered)
-            append_output_line!(session, "")
-        end
-    end
-
-    function_names = list_module_function_names(module_value)
-    append_output_line!(session, "Functions in $(query)")
-    if isempty(function_names)
-        append_output_line!(session, "(no public functions found)")
-        return
-    end
-
-    append_output_block!(session, join(function_names, "\n"))
-    append_output_line!(session, "")
-    append_output_line!(session, "Lookup one by name with ?$(query).function_name")
 end
 
 """Append binding docs and method signatures to scratchpad output."""
@@ -877,58 +738,6 @@ function append_binding_help!(
         append_output_line!(session, "Method Signatures")
         append_output_block!(session, signatures)
     end
-end
-
-"""Return true when value should be shown as struct field/property help in `?` mode."""
-function should_render_struct_help(value)
-    if value isa Module || value isa Function
-        return false
-    end
-    if value isa DataType
-        return isstructtype(value)
-    end
-    return isstructtype(typeof(value))
-end
-
-"""Render a compact multiline description of struct fields/properties for help output."""
-function render_struct_properties_help(query::AbstractString, value)
-    if value isa DataType
-        struct_type = value
-        field_lines = String[]
-        for i in eachindex(fieldnames(struct_type))
-            fname = fieldnames(struct_type)[i]
-            ftype = fieldtype(struct_type, i)
-            push!(field_lines, string(fname) * "::" * string(ftype))
-        end
-
-        if isempty(field_lines)
-            return "Struct Fields for $(query)\n(no fields found)"
-        end
-
-        return "Struct Fields for $(query)\n" * join(field_lines, "\n")
-    end
-
-    struct_type = typeof(value)
-    prop_lines = String[]
-    for prop in propertynames(value)
-        push!(prop_lines, string(prop))
-    end
-
-    if isempty(prop_lines)
-        for i in eachindex(fieldnames(struct_type))
-            fname = fieldnames(struct_type)[i]
-            ftype = fieldtype(struct_type, i)
-            push!(prop_lines, string(fname) * "::" * string(ftype))
-        end
-    end
-
-    if isempty(prop_lines)
-        return "Struct Properties for $(query)::$(struct_type)\n(no properties found)"
-    end
-
-    unique!(prop_lines)
-    sort!(prop_lines)
-    return "Struct Properties for $(query)::$(struct_type)\n" * join(prop_lines, "\n")
 end
 
 """Resolve a module/symbol alias spec to a docs binding, or `nothing` when unavailable."""
@@ -990,9 +799,9 @@ function append_native_help_query!(session::ScratchpadSession, query::AbstractSt
             append_output_block!(session,
                 format_result_value(rendered_help, session.runtime))
         end
-    catch
+    catch e
         append_native_error_block!(
-            session, format_current_exception_text(session.runtime; color=true))
+            session, format_current_exception_text(session.runtime, e; color=true))
     end
 end
 

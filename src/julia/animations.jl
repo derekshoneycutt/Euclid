@@ -15,7 +15,8 @@ using LinearAlgebra
 export animate_pen_descend, animate_pen_rise, animate_compass_descend,
     animate_compass_rise, animate_pen_tilt, animate_pen_cone, animate_pen_drag,
     animate_pen_arcmove, animate_compass_arcmove, animate_highlight_point,
-    animate_extend_line, animate_pen_tilt_and_drag, animate_draw_point, animate_draw_line,
+    animate_extend_line, animate_pen_tilt_and_drag, animate_draw_point,
+    animate_draw_line,
     animate_draw_filledcircle,
     animate_draw_two_line_segments,
     animate_draw_circle, animate_compass_fill_arc_highlight,
@@ -61,9 +62,9 @@ const ReplDrawShare = 0.6f0
 const TransformEps = 1f-6
 
 struct ReflectedAngleMarkerPose
-    center::Vector{Float32}
-    start_point::Vector{Float32}
-    end_point::Vector{Float32}
+    center::AbstractVector{<:Real}
+    start_point::AbstractVector{<:Real}
+    end_point::AbstractVector{<:Real}
 end
 
 
@@ -99,14 +100,14 @@ Build a displacement vector from direction and total displacement length.
 Returns a zero vector when the direction is degenerate.
 """
 @inline function displacement_from_vector_and_length(
-    direction::AbstractVector{<:Real}, displacementLength::Real)
+    direction::AbstractVector{<:Real}, displacement_length::Real)
 
-    directionVec = Float32[Float32(d) for d in direction]
-    directionLength = norm(directionVec)
-    if directionLength <= TransformEps
+    directionvec = Float32[Float32(d) for d in direction]
+    direction_length = norm(directionvec)
+    if direction_length <= TransformEps
         return Float32[0f0, 0f0, 0f0]
     end
-    return (directionVec / directionLength) * Float32(displacementLength)
+    return (directionvec / direction_length) * Float32(displacement_length)
 end
 
 
@@ -116,29 +117,29 @@ Rotate one point around a 3D axis line using Rodrigues' rotation formula.
 Returns `nothing` when the axis line is degenerate.
 """
 @inline function rotate_point_about_axis_line(
-    point::AbstractVector{<:Real}, axisA::AbstractVector{<:Real},
-    axisB::AbstractVector{<:Real}, angle::Real)
+    point::AbstractVector{<:Real}, axis_a::AbstractVector{<:Real},
+    axis_b::AbstractVector{<:Real}, angle::Real)
 
-    pointVec = Float32[Float32(p) for p in point]
-    axisAVec = Float32[Float32(a) for a in axisA]
-    axisBVec = Float32[Float32(b) for b in axisB]
-    axisDirection = axisBVec - axisAVec
-    axisLength = norm(axisDirection)
-    if axisLength <= TransformEps
+    pointvec = Float32[Float32(p) for p in point]
+    axis_avec = Float32[Float32(a) for a in axis_a]
+    axis_bvec = Float32[Float32(b) for b in axis_b]
+    axis_direction = axis_bvec - axis_avec
+    axis_length = norm(axis_direction)
+    if axis_length <= TransformEps
         return nothing
     end
 
-    unitAxis = axisDirection / axisLength
-    relative = pointVec - axisAVec
+    unit_axis = axis_direction / axis_length
+    relative = pointvec - axis_avec
     c = Float32(cos(Float32(angle)))
     s = Float32(sin(Float32(angle)))
 
-    rotatedRelative =
+    rotatedrelative =
         relative * c +
-        cross(unitAxis, relative) * s +
-        unitAxis * dot(unitAxis, relative) * (1f0 - c)
+        cross(unit_axis, relative) * s +
+        unit_axis * dot(unit_axis, relative) * (1f0 - c)
 
-    return axisAVec + rotatedRelative
+    return axis_avec + rotatedrelative
 end
 
 
@@ -149,33 +150,33 @@ Only XY components participate in reflection geometry; `z` is preserved.
 Returns `nothing` when the line is degenerate.
 """
 @inline function reflect_point_xy_across_line(
-    point::AbstractVector{<:Real}, lineA::AbstractVector{<:Real},
-    lineB::AbstractVector{<:Real})
+    point::AbstractVector{<:Real}, line_a::AbstractVector{<:Real},
+    line_b::AbstractVector{<:Real})
 
-    pointVec = Float32[Float32(p) for p in point]
-    lineAVec = Float32[Float32(a) for a in lineA]
-    lineBVec = Float32[Float32(b) for b in lineB]
-    lineDx = lineBVec[1] - lineAVec[1]
-    lineDy = lineBVec[2] - lineAVec[2]
-    lineLength = Float32(hypot(lineDx, lineDy))
-    if lineLength <= TransformEps
+    pointvec = Float32[Float32(p) for p in point]
+    line_avec = Float32[Float32(a) for a in line_a]
+    line_bvec = Float32[Float32(b) for b in line_b]
+    line_dx = line_bvec[1] - line_avec[1]
+    line_dy = line_bvec[2] - line_avec[2]
+    line_length = Float32(hypot(line_dx, line_dy))
+    if line_length <= TransformEps
         return nothing
     end
 
-    ux = lineDx / lineLength
-    uy = lineDy / lineLength
-    relX = pointVec[1] - lineAVec[1]
-    relY = pointVec[2] - lineAVec[2]
-    proj = relX * ux + relY * uy
-    projX = proj * ux
-    projY = proj * uy
-    perpX = relX - projX
-    perpY = relY - projY
+    ux = line_dx / line_length
+    uy = line_dy / line_length
+    rel_x = pointvec[1] - line_avec[1]
+    rel_y = pointvec[2] - line_avec[2]
+    proj = rel_x * ux + rel_y * uy
+    proj_x = proj * ux
+    proj_y = proj * uy
+    perp_x = rel_x - proj_x
+    perp_y = rel_y - proj_y
 
     return Float32[
-        lineAVec[1] + (projX - perpX),
-        lineAVec[2] + (projY - perpY),
-        pointVec[3],
+        line_avec[1] + (proj_x - perp_x),
+        line_avec[2] + (proj_y - perp_y),
+        pointvec[3],
     ]
 end
 
@@ -186,18 +187,18 @@ Choose the reflection half-turn branch with greater positive z lift.
 Returns `nothing` when axis rotation cannot be resolved.
 """
 @inline function reflection_arc_point_above_surface(
-    startOnPlane::AbstractVector{<:Real},
-    lineA::AbstractVector{<:Real},
-    lineB::AbstractVector{<:Real},
+    start_on_plane::AbstractVector{<:Real},
+    line_a::AbstractVector{<:Real},
+    line_b::AbstractVector{<:Real},
     angle::Real)
 
-    rotatedPos = rotate_point_about_axis_line(startOnPlane, lineA, lineB, angle)
-    rotatedNeg = rotate_point_about_axis_line(startOnPlane, lineA, lineB, -angle)
-    if rotatedPos === nothing || rotatedNeg === nothing
+    rotated_pos = rotate_point_about_axis_line(start_on_plane, line_a, line_b, angle)
+    rotated_neg = rotate_point_about_axis_line(start_on_plane, line_a, line_b, -angle)
+    if rotated_pos === nothing || rotated_neg === nothing
         return nothing
     end
 
-    return rotatedPos[3] >= rotatedNeg[3] ? rotatedPos : rotatedNeg
+    return rotated_pos[3] >= rotated_neg[3] ? rotated_pos : rotated_neg
 end
 
 
@@ -207,18 +208,18 @@ Choose the reflection half-turn branch with greater negative z lift.
 Returns `nothing` when axis rotation cannot be resolved.
 """
 @inline function reflection_arc_point_below_surface(
-    startOnPlane::AbstractVector{<:Real},
-    lineA::AbstractVector{<:Real},
-    lineB::AbstractVector{<:Real},
+    start_on_plane::AbstractVector{<:Real},
+    line_a::AbstractVector{<:Real},
+    line_b::AbstractVector{<:Real},
     angle::Real)
 
-    rotatedPos = rotate_point_about_axis_line(startOnPlane, lineA, lineB, angle)
-    rotatedNeg = rotate_point_about_axis_line(startOnPlane, lineA, lineB, -angle)
-    if rotatedPos === nothing || rotatedNeg === nothing
+    rotated_pos = rotate_point_about_axis_line(start_on_plane, line_a, line_b, angle)
+    rotated_neg = rotate_point_about_axis_line(start_on_plane, line_a, line_b, -angle)
+    if rotated_pos === nothing || rotated_neg === nothing
         return nothing
     end
 
-    return rotatedPos[3] <= rotatedNeg[3] ? rotatedPos : rotatedNeg
+    return rotated_pos[3] <= rotated_neg[3] ? rotated_pos : rotated_neg
 end
 
 
@@ -248,14 +249,14 @@ function transform_translate_point(
     current_time::Real,
     total_duration::Real)
 
-    startVec = as_vec3(start_position)
-    displacementVec = as_vec3(displacement)
-    if startVec === nothing || displacementVec === nothing
+    start_vec = as_vec3(start_position)
+    displacement_vec = as_vec3(displacement)
+    if start_vec === nothing || displacement_vec === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
     t = normalized_progress(current_time, total_duration)
-    point = startVec + displacementVec * t
+    point = start_vec + displacement_vec * t
     return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
 end
 
@@ -291,23 +292,20 @@ function transform_translate_point(
     current_time::Real,
     total_duration::Real)
 
-    directionVec = as_vec3(direction)
-    if directionVec === nothing
+    directionvec = as_vec3(direction)
+    if directionvec === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    displacementVec = displacement_from_vector_and_length(
-        directionVec,
-        Float32(displacement_length),
-    )
+    displacement_vec = displacement_from_vector_and_length(
+        directionvec, displacement_length)
     return transform_translate_point(
         state_ptr,
         point_id,
         start_position,
-        displacementVec,
+        displacement_vec,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -341,16 +339,16 @@ function transform_rotate_point(
     current_time::Real,
     total_duration::Real)
 
-    startVec = as_vec3(start_position)
-    axisA = as_vec3(axis_point_a)
-    axisB = as_vec3(axis_point_b)
-    if startVec === nothing || axisA === nothing || axisB === nothing
+    start_vec = as_vec3(start_position)
+    axis_a = as_vec3(axis_point_a)
+    axis_b = as_vec3(axis_point_b)
+    if start_vec === nothing || axis_a === nothing || axis_b === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
     t = normalized_progress(current_time, total_duration)
-    frameAngle = Float32(theta) * t
-    rotated = rotate_point_about_axis_line(startVec, axisA, axisB, frameAngle)
+    frame_angle = Float32(theta) * t
+    rotated = rotate_point_about_axis_line(start_vec, axis_a, axis_b, frame_angle)
     if rotated === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
@@ -380,8 +378,7 @@ function transform_rotate_point_x(
         Float32[1f0, 0f0, 0f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -406,8 +403,7 @@ function transform_rotate_point_y(
         Float32[0f0, 1f0, 0f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -432,8 +428,7 @@ function transform_rotate_point_z(
         Float32[0f0, 0f0, 1f0],
         theta,
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -469,26 +464,26 @@ function transform_reflect2d_point(
     current_time::Real,
     total_duration::Real)
 
-    startVec = as_vec3(start_position)
-    lineA = as_vec3(line_point_a)
-    lineB = as_vec3(line_point_b)
-    if startVec === nothing || lineA === nothing || lineB === nothing
+    start_vec = as_vec3(start_position)
+    line_a = as_vec3(line_point_a)
+    line_b = as_vec3(line_point_b)
+    if start_vec === nothing || line_a === nothing || line_b === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+    if abs(line_a[3]) > TransformEps || abs(line_b[3]) > TransformEps
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
     t = normalized_progress(current_time, total_duration)
-    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    start_on_plane = Float32[start_vec[1], start_vec[2], 0f0]
     angle = Float32(pi) * t
-    rotated = reflection_arc_point_above_surface(startOnPlane, lineA, lineB, angle)
+    rotated = reflection_arc_point_above_surface(start_on_plane, line_a, line_b, angle)
     if rotated === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    point = Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+    point = Float32[rotated[1], rotated[2], start_vec[3] + rotated[3]]
     return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
 end
 
@@ -507,26 +502,26 @@ function transform_reflect2d_point_negative(
     current_time::Real,
     total_duration::Real)
 
-    startVec = as_vec3(start_position)
-    lineA = as_vec3(line_point_a)
-    lineB = as_vec3(line_point_b)
-    if startVec === nothing || lineA === nothing || lineB === nothing
+    start_vec = as_vec3(start_position)
+    line_a = as_vec3(line_point_a)
+    line_b = as_vec3(line_point_b)
+    if start_vec === nothing || line_a === nothing || line_b === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+    if abs(line_a[3]) > TransformEps || abs(line_b[3]) > TransformEps
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
     t = normalized_progress(current_time, total_duration)
-    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    start_on_plane = Float32[start_vec[1], start_vec[2], 0f0]
     angle = Float32(pi) * t
-    rotated = reflection_arc_point_below_surface(startOnPlane, lineA, lineB, angle)
+    rotated = reflection_arc_point_below_surface(start_on_plane, line_a, line_b, angle)
     if rotated === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    point = Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+    point = Float32[rotated[1], rotated[2], start_vec[3] + rotated[3]]
     return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
 end
 
@@ -550,8 +545,7 @@ function transform_reflect2d_point_x_axis(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -574,8 +568,7 @@ function transform_reflect2d_point_y_axis(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -598,8 +591,7 @@ function transform_reflect2d_point_diag_pos(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -622,8 +614,7 @@ function transform_reflect2d_point_diag_neg(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, -1f0, 0f0],
         current_time,
-        total_duration,
-    )
+        total_duration)
 end
 
 
@@ -669,26 +660,26 @@ end
     current_time::Real,
     total_duration::Real)
 
-    startVec = as_vec3(start_position)
-    lineA = as_vec3(line_point_a)
-    lineB = as_vec3(line_point_b)
-    if startVec === nothing || lineA === nothing || lineB === nothing
+    start_vec = as_vec3(start_position)
+    line_a = as_vec3(line_point_a)
+    line_b = as_vec3(line_point_b)
+    if start_vec === nothing || line_a === nothing || line_b === nothing
         return nothing
     end
 
-    if abs(lineA[3]) > TransformEps || abs(lineB[3]) > TransformEps
+    if abs(line_a[3]) > TransformEps || abs(line_b[3]) > TransformEps
         return nothing
     end
 
     t = normalized_progress(current_time, total_duration)
-    startOnPlane = Float32[startVec[1], startVec[2], 0f0]
+    start_on_plane = Float32[start_vec[1], start_vec[2], 0f0]
     angle = Float32(pi) * t
-    rotated = reflection_arc_point_above_surface(startOnPlane, lineA, lineB, angle)
+    rotated = reflection_arc_point_above_surface(start_on_plane, line_a, line_b, angle)
     if rotated === nothing
         return nothing
     end
 
-    return Float32[rotated[1], rotated[2], startVec[3] + rotated[3]]
+    return Float32[rotated[1], rotated[2], start_vec[3] + rotated[3]]
 end
 
 
@@ -732,50 +723,60 @@ function animate_reflect2d_filled_angle_marker(
     state_ptr::Ptr{Cvoid},
     marker_host_id::Integer,
     marker_start_id::Integer,
-    marker_end_id::Integer,
-    start_center::AbstractVector{<:Real},
-    start_point::AbstractVector{<:Real},
-    end_point::AbstractVector{<:Real},
-    line_point_a::AbstractVector{<:Real},
-    line_point_b::AbstractVector{<:Real},
-    current_time::Real,
-    total_duration::Real;
+    marker_end_id::Integer;
+    start_center::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    start_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    end_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    line_point_a::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    line_point_b::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    current_time::Real=0f0,
+    total_duration::Real=0f0,
     preserve_interior::Bool=true)
 
     # TODO : This looks like ass lmfao we should fix this.
 
     reflected_center = reflected_arc_point_xy_progress(
-        start_center,
-        line_point_a,
-        line_point_b,
-        current_time,
-        total_duration)
+        start_center, line_point_a, line_point_b, current_time, total_duration)
     reflected_start = reflected_arc_point_xy_progress(
-        start_point,
-        line_point_a,
-        line_point_b,
-        current_time,
-        total_duration)
+        start_point, line_point_a, line_point_b, current_time, total_duration)
     reflected_end = reflected_arc_point_xy_progress(
-        end_point,
-        line_point_a,
-        line_point_b,
-        current_time,
-        total_duration)
+        end_point, line_point_a, line_point_b, current_time, total_duration)
 
     if reflected_center === nothing || reflected_start === nothing ||
         reflected_end === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    start_out = reflected_start
-    end_out = reflected_end
+    start_out, end_out = reflected_marker_endpoints(
+        reflected_center, reflected_start, reflected_end, preserve_interior)
+
+    return write_marker_point_positions(
+        state_ptr, marker_host_id, marker_start_id, marker_end_id,
+        reflected_center, start_out, end_out)
+end
+
+
+"""Order reflected marker endpoints to preserve the interior sweep direction."""
+function reflected_marker_endpoints(
+    reflected_center::AbstractVector{<:Real}, reflected_start::AbstractVector{<:Real},
+    reflected_end::AbstractVector{<:Real}, preserve_interior::Bool)
+
     if preserve_interior
         sweep = ccw_sweep_xy(reflected_center, reflected_start, reflected_end)
         if sweep > Float32(pi)
-            start_out, end_out = reflected_end, reflected_start
+            return reflected_end, reflected_start
         end
     end
+    return reflected_start, reflected_end
+end
+
+
+"""Write the three reflected marker point positions, returning the first failure."""
+function write_marker_point_positions(
+    state_ptr::Ptr{Cvoid},
+    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,
+    reflected_center::AbstractVector{<:Real}, start_out::AbstractVector{<:Real},
+    end_out::AbstractVector{<:Real})
 
     host_status = OdinJuliaBridge.set_point_position_status(
         state_ptr, marker_host_id, reflected_center)
@@ -793,38 +794,44 @@ function animate_reflect2d_filled_angle_marker(
 end
 
 
+"""
+Place a pen at the given floor and swing angles, updating its pose each frame.
+"""
 function place_pen_at_angles(
-    state_ptr::Ptr{Cvoid}, penX::Float32, penY::Float32, baseZ::Float32,
-    floorAngle::Float32, azimuth::Float32)
+    state_ptr::Ptr{Cvoid}, pen_x::Real, pen_y::Real, base_z::Real,
+    floor_angle::Real, azimuth::Real)
 
-    horizontalLength = PenLength * Float32(cos(floorAngle))
-    verticalLength = PenLength * Float32(sin(floorAngle))
+    horizontal_length = PenLength * Float32(cos(floor_angle))
+    vertical_length = PenLength * Float32(sin(floor_angle))
 
-    tipX = penX + horizontalLength * Float32(cos(azimuth))
-    tipY = penY + horizontalLength * Float32(sin(azimuth))
-    tipZ = baseZ + verticalLength
+    tip_x = pen_x + horizontal_length * Float32(cos(azimuth))
+    tip_y = pen_y + horizontal_length * Float32(sin(azimuth))
+    tip_z = base_z + vertical_length
 
-    OdinJuliaBridge.lock_pen_joint1(state_ptr, penX, penY, baseZ)
-    OdinJuliaBridge.move_pen_joint2(state_ptr, tipX, tipY, tipZ)
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, pen_x, pen_y, base_z)
+    OdinJuliaBridge.move_pen_joint2(state_ptr, tip_x, tip_y, tip_z)
 end
 
 
 function place_pen_at_angles(
-    state_ptr::Ptr{Cvoid}, penpos::Vector{Float32},
-    floorAngle::Float32, azimuth::Float32)
+    state_ptr::Ptr{Cvoid}, penpos::AbstractVector{<:Real},
+    floor_angle::Real, azimuth::Real)
 
-    place_pen_at_angles(state_ptr, penpos[1], penpos[2], penpos[3], floorAngle, azimuth)
+    place_pen_at_angles(state_ptr, penpos[1], penpos[2], penpos[3], floor_angle, azimuth)
 end
 
 
+"""
+Emit a trailing filled-circle radius particle burst for the current frame.
+"""
 function emit_filledcircle_radius_trail(
-    state_ptr::Ptr{Cvoid}, jointPoint::Vector{Float32},
-    endPoint::Vector{Float32}, color)
+    state_ptr::Ptr{Cvoid}, joint_point::AbstractVector{<:Real},
+    end_point::AbstractVector{<:Real}, color)
 
     for i in 0:MarkerRadialTrailSamples
         t = (Float32(i) / Float32(MarkerRadialTrailSamples)) +
             Float32(rand() - 0.5f0) / MarkerRadialTrailSamples
-        markerpoint = jointPoint + (endPoint - jointPoint) * t
+        markerpoint = joint_point + (end_point - joint_point) * t
         OdinJuliaBridge.emit_trailing_particle(state_ptr, markerpoint, color)
     end
 end
@@ -851,8 +858,8 @@ Returns:
 """
 function animate_pen_descend(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz - (topz * t)
@@ -884,15 +891,17 @@ Returns:
 """
 function animate_compass_descend(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, joint1x::Float32, joint1y::Float32,
-    joint2x::Float32, joint2y::Float32)
+    timer::Real, duration::Real,
+    topz::Real, joint1x::Real, joint1y::Real,
+    joint2x::Real, joint2y::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    tipZ = topz + (0f0 - topz) * t
+    tip_z = topz + (0f0 - topz) * t
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ, sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, joint1x, joint1y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, joint2x, joint2y, tip_z, sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 end
 
@@ -917,8 +926,8 @@ Returns:
 """
 function animate_pen_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     penz = topz * t
@@ -929,8 +938,8 @@ function animate_pen_rise(
 end
 function animate_pen_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startz::Float32, topz::Float32, penx::Float32, peny::Float32)
+    timer::Real, duration::Real,
+    startz::Real, topz::Real, penx::Real, peny::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
     diffz = topz - startz
@@ -964,15 +973,17 @@ Returns:
 """
 function animate_compass_rise(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    topz::Float32, joint1x::Float32, joint1y::Float32,
-    joint2x::Float32, joint2y::Float32)
+    timer::Real, duration::Real,
+    topz::Real, joint1x::Real, joint1y::Real,
+    joint2x::Real, joint2y::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    tipZ = 0f0 + (topz - 0f0) * t
+    tip_z = 0f0 + (topz - 0f0) * t
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint1x, joint1y, tipZ, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, joint2x, joint2y, tipZ, sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, joint1x, joint1y, tip_z, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, joint2x, joint2y, tip_z, sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     OdinJuliaBridge.show_compass(state_ptr)
 end
@@ -1000,24 +1011,14 @@ Returns:
 """
 function animate_pen_tilt(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penx::Float32, peny::Float32, penz::Float32,
-    startθ::Float32, endθ::Float32, azimuth::Float32)
-
-    animate_pen_tilt(state_ptr, timer, duration,
-        [penx, peny, penz], startθ, endθ, azimuth)
-end
-
-function animate_pen_tilt(
-    state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32},
-    startθ::Float32, endθ::Float32, azimuth::Float32)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real},
+    startθ::Real, endθ::Real, azimuth::Real)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    floorAngle = startθ + (endθ - startθ) * t
+    floor_angle = startθ + (endθ - startθ) * t
 
-    place_pen_at_angles(state_ptr, penpos, floorAngle, azimuth)
+    place_pen_at_angles(state_ptr, penpos, floor_angle, azimuth)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
     OdinJuliaBridge.show_pen(state_ptr)
 end
@@ -1034,8 +1035,8 @@ Parameters:
 - penx : Pen base X position.
 - peny : Pen base Y position.
 - penz : Pen base Z position.
-- penFloorθ : Pen floor angle in radians.
-- spinSpeed : Angular spin speed in radians per second.
+- pen_floor_angle : Pen floor angle in radians.
+- spin_speed : Angular spin speed in radians per second.
 
 Returns:
 
@@ -1043,22 +1044,22 @@ Returns:
 """
 function animate_pen_cone(
     state_ptr::Ptr{Cvoid},
-    timer::Float32,
-    penx::Float32, peny::Float32, penz::Float32, penFloorθ::Float32,
-    spinSpeed::Float32)
+    timer::Real,
+    penx::Real, peny::Real, penz::Real, pen_floor_angle::Real,
+    spin_speed::Real)
 
-    animate_pen_cone(state_ptr, timer, [penx, peny, penz], penFloorθ, spinSpeed)
+    animate_pen_cone(state_ptr, timer, [penx, peny, penz], pen_floor_angle, spin_speed)
 end
 
 function animate_pen_cone(
     state_ptr::Ptr{Cvoid},
-    timer::Float32,
-    penpos::Vector{Float32}, penFloorθ::Float32,
-    spinSpeed::Float32)
+    timer::Real,
+    penpos::AbstractVector{<:Real}, pen_floor_angle::Real,
+    spin_speed::Real)
 
-    θ = timer * spinSpeed
+    θ = timer * spin_speed
 
-    place_pen_at_angles(state_ptr, penpos, penFloorθ, θ)
+    place_pen_at_angles(state_ptr, penpos, pen_floor_angle, θ)
     OdinJuliaBridge.show_pen(state_ptr)
 end
 
@@ -1075,7 +1076,7 @@ Parameters:
 - startpos : Starting tip position vector [x, y, z].
 - endpos : Ending tip position vector [x, y, z].
 - dragθ : Pen floor angle used during drag.
-- dragAzimuth : Pen azimuth used during drag.
+- drag_azimuth : Pen azimuth used during drag.
 - color : Trail and active pen color.
 
 Returns:
@@ -1084,10 +1085,10 @@ Returns:
 """
 function animate_pen_drag(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32},
-    endpos::Vector{Float32},
-    dragθ::Float32, dragAzimuth::Float32, color)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    dragθ::Real, drag_azimuth::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1095,7 +1096,7 @@ function animate_pen_drag(
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 1, color)
-    place_pen_at_angles(state_ptr, tippos, dragθ, dragAzimuth)
+    place_pen_at_angles(state_ptr, tippos, dragθ, drag_azimuth)
 
     OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, color)
 
@@ -1124,10 +1125,10 @@ Returns:
 """
 function animate_pen_arcmove(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32},
-    endpos::Vector{Float32},
-    height::Float32, periods::Integer, strikecolor)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    height::Real, periods::Integer, strikecolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
@@ -1136,42 +1137,52 @@ function animate_pen_arcmove(
     tvec = t * vec
     offsetz = abs(clamp(sin(t * periods * π) * height, -1f0, 1f0))
     tvec[3] = tvec[3] + offsetz
-    usePoint = startpos + tvec
-    place_pen_at_angles(state_ptr, usePoint, π / 2f0, 0f0)
-    if usePoint[3] < 0.05 && strikecolor != :none
-        particlePoint = [usePoint[1], usePoint[2], 0f0]
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, particlePoint, strikecolor)
+    use_point = startpos + tvec
+    place_pen_at_angles(state_ptr, use_point, π / 2f0, 0f0)
+    if use_point[3] < 0.05 && strikecolor != :none
+        particle_point = [use_point[1], use_point[2], 0f0]
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, particle_point, strikecolor)
     end
 end
 
-@inline xy_cross(ax::Float32, ay::Float32, bx::Float32, by::Float32) = ax * by - ay * bx
+"""Compute the 2D cross-product z-component of two vectors."""
+@inline xy_cross(ax::Real, ay::Real, bx::Real, by::Real) = ax * by - ay * bx
 
+"""
+Return whether a point lies on a segment within a tolerance in the xy plane.
+"""
 @inline function point_on_segment_xy(
-    a::Vector{Float32}, b::Vector{Float32}, p::Vector{Float32}, eps::Float32)
+    a::AbstractVector{<:Real}, b::AbstractVector{<:Real}, p::AbstractVector{<:Real},
+    eps::Real)
 
-    return (
-        p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
-        p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps
-    )
+    return (p[1] >= min(a[1], b[1]) - eps && p[1] <= max(a[1], b[1]) + eps &&
+        p[2] >= min(a[2], b[2]) - eps && p[2] <= max(a[2], b[2]) + eps)
 end
 
-@inline function has_collinear_segment_overlap_xy(
-    a1::Vector{Float32}, a2::Vector{Float32},
-    b1::Vector{Float32}, b2::Vector{Float32},
-    o1::Float32, o2::Float32, o3::Float32, o4::Float32,
-    eps::Float32)
+"""
+Return whether the two cross-product signs straddle zero, meaning the tested
+points lie on opposite sides of the reference line.
+"""
+@inline xy_orientations_straddle(p::Real, q::Real, eps::Real) =
+    (p > eps && q < -eps) || (p < -eps && q > eps)
 
-    return (
-        (abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
-        (abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)) ||
-        (abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)) ||
-        (abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps))
-    )
-end
+"""
+Return whether a cross product is collinear within `eps` and its point lies on
+the segment between `seg_a` and `seg_b`.
+"""
+@inline xy_collinear_on_segment(
+    orientation::Real,
+    seg_a::AbstractVector{<:Real}, seg_b::AbstractVector{<:Real},
+    point::AbstractVector{<:Real}, eps::Real) =
 
+    abs(orientation) <= eps && point_on_segment_xy(seg_a, seg_b, point, eps)
+
+"""
+Return whether two segments intersect in the xy plane, including collinear overlap.
+"""
 @inline function segments_intersect_xy(
-    a1::Vector{Float32}, a2::Vector{Float32},
-    b1::Vector{Float32}, b2::Vector{Float32})
+    a1::AbstractVector{<:Real}, a2::AbstractVector{<:Real},
+    b1::AbstractVector{<:Real}, b2::AbstractVector{<:Real})
 
     eps = 1f-5
 
@@ -1180,55 +1191,97 @@ end
     o3 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a1[1] - b1[1], a1[2] - b1[2])
     o4 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a2[1] - b1[1], a2[2] - b1[2])
 
-    if ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
-       ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))
-        return true
-    end
+    xy_orientations_straddle(o1, o2, eps) &&
+        xy_orientations_straddle(o3, o4, eps) && return true
 
-    return has_collinear_segment_overlap_xy(a1, a2, b1, b2, o1, o2, o3, o4, eps)
+    return (xy_collinear_on_segment(o1, a1, a2, b1, eps) ||
+        xy_collinear_on_segment(o2, a1, a2, b2, eps) ||
+        xy_collinear_on_segment(o3, b1, b2, a1, eps) ||
+        xy_collinear_on_segment(o4, b1, b2, a2, eps))
 end
 
+"""
+Return the average of the two endpoint distances from an xy center.
+"""
 @inline function avg_radius_to_xy_center(
-    startJoint::Vector{Float32}, endJoint::Vector{Float32},
-    centerX::Float32, centerY::Float32)
+    start_joint::AbstractVector{<:Real}, end_joint::AbstractVector{<:Real},
+    center_x::Real, center_y::Real)
 
-    startRadius = hypot(startJoint[1] - centerX, startJoint[2] - centerY)
-    endRadius = hypot(endJoint[1] - centerX, endJoint[2] - centerY)
-    return (startRadius + endRadius) * 0.5f0
+    start_radius = hypot(start_joint[1] - center_x, start_joint[2] - center_y)
+    end_radius = hypot(end_joint[1] - center_x, end_joint[2] - center_y)
+    return (start_radius + end_radius) * 0.5f0
 end
 
-@inline function apply_xy_detour_arc!(
-    outsidePoint::Vector{Float32},
-    outsideStart::Vector{Float32}, outsideEnd::Vector{Float32},
-    insideStart::Vector{Float32}, insideEnd::Vector{Float32},
-    t::Float32)
+"""
+Apply a detour arc that routes a point around an inside segment.
 
-    dirX = outsideEnd[1] - outsideStart[1]
-    dirY = outsideEnd[2] - outsideStart[2]
-    dirLen = hypot(dirX, dirY)
-    if dirLen <= 1f-6
+Mutates `outside_point` in place as the arc progresses over normalized time `t`.
+"""
+@inline function apply_xy_detour_arc!(
+    outside_point::AbstractVector{<:Real},
+    outside_start::AbstractVector{<:Real}, outside_end::AbstractVector{<:Real},
+    inside_start::AbstractVector{<:Real}, inside_end::AbstractVector{<:Real},
+    t::Real)
+
+    dir_x = outside_end[1] - outside_start[1]
+    dir_y = outside_end[2] - outside_start[2]
+    dir_len = hypot(dir_x, dir_y)
+    if dir_len <= 1f-6
         return
     end
 
-    normalX = -dirY / dirLen
-    normalY = dirX / dirLen
+    normal_x = -dir_y / dir_len
+    normal_y = dir_x / dir_len
 
-    relX = outsideStart[1] - insideStart[1]
-    relY = outsideStart[2] - insideStart[2]
-    side = sign(xy_cross(dirX, dirY, relX, relY))
+    rel_x = outside_start[1] - inside_start[1]
+    rel_y = outside_start[2] - inside_start[2]
+    side = sign(xy_cross(dir_x, dir_y, rel_x, rel_y))
     if side == 0f0
         side = 1f0
     end
 
-    spanStart = hypot(outsideStart[1] - insideStart[1], outsideStart[2] - insideStart[2])
-    spanEnd = hypot(outsideEnd[1] - insideEnd[1], outsideEnd[2] - insideEnd[2])
-    avgSpan = (spanStart + spanEnd) * 0.5f0
-    arcAmplitude = clamp(avgSpan * 0.15f0, 0.01f0, 0.05f0)
+    span_start = hypot(outside_start[1] - inside_start[1],
+        outside_start[2] - inside_start[2])
+    span_end = hypot(outside_end[1] - inside_end[1], outside_end[2] - inside_end[2])
+    avg_span = (span_start + span_end) * 0.5f0
+    arc_amplitude = clamp(avg_span * 0.15f0, 0.01f0, 0.05f0)
 
-    offset = sin(t * π) * arcAmplitude * side
-    outsidePoint[1] += normalX * offset
-    outsidePoint[2] += normalY * offset
+    offset = sin(t * π) * arc_amplitude * side
+    outside_point[1] += normal_x * offset
+    outside_point[2] += normal_y * offset
 end
+
+"""
+Apply the detour arc to the compass joint with the larger radius.
+
+When two compass joint paths cross, the joint farther from the shared center is
+routed around the nearer joint's segment so the compass does not clip itself.
+"""
+function apply_compass_joint_detour!(
+    use_point1::AbstractVector{<:Real}, use_point2::AbstractVector{<:Real},
+    start_joint1::AbstractVector{<:Real}, end_joint1::AbstractVector{<:Real},
+    start_joint2::AbstractVector{<:Real}, end_joint2::AbstractVector{<:Real},
+    t::Real)
+
+    center_x = (start_joint1[1] + start_joint2[1] + end_joint1[1] + end_joint2[1])
+    center_x = center_x * 0.25f0
+    center_y = (start_joint1[2] + start_joint2[2] + end_joint1[2] + end_joint2[2])
+    center_y = center_y * 0.25f0
+
+    joint1_radius = avg_radius_to_xy_center(
+        start_joint1, end_joint1, center_x, center_y)
+    joint2_radius = avg_radius_to_xy_center(
+        start_joint2, end_joint2, center_x, center_y)
+
+    if joint1_radius >= joint2_radius
+        apply_xy_detour_arc!(
+            use_point1, start_joint1, end_joint1, start_joint2, end_joint2, t)
+    else
+        apply_xy_detour_arc!(
+            use_point2, start_joint2, end_joint2, start_joint1, end_joint1, t)
+    end
+end
+
 
 """
 Animate compass transfer along an elevated arc between two joint pairs.
@@ -1240,10 +1293,10 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the arc move.
-- startJoint1 : Starting position of compass joint 1 [x, y, z].
-- endJoint1 : Ending position of compass joint 1 [x, y, z].
-- startJoint2 : Starting position of compass joint 2 [x, y, z].
-- endJoint2 : Ending position of compass joint 2 [x, y, z].
+- start_joint1 : Starting position of compass joint 1 [x, y, z].
+- end_joint1 : Ending position of compass joint 1 [x, y, z].
+- start_joint2 : Starting position of compass joint 2 [x, y, z].
+- end_joint2 : Ending position of compass joint 2 [x, y, z].
 - height : Arc peak height scale.
 - periods : Number of sinusoidal periods over the move.
 - strikecolor : Particle strike color near the floor, or :none.
@@ -1254,63 +1307,47 @@ Returns:
 """
 function animate_compass_arcmove(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startJoint1::Vector{Float32},
-    endJoint1::Vector{Float32},
-    startJoint2::Vector{Float32},
-    endJoint2::Vector{Float32},
-    height::Float32, periods::Integer, strikecolor)
+    timer::Real, duration::Real,
+    start_joint1::AbstractVector{<:Real},
+    end_joint1::AbstractVector{<:Real},
+    start_joint2::AbstractVector{<:Real},
+    end_joint2::AbstractVector{<:Real};
+    height::Real=0.22f0,
+    periods::Integer=1,
+    strikecolor=:none)
 
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
 
-    vec1 = endJoint1 - startJoint1
-    vec2 = endJoint2 - startJoint2
+    vec1 = end_joint1 - start_joint1
+    vec2 = end_joint2 - start_joint2
 
     tvec1 = t * vec1
     tvec2 = t * vec2
 
-    zArc = sin(t * periods * π) * height
-    tvec1[3] = zArc
-    tvec2[3] = zArc
+    z_arc = sin(t * periods * π) * height
+    tvec1[3] = z_arc
+    tvec2[3] = z_arc
 
-    usePoint1 = startJoint1 + tvec1
-    usePoint2 = startJoint2 + tvec2
+    use_point1 = start_joint1 + tvec1
+    use_point2 = start_joint2 + tvec2
 
-    if segments_intersect_xy(startJoint1, endJoint1, startJoint2, endJoint2)
-        centerX = (startJoint1[1] + startJoint2[1] + endJoint1[1] + endJoint2[1]) * 0.25f0
-        centerY = (startJoint1[2] + startJoint2[2] + endJoint1[2] + endJoint2[2]) * 0.25f0
-
-        joint1Radius = avg_radius_to_xy_center(startJoint1, endJoint1, centerX, centerY)
-        joint2Radius = avg_radius_to_xy_center(startJoint2, endJoint2, centerX, centerY)
-
-        if joint1Radius >= joint2Radius
-            apply_xy_detour_arc!(
-                usePoint1,
-                startJoint1, endJoint1,
-                startJoint2, endJoint2,
-                t,
-            )
-        else
-            apply_xy_detour_arc!(
-                usePoint2,
-                startJoint2, endJoint2,
-                startJoint1, endJoint1,
-                t,
-            )
-        end
+    if segments_intersect_xy(start_joint1, end_joint1, start_joint2, end_joint2)
+        apply_compass_joint_detour!(
+            use_point1, use_point2,
+            start_joint1, end_joint1, start_joint2, end_joint2, t)
     end
 
-    usePoint1[3] = abs(clamp(usePoint1[3], -1f0, 1f0))
-    usePoint2[3] = abs(clamp(usePoint2[3], -1f0, 1f0))
+    use_point1[3] = abs(clamp(use_point1[3], -1f0, 1f0))
+    use_point2[3] = abs(clamp(use_point2[3], -1f0, 1f0))
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, usePoint1; sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, usePoint2; sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, use_point1; sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, use_point2; sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 
-    if usePoint1[3] < 0.05 && strikecolor != :none
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint1, strikecolor)
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, usePoint2, strikecolor)
+    if use_point1[3] < 0.05 && strikecolor != :none
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, use_point1, strikecolor)
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, use_point2, strikecolor)
     end
 end
 
@@ -1334,8 +1371,8 @@ Returns:
 """
 function animate_pen_tilt_and_drag(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32}, color)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real}, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1379,8 +1416,8 @@ Returns:
 """
 function animate_highlight_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, pencolor)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, pencolor)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1397,11 +1434,11 @@ function animate_highlight_point(
 
         OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
     else
-        endAzimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
+        end_azimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,
             duration * (1f0 - GroundTrailEndTime), penpos,
-            PenConeFloorAngle, PenStraightFloorAngle, endAzimuth)
+            PenConeFloorAngle, PenStraightFloorAngle, end_azimuth)
     end
 end
 
@@ -1418,7 +1455,7 @@ Parameters:
 - penpos : Pen base position vector [x, y, z].
 - penbrush : Brush size for the point primitive.
 - pencolor : Point and trail color.
-- pointId : Host point id to update and show.
+- pointid : Host point id to update and show.
 
 Returns:
 
@@ -1426,9 +1463,9 @@ Returns:
 """
 function animate_draw_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, penbrush::Float32, pencolor,
-    pointId::Integer)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, penbrush::Real, pencolor,
+    pointid::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1443,31 +1480,21 @@ function animate_draw_point(
 
         OdinJuliaBridge.simulate_drawing_sound(state_ptr, PenConeSimulatedDrawSpeed)
 
-        OdinJuliaBridge.set_point_color(state_ptr, pointId, pencolor)
-        OdinJuliaBridge.set_point_position(state_ptr, pointId, penpos)
-        OdinJuliaBridge.set_point_brush(state_ptr, pointId, penbrush)
-        OdinJuliaBridge.show_point(state_ptr, pointId)
+        OdinJuliaBridge.set_point_color(state_ptr, pointid, pencolor)
+        OdinJuliaBridge.set_point_position(state_ptr, pointid, penpos)
+        OdinJuliaBridge.set_point_brush(state_ptr, pointid, penbrush)
+        OdinJuliaBridge.show_point(state_ptr, pointid)
 
         OdinJuliaBridge.emit_trailing_particle(state_ptr, penpos, pencolor)
 
         OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
     else
-        endAzimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
+        end_azimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,
             duration * (1f0 - GroundTrailEndTime), penpos,
-            PenConeFloorAngle, PenStraightFloorAngle, endAzimuth)
+            PenConeFloorAngle, PenStraightFloorAngle, end_azimuth)
     end
-end
-
-function animate_draw_point(
-    state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penx::Float32, peny::Float32, penz::Float32, penbrush::Float32, pencolor,
-    pointId::Integer)
-
-    animate_draw_point(
-        state_ptr, timer, duration, [penx, peny, penz], penbrush, pencolor, pointId)
 end
 
 """
@@ -1484,9 +1511,9 @@ Parameters:
 - endpos : Ending line endpoint vector [x, y, z].
 - penbrush : Brush size for the line host primitive.
 - pencolor : Line and trail color.
-- lineHostId : Host point id representing the line primitive.
-- lineJoint1Id : Start endpoint control id.
-- lineJoint2Id : End endpoint control id.
+- line_host_id : Host point id representing the line primitive.
+- line_joint1_id : Start endpoint control id.
+- line_joint2_id : End endpoint control id.
 
 Returns:
 
@@ -1494,10 +1521,13 @@ Returns:
 """
 function animate_draw_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
-    lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real};
+    penbrush::Real,
+    pencolor,
+    line_host_id::Integer,
+    line_joint1_id::Integer,
+    line_joint2_id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1510,11 +1540,11 @@ function animate_draw_line(
             duration * GroundLineDuration, startpos, endpos, PenDrawLineAngle,
             azimuth, pencolor)
 
-        OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, lineJoint1Id, startpos)
-        OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id, tippos)
-        OdinJuliaBridge.show_point(state_ptr, lineHostId)
+        OdinJuliaBridge.set_point_color(state_ptr, line_host_id, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, line_host_id, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, tippos)
+        OdinJuliaBridge.show_point(state_ptr, line_host_id)
 
         OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
 
@@ -1527,6 +1557,24 @@ function animate_draw_line(
     end
 end
 
+"""Run the pen tilt-in or tilt-out phase bounding a two-segment line draw."""
+function animate_two_segment_tilt(
+    state_ptr::Ptr{Cvoid}, timer::Real, duration::Real,
+    position::AbstractVector{<:Real}, azimuth::Real, tilt_in::Bool)
+
+    if tilt_in
+        animate_pen_tilt(
+            state_ptr, timer, duration * TiltToLineDuration, position,
+            PenStraightFloorAngle, PenDrawLineAngle, azimuth)
+    else
+        animate_pen_tilt(
+            state_ptr, timer - duration * GroundTrailEndTime,
+            duration * (1f0 - GroundTrailEndTime), position,
+            PenDrawLineAngle, PenStraightFloorAngle, azimuth)
+    end
+end
+
+
 """
 Animate two connected line segments as one continuous pen stroke.
 
@@ -1535,11 +1583,12 @@ drawn line while still updating two independent host line primitives.
 """
 function animate_draw_two_line_segments(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
-    line1HostId::Integer, line1Joint1Id::Integer, line1Joint2Id::Integer,
-    line2HostId::Integer, line2Joint1Id::Integer, line2Joint2Id::Integer)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor;
+    line1_host_id::Integer, line1_joint1_id::Integer, line1_joint2_id::Integer,
+    line2_host_id::Integer, line2_joint1_id::Integer, line2_joint2_id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1554,64 +1603,78 @@ function animate_draw_two_line_segments(
     seg2_duration = draw_duration - seg1_duration
 
     if t < TiltToLineDuration
-        animate_pen_tilt(
-            state_ptr, timer, duration * TiltToLineDuration, startpos,
-            PenStraightFloorAngle, PenDrawLineAngle, azimuth1)
+        animate_two_segment_tilt(
+            state_ptr, timer, duration, startpos, azimuth1, true)
     elseif t < GroundLineEndTime
-        drag_time = timer - duration * TiltToLineDuration
-
-        if drag_time <= seg1_duration
-            tippos = animate_pen_drag(
-                state_ptr, drag_time, seg1_duration,
-                startpos, midpos, PenDrawLineAngle, azimuth1, pencolor)
-
-            OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
-            OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
-            OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
-            OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, tippos)
-            OdinJuliaBridge.show_point(state_ptr, line1HostId)
-
-            OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
-            OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
-            OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
-            OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, midpos)
-            OdinJuliaBridge.hide_point(state_ptr, line2HostId)
-        else
-            tippos = animate_pen_drag(
-                state_ptr, drag_time - seg1_duration, seg2_duration,
-                midpos, endpos, PenDrawLineAngle, azimuth2, pencolor)
-
-            OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
-            OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
-            OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
-            OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, midpos)
-            OdinJuliaBridge.show_point(state_ptr, line1HostId)
-
-            OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
-            OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
-            OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
-            OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, tippos)
-            OdinJuliaBridge.show_point(state_ptr, line2HostId)
-        end
-
-        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+        draw_two_segment_stroke(
+            state_ptr, timer - duration * TiltToLineDuration,
+            (seg1_duration, seg2_duration), (startpos, midpos, endpos),
+            (penbrush, pencolor), (azimuth1, azimuth2),
+            (line1_host_id, line1_joint1_id, line1_joint2_id),
+            (line2_host_id, line2_joint1_id, line2_joint2_id))
     else
-        OdinJuliaBridge.set_point_color(state_ptr, line1HostId, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, line1HostId, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, line1Joint1Id, startpos)
-        OdinJuliaBridge.set_point_position(state_ptr, line1Joint2Id, midpos)
-        OdinJuliaBridge.show_point(state_ptr, line1HostId)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line1_host_id,
+            (line1_joint1_id, line1_joint2_id), startpos, midpos, true)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line2_host_id,
+            (line2_joint1_id, line2_joint2_id), midpos, endpos, true)
 
-        OdinJuliaBridge.set_point_color(state_ptr, line2HostId, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, line2HostId, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, line2Joint1Id, midpos)
-        OdinJuliaBridge.set_point_position(state_ptr, line2Joint2Id, endpos)
-        OdinJuliaBridge.show_point(state_ptr, line2HostId)
+        animate_two_segment_tilt(
+            state_ptr, timer, duration, endpos, azimuth2, false)
+    end
+end
 
-        animate_pen_tilt(
-            state_ptr, timer - duration * GroundTrailEndTime,
-            duration * (1f0 - GroundTrailEndTime), endpos,
-            PenDrawLineAngle, PenStraightFloorAngle, azimuth2)
+
+"""Draw the active stroke across two connected line segments for the current drag."""
+function draw_two_segment_stroke(
+    state_ptr::Ptr{Cvoid}, drag_time::Real,
+    seg_durations::Tuple{<:Real,<:Real},
+    positions::Tuple{<:AbstractVector{<:Real},
+        <:AbstractVector{<:Real},<:AbstractVector{<:Real}},
+    style::Tuple{<:Real,Any}, azimuths::Tuple{<:Real,<:Real},
+    line1_ids::Tuple{<:Integer,<:Integer,<:Integer},
+    line2_ids::Tuple{<:Integer,<:Integer,<:Integer})
+
+    seg1_duration, seg2_duration = seg_durations
+    startpos, midpos, endpos = positions
+    penbrush, pencolor = style
+    azimuth1, azimuth2 = azimuths
+    if drag_time <= seg1_duration
+        tippos = animate_pen_drag(
+            state_ptr, drag_time, seg1_duration,
+            startpos, midpos, PenDrawLineAngle, azimuth1, pencolor)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line1_ids[1],
+            (line1_ids[2], line1_ids[3]), startpos, tippos, true)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line2_ids[1],
+            (line2_ids[2], line2_ids[3]), midpos, midpos, false)
+    else
+        tippos = animate_pen_drag(
+            state_ptr, drag_time - seg1_duration, seg2_duration,
+            midpos, endpos, PenDrawLineAngle, azimuth2, pencolor)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line1_ids[1],
+            (line1_ids[2], line1_ids[3]), startpos, midpos, true)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line2_ids[1],
+            (line2_ids[2], line2_ids[3]), midpos, tippos, true)
+    end
+
+    OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+end
+
+
+"""Set one line segment host/joint point state, showing or hiding the host."""
+function set_line_segment_points(
+    state_ptr::Ptr{Cvoid}, penbrush::Real, pencolor,
+    host_id::Integer, joint_ids::Tuple{<:Integer,<:Integer},
+    joint1_pos::AbstractVector{<:Real}, joint2_pos::AbstractVector{<:Real},
+    show_host::Bool)
+
+    OdinJuliaBridge.set_point_color(state_ptr, host_id, pencolor)
+    OdinJuliaBridge.set_point_brush(state_ptr, host_id, penbrush)
+    OdinJuliaBridge.set_point_position(state_ptr, joint_ids[1], joint1_pos)
+    OdinJuliaBridge.set_point_position(state_ptr, joint_ids[2], joint2_pos)
+    if show_host
+        OdinJuliaBridge.show_point(state_ptr, host_id)
+    else
+        OdinJuliaBridge.hide_point(state_ptr, host_id)
     end
 end
 
@@ -1630,9 +1693,9 @@ Parameters:
 - endpos : Ending line endpoint vector [x, y, z].
 - penbrush : Brush size for the line host primitive.
 - pencolor : Line and trail color.
-- lineHostId : Host point id representing the line primitive.
-- lineJoint1Id : Start endpoint control id.
-- lineJoint2Id : End endpoint control id.
+- line_host_id : Host point id representing the line primitive.
+- line_joint1_id : Start endpoint control id.
+- line_joint2_id : End endpoint control id.
 
 Returns:
 
@@ -1640,10 +1703,13 @@ Returns:
 """
 function animate_extend_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, midpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
-    lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
+    endpos::AbstractVector{<:Real},
+    penbrush::Real, pencolor;
+    line_host_id::Integer=0,
+    line_joint1_id::Integer=0,
+    line_joint2_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1656,11 +1722,11 @@ function animate_extend_line(
             duration * GroundLineDuration, midpos, endpos, PenDrawLineAngle,
             azimuth, pencolor)
 
-        OdinJuliaBridge.set_point_color(state_ptr, lineHostId, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, lineHostId, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, lineJoint1Id, startpos)
-        OdinJuliaBridge.set_point_position(state_ptr, lineJoint2Id, tippos)
-        OdinJuliaBridge.show_point(state_ptr, lineHostId)
+        OdinJuliaBridge.set_point_color(state_ptr, line_host_id, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, line_host_id, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, tippos)
+        OdinJuliaBridge.show_point(state_ptr, line_host_id)
 
         OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
 
@@ -1683,15 +1749,15 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the circle draw sequence.
-- jointPoint : Compass pivot position vector [x, y, z].
-- startPoint : Marker start point vector [x, y, z].
-- angleTheta : Sweep angle in radians.
+- joint_point : Compass pivot position vector [x, y, z].
+- start_point : Marker start point vector [x, y, z].
+- angle_theta : Sweep angle in radians.
 - radius : Marker radius.
 - brush : Brush size for the marker host primitive.
 - color : Marker and trail color.
-- markerHostId : Host id for the filled marker primitive.
-- markerStartId : Start control point id for marker geometry.
-- markerEndId : End control point id for marker geometry.
+- marker_host_id : Host id for the filled marker primitive.
+- marker_start_id : Start control point id for marker geometry.
+- marker_end_id : End control point id for marker geometry.
 
 Returns:
 
@@ -1699,33 +1765,37 @@ Returns:
 """
 function animate_draw_circle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1]))
-    theta = startTheta + angleTheta * t
+    start_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1]))
+    theta = start_theta + angle_theta * t
 
-    endPoint = [
-        jointPoint[1] + radius * Float32(cos(theta)),
-        jointPoint[2] + radius * Float32(sin(theta)),
+    end_point = [
+        joint_point[1] + radius * Float32(cos(theta)),
+        joint_point[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint, sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point, sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint, sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point, sweep = false)
     OdinJuliaBridge.show_compass(state_ptr)
 
-    OdinJuliaBridge.set_point_color(state_ptr, markerHostId, color)
-    OdinJuliaBridge.set_point_brush(state_ptr, markerHostId, brush)
-    OdinJuliaBridge.set_point_position(state_ptr, markerStartId, startPoint)
-    OdinJuliaBridge.set_point_position(state_ptr, markerEndId, endPoint)
-    OdinJuliaBridge.show_point(state_ptr, markerHostId)
+    OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
+    OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_start_id, start_point)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, end_point)
+    OdinJuliaBridge.show_point(state_ptr, marker_host_id)
 
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, endPoint, color)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
 end
 
 """
@@ -1738,15 +1808,15 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the marker draw sequence.
-- jointPoint : Compass pivot position vector [x, y, z].
-- startPoint : Marker start point vector [x, y, z].
-- angleTheta : Sweep angle in radians.
+- joint_point : Compass pivot position vector [x, y, z].
+- start_point : Marker start point vector [x, y, z].
+- angle_theta : Sweep angle in radians.
 - radius : Marker radius.
 - brush : Brush size for the marker host primitive.
 - color : Marker and trail color.
-- markerHostId : Host id for the filled marker primitive.
-- markerStartId : Start control point id for marker geometry.
-- markerEndId : End control point id for marker geometry.
+- marker_host_id : Host id for the filled marker primitive.
+- marker_start_id : Start control point id for marker geometry.
+- marker_end_id : End control point id for marker geometry.
 
 Returns:
 
@@ -1754,33 +1824,37 @@ Returns:
 """
 function animate_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1]))
-    theta = startTheta + angleTheta * t
+    start_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1]))
+    theta = start_theta + angle_theta * t
 
-    endPoint = [
-        jointPoint[1] + radius * Float32(cos(theta)),
-        jointPoint[2] + radius * Float32(sin(theta)),
+    end_point = [
+        joint_point[1] + radius * Float32(cos(theta)),
+        joint_point[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point)
     OdinJuliaBridge.show_compass(state_ptr)
 
-    OdinJuliaBridge.set_point_color(state_ptr, markerHostId, color)
-    OdinJuliaBridge.set_point_brush(state_ptr, markerHostId, brush)
-    OdinJuliaBridge.set_point_position(state_ptr, markerStartId, startPoint)
-    OdinJuliaBridge.set_point_position(state_ptr, markerEndId, endPoint)
-    OdinJuliaBridge.show_point(state_ptr, markerHostId)
+    OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
+    OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_start_id, start_point)
+    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, end_point)
+    OdinJuliaBridge.show_point(state_ptr, marker_host_id)
 
-    emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
+    emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
 end
 
 """
@@ -1793,9 +1867,9 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the highlight sweep.
-- jointPoint : Compass pivot position vector [x, y, z].
-- startPoint : Sweep start point vector [x, y, z].
-- angleTheta : Sweep angle in radians.
+- joint_point : Compass pivot position vector [x, y, z].
+- start_point : Sweep start point vector [x, y, z].
+- angle_theta : Sweep angle in radians.
 - radius : Sweep radius.
 - color : Trail and compass-active color.
 
@@ -1805,26 +1879,26 @@ Returns:
 """
 function animate_compass_fill_arc_highlight(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, color)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1]))
-    theta = startTheta + angleTheta * t
+    start_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1]))
+    theta = start_theta + angle_theta * t
 
-    endPoint = [
-        jointPoint[1] + radius * Float32(cos(theta)),
-        jointPoint[2] + radius * Float32(sin(theta)),
+    end_point = [
+        joint_point[1] + radius * Float32(cos(theta)),
+        joint_point[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint; sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint; sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point; sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point; sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
     OdinJuliaBridge.show_compass(state_ptr)
 
-    emit_filledcircle_radius_trail(state_ptr, jointPoint, endPoint, color)
+    emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
 end
 
 """
@@ -1837,9 +1911,9 @@ Parameters:
 - state_ptr : Pointer to the Euclid application state.
 - timer : Elapsed animation time.
 - duration : Total duration for the highlight sweep.
-- jointPoint : Compass pivot position vector [x, y, z].
-- startPoint : Sweep start point vector [x, y, z].
-- angleTheta : Sweep angle in radians.
+- joint_point : Compass pivot position vector [x, y, z].
+- start_point : Sweep start point vector [x, y, z].
+- angle_theta : Sweep angle in radians.
 - radius : Sweep radius.
 - color : Trail and compass-active color.
 
@@ -1849,34 +1923,34 @@ Returns:
 """
 function animate_compass_arc_highlight(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, color)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real, color)
 
     t = clamp(timer / duration, 0f0, 1f0)
-    startTheta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1]))
-    theta = startTheta + angleTheta * t
+    start_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1]))
+    theta = start_theta + angle_theta * t
 
-    endPoint = [
-        jointPoint[1] + radius * Float32(cos(theta)),
-        jointPoint[2] + radius * Float32(sin(theta)),
+    end_point = [
+        joint_point[1] + radius * Float32(cos(theta)),
+        joint_point[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, jointPoint; sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, endPoint; sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point; sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point; sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
     OdinJuliaBridge.show_compass(state_ptr)
 
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, endPoint, color)
+    OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
 end
 
 """Animate a REPL point draw with explicit pen descend, draw, and rise phases."""
 function animate_repl_draw_point(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    penpos::Vector{Float32}, penbrush::Float32, pencolor,
-    pointId::Integer)
+    timer::Real, duration::Real,
+    penpos::AbstractVector{<:Real}, penbrush::Real, pencolor,
+    pointid::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1904,7 +1978,7 @@ function animate_repl_draw_point(
             penpos,
             penbrush,
             pencolor,
-            pointId)
+            pointid)
         return
     end
 
@@ -1920,61 +1994,84 @@ end
 """Animate a REPL line draw with explicit pen descend, draw, and rise phases."""
 function animate_repl_draw_line(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    startpos::Vector{Float32}, endpos::Vector{Float32},
-    penbrush::Float32, pencolor,
-    lineHostId::Integer, lineJoint1Id::Integer, lineJoint2Id::Integer)
+    timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real};
+    penbrush::Real=0f0,
+    pencolor=:black,
+    line_host_id::Integer=0,
+    line_joint1_id::Integer=0,
+    line_joint2_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
-    descend_duration = duration * ReplDescendShare
-    draw_duration = duration * ReplDrawShare
-    draw_start = descend_duration
-    draw_end = draw_start + draw_duration
+    draw_start = duration * ReplDescendShare
+    draw_end = draw_start + duration * ReplDrawShare
 
     if t < ReplDescendShare
         animate_pen_descend(
-            state_ptr,
-            timer,
-            descend_duration,
-            ReplToolTravelTopZ,
-            startpos[1],
-            startpos[2])
+            state_ptr, timer, draw_start, ReplToolTravelTopZ,
+            startpos[1], startpos[2])
         return
     end
 
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_line(
-            state_ptr,
-            timer - draw_start,
-            draw_duration,
-            startpos,
-            endpos,
-            penbrush,
-            pencolor,
-            lineHostId,
-            lineJoint1Id,
-            lineJoint2Id)
+            state_ptr, timer - draw_start, duration * ReplDrawShare,
+            startpos, endpos; penbrush=penbrush, pencolor=pencolor,
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
         return
     end
 
     animate_pen_rise(
-        state_ptr,
-        timer - draw_end,
-        duration - draw_end,
-        ReplToolTravelTopZ,
-        endpos[1],
-        endpos[2])
+        state_ptr, timer - draw_end, duration - draw_end,
+        ReplToolTravelTopZ, endpos[1], endpos[2])
 end
+
+"""Run the compass descend/rise phases around a REPL circle draw."""
+function animate_repl_circle_phases(
+    state_ptr::Ptr{Cvoid},
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    sweep::Tuple{<:Real,<:Real},
+    marker_host_id::Integer, full_sweep::Bool)
+
+    angle_theta, radius = sweep
+    if full_sweep
+        OdinJuliaBridge.set_point_offset(state_ptr, marker_host_id, angle_theta)
+    else
+        OdinJuliaBridge.set_point_offset(state_ptr, marker_host_id, 0f0)
+    end
+
+    draw_end = duration * (ReplDescendShare + ReplDrawShare)
+    final_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1])) + angle_theta
+    end_point = Float32[
+        joint_point[1] + radius * Float32(cos(final_theta)),
+        joint_point[2] + radius * Float32(sin(final_theta)),
+        joint_point[3],
+    ]
+
+    animate_compass_rise(
+        state_ptr, timer - draw_end, duration - draw_end, ReplToolTravelTopZ,
+        joint_point[1], joint_point[2], end_point[1], end_point[2])
+end
+
 
 """Animate a REPL circle draw with explicit compass descend, draw, and rise phases."""
 function animate_repl_draw_circle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
-    fullSweep::Bool=false)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real,
+    radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0,
+    full_sweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1989,63 +2086,39 @@ function animate_repl_draw_circle(
             timer,
             descend_duration,
             ReplToolTravelTopZ,
-            jointPoint[1],
-            jointPoint[2],
-            startPoint[1],
-            startPoint[2])
+            joint_point[1],
+            joint_point[2],
+            start_point[1],
+            start_point[2])
         return
     end
 
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_circle(
-            state_ptr,
-            timer - draw_start,
-            draw_duration,
-            jointPoint,
-            startPoint,
-            angleTheta,
-            radius,
-            brush,
-            color,
-            markerHostId,
-            markerStartId,
-            markerEndId)
+            state_ptr, timer - draw_start, draw_duration,
+            joint_point, start_point, angle_theta, radius;
+            brush=brush, color=color, marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
         return
     end
 
-    if fullSweep
-        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, angleTheta)
-    else
-        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
-    end
-
-    final_theta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1])) + angleTheta
-    endPoint = Float32[
-        jointPoint[1] + radius * Float32(cos(final_theta)),
-        jointPoint[2] + radius * Float32(sin(final_theta)),
-        jointPoint[3],
-    ]
-
-    animate_compass_rise(
-        state_ptr,
-        timer - draw_end,
-        duration - draw_end,
-        ReplToolTravelTopZ,
-        jointPoint[1],
-        jointPoint[2],
-        endPoint[1],
-        endPoint[2])
+    animate_repl_circle_phases(
+        state_ptr, timer, duration, joint_point, start_point,
+        (angle_theta, radius), marker_host_id, full_sweep)
 end
 
 """Animate a REPL filled-circle draw with explicit compass descend, draw, and rise phases."""
 function animate_repl_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
-    timer::Float32, duration::Float32,
-    jointPoint::Vector{Float32}, startPoint::Vector{Float32},
-    angleTheta::Float32, radius::Float32, brush::Float32, color,
-    markerHostId::Integer, markerStartId::Integer, markerEndId::Integer,
-    fullSweep::Bool=false)
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0,
+    full_sweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -2060,53 +2133,25 @@ function animate_repl_draw_filledcircle(
             timer,
             descend_duration,
             ReplToolTravelTopZ,
-            jointPoint[1],
-            jointPoint[2],
-            startPoint[1],
-            startPoint[2])
+            joint_point[1],
+            joint_point[2],
+            start_point[1],
+            start_point[2])
         return
     end
 
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_filledcircle(
-            state_ptr,
-            timer - draw_start,
-            draw_duration,
-            jointPoint,
-            startPoint,
-            angleTheta,
-            radius,
-            brush,
-            color,
-            markerHostId,
-            markerStartId,
-            markerEndId)
+            state_ptr, timer - draw_start, draw_duration,
+            joint_point, start_point, angle_theta, radius;
+            brush=brush, color=color, marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
         return
     end
 
-    if fullSweep
-        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, angleTheta)
-    else
-        OdinJuliaBridge.set_point_offset(state_ptr, markerHostId, 0f0)
-    end
-
-    final_theta = Float32(atan(startPoint[2] - jointPoint[2],
-        startPoint[1] - jointPoint[1])) + angleTheta
-    endPoint = Float32[
-        jointPoint[1] + radius * Float32(cos(final_theta)),
-        jointPoint[2] + radius * Float32(sin(final_theta)),
-        jointPoint[3],
-    ]
-
-    animate_compass_rise(
-        state_ptr,
-        timer - draw_end,
-        duration - draw_end,
-        ReplToolTravelTopZ,
-        jointPoint[1],
-        jointPoint[2],
-        endPoint[1],
-        endPoint[2])
+    animate_repl_circle_phases(
+        state_ptr, timer, duration, joint_point, start_point,
+        (angle_theta, radius), marker_host_id, full_sweep)
 end
 
 end

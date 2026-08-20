@@ -9,17 +9,37 @@ SCRATCHPAD_PARSE_ERROR :: i32(0)
 SCRATCHPAD_PARSE_INCOMPLETE :: i32(1)
 SCRATCHPAD_PARSE_COMPLETE :: i32(2)
 
+Scratchpad_Sumbission_Config :: struct {
+    text: string,
+    caret_byte: int,
+    input_mode: Scratchpad_Input_Mode,
+    input_generation: u64,
+}
+
+//   Get a new scratchpad submission configuration object
+get_scratchpad_submission :: proc(
+    text: string = "",
+    caret_byte: int = 0,
+    input_mode: Scratchpad_Input_Mode = .Julia,
+    input_generation: u64 = 0) -> Scratchpad_Sumbission_Config {
+    return {
+        text = text,
+        caret_byte = caret_byte,
+        input_mode = input_mode,
+        input_generation = input_generation,
+    }
+}
+
 //   Submit one copied Scratchpad operation without blocking the display thread.
 try_submit_scratchpad_async :: proc(
-    state: ^core.Euclid_General_State, kind: Scratchpad_Async_Kind,
-    text: string = "", caret_byte: int = 0,
-    input_mode: Scratchpad_Input_Mode = .Julia,
-    input_generation: u64 = 0) -> (u64, bool) {
+    state: ^core.Euclid_General_State,
+    kind: Scratchpad_Async_Kind,
+    config: Scratchpad_Sumbission_Config) -> (u64, bool) {
 
     if state == nil || state^.julia_runtime_service == nil {
         return 0, false
     }
-    if len(text) > SCRATCHPAD_ASYNC_TEXT_CAPACITY {
+    if len(config.text) > SCRATCHPAD_ASYNC_TEXT_CAPACITY {
         return 0, false
     }
 
@@ -33,13 +53,13 @@ try_submit_scratchpad_async :: proc(
     slot^ = Scratchpad_Async_Slot{
         state = .Pending,
         kind = kind,
-        input_generation = input_generation,
-        input_mode = input_mode,
+        input_generation = config.input_generation,
+        input_mode = config.input_mode,
         host_state = state,
-        caret_byte = caret_byte,
-        input_len = len(text),
+        caret_byte = config.caret_byte,
+        input_len = len(config.text),
     }
-    copy(slot^.input[:], transmute([]u8)text)
+    copy(slot^.input[:], transmute([]u8)config.text)
 
     request_id, sent := try_submit_julia_request(
         service, .Scratchpad, scratchpad_async_task, rawptr(slot), i32(slot_index))
@@ -186,35 +206,6 @@ scratchpad_classify_input_direct :: proc(
     }
 
     return i32(julialib.jl_unbox_int32(result))
-}
-
-//   Resolve one phase-1 scratchpad backslash token to a Unicode replacement.
-//
-// Returns:
-//   - Replacement text when Julia REPL backslash completion resolves a single match.
-//   - Empty string when no completion should be applied.
-scratchpad_complete_backslash_direct :: proc(
-    state: ^core.Euclid_General_State, token: string) -> string {
-
-    if state == nil || state^.julia_interface == nil {
-        return ""
-    }
-    if state^.julia_interface^.scratchpad_complete_backslash == nil {
-        return ""
-    }
-
-    state_value := julialib.jl_box_voidpointer(state)
-    token_c := strings.clone_to_cstring(token, context.temp_allocator)
-    token_value := julialib.jl_cstr_to_string(token_c)
-    result := julialib.jl_call2(state^.julia_interface^.scratchpad_complete_backslash,
-        state_value, token_value)
-
-    if julialib.jl_exception_occurred() != nil || result == nil {
-        print_julia_exception("scratchpad_complete_backslash")
-        return ""
-    }
-
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
 }
 
 //   Resolve one generic scratchpad completion request from full input text and caret byte offset.

@@ -4,13 +4,13 @@ import rl "vendor:raylib"
 
 
 Mouse_Input_State :: struct {
-	position: rl.Vector2,
-	delta: rl.Vector2,
-	wheel_delta: f32,
-	left_pressed: bool,
-	left_down: bool,
-	left_released: bool,
-	timestamp_seconds: f64,
+    position: rl.Vector2,
+    delta: rl.Vector2,
+    wheel_delta: f32,
+    left_pressed: bool,
+    left_down: bool,
+    left_released: bool,
+    timestamp_seconds: f64,
 }
 
 

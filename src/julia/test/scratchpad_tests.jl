@@ -22,38 +22,45 @@ using Test
 
 const TEST_SESSION_ID_REF = Ref(1)
 
+const TEST_STATE_PTR = Ptr{Cvoid}(0)
+
+struct ScratchpadLatexResultMock
+end
+
+struct ScratchpadPlainResultMock
+end
+
+"""Construct a zeroed scratchpad metrics struct for testing."""
 function new_metrics()
     return Scratchpad.ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 end
 
+"""Create a fresh scratchpad session bound to the shared test state."""
 function new_session(; id::Int=TEST_SESSION_ID_REF[])
     TEST_SESSION_ID_REF[] = id + 1
     return Scratchpad.create_session(TEST_STATE_PTR, id)
 end
 
-struct ScratchpadLatexResultMock
-end
+"""Render a LaTeX result mock as plain text or LaTeX."""
+Base.show(io::IO, ::MIME"text/plain", m::ScratchpadLatexResultMock) =
+    print(io, "ScratchpadLatexResultMock()")
+Base.show(io::IO, ::MIME"text/latex", m::ScratchpadLatexResultMock) =
+    print(io, "\\frac{1}{2}")
 
-Base.show(io::IO, ::MIME"text/plain", ::ScratchpadLatexResultMock) = print(io, "ScratchpadLatexResultMock()")
-Base.show(io::IO, ::MIME"text/latex", ::ScratchpadLatexResultMock) = print(io, "\\frac{1}{2}")
+Base.show(io::IO, ::MIME"text/plain", m::ScratchpadPlainResultMock) =
+    print(io, "ScratchpadPlainResultMock()")
 
-struct ScratchpadPlainResultMock
-end
-
-Base.show(io::IO, ::MIME"text/plain", ::ScratchpadPlainResultMock) = print(io, "ScratchpadPlainResultMock()")
-
+"""Run a function with a fresh scratchpad session installed, restoring the old one after."""
 function with_test_session(f::Function)
-    old_session = Scratchpad.session_ref[]
+    old_session = Scratchpad.SessionRef[]
     try
         session = new_session()
-        Scratchpad.session_ref[] = session
+        Scratchpad.SessionRef[] = session
         return f(session)
     finally
-        Scratchpad.session_ref[] = old_session
+        Scratchpad.SessionRef[] = old_session
     end
 end
-
-const TEST_STATE_PTR = Ptr{Cvoid}(0)
 
 @testset "classify_parse" begin
     status_complete, parsed_complete = Scratchpad.classify_parse("1 + 2")
@@ -175,8 +182,10 @@ end
 end
 
 @testset "blocked_input_reason" begin
-    @test Scratchpad.blocked_input_reason("using Pkg") == "package management is disabled in scratchpad"
-    @test Scratchpad.blocked_input_reason("import   pkg") == "package management is disabled in scratchpad"
+    @test Scratchpad.blocked_input_reason("using Pkg") ==
+        "package management is disabled in scratchpad"
+    @test Scratchpad.blocked_input_reason("import   pkg") ==
+        "package management is disabled in scratchpad"
     @test Scratchpad.blocked_input_reason("run(`ls`)") == "blocked token: run("
     @test Scratchpad.blocked_input_reason("cp(\"a\", \"b\")") == "blocked token: cp("
     @test Scratchpad.blocked_input_reason("x = 42") === nothing
@@ -184,14 +193,17 @@ end
 
 @testset "classify_input" begin
     with_test_session() do session
-        @test Scratchpad.classify_input(TEST_STATE_PTR, "x = 2") == Scratchpad.ParseComplete
+        @test Scratchpad.classify_input(TEST_STATE_PTR, "x = 2") ==
+            Scratchpad.ParseComplete
         @test isempty(session.output)
 
-        @test Scratchpad.classify_input(TEST_STATE_PTR, "x = )") == Scratchpad.ParseError
+        @test Scratchpad.classify_input(TEST_STATE_PTR, "x = )") ==
+            Scratchpad.ParseError
         @test length(session.output) == 1
         @test startswith(session.output[1], "Parse error")
 
-        @test Scratchpad.classify_input(TEST_STATE_PTR, "?OdinJuliaBridge.bridge_color") == Scratchpad.ParseComplete
+        @test Scratchpad.classify_input(
+            TEST_STATE_PTR, "?OdinJuliaBridge.bridge_color") == Scratchpad.ParseComplete
         @test length(session.output) == 1
     end
 end
@@ -250,9 +262,12 @@ end
 @testset "complete_input" begin
     with_test_session() do session
         @test Scratchpad.complete_input(TEST_STATE_PTR, "\\alpha", 6) == "0\n6\nα"
-        @test Scratchpad.completion_replacement_text("test_val", 1:8, ["test_value"]) == "test_value"
-        @test Scratchpad.completion_replacement_text("alph", 1:4, ["alpha_one", "alpha_two"]) == "alpha_"
-        @test Scratchpad.completion_replacement_text("alpha_", 1:6, ["alpha_one", "alpha_two"]) === nothing
+        @test Scratchpad.completion_replacement_text(
+            "test_val", 1:8, ["test_value"]) == "test_value"
+        @test Scratchpad.completion_replacement_text(
+            "alph", 1:4, ["alpha_one", "alpha_two"]) == "alpha_"
+        @test Scratchpad.completion_replacement_text(
+            "alpha_", 1:6, ["alpha_one", "alpha_two"]) === nothing
     end
 end
 
@@ -261,7 +276,8 @@ end
     formatted = try
         1 + "a"
         ""
-    catch
+    catch e
+        @test e isa MethodError
         Scratchpad.format_current_exception_text(runtime)
     end
 
@@ -283,12 +299,16 @@ end
 
 @testset "new runtime method candidates" begin
     runtime = Module(:ScratchpadRuntimeMethodCandidateTest)
-    Core.eval(runtime, :(f(x, y) = x + y))
+    Core.eval(runtime, quote
+        """Add two numbers; a two-argument method candidate fixture."""
+        f(x, y) = x + y
+    end)
 
     formatted = try
         Core.eval(runtime, :(f(2)))
         ""
-    catch
+    catch e
+        @test e isa MethodError
         Scratchpad.format_current_exception_text(runtime)
     end
 
@@ -333,16 +353,20 @@ end
         @test !occursin('\e', output)
         @test any(==("Closest candidates are:"), session.output)
         @test any(==("Stacktrace:"), session.output)
-        error_start = findfirst(entry -> startswith(entry.line, "ERROR:"), session.output_entries)
+        error_start = findfirst(entry ->
+            startswith(entry.line, "ERROR:"), session.output_entries)
         @test error_start !== nothing
-        error_entries = session.output_entries[error_start:lastindex(session.output_entries)]
-        error_segments = reduce(vcat, (entry.segments for entry in error_entries); init=[])
+        error_entries =
+            session.output_entries[error_start:lastindex(session.output_entries)]
+        error_segments = reduce(vcat,
+            (entry.segments for entry in error_entries); init=[])
         @test any(segment -> startswith(segment.text, "ERROR:") &&
             segment.style_id == Scratchpad.DynviewStyleBold &&
             segment.brush_color == Scratchpad.NativeErrorRed, error_segments)
         @test any(segment -> occursin("::Any", segment.text) &&
             segment.brush_color == Scratchpad.NativeErrorRed, error_segments)
-        @test any(segment -> segment.brush_color == Scratchpad.NativeErrorGray, error_segments)
+        @test any(segment ->
+            segment.brush_color == Scratchpad.NativeErrorGray, error_segments)
         @test any(segment -> occursin("REPL[", segment.text) &&
             segment.style_id == Scratchpad.DynviewStyleUnderline, error_segments)
         @test any(segment -> occursin("The function `f` exists", segment.text) &&
@@ -355,21 +379,24 @@ end
 
 @testset "latex result formatting helpers" begin
     @test Scratchpad.normalize_latex_result_source("\$\\alpha\$") == "\\alpha"
-    @test Scratchpad.normalize_latex_result_source("\$\$\\frac{1}{2}\$\$") == "\\frac{1}{2}"
+    @test Scratchpad.normalize_latex_result_source(
+        "\$\$\\frac{1}{2}\$\$") == "\\frac{1}{2}"
     @test Scratchpad.normalize_latex_result_source("\$\$\\alpha\$") == "\\alpha"
     @test Scratchpad.normalize_latex_result_source("\$\\alpha\$\$") == "\\alpha"
     @test Scratchpad.normalize_latex_result_source("\$\$\$\\alpha\$\$\$") == "\\alpha"
     @test Scratchpad.normalize_latex_result_source("x\$y") == "x\$y"
     @test Scratchpad.normalize_latex_result_source("  \\beta  ") == "\\beta"
 
-    latex_source = Scratchpad.format_result_latex_source(ScratchpadLatexResultMock(), Main)
+    latex_source = Scratchpad.format_result_latex_source(
+        ScratchpadLatexResultMock(), Main)
     @test latex_source == "\\frac{1}{2}"
 
     runtime = Scratchpad.create_runtime_module(4_001)
     malformed_latex = Main.LaTeXStrings.LaTeXString("\$\$\\alpha\$")
     @test Scratchpad.format_result_latex_source(malformed_latex, runtime) == "\\alpha"
 
-    plain_source = Scratchpad.format_result_latex_source(ScratchpadPlainResultMock(), Main)
+    plain_source = Scratchpad.format_result_latex_source(
+        ScratchpadPlainResultMock(), Main)
     @test plain_source === nothing
 end
 

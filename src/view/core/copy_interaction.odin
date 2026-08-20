@@ -13,6 +13,7 @@ COPY_ICON_PRESS_RISE_SPEED :: 32.0
 COPY_ICON_PRESS_FALL_SPEED :: 24.0
 COPY_ICON_CLICK_LINGER_SECONDS :: 0.1
 
+//   Move one copy-icon transition value toward its target at a bounded rate.
 copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32 {
     t := clamp(speed * dt, 0.0, 1.0)
     return current + (target - current) * t
@@ -168,6 +169,18 @@ copy_icon_linger_t :: #force_inline proc(
         runtime^.copy_icon_linger_remaining / COPY_ICON_CLICK_LINGER_SECONDS, 0.0, 1.0)
 }
 
+//   Resolve the foreground color for one copy icon press transition.
+copy_icon_color :: #force_inline proc(press_t: f32) -> rl.Color {
+    color := UI_TEXT_COLOR
+    if press_t <= 0 {
+        return color
+    }
+    factor := 1.0 - 0.45 * press_t
+    return {u8(f32(BACKGROUND_COLOR.r) * factor),
+        u8(f32(BACKGROUND_COLOR.g) * factor),
+        u8(f32(BACKGROUND_COLOR.b) * factor), BACKGROUND_COLOR.a}
+}
+
 //   Draw a copy icon button using shared icon primitives with hover/press feedback.
 draw_copy_icon_button :: proc(
     rect: rl.Rectangle,
@@ -184,20 +197,8 @@ draw_copy_icon_button :: proc(
     use_hover_t := clamp(hover_t, 0.0, 1.0)
     use_press_t := clamp(press_t, 0.0, 1.0)
 
-    icon_color := UI_TEXT_COLOR
     if use_press_t > 0 {
         rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
-        icon_color = BACKGROUND_COLOR
-    }
-
-    if use_press_t > 0 {
-        factor := 1.0 - (0.45 * use_press_t)
-        icon_color = rl.Color{
-            u8(f32(icon_color.r) * factor),
-            u8(f32(icon_color.g) * factor),
-            u8(f32(icon_color.b) * factor),
-            icon_color.a,
-        }
     }
 
     scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t -
@@ -213,7 +214,7 @@ draw_copy_icon_button :: proc(
         icon_rect.y += 0.5
     }
 
-    draw_copy_icon(icon_rect, icon_color)
+    draw_copy_icon(icon_rect, copy_icon_color(use_press_t))
     return hovered_icon && mouse_input.left_released
 }
 

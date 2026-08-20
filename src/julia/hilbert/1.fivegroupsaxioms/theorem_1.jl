@@ -18,7 +18,8 @@ const LineAStart = [0.18f0, 0.58f0, 0f0]
 const LineAEnd = [0.82f0, 0.58f0, 0f0]
 const LineBStart = [0.34f0, 0.78f0, 0f0]
 const LineBEnd = [0.56f0, 0.36f0, 0f0]
-const IntersectionPoint = line_intersection_3d(LineAStart, LineAEnd, LineBStart, LineBEnd)
+const IntersectionPoint =
+    line_intersection_3d(LineAStart, LineAEnd, LineBStart, LineBEnd)
 const PenTopZ = 1.4f0
 
 const PlaneColor = :palevioletred1
@@ -70,29 +71,32 @@ const PhaseHoverIntersection = 10f0
 const PhaseEndLift = 11f0
 const PhaseFinalHold = 12f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 1
 
 Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
 
-Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
+Two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] of a plane have either one point \euclidpoint[color=khaki3,size=1] or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-function set_plane_alpha(state_ptr::Ptr{Cvoid}, hostId, alpha01)
+"""Set the plane's fill alpha from a normalized [0, 1] opacity."""
+function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     t = clamp(alpha01, 0f0, PlaneMaxAlpha01)
-    alpha = UInt8(round(Int, Float32(PlaneBaseColor.a) * t))
+    alpha = UInt8(round(Int, PlaneBaseColor.a * t))
     color = OdinJuliaBridge.BridgeColor(
         PlaneBaseColor.r,
         PlaneBaseColor.g,
         PlaneBaseColor.b,
         alpha)
-    OdinJuliaBridge.set_point_color(state_ptr, hostId, color)
+    OdinJuliaBridge.set_point_color(state_ptr, host_id, color)
 end
 
-function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
+"""Pick a random interior point of the triangle with vertices a, b, and c."""
+function random_triangle_point(
+    a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
     u = rand(Float32)
     v = rand(Float32)
 
@@ -108,6 +112,7 @@ function random_triangle_point(a::Vector{Float32}, b::Vector{Float32}, c::Vector
     ]
 end
 
+"""Pick a random interior point of the vertical plane built from the current vertices."""
 function random_vertical_plane_point()
     if rand(Float32) < 0.5f0
         return random_triangle_point(PlaneEdgeLeft, PlaneTopLeft, PlaneTopRight)
@@ -116,33 +121,42 @@ function random_vertical_plane_point()
     random_triangle_point(PlaneEdgeLeft, PlaneTopRight, PlaneEdgeRight)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    planeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    lineBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBHostId))
-    lineBJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint1Id))
-    lineBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint2Id))
-    intersectionPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaIntersectionPointId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPlaneHostId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
+    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBHostId))
+    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint1Id))
+    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint2Id))
+    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaIntersectionPointId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [planeHostId, lineAHostId, lineBHostId, intersectionPointId])
+        [plane_host_id, line_a_host_id, line_b_host_id, intersection_point_id])
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineAJoint1Id, LineAStart[1], LineAStart[2], LineAStart[3])
+        state_ptr, line_a_joint1_id, LineAStart[1], LineAStart[2], LineAStart[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineAJoint2Id, LineAStart[1], LineAStart[2], LineAStart[3])
+        state_ptr, line_a_joint2_id, LineAStart[1], LineAStart[2], LineAStart[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineBJoint1Id, LineBStart[1], LineBStart[2], LineBStart[3])
+        state_ptr, line_b_joint1_id, LineBStart[1], LineBStart[2], LineBStart[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineBJoint2Id, LineBStart[1], LineBStart[2], LineBStart[3])
+        state_ptr, line_b_joint2_id, LineBStart[1], LineBStart[2], LineBStart[3])
 
-    set_plane_alpha(state_ptr, planeHostId, 0f0)
-    OdinJuliaBridge.hide_point(state_ptr, planeHostId)
+    set_plane_alpha(state_ptr, plane_host_id, 0f0)
+    OdinJuliaBridge.hide_point(state_ptr, plane_host_id)
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineAColor)
@@ -150,47 +164,61 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    lineA = OdinJuliaBridge.create_new_line(
+    line_a = OdinJuliaBridge.create_new_line(
         state_ptr, LineAStart, LineAStart, LineAColor, 0f0)
-    lineB = OdinJuliaBridge.create_new_line(
+    line_b = OdinJuliaBridge.create_new_line(
         state_ptr, LineBStart, LineBStart, LineBColor, 0f0)
-    intersectionPoint = OdinJuliaBridge.create_new_point(
+    intersection_point = OdinJuliaBridge.create_new_point(
         state_ptr, IntersectionPoint, IntersectionColor, 0f0)
-    planeBeta = OdinJuliaBridge.create_new_square(
-        state_ptr,
-        PlaneEdgeLeft,
-        PlaneEdgeRight,
-        PlaneTopRight,
-        PlaneTopLeft,
-        PlaneColor)
+    plane_beta = OdinJuliaBridge.create_new_square(state_ptr,
+        PlaneEdgeLeft, PlaneEdgeRight, PlaneTopRight, PlaneTopLeft, PlaneColor)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, Float32(planeBeta.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAHostId, Float32(lineA.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint1Id, Float32(lineA.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineAJoint2Id, Float32(lineA.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBHostId, Float32(lineB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBJoint1Id, Float32(lineB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineBJoint2Id, Float32(lineB.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaIntersectionPointId, Float32(intersectionPoint.index))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPlaneHostId, plane_beta.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAHostId, line_a.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAJoint1Id, line_a.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineAJoint2Id, line_a.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBHostId, line_b.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBJoint1Id, line_b.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLineBJoint2Id, line_b.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaIntersectionPointId, intersection_point.index)
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    planeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPlaneHostId))
-    lineAHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAHostId))
-    lineAJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint1Id))
-    lineAJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineAJoint2Id))
-    lineBHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBHostId))
-    lineBJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint1Id))
-    lineBJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineBJoint2Id))
-    intersectionPointId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaIntersectionPointId))
+    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPlaneHostId))
+    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAHostId))
+    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint1Id))
+    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineAJoint2Id))
+    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBHostId))
+    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint1Id))
+    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineBJoint2Id))
+    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaIntersectionPointId))
 
-    if planeHostId < 0
+    if plane_host_id < 0
         return
     end
 
@@ -207,9 +235,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, lineAHostId, lineAJoint1Id, lineAJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -227,9 +260,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, LineBStart, LineBEnd,
-            LineMaxBrush, LineBColor, lineBHostId, lineBJoint1Id, lineBJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            LineBStart, LineBEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineBColor,
+            line_host_id=line_b_host_id,
+            line_joint1_id=line_b_joint1_id,
+            line_joint2_id=line_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -249,7 +287,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawIntersection
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, PointTrailDuration, IntersectionPoint,
-            PointMaxBrush, IntersectionColor, intersectionPointId)
+            PointMaxBrush, IntersectionColor, intersection_point_id)
 
         timer += dt
         if timer >= PointTrailDuration
@@ -257,27 +295,28 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhasePlaneReveal
-        set_plane_alpha(state_ptr, planeHostId, (timer / PlaneRevealDuration) * PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id,
+            (timer / PlaneRevealDuration) * PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, PlaneRevealDuration,
             IntersectionPoint, LineAStart, 0.25f0, 1, :none)
 
         for _ in 1:FlickerSamplesPerFrame
-            samplePos = random_vertical_plane_point()
-            OdinJuliaBridge.emit_flicker_particle(state_ptr, samplePos, FlickerColor)
+            sample_pos = random_vertical_plane_point()
+            OdinJuliaBridge.emit_flicker_particle(state_ptr, sample_pos, FlickerColor)
         end
 
         timer += dt
         if timer >= PlaneRevealDuration
             phase = PhaseSweepSurface
             timer = 0f0
-            set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
+            set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
         end
     elseif phase == PhaseSweepSurface
-        set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         EuclidAnimations.animate_pen_tilt_and_drag(
             state_ptr, timer, SurfaceSweepDuration,
@@ -289,8 +328,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseMoveToIntersectionHover
-        set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, MoveToLineBDuration,
@@ -302,8 +341,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseHoverIntersection
-        set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         EuclidAnimations.animate_highlight_point(state_ptr, timer, SurfaceHoverDuration,
             IntersectionPoint, HighlightColor)
@@ -314,11 +353,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseEndLift
-        set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
 
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, EndLiftDuration, PenTopZ, IntersectionPoint[1], IntersectionPoint[2])
+            state_ptr, timer, EndLiftDuration, PenTopZ,
+            IntersectionPoint[1], IntersectionPoint[2])
 
         timer += dt
         if timer >= EndLiftDuration
@@ -326,8 +366,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseFinalHold
-        set_plane_alpha(state_ptr, planeHostId, PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, planeHostId)
+        set_plane_alpha(state_ptr, plane_host_id, PlaneMaxAlpha01)
+        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
         OdinJuliaBridge.show_pen(state_ptr)
         OdinJuliaBridge.set_pen_active(state_ptr, 0, LineAColor)
 

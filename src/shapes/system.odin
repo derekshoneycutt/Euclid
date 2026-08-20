@@ -53,6 +53,23 @@ Polygon_Cache_Range_Reservation :: struct {
     ok:                 bool,
 }
 
+Polygon_Triangulation :: struct {
+    point_system: ^Shapes_Point_System,
+    ring: []Shapes_Polygon_Ring_Node,
+    vertices: []Vector3,
+    count: int,
+    want_ccw: bool,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int,
+}
+
+Polygon_Draw_Commit :: struct {
+    source_index, vertex_count, triangle_count: int,
+    source: ^Shapes_Point,
+    reservation: Polygon_Cache_Range_Reservation,
+}
+
 //   Snapshot current point positions into per-point previous_position for interpolation.
 //
 // Parameters:
@@ -499,20 +516,19 @@ point_in_triangle_xy :: #force_inline proc(p, a, b, c: Vector3) -> bool {
 }
 
 //   Append one triangle into the cached polygon triangle index pool.
+//   Append one triangle into the cached polygon triangle index pool.
 emit_polygon_triangle :: #force_inline proc(
-    point_system: ^Shapes_Point_System,
-    triangle_start: int,
-    triangle_count: ^int,
-    base_vertex: int,
+    triangulation: Polygon_Triangulation,
     a, b, c: int) {
 
-    write_index := triangle_start + triangle_count^
-    point_system^.draw_cache.polygon_triangles[write_index] = Shapes_Polygon_Triangle{
-        base_vertex + a,
-        base_vertex + b,
-        base_vertex + c,
+    write_index := triangulation.triangle_start + triangulation.triangle_count^
+    triangulation.point_system^.draw_cache.polygon_triangles[write_index] =
+        Shapes_Polygon_Triangle{
+        triangulation.base_vertex + a,
+        triangulation.base_vertex + b,
+        triangulation.base_vertex + c,
     }
-    triangle_count^ += 1
+    triangulation.triangle_count^ += 1
 }
 
 //   Initialize an active doubly-linked ring over count polygon vertices.
@@ -537,17 +553,15 @@ init_polygon_ring_nodes :: #force_inline proc(
 
 //   Return true when node is a valid ear candidate under current winding.
 is_polygon_ear_node :: #force_inline proc(
-    ring: []Shapes_Polygon_Ring_Node,
-    vertices: []Vector3,
-    node, prev, next: int,
-    want_ccw: bool) -> bool {
+    triangulation: Polygon_Triangulation,
+    node, prev, next: int) -> bool {
 
-    a := vertices[prev]
-    b := vertices[node]
-    c := vertices[next]
+    a := triangulation.vertices[prev]
+    b := triangulation.vertices[node]
+    c := triangulation.vertices[next]
 
     cross := cross2_xy(a, b, c)
-    if want_ccw {
+    if triangulation.want_ccw {
         if cross <= 0 {
             return false
         }
@@ -557,12 +571,13 @@ is_polygon_ear_node :: #force_inline proc(
         }
     }
 
-    scan := ring[next].next
+    scan := triangulation.ring[next].next
     for scan != prev {
-        if ring[scan].active && point_in_triangle_xy(vertices[scan], a, b, c) {
+        if triangulation.ring[scan].active &&
+            point_in_triangle_xy(triangulation.vertices[scan], a, b, c) {
             return false
         }
-        scan = ring[scan].next
+        scan = triangulation.ring[scan].next
     }
 
     return true
@@ -570,121 +585,73 @@ is_polygon_ear_node :: #force_inline proc(
 
 //   Emit the final triangle from the remaining active 3-node ring.
 emit_polygon_last_ring_triangle :: #force_inline proc(
-    point_system: ^Shapes_Point_System,
-    ring: []Shapes_Polygon_Ring_Node,
-    count: int,
-    node: int,
-    want_ccw: bool,
-    triangle_start: int,
-    triangle_count: ^int,
-    base_vertex: int) {
+    triangulation: Polygon_Triangulation,
+    node: int) {
 
     first := node
-    if !ring[first].active {
-        for i in 0..<count {
-            if ring[i].active {
+    if !triangulation.ring[first].active {
+        for i in 0..<triangulation.count {
+            if triangulation.ring[i].active {
                 first = i
                 break
             }
         }
     }
 
-    second := ring[first].next
-    third := ring[second].next
-    if want_ccw {
-        emit_polygon_triangle(
-            point_system,
-            triangle_start,
-            triangle_count,
-            base_vertex,
-            first,
-            second,
-            third)
+    second := triangulation.ring[first].next
+    third := triangulation.ring[second].next
+    if triangulation.want_ccw {
+        emit_polygon_triangle(triangulation, first, second, third)
     } else {
-        emit_polygon_triangle(
-            point_system,
-            triangle_start,
-            triangle_count,
-            base_vertex,
-            third,
-            second,
-            first)
+        emit_polygon_triangle(triangulation, third, second, first)
     }
 }
 
 //   Emit fallback fan triangulation for degenerate/non-ear-clippable polygons.
 emit_polygon_fallback_fan :: #force_inline proc(
-    point_system: ^Shapes_Point_System,
-    count: int,
-    want_ccw: bool,
-    triangle_start: int,
-    triangle_count: ^int,
-    base_vertex: int) {
+    triangulation: Polygon_Triangulation) {
 
-    for i in 1..<count - 1 {
-        if want_ccw {
-            emit_polygon_triangle(
-                point_system,
-                triangle_start,
-                triangle_count,
-                base_vertex,
-                0,
-                i,
-                i + 1)
+    for i in 1..<triangulation.count - 1 {
+        if triangulation.want_ccw {
+            emit_polygon_triangle(triangulation, 0, i, i + 1)
         } else {
-            emit_polygon_triangle(
-                point_system,
-                triangle_start,
-                triangle_count,
-                base_vertex,
-                0,
-                i + 1,
-                i)
+            emit_polygon_triangle(triangulation, 0, i + 1, i)
         }
     }
 }
 
 //   Run the main ear-removal loop and return remaining active ring node count.
 triangulate_polygon_ear_loop :: #force_inline proc(
-    point_system: ^Shapes_Point_System,
-    ring: []Shapes_Polygon_Ring_Node,
-    vertices: []Vector3,
-    count: int,
-    want_ccw: bool,
-    triangle_start: int,
-    triangle_count: ^int,
-    base_vertex: int) -> int {
+    triangulation: Polygon_Triangulation) -> int {
 
-    remaining := count
+    remaining := triangulation.count
     node := 0
-    guard := count * count
+    guard := triangulation.count * triangulation.count
 
     for remaining > 3 && guard > 0 {
         guard -= 1
 
-        if !ring[node].active {
-            node = ring[node].next
+        if !triangulation.ring[node].active {
+            node = triangulation.ring[node].next
             continue
         }
 
-        prev := ring[node].prev
-        next := ring[node].next
-        if !is_polygon_ear_node(ring, vertices, node, prev, next, want_ccw) {
+        prev := triangulation.ring[node].prev
+        next := triangulation.ring[node].next
+        if !is_polygon_ear_node(triangulation, node, prev, next) {
             node = next
             continue
         }
 
-        if want_ccw {
-            emit_polygon_triangle(point_system, triangle_start, triangle_count,
-                base_vertex, prev, node, next)
+        if triangulation.want_ccw {
+            emit_polygon_triangle(triangulation, prev, node, next)
         } else {
-            emit_polygon_triangle(point_system, triangle_start, triangle_count,
-                base_vertex, next, node, prev)
+            emit_polygon_triangle(triangulation, next, node, prev)
         }
 
-        ring[prev].next = next
-        ring[next].prev = prev
-        ring[node].active = false
+        triangulation.ring[prev].next = next
+        triangulation.ring[next].prev = prev
+        triangulation.ring[node].active = false
         remaining -= 1
         node = next
     }
@@ -710,36 +677,18 @@ triangulate_polygon_ear_clip :: proc(
     area := polygon_signed_area_xy(vertices)
     want_ccw := area >= 0
     triangle_count := 0
-    remaining := triangulate_polygon_ear_loop(
-        point_system,
-        ring,
-        vertices,
-        count,
-        want_ccw,
-        triangle_start,
-        &triangle_count,
-        base_vertex)
+    triangulation := Polygon_Triangulation{
+        point_system, ring, vertices, count, want_ccw, triangle_start,
+        &triangle_count, base_vertex,
+    }
+    remaining := triangulate_polygon_ear_loop(triangulation)
 
     if remaining == 3 {
-        emit_polygon_last_ring_triangle(
-            point_system,
-            ring,
-            count,
-            0,
-            want_ccw,
-            triangle_start,
-            &triangle_count,
-            base_vertex)
+        emit_polygon_last_ring_triangle(triangulation, 0)
         return triangle_count
     }
 
-    emit_polygon_fallback_fan(
-        point_system,
-        count,
-        want_ccw,
-        triangle_start,
-        &triangle_count,
-        base_vertex)
+    emit_polygon_fallback_fan(triangulation)
 
     return triangle_count
 }
@@ -805,7 +754,7 @@ cache_push_draw_item :: #force_inline proc(
     case .Point: cache_push_point(point_system, source_index, src, alpha)
     case .Line: cache_push_line(point_system, source_index, src, alpha)
     case .Circle: cache_push_circle(point_system, source_index, src, alpha)
-    case .FilledCircle: cache_push_filledcircle(point_system, source_index, src, alpha)
+    case .Filled_Circle: cache_push_filledcircle(point_system, source_index, src, alpha)
     case .Triangle,
         .Square,
         .Pentagon:
@@ -961,6 +910,26 @@ cache_push_filledcircle :: proc(
 }
 
 //   Push a cached polygon draw item into the draw-cache item list.
+commit_polygon_draw_cache :: proc(
+    point_system: ^Shapes_Point_System,
+    commit: Polygon_Draw_Commit) {
+
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        rollback_polygon_cache_ranges(
+            point_system, commit.vertex_count, commit.triangle_count)
+        return
+    }
+    slot^ = Shapes_Polygon_Draw{
+        make_draw_base(commit.source_index, commit.source),
+        commit.reservation.first_vertex,
+        commit.vertex_count,
+        commit.reservation.first_triangle,
+        commit.triangle_count,
+    }
+}
+
+//   Push a cached polygon draw item into the draw-cache item list.
 cache_push_polygon :: proc(
     point_system: ^Shapes_Point_System,
     source_index: int,
@@ -998,20 +967,9 @@ cache_push_polygon :: proc(
         reservation.first_triangle,
         triangle_count)
 
-    slot, has_slot := draw_cache_next_item_slot(point_system)
-    if !has_slot {
-        rollback_polygon_cache_ranges(point_system, vertex_count, triangle_count)
-        return
-    }
-
-    point := Shapes_Polygon_Draw{
-        make_draw_base(source_index, src),
-        reservation.first_vertex,
-        vertex_count,
-        reservation.first_triangle,
-        triangle_count,
-    }
-    slot^ = point
+    commit_polygon_draw_cache(point_system, {
+        source_index, vertex_count, triangle_count, src, reservation,
+    })
 }
 
 //   Update cached pen tool draw data and pen draw-enable flag.

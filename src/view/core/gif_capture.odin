@@ -21,13 +21,13 @@ Gif_Capture_Session :: core.Gif_Capture_Session
 
 
 //   Clear transient GIF status note displayed in the settings panel.
-clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
+clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.gif_status_note_len = 0
     ui_runtime.gif_status_note[0] = 0
 }
 
 //   Store a transient GIF status note displayed in the settings panel.
-set_gif_status_note :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, note: string) {
+set_gif_status_note :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State, note: string) {
     max_len := len(ui_runtime.gif_status_note) - 1
     n := min(len(note), max_len)
 
@@ -53,6 +53,45 @@ cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: st
     set_gif_status_note(ui_runtime, note)
 }
 
+//   Load the screen capture and normalize it to encoder dimensions.
+//
+// Parameters:
+//   - state: Global app state providing capture config and encoder state.
+//   - downsample: Integer downsample factor, 1 meaning no downsample.
+//
+// Returns:
+//   - image: Capture image owned by the caller; unload with rl.UnloadImage.
+//   - ok: true when a usable frame was captured.
+gif_capture_normalized_frame :: proc(
+    state: ^core.Euclid_General_State, downsample: int) -> (rl.Image, bool) {
+
+    capture_w, capture_h := gif_capture_source_dimensions()
+
+    image := rl.LoadImageFromScreen()
+    if image.data == nil {
+        return rl.Image{}, false
+    }
+
+    crop_w := min(capture_w, int(image.width))
+    crop_h := min(capture_h, int(image.height))
+    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
+
+    if downsample > 1 {
+        out_w := max(1, int(image.width) / downsample)
+        out_h := max(1, int(image.height) / downsample)
+        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
+    }
+
+    expected_w := state^.gif_capture.encoder.width
+    expected_h := state^.gif_capture.encoder.height
+    if int(image.width) != expected_w || int(image.height) != expected_h {
+        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
+        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
+    }
+
+    return image, true
+}
+
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -74,41 +113,17 @@ gif_capture_submit_frame :: proc(
         return true
     }
 
-    capture_w, capture_h := gif_capture_source_dimensions()
-
-    image := rl.LoadImageFromScreen()
-    if image.data == nil {
+    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
+    image, frame_ok := gif_capture_normalized_frame(state, downsample)
+    if !frame_ok {
         return false
     }
     defer rl.UnloadImage(image)
 
-    crop_w := min(capture_w, int(image.width))
-    crop_h := min(capture_h, int(image.height))
-    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
-
-    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
-    if downsample > 1 {
-        out_w := max(1, int(image.width) / downsample)
-        out_h := max(1, int(image.height) / downsample)
-        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
-    }
-
-    expected_w := state^.gif_capture.encoder.width
-    expected_h := state^.gif_capture.encoder.height
-    if int(image.width) != expected_w || int(image.height) != expected_h {
-        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
-        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
-    }
-
     pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(
-        &state^.gif_capture.encoder,
-        image.data,
-        centiseconds,
-        GIF_CAPTURE_QUALITY,
-        pitch,
-    ) {
+    if !files.gif_encode_frame(&state^.gif_capture.encoder, image.data, centiseconds,
+        GIF_CAPTURE_QUALITY, pitch) {
         return false
     }
 
@@ -162,7 +177,7 @@ gif_capture_update_fixed_step :: proc(
 
 //   Advance the Armed phase: begin a capture session or record the failure.
 gif_capture_advance_armed :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     if gif_capture_begin_session(state) {
         ui_runtime.gif_capture_phase = .Recording
         clear_gif_status_note(ui_runtime)
@@ -174,7 +189,7 @@ gif_capture_advance_armed :: proc(
 
 //   Advance the Recording phase: finalize the file or record the failure.
 gif_capture_advance_recording :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_UI_Runtime_State) {
+    state: ^core.Euclid_General_State, ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.gif_capture_phase = .Finalizing
     if gif_capture_finalize_session(state) {
         ui_runtime.gif_capture_phase = .Saved
@@ -227,13 +242,13 @@ gif_capture_destroy_session :: proc(session: ^Gif_Capture_Session) {
 
 
 //   Clear stored UI path text for last saved GIF output.
-clear_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State) {
+clear_last_gif_path :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     ui_runtime.last_gif_path_len = 0
     ui_runtime.last_gif_path[0] = 0
 }
 
 //   Store saved GIF output path into fixed UI buffer fields.
-set_last_gif_path :: proc(ui_runtime: ^core.Euclid_UI_Runtime_State, path: string) {
+set_last_gif_path :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State, path: string) {
     max_len := len(ui_runtime.last_gif_path) - 1
     n := min(len(path), max_len)
     for i in 0..<n {
@@ -252,16 +267,8 @@ gif_output_filename :: proc() -> string {
     hour, minute, second, nanos := time.precise_clock(now)
     millis := nanos / 1_000_000
 
-    return fmt.tprintf(
-        "Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        millis,
-    )
+    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
+        year, month, day, hour, minute, second, millis)
 }
 
 //   Resolve writable output path for the next GIF export file.

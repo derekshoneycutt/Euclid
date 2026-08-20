@@ -19,8 +19,9 @@ This document is the coding source of truth for this repository.
 
 ## Purpose
 
-This document converts language-community guidance and project experience into reviewable rules for
-Euclid. It is intentionally concise, but not at the expense of rationale, scope, or enforcement.
+This document converts language-community guidance and project experience into
+reviewable rules for Euclid. It is intentionally concise, but not at the
+expense of rationale, scope, or enforcement.
 
 ## How To Read This Standard
 
@@ -41,9 +42,10 @@ When guidance conflicts, use this precedence:
 1. Established local module conventions.
 1. Upstream Odin or Julia style guidance.
 
-An exception should state what rule is being relaxed, why the normal form is worse in that case,
-and how correctness or readability remains protected. Do not add comments merely to excuse weak
-code; improve the code first.
+An exception should state what rule is being relaxed and why the normal form is
+worse in that case. It should also explain how correctness or readability
+remains protected. Do not add comments merely to excuse weak code; improve the
+code first.
 
 ## Upstream Style Relationship
 
@@ -62,9 +64,10 @@ This standard incorporates and specializes:
 | Julia naming | Lowercase; `!` for argument mutation. | Adopted; use `snake_case` when needed. |
 | Julia typing | Generic unless dispatch requires constraints. | Adopted; ABI wrappers use exact types. |
 
-Repository policy wins where it deliberately differs. In particular, never introduce tabs into Odin
-files to match the upstream examples repository. The Odin build uses `-vet -strict-style`,
-`-disallow-do`, and `-warnings-as-errors`. Explicit types remain appropriate where ABI layout or
+Repository policy wins where it deliberately differs. In particular, never
+introduce tabs into Odin files to match the upstream examples repository. The
+Odin build uses `-vet -strict-style`, `-disallow-do`, and
+`-warnings-as-errors`. Explicit types remain appropriate where ABI layout or
 numeric width is part of the contract.
 
 ## Fast Compliance Checklist
@@ -81,8 +84,10 @@ Before marking work complete, verify all items below:
 - No Odin or Julia closing parenthesis begins its own continuation line.
 - Every named Odin procedure and Julia function has a useful doc comment or docstring.
 - Doc comments explain contracts, intent, and side effects rather than narrating syntax.
-- Public API names, mutation signals, argument order, and type constraints match language conventions.
-- Canonical validation occurs at boundaries; internal code does not repeatedly normalize bad input.
+- Public API names, mutation signals, argument order, and type constraints
+  match language conventions.
+- Canonical validation occurs at boundaries; internal code does not repeatedly
+  normalize bad input.
 
 ## Verification Gate
 
@@ -92,27 +97,28 @@ Before work is complete, run the standard Makefile target:
 make test
 ```
 
-`make test` is the preferred path on systems that support `make`. It runs the
-`configure` script once (verifying the toolchain and installing Julia dependencies)
+`make test` is the preferred path on systems that support `make`. It runs
+`tools/configure.sh` once (verifying the toolchain and installing Julia dependencies)
 and then the full driver gate, equivalent to `julia make.jl -vt`. `make check` is an
 alias.
 
 `make vet` alone is insufficient because it omits tests. Running tests alone is
-insufficient because it omits the validated build and vet analysis. Do not report the
+insufficient because it omits the build and repository analysis. Do not report the
 combined gate as passing when a phase was skipped.
 
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
-| Odin build/style | Compiler strict flags | No warnings or style failures. |
-| Odin behavior | `odin test tests -all-packages` through `make.jl` | All tests pass. |
-| Julia behavior | `src/julia/test/runtests.jl` through `make.jl` | All tests pass. |
-| Julia static analysis | JET vet phase | No actionable reports. |
-| Julia complexity | CodeComplexity vet phase | No blocking rows; approved content warnings only. |
-| Vet report | `bin/vet-report.md` | No blocking section and no unexplained new warning. |
-| Documentation structure | Focused checks and review | Valid headings, links, fences, and line length. |
+| Odin build/style | Analysis engine's strict analytical Odin build | No warnings or style failures. |
+| Odin behavior | `odin test src -all-packages` through the verification gate | All tests pass. |
+| Julia behavior | `src/julia/test/runtests.jl` through the verification gate | All tests pass. |
+| Julia static analysis | JET entry-point analysis via OdinJuliaAnalysis | No actionable reports. |
+| Julia/Odin complexity | Function metric rules with reviewed exceptions | No blocking rows; reviewed warnings only. |
+| Analysis report | `.build/reports/analysis.md` | No failures and no unexplained new warning. |
+| Documentation structure | Markdown rules and review | Valid headings, links, fences, and line length. |
 
-Run the narrowest relevant test while developing, then run the complete gate before delivery. A new
-warning is work to understand, even when the current report classifies it as nonblocking.
+Run the narrowest relevant test while developing, then run the complete gate
+before delivery. A new warning is work to understand, even when the current
+report classifies it as nonblocking.
 
 ## Global Rules
 
@@ -124,14 +130,16 @@ warning is work to understand, even when the current report classifies it as non
 - Prefer structs over long tuples and over long parameter lists when inputs
   form one coherent data shape.
 - Prefer established language and repository idioms over custom mini-frameworks.
-- Keep the happy path visually prominent; validate or reject exceptional states at boundaries.
+- Keep the happy path visually prominent; validate or reject exceptional states
+  at boundaries.
 - Name values for their domain meaning, not their temporary implementation role.
 
 ### Command-Line Short Flags
 
-For paired command-line options, lowercase short flags MUST enable the option and the corresponding
-uppercase flag MUST disable it, such as `-a`/`-A`. Combined short groups are allowed and are applied
-left to right, so the last occurrence wins. Unpaired actions such as help or clean remain lowercase.
+For paired command-line options, lowercase short flags MUST enable the option
+and the corresponding uppercase flag MUST disable it, such as `-a`/`-A`.
+Combined short groups are allowed and are applied left to right, so the last
+occurrence wins. Unpaired actions such as help or clean remain lowercase.
 
 ### Line Length
 
@@ -141,9 +149,10 @@ left to right, so the last occurrence wins. Unpaired actions such as help or cle
 
 ### Closing Parenthesis Placement (Absolute)
 
-In both Odin and Julia, a closing `)` MUST remain on the same physical line as the final parameter or
-argument. This applies to procedure/function declarations, definitions, calls, macro invocations,
-and any other wrapped parenthesized construct.
+In both Odin and Julia, a closing `)` MUST remain on the same physical line as
+the final parameter or argument. This applies to procedure/function
+declarations, definitions, calls, macro invocations, and any other wrapped
+parenthesized construct.
 
 The following continuation-line forms are wholesale forbidden:
 
@@ -154,37 +163,40 @@ The following continuation-line forms are wholesale forbidden:
 - a line beginning with `)::ReturnType` or `) = begin`;
 - any equivalent form that moves the closing delimiter away from the final item.
 
-This rule has no style exception for a long return type or header. Reflow earlier parameters, use a
-meaningful named return type, or otherwise restructure the declaration. Do not solve line length by
-moving `)` or the tokens that complete its header onto a new line.
+This rule has no style exception for a long return type or header. Reflow
+earlier parameters, use a meaningful named return type, or otherwise
+restructure the declaration. Do not solve line length by moving `)` or the
+tokens that complete its header onto a new line.
 
 Code review MUST reject a violation even when the compiler or formatter accepts it.
 
 ### Function Size and Complexity
 
 - A function/procedure SHOULD remain at or below 20 executable lines.
-- More than 20 executable lines requires review justification; more than 30 requires a documented
-  exception and a clear reason decomposition would make the code worse.
+- More than 20 executable lines requires review justification; more than 30
+  requires a documented exception and a clear reason decomposition would make
+  the code worse.
 - Each function/procedure must have one clear responsibility.
 - If parameter count exceeds 5, reevaluate and group related inputs.
-- Cyclomatic complexity SHOULD remain at or below 10 and MUST remain below 15 unless a documented
-  exception is granted.
+- Cyclomatic complexity SHOULD remain at or below 10 and MUST remain below 15
+  unless a documented exception is granted.
 - Do not split into trivial wrappers only to satisfy line-count rules.
 
-The vet report records NLOC, parameter count, and cyclomatic complexity for both languages.
-Julia complexity above 10 is blocking outside configured content-script exceptions. Odin
-complexity is measured by the parser-based analyzer in `tools/vet`: complexity at or above 15
-is blocking unless the procedure carries an inline `#vet forgives(cyclomatic_complexity)`
-documented exception; complexity 11-14 produces a warning. NLOC and parameter count remain
-review signals in both languages.
+The analysis report records executable lines, parameter count, and cyclomatic
+complexity for both languages.
+Julia complexity above 10 is blocking outside configured content-script exceptions.
+Odin complexity at or above 15 is blocking, and 11-14 produces a warning. Executable
+line and parameter count remain review signals in both languages. Exceptions are
+reviewed entries in `tools/analysis_settings.jl` with drift detection rather than
+inline markers.
 
-The analyzer also classifies every allocation call site by allocator source. An allocation
-without an explicit allocator argument (silently using the default heap) is a **blocking** vet
-failure; an explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
-a warning. Dynamic-array mutators (`append`, `reserve`, `resize`) are exempt because the array
-carries its allocator from creation. Documented exceptions use `#vet forgives(implicit_allocator)`
-or `#vet forgives(heap_allocator)` with a following comment explaining why the default heap is
-correct there, such as a process-lifetime singleton created once at startup.
+The analyzer also classifies every allocation call site by allocator source. An
+allocation it cannot classify is a **blocking** analysis failure; an implicit or
+explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
+a warning. Dynamic-array mutators (`append`, `reserve`, `resize`) are exempt because
+the array carries its allocator from creation. Documented exceptions are
+`ReviewedAllocationPolicy` entries in `tools/analysis_settings.jl` with a reason,
+such as a process-lifetime singleton created once at startup.
 
 Use this decision path when a function grows:
 
@@ -210,8 +222,9 @@ flowchart TD
 
 ### Return Shape
 
-Odin procedures and Julia functions SHOULD return one semantic value. A tuple return SHOULD contain
-no more than two items. When three or more values belong together, define a named struct instead.
+Odin procedures and Julia functions SHOULD return one semantic value. A tuple
+return SHOULD contain no more than two items. When three or more values belong
+together, define a named struct instead.
 
 | Shape | Policy | Typical use |
 | --- | --- | --- |
@@ -220,8 +233,9 @@ no more than two items. When three or more values belong together, define a name
 | Three or more tuple items | Strongly discouraged | Replace with a named result struct. |
 | Nested tuple used to avoid the limit | Forbidden | Model the result explicitly. |
 
-A collection, optional/union result, or named struct counts as one value. The concern is positional
-return arity, not the number of elements inside a returned collection or variants in one return type.
+A collection, optional/union result, or named struct counts as one value. The
+concern is positional return arity, not the number of elements inside a
+returned collection or variants in one return type.
 
 Prefer a named result struct when any of these conditions apply:
 
@@ -232,12 +246,14 @@ Prefer a named result struct when any of these conditions apply:
 - field names would make review safer than positional order;
 - success/failure carries payload, diagnostics, or partial-progress metadata.
 
-An exception for more than two positional values requires explicit review justification. Acceptable
-reasons are narrow, such as compatibility with an external ABI or a language-mandated callback shape.
-Convenience, avoiding a small struct, or preserving an accidental local pattern is not sufficient.
+An exception for more than two positional values requires explicit review
+justification. Acceptable reasons are narrow, such as compatibility with an
+external ABI or a language-mandated callback shape. Convenience, avoiding a
+small struct, or preserving an accidental local pattern is not sufficient.
 
-Do not introduce a reusable abstraction solely to avoid a clear local two-item tuple. Conversely, do
-not keep a wide tuple merely because destructuring makes the call site superficially short.
+Do not introduce a reusable abstraction solely to avoid a clear local two-item
+tuple. Conversely, do not keep a wide tuple merely because destructuring makes
+the call site superficially short.
 
 ## Odin-Julia Boundary Rules
 
@@ -284,12 +300,13 @@ not keep a wide tuple merely because destructuring makes the call site superfici
 
 Names SHOULD communicate domain role and units where ambiguity is possible:
 
-- Prefer `elapsed_seconds`, `point_index`, and `command_count` over `value`, `id`, and `size`.
+- Prefer `elapsed_seconds`, `point_index`, and `command_count` over `value`,
+  `id`, and `size`.
 - Avoid repeating package or type context that is already obvious at the call site.
 - Boolean names SHOULD read as predicates: `is_ready`, `has_capacity`, `should_publish`.
 - Use established bridge ABI names exactly. Do not improve one side independently.
-- Avoid abbreviations unless they are conventional in this codebase or domain, such as `abi`, `ui`,
-  `io`, `dt`, or `ptr` at an interop boundary.
+- Avoid abbreviations unless they are conventional in this codebase or domain,
+  such as `abi`, `ui`, `io`, `dt`, or `ptr` at an interop boundary.
 
 ### Formatting
 
@@ -314,13 +331,13 @@ build_scene_batch :: proc(
 }
 ```
 
-Keep wrapped calls compact, but do not compress unrelated arguments onto a line merely to save
-vertical space. If a signature repeatedly exceeds the line limit, reconsider the data shape before
-inventing unusual alignment.
+Keep wrapped calls compact, but do not compress unrelated arguments onto a line
+merely to save vertical space. If a signature repeatedly exceeds the line
+limit, reconsider the data shape before inventing unusual alignment.
 
-For Odin, `generation: u64) -> (Scene_Command_Batch, bool) {` demonstrates the required terminal
-shape. The final parameter, closing parenthesis, return declaration, and opening brace remain one
-continuous header.
+For Odin, `generation: u64) -> (Scene_Command_Batch, bool) {` demonstrates the
+required terminal shape. The final parameter, closing parenthesis, return
+declaration, and opening brace remain one continuous header.
 
 ### Compiler Cleanliness
 
@@ -330,21 +347,24 @@ Odin production code MUST compile cleanly under:
 -vet -strict-style -disallow-do -warnings-as-errors
 ```
 
-These flags catch unused values, shadowing, discouraged syntax, and other style defects. The
-repository intentionally does not use `-vet-tabs`, because that flag requires tabs while this project
-requires spaces. Do not suppress a warning when a clearer declaration or control flow removes it.
+These flags catch unused values, shadowing, discouraged syntax, and other style
+defects. The repository intentionally does not use `-vet-tabs`, because that
+flag requires tabs while this project requires spaces. Do not suppress a
+warning when a clearer declaration or control flow removes it.
 
 ### Design and Initialization
 
-- Prefer `value := expression` when the inferred type is clear and is not itself a contract.
-- Use an explicit type for ABI layout, fixed numeric width, union selection, empty/default values, or
-  when it materially improves understanding.
+- Prefer `value := expression` when the inferred type is clear and is not
+  itself a contract.
+- Use an explicit type for ABI layout, fixed numeric width, union selection,
+  empty/default values, or when it materially improves understanding.
 - Prefer `value := Some_Type { ... }` over `value: Some_Type = { ... }`.
-- Initialize coherent state in one struct literal rather than declaring and assigning fields later.
-- Use field names in nontrivial literals. Positional literals are acceptable only when their meaning
-  is immediate and stable.
-- Avoid mutable globals. Constants and immutable lookup data are acceptable when module ownership is
-  clear.
+- Initialize coherent state in one struct literal rather than declaring and
+  assigning fields later.
+- Use field names in nontrivial literals. Positional literals are acceptable
+  only when their meaning is immediate and stable.
+- Avoid mutable globals. Constants and immutable lookup data are acceptable
+  when module ownership is clear.
 
 ```odin
 runtime := Julia_Runtime_Service {
@@ -353,8 +373,8 @@ runtime := Julia_Runtime_Service {
 }
 ```
 
-Do not repeat a type annotation that inference already proves unless that annotation documents a
-meaningful boundary.
+Do not repeat a type annotation that inference already proves unless that
+annotation documents a meaningful boundary.
 
 ### Procedures and Control Flow
 
@@ -363,41 +383,52 @@ meaningful boundary.
 - Keep state transitions explicit; do not encode lifecycle state in unrelated booleans.
 - Prefer a struct when several parameters travel together or share validation/ownership.
 - Do not use `do` syntax; the build rejects it with `-disallow-do`.
-- Avoid hidden mutation through broadly shared pointers. Pass the narrow owner or subsystem needed.
-- For an approved two-item tuple, return the primary value first and status second unless an
-  established API contract requires another order.
-- Replace wider positional returns with an `Ada_Case` result struct and descriptive fields.
+- Avoid hidden mutation through broadly shared pointers. Pass the narrow owner
+  or subsystem needed.
+- For an approved two-item tuple, return the primary value first and status
+  second unless an established API contract requires another order.
+- Replace wider positional returns with an `Ada_Case` result struct and
+  descriptive fields.
 
 ### Comments and Function Placement
 
 - Public/cross-file functions should appear near the top of a file.
-- Every named procedure MUST have a doc comment directly above its declaration, including local and
-  file-private helpers.
-- Every reusable named type, enum, procedure group, and package-level subsystem contract MUST have a
-  doc comment.
+- Every named procedure MUST have a doc comment directly above its declaration,
+  including local and file-private helpers.
+- Every reusable named type, enum, procedure group, and package-level
+  subsystem contract MUST have a doc comment.
 - A concise one-sentence comment is sufficient for a simple helper, but omission is not.
-- Keep helpers near the owning operation when they are not part of the package-facing surface.
-- Document invariants, ownership, units, valid ranges, and failure semantics that types do not show.
+- Keep helpers near the owning operation when they are not part of the
+  package-facing surface.
+- Document invariants, ownership, units, valid ranges, and failure semantics
+  that types do not show.
 - Do not narrate assignments, loops, or conditionals that are already clear from the code.
 
 ```odin
 // Return the published scene batch when its generation is current.
-resolve_scene_batch :: proc(state: ^Euclid_General_State, generation: u64) -> (Scene_Command_Batch, bool) {
+resolve_scene_batch :: proc(
+  state: ^Euclid_General_State,
+  generation: u64) -> (Scene_Command_Batch, bool) {
     // ...
 }
 ```
 
-Use normal Odin documentation comments immediately before the declaration. Do not separate the
-comment from its declaration with unrelated constants, attributes, or implementation notes.
+Use normal Odin documentation comments immediately before the declaration. Do
+not separate the comment from its declaration with unrelated constants,
+attributes, or implementation notes.
 
 ### Resource Management
 
-- Make allocation owner, mutation owner, recycler, and teardown point identifiable from the API.
+- Make allocation owner, mutation owner, recycler, and teardown point
+  identifiable from the API.
 - Use `defer` when multiple exits require the same guaranteed cleanup.
-- Avoid `defer` in a simple single-exit path when direct cleanup preserves clearer linear flow.
-- Pair acquisition and cleanup visibly. Transfer ownership only through a documented operation.
+- Avoid `defer` in a simple single-exit path when direct cleanup preserves
+  clearer linear flow.
+- Pair acquisition and cleanup visibly. Transfer ownership only through a
+  documented operation.
 - Do not retain temp-allocator memory beyond its reset boundary.
-- Use bounded, preallocated storage in steady frame paths unless an approved exception applies.
+- Use bounded, preallocated storage in steady frame paths unless an approved
+  exception applies.
 
 ## Julia Rules (Required)
 
@@ -411,8 +442,9 @@ comment from its declaration with unrelated constants, attributes, or implementa
 - Avoid non-const globals; prefer explicit state paths.
 - Do not parenthesize `if` or `while` conditions.
 - Use blank lines to separate concepts, not individual statements.
-- Keep executable module initialization narrow and obvious. Content registration is an explicit
-  project exception, not a general license for top-level computation.
+- Keep executable module initialization narrow and obvious. Content
+  registration is an explicit project exception, not a general license for
+  top-level computation.
 
 ```julia
 function resolve_entry(
@@ -430,14 +462,15 @@ entry = resolve_entry(
 
 - Every named function MUST have a Julia docstring attached directly to its binding.
 - Every module and reusable named type MUST have a docstring.
-- A concise one-sentence docstring is sufficient for a simple private helper, but omission is not.
-- Multiple methods MAY share one canonical function docstring when they implement the same semantic
-  contract. A method with distinct constraints, side effects, ownership, or failure behavior needs
-  its own documentation.
-- Anonymous functions and one-off callback literals do not require independent docstrings; document
-  the named operation or value that owns their behavior.
-- Generated methods MAY be documented at their generator when the generated contract is uniform and
-  the generated bindings remain discoverable.
+- A concise one-sentence docstring is sufficient for a simple private helper,
+  but omission is not.
+- Multiple methods MAY share one canonical function docstring when they
+  implement the same semantic contract. A method with distinct constraints,
+  side effects, ownership, or failure behavior needs its own documentation.
+- Anonymous functions and one-off callback literals do not require independent
+  docstrings; document the named operation or value that owns their behavior.
+- Generated methods MAY be documented at their generator when the generated
+  contract is uniform and the generated bindings remain discoverable.
 
 ```julia
 """Return the current callback binding, or `nothing` when the symbol is undefined."""
@@ -448,8 +481,8 @@ function resolve_entry(
 end
 ```
 
-Use Julia docstrings, not detached `#` comments, for named API documentation so `Docs` metadata and
-the future generated Code reference can discover it.
+Use Julia docstrings, not detached `#` comments, for named API documentation
+so `Docs` metadata and the future generated Code reference can discover it.
 
 ### Naming and API Semantics
 
@@ -461,12 +494,15 @@ the future generated Code reference can discover it.
 | Constant | `CamelCase` or established local form | Keep related modules internally consistent. |
 | Internal name | descriptive name | `_` may signal internal status but does not enforce privacy. |
 
-- Avoid inconsistent abbreviations; concise names are useful only when callers can remember them.
-- A `!` signals mutation beyond implicit advancement of an `IO` or RNG argument. For example,
-  `read(io)` need not end in `!`, while a function that also mutates a destination buffer should.
-- Provide copying and mutating pairs only when both semantics are useful and their cost difference is
-  meaningful.
-- Do not use naming to hide side effects. Document host mutation performed through bridge calls.
+- Avoid inconsistent abbreviations; concise names are useful only when callers
+  can remember them.
+- A `!` signals mutation beyond implicit advancement of an `IO` or RNG
+  argument. For example, `read(io)` need not end in `!`, while a function that
+  also mutates a destination buffer should.
+- Provide copying and mutating pairs only when both semantics are useful and
+  their cost difference is meaningful.
+- Do not use naming to hide side effects. Document host mutation performed
+  through bridge calls.
 
 ### Type and Dispatch Style
 
@@ -479,21 +515,27 @@ the future generated Code reference can discover it.
 | A clear abstract container contract | Elaborate unions inside container types | Simpler dispatch and inference. |
 | `isa` and `<:` for type relationships | Exact type equality by default | Subtypes remain valid. |
 
-- Add a type constraint when it defines dispatch, rejects an invalid domain, or documents an ABI.
-- Exact bridge types such as `Cint`, `Cfloat`, and `Ptr{Cvoid}` are contracts, not overspecification.
-- Avoid a static parameter when the type variable is not needed; use `typeof(x)` when that is the
-  actual requirement.
-- Decide whether a concept is represented by a type or an instance and use that choice consistently.
-- Avoid type piracy. A tightly coupled interoperability extension requires explicit justification,
-  tests, and ownership documentation.
-- Do not overload methods on broad Base container types to customize one element type. Define behavior
-  on a project-owned wrapper or project-owned function instead.
+- Add a type constraint when it defines dispatch, rejects an invalid domain, or
+  documents an ABI.
+- Exact bridge types such as `Cint`, `Cfloat`, and `Ptr{Cvoid}` are contracts,
+  not overspecification.
+- Avoid a static parameter when the type variable is not needed; use
+  `typeof(x)` when that is the actual requirement.
+- Decide whether a concept is represented by a type or an instance and use that
+  choice consistently.
+- Avoid type piracy. A tightly coupled interoperability extension requires
+  explicit justification, tests, and ownership documentation.
+- Do not overload methods on broad Base container types to customize one
+  element type. Define behavior on a project-owned wrapper or project-owned
+  function instead.
 
 ### Interfaces and Encapsulation
 
 - Prefer exported methods over direct field access outside the type's owning module.
-- Treat fields and non-exported functions as implementation details unless documented otherwise.
-- Expose conceptual operations that can support multiple implementations, not storage layout.
+- Treat fields and non-exported functions as implementation details unless
+  documented otherwise.
+- Expose conceptual operations that can support multiple implementations, not
+  storage layout.
 - Unsafe operations MUST be checked or include `unsafe` in the public name.
 - Do not expose raw pointers through ordinary collection-like syntax that appears safe.
 - Constructors named `T(...)` MUST return an instance of `T`.
@@ -514,31 +556,37 @@ Follow Julia Base ordering when applicable:
 | 8 | Varargs | Last among positional arguments. |
 | 9 | Keyword arguments | Last; use for optional policy, not required identity. |
 
-Bridge wrappers MAY put `state_ptr` first because it is the mutated host context and an established
-project convention. Do not reorder one wrapper independently from related APIs.
+Bridge wrappers MAY put `state_ptr` first because it is the mutated host
+context and an established project convention. Do not reorder one wrapper
+independently from related APIs.
 
 ### Functions, Macros, and Control Flow
 
 - Pass a named function directly instead of wrapping it as `x -> f(x)`.
-- Avoid splatting merely to collect or concatenate values; use direct iteration, `collect`, or the
-  appropriate concatenation operation.
-- Prevent predictable invalid states instead of using broad `try/catch` as ordinary control flow.
-- Catch at a boundary only when the boundary can add context, recover, translate the error, or
-  preserve host safety.
+- Avoid splatting merely to collect or concatenate values; use direct
+  iteration, `collect`, or the appropriate concatenation operation.
+- Prevent predictable invalid states instead of using broad `try/catch` as
+  ordinary control flow.
+- Catch at a boundary only when the boundary can add context, recover,
+  translate the error, or preserve host safety.
 - Prefer a function over a macro when runtime values are sufficient.
 - Treat `eval` inside a macro as a design warning; it couples behavior to top-level scope.
-- Use integer literals in generic numeric code when a floating literal would force unwanted
-  promotion. Use `oneunit`, `zero`, or similar generic constructors when they express the intent.
+- Use integer literals in generic numeric code when a floating literal would
+  force unwanted promotion. Use `oneunit`, `zero`, or similar generic
+  constructors when they express the intent.
 
 ### Embedded Runtime Rules
 
-- Julia C API calls remain on the persistent owner thread, including exception inspection and
-  shutdown.
-- Use `Base.invokelatest` only where freshly evaluated Scratchpad or reload definitions require
-  latest-world dispatch. Do not spread it into ordinary static call paths.
-- Keep bridge calls and their status handling visible. Stop transactional emission after failure.
+- Julia C API calls remain on the persistent owner thread, including exception
+  inspection and shutdown.
+- Use `Base.invokelatest` only where freshly evaluated Scratchpad or reload
+  definitions require latest-world dispatch. Do not spread it into ordinary
+  static call paths.
+- Keep bridge calls and their status handling visible. Stop transactional
+  emission after failure.
 - Do not retain host pointers beyond their documented generation or lifecycle.
-- Runtime-loaded scripts must surface parse, load, and evaluation failures with useful context.
+- Runtime-loaded scripts must surface parse, load, and evaluation failures with
+  useful context.
 
 ### View Text Rule
 
@@ -549,10 +597,12 @@ project convention. Do not reorder one wrapper independently from related APIs.
 ### Function/Control Flow Guidance
 
 - Keep local conversions close to the boundary that requires them.
-- Use `eachindex` or the collection's interface rather than assuming one-based contiguous indices.
+- Use `eachindex` or the collection's interface rather than assuming one-based
+  contiguous indices.
 - Prefer methods that describe behavior over caller access to representation fields.
-- Keep return shapes stable. Use a named `CamelCase` struct when several outputs form one enduring
-  concept or when a result would otherwise exceed two positional values.
+- Keep return shapes stable. Use a named `CamelCase` struct when several
+  outputs form one enduring concept or when a result would otherwise exceed
+  two positional values.
 
 ### Animation-Script Exception
 
@@ -589,13 +639,15 @@ Choose the representation that makes comparison or flow easiest to verify:
 
 - Do not force prose into a table when cells need multiple paragraphs.
 - Do not use a diagram for a sequence that a short numbered list communicates better.
-- A diagram supplements the normative text; it does not become the only statement of a requirement.
+- A diagram supplements the normative text; it does not become the only
+  statement of a requirement.
 - Prefer one strong example over several nearly identical examples.
 
 ### Doc Comments And Docstrings (Required)
 
-Doc comments are mandatory source code, not optional polish. They are the canonical prose for the
-future generated Code reference and part of the declaration's review contract.
+Doc comments are mandatory source code, not optional polish. They are the
+canonical prose for the future generated Code reference and part of the
+declaration's review contract.
 
 | Declaration | Requirement |
 | --- | --- |
@@ -608,25 +660,32 @@ future generated Code reference and part of the declaration's review contract.
 | Anonymous local callback | No separate docstring; document the named owning operation. |
 
 - Begin with a useful summary of behavior, not the declaration restated in English.
-- Record side effects, units, valid ranges, ownership transfer, thread affinity, and failure semantics
-  when they are part of the contract.
-- Describe parameters and return values when names and types do not make their roles obvious.
-- Keep documentation attached to the declaration so language tooling and Wiki extraction can find it.
+- Record side effects, units, valid ranges, ownership transfer, thread
+  affinity, and failure semantics when they are part of the contract.
+- Describe parameters and return values when names and types do not make their
+  roles obvious.
+- Keep documentation attached to the declaration so language tooling and Wiki
+  extraction can find it.
 - Keep implementation commentary near the invariant or unusual decision it explains.
 - Remove stale comments in the same change that makes them stale.
-- Do not preserve duplicate prose in several files. Keep one canonical explanation and link to it.
+- Do not preserve duplicate prose in several files. Keep one canonical
+  explanation and link to it.
 
 ## Error Handling, Performance, Safety
 
 ### Error Handling
 
 - Validate external input and cross-module contracts at the receiving boundary.
-- Fail fast on violated invariants; return a typed status for expected operational failure.
-- Do not partially publish state. Build or mutate in staging, validate, then commit atomically.
-- Error messages must identify the operation and include relevant request, generation, symbol, path,
-  or index context without exposing secrets.
-- Catch an error only to recover, add context, translate across a boundary, or preserve host safety.
-- Do not swallow exceptions/errors or replace them with empty output without explicit justification.
+- Fail fast on violated invariants; return a typed status for expected
+  operational failure.
+- Do not partially publish state. Build or mutate in staging, validate, then
+  commit atomically.
+- Error messages must identify the operation and include relevant request,
+  generation, symbol, path, or index context without exposing secrets.
+- Catch an error only to recover, add context, translate across a boundary, or
+  preserve host safety.
+- Do not swallow exceptions/errors or replace them with empty output without
+  explicit justification.
 - Cleanup and completion reporting must run on both success and failure paths.
 
 | Failure kind | Preferred response |
@@ -641,13 +700,15 @@ future generated Code reference and part of the declaration's review contract.
 ### Performance and Allocation
 
 - Optimize with evidence, not guesswork.
-- Prefer algorithm, data-layout, and work-elimination improvements over incidental syntax tricks.
+- Prefer algorithm, data-layout, and work-elimination improvements over
+  incidental syntax tricks.
 - Measure representative workloads before and after a non-obvious optimization.
 - Keep host-side per-frame paths allocation-aware.
 - Avoid hidden allocation churn in hot loops.
 - Preallocate bounded steady-state buffers and mutate them in place.
 - Keep Julia performance-critical code inside functions and avoid untyped mutable globals.
-- Do not make a Julia API artificially concrete for performance; Julia specializes generic methods.
+- Do not make a Julia API artificially concrete for performance; Julia
+  specializes generic methods.
 - Make performance-motivated complexity local and document the measured reason.
 - Follow the allocation policy in `ArchitectureSummary.md`.
 
@@ -657,18 +718,20 @@ future generated Code reference and part of the declaration's review contract.
 - Validate external/input data at boundaries.
 - Keep interop assumptions explicit and documented.
 - Keep pointer validity, count/span relationships, ABI widths, and nullability explicit.
-- Never let a borrowed slice, pointer, arena allocation, or generation-bound handle outlive its owner.
-- Thread-affine Julia, rendering, window, and audio operations must remain on their owning threads.
+- Never let a borrowed slice, pointer, arena allocation, or generation-bound
+  handle outlive its owner.
+- Thread-affine Julia, rendering, window, and audio operations must remain on
+  their owning threads.
 - Prefer bounded failure over unchecked truncation, overflow, or queue growth.
 
 ## Standard Updates
 
 - Changes to this document must preserve clarity and enforceability.
-- Avoid optimizing this document for line count when doing so removes rationale, scope, exceptions,
-  or enforcement guidance.
+- Avoid optimizing this document for line count when doing so removes
+  rationale, scope, exceptions, or enforcement guidance.
 - Use tables and diagrams when they compress repeated structure without hiding nuance.
-- Recheck upstream guidance periodically, but do not adopt upstream changes that conflict with an
-  intentional repository policy.
+- Recheck upstream guidance periodically, but do not adopt upstream changes
+  that conflict with an intentional repository policy.
 
 A standards change SHOULD identify:
 

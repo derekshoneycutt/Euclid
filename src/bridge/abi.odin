@@ -101,20 +101,20 @@ BRIDGE_DYNVIEW_FONT_FLAG_ITALIC :: i32(core.Font_Variant_Flags.Italic)
 BRIDGE_DYNVIEW_FONT_FLAG_LIGHT :: i32(core.Font_Variant_Flags.Light)
 BRIDGE_DYNVIEW_FONT_FLAG_REGULAR :: i32(core.Font_Variant_Flags.Regular)
 BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM :: i32(core.Font_Variant_Flags.Medium)
-BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD :: i32(core.Font_Variant_Flags.SemiBold)
+BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD :: i32(core.Font_Variant_Flags.Semibold)
 BRIDGE_DYNVIEW_FONT_FLAG_BOLD :: i32(core.Font_Variant_Flags.Bold)
-BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD :: i32(core.Font_Variant_Flags.ExtraBold)
+BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD :: i32(core.Font_Variant_Flags.Extrabold)
 BRIDGE_DYNVIEW_FONT_FLAG_BLACK :: i32(core.Font_Variant_Flags.Black)
 
 BRIDGE_LABEL_DECORATION_NONE :: i32(core.Shapes_Label_Decoration_Kind.None)
 BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Shapes_Label_Decoration_Kind.Prime)
-BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.DoublePrime)
-BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.TriplePrime)
+BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.Double_Prime)
+BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.Triple_Prime)
 BRIDGE_LABEL_DECORATION_HAT :: i32(core.Shapes_Label_Decoration_Kind.Hat)
 BRIDGE_LABEL_DECORATION_BAR :: i32(core.Shapes_Label_Decoration_Kind.Bar)
 
 SHAPES_CONSTRAINT_KIND_MIN :: i32(core.Shapes_Constraint_Kind.Distance)
-SHAPES_CONSTRAINT_KIND_MAX :: i32(core.Shapes_Constraint_Kind.CenterPivot)
+SHAPES_CONSTRAINT_KIND_MAX :: i32(core.Shapes_Constraint_Kind.Center_Pivot)
 
 CONSTRAINT_SPEC_TRAITS :: (1 << 0)
 CONSTRAINT_SPEC_ONPOINT :: (1 << 1)
@@ -155,6 +155,14 @@ Bridge_Dynview_Math_Op :: struct {
     script_gap: f32,
     accent_thickness: f32,
     accent_offset: f32,
+}
+
+//   Flat op payload for one inline math block, grouped so the C export
+//   signature stays within the bridge parameter budget.
+Bridge_Dynview_Math_Program :: struct {
+    ops:                [^]Bridge_Dynview_Math_Op,
+    op_count:           i32,
+    top_level_op_count: i32,
 }
 
 Bridge_Point_View :: struct {

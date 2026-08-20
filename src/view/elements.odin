@@ -64,59 +64,88 @@ Pen_Polygon_Crossing :: struct {
     has_front: bool,
 }
 
+//   Resolved tool_brush shader program paths.
+Tool_Brush_Shader_Paths :: struct {
+    vertex:   cstring,
+    fragment: cstring,
+}
 
-//   Initialize stroke3d shader handles and uniform locations from packaged assets.
+//   Plane-clipping context for one pen segment against one polygon plane.
+Pen_Polygon_Clip_Context :: struct {
+    stage0_start:  Vector3,
+    stage0_end:    Vector3,
+    clip_start:    Vector3,
+    clip_end:      Vector3,
+    plane_point:   Vector3,
+    plane_normal:  Vector3,
+    raw_distance0: f32,
+    raw_distance1: f32,
+    side0:         int,
+    side1:         int,
+    on_plane0:     bool,
+    on_plane1:     bool,
+}
+
+//   Circle/arc geometry shared by draw and shadow passes.
+Circle_Arc_Geometry :: struct {
+    center:       Vector3,
+    sweep_delta:  f32,
+    start_radius: f32,
+    end_radius:   f32,
+    start_theta:  f32,
+}
+
+//   Batch world points plus their SoA scratch and output slices.
+Iso_Batch_Project_Params :: struct {
+    world_points: []Vector3,
+    xs, ys, zs:   []f32,
+    out:          []Vector2,
+}
+
+//   Shared basis for the compass top-circle arc that lies outside the swing angle.
+Compass_Top_Circle_Basis :: struct {
+    u:         Vector3,
+    v:         Vector3,
+    radius:    f32,
+    theta_out: f32,
+}
+
+//   Draw inputs for one compass outside-arc segment.
+Compass_Arc_Draw :: struct {
+    state:      ^Euclid_General_State,
+    brush_size: f32,
+    color:      rl.Color,
+}
+
+
+//   Initialize tool_brush shader handles and uniform locations from packaged assets.
 //
 // Parameters:
 //   - state: Global app state that stores shader handles and uniform locations.
 //
 // Returns:
 //   - none.
-init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
-    vertex_path :=
-        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
-    fragment_path :=
-        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
-    if len(vertex_path) == 0 || len(fragment_path) == 0 {
-        fmt.println(
-            "stroke3d shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
+    paths: Tool_Brush_Shader_Paths
+    if !tool_brush_shader_paths(&paths) {
         s^.ready = false
         return
     }
 
-    vertex_cstr := strings.clone_to_cstring(vertex_path, context.temp_allocator)
-    fragment_cstr := strings.clone_to_cstring(fragment_path, context.temp_allocator)
-
-    if !rl.FileExists(vertex_cstr) || !rl.FileExists(fragment_cstr) {
-        fmt.println("stroke3d shader files not found; pen/compass 3D shading disabled")
-        fmt.println("stroke3d expected paths: vs=", vertex_path, " fs=", fragment_path)
-        s^.ready = false
-        return
-    }
-
-    s^.shader = rl.LoadShader(vertex_cstr, fragment_cstr)
+    s^.shader = rl.LoadShader(paths.vertex, paths.fragment)
     if s^.shader.id == 0 {
-        fmt.println("stroke3d shader failed to load; pen/compass 3D shading disabled")
+        fmt.println("tool_brush shader failed to load; pen/compass 3D shading disabled")
         s^.ready = false
         return
     }
 
-    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
-    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
-    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
-    s^.loc_specular_strength = rl.GetShaderLocation(s^.shader, "uSpecularStrength")
-    s^.loc_specular_power = rl.GetShaderLocation(s^.shader, "uSpecularPower")
-    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
-    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
-    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
-    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
-
-    if s^.loc_p0 < 0 || s^.loc_p1 < 0 || s^.loc_radius < 0 || s^.loc_viewport_height < 0 {
+    tool_brush_cache_uniform_locations(s)
+    if !tool_brush_uniforms_valid(s) {
         fmt.println(
-            "stroke3d shader missing required uniforms; pen/compass 3D shading disabled")
-        fmt.println("stroke3d uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
+            "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
+        fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
             " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
         rl.UnloadShader(s^.shader)
         s^.ready = false
@@ -126,14 +155,64 @@ init_stroke3d_shader :: proc(state: ^Euclid_General_State) {
     s^.ready = true
 }
 
-//   Unload stroke3d shader resources and mark shader state as unavailable.
+//   Resolve and validate the tool_brush shader asset paths.
 //
 // Parameters:
-//   - state: Global app state containing stroke3d shader state.
+//   - paths: Destination for the resolved vertex/fragment C-strings when true.
+//
+// Returns:
+//   - ok: true when both paths resolve to existing files.
+tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
+    vertex_path :=
+        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
+    fragment_path :=
+        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
+    if len(vertex_path) == 0 || len(fragment_path) == 0 {
+        fmt.println(
+            "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
+        return false
+    }
+
+    paths^.vertex = strings.clone_to_cstring(vertex_path, context.temp_allocator)
+    paths^.fragment = strings.clone_to_cstring(fragment_path, context.temp_allocator)
+    if !rl.FileExists(paths^.vertex) || !rl.FileExists(paths^.fragment) {
+        fmt.println(
+            "tool_brush shader files not found; pen/compass 3D shading disabled")
+        fmt.println(
+            "tool_brush expected paths: vs=", vertex_path, " fs=", fragment_path)
+        return false
+    }
+
+    return true
+}
+
+//   Cache tool_brush uniform locations onto the stroke_3d render state.
+tool_brush_cache_uniform_locations :: proc(s: ^core.Tool_Render_State) {
+    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
+    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
+    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
+    s^.loc_specular_strength = rl.GetShaderLocation(s^.shader, "uSpecularStrength")
+    s^.loc_specular_power = rl.GetShaderLocation(s^.shader, "uSpecularPower")
+    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
+    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
+    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
+    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
+}
+
+//   Return true when the required tool_brush uniforms were all located.
+tool_brush_uniforms_valid :: proc(s: ^core.Tool_Render_State) -> bool {
+    return s^.loc_p0 >= 0 && s^.loc_p1 >= 0 && s^.loc_radius >= 0 &&
+        s^.loc_viewport_height >= 0
+}
+
+//   Unload tool_brush shader resources and mark shader state as unavailable.
+//
+// Parameters:
+//   - state: Global app state containing tool_brush shader state.
 //
 // Returns:
 //   - none.
-shutdown_stroke3d_shader :: proc(state: ^Euclid_General_State) {
+shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     if !s^.ready {
@@ -174,11 +253,13 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
     projected: [8]Vector2
     _ = project_iso_points_batch_with_components(
         state,
-        world_points[:],
-        xs[:],
-        ys[:],
-        zs[:],
-        projected[:])
+        Iso_Batch_Project_Params{
+            world_points = world_points[:],
+            xs = xs[:],
+            ys = ys[:],
+            zs = zs[:],
+            out = projected[:],
+        })
 
     rl.DrawTriangle(projected[0], projected[1], projected[2], room.edge_color)
     rl.DrawTriangle(projected[3], projected[2], projected[1], room.edge_color)
@@ -193,7 +274,7 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.point_system^.draw_cache.item_count {
         draw_cached_item_low(state, &state^.point_system^.draw_cache.items[i])
     }
@@ -206,7 +287,7 @@ draw_Shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     crossing := Pen_Polygon_Crossing {
         pen_index = -1,
         polygon_index = -1,
@@ -228,33 +309,6 @@ draw_Shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     }
 }
 
-//   Render cached high-layer tool visuals and active markers with stroke3d mode.
-//
-// Parameters:
-//   - state: Global app state containing pen/compass draw-cache entries.
-//
-// Returns:
-//   - none.
-draw_Shapes_points_high_cached :: proc(state: ^Euclid_General_State) {
-    if state^.point_system^.draw_cache.draw_pen {
-        draw_cached_pen_active_dot(state, &state^.point_system^.draw_cache.pen)
-    }
-    if state^.point_system^.draw_cache.draw_compass {
-        draw_cached_compass_active_dot(state, &state^.point_system^.draw_cache.compass)
-    }
-
-    begin_stroke3d_mode(state)
-
-    if state^.point_system^.draw_cache.draw_pen {
-        draw_cached_pen(state, &state^.point_system^.draw_cache.pen)
-    }
-    if state^.point_system^.draw_cache.draw_compass {
-        draw_cached_compass(state, &state^.point_system^.draw_cache.compass)
-    }
-
-    end_stroke3d_mode(state)
-}
-
 //   Render cached shadow overlays for pen and compass tool geometry.
 //
 // Parameters:
@@ -262,7 +316,7 @@ draw_Shapes_points_high_cached :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - none.
-draw_Shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
     if state^.point_system^.draw_cache.draw_pen {
         draw_cached_pen_shadow(state, &state^.point_system^.draw_cache.pen)
     }
@@ -276,7 +330,7 @@ draw_Shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
 // Notes:
 //   - Flat and below-surface geometry draws no shadow.
 //   - Labels are intentionally excluded from the shape-shadow pass.
-draw_Shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
+draw_shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.point_system^.draw_cache.item_count {
         draw_cached_item_shadow(state, &state^.point_system^.draw_cache.items[i])
     }
@@ -348,12 +402,6 @@ draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
 //   Return true when a cached point draw item belongs to the elevated layer.
 draw_cached_point_is_elevated :: #force_inline proc(p: ^core.Shapes_Point_Draw) -> bool {
     return shadow_point_is_elevated(p^.point1)
-}
-
-//   Return true when a cached line draw item belongs to the elevated layer.
-draw_cached_line_is_elevated :: #force_inline proc(l: ^core.Shapes_Line_Draw) -> bool {
-    line_points := [2]Vector3{l^.point1, l^.point2}
-    return has_any_elevated_shadow_point(line_points[:])
 }
 
 //   Return true when a cached circle draw item belongs to the elevated layer.
@@ -461,18 +509,18 @@ draw_cached_polygon_high :: #force_inline proc(
 draw_cached_pen_full :: proc(
     state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw) {
     draw_cached_pen_active_dot(state, pen)
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     draw_cached_pen(state, pen)
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 //   Render one full cached compass item for the merged higher layer.
 draw_cached_compass_full :: proc(
     state: ^Euclid_General_State, comp: ^core.Shapes_Compass_Draw) {
     draw_cached_compass_active_dot(state, comp)
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     draw_cached_compass(state, comp)
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 
@@ -480,8 +528,8 @@ draw_cached_compass_full :: proc(
 
 
 
-//   Set a float uniform on the stroke3d shader when location is valid.
-set_stroke3d_uniform_float :: #force_inline proc(
+//   Set a float uniform on the tool_brush shader when location is valid.
+set_tool_brush_uniform_float :: #force_inline proc(
     state: ^Euclid_General_State, location: i32, value: f32) {
     if location < 0 {
         return
@@ -491,8 +539,8 @@ set_stroke3d_uniform_float :: #force_inline proc(
 }
 
 
-//   Set a vec2 uniform on the stroke3d shader when location is valid.
-set_stroke3d_uniform_vec2 :: #force_inline proc(
+//   Set a vec2 uniform on the tool_brush shader when location is valid.
+set_tool_brush_uniform_vec2 :: #force_inline proc(
     state: ^Euclid_General_State, location: i32, value: Vector2) {
     if location < 0 {
         return
@@ -503,7 +551,7 @@ set_stroke3d_uniform_vec2 :: #force_inline proc(
 
 
 //   Compute render-to-screen scale factors for shader-space thickness correction.
-get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
+get_tool_brush_render_scale :: #force_inline proc() -> Vector2 {
     screen_w := f32(rl.GetScreenWidth())
     screen_h := f32(rl.GetScreenHeight())
     render_w := f32(rl.GetRenderWidth())
@@ -523,28 +571,28 @@ get_stroke3d_render_scale :: #force_inline proc() -> Vector2 {
 }
 
 
-//   Update stroke3d segment uniforms for endpoints and stroke radius.
-set_stroke3d_segment :: #force_inline proc(
+//   Update tool_brush segment uniforms for endpoints and stroke radius.
+set_tool_brush_segment :: #force_inline proc(
     state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32) {
     s := &state^.stroke_3d
-    scale := get_stroke3d_render_scale()
-    p0Scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
-    p1Scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
+    scale := get_tool_brush_render_scale()
+    p0_scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
+    p1_scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
     avg_scale := (scale.x + scale.y) * 0.5
 
-    set_stroke3d_uniform_vec2(state, s^.loc_p0, p0Scaled)
-    set_stroke3d_uniform_vec2(state, s^.loc_p1, p1Scaled)
-    set_stroke3d_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
+    set_tool_brush_uniform_vec2(state, s^.loc_p0, p0_scaled)
+    set_tool_brush_uniform_vec2(state, s^.loc_p1, p1_scaled)
+    set_tool_brush_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
 }
 
 
-//   Draw one segment with stroke3d lighting when available, else standard line draw.
-draw_stroke3d_segment :: #force_inline proc(
+//   Draw one segment with tool_brush lighting when available, else standard line draw.
+draw_tool_brush_segment :: #force_inline proc(
     state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
     s := &state^.stroke_3d
     if s^.ready {
         rlgl.DrawRenderBatchActive()
-        set_stroke3d_segment(state, p0, p1, thickness)
+        set_tool_brush_segment(state, p0, p1, thickness)
     }
     rl.DrawLineEx(p0, p1, thickness, color)
 }
@@ -581,11 +629,11 @@ compass_draw_joint1_leg_last :: #force_inline proc(
 }
 
 
-//   Bind stroke3d shader and upload per-frame lighting/render uniforms.
+//   Bind tool_brush shader and upload per-frame lighting/render uniforms.
 //
 // Notes:
-//   - Must be paired with end_stroke3d_mode in the same draw pass.
-begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+//   - Must be paired with end_tool_brush_mode in the same draw pass.
+begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
 
     if !s^.ready {
@@ -600,22 +648,22 @@ begin_stroke3d_mode :: proc(state: ^Euclid_General_State) {
         rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
     }
 
-    set_stroke3d_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
-    set_stroke3d_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
-    set_stroke3d_uniform_float(state,
+    set_tool_brush_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
+    set_tool_brush_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
+    set_tool_brush_uniform_float(state,
         s^.loc_specular_strength, STROKE3D_SPECULAR_STRENGTH)
-    set_stroke3d_uniform_float(state, s^.loc_specular_power, STROKE3D_SPECULAR_POWER)
-    set_stroke3d_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
+    set_tool_brush_uniform_float(state, s^.loc_specular_power, STROKE3D_SPECULAR_POWER)
+    set_tool_brush_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
 
     rl.BeginShaderMode(s^.shader)
 }
 
 
-//   Flush pending batch and unbind stroke3d shader mode.
+//   Flush pending batch and unbind tool_brush shader mode.
 //
 // Notes:
-//   - Completes the begin_stroke3d_mode/end_stroke3d_mode pair.
-end_stroke3d_mode :: proc(state: ^Euclid_General_State) {
+//   - Completes the begin_tool_brush_mode/end_tool_brush_mode pair.
+end_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     if !state^.stroke_3d.ready {
         return
     }
@@ -690,13 +738,6 @@ z_split_point_in_halfspace :: #force_inline proc(
         return sign > 0
     }
     return sign <= 0
-}
-
-//   Return true when one segment strictly crosses z=0.
-z_split_segment_crosses_plane :: #force_inline proc(point0, point1: Vector3) -> bool {
-    sign0 := z_split_sign(point0.z)
-    sign1 := z_split_sign(point1.z)
-    return sign0 * sign1 < 0
 }
 
 //   Compute one segment intersection point against the z=0 plane.
@@ -821,15 +862,21 @@ point_in_triangle :: #force_inline proc(point, a, b, c: Vector3) -> bool {
         bary_w >= -TOOL_POLYGON_CLIP_EPSILON
 }
 
+//   Validate that one polygon triangle's local indices are in range.
+polygon_triangle_indices_valid :: #force_inline proc(
+    tri: core.Shapes_Polygon_Triangle, vertex_count: int) -> bool {
+
+    return tri.a >= 0 && tri.a < vertex_count &&
+        tri.b >= 0 && tri.b < vertex_count &&
+        tri.c >= 0 && tri.c < vertex_count
+}
+
 //   Resolve one stable polygon plane from cached polygon triangles.
 polygon_plane :: proc(
     state: ^Euclid_General_State,
     polygon: ^core.Shapes_Polygon_Draw,
     plane_point, plane_normal: ^Vector3) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — polygon plane-fit kernel.
-    // The guards are triangle-index bounds and degenerate-normal rejection over the
-    // triangle list; intrinsic to the geometry, not incidental branching.
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
         return false
     }
@@ -844,13 +891,9 @@ polygon_plane :: proc(
         local_a := tri.a - polygon^.first_vertex
         local_b := tri.b - polygon^.first_vertex
         local_c := tri.c - polygon^.first_vertex
-        if local_a < 0 || local_a >= polygon^.vertex_count {
-            continue
-        }
-        if local_b < 0 || local_b >= polygon^.vertex_count {
-            continue
-        }
-        if local_c < 0 || local_c >= polygon^.vertex_count {
+        if !polygon_triangle_indices_valid(
+            core.Shapes_Polygon_Triangle{local_a, local_b, local_c},
+            polygon^.vertex_count) {
             continue
         }
 
@@ -886,13 +929,9 @@ point_inside_polygon :: proc(
         local_a := tri.a - polygon^.first_vertex
         local_b := tri.b - polygon^.first_vertex
         local_c := tri.c - polygon^.first_vertex
-        if local_a < 0 || local_a >= polygon^.vertex_count {
-            continue
-        }
-        if local_b < 0 || local_b >= polygon^.vertex_count {
-            continue
-        }
-        if local_c < 0 || local_c >= polygon^.vertex_count {
+        if !polygon_triangle_indices_valid(
+            core.Shapes_Polygon_Triangle{local_a, local_b, local_c},
+            polygon^.vertex_count) {
             continue
         }
 
@@ -913,7 +952,174 @@ draw_pen_segment_fragment :: #force_inline proc(
 
     c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
-    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
+}
+
+//   Build the z=0-clipped segment and oriented polygon plane for one crossing test.
+//
+// Parameters:
+//   - ctx: Destination populated when ok.
+//
+// Returns:
+//   - ok: true when the segment clips against z=0 and the polygon plane resolves.
+pen_polygon_clip_context :: proc(
+    state: ^Euclid_General_State,
+    pen: ^core.Shapes_Pen_Draw,
+    polygon: ^core.Shapes_Polygon_Draw,
+    ctx: ^Pen_Polygon_Clip_Context) -> bool {
+
+    if !z_split_clip_segment_halfspace(
+        pen^.joint1,
+        pen^.joint2,
+        true,
+        &ctx^.stage0_start,
+        &ctx^.stage0_end) {
+        return false
+    }
+
+    if !polygon_plane(state, polygon, &ctx^.plane_point, &ctx^.plane_normal) {
+        return false
+    }
+
+    // Keep front/back classification stable regardless of polygon triangle winding.
+    if linalg.dot(ctx^.plane_normal, PEN_CLIP_FRONT_DIRECTION) < 0 {
+        ctx^.plane_normal *= -1.0
+    }
+
+    pen_polygon_apply_bottom_bias(pen, ctx)
+    pen_polygon_measure_sides(ctx)
+    return true
+}
+
+//   Bias the nearer clip endpoint downward to stabilize front/back ordering.
+pen_polygon_apply_bottom_bias :: proc(
+    pen: ^core.Shapes_Pen_Draw, ctx: ^Pen_Polygon_Clip_Context) {
+
+    ctx^.clip_start = ctx^.stage0_start
+    ctx^.clip_end = ctx^.stage0_end
+    start_d := ctx^.stage0_start - pen^.joint1
+    end_d := ctx^.stage0_end - pen^.joint1
+    if linalg.dot(start_d, start_d) <= linalg.dot(end_d, end_d) {
+        ctx^.clip_start += PEN_BOTTOM_CLIP_BIAS
+    } else {
+        ctx^.clip_end += PEN_BOTTOM_CLIP_BIAS
+    }
+}
+
+//   Measure signed distances and plane-side classification for both endpoints.
+pen_polygon_measure_sides :: proc(ctx: ^Pen_Polygon_Clip_Context) {
+    ctx^.raw_distance0 = plane_signed_distance(
+        ctx^.stage0_start, ctx^.plane_point, ctx^.plane_normal)
+    ctx^.raw_distance1 = plane_signed_distance(
+        ctx^.stage0_end, ctx^.plane_point, ctx^.plane_normal)
+    ctx^.side0 = tool_plane_side(
+        plane_signed_distance(ctx^.clip_start, ctx^.plane_point, ctx^.plane_normal))
+    ctx^.side1 = tool_plane_side(
+        plane_signed_distance(ctx^.clip_end, ctx^.plane_point, ctx^.plane_normal))
+    ctx^.on_plane0 = math.abs(ctx^.raw_distance0) <= TOOL_POLYGON_CLIP_EPSILON
+    ctx^.on_plane1 = math.abs(ctx^.raw_distance1) <= TOOL_POLYGON_CLIP_EPSILON
+}
+
+//   Record the whole segment as front or back when both ends share one side.
+//
+// Returns:
+//   - ok: true when the contact point is inside the polygon.
+pen_polygon_same_side_part :: proc(
+    state: ^Euclid_General_State,
+    polygon: ^core.Shapes_Polygon_Draw,
+    ctx: ^Pen_Polygon_Clip_Context,
+    crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    if !(ctx^.on_plane0 || ctx^.on_plane1) {
+        return false
+    }
+
+    contact_point := ctx^.stage0_start
+    if !ctx^.on_plane0 && ctx^.on_plane1 {
+        contact_point = ctx^.stage0_end
+    }
+    if !point_inside_polygon(state, polygon, contact_point) {
+        return false
+    }
+
+    if ctx^.side0 > 0 {
+        crossing^.front0 = ctx^.stage0_start
+        crossing^.front1 = ctx^.stage0_end
+        crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
+        return crossing^.has_front
+    }
+
+    crossing^.back0 = ctx^.stage0_start
+    crossing^.back1 = ctx^.stage0_end
+    crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
+    return crossing^.has_back
+}
+
+//   Resolve the unbiased plane-crossing point along the original segment.
+//
+// Returns:
+//   - ok: true when the intersection is computable and inside the polygon.
+pen_polygon_resolve_crossing_point :: proc(
+    state: ^Euclid_General_State,
+    polygon: ^core.Shapes_Polygon_Draw,
+    ctx: ^Pen_Polygon_Clip_Context,
+    out: ^Vector3) -> bool {
+
+    intersection := Vector3{}
+    if !segment_plane_intersection(
+        ctx^.clip_start,
+        ctx^.clip_end,
+        ctx^.plane_point,
+        ctx^.plane_normal,
+        &intersection) {
+        return false
+    }
+    if !point_inside_polygon(state, polygon, intersection) {
+        return false
+    }
+
+    clip_direction := ctx^.clip_end - ctx^.clip_start
+    clip_len_sq := linalg.dot(clip_direction, clip_direction)
+    if clip_len_sq <= TOOL_POLYGON_SEGMENT_EPSILON {
+        return false
+    }
+    t := linalg.dot(intersection-ctx^.clip_start, clip_direction) / clip_len_sq
+    t = math.clamp(t, 0, 1)
+    out^ = linalg.lerp(ctx^.stage0_start, ctx^.stage0_end, t)
+    return true
+}
+
+//   Split the segment at its plane intersection into back and front parts.
+//
+// Returns:
+//   - ok: true when the split point lies inside the polygon.
+pen_polygon_split_part :: proc(
+    state: ^Euclid_General_State,
+    polygon: ^core.Shapes_Polygon_Draw,
+    ctx: ^Pen_Polygon_Clip_Context,
+    crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    intersection_unbiased := Vector3{}
+    if !pen_polygon_resolve_crossing_point(
+        state, polygon, ctx, &intersection_unbiased) {
+        return false
+    }
+
+    if ctx^.side0 < ctx^.side1 {
+        crossing^.back0 = ctx^.stage0_start
+        crossing^.back1 = intersection_unbiased
+        crossing^.front0 = intersection_unbiased
+        crossing^.front1 = ctx^.stage0_end
+    } else {
+        crossing^.back0 = ctx^.stage0_end
+        crossing^.back1 = intersection_unbiased
+        crossing^.front0 = intersection_unbiased
+        crossing^.front1 = ctx^.stage0_start
+    }
+
+    crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
+    crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
+    return crossing^.has_back || crossing^.has_front
 }
 
 //   Build one pen/polygon crossing event using z=0 clipping as stage one.
@@ -923,133 +1129,34 @@ build_pen_polygon_crossing :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    // #vet forgives(cyclomatic_complexity) — pen/polygon clipping pipeline.
-    // The branches are half-space clip, plane-side classification, and front/back
-    // emission of a geometry crossing; each is a distinct geometric stage.
-    stage0_start, stage0_end: Vector3
-    if !z_split_clip_segment_halfspace(
-        pen^.joint1,
-        pen^.joint2,
-        true,
-        &stage0_start,
-        &stage0_end) {
+    ctx: Pen_Polygon_Clip_Context
+    if !pen_polygon_clip_context(state, pen, polygon, &ctx) {
         return false
     }
-
-    plane_point, plane_normal: Vector3
-    if !polygon_plane(state, polygon, &plane_point, &plane_normal) {
-        return false
-    }
-
-    // Keep front/back classification stable regardless of polygon triangle winding.
-    if linalg.dot(plane_normal, PEN_CLIP_FRONT_DIRECTION) < 0 {
-        plane_normal *= -1.0
-    }
-
-    clip_start := stage0_start
-    clip_end := stage0_end
-    if linalg.dot(stage0_start-pen^.joint1, stage0_start-pen^.joint1) <=
-        linalg.dot(stage0_end-pen^.joint1, stage0_end-pen^.joint1) {
-        clip_start += PEN_BOTTOM_CLIP_BIAS
-    } else {
-        clip_end += PEN_BOTTOM_CLIP_BIAS
-    }
-
-    raw_distance0 := plane_signed_distance(stage0_start, plane_point, plane_normal)
-    raw_distance1 := plane_signed_distance(stage0_end, plane_point, plane_normal)
-    distance0 := plane_signed_distance(clip_start, plane_point, plane_normal)
-    distance1 := plane_signed_distance(clip_end, plane_point, plane_normal)
-    side0 := tool_plane_side(distance0)
-    side1 := tool_plane_side(distance1)
-    on_plane0 := math.abs(raw_distance0) <= TOOL_POLYGON_CLIP_EPSILON
-    on_plane1 := math.abs(raw_distance1) <= TOOL_POLYGON_CLIP_EPSILON
 
     crossing^.has_back = false
     crossing^.has_front = false
 
-    if side0 == side1 {
-        if !(on_plane0 || on_plane1) {
-            return false
-        }
-
-        contact_point := stage0_start
-        if !on_plane0 && on_plane1 {
-            contact_point = stage0_end
-        }
-        if !point_inside_polygon(state, polygon, contact_point) {
-            return false
-        }
-
-        if side0 > 0 {
-            crossing^.front0 = stage0_start
-            crossing^.front1 = stage0_end
-            crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
-            return crossing^.has_front
-        }
-
-        crossing^.back0 = stage0_start
-        crossing^.back1 = stage0_end
-        crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
-        return crossing^.has_back
+    if ctx.side0 == ctx.side1 {
+        return pen_polygon_same_side_part(state, polygon, &ctx, crossing)
     }
 
-    intersection := Vector3{}
-    if !segment_plane_intersection(
-        clip_start,
-        clip_end,
-        plane_point,
-        plane_normal,
-        &intersection) {
-        return false
-    }
-    if !point_inside_polygon(state, polygon, intersection) {
-        return false
-    }
-
-    clip_direction := clip_end - clip_start
-    clip_len_sq := linalg.dot(clip_direction, clip_direction)
-    if clip_len_sq <= TOOL_POLYGON_SEGMENT_EPSILON {
-        return false
-    }
-    intersection_t := linalg.dot(intersection-clip_start, clip_direction) / clip_len_sq
-    intersection_t = math.clamp(intersection_t, 0, 1)
-    intersection_unbiased := linalg.lerp(stage0_start, stage0_end, intersection_t)
-
-    if side0 < side1 {
-        crossing^.back0 = stage0_start
-        crossing^.back1 = intersection_unbiased
-        crossing^.front0 = intersection_unbiased
-        crossing^.front1 = stage0_end
-    } else {
-        crossing^.back0 = stage0_end
-        crossing^.back1 = intersection_unbiased
-        crossing^.front0 = intersection_unbiased
-        crossing^.front1 = stage0_start
-    }
-
-    crossing^.has_back = segment_has_length(crossing^.back0, crossing^.back1)
-    crossing^.has_front = segment_has_length(crossing^.front0, crossing^.front1)
-    return crossing^.has_back || crossing^.has_front
+    return pen_polygon_split_part(state, polygon, &ctx, crossing)
 }
 
-//   Find one pen/polygon crossing pair in current high merged cache items.
-find_pen_polygon_crossing :: proc(
-    state: ^Euclid_General_State,
-    out_crossing: ^Pen_Polygon_Crossing) -> bool {
+//   Find the first cached pen draw item in the merged cache.
+//
+// Returns:
+//   - pen: The pen draw item when found.
+//   - pen_index: Cache index of the pen item, or -1.
+find_cached_pen_item :: proc(
+    cache: ^core.Shapes_Draw_Cache) -> (core.Shapes_Pen_Draw, int) {
 
-    // #vet forgives(cyclomatic_complexity) — crossing-search driver.
-    // The guards skip non-crossing candidate pairs over the merged draw cache;
-    // load-bearing filtering, not incidental control flow.
-    cache := &state^.point_system^.draw_cache
-    pen_index := -1
-    pen := core.Shapes_Pen_Draw {}
-
+    pen := core.Shapes_Pen_Draw{}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case core.Shapes_Pen_Draw:
-            pen = item_typed
-            pen_index = i
-            break
+            return item_typed, i
         case core.Shapes_Label_Draw,
             core.Shapes_Point_Draw,
             core.Shapes_Line_Draw,
@@ -1058,14 +1165,18 @@ find_pen_polygon_crossing :: proc(
             core.Shapes_Polygon_Draw,
             core.Shapes_Compass_Draw:
         }
-        if pen_index >= 0 {
-            break
-        }
     }
-    if pen_index < 0 {
-        return false
-    }
+    return pen, -1
+}
 
+//   Find one elevated polygon that crosses the given pen segment.
+find_pen_crossing_polygon :: proc(
+    state: ^Euclid_General_State,
+    pen: ^core.Shapes_Pen_Draw,
+    pen_index: int,
+    out_crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    cache := &state^.point_system^.draw_cache
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case core.Shapes_Polygon_Draw:
@@ -1073,14 +1184,14 @@ find_pen_polygon_crossing :: proc(
                 continue
             }
 
-            trial := Pen_Polygon_Crossing {}
-            if !build_pen_polygon_crossing(state, &pen, &item_typed, &trial) {
+            trial := Pen_Polygon_Crossing{}
+            if !build_pen_polygon_crossing(state, pen, &item_typed, &trial) {
                 continue
             }
 
             trial.pen_index = pen_index
             trial.polygon_index = i
-            trial.pen = pen
+            trial.pen = pen^
             trial.polygon = item_typed
             out_crossing^ = trial
             return true
@@ -1093,8 +1204,21 @@ find_pen_polygon_crossing :: proc(
             core.Shapes_Compass_Draw:
         }
     }
-
     return false
+}
+
+//   Find one pen/polygon crossing pair in current high merged cache items.
+find_pen_polygon_crossing :: proc(
+    state: ^Euclid_General_State,
+    out_crossing: ^Pen_Polygon_Crossing) -> bool {
+
+    cache := &state^.point_system^.draw_cache
+    pen, pen_index := find_cached_pen_item(cache)
+    if pen_index < 0 {
+        return false
+    }
+
+    return find_pen_crossing_polygon(state, &pen, pen_index, out_crossing)
 }
 
 //   Draw interleaving for one crossing pen/polygon pair.
@@ -1104,20 +1228,20 @@ draw_pen_polygon_crossing :: proc(
 
     draw_cached_pen_active_dot(state, &crossing^.pen)
 
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     if crossing^.has_back {
         draw_pen_segment_fragment(state, &crossing^.pen, crossing^.back0, crossing^.back1)
     }
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 
     draw_cached_polygon(state, &crossing^.polygon)
 
-    begin_stroke3d_mode(state)
+    begin_tool_brush_mode(state)
     if crossing^.has_front {
         draw_pen_segment_fragment(state, &crossing^.pen,
             crossing^.front0, crossing^.front1)
     }
-    end_stroke3d_mode(state)
+    end_tool_brush_mode(state)
 }
 
 //   Compute average height across one point slice for shadow alpha attenuation.
@@ -1155,91 +1279,132 @@ shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
     return view_core.iso_to_cartesian(p_shadow, state^.iso_scale^)
 }
 
+//   Derive shared arc geometry (center-relative vectors, radii, sweep).
+circle_arc_geometry :: #force_inline proc(
+    start, finish, center: Vector3, offset: f32) -> Circle_Arc_Geometry {
+
+    start_vec := start - center
+    end_vec := finish - center
+    start_radius :=
+        f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + offset
+    return Circle_Arc_Geometry{
+        center = center,
+        sweep_delta = sweep_delta,
+        start_radius = start_radius,
+        end_radius = end_radius,
+        start_theta = start_theta,
+    }
+}
+
+//   Sample the world-space arc points from start through the sweep.
+circle_arc_sample_world :: proc(
+    geom: ^Circle_Arc_Geometry,
+    start: Vector3,
+    arc_world: []Vector3) {
+
+    arc_world[0] = start
+    seg_count := f32(len(arc_world) - 1)
+    for i in 1..<len(arc_world) {
+        t := f32(i) / seg_count
+        theta := geom^.start_theta + geom^.sweep_delta * t
+        radius := math.lerp(geom^.start_radius, geom^.end_radius, t)
+        arc_world[i] = Vector3{
+            geom^.center.x + f32(math.cos(theta)) * radius,
+            geom^.center.y + f32(math.sin(theta)) * radius,
+            geom^.center.z,
+        }
+    }
+}
+
 //   Batch-project world points by first decomposing into x/y/z SoA component slices.
+//
+// Parameters:
+//   - state: Global app state providing the iso scale and SIMD flag.
+//   - params: Grouped world points plus SoA scratch and output slices.
+//
+// Returns:
+//   - count: Number of points projected.
 project_iso_points_batch_with_components :: proc(
     state: ^Euclid_General_State,
-    world_points: []Vector3,
-    xs, ys, zs: []f32,
-    out: []Vector2) -> int {
-    count := len(world_points)
-    if len(xs) < count {
-        count = len(xs)
+    params: Iso_Batch_Project_Params) -> int {
+    count := len(params.world_points)
+    if len(params.xs) < count {
+        count = len(params.xs)
     }
-    if len(ys) < count {
-        count = len(ys)
+    if len(params.ys) < count {
+        count = len(params.ys)
     }
-    if len(zs) < count {
-        count = len(zs)
+    if len(params.zs) < count {
+        count = len(params.zs)
     }
-    if len(out) < count {
-        count = len(out)
+    if len(params.out) < count {
+        count = len(params.out)
     }
 
     for i in 0..<count {
-        p := world_points[i]
-        xs[i] = p.x
-        ys[i] = p.y
-        zs[i] = p.z
+        p := params.world_points[i]
+        params.xs[i] = p.x
+        params.ys[i] = p.y
+        params.zs[i] = p.z
     }
 
-    return view_core.iso_to_cartesian_components_batch_selected(
-        xs[:count],
-        ys[:count],
-        zs[:count],
-        out[:count],
+    return view_core.iso_to_cartesian_components_batch_selected({
+        params.xs[:count],
+        params.ys[:count],
+        params.zs[:count],
+        params.out[:count],
         state^.iso_scale^,
-        state^.ui_runtime.use_simd_batch_projection)
+    }, state^.ui_runtime.use_simd_batch_projection)
 }
 
 
 
+
+//   Draw one prime decoration glyph at the resolved position and size.
+label_draw_prime :: #force_inline proc(
+    state: ^Euclid_General_State, pos: rl.Vector2, size: f32, color: rl.Color) {
+    rl.DrawTextCodepoint(state^.font, '\'', pos, size, color)
+}
+
+//   Draw a run of prime decoration glyphs spaced across the label.
+label_draw_prime_run :: proc(
+    state: ^Euclid_General_State,
+    c: rl.Vector2,
+    brush_size: f32,
+    color: rl.Color,
+    count: int) {
+
+    width := brush_size * LABEL_DECORATION_WIDTH_SCALE
+    height := brush_size * LABEL_DECORATION_HEIGHT_SCALE
+    prime_pos := rl.Vector2{
+        c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
+        c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
+    }
+    prime_size := math.max(16.0, brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
+    spacing := prime_size * LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE
+    for i in 0..<count {
+        pos := rl.Vector2{prime_pos.x + f32(i) * spacing, prime_pos.y}
+        label_draw_prime(state, pos, prime_size, color)
+    }
+}
 
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawTextCodepoint(state^.font, p^.label, c, p^.brush_size, p^.color)
 
-    width := p^.brush_size * LABEL_DECORATION_WIDTH_SCALE
-    height := p^.brush_size * LABEL_DECORATION_HEIGHT_SCALE
-
     switch p^.decoration_kind {
     case .None:
     case .Prime:
-        prime_pos := rl.Vector2{
-            c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
-            c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
-        }
-        prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
-        rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
-    case .DoublePrime:
-        prime_pos := rl.Vector2{
-            c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
-            c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
-        }
-        prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
-        second_prime_pos := rl.Vector2{
-            prime_pos.x + prime_size * LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE,
-            prime_pos.y,
-        }
-        rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
-        rl.DrawTextCodepoint(state^.font, '\'', second_prime_pos, prime_size, p^.color)
-    case .TriplePrime:
-        prime_pos := rl.Vector2{
-            c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
-            c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
-        }
-        prime_size := math.max(16.0, p^.brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
-        second_prime_pos := rl.Vector2{
-            prime_pos.x + prime_size * LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE,
-            prime_pos.y,
-        }
-        third_prime_pos := rl.Vector2{
-            second_prime_pos.x + prime_size * LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE,
-            second_prime_pos.y,
-        }
-        rl.DrawTextCodepoint(state^.font, '\'', prime_pos, prime_size, p^.color)
-        rl.DrawTextCodepoint(state^.font, '\'', second_prime_pos, prime_size, p^.color)
-        rl.DrawTextCodepoint(state^.font, '\'', third_prime_pos, prime_size, p^.color)
+        label_draw_prime_run(state, c, p^.brush_size, p^.color, 1)
+    case .Double_Prime:
+        label_draw_prime_run(state, c, p^.brush_size, p^.color, 2)
+    case .Triple_Prime:
+        label_draw_prime_run(state, c, p^.brush_size, p^.color, 3)
     case .Hat:
         //TODO: Do this
     case .Bar:
@@ -1293,36 +1458,11 @@ draw_cached_circle_shadow :: proc(
         return
     }
 
-    start := c^.start
-    finish := c^.end
-    center := c^.center
-
-    start_vec := start - center
-    end_vec := finish - center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
+    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
     thickness := math.max(c^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    arc_world[0] = start
-    seg_count := f32(CIRCLE_ARC_SEGMENTS)
-
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / seg_count
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
-
-        arc_world[i] = Vector3{
-            center.x + f32(math.cos(theta)) * radius,
-            center.y + f32(math.sin(theta)) * radius,
-            center.z,
-        }
-    }
+    circle_arc_sample_world(&geom, c^.start, arc_world[:])
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
         clipped0 := Vector3{}
@@ -1355,41 +1495,15 @@ draw_cached_filledcircle_shadow :: proc(
         return
     }
 
-    start := c^.start
-    finish := c^.end
-    center := c^.center
-
-    start_vec := start - center
-    end_vec := finish - center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
+    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
     avg_height := average_shadow_height(circle_points[:])
     shadow_color := make_shadow_color(c^.color, avg_height)
 
-    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
-    points[0] = shadow_to_screen(center, state)
-
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    arc_world[0] = start
+    circle_arc_sample_world(&geom, c^.start, arc_world[:])
 
-    seg_count := f32(CIRCLE_ARC_SEGMENTS)
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / seg_count
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
-
-        arc_world[i] = Vector3{
-            center.x + f32(math.cos(theta)) * radius,
-            center.y + f32(math.sin(theta)) * radius,
-            center.z,
-        }
-    }
-
+    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
+    points[0] = shadow_to_screen(geom.center, state)
     for i in 0..<len(arc_world) {
         points[i + 1] = shadow_to_screen(arc_world[i], state)
     }
@@ -1428,47 +1542,22 @@ draw_cached_line :: proc(
 
 //   Render one cached circle/arc draw item.
 draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^core.Shapes_Circle_Draw) {
-    start := c^.start
-    finish := c^.end
-    center := c^.center
-
-    start_vec := start - center
-    end_vec := finish - center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
+    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    arc_world[0] = start
-    seg_count := f32(CIRCLE_ARC_SEGMENTS)
-
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / seg_count
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
-
-        curr_world := Vector3{
-            center.x + f32(math.cos(theta)) * radius,
-            center.y + f32(math.sin(theta)) * radius,
-            center.z,
-        }
-
-        arc_world[i] = curr_world
-    }
+    circle_arc_sample_world(&geom, c^.start, arc_world[:])
 
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
     _ = project_iso_points_batch_with_components(
         state,
-        arc_world[:],
-        xs[:],
-        ys[:],
-        zs[:],
-        arc_screen[:])
+        Iso_Batch_Project_Params{
+            world_points = arc_world[:],
+            xs = xs[:],
+            ys = ys[:],
+            zs = zs[:],
+            out = arc_screen[:],
+        })
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
         rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size, c^.color)
@@ -1478,49 +1567,26 @@ draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^core.Shapes_Circle_
 //   Render one cached filled-circle draw item.
 draw_cached_filledcircle :: proc(
     state: ^Euclid_General_State, c: ^core.Shapes_Filled_Circle_Draw) {
-    start := c^.start
-    finish := c^.end
-    center := c^.center
-    isocenter := view_core.iso_to_cartesian(center, state^.iso_scale^)
-
-    start_vec := start - center
-    end_vec := finish - center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + c^.offset
-
-    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
-    points[0] = isocenter
+    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
+    isocenter := view_core.iso_to_cartesian(geom.center, state^.iso_scale^)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    arc_world[0] = start
-
-    seg_count := f32(CIRCLE_ARC_SEGMENTS)
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        t := f32(i) / seg_count
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
-
-        arc_world[i] = Vector3{
-            center.x + f32(math.cos(theta)) * radius,
-            center.y + f32(math.sin(theta)) * radius,
-            center.z,
-        }
-    }
+    circle_arc_sample_world(&geom, c^.start, arc_world[:])
 
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
     _ = project_iso_points_batch_with_components(
         state,
-        arc_world[:],
-        xs[:],
-        ys[:],
-        zs[:],
-        arc_screen[:])
+        Iso_Batch_Project_Params{
+            world_points = arc_world[:],
+            xs = xs[:],
+            ys = ys[:],
+            zs = zs[:],
+            out = arc_screen[:],
+        })
+
+    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
+    points[0] = isocenter
     for i in 0..<len(arc_screen) {
         points[i + 1] = arc_screen[i]
     }
@@ -1542,11 +1608,13 @@ project_cached_polygon_vertices :: #force_inline proc(
 
     _ = project_iso_points_batch_with_components(
         state,
-        vertices,
-        xs[:],
-        ys[:],
-        zs[:],
-        projected)
+        Iso_Batch_Project_Params{
+            world_points = vertices,
+            xs = xs[:],
+            ys = ys[:],
+            zs = zs[:],
+            out = projected,
+        })
 
     return true
 }
@@ -1624,7 +1692,7 @@ draw_cached_pen :: proc(state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw
     c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
-    draw_stroke3d_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
 
 
@@ -1649,29 +1717,29 @@ draw_cached_pen_active_dot :: proc(
     }
 }
 
+//   Compute the orthonormal arc basis, radius, and outside sweep for a compass.
+//
+// Returns:
+//   - basis: Populated basis when ok.
+//   - ok: true when the leg vectors are non-degenerate and radius is positive.
+compass_top_circle_basis :: proc(
+    p0, p1, p2: Vector3) -> (Compass_Top_Circle_Basis, bool) {
+    basis := Compass_Top_Circle_Basis{}
 
-//   Render compass top arc segment that lies outside the swing angle.
-draw_outside_arc_compass_cached :: proc(
-    p0, p1, p2: Vector3,
-    state: ^Euclid_General_State,
-    brush_size: f32,
-    color: rl.Color) {
     a := p0 - p1
     b := p2 - p1
-
     a_len := linalg.length(a)
     b_len := linalg.length(b)
     if a_len <= 0.00001 || b_len <= 0.00001 {
-        return
+        return basis, false
     }
 
     an := a / a_len
     bn := b / b_len
-
     n := linalg.cross(an, bn)
     n_len := linalg.length(n)
     if n_len <= 0.00001 {
-        return
+        return basis, false
     }
     n /= n_len
 
@@ -1683,28 +1751,36 @@ draw_outside_arc_compass_cached :: proc(
     if theta_short < 0 {
         sign = -1.0
     }
-    theta_out := theta_short - 2.0 * math.PI * sign
+    basis.theta_out = theta_short - 2.0 * math.PI * sign
+    basis.u = an
+    basis.v = linalg.normalize(linalg.cross(n, basis.u))
+    basis.radius = math.min(a_len, b_len) * COMPASS_TOPCIRCLE_RADIUS
+    if basis.radius <= 0 {
+        return basis, false
+    }
+    return basis, true
+}
 
-    u := an
-    v := linalg.normalize(linalg.cross(n, u))
-
-    radius := math.min(a_len, b_len) * COMPASS_TOPCIRCLE_RADIUS
-    if radius <= 0 {
+//   Render compass top arc segment that lies outside the swing angle.
+draw_outside_arc_compass_cached :: proc(
+    p0, p1, p2: Vector3, draw: Compass_Arc_Draw) {
+    basis, ok := compass_top_circle_basis(p0, p1, p2)
+    if !ok {
         return
     }
 
-    step := theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-
-    prev3d := p1 + u * radius
+    state := draw.state
+    step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
+    prev3d := p1 + basis.u * basis.radius
     prev := view_core.iso_to_cartesian(prev3d, state^.iso_scale^)
 
     for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
         t := step * f32(i)
-        dir := u * math.cos(t) + v * math.sin(t)
-        curr3d := p1 + dir * radius
+        dir := basis.u * math.cos(t) + basis.v * math.sin(t)
+        curr3d := p1 + dir * basis.radius
         curr := view_core.iso_to_cartesian(curr3d, state^.iso_scale^)
 
-        draw_stroke3d_segment(state, prev, curr, brush_size, color)
+        draw_tool_brush_segment(state, prev, curr, draw.brush_size, draw.color)
         prev = curr
     }
 }
@@ -1719,21 +1795,15 @@ draw_cached_compass :: proc(
 
     draw_joint1_last := compass_draw_joint1_leg_last(comp, c0, c1, c2)
     if draw_joint1_last {
-        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
-        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
     } else {
-        draw_stroke3d_segment(state, c0, c1, comp^.brush_size, comp^.color)
-        draw_stroke3d_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
     }
 
-    draw_outside_arc_compass_cached(
-        comp^.joint1,
-        comp^.pivot,
-        comp^.joint2,
-        state,
-        comp^.brush_size,
-        comp^.color,
-    )
+    draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
+        Compass_Arc_Draw{state, comp^.brush_size, comp^.color})
 }
 
 
@@ -1774,63 +1844,28 @@ draw_cached_pen_shadow :: proc(state: ^Euclid_General_State, pen: ^core.Shapes_P
 
 //   Render floor-shadow arc segment outside the compass swing angle.
 draw_outside_arc_compass_shadow_cached :: proc(
-    p0, p1, p2: Vector3,
-    state: ^Euclid_General_State,
-    brush_size: f32,
-    color: rl.Color) {
-    if brush_size <= 0 {
+    p0, p1, p2: Vector3, draw: Compass_Arc_Draw) {
+    if draw.brush_size <= 0 {
         return
     }
 
-    a := p0 - p1
-    b := p2 - p1
-
-    a_len := linalg.length(a)
-    b_len := linalg.length(b)
-    if a_len <= 0.00001 || b_len <= 0.00001 {
+    basis, ok := compass_top_circle_basis(p0, p1, p2)
+    if !ok {
         return
     }
 
-    an := a / a_len
-    bn := b / b_len
-
-    n := linalg.cross(an, bn)
-    n_len := linalg.length(n)
-    if n_len <= 0.00001 {
-        return
-    }
-    n /= n_len
-
-    dot_ab := math.clamp(linalg.dot(an, bn), -1, 1)
-    cross_ab := linalg.cross(an, bn)
-    theta_short := math.atan2(linalg.dot(n, cross_ab), dot_ab)
-
-    sign := f32(1.0)
-    if theta_short < 0 {
-        sign = -1.0
-    }
-    theta_out := theta_short - 2.0 * math.PI * sign
-
-    u := an
-    v := linalg.normalize(linalg.cross(n, u))
-
-    radius := math.min(a_len, b_len) * COMPASS_TOPCIRCLE_RADIUS
-    if radius <= 0 {
-        return
-    }
-
-    step := theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-
-    prev3d := p1 + u * radius
+    state := draw.state
+    step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
+    prev3d := p1 + basis.u * basis.radius
     prev := shadow_to_screen(prev3d, state)
 
     for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
         t := step * f32(i)
-        dir := u * math.cos(t) + v * math.sin(t)
-        curr3d := p1 + dir * radius
+        dir := basis.u * math.cos(t) + basis.v * math.sin(t)
+        curr3d := p1 + dir * basis.radius
         curr := shadow_to_screen(curr3d, state)
 
-        rl.DrawLineEx(prev, curr, brush_size, color)
+        rl.DrawLineEx(prev, curr, draw.brush_size, draw.color)
         prev = curr
     }
 }
@@ -1856,12 +1891,6 @@ draw_cached_compass_shadow :: proc(
         rl.DrawLineEx(s1, s2, thickness, shadow_color)
     }
 
-    draw_outside_arc_compass_shadow_cached(
-        comp^.joint1,
-        comp^.pivot,
-        comp^.joint2,
-        state,
-        thickness,
-        shadow_color,
-    )
+    draw_outside_arc_compass_shadow_cached(comp^.joint1, comp^.pivot, comp^.joint2,
+        Compass_Arc_Draw{state, thickness, shadow_color})
 }

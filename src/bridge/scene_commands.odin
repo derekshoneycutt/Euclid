@@ -12,7 +12,7 @@ SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
 SCENE_COMMAND_POINT_BATCH_CAPACITY :: core.SCENE_COMMAND_POINT_BATCH_CAPACITY
 
 //   Per-kind validator shape: report whether one command is valid against state.
-Scene_Command_Validator :: proc(
+Scene_Command_Validator :: #type proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool
 
 //   Dispatch table mapping each scene command kind to its validator. The enum key
@@ -44,7 +44,7 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
 }
 
 //   Per-kind applier shape: apply one validated command against canonical state.
-Scene_Command_Applier :: proc(
+Scene_Command_Applier :: #type proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command)
 
 //   Dispatch table mapping each scene command kind to its applier. The enum key
@@ -514,8 +514,8 @@ apply_lock_pen_joint1 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_pen_joint1(state, command^.position)
     _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen", "joint1",
-        command^.position, nil, nil)
+        &state^.trace_state, "pen.joint_changed", "pen",
+        {"joint1", command^.position, nil, nil})
 }
 
 //   Apply one pen-joint2 move command and record its joint-change event.
@@ -523,8 +523,8 @@ apply_move_pen_joint2 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     move_pen_joint2(state, command^.position)
     _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen", "joint2",
-        command^.position, nil, nil)
+        &state^.trace_state, "pen.joint_changed", "pen",
+        {"joint2", command^.position, nil, nil})
 }
 
 //   Apply one set-pen-active command and record its active-change event.
@@ -532,8 +532,8 @@ apply_set_pen_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_pen_active(state, i32(command^.integer), command^.color)
     _ = trace.record_tool_event(
-        &state^.trace_state, "pen.active_changed", "pen", "",
-        nil, nil, command^.integer)
+        &state^.trace_state, "pen.active_changed", "pen",
+        {"", nil, nil, command^.integer})
 }
 
 //   Apply one show-pen command and record its visibility-change event.
@@ -541,8 +541,8 @@ apply_show_pen :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     show_pen(state)
     _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen", "",
-        nil, true, nil)
+        &state^.trace_state, "pen.visibility_changed", "pen",
+        {"", nil, true, nil})
 }
 
 //   Apply one hide-pen command and record its visibility-change event.
@@ -550,8 +550,8 @@ apply_hide_pen :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     hide_pen(state)
     _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen", "",
-        nil, false, nil)
+        &state^.trace_state, "pen.visibility_changed", "pen",
+        {"", nil, false, nil})
 }
 
 //   Apply one hide-compass command and record its visibility-change event.
@@ -559,8 +559,8 @@ apply_hide_compass :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     hide_compass(state)
     _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass", "",
-        nil, false, nil)
+        &state^.trace_state, "compass.visibility_changed", "compass",
+        {"", nil, false, nil})
 }
 
 //   Apply one show-compass command and record its visibility-change event.
@@ -568,8 +568,8 @@ apply_show_compass :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     show_compass(state)
     _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass", "",
-        nil, true, nil)
+        &state^.trace_state, "compass.visibility_changed", "compass",
+        {"", nil, true, nil})
 }
 
 //   Apply one set-compass-active command and record its active-change event.
@@ -577,8 +577,8 @@ apply_set_compass_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_compass_active(state, i32(command^.integer), command^.color)
     _ = trace.record_tool_event(
-        &state^.trace_state, "compass.active_changed", "compass", "",
-        nil, nil, command^.integer)
+        &state^.trace_state, "compass.active_changed", "compass",
+        {"", nil, nil, command^.integer})
 }
 
 //   Apply one compass-joint1 lock command and record its joint-change event.
@@ -586,8 +586,8 @@ apply_lock_compass_joint1 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_compass_joint1(state, command^.position, command^.flag)
     _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass", "joint1",
-        command^.position, nil, nil)
+        &state^.trace_state, "compass.joint_changed", "compass",
+        {"joint1", command^.position, nil, nil})
 }
 
 //   Apply one compass-joint2 lock command and record its joint-change event.
@@ -595,8 +595,8 @@ apply_lock_compass_joint2 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_compass_joint2(state, command^.position, command^.flag)
     _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass", "joint2",
-        command^.position, nil, nil)
+        &state^.trace_state, "compass.joint_changed", "compass",
+        {"joint2", command^.position, nil, nil})
 }
 
 //   Apply one set-animation-meta command.
@@ -622,7 +622,7 @@ apply_emit_trailing_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_trailing_particle(state, command^.position, command^.color)
     _ = trace.record_particles_emitted(
-        &state^.trace_state, "trail", "mid", 1, command^.position, command^.color)
+        &state^.trace_state, {"trail", "mid", 1, command^.position, command^.color})
 }
 
 //   Apply one emit-flicker-particle command and record its emission.
@@ -630,8 +630,7 @@ apply_emit_flicker_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_flicker_particle(state, command^.position, command^.color)
     _ = trace.record_particles_emitted(
-        &state^.trace_state, "flicker", "high", 10, command^.position,
-        command^.color)
+        &state^.trace_state, {"flicker", "high", 10, command^.position, command^.color})
 }
 
 //   Apply one animation-cycle-boundary notification command.

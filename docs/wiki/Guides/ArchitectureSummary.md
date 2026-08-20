@@ -23,7 +23,8 @@ The overall structure includes 2 programming languages, Odin and Julia.
 
 - **Odin** code provides the application shell, rendering loop, simulation data model,
     memory ownership, and bridge exports. It owns long-lived application state
-    (`Euclid_General_State`), rendering, UI, and systems (shapes + particles + gif capture).
+  (`Euclid_General_State`), rendering, UI, and systems (shapes + particles +
+  gif capture).
 - **Julia** code provides animation/content logic loaded from scripts at runtime. It
     registers an animation tree and drives per-animation behavior by calling exported
     Odin-Julia Bridge functions.
@@ -40,8 +41,13 @@ A useful mental model:
 If you are new, read in this order:
 
 1. Host lifecycle path (`src/main.odin`, `src/view/view.odin`).
-1. Host/runtime boundary (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin`, `src/julia/odin-julia-bridge.jl`).
-1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`).
+1. Host/runtime boundary (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`,
+   `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`,
+   `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`,
+   `src/bridge/dynview.odin`, `src/julia/odin-julia-bridge.jl`).
+1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile.odin`,
+   `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`,
+   `src/dynview/styles.odin`).
 1. Julia runtime entry (`src/julia/script.jl`).
 1. Then continue by module using the maps below, touching only each module's
    highlighted files first.
@@ -312,9 +318,9 @@ ordering:
 1. Advance display-owned `fixed_step` and deterministic `simulation_time`.
 1. Emit the post-join semantic trace summary.
 
-The interactive loop calls `run_windowed_fixed_step`, which layers GIF capture state on top of
-that deterministic step. GIF behavior is presentation-side policy and is not part of the core
-semantic step boundary.
+The interactive loop calls `run_windowed_fixed_step`, which layers GIF capture
+state on top of that deterministic step. GIF behavior is presentation-side
+policy and is not part of the core semantic step boundary.
 
 Particle workers exclusively mutate `Particle_System`; constraint workers
 exclusively mutate `Shapes_Point_System`. Their task payloads and pool
@@ -352,17 +358,20 @@ display thread.
 
 ## Testing Strategy
 
-Euclid's testing foundation is the ordinary unit and module test suite. Those tests are the
-first line of defense for geometry, dynview, files, particles, bridge behavior, and runtime
-invariants before any higher-level harness or trace system is involved.
+Euclid's testing foundation is the ordinary unit and module test suite. Those
+tests are the first line of defense for geometry, dynview, files, particles,
+bridge behavior, and runtime invariants before any higher-level harness or trace
+system is involved.
 
-On top of that baseline, Euclid now has a dedicated testing architecture built around semantic
-tracing, deterministic fixed-step execution, and a headless runtime harness. The interactive app
-and the harness share the same runtime session and deterministic step boundary, while test-only
-orchestration remains outside the production control surface.
+On top of that baseline, Euclid now has a dedicated testing architecture built
+around semantic tracing, deterministic fixed-step execution, and a headless
+runtime harness. The interactive app and the harness share the same runtime
+session and deterministic step boundary, while test-only orchestration remains
+outside the production control surface.
 
-See [TestingStrategy.md](TestingStrategy.md) for the full testing model, including trace
-ownership, checkpoint boundaries, harness usage, failure policy, and current coverage gaps.
+See [TestingStrategy.md](TestingStrategy.md) for the full testing model,
+including trace ownership, checkpoint boundaries, harness usage, failure policy,
+and current coverage gaps.
 
 ---
 
@@ -395,8 +404,10 @@ This policy is strict by design.
     on subsystem/application teardown.
 1. Event-driven allocations outside steady frame loops.
    - Current approved cases are intentionally narrow:
-     1. Final contiguous GIF output buffer returned by encoder end with documented allocation.
-     1. Asset-unpack decompression staging allocation released immediately when unpack completes.
+      1. Final contiguous GIF output buffer returned by encoder end with
+        documented allocation.
+      1. Asset-unpack decompression staging allocation released immediately when
+        unpack completes.
    - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
 
 ### Current Arena Notes
@@ -419,9 +430,10 @@ This policy is strict by design.
 ## Build and Packaging Model
 
 - The `Makefile` is the standard entry point on systems that support `make`. It runs
-  the `configure` script once (toolchain check + Julia dependency install) and then
+  `tools/configure.sh` once (toolchain check + Julia dependency install) and then
   drives `make.jl`. Bare `make` builds; `make test` runs the full verification gate.
-- `configure` (polyglot sh/PowerShell) verifies the toolchain and installs Julia
+  On Windows, `make.ps1` performs the same configure steps natively in PowerShell.
+- `tools/configure.sh` (POSIX sh) verifies the toolchain and installs Julia
   dependencies; `make.jl` is the build/test/vet driver that both wrap.
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
 - Packaged assets include:
@@ -429,7 +441,8 @@ This policy is strict by design.
   - `src/view/shaders/**`
   - `assets/**`
   - `manifest.txt`
-- At startup, app unpacks `assets.pkg` to a writable cache directory and resolves runtime paths from there.
+- At startup, app unpacks `assets.pkg` to a writable cache directory and
+  resolves runtime paths from there.
 
 ---
 
@@ -475,11 +488,16 @@ make animations "fit in".
 
 ## Key Architecture Takeaways
 
-- The app is **host-driven**: Odin controls lifecycle, simulation pacing, rendering, and core state.
-- Julia is **content-driven**: scripts define what animation behavior runs and what geometry/tools are manipulated.
+- The app is **host-driven**: Odin controls lifecycle, simulation pacing,
+  rendering, and core state.
+- Julia is **content-driven**: scripts define what animation behavior runs and
+  what geometry/tools are manipulated.
 - The bridge is the contract: keep Odin exports and Julia wrappers aligned.
 - Host memory strategy is lifecycle-scoped: startup allocations, temp scratch,
   and dedicated arenas for targeted subsystems.
-- Dynview is now a dual-path text system: fallback plain text plus validated structured streams.
-- LaTeX is parsed and compiled in Julia (`src/julia/latex.jl`) and laid out/rendered in Odin dynview.
-- Assets are packaged and loaded at runtime, enabling script/content iteration without redesigning host architecture.
+- Dynview is now a dual-path text system: fallback plain text plus validated
+  structured streams.
+- LaTeX is parsed and compiled in Julia (`src/julia/latex.jl`) and laid
+  out/rendered in Odin dynview.
+- Assets are packaged and loaded at runtime, enabling script/content iteration
+  without redesigning host architecture.

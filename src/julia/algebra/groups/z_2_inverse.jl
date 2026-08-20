@@ -3,6 +3,7 @@ module EuclidAlgebraGroupsZ2Inverse
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
+using ..EuclidGeometry
 
 export get_view_text, initialize, clean, loop
 
@@ -66,13 +67,9 @@ $a \circ a^{-1} = a^{-1} \circ a = e$, where $e$ is the identity.
 1. $e^{-1} = e$: doing nothing undoes itself.\newline
 2. $r^{-1} = r$: one reflection undoes itself because reflecting twice gives back the original figure."""
 
-function reflect_about_axis_x_half(point::Vector{Float32})
-    Float32[1f0 - point[1], point[2], point[3]]
-end
-
-const RefVertexA = reflect_about_axis_x_half(VertexA)
-const RefVertexB = reflect_about_axis_x_half(VertexB)
-const RefVertexC = reflect_about_axis_x_half(VertexC)
+const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
+const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
+const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
 
 const ReflectLineStartBase = (
     VertexA,
@@ -93,10 +90,13 @@ const ReflectLineStartMirrored = (
 const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr, InverseLatexDocument, InverseFallbackText)
+    EuclidLatex.emit_latex_view_text!(state_ptr,
+        InverseLatexDocument, InverseFallbackText)
 end
 
+"""Apply a set of reflection poses to the tracked points."""
 function set_reflection_pose!(
     state_ptr::Ptr{Cvoid},
     point_ids::NTuple{6,Int64},
@@ -107,6 +107,7 @@ function set_reflection_pose!(
     end
 end
 
+"""Animate one reflection step, interpolating points from their start poses."""
 function animate_reflection_step!(
     state_ptr::Ptr{Cvoid},
     timer::Float32,
@@ -140,6 +141,7 @@ function animate_reflection_step!(
     end
 end
 
+"""Reset the three reflection lines to their default colors."""
 function reset_line_colors!(
     state_ptr::Ptr{Cvoid},
     line_host_id_1::Int,
@@ -151,16 +153,26 @@ function reset_line_colors!(
     OdinJuliaBridge.set_point_color(state_ptr, line_host_id_3, SideColors[3])
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_host_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1])))
-    line_host_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[2])))
-    line_host_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[3])))
-    line_joint1_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[1])))
-    line_joint1_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[2])))
-    line_joint1_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[3])))
-    line_joint2_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[1])))
-    line_joint2_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[2])))
-    line_joint2_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[3])))
+    line_host_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[1])))
+    line_host_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[2])))
+    line_host_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[3])))
+    line_joint1_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[1])))
+    line_joint1_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[2])))
+    line_joint1_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[3])))
+    line_joint2_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[1])))
+    line_joint2_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[2])))
+    line_joint2_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[3])))
 
     if line_host_id_1 < 0 || line_host_id_2 < 0 || line_host_id_3 < 0
         return
@@ -202,41 +214,52 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:3
         line = OdinJuliaBridge.create_new_line(
-            state_ptr,
-            SideStarts[i],
-            SideStarts[i],
-            SideColors[i],
-            0f0)
+            state_ptr, SideStarts[i], SideStarts[i], SideColors[i], 0f0)
 
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostIds[i], Float32(line.hostId))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1Id))
-        OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2Id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineHostIds[i], Float32(line.host_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint1Ids[i], Float32(line.joint1_id))
+        OdinJuliaBridge.set_animation_meta(state_ptr,
+            MetaLineJoint2Ids[i], Float32(line.joint2_id))
     end
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_host_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[1])))
-    line_host_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[2])))
-    line_host_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostIds[3])))
+    line_host_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[1])))
+    line_host_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[2])))
+    line_host_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostIds[3])))
 
     if line_host_id_1 < 0
         return
     end
 
-    line_joint1_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[1])))
-    line_joint1_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[2])))
-    line_joint1_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Ids[3])))
-    line_joint2_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[1])))
-    line_joint2_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[2])))
-    line_joint2_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Ids[3])))
+    line_joint1_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[1])))
+    line_joint1_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[2])))
+    line_joint1_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Ids[3])))
+    line_joint2_id_1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[1])))
+    line_joint2_id_2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[2])))
+    line_joint2_id_3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Ids[3])))
 
     line_reflection_point_ids = (
         Int64(line_joint1_id_1),
@@ -271,21 +294,21 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseDrawAB || phase == PhaseDrawBC || phase == PhaseDrawCA
         side_index = Int(phase)
-        line_host_id = side_index == 1 ? line_host_id_1 : (side_index == 2 ? line_host_id_2 : line_host_id_3)
-        line_joint1_id = side_index == 1 ? line_joint1_id_1 : (side_index == 2 ? line_joint1_id_2 : line_joint1_id_3)
-        line_joint2_id = side_index == 1 ? line_joint2_id_1 : (side_index == 2 ? line_joint2_id_2 : line_joint2_id_3)
+        line_host_id = side_index == 1 ? line_host_id_1 :
+            (side_index == 2 ? line_host_id_2 : line_host_id_3)
+        line_joint1_id = side_index == 1 ? line_joint1_id_1 :
+            (side_index == 2 ? line_joint1_id_2 : line_joint1_id_3)
+        line_joint2_id = side_index == 1 ? line_joint2_id_1 :
+            (side_index == 2 ? line_joint2_id_2 : line_joint2_id_3)
 
-        EuclidAnimations.animate_draw_line(
-            state_ptr,
-            timer,
-            SideDrawDuration,
-            SideStarts[side_index],
-            SideEnds[side_index],
-            TriangleBrush,
-            SideColors[side_index],
-            line_host_id,
-            line_joint1_id,
-            line_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, SideDrawDuration,
+            SideStarts[side_index], SideEnds[side_index];
+            penbrush=TriangleBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
 
         timer += dt
         if timer >= SideDrawDuration
@@ -308,7 +331,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= PenRiseDuration
             OdinJuliaBridge.hide_pen(state_ptr)
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineStartBase)
+            set_reflection_pose!(state_ptr,
+                line_reflection_point_ids, ReflectLineStartBase)
             phase = PhasePauseBeforeFirstReflection
             timer = 0f0
         end
@@ -328,7 +352,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ReflectionDuration
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndBase)
+            set_reflection_pose!(state_ptr,
+                line_reflection_point_ids, ReflectLineEndBase)
             phase = PhasePauseBetweenReflections
             timer = 0f0
         end
@@ -348,7 +373,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= ReflectionDuration
-            set_reflection_pose!(state_ptr, line_reflection_point_ids, ReflectLineEndMirrored)
+            set_reflection_pose!(state_ptr,
+                line_reflection_point_ids, ReflectLineEndMirrored)
             phase = PhasePauseAfterSecondReflection
             timer = 0f0
         end

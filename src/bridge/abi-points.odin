@@ -6,25 +6,10 @@ import "../shapes"
 
 import rl "vendor:raylib"
 
-//   Create a new label shape in the shapes system for Julia-driven animation state.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - label: Rune glyph used by label point shapes.
-//   - pos: 3D position used for shape/tool placement in world space.
-//   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
-//
-// Returns:
-//   - Snapshot struct for the newly created label host with resolved draw/style/child fields.
-@(export)
-create_new_label :: proc "c" (
-    state: ^core.Euclid_General_State,
-    label: rune, pos: core.Vector3,
-    color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
-
-    return create_new_label_decorated(
-        state, label, i32(core.Shapes_Label_Decoration_Kind.None), pos, color, brushSize)
+Child_Chain_Walk :: struct {
+    tail:   int,
+    count:  int,
+    status: i32,
 }
 
 //   Create a new label shape in the shapes system for Julia-driven animation state.
@@ -32,62 +17,57 @@ create_new_label :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - label: Rune glyph used by label point shapes.
-//   - decoration_kind: Decoration enum encoded as integer.
-//     none=0, prime=1, doubleprime=2, tripleprime=3, hat=4, bar=5.
 //   - pos: 3D position used for shape/tool placement in world space.
 //   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
+//
+// Returns:
+//   - Snapshot struct for the newly created label host with resolved draw/style/child fields.
+@(export)
+create_new_label :: proc "c" (
+    state: ^core.Euclid_General_State,
+    label: rune, pos: core.Vector3,
+    color: Bridge_Color, brush_size: f32) -> Bridge_Point_View {
+
+    return create_new_label_decorated(
+        state,
+        core.Bridge_Label_Glyph{
+            label = label,
+            decoration_kind = i32(core.Shapes_Label_Decoration_Kind.None),
+        },
+        pos, color, brush_size)
+}
+
+//   Create a new label shape in the shapes system for Julia-driven animation state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - glyph: Label rune and decoration kind.
+//   - pos: 3D position used for shape/tool placement in world space.
+//   - color: RGBA color payload in bridge format.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
 // Returns:
 //   - Snapshot struct for the newly created label host with resolved draw/style/child fields.
 @(export)
 create_new_label_decorated :: proc "c" (
     state: ^core.Euclid_General_State,
-    label: rune,
-    decoration_kind: i32,
+    glyph: core.Bridge_Label_Glyph,
     pos: core.Vector3,
     color: Bridge_Color,
-    brushSize: f32) -> Bridge_Point_View {
+    brush_size: f32) -> Bridge_Point_View {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    use_decoration_kind := label_decoration_kind_from_i32(decoration_kind)
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+    use_decoration_kind := label_decoration_kind_from_i32(glyph.decoration_kind)
     point, index := shapes.init_label(
-        state^.point_system, label, use_decoration_kind, pos, rlColor, brushSize)
+        state^.point_system,
+        {glyph.label, use_decoration_kind, pos, {rl_color, brush_size}})
 
-    use_pos, hasPos := point^.position.?
-    color, hasColor := point^.color.?
-    activeColor, hasActiveColor := point^.active_color.?
-    use_label, hasLabel := point^.label.?
-
-    return Bridge_Point_View{
-        valid = true,
-        index = index,
-
-        point_type = 1,
-        do_draw = point^.do_draw,
-        brush_size = point^.brush_size,
-        offset = point^.offset,
-
-        has_position = hasPos,
-        position = use_pos,
-
-        has_color = hasColor,
-        color = Bridge_Color{ color.r, color.g, color.b, color.a },
-
-        has_active_color = hasActiveColor,
-        active_color =
-            Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
-
-        has_label = hasLabel,
-        label = use_label,
-        decoration_kind = i32(point^.decoration_kind),
-
-        active_child = point^.active_child,
-        child_count = point^.child_count,
-        child_point_head = point^.child_point_head,
-        next_child_point = point^.next_child_point,
-    }
+    view := point_view_from_point(point^, index)
+    view.point_type = 1
+    view.offset = point^.offset
+    return view
 }
 
 //   Create a new point shape in the shapes system for Julia-driven animation state.
@@ -96,24 +76,24 @@ create_new_label_decorated :: proc "c" (
 //   - state: Global runtime state passed from the host application.
 //   - pos: 3D position used for shape/tool placement in world space.
 //   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
 // Returns:
 //   - Snapshot struct for the newly created point host with resolved draw/style/child fields.
 @(export)
 create_new_point :: proc "c" (
     state: ^core.Euclid_General_State,
-    pos: core.Vector3, color: Bridge_Color, brushSize: f32) -> Bridge_Point_View {
+    pos: core.Vector3, color: Bridge_Color, brush_size: f32) -> Bridge_Point_View {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     point, index := shapes.init_point(
-        state^.point_system, pos, rlColor, brushSize)
+        state^.point_system, pos, rl_color, brush_size)
 
-    use_pos, hasPos := point^.position.?
-    color, hasColor := point^.color.?
-    activeColor, hasActiveColor := point^.active_color.?
-    label, hasLabel := point^.label.?
+    use_pos, has_pos := point^.position.?
+    color, has_color := point^.color.?
+    active_color, has_active_color := point^.active_color.?
+    label, has_label := point^.label.?
 
     return Bridge_Point_View{
         valid = true,
@@ -124,17 +104,17 @@ create_new_point :: proc "c" (
         brush_size = point^.brush_size,
         offset = point^.offset,
 
-        has_position = hasPos,
+        has_position = has_pos,
         position = use_pos,
 
-        has_color = hasColor,
+        has_color = has_color,
         color = Bridge_Color{ color.r, color.g, color.b, color.a },
 
-        has_active_color = hasActiveColor,
-        active_color =
-            Bridge_Color{ activeColor.r, activeColor.g, activeColor.b, activeColor.a },
+        has_active_color = has_active_color,
+        active_color = Bridge_Color{ active_color.r, active_color.g,
+            active_color.b, active_color.a },
 
-        has_label = hasLabel,
+        has_label = has_label,
         label = label,
         decoration_kind = i32(point^.decoration_kind),
 
@@ -152,7 +132,7 @@ create_new_point :: proc "c" (
 //   - point1: 3D position used for shape/tool placement in world space.
 //   - point2: 3D position used for shape/tool placement in world space.
 //   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
 // Returns:
 //   - Handle ids for the newly created line host and endpoint points.
@@ -160,12 +140,12 @@ create_new_point :: proc "c" (
 create_new_line :: proc "c" (
     state: ^core.Euclid_General_State,
     point1, point2: core.Vector3,
-    color: Bridge_Color, brushSize: f32) -> core.Shapes_Line {
+    color: Bridge_Color, brush_size: f32) -> core.Shapes_Line {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_line(
-        state^.point_system, point1, point2, rlColor, brushSize)
+        state^.point_system, point1, point2, rl_color, brush_size)
 
     return line
 }
@@ -175,24 +155,22 @@ create_new_line :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - center: 3D position used for shape/tool placement in world space.
-//   - radius: Circle radius in world units.
-//   - startTheta: Arc angle bound in radians.
-//   - endTheta: Arc angle bound in radians.
+//   - arc: Radius and arc angle bounds in radians.
 //   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
 // Returns:
 //   - Handle ids for the newly created circle host, center, and perimeter points.
 @(export)
 create_new_circle :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3, radius, startTheta, endTheta: f32,
-    color: Bridge_Color, brushSize: f32) -> core.Shapes_Circle {
+    center: core.Vector3, arc: core.Bridge_Arc_Geometry,
+    color: Bridge_Color, brush_size: f32) -> core.Shapes_Circle {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := shapes.init_circle(
-        state^.point_system, center, radius, startTheta, endTheta, rlColor, brushSize)
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+    circle := shapes.init_circle(state^.point_system,
+        {center, arc.radius, arc.start_theta, arc.end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -202,24 +180,22 @@ create_new_circle :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - center: 3D position used for shape/tool placement in world space.
-//   - radius: Circle radius in world units.
-//   - startTheta: Arc angle bound in radians.
-//   - endTheta: Arc angle bound in radians.
+//   - arc: Radius and arc angle bounds in radians.
 //   - color: RGBA color payload in bridge format.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
 // Returns:
 //   - Handle ids for the newly created filled circle host, center, and perimeter points.
 @(export)
 create_new_filledcircle :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3, radius, startTheta, endTheta: f32,
-    color: Bridge_Color, brushSize: f32) -> core.Shapes_Filled_Circle {
+    center: core.Vector3, arc: core.Bridge_Arc_Geometry,
+    color: Bridge_Color, brush_size: f32) -> core.Shapes_Filled_Circle {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    circle := shapes.init_filledcircle(
-        state^.point_system, center, radius, startTheta, endTheta, rlColor, brushSize)
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+    circle := shapes.init_filledcircle(state^.point_system,
+        {center, arc.radius, arc.start_theta, arc.end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -241,9 +217,9 @@ create_new_triangle :: proc "c" (
     point1, point2, point3: core.Vector3, color: Bridge_Color) -> core.Shapes_Triangle {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_triangle(
-        state^.point_system, point1, point2, point3, rlColor)
+        state^.point_system, point1, point2, point3, rl_color)
 
     return line
 }
@@ -252,10 +228,7 @@ create_new_triangle :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - point1: 3D position used for shape/tool placement in world space.
-//   - point2: 3D position used for shape/tool placement in world space.
-//   - point3: 3D position used for shape/tool placement in world space.
-//   - point4: 3D position used for shape/tool placement in world space.
+//   - vertices: Four 3D vertex positions for the square corners.
 //   - color: RGBA color payload in bridge format.
 //
 // Returns:
@@ -263,13 +236,13 @@ create_new_triangle :: proc "c" (
 @(export)
 create_new_square :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4: core.Vector3,
+    vertices: core.Bridge_Square_Vertices,
     color: Bridge_Color) -> core.Shapes_Square {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_square(
-        state^.point_system, point1, point2, point3, point4, rlColor)
+        state^.point_system, {vertices.vertices, rl_color})
 
     return line
 }
@@ -278,11 +251,7 @@ create_new_square :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - point1: 3D position used for shape/tool placement in world space.
-//   - point2: 3D position used for shape/tool placement in world space.
-//   - point3: 3D position used for shape/tool placement in world space.
-//   - point4: 3D position used for shape/tool placement in world space.
-//   - point5: 3D position used for shape/tool placement in world space.
+//   - vertices: Five 3D vertex positions for the pentagon corners.
 //   - color: RGBA color payload in bridge format.
 //
 // Returns:
@@ -290,15 +259,55 @@ create_new_square :: proc "c" (
 @(export)
 create_new_pentagon :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4, point5: core.Vector3,
+    vertices: core.Bridge_Pentagon_Vertices,
     color: Bridge_Color) -> core.Shapes_Pentagon {
 
     context = state^.saved_context
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_pentagon(
-        state^.point_system, point1, point2, point3, point4, point5, rlColor)
+        state^.point_system, {vertices.vertices, rl_color})
 
     return line
+}
+
+//   Map a point kind to its bridge point-type code.
+point_kind_to_type :: proc(kind: core.Shapes_Point_Type) -> int {
+    table := [?]int{ 1, 2, 3, 4, 5, 6, 7, 8, 100, 150 }
+    ordinal := int(kind)
+    if ordinal < 0 || ordinal >= len(table) {
+        return 0
+    }
+    return table[ordinal]
+}
+
+//   Build a bridge point view payload from a resolved point and index.
+point_view_from_point :: proc(point: core.Shapes_Point, index: int) -> Bridge_Point_View {
+    pos, has_pos := point.position.?
+    color, has_color := point.color.?
+    active_color, has_active_color := point.active_color.?
+    label, has_label := point.label.?
+
+    return Bridge_Point_View{
+        valid = true,
+        index = index,
+        point_type = 0,
+        do_draw = point.do_draw,
+        brush_size = point.brush_size,
+        has_position = has_pos,
+        position = pos,
+        has_color = has_color,
+        color = Bridge_Color{ color.r, color.g, color.b, color.a },
+        has_active_color = has_active_color,
+        active_color = Bridge_Color{ active_color.r, active_color.g,
+            active_color.b, active_color.a },
+        has_label = has_label,
+        label = label,
+        decoration_kind = i32(point.decoration_kind),
+        active_child = point.active_child,
+        child_count = point.child_count,
+        child_point_head = point.child_point_head,
+        next_child_point = point.next_child_point,
+    }
 }
 
 //   Build a bridge-safe snapshot of a point entry and its optional fields.
@@ -314,9 +323,7 @@ get_point_view :: proc "c" (
     state: ^core.Euclid_General_State,
     index_abi: i32) -> Bridge_Point_View {
 
-    // #vet forgives(cyclomatic_complexity) — bridge point-view snapshot.
-    // Maps one internal point to the ABI view struct; the switch/optional unwraps
-    // are the wire-format translation, not decomposable logic.
+    context = state^.saved_context
     index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
         point := state^.point_system^.points[index]
@@ -324,62 +331,10 @@ get_point_view :: proc "c" (
         if query_snapshot != nil {
             point = query_snapshot^.points[index]
         }
-        type: int = 0
-        switch point.kind {
-        case .Label:
-            type = 1
-        case .Point:
-            type = 2
-        case .Line:
-            type = 3
-        case .Circle:
-            type = 4
-        case .FilledCircle:
-            type = 5
-        case .Triangle:
-            type = 6
-        case .Square:
-            type = 7
-        case .Pentagon:
-            type = 8
-        case .Pen:
-            type = 100
-        case .Compass:
-            type = 150
-        }
-        pos, hasPos := point.position.?
-        color, hasColor := point.color.?
-        activeColor, hasActiveColor := point.active_color.?
-        label, hasLabel := point.label.?
 
-        return Bridge_Point_View{
-            valid = true,
-            index = index,
-
-            point_type = type,
-            do_draw = point.do_draw,
-            brush_size = point.brush_size,
-
-            has_position = hasPos,
-            position = pos,
-
-            has_color = hasColor,
-            color = Bridge_Color{ color.r, color.g, color.b, color.a },
-
-            has_active_color = hasActiveColor,
-            active_color =
-                Bridge_Color{ activeColor.r, activeColor.g,
-                    activeColor.b, activeColor.a },
-
-            has_label = hasLabel,
-            label = label,
-            decoration_kind = i32(point.decoration_kind),
-
-            active_child = point.active_child,
-            child_count = point.child_count,
-            child_point_head = point.child_point_head,
-            next_child_point = point.next_child_point,
-        }
+        view := point_view_from_point(point, index)
+        view.point_type = point_kind_to_type(point.kind)
+        return view
     }
 
     return Bridge_Point_View{
@@ -508,16 +463,16 @@ set_point_position :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - index: Target point or constraint index for this bridge operation.
-//   - brushSize: Stroke thickness for rendered point/shape geometry.
+//   - brush_size: Stroke thickness for rendered point/shape geometry.
 @(export)
 set_point_brush :: proc "c" (
-    state: ^core.Euclid_General_State, index_abi: i32, brushSize: f32) {
+    state: ^core.Euclid_General_State, index_abi: i32, brush_size: f32) {
     index := int(index_abi)
-    if capture_point_brush_command(state, index, brushSize) {
+    if capture_point_brush_command(state, index, brush_size) {
         return
     }
     if index >= 0 && index < MAX_SHAPESPOINTS {
-        state^.point_system^.points[index].brush_size = brushSize
+        state^.point_system^.points[index].brush_size = brush_size
     }
 }
 
@@ -535,8 +490,8 @@ set_point_color :: proc "c" (
         return
     }
     if index >= 0 && index < MAX_SHAPESPOINTS {
-        rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-        state^.point_system^.points[index].color = rlColor
+        rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+        state^.point_system^.points[index].color = rl_color
     }
 }
 
@@ -551,8 +506,8 @@ set_point_active_color :: proc "c" (
     state: ^core.Euclid_General_State, index_abi: i32, color: Bridge_Color) {
     index := int(index_abi)
     if index >= 0 && index < MAX_SHAPESPOINTS {
-        rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-        state^.point_system^.points[index].active_color = rlColor
+        rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+        state^.point_system^.points[index].active_color = rl_color
     }
 }
 
@@ -608,12 +563,12 @@ set_point_draw_enabled :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    point := &state^.point_system^.points[pointIndex]
+    point := &state^.point_system^.points[point_index]
     point^.do_draw = enabled != 0
     if point^.do_draw {
         emit_label_show_dust_push(state, point)
@@ -636,15 +591,15 @@ set_point_position_status :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
-    if capture_point_position_command(state, pointIndex, pos) {
+    if capture_point_position_command(state, point_index, pos) {
         return BRIDGE_STATUS_OK
     }
 
-    set_point_position_with_floor_crossing_dust(state, pointIndex, pos)
+    set_point_position_with_floor_crossing_dust(state, point_index, pos)
     return BRIDGE_STATUS_OK
 }
 
@@ -659,12 +614,12 @@ set_point_position_status :: proc "c" (
 @(export)
 clear_point_position :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> i32 {
     context = state^.saved_context
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].position = nil
+    state^.point_system^.points[point_index].position = nil
     return BRIDGE_STATUS_OK
 }
 
@@ -683,13 +638,13 @@ set_point_color_status :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    state^.point_system^.points[pointIndex].color = rlColor
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+    state^.point_system^.points[point_index].color = rl_color
     return BRIDGE_STATUS_OK
 }
 
@@ -704,12 +659,12 @@ set_point_color_status :: proc "c" (
 @(export)
 clear_point_color :: proc "c" (state: ^core.Euclid_General_State, index: i32) -> i32 {
     context = state^.saved_context
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].color = nil
+    state^.point_system^.points[point_index].color = nil
     return BRIDGE_STATUS_OK
 }
 
@@ -728,13 +683,13 @@ set_point_active_color_status :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    rlColor := rl.Color{ color.r, color.g, color.b, color.a }
-    state^.point_system^.points[pointIndex].active_color = rlColor
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
+    state^.point_system^.points[point_index].active_color = rl_color
     return BRIDGE_STATUS_OK
 }
 
@@ -750,12 +705,12 @@ set_point_active_color_status :: proc "c" (
 clear_point_active_color :: proc "c" (
     state: ^core.Euclid_General_State, index: i32) -> i32 {
     context = state^.saved_context
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].active_color = nil
+    state^.point_system^.points[point_index].active_color = nil
     return BRIDGE_STATUS_OK
 }
 
@@ -774,12 +729,12 @@ set_point_brush_size :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    state^.point_system^.points[pointIndex].brush_size = brush
+    state^.point_system^.points[point_index].brush_size = brush
     return BRIDGE_STATUS_OK
 }
 
@@ -798,15 +753,15 @@ set_point_offset :: proc "c" (
 
     context = state^.saved_context
 
-    pointIndex := int(index)
-    if !is_point_index_in_bounds(pointIndex) {
+    point_index := int(index)
+    if !is_point_index_in_bounds(point_index) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
-    if capture_point_scalar_command(state, .Set_Point_Offset, pointIndex, offset) {
+    if capture_point_scalar_command(state, .Set_Point_Offset, point_index, offset) {
         return BRIDGE_STATUS_OK
     }
 
-    state^.point_system^.points[pointIndex].offset = offset
+    state^.point_system^.points[point_index].offset = offset
     return BRIDGE_STATUS_OK
 }
 
@@ -814,8 +769,8 @@ set_point_offset :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - parentIndex: Parent point index.
-//   - childIndex: Child point index to append.
+//   - parent_index: Parent point index.
+//   - child_index: Child point index to append.
 //
 // Returns:
 //   - BRIDGE_STATUS_OK on success.
@@ -823,15 +778,12 @@ set_point_offset :: proc "c" (
 //   - BRIDGE_STATUS_INVALID_GRAPH for self-links, duplicate links, invalid chains, or pre-linked child nodes.
 @(export)
 attach_child_point :: proc "c" (
-    state: ^core.Euclid_General_State, parentIndex, childIndex: i32) -> i32 {
+    state: ^core.Euclid_General_State, parent_index, child_index: i32) -> i32 {
 
-    // #vet forgives(cyclomatic_complexity) — child-graph attach with cycle guard.
-    // The linked-list walk plus visited-set guards enforce graph validity at the
-    // ABI boundary; the branches are the safety contract.
     context = state^.saved_context
 
-    parent := int(parentIndex)
-    child := int(childIndex)
+    parent := int(parent_index)
+    child := int(child_index)
     if !is_point_index_in_bounds(parent) || !is_point_index_in_bounds(child) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
@@ -839,34 +791,51 @@ attach_child_point :: proc "c" (
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    parentPoint := &state^.point_system^.points[parent]
-    childPoint := &state^.point_system^.points[child]
+    parent_point := &state^.point_system^.points[parent]
+    child_point := &state^.point_system^.points[child]
 
-    if childPoint^.next_child_point >= 0 {
+    if child_point^.next_child_point >= 0 {
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    if parentPoint^.child_point_head < 0 {
-        parentPoint^.child_point_head = child
-        parentPoint^.child_count = 1
+    if parent_point^.child_point_head < 0 {
+        parent_point^.child_point_head = child
+        parent_point^.child_count = 1
         return BRIDGE_STATUS_OK
     }
 
+    walk := child_chain_tail(state, parent_point^.child_point_head, child)
+    if walk.status != BRIDGE_STATUS_OK {
+        return walk.status
+    }
+
+    state^.point_system^.points[walk.tail].next_child_point = child
+    parent_point^.child_count = walk.count + 1
+    return BRIDGE_STATUS_OK
+}
+
+//   Walk a child chain to its tail, rejecting cycles, bad indices, and the child.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - head: Index of the first child in the chain.
+//   - child: Child index that must not already appear in the chain.
+//
+// Returns:
+//   - Walk result with the tail index, current child count, and a status that is
+//     BRIDGE_STATUS_OK on a clean walk, otherwise BRIDGE_STATUS_INVALID_GRAPH.
+child_chain_tail :: proc(
+    state: ^core.Euclid_General_State, head: int, child: int) -> Child_Chain_Walk {
+
     visited: [MAX_SHAPESPOINTS]bool
-    current := parentPoint^.child_point_head
+    current := head
     tail := current
     count := 0
     for current >= 0 {
-        if !is_point_index_in_bounds(current) {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
-        if visited[current] {
-            return BRIDGE_STATUS_INVALID_GRAPH
+        if !is_point_index_in_bounds(current) || visited[current] || current == child {
+            return Child_Chain_Walk{ tail, count, BRIDGE_STATUS_INVALID_GRAPH }
         }
         visited[current] = true
-        if current == child {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
 
         tail = current
         count += 1
@@ -876,18 +845,15 @@ attach_child_point :: proc "c" (
         }
         current = next
     }
-
-    state^.point_system^.points[tail].next_child_point = child
-    parentPoint^.child_count = count + 1
-    return BRIDGE_STATUS_OK
+    return Child_Chain_Walk{ tail, count, BRIDGE_STATUS_OK }
 }
 
 //   Detach a child point from a parent's child chain.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - parentIndex: Parent point index.
-//   - childIndex: Child point index to remove.
+//   - parent_index: Parent point index.
+//   - child_index: Child point index to remove.
 //
 // Returns:
 //   - BRIDGE_STATUS_OK on success.
@@ -895,87 +861,95 @@ attach_child_point :: proc "c" (
 //   - BRIDGE_STATUS_INVALID_GRAPH when the chain is invalid or the child is not present.
 @(export)
 detach_child_point :: proc "c" (
-    state: ^core.Euclid_General_State, parentIndex, childIndex: i32) -> i32 {
+    state: ^core.Euclid_General_State, parent_index, child_index: i32) -> i32 {
 
     context = state^.saved_context
 
-    parent := int(parentIndex)
-    child := int(childIndex)
+    parent := int(parent_index)
+    child := int(child_index)
     if !is_point_index_in_bounds(parent) || !is_point_index_in_bounds(child) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    parentPoint := &state^.point_system^.points[parent]
-    head := parentPoint^.child_point_head
-    if head < 0 {
+    parent_point := &state^.point_system^.points[parent]
+    if parent_point^.child_point_head < 0 {
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    visited: [MAX_SHAPESPOINTS]bool
-    current := head
-    prev := -1
-    removed := false
+    if !remove_from_child_chain(state, parent_point, child) {
+        return BRIDGE_STATUS_INVALID_GRAPH
+    }
 
+    _ = rebuild_child_count(state, parent_index)
+    return BRIDGE_STATUS_OK
+}
+
+//   Unlink a child from a parent's child chain, reporting whether it was removed.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - parent_point: Parent point owning the child chain.
+//   - child: Child index to remove from the chain.
+//
+// Returns:
+//   - true when the child was found and unlinked from a clean, acyclic chain.
+remove_from_child_chain :: proc(
+    state: ^core.Euclid_General_State, parent_point: ^core.Shapes_Point,
+    child: int) -> bool {
+
+    visited: [MAX_SHAPESPOINTS]bool
+    current := parent_point^.child_point_head
+    prev := -1
     for current >= 0 {
-        if !is_point_index_in_bounds(current) {
-            return BRIDGE_STATUS_INVALID_GRAPH
-        }
-        if visited[current] {
-            return BRIDGE_STATUS_INVALID_GRAPH
+        if !is_point_index_in_bounds(current) || visited[current] {
+            return false
         }
         visited[current] = true
 
         next := state^.point_system^.points[current].next_child_point
         if current == child {
-            removed = true
             if prev < 0 {
-                parentPoint^.child_point_head = next
+                parent_point^.child_point_head = next
             } else {
                 state^.point_system^.points[prev].next_child_point = next
             }
             state^.point_system^.points[current].next_child_point = -1
-            break
+            return true
         }
 
         prev = current
         current = next
     }
-
-    if !removed {
-        return BRIDGE_STATUS_INVALID_GRAPH
-    }
-
-    _ = rebuild_child_count(state, parentIndex)
-    return BRIDGE_STATUS_OK
+    return false
 }
 
 //   Recompute and store a parent's child_count by walking its child chain.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - parentIndex: Parent point index.
+//   - parent_index: Parent point index.
 //
 // Returns:
 //   - BRIDGE_STATUS_OK on success.
-//   - BRIDGE_STATUS_INVALID_INDEX when parentIndex is out of bounds.
+//   - BRIDGE_STATUS_INVALID_INDEX when parent_index is out of bounds.
 //   - BRIDGE_STATUS_INVALID_GRAPH when the child chain contains invalid indices or cycles.
 @(export)
 rebuild_child_count :: proc "c" (
-    state: ^core.Euclid_General_State, parentIndex: i32) -> i32 {
+    state: ^core.Euclid_General_State, parent_index: i32) -> i32 {
     context = state^.saved_context
-    parent := int(parentIndex)
+    parent := int(parent_index)
     if !is_point_index_in_bounds(parent) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    parentPoint := &state^.point_system^.points[parent]
-    if parentPoint^.child_point_head < 0 {
-        parentPoint^.child_count = 0
+    parent_point := &state^.point_system^.points[parent]
+    if parent_point^.child_point_head < 0 {
+        parent_point^.child_count = 0
         return BRIDGE_STATUS_OK
     }
 
     visited: [MAX_SHAPESPOINTS]bool
-    current := parentPoint^.child_point_head
+    current := parent_point^.child_point_head
     count := 0
     for current >= 0 {
         if !is_point_index_in_bounds(current) {
@@ -989,7 +963,7 @@ rebuild_child_count :: proc "c" (
         current = state^.point_system^.points[current].next_child_point
     }
 
-    parentPoint^.child_count = count
+    parent_point^.child_count = count
     return BRIDGE_STATUS_OK
 }
 
@@ -997,33 +971,33 @@ rebuild_child_count :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - parentIndex: Parent point index.
+//   - parent_index: Parent point index.
 //
 // Returns:
 //   - BRIDGE_STATUS_OK when chain indices, cycle checks, child_count, and active_child are consistent.
-//   - BRIDGE_STATUS_INVALID_INDEX when parentIndex is out of bounds.
+//   - BRIDGE_STATUS_INVALID_INDEX when parent_index is out of bounds.
 //   - BRIDGE_STATUS_INVALID_GRAPH when chain or metadata invariants are broken.
 @(export)
 validate_parent_child_chain :: proc "c" (
-    state: ^core.Euclid_General_State, parentIndex: i32) -> i32 {
+    state: ^core.Euclid_General_State, parent_index: i32) -> i32 {
 
     context = state^.saved_context
 
-    parent := int(parentIndex)
+    parent := int(parent_index)
     if !is_point_index_in_bounds(parent) {
         return BRIDGE_STATUS_INVALID_INDEX
     }
 
-    parentPoint := &state^.point_system^.points[parent]
-    if parentPoint^.child_point_head < 0 {
-        if parentPoint^.child_count != 0 {
+    parent_point := &state^.point_system^.points[parent]
+    if parent_point^.child_point_head < 0 {
+        if parent_point^.child_count != 0 {
             return BRIDGE_STATUS_INVALID_GRAPH
         }
         return BRIDGE_STATUS_OK
     }
 
     visited: [MAX_SHAPESPOINTS]bool
-    current := parentPoint^.child_point_head
+    current := parent_point^.child_point_head
     count := 0
     for current >= 0 {
         if !is_point_index_in_bounds(current) {
@@ -1037,11 +1011,11 @@ validate_parent_child_chain :: proc "c" (
         current = state^.point_system^.points[current].next_child_point
     }
 
-    if parentPoint^.child_count != count {
+    if parent_point^.child_count != count {
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
-    if parentPoint^.active_child < -1 || parentPoint^.active_child >= count {
+    if parent_point^.active_child < -1 || parent_point^.active_child >= count {
         return BRIDGE_STATUS_INVALID_GRAPH
     }
 
@@ -1052,16 +1026,16 @@ validate_parent_child_chain :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_line_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Line {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Line {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Line{ -1, -1, -1 }
     }
@@ -1087,16 +1061,16 @@ get_shape_line_view :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_circle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Circle {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Circle {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Circle{ -1, -1, -1 }
     }
@@ -1122,22 +1096,22 @@ get_shape_circle_view :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_filledcircle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Filled_Circle {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Filled_Circle {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
 
     point := state^.point_system^.points[host]
-    if point.kind != .FilledCircle {
+    if point.kind != .Filled_Circle {
         return core.Shapes_Filled_Circle{ -1, -1, -1 }
     }
 
@@ -1157,16 +1131,16 @@ get_shape_filledcircle_view :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_triangle_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Triangle {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Triangle {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Triangle{ -1, -1, -1, -1 }
     }
@@ -1196,16 +1170,16 @@ get_shape_triangle_view :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_square_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Square {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Square {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Square{ -1, -1, -1, -1, -1 }
     }
@@ -1239,16 +1213,16 @@ get_shape_square_view :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - hostId: Host point index expected to own the requested shape kind.
+//   - host_id: Host point index expected to own the requested shape kind.
 //
 // Returns:
 //   - Typed shape handle with -1 sentinel indices when host id is invalid or does not match expected shape kind.
 @(export)
 get_shape_pentagon_view :: proc "c" (
-    state: ^core.Euclid_General_State, hostId: i32) -> core.Shapes_Pentagon {
+    state: ^core.Euclid_General_State, host_id: i32) -> core.Shapes_Pentagon {
 
     context = state^.saved_context
-    host := int(hostId)
+    host := int(host_id)
     if !is_point_index_in_bounds(host) {
         return core.Shapes_Pentagon{ -1, -1, -1, -1, -1, -1 }
     }

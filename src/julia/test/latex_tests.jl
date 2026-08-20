@@ -129,7 +129,8 @@ end
     alias_plain = EuclidLatex.latex_to_plain_text("a \\ne b, x \\ge y")
     @test alias_plain == "a ≠ b, x ≥ y"
 
-    symbol_plain = EuclidLatex.latex_to_plain_text("1,2,\\dots,n; x \\mapsto y; A \\rtimes B")
+    symbol_plain = EuclidLatex.latex_to_plain_text(
+        "1,2,\\dots,n; x \\mapsto y; A \\rtimes B")
     @test symbol_plain == "1,2,…,n; x ↦ y; A ⋊ B"
 
     spacing_plain = EuclidLatex.latex_to_plain_text("a\\;b")
@@ -242,7 +243,8 @@ end
     @test recursive_parent_program[1].sup_text == "2"
     @test recursive_parent_program[1].sub_text == "1"
     @test length(recursive_parent_program[1].children) == 1
-    @test recursive_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+    @test recursive_parent_program[1].children[1].kind ==
+        EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
 end
 
 @testset "large operators" begin
@@ -285,7 +287,8 @@ end
     nested = EuclidLatex.latex_to_plain_text("\\overline{\\underline{x}}")
     @test nested == "\\overline{\\underline{x}}"
 
-    accent_program = EuclidLatex.compiled_program_for("f(\\overline{AB}) + \\underline{CD}")
+    accent_program = EuclidLatex.compiled_program_for(
+        "f(\\overline{AB}) + \\underline{CD}")
     @test length(accent_program) == 4
     @test accent_program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test accent_program[1].style_role == :math
@@ -300,19 +303,22 @@ end
     @test accent_program[4].children[1].text == "CD"
     @test accent_program[4].style_role == :math
 
-    embedded_scripts = EuclidLatex.compiled_program_for("\\overline{AB^2} + \\underline{CD_4}")
+    embedded_scripts = EuclidLatex.compiled_program_for(
+        "\\overline{AB^2} + \\underline{CD_4}")
     @test length(embedded_scripts) == 3
     @test embedded_scripts[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[1].accent_mode == :overline
     @test length(embedded_scripts[1].children) == 1
-    @test embedded_scripts[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test embedded_scripts[1].children[1].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test embedded_scripts[1].children[1].text == "AB"
     @test embedded_scripts[1].children[1].sup_text == "2"
     @test embedded_scripts[1].style_role == :math
     @test embedded_scripts[3].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test embedded_scripts[3].accent_mode == :underline
     @test length(embedded_scripts[3].children) == 1
-    @test embedded_scripts[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test embedded_scripts[3].children[1].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test embedded_scripts[3].children[1].text == "CD"
     @test embedded_scripts[3].children[1].sub_text == "4"
     @test embedded_scripts[3].style_role == :math
@@ -347,7 +353,8 @@ end
     @test radical_program[1].style_role == :math
     @test radical_program[3].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test length(radical_program[3].children) == 1
-    @test radical_program[3].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test radical_program[3].children[1].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test radical_program[3].children[1].text == "x"
     @test radical_program[3].children[1].sup_text == "2"
     @test radical_program[3].style_role == :math
@@ -357,7 +364,8 @@ end
     @test indexed_program[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
     @test indexed_program[1].radical_index_text == "n"
     @test length(indexed_program[1].children) == 1
-    @test indexed_program[1].children[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test indexed_program[1].children[1].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
     @test indexed_program[1].children[1].text == "A"
     @test indexed_program[1].children[1].sup_text == "2"
     @test indexed_program[1].children[1].sub_text == "1"
@@ -370,7 +378,8 @@ end
     @test radical_parent_program[1].sup_text == "2"
     @test radical_parent_program[1].sub_text == "1"
     @test length(radical_parent_program[1].children) == 1
-    @test radical_parent_program[1].children[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
+    @test radical_parent_program[1].children[1].kind ==
+        EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
 end
 
 @testset "fractions" begin
@@ -400,7 +409,8 @@ end
     @test length(mixed_program[1].children) == 1
     @test length(mixed_program[1].secondary_children) == 1
     @test mixed_program[1].children[1].kind == EuclidLatex.MATH_OP_RADICAL_BAR_RECURSIVE
-    @test mixed_program[1].secondary_children[1].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+    @test mixed_program[1].secondary_children[1].kind ==
+        EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
 end
 
 @testset "stretch delimiters" begin
@@ -422,10 +432,12 @@ end
     plain_right_omit = EuclidLatex.latex_to_plain_text("\\left( x \\right.")
     @test plain_right_omit == "\\left( x \\right."
 
-    plain_nested = EuclidLatex.latex_to_plain_text("\\left[ a + \\left( b \\right) \\right]")
+    plain_nested = EuclidLatex.latex_to_plain_text(
+        "\\left[ a + \\left( b \\right) \\right]")
     @test plain_nested == "\\left[ a + \\left( b \\right) \\right]"
 
-    plain_embedded = EuclidLatex.latex_to_plain_text("\\left\\{ \\frac{a}{b} + \\sqrt{x} \\right\\}")
+    plain_embedded = EuclidLatex.latex_to_plain_text(
+        "\\left\\{ \\frac{a}{b} + \\sqrt{x} \\right\\}")
     @test plain_embedded == "\\left\\{ {a}/{b} + \\sqrt{x} \\right\\}"
 
     structure_program = EuclidLatex.compiled_program_for("\\left( \\frac{a}{b} \\right)")
@@ -433,7 +445,8 @@ end
     @test structure_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
     @test structure_program[1].radical_index_text == "("
     @test structure_program[1].sup_text == ")"
-    @test any(op -> op.kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE, structure_program[1].children)
+    @test any(op -> op.kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE,
+        structure_program[1].children)
 
     unmatched_left = EuclidLatex.latex_to_plain_text("\\left( x")
     @test unmatched_left == "\\left( x\\right."
@@ -443,37 +456,47 @@ end
 end
 
 @testset "matrix blocks" begin
-    plain_square = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c&d\\end{matrix}")
+    plain_square = EuclidLatex.latex_to_plain_text(
+        "\\begin{matrix}a&b\\\\c&d\\end{matrix}")
     @test plain_square == "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
 
     array_single = EuclidLatex.latex_to_plain_text("\\begin{array}{c}x\\end{array}")
     @test array_single == "\\begin{array}{c}x\\end{array}"
 
-    array_rect = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\end{array}")
+    array_rect = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cc}a&b\\\\c&d\\end{array}")
     @test array_rect == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
 
-    array_formatted = EuclidLatex.latex_to_plain_text("\\begin{array}{cccc}\n1 & 2 & 3 & 4 \\\\ \n5 & 6 & 7 & 8 \\\\ \n\\end{array}")
+    array_formatted = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cccc}\n1 & 2 & 3 & 4 \\\\ \n5 & 6 & 7 & 8 \\\\ \n\\end{array}")
     @test array_formatted == "\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\end{array}"
 
-    array_with_trailing_row_sep = EuclidLatex.latex_to_plain_text("\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\\\\\end{array}")
+    array_with_trailing_row_sep = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\\\\\end{array}")
     @test array_with_trailing_row_sep == "\\begin{array}{cccc}1&2&3&4\\\\5&6&7&8\\end{array}"
 
-    array_trailing_sep = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
+    array_trailing_sep = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
     @test array_trailing_sep == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
 
-    matrix_trailing_sep = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c&d\\\\\\end{matrix}")
+    matrix_trailing_sep = EuclidLatex.latex_to_plain_text(
+        "\\begin{matrix}a&b\\\\c&d\\\\\\end{matrix}")
     @test matrix_trailing_sep == "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
 
-    array_trailing_row_break = EuclidLatex.latex_to_plain_text("\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
+    array_trailing_row_break = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cc}a&b\\\\c&d\\\\\\end{array}")
     @test array_trailing_row_break == "\\begin{array}{cc}a&b\\\\c&d\\end{array}"
 
-    plain_rect = EuclidLatex.latex_to_plain_text("\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}")
+    plain_rect = EuclidLatex.latex_to_plain_text(
+        "\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}")
     @test plain_rect == "\\begin{matrix}x&y&z\\\\1&2&3\\end{matrix}"
 
-    bmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
+    bmatrix_plain = EuclidLatex.latex_to_plain_text(
+        "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
     @test bmatrix_plain == "\\left[\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right]"
 
-    bmatrix_program = EuclidLatex.compiled_program_for("\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
+    bmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}")
     @test length(bmatrix_program) == 1
     @test bmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
     @test bmatrix_program[1].radical_index_text == "["
@@ -481,10 +504,12 @@ end
     @test length(bmatrix_program[1].children) == 1
     @test bmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
 
-    pmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
+    pmatrix_plain = EuclidLatex.latex_to_plain_text(
+        "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
     @test pmatrix_plain == "\\left(\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right)"
 
-    pmatrix_program = EuclidLatex.compiled_program_for("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
+    pmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")
     @test length(pmatrix_program) == 1
     @test pmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
     @test pmatrix_program[1].radical_index_text == "("
@@ -492,10 +517,12 @@ end
     @test length(pmatrix_program[1].children) == 1
     @test pmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
 
-    vmatrix_plain = EuclidLatex.latex_to_plain_text("\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
+    vmatrix_plain = EuclidLatex.latex_to_plain_text(
+        "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
     @test vmatrix_plain == "\\left|\\begin{matrix}a&b\\\\c&d\\end{matrix}\\right|"
 
-    vmatrix_program = EuclidLatex.compiled_program_for("\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
+    vmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}")
     @test length(vmatrix_program) == 1
     @test vmatrix_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
     @test vmatrix_program[1].radical_index_text == "|"
@@ -503,16 +530,19 @@ end
     @test length(vmatrix_program[1].children) == 1
     @test vmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
 
-    matrix_program = EuclidLatex.compiled_program_for("\\begin{matrix}a&\\frac{1}{2}\\\\c&d_1\\end{matrix}")
+    matrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{matrix}a&\\frac{1}{2}\\\\c&d_1\\end{matrix}")
     @test length(matrix_program) == 1
     @test matrix_program[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
     @test matrix_program[1].radical_index_text == "2"
     @test matrix_program[1].sup_text == "2"
     @test length(matrix_program[1].children) == 4
     @test matrix_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
-    @test matrix_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test matrix_program[1].children[4].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
 
-    array_program = EuclidLatex.compiled_program_for("\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}")
+    array_program = EuclidLatex.compiled_program_for(
+        "\\begin{array}{cc}a&\\frac{1}{2}\\\\c&d_1\\end{array}")
     @test length(array_program) == 1
     @test array_program[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
     @test array_program[1].radical_index_text == "2"
@@ -523,7 +553,8 @@ end
     @test array_program[1].children[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
     @test array_program[1].children[4].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
 
-    array_program_mixed = EuclidLatex.compiled_program_for("\\begin{array}{l c r}a&b&c\\end{array}")
+    array_program_mixed = EuclidLatex.compiled_program_for(
+        "\\begin{array}{l c r}a&b&c\\end{array}")
     @test length(array_program_mixed) == 1
     @test array_program_mixed[1].sub_text == "lcr"
 
@@ -532,10 +563,12 @@ end
     malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
     @test malformed == "\\begin"
 
-    malformed_array = EuclidLatex.latex_to_plain_text("\\begin{array}{cx}a&b\\\\c&d\\end{array}")
+    malformed_array = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{cx}a&b\\\\c&d\\end{array}")
     @test malformed_array == "\\begin"
 
-    malformed_array_mismatch = EuclidLatex.latex_to_plain_text("\\begin{array}{c}a&b\\end{array}")
+    malformed_array_mismatch = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{c}a&b\\end{array}")
     @test malformed_array_mismatch == "\\begin"
 end
 
@@ -565,7 +598,8 @@ end
     @test dropped_style == 2
     @test EuclidLatex.cache_size() == 1
 
-    dropped_grammar = EuclidLatex.invalidate_cache_for_grammar!(EuclidLatex.PARSER_GRAMMAR_VERSION)
+    dropped_grammar = EuclidLatex.invalidate_cache_for_grammar!(
+        EuclidLatex.PARSER_GRAMMAR_VERSION)
     @test dropped_grammar == 1
     @test EuclidLatex.cache_size() == 0
 

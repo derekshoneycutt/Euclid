@@ -14,7 +14,7 @@ const ODIN_DOC_FIXTURE = """package sample
 \t\t\t  - value: Candidate value.
 
 \t\tUNDOCUMENTED :: 4 /* 1!80 */
-		INFERRED := 5 /* 1!100 */
+\t\tINFERRED := 5 /* 1!100 */
 
 
 \tfullpath:

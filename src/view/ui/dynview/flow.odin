@@ -10,7 +10,7 @@ import rl "vendor:raylib"
 
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
-Flow_Command_Handler :: proc(
+Flow_Command_Handler :: #type proc(
     cmd: core.Dynview_Command,
     buffer: ^core.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
@@ -20,30 +20,30 @@ Flow_Command_Handler :: proc(
 //   Dispatch table mapping each dynview command kind to its flow handler.
 //   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
 FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
-    .BeginBlock = nil,
-    .EndBlock = nil,
-    .CopyableTextRun = nil,
-    .LineBreak = nil,
+    .Begin_Block = nil,
+    .End_Block = nil,
+    .Copyable_Text_Run = nil,
+    .Line_Break = nil,
     .Divider = nil,
-    .TextRun = consume_text_based_command,
-    .MathGlyphRun = consume_text_based_command,
-    .MathBlock = consume_text_based_command,
-    .ScriptAttachRecursive = consume_text_based_command,
-    .FracRecursive = consume_text_based_command,
-    .StretchDelimiterRecursive = consume_text_based_command,
-    .MatrixRecursive = consume_text_based_command,
-    .LargeOpRecursive = consume_large_op_command,
-    .AccentBarRecursive = consume_text_based_command,
-    .RadicalBarRecursive = consume_text_based_command,
-    .InlineLine = flow_handle_inline_line,
-    .InlineBox = flow_handle_inline_box,
-    .InlineCircle = flow_handle_inline_circle,
-    .InlineFilledBox = flow_handle_inline_filled_box,
-    .InlineFilledCircle = flow_handle_inline_filled_circle,
-    .InlinePieSection = flow_handle_inline_pie_section,
-    .InlinePerpendicular = flow_handle_inline_perpendicular,
-    .InlineTriangle = flow_handle_inline_triangle,
-    .InlinePentagon = flow_handle_inline_pentagon,
+    .Text_Run = consume_text_based_command,
+    .Math_Glyph_Run = consume_text_based_command,
+    .Math_Block = consume_text_based_command,
+    .Script_Attach = consume_text_based_command,
+    .Frac = consume_text_based_command,
+    .Stretch_Delimiter = consume_text_based_command,
+    .Matrix = consume_text_based_command,
+    .Large_Op = consume_large_op_command,
+    .Accent_Bar = consume_text_based_command,
+    .Radical_Bar = consume_text_based_command,
+    .Inline_Line = flow_handle_inline_line,
+    .Inline_Box = flow_handle_inline_box,
+    .Inline_Circle = flow_handle_inline_circle,
+    .Inline_Filled_Box = flow_handle_inline_filled_box,
+    .Inline_Filled_Circle = flow_handle_inline_filled_circle,
+    .Inline_Pie_Section = flow_handle_inline_pie_section,
+    .Inline_Perpendicular = flow_handle_inline_perpendicular,
+    .Inline_Triangle = flow_handle_inline_triangle,
+    .Inline_Pentagon = flow_handle_inline_pentagon,
 }
 
 Dynview_Flow_State :: struct {
@@ -99,6 +99,28 @@ Pie_Section_Bounds :: struct {
     y_max: f32,
 }
 
+//   Style inputs for one pie-section draw (stroke and color).
+Pie_Section_Style :: struct {
+    stroke: f32,
+    color:  rl.Color,
+}
+
+//   Vertical span scales for one inline-shape frame within its row.
+Flow_Shape_Span :: struct {
+    y_start_scale: f32,
+    y_end_scale:   f32,
+}
+
+//   Geometry of one inline atom in the current flow row, when visible.
+Flow_Atom_Frame :: struct {
+    atom_x:   f32,
+    atom_w:   f32,
+    row_y:    f32,
+    advance:  f32,
+    visible:  bool,
+}
+
+//   Resolve the style-specific font for a draw context, falling back when state is nil.
 style_font :: #force_inline proc(
     draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
     if draw_ctx == nil || draw_ctx^.state == nil {
@@ -138,6 +160,7 @@ command_draw_color :: #force_inline proc(
     return style.color
 }
 
+//   Return edge_color unless it is fully transparent zero, else the fallback.
 shape_edge_color_or :: #force_inline proc(edge_color, fallback: rl.Color) -> rl.Color {
     if edge_color.r == 0 && edge_color.g == 0 && edge_color.b == 0 && edge_color.a == 0 {
         return fallback
@@ -198,34 +221,31 @@ pie_section_bounds :: #force_inline proc(
     end_n := normalize_angle_degrees(end_degrees)
     sweep := positive_sweep_degrees(start_n, end_n)
 
-    x_min: f32 = 0
-    x_max: f32 = 0
-    y_min: f32 = 0
-    y_max: f32 = 0
-
+    // Expand the running bounds to include the point at one degree angle.
     include_bound_angle :: #force_inline proc(
-        angle_degrees: f32, radius: f32, x_min, x_max, y_min, y_max: ^f32) {
+        angle_degrees: f32, radius: f32, bounds: ^Pie_Section_Bounds) {
         radians := angle_degrees * math.PI / 180.0
         x := radius * f32(math.cos(f64(radians)))
         y := -radius * f32(math.sin(f64(radians)))
-        x_min^ = min(x_min^, x)
-        x_max^ = max(x_max^, x)
-        y_min^ = min(y_min^, y)
-        y_max^ = max(y_max^, y)
+        bounds.x_min = min(bounds.x_min, x)
+        bounds.x_max = max(bounds.x_max, x)
+        bounds.y_min = min(bounds.y_min, y)
+        bounds.y_max = max(bounds.y_max, y)
     }
 
-    include_bound_angle(start_n, radius, &x_min, &x_max, &y_min, &y_max)
-    include_bound_angle(end_n, radius, &x_min, &x_max, &y_min, &y_max)
+    bounds := Pie_Section_Bounds{}
+    include_bound_angle(start_n, radius, &bounds)
+    include_bound_angle(end_n, radius, &bounds)
 
     cardinals := [?]f32{0, 90, 180, 270}
     for i in 0..<len(cardinals) {
         angle := cardinals[i]
         if pie_angle_in_sweep(angle, start_n, sweep) {
-            include_bound_angle(angle, radius, &x_min, &x_max, &y_min, &y_max)
+            include_bound_angle(angle, radius, &bounds)
         }
     }
 
-    return Pie_Section_Bounds{x_min, x_max, y_min, y_max}
+    return bounds
 }
 
 //   Draw a filled pie section using a deterministic triangle fan.
@@ -257,9 +277,10 @@ draw_pie_section_outline :: proc(
     center: rl.Vector2,
     radius: f32,
     start_degrees, end_degrees: f32,
-    stroke: f32,
-    color: rl.Color) {
+    style: Pie_Section_Style) {
 
+    stroke := style.stroke
+    color := style.color
     sweep := positive_sweep_degrees(start_degrees, end_degrees)
     if sweep <= 0 {
         return
@@ -341,7 +362,7 @@ draw_pentagon_shape :: proc(
 
     if filled {
         for i in 1..<4 {
-            rl.DrawTriangle(points[0], points[i], points[i + 1], colors.fill)
+            rl.DrawTriangle(points[i], points[0], points[i + 1], colors.fill)
         }
     }
 
@@ -362,8 +383,10 @@ flow_inline_shape_frame :: proc(
     cmd: core.Dynview_Command,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context,
-    y_start_scale, y_end_scale: f32) -> Inline_Shape_Frame {
+    span: Flow_Shape_Span) -> Inline_Shape_Frame {
 
+    y_start_scale := span.y_start_scale
+    y_end_scale := span.y_end_scale
     max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width, draw_ctx^.text_padding, draw_ctx^.wrap_advance, style)
     if max_cols <= 0 {
@@ -402,15 +425,7 @@ flow_consume_text_run :: proc(
     text: string,
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-
-    if max_cols <= 0 {
-        max_cols = 1
-    }
+    max_cols := flow_max_cols(style, draw_ctx)
 
     start := 0
     for start < len(text) {
@@ -424,27 +439,37 @@ flow_consume_text_run :: proc(
         }
 
         span := dynview.next_wrapped_text_span(text, start, available)
-        line_text := text[span.line_start:span.line_end]
-        line_len := dynview.text_codepoint_count_span(line_text, 0, len(line_text))
-        if line_len <= 0 {
-            break
-        }
-
-        flow_draw_text_line(flow, line_text, line_len, style, draw_ctx)
-
-        flow^.had_visible = true
-        flow^.col += line_len
-
-        if span.next_start < len(text) {
-            flow^.row += 1
-            flow^.col = 0
-        }
-
-        if span.next_start <= start {
+        if !flow_consume_text_span(flow, text, span, style, draw_ctx) {
             break
         }
         start = span.next_start
     }
+}
+
+//   Draw one wrapped text span and advance the flow cursor; false stops iteration.
+flow_consume_text_span :: proc(
+    flow: ^Dynview_Flow_State,
+    text: string,
+    span: dynview.Wrapped_Text_Span,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) -> bool {
+
+    line_text := text[span.line_start:span.line_end]
+    line_len := dynview.text_codepoint_count_span(line_text, 0, len(line_text))
+    if line_len <= 0 || span.next_start <= span.line_start {
+        return false
+    }
+
+    flow_draw_text_line(flow, line_text, line_len, style, draw_ctx)
+
+    flow^.had_visible = true
+    flow^.col += line_len
+
+    if span.next_start < len(text) {
+        flow^.row += 1
+        flow^.col = 0
+    }
+    return true
 }
 
 //   Draw one wrapped text line at the current flow position when it is visible.
@@ -474,7 +499,7 @@ flow_draw_text_line :: proc(
     }
 
     view_core.ui_text(line_text, int(line_x), int(row_y), style.color,
-        style_font(draw_ctx, style), draw_ctx^.font_size)
+        view_core.Ui_Text_Font{style_font(draw_ctx, style), draw_ctx^.font_size})
     if style.underline {
         underline_y := row_y + draw_ctx^.font_size + 1
         underline_width := f32(line_len) *
@@ -487,12 +512,9 @@ flow_draw_text_line :: proc(
     }
 }
 
-//   Consume one inline-line atom in flow layout, optionally drawing it.
-flow_consume_inline_line :: proc(
-    flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
-    style: Dynview_Text_Style,
-    draw_ctx: ^Dynview_Draw_Context) {
+//   Resolve the clamped max columns for one style in the current panel.
+flow_max_cols :: #force_inline proc(
+    style: Dynview_Text_Style, draw_ctx: ^Dynview_Draw_Context) -> int {
 
     max_cols := dynview.chars_per_row_for_style(
         draw_ctx^.panel.width,
@@ -502,29 +524,58 @@ flow_consume_inline_line :: proc(
     if max_cols <= 0 {
         max_cols = 1
     }
+    return max_cols
+}
 
-    cols := dynview.inline_line_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
+//   Advance the flow cursor to a fresh row when the atom does not fit.
+flow_wrap_for_cols :: #force_inline proc(
+    flow: ^Dynview_Flow_State, cols, max_cols: int) {
+
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
     }
+}
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
+//   Compute the current row's top y and whether it is visible in the panel.
+//
+// Returns:
+//   - row_y: Top y of the current flow row.
+//   - visible: true when the row intersects the panel.
+flow_row_position :: #force_inline proc(
+    flow: ^Dynview_Flow_State,
+    draw_ctx: ^Dynview_Draw_Context) -> (f32, bool) {
 
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            line_w := f32(cols) * effective_advance
-            baseline_y := row_y + draw_ctx^.text_row_height * 0.62
-            thickness := max(1.0, cmd.inline_atom_stroke)
-            start_pos := rl.Vector2{line_x, baseline_y}
-            end_pos := rl.Vector2{line_x + line_w, baseline_y}
-            rl.DrawLineEx(start_pos, end_pos, thickness, command_draw_color(cmd, style))
-        }
+    row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
+        f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
+    visible := draw_ctx^.enabled &&
+        row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
+        row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height
+    return row_y, visible
+}
+
+//   Consume one inline-line atom in flow layout, optionally drawing it.
+flow_consume_inline_line :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+
+    max_cols := flow_max_cols(style, draw_ctx)
+    cols := dynview.inline_line_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
+    flow_wrap_for_cols(flow, cols, max_cols)
+
+    row_y, visible := flow_row_position(flow, draw_ctx)
+    if visible {
+        effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
+        line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+            f32(flow^.col) * effective_advance
+        line_w := f32(cols) * effective_advance
+        baseline_y := row_y + draw_ctx^.text_row_height * 0.62
+        thickness := max(1.0, cmd.inline_atom_stroke)
+        start_pos := rl.Vector2{line_x, baseline_y}
+        end_pos := rl.Vector2{line_x + line_w, baseline_y}
+        rl.DrawLineEx(start_pos, end_pos, thickness, command_draw_color(cmd, style))
     }
 
     flow^.had_visible = true
@@ -539,54 +590,92 @@ flow_consume_inline_box :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-    if max_cols <= 0 {
-        max_cols = 1
-    }
-
+    max_cols := flow_max_cols(style, draw_ctx)
     cols := dynview.inline_box_cols(cmd, style, max_cols)
-    if flow^.col > 0 && flow^.col + cols > max_cols {
-        flow^.row += 1
-        flow^.col = 0
-    }
+    flow_wrap_for_cols(flow, cols, max_cols)
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            box_w := f32(cols) * effective_advance
-            raw_h := cmd.inline_box_height * effective_advance
-            box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
-            box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
-            stroke := max(1.0, cmd.inline_atom_stroke)
-            top_left := rl.Vector2{box_x, box_y}
-            top_right := rl.Vector2{box_x + box_w, box_y}
-            bottom_left := rl.Vector2{box_x, box_y + box_h}
-            bottom_right := rl.Vector2{box_x + box_w, box_y + box_h}
-            base_color := command_draw_color(cmd, style)
-            edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
-            edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
-            edge3 := shape_edge_color_or(cmd.shape_edge_color_3, base_color)
-            edge4 := shape_edge_color_or(cmd.shape_edge_color_4, base_color)
-            rl.DrawLineEx(top_left, top_right, stroke, edge1)
-            rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
-            rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
-            rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
-        }
+    row_y, visible := flow_row_position(flow, draw_ctx)
+    if visible {
+        effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
+        box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+            f32(flow^.col) * effective_advance
+        box_w := f32(cols) * effective_advance
+        raw_h := cmd.inline_box_height * effective_advance
+        box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
+        box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
+        stroke := max(1.0, cmd.inline_atom_stroke)
+        top_left := rl.Vector2{box_x, box_y}
+        top_right := rl.Vector2{box_x + box_w, box_y}
+        bottom_left := rl.Vector2{box_x, box_y + box_h}
+        bottom_right := rl.Vector2{box_x + box_w, box_y + box_h}
+        base_color := command_draw_color(cmd, style)
+        edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
+        edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
+        edge3 := shape_edge_color_or(cmd.shape_edge_color_3, base_color)
+        edge4 := shape_edge_color_or(cmd.shape_edge_color_4, base_color)
+        rl.DrawLineEx(top_left, top_right, stroke, edge1)
+        rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
+        rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
+        rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
     }
 
     flow^.had_visible = true
     flow^.col += cols
     wrap_if_full(flow, max_cols)
+}
+
+//   Compute the current inline atom's geometry, advancing the cursor on wrap.
+//
+// Returns:
+//   - frame: Atom geometry; visible is false when the row is off-panel.
+flow_inline_atom_frame :: proc(
+    flow: ^Dynview_Flow_State,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context,
+    cols: int) -> Flow_Atom_Frame {
+
+    frame := Flow_Atom_Frame{}
+    row_y, visible := flow_row_position(flow, draw_ctx)
+    frame.row_y = row_y
+    frame.visible = visible
+    if !visible {
+        return frame
+    }
+    frame.advance = dynview.effective_advance(style, draw_ctx^.wrap_advance)
+    frame.atom_x = draw_ctx^.panel.x + draw_ctx^.text_padding +
+        f32(flow^.col) * frame.advance
+    frame.atom_w = f32(cols) * frame.advance
+    return frame
+}
+
+//   Draw one inline circle outline within an atom frame.
+draw_flow_inline_circle :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context,
+    frame: Flow_Atom_Frame) {
+
+    radius := max(2.0, min(frame.atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
+    center := rl.Vector2{frame.atom_x + frame.atom_w * 0.5,
+        frame.row_y + draw_ctx^.text_row_height * 0.58}
+    color := command_draw_color(cmd, style)
+    rl.DrawCircleLines(i32(center.x), i32(center.y), radius, color)
+    if max(1.0, cmd.inline_atom_stroke) > 1 {
+        rl.DrawCircleLines(i32(center.x), i32(center.y),
+            max(1.0, radius - 1), color)
+    }
+}
+
+//   Compute the inline box rect within an atom frame.
+flow_inline_box_rect :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    draw_ctx: ^Dynview_Draw_Context,
+    frame: Flow_Atom_Frame) -> rl.Rectangle {
+
+    raw_h := cmd.inline_box_height * frame.advance
+    box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
+    box_y := frame.row_y + (draw_ctx^.text_row_height - box_h) * 0.5
+    return rl.Rectangle{frame.atom_x, box_y, frame.atom_w, box_h}
 }
 
 //   Consume one inline-circle atom in flow layout, optionally drawing it.
@@ -596,42 +685,13 @@ flow_consume_inline_circle :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-    if max_cols <= 0 {
-        max_cols = 1
-    }
-
+    max_cols := flow_max_cols(style, draw_ctx)
     cols := dynview.inline_pie_section_cols(cmd, style, max_cols)
-    if flow^.col > 0 && flow^.col + cols > max_cols {
-        flow^.row += 1
-        flow^.col = 0
-    }
+    flow_wrap_for_cols(flow, cols, max_cols)
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            atom_w := f32(cols) * effective_advance
-            radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-            center := rl.Vector2{atom_x + atom_w * 0.5, row_y +
-                draw_ctx^.text_row_height * 0.58}
-            stroke := max(1.0, cmd.inline_atom_stroke)
-            color := command_draw_color(cmd, style)
-            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, color)
-            if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y),
-                    max(1.0, radius - 1), color)
-            }
-        }
+    frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
+    if frame.visible {
+        draw_flow_inline_circle(cmd, style, draw_ctx, frame)
     }
 
     flow^.had_visible = true
@@ -646,49 +706,44 @@ flow_consume_inline_filled_box :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-    if max_cols <= 0 {
-        max_cols = 1
-    }
-
+    max_cols := flow_max_cols(style, draw_ctx)
     cols := dynview.inline_box_cols(cmd, style, max_cols)
-    if flow^.col > 0 && flow^.col + cols > max_cols {
-        flow^.row += 1
-        flow^.col = 0
-    }
+    flow_wrap_for_cols(flow, cols, max_cols)
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            box_w := f32(cols) * effective_advance
-            raw_h := cmd.inline_box_height * effective_advance
-            box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
-            box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
-            color := command_draw_color(cmd, style)
-            rl.DrawRectangleRec(rl.Rectangle{box_x, box_y, box_w, box_h}, color)
-
-            if cmd.inline_outline_stroke > 0 {
-                rl.DrawRectangleLinesEx(
-                    rl.Rectangle{box_x, box_y, box_w, box_h},
-                    max(1.0, cmd.inline_outline_stroke),
-                    style.color)
-            }
+    frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
+    if frame.visible {
+        rect := flow_inline_box_rect(cmd, draw_ctx, frame)
+        rl.DrawRectangleRec(rect, command_draw_color(cmd, style))
+        if cmd.inline_outline_stroke > 0 {
+            rl.DrawRectangleLinesEx(
+                rect, max(1.0, cmd.inline_outline_stroke), style.color)
         }
     }
 
     flow^.had_visible = true
     flow^.col += cols
     wrap_if_full(flow, max_cols)
+}
+
+//   Draw one filled inline circle within an atom frame, with optional outline.
+draw_flow_inline_filled_circle :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context,
+    frame: Flow_Atom_Frame) {
+
+    radius := max(2.0, min(frame.atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
+    center := rl.Vector2{frame.atom_x + frame.atom_w * 0.5,
+        frame.row_y + draw_ctx^.text_row_height * 0.58}
+    rl.DrawCircleV(center, radius, command_draw_color(cmd, style))
+
+    if cmd.inline_outline_stroke > 0 {
+        rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+        if max(1.0, cmd.inline_outline_stroke) > 1 {
+            rl.DrawCircleLines(i32(center.x), i32(center.y),
+                max(1.0, radius - 1), style.color)
+        }
+    }
 }
 
 //   Consume one filled inline-circle atom in flow layout, optionally drawing it.
@@ -698,51 +753,57 @@ flow_consume_inline_filled_circle :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-    if max_cols <= 0 {
-        max_cols = 1
-    }
-
+    max_cols := flow_max_cols(style, draw_ctx)
     cols := dynview.inline_circle_cols(cmd, style, max_cols)
-    if flow^.col > 0 && flow^.col + cols > max_cols {
-        flow^.row += 1
-        flow^.col = 0
-    }
+    flow_wrap_for_cols(flow, cols, max_cols)
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            atom_w := f32(cols) * effective_advance
-            radius := max(2.0, min(atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-            center := rl.Vector2{atom_x + atom_w * 0.5, row_y +
-                    draw_ctx^.text_row_height * 0.58}
-            color := command_draw_color(cmd, style)
-            rl.DrawCircleV(center, radius, color)
-
-            if cmd.inline_outline_stroke > 0 {
-                stroke := max(1.0, cmd.inline_outline_stroke)
-                rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
-                if stroke > 1 {
-                    rl.DrawCircleLines(i32(center.x), i32(center.y),
-                        max(1.0, radius - 1), style.color)
-                }
-            }
-        }
+    frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
+    if frame.visible {
+        draw_flow_inline_filled_circle(cmd, style, draw_ctx, frame)
     }
 
     flow^.had_visible = true
     flow^.col += cols
     wrap_if_full(flow, max_cols)
+}
+
+//   Draw one inline pie-section wedge within an atom frame.
+draw_flow_inline_pie_section :: #force_inline proc(
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context,
+    frame: Flow_Atom_Frame) {
+
+    radius := max(2.0, cmd.inline_atom_dimension * frame.advance)
+    bounds := pie_section_bounds(
+        radius,
+        cmd.pie_start_angle_degrees,
+        cmd.pie_end_angle_degrees)
+    wedge_height := max(1.0, bounds.y_max - bounds.y_min)
+    center := rl.Vector2{
+        frame.atom_x + (-bounds.x_min),
+        frame.row_y + draw_ctx^.text_row_height * 0.58 -
+            wedge_height * 0.5 + (-bounds.y_min),
+    }
+    fill_color := command_draw_color(cmd, style)
+    outline_color := cmd.has_outline_color ? cmd.outline_color : style.color
+    stroke := max(1.0, cmd.inline_outline_stroke)
+    if cmd.pie_is_filled {
+        draw_filled_pie_section(
+            center,
+            radius,
+            cmd.pie_start_angle_degrees,
+            cmd.pie_end_angle_degrees,
+            fill_color)
+    }
+    if !cmd.pie_is_filled || cmd.inline_outline_stroke > 0 {
+        draw_pie_section_outline(
+            center,
+            radius,
+            cmd.pie_start_angle_degrees,
+            cmd.pie_end_angle_degrees,
+            Pie_Section_Style{stroke, outline_color})
+    }
 }
 
 //   Consume one inline pie-section atom in flow layout, optionally drawing it.
@@ -752,70 +813,13 @@ flow_consume_inline_pie_section :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    max_cols := dynview.chars_per_row_for_style(
-        draw_ctx^.panel.width,
-        draw_ctx^.text_padding,
-        draw_ctx^.wrap_advance,
-        style)
-    if max_cols <= 0 {
-        max_cols = 1
-    }
-
+    max_cols := flow_max_cols(style, draw_ctx)
     cols := dynview.inline_circle_cols(cmd, style, max_cols)
-    if flow^.col > 0 && flow^.col + cols > max_cols {
-        flow^.row += 1
-        flow^.col = 0
-    }
+    flow_wrap_for_cols(flow, cols, max_cols)
 
-    if draw_ctx^.enabled {
-        row_y := draw_ctx^.panel.y + draw_ctx^.text_padding +
-            f32(flow^.row) * draw_ctx^.text_row_height - draw_ctx^.scroll_y
-        if row_y + draw_ctx^.text_row_height >= draw_ctx^.panel.y &&
-            row_y <= draw_ctx^.panel.y + draw_ctx^.panel.height {
-
-            effective_advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
-            atom_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-                f32(flow^.col) * effective_advance
-            radius := max(2.0, cmd.inline_atom_dimension * effective_advance)
-            bounds := pie_section_bounds(
-                radius,
-                cmd.pie_start_angle_degrees,
-                cmd.pie_end_angle_degrees)
-            wedge_height := max(1.0, bounds.y_max - bounds.y_min)
-            center := rl.Vector2{
-                atom_x + (-bounds.x_min),
-                row_y + draw_ctx^.text_row_height * 0.58 -
-                    wedge_height * 0.5 + (-bounds.y_min),
-            }
-            fill_color := command_draw_color(cmd, style)
-            outline_color := cmd.has_outline_color ? cmd.outline_color : style.color
-            stroke := max(1.0, cmd.inline_outline_stroke)
-            if cmd.pie_is_filled {
-                draw_filled_pie_section(
-                    center,
-                    radius,
-                    cmd.pie_start_angle_degrees,
-                    cmd.pie_end_angle_degrees,
-                    fill_color)
-                if cmd.inline_outline_stroke > 0 {
-                    draw_pie_section_outline(
-                        center,
-                        radius,
-                        cmd.pie_start_angle_degrees,
-                        cmd.pie_end_angle_degrees,
-                        stroke,
-                        outline_color)
-                }
-            } else {
-                draw_pie_section_outline(
-                    center,
-                    radius,
-                    cmd.pie_start_angle_degrees,
-                    cmd.pie_end_angle_degrees,
-                    stroke,
-                    outline_color)
-            }
-        }
+    frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
+    if frame.visible {
+        draw_flow_inline_pie_section(cmd, style, draw_ctx, frame)
     }
 
     flow^.had_visible = true
@@ -830,7 +834,8 @@ flow_consume_inline_perpendicular :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.34, 0.74)
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx,
+        Flow_Shape_Span{0.34, 0.74})
     if frame.visible {
         draw_perpendicular_shape(frame.rect, max(1.0, cmd.inline_atom_stroke),
             Perpendicular_Colors{command_draw_color(cmd, style), cmd.shape_edge_color_1})
@@ -848,7 +853,8 @@ flow_consume_inline_triangle :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.30, 0.78)
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx,
+        Flow_Shape_Span{0.30, 0.78})
     if frame.visible {
         base_color := command_draw_color(cmd, style)
         draw_triangle_shape(frame.rect, cmd.shape_is_filled, Triangle_Colors{
@@ -871,7 +877,8 @@ flow_consume_inline_pentagon :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
-    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx, 0.30, 0.78)
+    frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx,
+        Flow_Shape_Span{0.30, 0.78})
     if frame.visible {
         base_color := command_draw_color(cmd, style)
         draw_pentagon_shape(frame.rect, cmd.shape_is_filled, Pentagon_Colors{
@@ -887,35 +894,6 @@ flow_consume_inline_pentagon :: proc(
     flow^.had_visible = true
     flow^.col += frame.cols
     wrap_if_full(flow, frame.max_cols)
-}
-
-//   Compute style-aware row count for one text command payload.
-count_rows_for_run :: #force_inline proc(
-    text: string,
-    panel_width, text_padding, wrap_advance: f32,
-    style: Dynview_Text_Style) -> int {
-
-    max_chars := dynview.chars_per_row_for_style(
-        panel_width, text_padding, wrap_advance, style)
-    return dynview.count_wrapped_text_rows(text, max_chars)
-}
-
-//   Draw one styled wrapped text line run with bounded visual traits.
-draw_styled_line :: #force_inline proc(
-    text: string,
-    panel: rl.Rectangle,
-    row_y, text_padding, wrap_advance, font_size: f32,
-    font: rl.Font,
-    style: Dynview_Text_Style) {
-
-    line_x := panel.x + text_padding
-    if style.alignment == .Center {
-        line_w := f32(dynview.text_codepoint_count_span(text, 0, len(text))) *
-            wrap_advance * max(0.5, style.wrap_scale)
-        line_x = panel.x + (panel.width - line_w) * 0.5
-    }
-
-    view_core.ui_text(text, int(line_x), int(row_y), style.color, font, font_size)
 }
 
 //  Consume a text based command for the given flow
@@ -944,14 +922,6 @@ consume_large_op_command :: proc(
 
     text := dynview.large_op_visible_text(buffer, cmd)
     flow_consume_text_run(flow, text, style, draw_ctx)
-}
-
-//  Consume a line break for the given flow
-consume_linebreak :: proc(
-    flow: ^Dynview_Flow_State) {
-
-    flow.row += 1
-    flow.col = 0
 }
 
 //   Adapt flow_consume_inline_line to the uniform table handler shape.
@@ -1042,101 +1012,4 @@ flow_handle_inline_pentagon :: proc(
     style: Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
     flow_consume_inline_pentagon(flow, cmd, style, draw_ctx)
-}
-
-//   Consume a single command in the current run of the given flow.
-//   Handlers are dispatched from a static table indexed by command kind.
-consume_flow_command :: proc(
-    runtime: ^core.Dynview_System,
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
-    flow: ^Dynview_Flow_State,
-    draw_ctx: ^Dynview_Draw_Context) {
-
-    kind := cmd.kind
-    if kind == .LineBreak || kind == .Divider {
-        consume_linebreak(flow)
-        return
-    }
-
-    style := dynview.style_by_id(cmd.style_id)
-    handlers := FLOW_COMMAND_HANDLERS
-    handler := handlers[kind]
-    if handler != nil {
-        handler(cmd, buffer, flow, style, draw_ctx)
-    }
-}
-
-//   Count total style-aware rows from validated dynview command stream.
-count_styled_rows :: proc(
-    runtime: ^core.Dynview_System,
-    panel_width, text_padding, wrap_advance: f32) -> int {
-
-    if runtime == nil {
-        return 1
-    }
-
-    buffer := &runtime^.command_buffer
-    if buffer^.command_count <= 0 {
-        return 1
-    }
-
-    flow := Dynview_Flow_State{}
-    draw_ctx := Dynview_Draw_Context{
-        panel = {0, 0, panel_width, 0},
-        text_padding = text_padding,
-        text_row_height = 1,
-        wrap_advance = wrap_advance,
-    }
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
-        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
-    }
-
-    if !flow.had_visible && flow.row == 0 {
-        return 1
-    }
-    return flow.row + 1
-}
-
-//   Draw environment for styled wrapped dynview content: the target panel,
-//   scroll offset, typography metrics, and fallback font, grouped so the entry
-//   point passes one coherent value.
-Styled_Content_Params :: struct {
-    panel:           rl.Rectangle,
-    scroll_y:        f32,
-    text_padding:    f32,
-    text_row_height: f32,
-    wrap_advance:    f32,
-    font_size:       f32,
-    font:            rl.Font,
-}
-
-//   Draw style-aware wrapped dynview text content clipped by caller scissor.
-draw_styled_content :: proc(
-    state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
-    params: Styled_Content_Params) {
-
-    if runtime == nil {
-        return
-    }
-
-    buffer := &runtime^.command_buffer
-    flow := Dynview_Flow_State{}
-    draw_ctx := Dynview_Draw_Context{
-        enabled = true,
-        state = state,
-        panel = params.panel,
-        scroll_y = params.scroll_y,
-        text_padding = params.text_padding,
-        text_row_height = params.text_row_height,
-        wrap_advance = params.wrap_advance,
-        font_size = params.font_size,
-        fallback_font = params.font,
-    }
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
-        consume_flow_command(runtime, cmd, buffer, &flow, &draw_ctx)
-    }
 }

@@ -1,3 +1,4 @@
+"""Accent, radical, and large-operator mode codes for one math block payload op."""
 struct MathBlockModeCodes
     accent_mode::Int32
     radical_mode::Int32
@@ -67,34 +68,9 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         sub_text = script_payload_text(script_token)
     end
 
-    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE
-        return MathPayloadOp(
-            MATH_OP_SCRIPT_ATTACH_RECURSIVE,
-            op.text,
-            op.radical_index_text,
-            sup_text,
-            sub_text,
-            op.accent_mode,
-            op.radical_mode,
-            op.large_op_kind,
-            op.style_role,
-            op.children,
-            op.secondary_children)
-    end
-
-    if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        return MathPayloadOp(
-            MATH_OP_LARGE_OP_RECURSIVE,
-            op.text,
-            op.radical_index_text,
-            sup_text,
-            sub_text,
-            op.accent_mode,
-            op.radical_mode,
-            op.large_op_kind,
-            op.style_role,
-            op.children,
-            op.secondary_children)
+    if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
+            op.kind == MATH_OP_LARGE_OP_RECURSIVE
+        return payload_op_rescripted(op, sup_text, sub_text)
     end
 
     parent_text = plain_text_for_payload(op)
@@ -110,6 +86,22 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         :math,
         [op],
         MathPayloadOp[])
+end
+
+"""Rebuild one payload op with updated script texts, preserving its kind and children."""
+function payload_op_rescripted(op::MathPayloadOp, sup_text::String, sub_text::String)
+    return MathPayloadOp(
+        op.kind,
+        op.text,
+        op.radical_index_text,
+        sup_text,
+        sub_text,
+        op.accent_mode,
+        op.radical_mode,
+        op.large_op_kind,
+        op.style_role,
+        op.children,
+        op.secondary_children)
 end
 
 """Return one plain-text fallback string for a run vector."""
@@ -196,7 +188,7 @@ function fraction_payload_op(run::LatexRun)
     denominator_payloads = math_payload_ops_for_runs(run.secondary_children)
     return MathPayloadOp(MATH_OP_FRACTION_RECURSIVE,
         fraction_text(plain_text_for_runs(run.children),
-        plain_text_for_runs(run.secondary_children)),
+            plain_text_for_runs(run.secondary_children)),
         "", "", "", :none, :none, LARGE_OP_KIND_NONE, :math,
         numerator_payloads, denominator_payloads)
 end
@@ -376,8 +368,7 @@ function bridge_math_payload_op(
         SCRIPT_SUB_DROP,
         SCRIPT_GAP,
         ACCENT_BAR_THICKNESS,
-        ACCENT_BAR_OFFSET,
-    )
+        ACCENT_BAR_OFFSET)
 end
 
 """Flatten recursive payload ops into preorder bridge ops and return direct child count."""

@@ -59,96 +59,96 @@ const SegmentAPrimeBPrimeEnd = PointBPrime
 
 const MarkerRadius = 0.08f0
 
-const ThetaO_H = Float32(atan(RayHEnd[2] - PointO[2], RayHEnd[1] - PointO[1]))
-const ThetaO_K = Float32(atan(RayKEnd[2] - PointO[2], RayKEnd[1] - PointO[1]))
-const ThetaOPrime_H = Float32(atan(
+const ThetaOH = atan(RayHEnd[2] - PointO[2], RayHEnd[1] - PointO[1])
+const ThetaOK = atan(RayKEnd[2] - PointO[2], RayKEnd[1] - PointO[1])
+const ThetaOPrimeH = Float32(atan(
     RayHPrimeEnd[2] - PointOPrime[2], RayHPrimeEnd[1] - PointOPrime[1]))
-const ThetaOPrime_K = Float32(atan(
+const ThetaOPrimeK = Float32(atan(
     RayKPrimeEnd[2] - PointOPrime[2], RayKPrimeEnd[1] - PointOPrime[1]))
 
-const ThetaA_AO = Float32(atan(PointO[2] - PointA[2], PointO[1] - PointA[1]))
-const ThetaA_AB = Float32(atan(PointB[2] - PointA[2], PointB[1] - PointA[1]))
-const ThetaAPrime_AO = Float32(atan(
+const ThetaAAO = atan(PointO[2] - PointA[2], PointO[1] - PointA[1])
+const ThetaAAB = atan(PointB[2] - PointA[2], PointB[1] - PointA[1])
+const ThetaAPrimeAO = Float32(atan(
     PointOPrime[2] - PointAPrime[2], PointOPrime[1] - PointAPrime[1]))
-const ThetaAPrime_AB = Float32(atan(
+const ThetaAPrimeAB = Float32(atan(
     PointBPrime[2] - PointAPrime[2], PointBPrime[1] - PointAPrime[1]))
 
-const ThetaB_BO = Float32(atan(PointO[2] - PointB[2], PointO[1] - PointB[1]))
-const ThetaB_BA = Float32(atan(PointA[2] - PointB[2], PointA[1] - PointB[1]))
-const ThetaBPrime_BO = Float32(atan(
+const ThetaBBO = atan(PointO[2] - PointB[2], PointO[1] - PointB[1])
+const ThetaBBA = atan(PointA[2] - PointB[2], PointA[1] - PointB[1])
+const ThetaBPrimeBO = Float32(atan(
     PointOPrime[2] - PointBPrime[2], PointOPrime[1] - PointBPrime[1]))
-const ThetaBPrime_BA = Float32(atan(
+const ThetaBPrimeBA = Float32(atan(
     PointAPrime[2] - PointBPrime[2], PointAPrime[1] - PointBPrime[1]))
 
 const MarkerOHStart = [
-    PointO[1] + MarkerRadius * Float32(cos(ThetaO_H)),
-    PointO[2] + MarkerRadius * Float32(sin(ThetaO_H)),
+    PointO[1] + MarkerRadius * cos(ThetaOH),
+    PointO[2] + MarkerRadius * sin(ThetaOH),
     0f0,
 ]
 const MarkerOHEnd = [
-    PointO[1] + MarkerRadius * Float32(cos(ThetaO_K)),
-    PointO[2] + MarkerRadius * Float32(sin(ThetaO_K)),
+    PointO[1] + MarkerRadius * cos(ThetaOK),
+    PointO[2] + MarkerRadius * sin(ThetaOK),
     0f0,
 ]
 const MarkerOPrimeHStart = [
-    PointOPrime[1] + MarkerRadius * Float32(cos(ThetaOPrime_H)),
-    PointOPrime[2] + MarkerRadius * Float32(sin(ThetaOPrime_H)),
+    PointOPrime[1] + MarkerRadius * cos(ThetaOPrimeH),
+    PointOPrime[2] + MarkerRadius * sin(ThetaOPrimeH),
     0f0,
 ]
 const MarkerOPrimeHEnd = [
-    PointOPrime[1] + MarkerRadius * Float32(cos(ThetaOPrime_K)),
-    PointOPrime[2] + MarkerRadius * Float32(sin(ThetaOPrime_K)),
+    PointOPrime[1] + MarkerRadius * cos(ThetaOPrimeK),
+    PointOPrime[2] + MarkerRadius * sin(ThetaOPrimeK),
     0f0,
 ]
 
 const MarkerOABStart = [
-    PointA[1] + MarkerRadius * Float32(cos(ThetaA_AO)),
-    PointA[2] + MarkerRadius * Float32(sin(ThetaA_AO)),
+    PointA[1] + MarkerRadius * cos(ThetaAAO),
+    PointA[2] + MarkerRadius * sin(ThetaAAO),
     0f0,
 ]
 const MarkerOABEnd = [
-    PointA[1] + MarkerRadius * Float32(cos(ThetaA_AB)),
-    PointA[2] + MarkerRadius * Float32(sin(ThetaA_AB)),
+    PointA[1] + MarkerRadius * cos(ThetaAAB),
+    PointA[2] + MarkerRadius * sin(ThetaAAB),
     0f0,
 ]
 const MarkerOPrimeAPrimeBPrimeStart = [
-    PointAPrime[1] + MarkerRadius * Float32(cos(ThetaAPrime_AO)),
-    PointAPrime[2] + MarkerRadius * Float32(sin(ThetaAPrime_AO)),
+    PointAPrime[1] + MarkerRadius * cos(ThetaAPrimeAO),
+    PointAPrime[2] + MarkerRadius * sin(ThetaAPrimeAO),
     0f0,
 ]
 const MarkerOPrimeAPrimeBPrimeEnd = [
-    PointAPrime[1] + MarkerRadius * Float32(cos(ThetaAPrime_AB)),
-    PointAPrime[2] + MarkerRadius * Float32(sin(ThetaAPrime_AB)),
+    PointAPrime[1] + MarkerRadius * cos(ThetaAPrimeAB),
+    PointAPrime[2] + MarkerRadius * sin(ThetaAPrimeAB),
     0f0,
 ]
 
 const MarkerOBAStart = [
-    PointB[1] + MarkerRadius * Float32(cos(ThetaB_BO)),
-    PointB[2] + MarkerRadius * Float32(sin(ThetaB_BO)),
+    PointB[1] + MarkerRadius * cos(ThetaBBO),
+    PointB[2] + MarkerRadius * sin(ThetaBBO),
     0f0,
 ]
 const MarkerOBAEnd = [
-    PointB[1] + MarkerRadius * Float32(cos(ThetaB_BA)),
-    PointB[2] + MarkerRadius * Float32(sin(ThetaB_BA)),
+    PointB[1] + MarkerRadius * cos(ThetaBBA),
+    PointB[2] + MarkerRadius * sin(ThetaBBA),
     0f0,
 ]
 const MarkerOPrimeBPrimeAPrimeStart = [
-    PointBPrime[1] + MarkerRadius * Float32(cos(ThetaBPrime_BO)),
-    PointBPrime[2] + MarkerRadius * Float32(sin(ThetaBPrime_BO)),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBO),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBO),
     0f0,
 ]
 const MarkerOPrimeBPrimeAPrimeEnd = [
-    PointBPrime[1] + MarkerRadius * Float32(cos(ThetaBPrime_BA)),
-    PointBPrime[2] + MarkerRadius * Float32(sin(ThetaBPrime_BA)),
+    PointBPrime[1] + MarkerRadius * cos(ThetaBPrimeBA),
+    PointBPrime[2] + MarkerRadius * sin(ThetaBPrimeBA),
     0f0,
 ]
 
-const AngleOHKTheta = ThetaO_K - ThetaO_H
-const AngleOPrimeHKTheta = ThetaOPrime_K - ThetaOPrime_H
-const AngleOABTheta = ThetaA_AB - ThetaA_AO
-const AngleOPrimeAPrimeBPrimeTheta = ThetaAPrime_AB - ThetaAPrime_AO
-const AngleOBATheta = ThetaB_BA - ThetaB_BO
-const AngleOPrimeBPrimeAPrimeTheta = ThetaBPrime_BA - ThetaBPrime_BO
+const AngleOHKTheta = ThetaOK - ThetaOH
+const AngleOPrimeHKTheta = ThetaOPrimeK - ThetaOPrimeH
+const AngleOABTheta = ThetaAAB - ThetaAAO
+const AngleOPrimeAPrimeBPrimeTheta = ThetaAPrimeAB - ThetaAPrimeAO
+const AngleOBATheta = ThetaBBA - ThetaBBO
+const AngleOPrimeBPrimeAPrimeTheta = ThetaBPrimeBA - ThetaBPrimeBO
 
 const LabelColor = :plum1
 const HighlightColor = :lightgreen
@@ -334,7 +334,7 @@ const PhaseDrawRayLPrime = 80f0
 const PhasePenRiseEnd = 81f0
 const PhaseFinalHold = 82f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 13
 
@@ -353,82 +353,145 @@ are fulfilled. Because of the congruence of the triangles OAB and O'A'B', we hav
 Let the straight line AB intersect l in C. Take the point C' upon the segment A'B' so that A'C' ≡ AC. Then O'C' is the required half-ray. In fact, it follows directly from these congruences, by aid of axiom IV, 3, that BC ≡ B'C'. Furthermore, the triangles OAC and O'A'C' are congruent to each other, and the same is true also of the triangles OCB and O'B'C'. With this our proposition is demonstrated."""
     latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 13}
 
-Let the angle $(h, k)$ of the plane $\angle$ be congruent to the angle $(h', k')$ of the plane $\alpha '$, and, furthermore, let $l$ be a half-ray in the plane $\alpha$ emanating from the vertex of the angle $(h, k)$ and lying within this angle. Then there always exists in the plane $\angle '$ a half-ray $l'$ emanating from the vertex of the angle $(h', k')$ and lying within this angle so that we have
+Let the angle $\angle(h, k)$ \euclidangle[color=lightgreen,radius=2,end=60,filled] of the plane $\alpha$ be congruent
+to the angle $\angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled] of the plane $\alpha'$,
+and, furthermore, let $l$ \euclidline[color=grey60,length=3,thickness=4] be a half-ray in the plane $\alpha$ emanating
+from the vertex of the angle $\angle(h, k)$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
+and lying within this angle. Then there always exists in the plane $\alpha'$ a half-ray
+$l'$ \euclidline[color=grey60,length=3,thickness=4] emanating from the
+vertex of the angle $\angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and lying within this angle so that we have
 
-    $\angle(h, l) \equiv \angle(h', l')$,   $\angle(k, l) \equiv \angle(k', l')$.
+    $\angle(h, l) \equiv \angle(h', l')$ \euclidangle[color=lightgreen,radius=2,end=60,filled],   $\angle(k, l) \equiv \angle(k', l')$ \euclidangle[color=lightgreen,radius=2,end=60,filled].
 
-Proof: We will represent the vertices of the angles $(h, k)$ and $(h', k')$ by $O$ and $O'$, respectively, and so select upon the sides $h$, $k$, $h'$, $k'$ the points $A$, $B$, $A'$, $B'$ so that the congruences
+\textbf{Proof}: We will represent the vertices of the angles
+$\angle(h, k)$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and
+$\angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled] by
+$O$ \euclidpoint[color=plum1,size=0.5] and $O'$ \euclidpoint[color=plum1,size=0.5],
+respectively, and so select upon the sides
+$h$ \euclidline[color=steelblue,length=3,thickness=4], $k$ \euclidline[color=palevioletred1,length=3,thickness=4],
+$h'$ \euclidline[color=steelblue,length=3,thickness=4], $k'$ \euclidline[color=palevioletred1,length=3,thickness=4]
+the points $A$ \euclidpoint[color=grey60,size=1], $B$ \euclidpoint[color=grey60,size=1],
+$A'$ \euclidpoint[color=grey60,size=1], $B'$ \euclidpoint[color=grey60,size=1] so that the congruences
 
-    $OA \equiv O'A'$,   $OB \equiv O'B'$
+    $OA$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv O'A'$ \euclidline[color=steelblue,length=3,thickness=4],   $OB$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv O'B'$ \euclidline[color=palevioletred1,length=3,thickness=4]
 
-are fulfilled. Because of the congruence of the triangles $OAB$ and $O'A'B'$, we have at once
+are fulfilled. Because of the congruence of the triangles
+$OAB$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3]
+and $O'A'B'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3], we have at once
 
-    $AB \equiv A'B'$,   $\angle OAB \equiv \angle O'A'B'$,   $\angle OBA \equiv \angle O'B'A'$.
+    $AB$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=khaki3,length=3,thickness=4],   $\angle OAB \equiv \angle O'A'B'$ \euclidangle[color=lightgreen,radius=2,end=60,filled],   $\angle OBA \equiv \angle O'B'A'$ \euclidangle[color=lightgreen,radius=2,end=60,filled].
 
-Let the straight line $AB$ intersect $l$ in $C$. Take the point $C'$ upon the segment $A'B'$ so that $A'C' \equiv AC$. Then $O'C'$ is the required half-ray. In fact, it follows directly from these congruences, by aid of \textit{axiom IV, 3}, that $BC \equiv B'C'$. Furthermore, the triangles $OAC$ and $O'A'C'$ are congruent to each other, and the same is true also of the triangles $OCB$ and $O'B'C'$. With this our proposition is demonstrated."""
+Let the straight line $AB$ \euclidline[color=khaki3,length=3,thickness=4] intersect
+$l$ \euclidline[color=grey60,length=3,thickness=4] in $C$ \euclidpoint[color=steelblue,size=1]. Take the point
+$C'$ \euclidpoint[color=steelblue,size=1] upon the segment
+$A'B'$ \euclidline[color=khaki3,length=3,thickness=4] so that
+$A'C'$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv AC$ \euclidline[color=khaki3,length=3,thickness=4].
+Then $O'C'$ \euclidline[color=grey60,length=3,thickness=4] is the required half-ray. In fact, it follows directly from these congruences, by aid of
+\textit{axiom IV, 3}, that $BC$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv B'C'$ \euclidline[color=khaki3,length=3,thickness=4].
+Furthermore, the triangles $OAC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=steelblue,edge3_color=khaki3] and
+$O'A'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=steelblue,edge3_color=khaki3] are congruent to each other,
+and the same is true also of the triangles
+$OCB$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3] and
+$O'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3].
+With this our proposition is demonstrated."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    rayHHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHHostId))
-    rayHJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHJoint2Id))
-    rayKHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKHostId))
-    rayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint2Id))
-    rayHPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeHostId))
-    rayHPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
-    rayKPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeHostId))
-    rayKPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
-    rayLHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLHostId))
-    rayLJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLJoint2Id))
-    rayLPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLPrimeHostId))
-    rayLPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLPrimeJoint2Id))
+    ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHHostId))
+    ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHJoint2Id))
+    ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKHostId))
+    ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKJoint2Id))
+    ray_h_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHPrimeHostId))
+    ray_h_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHPrimeJoint2Id))
+    ray_k_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKPrimeHostId))
+    ray_k_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKPrimeJoint2Id))
+    ray_l_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLHostId))
+    ray_l_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLJoint2Id))
+    ray_l_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLPrimeHostId))
+    ray_l_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLPrimeJoint2Id))
 
-    segmentABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
-    segmentABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
-    segmentAPrimeBPrimeHostId = Integer(
+    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentABHostId))
+    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentABJoint2Id))
+    segment_a_prime_b_prime_host_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeHostId))
-    segmentAPrimeBPrimeJoint2Id = Integer(
+    segment_a_prime_b_prime_joint2_id = Integer(
         OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeJoint2Id))
 
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
-    pointBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBPrimeId))
-    pointCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
-    pointCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCPrimeId))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointAPrimeId))
+    point_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointBPrimeId))
+    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
+    point_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointCPrimeId))
 
-    labelOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
-    labelOPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOPrimeId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
-    labelBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    labelCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
-    labelHId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    labelKId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
-    labelHPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHPrimeId))
-    labelKPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKPrimeId))
-    labelLId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLId))
-    labelLPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLPrimeId))
+    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
+    label_o_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelOPrimeId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelAPrimeId))
+    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelBPrimeId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
+    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelCPrimeId))
+    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
+    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
+    label_h_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelHPrimeId))
+    label_k_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelKPrimeId))
+    label_l_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLId))
+    label_l_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelLPrimeId))
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
-        [rayHHostId, rayKHostId, rayHPrimeHostId, rayKPrimeHostId,
-         rayLHostId, rayLPrimeHostId,
-         segmentABHostId, segmentAPrimeBPrimeHostId,
-         pointAId, pointBId, pointAPrimeId, pointBPrimeId, pointCId, pointCPrimeId,
-         labelOId, labelOPrimeId, labelAId, labelBId,
-         labelAPrimeId, labelBPrimeId, labelCId, labelCPrimeId,
-         labelHId, labelKId, labelHPrimeId, labelKPrimeId, labelLId, labelLPrimeId])
+        [ray_h_host_id, ray_k_host_id, ray_h_prime_host_id, ray_k_prime_host_id,
+         ray_l_host_id, ray_l_prime_host_id,
+         segment_a_b_host_id, segment_a_prime_b_prime_host_id,
+         point_a_id, point_b_id, point_a_prime_id, point_b_prime_id,
+         point_c_id, point_c_prime_id,
+         label_o_id, label_o_prime_id, label_a_id, label_b_id,
+         label_a_prime_id, label_b_prime_id, label_c_id, label_c_prime_id,
+         label_h_id, label_k_id, label_h_prime_id, label_k_prime_id,
+         label_l_id, label_l_prime_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, rayHJoint2Id, RayHStart)
-    OdinJuliaBridge.set_point_position(state_ptr, rayKJoint2Id, RayKStart)
-    OdinJuliaBridge.set_point_position(state_ptr, rayHPrimeJoint2Id, RayHPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, rayKPrimeJoint2Id, RayKPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, rayLJoint2Id, RayLStart)
-    OdinJuliaBridge.set_point_position(state_ptr, rayLPrimeJoint2Id, RayLPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, segmentABJoint2Id, SegmentABStart)
-    OdinJuliaBridge.set_point_position(state_ptr, segmentAPrimeBPrimeJoint2Id, SegmentAPrimeBPrimeStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_h_joint2_id, RayHStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_k_joint2_id, RayKStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_h_prime_joint2_id, RayHPrimeStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_k_prime_joint2_id, RayKPrimeStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_l_joint2_id, RayLStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, ray_l_prime_joint2_id, RayLPrimeStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, segment_a_b_joint2_id, SegmentABStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, segment_a_prime_b_prime_joint2_id, SegmentAPrimeBPrimeStart)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendToO)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
@@ -453,169 +516,269 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    rayH = OdinJuliaBridge.create_new_line(state_ptr, RayHStart, RayHStart, RayHColor, 0f0)
-    rayK = OdinJuliaBridge.create_new_line(state_ptr, RayKStart, RayKStart, RayKColor, 0f0)
-    rayHPrime = OdinJuliaBridge.create_new_line(
+    ray_h = OdinJuliaBridge.create_new_line(
+        state_ptr, RayHStart, RayHStart, RayHColor, 0f0)
+    ray_k = OdinJuliaBridge.create_new_line(
+        state_ptr, RayKStart, RayKStart, RayKColor, 0f0)
+    ray_h_prime = OdinJuliaBridge.create_new_line(
         state_ptr, RayHPrimeStart, RayHPrimeStart, RayHColor, 0f0)
-    rayKPrime = OdinJuliaBridge.create_new_line(
+    ray_k_prime = OdinJuliaBridge.create_new_line(
         state_ptr, RayKPrimeStart, RayKPrimeStart, RayKColor, 0f0)
-    rayL = OdinJuliaBridge.create_new_line(state_ptr, RayLStart, RayLStart, RayLColor, 0f0)
-    rayLPrime = OdinJuliaBridge.create_new_line(
+    ray_l = OdinJuliaBridge.create_new_line(
+        state_ptr, RayLStart, RayLStart, RayLColor, 0f0)
+    ray_l_prime = OdinJuliaBridge.create_new_line(
         state_ptr, RayLPrimeStart, RayLPrimeStart, RayLColor, 0f0)
 
-    segmentAB = OdinJuliaBridge.create_new_line(
+    segment_a_b = OdinJuliaBridge.create_new_line(
         state_ptr, SegmentABStart, SegmentABStart, SegmentABColor, 0f0)
-    segmentAPrimeBPrime = OdinJuliaBridge.create_new_line(
-        state_ptr, SegmentAPrimeBPrimeStart, SegmentAPrimeBPrimeStart, SegmentABColor, 0f0)
+    segment_a_prime_b_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, SegmentAPrimeBPrimeStart,
+        SegmentAPrimeBPrimeStart, SegmentABColor, 0f0)
 
-    pointA = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAuxColor, 0f0)
-    pointB = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointAuxColor, 0f0)
-    pointAPrime = OdinJuliaBridge.create_new_point(state_ptr, PointAPrime, PointAuxColor, 0f0)
-    pointBPrime = OdinJuliaBridge.create_new_point(state_ptr, PointBPrime, PointAuxColor, 0f0)
-    pointC = OdinJuliaBridge.create_new_point(state_ptr, PointC, PointCColor, 0f0)
-    pointCPrime = OdinJuliaBridge.create_new_point(state_ptr, PointCPrime, PointCColor, 0f0)
+    point_a = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAuxColor, 0f0)
+    point_b = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointAuxColor, 0f0)
+    point_a_prime = OdinJuliaBridge.create_new_point(
+        state_ptr, PointAPrime, PointAuxColor, 0f0)
+    point_b_prime = OdinJuliaBridge.create_new_point(
+        state_ptr, PointBPrime, PointAuxColor, 0f0)
+    point_c = OdinJuliaBridge.create_new_point(state_ptr, PointC, PointCColor, 0f0)
+    point_c_prime = OdinJuliaBridge.create_new_point(
+        state_ptr, PointCPrime, PointCColor, 0f0)
 
-    labelO = OdinJuliaBridge.create_new_label(state_ptr, 'O', LabelOPoint, LabelColor, 16f0)
-    labelA = OdinJuliaBridge.create_new_label(state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
-    labelB = OdinJuliaBridge.create_new_label(state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
-    labelC = OdinJuliaBridge.create_new_label(state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
+    label_o = OdinJuliaBridge.create_new_label(
+        state_ptr, 'O', LabelOPoint, LabelColor, 16f0)
+    label_a = OdinJuliaBridge.create_new_label(
+        state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
+    label_b = OdinJuliaBridge.create_new_label(
+        state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
+    label_c = OdinJuliaBridge.create_new_label(
+        state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
 
-    labelOPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_o_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'O', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelOPrimePoint, LabelColor, 16f0)
-    labelAPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelAPrimePoint, LabelColor, 16f0)
-    labelBPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelBPrimePoint, LabelColor, 16f0)
-    labelCPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelCPrimePoint, LabelColor, 16f0)
-    labelH = OdinJuliaBridge.create_new_label(state_ptr, 'h', LabelHPoint, LabelColor, 16f0)
-    labelK = OdinJuliaBridge.create_new_label(state_ptr, 'k', LabelKPoint, LabelColor, 16f0)
-    labelL = OdinJuliaBridge.create_new_label(state_ptr, 'l', LabelLPoint, LabelColor, 16f0)
-    labelHPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_h = OdinJuliaBridge.create_new_label(
+        state_ptr, 'h', LabelHPoint, LabelColor, 16f0)
+    label_k = OdinJuliaBridge.create_new_label(
+        state_ptr, 'k', LabelKPoint, LabelColor, 16f0)
+    label_l = OdinJuliaBridge.create_new_label(
+        state_ptr, 'l', LabelLPoint, LabelColor, 16f0)
+    label_h_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'h', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelHPrimePoint, LabelColor, 16f0)
-    labelKPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_k_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'k', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelKPrimePoint, LabelColor, 16f0)
-    labelLPrime = OdinJuliaBridge.create_new_label_decorated(
+    label_l_prime = OdinJuliaBridge.create_new_label_decorated(
         state_ptr, 'l', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelLPrimePoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHHostId, Float32(rayH.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHJoint1Id, Float32(rayH.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHJoint2Id, Float32(rayH.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKHostId, Float32(rayK.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKJoint1Id, Float32(rayK.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKJoint2Id, Float32(rayK.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHPrimeHostId, Float32(rayHPrime.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHPrimeJoint1Id, Float32(rayHPrime.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayHPrimeJoint2Id, Float32(rayHPrime.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKPrimeHostId, Float32(rayKPrime.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKPrimeJoint1Id, Float32(rayKPrime.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayKPrimeJoint2Id, Float32(rayKPrime.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLHostId, Float32(rayL.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLJoint1Id, Float32(rayL.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLJoint2Id, Float32(rayL.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLPrimeHostId, Float32(rayLPrime.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLPrimeJoint1Id, Float32(rayLPrime.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaRayLPrimeJoint2Id, Float32(rayLPrime.joint2Id))
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABHostId, Float32(segmentAB.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint1Id, Float32(segmentAB.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaSegmentABJoint2Id, Float32(segmentAB.joint2Id))
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeHostId, Float32(segmentAPrimeBPrime.hostId))
+        state_ptr, MetaRayHHostId, ray_h.host_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint1Id, Float32(segmentAPrimeBPrime.joint1Id))
+        state_ptr, MetaRayHJoint1Id, ray_h.joint1_id)
     OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint2Id, Float32(segmentAPrimeBPrime.joint2Id))
+        state_ptr, MetaRayHJoint2Id, ray_h.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKHostId, ray_k.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKJoint1Id, ray_k.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKJoint2Id, ray_k.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayHPrimeHostId, ray_h_prime.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayHPrimeJoint1Id, ray_h_prime.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayHPrimeJoint2Id, ray_h_prime.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKPrimeHostId, ray_k_prime.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKPrimeJoint1Id, ray_k_prime.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayKPrimeJoint2Id, ray_k_prime.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLHostId, ray_l.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLJoint1Id, ray_l.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLJoint2Id, ray_l.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLPrimeHostId, ray_l_prime.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLPrimeJoint1Id, ray_l_prime.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaRayLPrimeJoint2Id, ray_l_prime.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, Float32(pointA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, Float32(pointB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAPrimeId, Float32(pointAPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBPrimeId, Float32(pointBPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointCId, Float32(pointC.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointCPrimeId, Float32(pointCPrime.index))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentABHostId, segment_a_b.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentABJoint1Id, segment_a_b.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentABJoint2Id, segment_a_b.joint2_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeHostId, segment_a_prime_b_prime.host_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeJoint1Id, segment_a_prime_b_prime.joint1_id)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeJoint2Id, segment_a_prime_b_prime.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOId, Float32(labelO.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelOPrimeId, Float32(labelOPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, Float32(labelA.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, Float32(labelB.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAPrimeId, Float32(labelAPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBPrimeId, Float32(labelBPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, Float32(labelC.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCPrimeId, Float32(labelCPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, Float32(labelH.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, Float32(labelK.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHPrimeId, Float32(labelHPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKPrimeId, Float32(labelKPrime.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelLId, Float32(labelL.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelLPrimeId, Float32(labelLPrime.index))
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointAId, point_a.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointBId, point_b.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointAPrimeId, point_a_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointBPrimeId, point_b_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointCId, point_c.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaPointCPrimeId, point_c_prime.index)
+
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelOId, label_o.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelOPrimeId, label_o_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelAId, label_a.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelBId, label_b.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelAPrimeId, label_a_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelBPrimeId, label_b_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelCId, label_c.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelCPrimeId, label_c_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelHId, label_h.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelKId, label_k.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelHPrimeId, label_h_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelKPrimeId, label_k_prime.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelLId, label_l.index)
+    OdinJuliaBridge.set_animation_meta(
+        state_ptr, MetaLabelLPrimeId, label_l_prime.index)
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    rayHHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHHostId))
-    rayHJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHJoint1Id))
-    rayHJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHJoint2Id))
-    rayKHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKHostId))
-    rayKJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint1Id))
-    rayKJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKJoint2Id))
-    rayHPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeHostId))
-    rayHPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint1Id))
-    rayHPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayHPrimeJoint2Id))
-    rayKPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeHostId))
-    rayKPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint1Id))
-    rayKPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayKPrimeJoint2Id))
-    rayLHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLHostId))
-    rayLJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLJoint1Id))
-    rayLJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLJoint2Id))
-    rayLPrimeHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLPrimeHostId))
-    rayLPrimeJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLPrimeJoint1Id))
-    rayLPrimeJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaRayLPrimeJoint2Id))
+    ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHHostId))
+    ray_h_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHJoint1Id))
+    ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHJoint2Id))
+    ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKHostId))
+    ray_k_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKJoint1Id))
+    ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKJoint2Id))
+    ray_h_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHPrimeHostId))
+    ray_h_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHPrimeJoint1Id))
+    ray_h_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayHPrimeJoint2Id))
+    ray_k_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKPrimeHostId))
+    ray_k_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKPrimeJoint1Id))
+    ray_k_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayKPrimeJoint2Id))
+    ray_l_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLHostId))
+    ray_l_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLJoint1Id))
+    ray_l_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLJoint2Id))
+    ray_l_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLPrimeHostId))
+    ray_l_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLPrimeJoint1Id))
+    ray_l_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaRayLPrimeJoint2Id))
 
-    segmentABHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABHostId))
-    segmentABJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint1Id))
-    segmentABJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentABJoint2Id))
-    segmentAPrimeBPrimeHostId = Integer(
-        OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeHostId))
-    segmentAPrimeBPrimeJoint1Id = Integer(
-        OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeJoint1Id))
-    segmentAPrimeBPrimeJoint2Id = Integer(
-        OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeJoint2Id))
+    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentABHostId))
+    segment_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentABJoint1Id))
+    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentABJoint2Id))
+    segment_a_prime_b_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeHostId))
+    segment_a_prime_b_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeJoint1Id))
+    segment_a_prime_b_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaSegmentAPrimeBPrimeJoint2Id))
 
-    pointAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    pointBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    pointAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAPrimeId))
-    pointBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBPrimeId))
-    pointCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
-    pointCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCPrimeId))
+    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointAId))
+    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointBId))
+    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointAPrimeId))
+    point_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointBPrimeId))
+    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointCId))
+    point_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPointCPrimeId))
 
-    labelOId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
-    labelOPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOPrimeId))
-    labelAId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    labelBId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    labelAPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAPrimeId))
-    labelBPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBPrimeId))
-    labelCId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    labelCPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCPrimeId))
-    labelHId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    labelKId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
-    labelHPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHPrimeId))
-    labelKPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKPrimeId))
-    labelLId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLId))
-    labelLPrimeId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLPrimeId))
+    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelOId))
+    label_o_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelOPrimeId))
+    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelAId))
+    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelBId))
+    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelAPrimeId))
+    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelBPrimeId))
+    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelCId))
+    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelCPrimeId))
+    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelHId))
+    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelKId))
+    label_h_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelHPrimeId))
+    label_k_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelKPrimeId))
+    label_l_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelLId))
+    label_l_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLabelLPrimeId))
 
-    if rayHHostId < 0 || rayKHostId < 0 || rayHPrimeHostId < 0 || rayKPrimeHostId < 0
+    if ray_h_host_id < 0 || ray_k_host_id < 0 ||
+       ray_h_prime_host_id < 0 || ray_k_prime_host_id < 0
         return
     end
 
@@ -627,18 +790,23 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, DescendDuration, PenTopZ, PointO[1], PointO[2])
         timer += dt
         if timer >= DescendDuration
-            OdinJuliaBridge.show_point(state_ptr, labelOId)
+            OdinJuliaBridge.show_point(state_ptr, label_o_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, RayHColor)
             phase = PhaseDrawRayH
             timer = 0f0
         end
     elseif phase == PhaseDrawRayH
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayHStart, RayHEnd,
-            EdgeBrush, RayHColor, rayHHostId, rayHJoint1Id, rayHJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayHStart, RayHEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayHColor,
+            line_host_id=ray_h_host_id,
+            line_joint1_id=ray_h_joint1_id,
+            line_joint2_id=ray_h_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelHId)
+            OdinJuliaBridge.show_point(state_ptr, label_h_id)
             phase = PhaseArcHToO
             timer = 0f0
         end
@@ -652,12 +820,17 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRayK
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayKStart, RayKEnd,
-            EdgeBrush, RayKColor, rayKHostId, rayKJoint1Id, rayKJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayKStart, RayKEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayKColor,
+            line_host_id=ray_k_host_id,
+            line_joint1_id=ray_k_joint1_id,
+            line_joint2_id=ray_k_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelKId)
+            OdinJuliaBridge.show_point(state_ptr, label_k_id)
             phase = PhaseArcOToOPrime
             timer = 0f0
         end
@@ -666,24 +839,30 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, RayKEnd, PointOPrime, 0.28f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelOPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_o_prime_id)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, RayHColor)
             phase = PhaseDrawRayHPrime
             timer = 0f0
         end
     elseif phase == PhaseDrawRayHPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayHPrimeStart, RayHPrimeEnd,
-            EdgeBrush, RayHColor, rayHPrimeHostId, rayHPrimeJoint1Id, rayHPrimeJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayHPrimeStart, RayHPrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayHColor,
+            line_host_id=ray_h_prime_host_id,
+            line_joint1_id=ray_h_prime_joint1_id,
+            line_joint2_id=ray_h_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelHPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_h_prime_id)
             phase = PhaseArcHPrimeToOPrime
             timer = 0f0
         end
     elseif phase == PhaseArcHPrimeToOPrime
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, RayHPrimeEnd, PointOPrime, 0.22f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration,
+            RayHPrimeEnd, PointOPrime, 0.22f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, RayKColor)
@@ -691,18 +870,24 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRayKPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayKPrimeStart, RayKPrimeEnd,
-            EdgeBrush, RayKColor, rayKPrimeHostId, rayKPrimeJoint1Id, rayKPrimeJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayKPrimeStart, RayKPrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayKColor,
+            line_host_id=ray_k_prime_host_id,
+            line_joint1_id=ray_k_prime_joint1_id,
+            line_joint2_id=ray_k_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelKPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_k_prime_id)
             phase = PhasePenRiseBeforeAngleHK
             timer = 0f0
         end
     elseif phase == PhasePenRiseBeforeAngleHK
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenLiftDuration, PenTopZ, RayKPrimeEnd[1], RayKPrimeEnd[2])
+            state_ptr, timer, PenLiftDuration, PenTopZ,
+            RayKPrimeEnd[1], RayKPrimeEnd[2])
         timer += dt
         if timer >= PenLiftDuration
             OdinJuliaBridge.hide_pen(state_ptr)
@@ -741,7 +926,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointO, PointOPrime,
-            MarkerOHStart, MarkerOPrimeHStart, 0.22f0, 1, :none)
+            MarkerOHStart, MarkerOPrimeHStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightHPrimeKPrimeForward
@@ -770,7 +955,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseCompassRiseAfterHK
         EuclidAnimations.animate_compass_rise(
             state_ptr, timer, CompassLiftDuration, CompassTopZ,
-            PointOPrime[1], PointOPrime[2], MarkerOPrimeHStart[1], MarkerOPrimeHStart[2])
+            PointOPrime[1], PointOPrime[2],
+            MarkerOPrimeHStart[1], MarkerOPrimeHStart[2])
         timer += dt
         if timer >= CompassLiftDuration
             OdinJuliaBridge.hide_compass(state_ptr)
@@ -788,12 +974,17 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRayL
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayLStart, RayLEnd,
-            EdgeBrush, RayLColor, rayLHostId, rayLJoint1Id, rayLJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayLStart, RayLEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayLColor,
+            line_host_id=ray_l_host_id,
+            line_joint1_id=ray_l_joint1_id,
+            line_joint2_id=ray_l_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelLId)
+            OdinJuliaBridge.show_point(state_ptr, label_l_id)
             phase = PhaseArcOToA
             timer = 0f0
         end
@@ -802,14 +993,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, RayLEnd, PointA, 0.20f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
             phase = PhaseDrawPointA
             timer = 0f0
         end
     elseif phase == PhaseDrawPointA
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointA, PointBrush, PointAuxColor, pointAId)
+            PointA, PointBrush, PointAuxColor, point_a_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcAToB
@@ -820,14 +1011,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, PointA, PointB, 0.20f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelBId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
             phase = PhaseDrawPointB
             timer = 0f0
         end
     elseif phase == PhaseDrawPointB
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointB, PointBrush, PointAuxColor, pointBId)
+            PointB, PointBrush, PointAuxColor, point_b_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcBToOPrime
@@ -838,14 +1029,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, PointB, PointAPrime, 0.30f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelAPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
             phase = PhaseDrawPointAPrime
             timer = 0f0
         end
     elseif phase == PhaseDrawPointAPrime
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointAPrime, PointBrush, PointAuxColor, pointAPrimeId)
+            PointAPrime, PointBrush, PointAuxColor, point_a_prime_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcAPrimeToBPrime
@@ -853,17 +1044,18 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseArcAPrimeToBPrime
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, PointAPrime, PointBPrime, 0.20f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration,
+            PointAPrime, PointBPrime, 0.20f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelBPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
             phase = PhaseDrawPointBPrime
             timer = 0f0
         end
     elseif phase == PhaseDrawPointBPrime
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointBPrime, PointBrush, PointAuxColor, pointBPrimeId)
+            PointBPrime, PointBrush, PointAuxColor, point_b_prime_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcBPrimeToOForOA
@@ -872,7 +1064,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     elseif phase == PhaseArcBPrimeToOForOA
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, PointBPrime, PointO, 0.30f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration,
+            PointBPrime, PointO, 0.30f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseDragOAForward
@@ -977,9 +1170,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSegmentAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, SegmentABStart, SegmentABEnd,
-            EdgeBrush, SegmentABColor, segmentABHostId, segmentABJoint1Id, segmentABJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            SegmentABStart, SegmentABEnd;
+            penbrush=EdgeBrush,
+            pencolor=SegmentABColor,
+            line_host_id=segment_a_b_host_id,
+            line_joint1_id=segment_a_b_joint1_id,
+            line_joint2_id=segment_a_b_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseArcBToAPrimeForPrimeAB
@@ -994,11 +1192,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSegmentAPrimeBPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration,
-            SegmentAPrimeBPrimeStart, SegmentAPrimeBPrimeEnd,
-            EdgeBrush, SegmentABColor,
-            segmentAPrimeBPrimeHostId, segmentAPrimeBPrimeJoint1Id, segmentAPrimeBPrimeJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            SegmentAPrimeBPrimeStart, SegmentAPrimeBPrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=SegmentABColor,
+            line_host_id=segment_a_prime_b_prime_host_id,
+            line_joint1_id=segment_a_prime_b_prime_joint1_id,
+            line_joint2_id=segment_a_prime_b_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseArcBPrimeToAForABHighlight
@@ -1093,7 +1294,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerOABStart, MarkerOPrimeAPrimeBPrimeStart, 0.22f0, 1, :none)
+            MarkerOABStart, MarkerOPrimeAPrimeBPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightOPrimeAPrimeBPrimeForward
@@ -1123,7 +1324,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointB,
-            MarkerOPrimeAPrimeBPrimeStart, MarkerOBAStart, 0.22f0, 1, :none)
+            MarkerOPrimeAPrimeBPrimeStart, MarkerOBAStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightOBAForward
@@ -1151,7 +1352,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointB, PointBPrime,
-            MarkerOBAStart, MarkerOPrimeBPrimeAPrimeStart, 0.22f0, 1, :none)
+            MarkerOBAStart, MarkerOPrimeBPrimeAPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightOPrimeBPrimeAPrimeForward
@@ -1194,14 +1395,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, DescendDuration, PenTopZ, PointC[1], PointC[2])
         timer += dt
         if timer >= DescendDuration
-            OdinJuliaBridge.show_point(state_ptr, labelCId)
+            OdinJuliaBridge.show_point(state_ptr, label_c_id)
             phase = PhaseDrawPointC
             timer = 0f0
         end
     elseif phase == PhaseDrawPointC
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointC, PointBrush, PointCColor, pointCId)
+            PointC, PointBrush, PointCColor, point_c_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcCToCPrime
@@ -1212,14 +1413,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, timer, ArcMoveDuration, PointC, PointCPrime, 0.26f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
-            OdinJuliaBridge.show_point(state_ptr, labelCPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
             phase = PhaseDrawPointCPrime
             timer = 0f0
         end
     elseif phase == PhaseDrawPointCPrime
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, DrawPointDuration,
-            PointCPrime, PointBrush, PointCColor, pointCPrimeId)
+            PointCPrime, PointBrush, PointCColor, point_c_prime_id)
         timer += dt
         if timer >= DrawPointDuration
             phase = PhaseArcCPrimeToAForAC
@@ -1324,7 +1525,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     elseif phase == PhaseArcBPrimeToOPrimeForLPrime
         EuclidAnimations.animate_pen_arcmove(
-            state_ptr, timer, ArcMoveDuration, PointBPrime, PointOPrime, 0.22f0, 1, :none)
+            state_ptr, timer, ArcMoveDuration,
+            PointBPrime, PointOPrime, 0.22f0, 1, :none)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, RayLColor)
@@ -1332,19 +1534,24 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRayLPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RayLPrimeStart, RayLPrimeEnd,
-            EdgeBrush, RayLColor,
-            rayLPrimeHostId, rayLPrimeJoint1Id, rayLPrimeJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RayLPrimeStart, RayLPrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=RayLColor,
+            line_host_id=ray_l_prime_host_id,
+            line_joint1_id=ray_l_prime_joint1_id,
+            line_joint2_id=ray_l_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
-            OdinJuliaBridge.show_point(state_ptr, labelLPrimeId)
+            OdinJuliaBridge.show_point(state_ptr, label_l_prime_id)
             phase = PhasePenRiseEnd
             timer = 0f0
         end
     elseif phase == PhasePenRiseEnd
         EuclidAnimations.animate_pen_rise(
-            state_ptr, timer, PenLiftDuration, PenTopZ, RayLPrimeEnd[1], RayLPrimeEnd[2])
+            state_ptr, timer, PenLiftDuration, PenTopZ,
+            RayLPrimeEnd[1], RayLPrimeEnd[2])
         timer += dt
         if timer >= PenLiftDuration
             OdinJuliaBridge.hide_pen(state_ptr)

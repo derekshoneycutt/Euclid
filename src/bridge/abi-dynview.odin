@@ -12,6 +12,19 @@ Dynview_Math_Text_Payloads :: struct {
     status:       i32,
 }
 
+Dynview_Inline_Target :: struct {
+    runtime: ^core.Dynview_System,
+    buffer:  ^core.Dynview_Command_Buffer,
+    status:  i32,
+}
+
+Dynview_Math_Block_Input :: struct {
+    ops:               [^]Bridge_Dynview_Math_Op,
+    op_count:          i32,
+    top_level_op_count: i32,
+    style_id:          i32,
+}
+
 //   Reset the dynview command stream for the current frame.
 //
 // Parameters:
@@ -80,7 +93,7 @@ dynview_begin_block :: proc "c" (
     }
 
     status = dynview_push_command(runtime, core.Dynview_Command{
-        kind = .BeginBlock,
+        kind = .Begin_Block,
         block_id = block_id,
         style_id = block_kind,
     })
@@ -131,7 +144,7 @@ dynview_text_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -181,7 +194,7 @@ dynview_text_run_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -230,7 +243,7 @@ dynview_math_glyph_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .MathGlyphRun,
+        kind = .Math_Glyph_Run,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         text_offset = offset,
@@ -284,17 +297,42 @@ dynview_math_capacity_available :: proc(
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int) -> bool {
 
-    if cache^.math_program_count >= core.DYNVIEW__MAX_MATH_PROGRAMS {
+    if cache^.math_program_count >= core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
     }
     extra_programs, extra_commands :=
         dynview_count_recursive_math_capacity(ops, op_count)
     if cache^.math_program_count + 1 + extra_programs >
-        core.DYNVIEW__MAX_MATH_PROGRAMS {
+        core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
     }
     return cache^.math_command_count + op_count + extra_commands <=
-        core.DYNVIEW__MAX_MATH_COMMANDS
+        core.DYNVIEW_MAX_MATH_COMMANDS
+}
+
+//   Resolve the runtime and command buffer for an inline atom emission.
+//
+// Returns:
+//   - Target with status set on failure; a nil buffer means the runtime is
+//     disabled and the caller should return BRIDGE_STATUS_OK.
+dynview_inline_atom_target :: proc(
+    state: ^core.Euclid_General_State) -> Dynview_Inline_Target {
+
+    target := Dynview_Inline_Target{status = BRIDGE_STATUS_OK}
+    status := dynview_require_runtime(state, &target.runtime)
+    if status != BRIDGE_STATUS_OK {
+        target.status = status
+        return target
+    }
+    if target.runtime == nil || !target.runtime^.enabled {
+        return target
+    }
+
+    status = dynview_require_buffer(target.runtime, &target.buffer, true)
+    if status != BRIDGE_STATUS_OK {
+        target.status = status
+    }
+    return target
 }
 
 //   Report whether the math-block arguments are non-nil and non-empty.
@@ -342,9 +380,7 @@ dynview_append_math_text_payloads :: proc(
 //   - state: Global runtime state passed from the host application.
 //   - plain_text: Plain-text copy payload for the math block.
 //   - style_id: Style id assigned to the emitted block command.
-//   - ops: Flat child-command program payload consumed by the importer.
-//   - op_count: Number of math ops in the payload.
-//   - top_level_op_count: Number of top-level ops in the payload.
+//   - program: Flat op payload with op counts consumed by the importer.
 //   - text_blob: Shared text blob backing the math op spans.
 //
 // Returns:
@@ -356,9 +392,7 @@ dynview_math_block_from_ops :: proc "c" (
     state: ^core.Euclid_General_State,
     plain_text: cstring,
     style_id: i32,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: i32,
-    top_level_op_count: i32,
+    program: Bridge_Dynview_Math_Program,
     text_blob: cstring) -> i32 {
 
     context = state^.saved_context
@@ -376,13 +410,13 @@ dynview_math_block_from_ops :: proc "c" (
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    if !dynview_math_block_args_valid(plain_text, ops, op_count,
-        top_level_op_count, text_blob) {
+    if !dynview_math_block_args_valid(plain_text, program.ops, program.op_count,
+        program.top_level_op_count, text_blob) {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    cache := &runtime^.compile_cache
-    if !dynview_math_capacity_available(cache, ops, int(op_count)) {
+    if !dynview_math_capacity_available(&runtime^.compile_cache, program.ops,
+        int(program.op_count)) {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
@@ -391,40 +425,85 @@ dynview_math_block_from_ops :: proc "c" (
         return payloads.status
     }
 
+    input := Dynview_Math_Block_Input{
+        program.ops, program.op_count, program.top_level_op_count, style_id}
+    return dynview_emit_math_block(runtime, buffer, input, payloads)
+}
+
+//   Import a math op program into the compile cache and emit the math block command.
+//
+// Parameters:
+//   - runtime: Active dynview runtime owning the compile cache.
+//   - buffer: Command buffer receiving the emitted math block command.
+//   - input: Flat op payload, op counts, and style id for the block.
+//   - payloads: Resolved plain-text and blob spans backing the program.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the program is imported and the command is emitted.
+dynview_emit_math_block :: proc(
+    runtime: ^core.Dynview_System,
+    buffer: ^core.Dynview_Command_Buffer,
+    input: Dynview_Math_Block_Input,
+    payloads: Dynview_Math_Text_Payloads) -> i32 {
+
+    cache := &runtime^.compile_cache
     program_id := cache^.math_program_count
     next_child_program_id := program_id + 1
     cursor := 0
 
-    status = dynview_import_math_program_from_ops(
+    status := dynview_import_math_program_from_ops(
         Dynview_Import_Context{
             cache = cache,
             block_id = buffer^.stream_open_block_id,
-            ops = ops,
-            op_count = int(op_count),
+            ops = input.ops,
+            op_count = int(input.op_count),
             cursor = &cursor,
             blob_offset = payloads.blob_offset,
             blob_count = payloads.blob_count,
             next_program_id = &next_child_program_id,
         },
-        int(top_level_op_count),
+        int(input.top_level_op_count),
         program_id)
     if status != BRIDGE_STATUS_OK {
         return dynview_fail(runtime, status)
     }
-    if cursor != int(op_count) {
+    if cursor != int(input.op_count) {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    cache^.math_programs[program_id].valid = true
-    cache^.math_programs[program_id].copy_text_offset = payloads.plain_offset
-    cache^.math_programs[program_id].copy_text_len = payloads.plain_count
-    cache^.math_program_count = next_child_program_id
+    return dynview_commit_math_block(
+        runtime, buffer, {program_id, next_child_program_id}, input, payloads)
+}
+
+//   Mark an imported math program valid and emit its math block command.
+//
+// Parameters:
+//   - runtime: Active dynview runtime owning the compile cache.
+//   - buffer: Command buffer receiving the emitted math block command.
+//   - program_ids: Imported program id and the next child program id.
+//   - input: Op payload descriptor carrying the block style id.
+//   - payloads: Resolved plain-text and blob spans backing the program.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+dynview_commit_math_block :: proc(
+    runtime: ^core.Dynview_System,
+    buffer: ^core.Dynview_Command_Buffer,
+    program_ids: [2]int,
+    input: Dynview_Math_Block_Input,
+    payloads: Dynview_Math_Text_Payloads) -> i32 {
+
+    cache := &runtime^.compile_cache
+    cache^.math_programs[program_ids[0]].valid = true
+    cache^.math_programs[program_ids[0]].copy_text_offset = payloads.plain_offset
+    cache^.math_programs[program_ids[0]].copy_text_len = payloads.plain_count
+    cache^.math_program_count = program_ids[1]
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .MathBlock,
+        kind = .Math_Block,
         block_id = buffer^.stream_open_block_id,
-        style_id = style_id,
-        math_program_id = i32(program_id),
+        style_id = input.style_id,
+        math_program_id = i32(program_ids[0]),
         text_offset = payloads.plain_offset,
         text_len = payloads.plain_count,
     })
@@ -473,7 +552,7 @@ dynview_copyable_text_run :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .CopyableTextRun,
+        kind = .Copyable_Text_Run,
         block_id = buffer^.stream_open_block_id,
         copy_text_offset = offset,
         copy_text_len = count,
@@ -518,7 +597,7 @@ dynview_inline_line :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineLine,
+        kind = .Inline_Line,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = length,
@@ -565,7 +644,7 @@ dynview_inline_box :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = width,
@@ -612,7 +691,7 @@ dynview_inline_circle :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineCircle,
+        kind = .Inline_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -660,7 +739,7 @@ dynview_inline_line_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineLine,
+        kind = .Inline_Line,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = length,
@@ -675,9 +754,7 @@ dynview_inline_line_brush :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - width: Box width in world units.
-//   - height: Box height in world units.
-//   - stroke: Box outline stroke thickness.
+//   - dims: Box width, height, and outline stroke thickness.
 //   - style_id: Style id assigned to the emitted atom.
 //   - brush_color: Brush color override for the atom.
 //
@@ -687,7 +764,7 @@ dynview_inline_line_brush :: proc "c" (
 @(export)
 dynview_inline_box_brush :: proc "c" (
     state: ^core.Euclid_General_State,
-    width, height, stroke: f32,
+    dims: core.Bridge_Inline_Box_Dims,
     style_id: i32,
     brush_color: Bridge_Color) -> i32 {
 
@@ -707,17 +784,17 @@ dynview_inline_box_brush :: proc "c" (
         return status
     }
 
-    if width <= 0 || height <= 0 || stroke <= 0 {
+    if dims.width <= 0 || dims.height <= 0 || dims.stroke <= 0 {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
+        kind = .Inline_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = width,
-        inline_atom_stroke = stroke,
-        inline_box_height = height,
+        inline_atom_dimension = dims.width,
+        inline_atom_stroke = dims.stroke,
+        inline_box_height = dims.height,
         has_brush_color = true,
         brush_color =
             rl.Color{brush_color.r, brush_color.g, brush_color.b, brush_color.a},
@@ -764,7 +841,7 @@ dynview_inline_circle_brush :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineCircle,
+        kind = .Inline_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -779,8 +856,7 @@ dynview_inline_circle_brush :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - width: Box width in world units.
-//   - height: Box height in world units.
+//   - size: Box width and height in world units.
 //   - style_id: Style id assigned to the emitted atom.
 //   - fill_color: Fill color for the atom.
 //   - outline_stroke: Optional outline stroke thickness.
@@ -791,7 +867,7 @@ dynview_inline_circle_brush :: proc "c" (
 @(export)
 dynview_inline_filled_box :: proc "c" (
     state: ^core.Euclid_General_State,
-    width, height: f32,
+    size: core.Bridge_Inline_Size,
     style_id: i32,
     fill_color: Bridge_Color,
     outline_stroke: f32) -> i32 {
@@ -812,16 +888,16 @@ dynview_inline_filled_box :: proc "c" (
         return status
     }
 
-    if width <= 0 || height <= 0 || outline_stroke < 0 {
+    if size.width <= 0 || size.height <= 0 || outline_stroke < 0 {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineFilledBox,
+        kind = .Inline_Filled_Box,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = width,
-        inline_box_height = height,
+        inline_atom_dimension = size.width,
+        inline_box_height = size.height,
         has_brush_color = true,
         brush_color = rl.Color{fill_color.r, fill_color.g, fill_color.b, fill_color.a},
         inline_outline_stroke = outline_stroke,
@@ -869,7 +945,7 @@ dynview_inline_filled_circle :: proc "c" (
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineFilledCircle,
+        kind = .Inline_Filled_Circle,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
         inline_atom_dimension = radius,
@@ -880,12 +956,22 @@ dynview_inline_filled_circle :: proc "c" (
 }
 
 //   Append one inline perpendicular atom with two independently colored legs.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - dims: Top-bar length, stem height, and stroke thickness.
+//   - style_id: Style id assigned to the emitted atom.
+//   - colors: Top and stem colors for the atom.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+//   - BRIDGE_STATUS_INVALID_ARGUMENT for non-positive dimensions.
 @(export)
 dynview_inline_perpendicular :: proc "c" (
     state: ^core.Euclid_General_State,
-    length, stem_height, stroke: f32,
+    dims: core.Bridge_Inline_Perpendicular_Dims,
     style_id: i32,
-    top_color, stem_color: Bridge_Color) -> i32 {
+    colors: core.Bridge_Perpendicular_Colors) -> i32 {
 
     context = state^.saved_context
     runtime: ^core.Dynview_System
@@ -903,59 +989,61 @@ dynview_inline_perpendicular :: proc "c" (
         return status
     }
 
-    if length <= 0 || stem_height <= 0 || stroke <= 0 {
+    if dims.length <= 0 || dims.stem_height <= 0 || dims.stroke <= 0 {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePerpendicular,
+        kind = .Inline_Perpendicular,
         block_id = buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = length,
-        inline_box_height = stem_height,
-        inline_atom_stroke = stroke,
-        brush_color = rl.Color{top_color.r, top_color.g, top_color.b, top_color.a},
+        inline_atom_dimension = dims.length,
+        inline_box_height = dims.stem_height,
+        inline_atom_stroke = dims.stroke,
+        brush_color =
+            rl.Color{colors.top.r, colors.top.g, colors.top.b, colors.top.a},
         shape_edge_color_1 =
-            rl.Color{stem_color.r, stem_color.g, stem_color.b, stem_color.a},
+            rl.Color{colors.stem.r, colors.stem.g, colors.stem.b, colors.stem.a},
     })
 }
 
 //   Append one inline triangle atom with optional fill and three edge colors.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - dims: Triangle width, height, and stroke thickness.
+//   - style_id: Style id assigned to the emitted atom.
+//   - filled: Whether the triangle is filled.
+//   - colors: Fill and edge colors for the atom.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+//   - BRIDGE_STATUS_INVALID_ARGUMENT for non-positive dimensions.
 @(export)
 dynview_inline_triangle :: proc "c" (
     state: ^core.Euclid_General_State,
-    width, height, stroke: f32,
+    dims: core.Bridge_Inline_Box_Dims,
     style_id: i32,
     filled: bool,
     colors: Bridge_Triangle_Colors) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    if runtime == nil || !runtime^.enabled {
-        return BRIDGE_STATUS_OK
+    target := dynview_inline_atom_target(state)
+    if target.status != BRIDGE_STATUS_OK || target.buffer == nil {
+        return target.status
     }
 
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    if dims.width <= 0 || dims.height <= 0 || dims.stroke <= 0 {
+        return dynview_fail(target.runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    if width <= 0 || height <= 0 || stroke <= 0 {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
-    }
-
-    return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineTriangle,
-        block_id = buffer^.stream_open_block_id,
+    return dynview_push_command(target.runtime, core.Dynview_Command{
+        kind = .Inline_Triangle,
+        block_id = target.buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = width,
-        inline_box_height = height,
-        inline_atom_stroke = stroke,
+        inline_atom_dimension = dims.width,
+        inline_box_height = dims.height,
+        inline_atom_stroke = dims.stroke,
         shape_is_filled = filled,
         has_brush_color = filled,
         brush_color =
@@ -970,40 +1058,40 @@ dynview_inline_triangle :: proc "c" (
 }
 
 //   Append one inline box atom with independently colored edges.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - dims: Box width, height, and stroke thickness.
+//   - style_id: Style id assigned to the emitted atom.
+//   - colors: Independent edge colors for the atom.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+//   - BRIDGE_STATUS_INVALID_ARGUMENT for non-positive dimensions.
 @(export)
 dynview_inline_box_edges :: proc "c" (
     state: ^core.Euclid_General_State,
-    width, height, stroke: f32,
+    dims: core.Bridge_Inline_Box_Dims,
     style_id: i32,
     colors: Bridge_Box_Edge_Colors) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    if runtime == nil || !runtime^.enabled {
-        return BRIDGE_STATUS_OK
+    target := dynview_inline_atom_target(state)
+    if target.status != BRIDGE_STATUS_OK || target.buffer == nil {
+        return target.status
     }
 
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    if dims.width <= 0 || dims.height <= 0 || dims.stroke <= 0 {
+        return dynview_fail(target.runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    if width <= 0 || height <= 0 || stroke <= 0 {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
-    }
-
-    return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlineBox,
-        block_id = buffer^.stream_open_block_id,
+    return dynview_push_command(target.runtime, core.Dynview_Command{
+        kind = .Inline_Box,
+        block_id = target.buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = width,
-        inline_atom_stroke = stroke,
-        inline_box_height = height,
+        inline_atom_dimension = dims.width,
+        inline_atom_stroke = dims.stroke,
+        inline_box_height = dims.height,
         shape_edge_color_1 =
             rl.Color{colors.edge1.r, colors.edge1.g, colors.edge1.b, colors.edge1.a},
         shape_edge_color_2 =
@@ -1016,41 +1104,42 @@ dynview_inline_box_edges :: proc "c" (
 }
 
 //   Append one inline pentagon atom with optional fill and five edge colors.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - dims: Pentagon width, height, and stroke thickness.
+//   - style_id: Style id assigned to the emitted atom.
+//   - filled: Whether the pentagon is filled.
+//   - colors: Fill and edge colors for the atom.
+//
+// Returns:
+//   - BRIDGE_STATUS_OK when the command is emitted.
+//   - BRIDGE_STATUS_INVALID_ARGUMENT for non-positive dimensions.
 @(export)
 dynview_inline_pentagon :: proc "c" (
     state: ^core.Euclid_General_State,
-    width, height, stroke: f32,
+    dims: core.Bridge_Inline_Box_Dims,
     style_id: i32,
     filled: bool,
     colors: Bridge_Pentagon_Colors) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    if runtime == nil || !runtime^.enabled {
-        return BRIDGE_STATUS_OK
+    target := dynview_inline_atom_target(state)
+    if target.status != BRIDGE_STATUS_OK || target.buffer == nil {
+        return target.status
     }
 
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    if dims.width <= 0 || dims.height <= 0 || dims.stroke <= 0 {
+        return dynview_fail(target.runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    if width <= 0 || height <= 0 || stroke <= 0 {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
-    }
-
-    return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePentagon,
-        block_id = buffer^.stream_open_block_id,
+    return dynview_push_command(target.runtime, core.Dynview_Command{
+        kind = .Inline_Pentagon,
+        block_id = target.buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = width,
-        inline_box_height = height,
-        inline_atom_stroke = stroke,
+        inline_atom_dimension = dims.width,
+        inline_box_height = dims.height,
+        inline_atom_stroke = dims.stroke,
         shape_is_filled = filled,
         has_brush_color = filled,
         brush_color =
@@ -1072,12 +1161,10 @@ dynview_inline_pentagon :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - radius: Circle radius in world units.
-//   - start_angle_degrees: Start angle for the pie section.
-//   - end_angle_degrees: End angle for the pie section.
+//   - geometry: Radius, sweep angles, and outline stroke for the section.
 //   - style_id: Style id assigned to the emitted atom.
-//   - fill_color: Fill color for the atom.
-//   - outline_stroke: Optional outline stroke thickness.
+//   - filled: Whether the section is filled.
+//   - colors: Fill and arc colors for the atom.
 //
 // Returns:
 //   - BRIDGE_STATUS_OK when the command is emitted.
@@ -1085,43 +1172,32 @@ dynview_inline_pentagon :: proc "c" (
 @(export)
 dynview_inline_pie_section :: proc "c" (
     state: ^core.Euclid_General_State,
-    radius, start_angle_degrees, end_angle_degrees: f32,
+    geometry: core.Bridge_Pie_Section_Geometry,
     style_id: i32,
     filled: bool,
-    colors: Bridge_Pie_Colors,
-    outline_stroke: f32) -> i32 {
+    colors: Bridge_Pie_Colors) -> i32 {
 
     context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    if runtime == nil || !runtime^.enabled {
-        return BRIDGE_STATUS_OK
+    target := dynview_inline_atom_target(state)
+    if target.status != BRIDGE_STATUS_OK || target.buffer == nil {
+        return target.status
     }
 
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
+    if geometry.radius <= 0 || geometry.outline_stroke < 0 {
+        return dynview_fail(target.runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
-    if radius <= 0 || outline_stroke < 0 {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
-    }
-
-    return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .InlinePieSection,
-        block_id = buffer^.stream_open_block_id,
+    return dynview_push_command(target.runtime, core.Dynview_Command{
+        kind = .Inline_Pie_Section,
+        block_id = target.buffer^.stream_open_block_id,
         style_id = style_id,
-        inline_atom_dimension = radius,
+        inline_atom_dimension = geometry.radius,
         has_brush_color = true,
         brush_color =
             rl.Color{colors.fill.r, colors.fill.g, colors.fill.b, colors.fill.a},
-        inline_outline_stroke = outline_stroke,
-        pie_start_angle_degrees = start_angle_degrees,
-        pie_end_angle_degrees = end_angle_degrees,
+        inline_outline_stroke = geometry.outline_stroke,
+        pie_start_angle_degrees = geometry.start_angle_degrees,
+        pie_end_angle_degrees = geometry.end_angle_degrees,
         pie_is_filled = filled,
         has_outline_color = true,
         outline_color =
@@ -1156,7 +1232,7 @@ dynview_line_break :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     }
 
     return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .LineBreak,
+        kind = .Line_Break,
         block_id = buffer^.stream_open_block_id,
     })
 }
@@ -1188,7 +1264,7 @@ dynview_end_block :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
     }
 
     status = dynview_push_command(runtime, core.Dynview_Command{
-        kind = .EndBlock,
+        kind = .End_Block,
         block_id = buffer^.stream_open_block_id,
     })
     if status != BRIDGE_STATUS_OK {

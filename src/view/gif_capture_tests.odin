@@ -1,22 +1,24 @@
-package view_tests
+package view
 
 import "core:strings"
 import "core:testing"
 
-import app_core "../../src/core"
-import app_bridge "../../src/bridge"
-import app_view "../../src/view/core"
+import app_core "../core"
+import app_bridge "../bridge"
+import app_view "./core"
 
+//   Verify clearing then setting a long GIF status note truncates with a terminator.
 @(test)
 clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_UI_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
     defer free(ui_runtime)
 
     app_view.clear_gif_status_note(ui_runtime)
     testing.expect_value(t, ui_runtime^.gif_status_note_len, 0)
     testing.expect_value(t, ui_runtime^.gif_status_note[0], u8(0))
 
-    long_note := strings.repeat("x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
+    long_note := strings.repeat(
+        "x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
     app_view.set_gif_status_note(ui_runtime, long_note)
 
     expected_len := len(ui_runtime^.gif_status_note) - 1
@@ -24,16 +26,18 @@ clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime^.gif_status_note[expected_len], u8(0))
 }
 
+//   Verify clearing then setting a long GIF path truncates with a terminator.
 @(test)
 clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_UI_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
     defer free(ui_runtime)
 
     app_view.clear_last_gif_path(ui_runtime)
     testing.expect_value(t, ui_runtime^.last_gif_path_len, 0)
     testing.expect_value(t, ui_runtime^.last_gif_path[0], u8(0))
 
-    long_path := strings.repeat("a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
+    long_path := strings.repeat(
+        "a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
     app_view.set_last_gif_path(ui_runtime, long_path)
 
     expected_len := len(ui_runtime^.last_gif_path) - 1
@@ -41,6 +45,7 @@ clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime^.last_gif_path[expected_len], u8(0))
 }
 
+//   Verify gif_capture_delay_centiseconds maps frame steps to expected delays.
 @(test)
 gif_capture_delay_centiseconds_matches_expected_steps :: proc(t: ^testing.T) {
     testing.expect_value(t, app_view.gif_capture_delay_centiseconds(1), 2)
@@ -48,6 +53,7 @@ gif_capture_delay_centiseconds_matches_expected_steps :: proc(t: ^testing.T) {
     testing.expect_value(t, app_view.gif_capture_delay_centiseconds(0), 1)
 }
 
+//   Verify gif_capture_scaled_extent matches the screen-to-render ratio with rounding.
 @(test)
 gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) {
     one_x := app_view.gif_capture_scaled_extent(900, 1280, 1280)
@@ -63,6 +69,7 @@ gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) 
     testing.expect_value(t, safe_minimum, 1)
 }
 
+//   Verify a cycle boundary is consumed exactly once per generation.
 @(test)
 gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -78,6 +85,7 @@ gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^test
     testing.expect(t, app_view.gif_capture_consume_cycle_boundary(state))
 }
 
+//   Verify aborting an inactive GIF capture session is a safe no-op.
 @(test)
 gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
     session := app_core.Gif_Capture_Session{}
@@ -85,6 +93,7 @@ gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
     testing.expect(t, !session.active)
 }
 
+//   Verify a large hide-point batch splits into multiple commands.
 @(test)
 scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -94,7 +103,8 @@ scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
     defer free(state^.point_system)
     state^.julia_interface = new(app_core.Euclid_Julia_Interface)
     defer free(state^.julia_interface)
-    state^.julia_interface^.current_animation = new(app_core.Euclid_Julia_Animation_Interface)
+    state^.julia_interface^.current_animation =
+        new(app_core.Euclid_Julia_Animation_Interface)
     defer free(state^.julia_interface^.current_animation)
 
     batch: app_bridge.Scene_Command_Batch
@@ -112,6 +122,7 @@ scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
     app_bridge.end_scene_command_batch(state)
 }
 
+//   Verify gif_output_filename produces an Euclid-prefixed .gif name.
 @(test)
 gif_output_filename_has_expected_shape :: proc(t: ^testing.T) {
     name := app_view.gif_output_filename()

@@ -5,6 +5,7 @@ end
 using .CodeWiki
 using Test
 
+"""Build a minimal navigation manifest for testing."""
 function navigation_test_manifest(; sections=nothing)
     default_sections = [
         WikiSection(
@@ -30,6 +31,7 @@ function navigation_test_manifest(; sections=nothing)
             symbol_prefixes=["run"])])
 end
 
+"""Build a minimal navigation package for testing."""
 function navigation_test_package()
     package = DocumentationPackage(
         language=:julia, stable_id="julia:Sample", display_name="Sample",
@@ -72,9 +74,11 @@ end
     pinned_outputs = build_code_wiki_outputs(
         [navigation_test_package()], BridgePair[];
         source_link_prefix="https://github.com/example/repo/blob/revision/")
-    sample_page = only(filter(output -> output.path == "Code/Julia/Sample.md", pinned_outputs))
+    sample_page = only(filter(
+        output -> output.path == "Code/Julia/Sample.md", pinned_outputs))
     @test occursin(
-        "https://github.com/example/repo/blob/revision/src/julia/sample.jl", sample_page.content)
+        "https://github.com/example/repo/blob/revision/src/julia/sample.jl",
+        sample_page.content)
     mktempdir() do directory
         cross_owner = WikiOutput(
             owner="code_wiki", path="Guides/Home.md", content="# Replaced\n")
@@ -125,7 +129,8 @@ end
         @test validate_wiki_links(manifest, directory)
 
         write(joinpath(wiki_root, "Code", "stale.md"), "# Stale\n")
-        @test_throws ErrorException validate_managed_outputs(manifest, expected, directory)
+        @test_throws ErrorException validate_managed_outputs(
+            manifest, expected, directory)
         write(joinpath(wiki_root, "Home.md"), "# Home\n\n[Missing](missing.md)\n")
         @test_throws ErrorException validate_wiki_links(manifest, directory)
     end

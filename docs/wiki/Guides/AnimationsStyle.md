@@ -4,8 +4,9 @@ This document captures the shared style conventions for Julia animations in
 `src/julia/`, especially the Hilbert and Euclid content that uses the pen,
 point, line, and plane primitives.
 
-This is kind of a preliminary approach to the style language for the animations. As further
-points arise with further animation work, this is expected to mature.
+This is kind of a preliminary approach to the style language for the
+animations. As further points arise with further animation work, this is
+expected to mature.
 
 ## Table Of Contents
 
@@ -32,10 +33,11 @@ points arise with further animation work, this is expected to mature.
 
 ## Inspiration
 
-Oliver Byrne's translation of Euclid's first 6 books is a good source of inspiration for
-how to present geometry with clear color and layout choices, but he is only a reference
-point. He is not a definitive style authority for this project; we are not trying to reproduce
-his work, and in fact are using the Heath translation in text.
+Oliver Byrne's translation of Euclid's first 6 books is a good source of
+inspiration for how to present geometry with clear color and layout choices,
+but he is only a reference point. He is not a definitive style authority for
+this project; we are not trying to reproduce his work, and in fact are using
+the Heath translation in text.
 
 ## Standard Palette
 
@@ -52,8 +54,9 @@ documented reason to deviate:
 | `lightgreen` | Congruence | Standard relationship-highlight color. |
 | `firebrick` | Absurdity | Use when intentionally drawing an absurd consequence. |
 
-The first four colors form the shared working palette for lines, circles, planes, and points. Assign
-them according to object relationships and the balance of the complete scene, not fixed object types.
+The first four colors form the shared working palette for lines, circles,
+planes, and points. Assign them according to object relationships and the
+balance of the complete scene, not fixed object types.
 
 ## Color Relationships
 
@@ -88,8 +91,8 @@ flowchart LR
   A --> B --> C --> D --> E --> F --> G --> H
 ```
 
-Omit phases that do not serve the construction, but preserve a readable start, meaningful action,
-and legible finish.
+Omit phases that do not serve the construction, but preserve a readable start,
+meaningful action, and legible finish.
 
 - Start with pen descent when the animation is about drawing.
 - Use `animate_pen_arcmove` for travel between distinct construction points.
@@ -100,8 +103,9 @@ and legible finish.
   screen for a moment.
 - Pen rise SHOULD begin from the final meaningful draw endpoint (or final
   emphasized point), not from an earlier anchor point.
-- Prefer a double pass, once in each direction when using a dragging motion to highlight
-  some shape or space. For example, when highlighting congruence between two lines or angles.
+- Prefer a double pass, once in each direction when using a dragging motion
+  to highlight some shape or space. For example, when highlighting congruence
+  between two lines or angles.
 
 ## Coordinate Space and Z Conventions
 
@@ -112,11 +116,13 @@ and legible finish.
 | `z > 0.0` | Height above surface | Tool lift/travel and intentional elevated geometry. |
 | `z < 0.0` | Below surface | Avoid unless a script documents a specific need. |
 
-Pen and compass rise phases should target a positive top height, commonly around `1.4` in existing
-scripts. Plane primitives require an intentional profile:
+Pen and compass rise phases should target a positive top height, commonly
+around `1.4` in existing scripts. Plane primitives require an intentional
+profile:
 
 - Flat or on-surface demonstrations keep plane vertices at `z = 0.0`.
-- Perspective or emphasis demonstrations may use positive `z` offsets for elevated vertices.
+- Perspective or emphasis demonstrations may use positive `z` offsets for
+  elevated vertices.
 - Negative `z` is not the default way to communicate depth.
 
 ## Isometric Projection and Right-Hand Rule
@@ -291,12 +297,14 @@ stable across frames so math parsing and compiled-program caches can be reused.
 | Document | Normal animation text surface | Prose, styles, inline/display math, breaks, shapes. |
 | Math | Complete source is one expression | Scripts, fractions, radicals, operators, matrices. |
 
-Document mode supports Unicode prose; `\textbf{...}`, `\textit{...}`, and `\emph{...}`; inline math
-with `$...$` or `\(...\)`; display math with `$$...$$` or `\[...\]`; blank-line paragraphs; forced
-breaks with `\\` or `\newline`; and embedded Euclid shapes.
+Document mode supports Unicode prose; `\textbf{...}`, `\textit{...}`, and
+`\emph{...}`; inline math with `$...$` or `\(...\)`; display math with
+`$$...$$` or `\[...\]`; blank-line paragraphs; forced breaks with `\\` or
+`\newline`; and embedded Euclid shapes.
 
-In math mode, prefer commands such as `\alpha`, `\leq`, and `\mathbb{R}` over raw mathematical
-Unicode when the symbol is important to parser or style behavior.
+In math mode, prefer commands such as `\alpha`, `\leq`, and `\mathbb{R}`
+over raw mathematical Unicode when the symbol is important to parser or style
+behavior.
 
 Use `\text{...}` or `\mathrm{...}` for upright words inside math. Document
 styles such as `\textbf` do not replace math-mode text commands.
@@ -397,8 +405,9 @@ the structured stream instead of displaying a partial document.
 | `emit_latex_dynview!` | Emit a standalone math-only block. |
 | Direct Dynview bridge calls | Last resort for composition the high-level APIs cannot express. |
 
-`replay_emit_math_block!` returns `false` on bridge failure. `emit_latex_dynview!` is appropriate only
-when the caller does not need document prose or embedded shapes.
+`replay_emit_math_block!` returns `false` on bridge failure.
+`emit_latex_dynview!` is appropriate only when the caller does not need
+document prose or embedded shapes.
 
 Do not manually parse LaTeX or approximate structured math with spaced text.
 

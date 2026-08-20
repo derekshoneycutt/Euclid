@@ -149,14 +149,14 @@ struct ReplStatus
     managed_shape_count::Int
 end
 
-const session_ref = Ref{Union{Nothing, ReplDrawSession}}(nothing)
+const SESSION_REF = Ref{Union{Nothing, ReplDrawSession}}(nothing)
 
 """Return the singleton EuclidRepl session, creating it when missing."""
 function ensure_session!()
-    session = session_ref[]
+    session = SESSION_REF[]
     if session === nothing
         session = ReplDrawSession(nothing, Int[])
-        session_ref[] = session
+        SESSION_REF[] = session
     end
 
     return session
@@ -383,12 +383,12 @@ function render_payload!(
         Float32(elapsed),
         Float32(duration),
         payload.start_pos,
-        payload.end_pos,
-        payload.brush,
-        payload.color,
-        payload.host_id,
-        payload.start_id,
-        payload.end_id)
+        payload.end_pos;
+        penbrush=payload.brush,
+        pencolor=payload.color,
+        line_host_id=payload.host_id,
+        line_joint1_id=payload.start_id,
+        line_joint2_id=payload.end_id)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -402,13 +402,13 @@ function render_payload!(
             payload.center,
             payload.start_pos,
             payload.angle_theta,
-            payload.radius,
-            payload.brush,
-            payload.color,
-            payload.host_id,
-            payload.start_id,
-            payload.end_id,
-            payload.full_sweep)
+            payload.radius;
+            brush=payload.brush,
+            color=payload.color,
+            marker_host_id=payload.host_id,
+            marker_start_id=payload.start_id,
+            marker_end_id=payload.end_id,
+            full_sweep=payload.full_sweep)
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
@@ -417,13 +417,13 @@ function render_payload!(
             payload.center,
             payload.start_pos,
             payload.angle_theta,
-            payload.radius,
-            payload.brush,
-            payload.color,
-            payload.host_id,
-            payload.start_id,
-            payload.end_id,
-            payload.full_sweep)
+            payload.radius;
+            brush=payload.brush,
+            color=payload.color,
+            marker_host_id=payload.host_id,
+            marker_start_id=payload.start_id,
+            marker_end_id=payload.end_id,
+            full_sweep=payload.full_sweep)
     end
 end
 
@@ -439,49 +439,25 @@ function render_payload!(
     rise_duration = max(duration - rise_start, 1f-5)
 
     if elapsed < first_pass_start
-        EuclidAnimations.animate_pen_descend(
-            state_ptr,
-            elapsed,
-            descend_duration,
-            HIGHLIGHT_TOOL_TOP_Z,
-            payload.start_pos[1],
-            payload.start_pos[2],
-        )
+        EuclidAnimations.animate_pen_descend(state_ptr, elapsed, descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z, payload.start_pos[1], payload.start_pos[2])
         return
     end
 
     if elapsed < second_pass_start
-        EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr,
-            elapsed - first_pass_start,
-            pass_duration,
-            payload.start_pos,
-            payload.end_pos,
-            payload.color,
-        )
+        EuclidAnimations.animate_pen_tilt_and_drag(state_ptr, elapsed - first_pass_start,
+            pass_duration, payload.start_pos, payload.end_pos, payload.color)
         return
     end
 
     if elapsed < rise_start
-        EuclidAnimations.animate_pen_tilt_and_drag(
-            state_ptr,
-            elapsed - second_pass_start,
-            pass_duration,
-            payload.end_pos,
-            payload.start_pos,
-            payload.color,
-        )
+        EuclidAnimations.animate_pen_tilt_and_drag(state_ptr, elapsed - second_pass_start,
+            pass_duration, payload.end_pos, payload.start_pos, payload.color)
         return
     end
 
-    EuclidAnimations.animate_pen_rise(
-        state_ptr,
-        elapsed - rise_start,
-        rise_duration,
-        HIGHLIGHT_TOOL_TOP_Z,
-        payload.start_pos[1],
-        payload.start_pos[2],
-    )
+    EuclidAnimations.animate_pen_rise(state_ptr, elapsed - rise_start,
+        rise_duration, HIGHLIGHT_TOOL_TOP_Z, payload.start_pos[1], payload.start_pos[2])
 end
 
 """Render one frame of compass highlight with descend-pass-pass-rise sequencing."""
@@ -497,53 +473,27 @@ function render_payload!(
     rise_duration = max(duration - rise_start, 1f-5)
 
     if elapsed < first_pass_start
-        EuclidAnimations.animate_compass_descend(
-            state_ptr,
-            elapsed,
-            descend_duration,
-            HIGHLIGHT_TOOL_TOP_Z,
-            payload.center[1],
-            payload.center[2],
-            payload.start_pos[1],
-            payload.start_pos[2],
-        )
+        EuclidAnimations.animate_compass_descend(state_ptr, elapsed, descend_duration,
+            HIGHLIGHT_TOOL_TOP_Z, payload.center[1], payload.center[2],
+            payload.start_pos[1], payload.start_pos[2])
         return
     end
 
     if elapsed < second_pass_start
-        render_compass_highlight_pass!(
-            state_ptr,
-            elapsed - first_pass_start,
-            pass_duration,
-            payload,
-            payload.start_pos,
-            payload.angle_theta,
-        )
+        render_compass_highlight_pass!(state_ptr, elapsed - first_pass_start,
+            pass_duration, payload, payload.start_pos, payload.angle_theta)
         return
     end
 
     if elapsed < rise_start
-        render_compass_highlight_pass!(
-            state_ptr,
-            elapsed - second_pass_start,
-            pass_duration,
-            payload,
-            payload.end_pos,
-            -payload.angle_theta,
-        )
+        render_compass_highlight_pass!(state_ptr, elapsed - second_pass_start,
+            pass_duration, payload, payload.end_pos, -payload.angle_theta)
         return
     end
 
-    EuclidAnimations.animate_compass_rise(
-        state_ptr,
-        elapsed - rise_start,
-        rise_duration,
-        HIGHLIGHT_TOOL_TOP_Z,
-        payload.center[1],
-        payload.center[2],
-        payload.start_pos[1],
-        payload.start_pos[2],
-    )
+    EuclidAnimations.animate_compass_rise(state_ptr, elapsed - rise_start,
+        rise_duration, HIGHLIGHT_TOOL_TOP_Z, payload.center[1], payload.center[2],
+        payload.start_pos[1], payload.start_pos[2])
 end
 
 """Render one compass highlight pass using filled or unfilled trail styling."""
@@ -556,29 +506,13 @@ function render_compass_highlight_pass!(
     angle_theta::Real)
 
     if payload.filled
-        EuclidAnimations.animate_compass_fill_arc_highlight(
-            state_ptr,
-            elapsed,
-            duration,
-            payload.center,
-            start_pos,
-            angle_theta,
-            payload.radius,
-            payload.color,
-        )
+        EuclidAnimations.animate_compass_fill_arc_highlight(state_ptr, elapsed, duration,
+            payload.center, start_pos, angle_theta, payload.radius, payload.color)
         return
     end
 
-    EuclidAnimations.animate_compass_arc_highlight(
-        state_ptr,
-        elapsed,
-        duration,
-        payload.center,
-        start_pos,
-        angle_theta,
-        payload.radius,
-        payload.color,
-    )
+    EuclidAnimations.animate_compass_arc_highlight(state_ptr, elapsed, duration,
+        payload.center, start_pos, angle_theta, payload.radius, payload.color)
 end
 
 """Render one frame of batch point translation."""
@@ -596,8 +530,7 @@ function render_transform_spec!(
         start_position,
         spec.displacement,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of batch point rotation."""
@@ -617,8 +550,7 @@ function render_transform_spec!(
         spec.axis_b,
         spec.theta,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of batch point 2D reflection."""
@@ -637,8 +569,7 @@ function render_transform_spec!(
         spec.line_a,
         spec.line_b,
         elapsed,
-        duration,
-    )
+        duration)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -652,8 +583,7 @@ function render_payload!(
             duration,
             point_id,
             start_position,
-            payload.spec,
-        )
+            payload.spec)
     end
 end
 
@@ -744,7 +674,7 @@ end
 
 """Reset EuclidRepl session state for scratchpad lifecycle transitions."""
 function reset_scratchpad_session!()
-    session_ref[] = nothing
+    SESSION_REF[] = nothing
     return nothing
 end
 
@@ -777,6 +707,7 @@ function clear!(state_ptr::Ptr{Cvoid})
     return true
 end
 
+"""Hide one bridge point, tolerating hosts that lack the hide symbol."""
 function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
     try
         OdinJuliaBridge.hide_point(state_ptr, Int(id))
@@ -804,19 +735,19 @@ end
 
 """Hide a line-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeLine)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a circle-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeCircle)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a filled-circle-shape handle by its host id."""
 function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeFilledCircle)
-    _hide_bridge_point(state_ptr, Int(shape.hostId))
+    _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
@@ -890,13 +821,12 @@ function line!(
         state_ptr,
         start_pos3,
         start_pos3,
-        color,
-        brush_value)
+        color, brush_value)
 
     payload = LinePayload(
-        Int(line_shape.hostId),
-        Int(line_shape.joint1Id),
-        Int(line_shape.joint2Id),
+        Int(line_shape.host_id),
+        Int(line_shape.joint1_id),
+        Int(line_shape.joint2_id),
         start_pos3,
         end_pos3,
         color,
@@ -904,7 +834,7 @@ function line!(
 
     job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(line_shape.hostId))
+    track_managed_host!(ensure_session!(), Int(line_shape.host_id))
     return line_shape
 end
 
@@ -941,42 +871,20 @@ function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::
     angle_theta = final_end_theta - start_theta_valid
 
     shape = if filled
-        OdinJuliaBridge.create_new_filledcircle(
-            state_ptr,
-            center3,
-            radius_valid,
-            start_theta_valid,
-            final_end_theta,
-            color,
-            brush_value)
+        OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
+            start_theta_valid, final_end_theta, color, brush_value)
     else
-        OdinJuliaBridge.create_new_circle(
-            state_ptr,
-            center3,
-            radius_valid,
-            start_theta_valid,
-            final_end_theta,
-            color,
-            brush_value)
+        OdinJuliaBridge.create_new_circle(state_ptr, center3, radius_valid,
+            start_theta_valid, final_end_theta, color, brush_value)
     end
 
-    payload = CirclePayload(
-        filled,
-        full_sweep,
-        Int(shape.hostId),
-        Int(shape.startId),
-        Int(shape.endId),
-        center3,
-        start_pos,
-        end_pos,
-        radius_valid,
-        angle_theta,
-        color,
-        brush_value)
+    payload = CirclePayload(filled, full_sweep, Int(shape.host_id), Int(shape.start_id),
+        Int(shape.end_id), center3, start_pos, end_pos, radius_valid, angle_theta,
+        color, brush_value)
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
     start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(shape.hostId))
+    track_managed_host!(ensure_session!(), Int(shape.host_id))
     return shape
 end
 
@@ -1051,8 +959,7 @@ function highlight_compass!(
         angle_theta32,
         radius32,
         color,
-        filled,
-    )
+        filled)
     job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return nothing
@@ -1101,15 +1008,14 @@ function rotate_points!(
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
     validate_transform_batch_lengths(ids, starts)
-    axisA = vec3("axis_point_a", axis_point_a)
-    axisB = vec3("axis_point_b", axis_point_b)
+    axis_a = vec3("axis_point_a", axis_point_a)
+    axis_b = vec3("axis_point_b", axis_point_b)
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(
         ids,
         starts,
-        RotateSpec(axisA, axisB, Float32(theta)),
-    )
+        RotateSpec(axis_a, axis_b, Float32(theta)))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return ids
@@ -1130,8 +1036,7 @@ function rotate_points_x!(
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Rotate points around world Y axis through origin."""
@@ -1149,8 +1054,7 @@ function rotate_points_y!(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Rotate points around world Z axis through origin."""
@@ -1168,8 +1072,7 @@ function rotate_points_z!(
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 0f0, 1f0],
         theta;
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """
@@ -1189,11 +1092,11 @@ function reflect2d_points!(
     ids = validated_point_ids(point_ids)
     starts = validated_start_positions(start_positions)
     validate_transform_batch_lengths(ids, starts)
-    lineA = vec3("line_point_a", line_point_a)
-    lineB = vec3("line_point_b", line_point_b)
+    line_a = vec3("line_point_a", line_point_a)
+    line_b = vec3("line_point_b", line_point_b)
     draw_duration = validated_duration(duration)
 
-    payload = TransformPayload(ids, starts, Reflect2DSpec(lineA, lineB))
+    payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
     start_job!(state_ptr, job)
     return ids
@@ -1212,8 +1115,7 @@ function reflect2d_points_x_axis!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across world Y axis (`x=0`) on XY plane."""
@@ -1229,8 +1131,7 @@ function reflect2d_points_y_axis!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across diagonal `y=x` on XY plane."""
@@ -1246,8 +1147,7 @@ function reflect2d_points_diag_pos!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 """Reflect points across diagonal `y=-x` on XY plane."""
@@ -1263,8 +1163,7 @@ function reflect2d_points_diag_neg!(
         start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, -1f0, 0f0];
-        duration=duration,
-    )
+        duration=duration)
 end
 
 end

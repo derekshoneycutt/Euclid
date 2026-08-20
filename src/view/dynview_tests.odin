@@ -1,16 +1,19 @@
-package view_tests
+package view
 
 import "core:testing"
 
-import app_bridge "../../src/bridge"
-import app_core "../../src/core"
-import app_dynview "../../src/dynview"
+import app_bridge "../bridge"
+import app_core "../core"
+import app_dynview "../dynview"
 
+//   Verify the scratchpad history prompt style matches the live input indent.
 @(test)
 scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
     prompt_style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_PROMPT)
-    input_block := app_dynview.block_format_for_kind(app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
-    output_block := app_dynview.block_format_for_kind(app_bridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT)
+    input_block := app_dynview.block_format_for_kind(
+        app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
+    output_block := app_dynview.block_format_for_kind(
+        app_bridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT)
     merged := app_dynview.style_with_block_format(prompt_style, input_block)
 
     testing.expect_value(t, merged.indent_cols, 0)
@@ -20,6 +23,7 @@ scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
     testing.expect_value(t, output_block.paragraph_spacing_after, f32(0))
 }
 
+//   Verify the native error underline style id and flags are stable across the bridge.
 @(test)
 scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
     testing.expect_value(t,
@@ -31,6 +35,7 @@ scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
     testing.expect_value(t, style.font_flags, app_core.Font_Variant_Flags.Regular)
 }
 
+//   Verify the Julia interface staging slots alternate between the two slots.
 @(test)
 julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -49,8 +54,11 @@ julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T)
     testing.expect(t, next_staging == &state^.julia_interface_slots[0])
 }
 
+//   Verify a recycled interface pointer from an old generation is rejected.
 @(test)
-view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(t: ^testing.T) {
+view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
+    t: ^testing.T) {
+
     state := new(app_core.Euclid_General_State)
     defer free(state)
     service := new(app_bridge.Julia_Runtime_Service)
@@ -71,6 +79,7 @@ view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(t: 
     testing.expect(t, app_bridge.view_snapshot_matches_current(state, service, snapshot))
 }
 
+//   Verify a scene command batch commits point positions in submission order.
 @(test)
 scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -101,6 +110,7 @@ scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
     testing.expect(t, ok_1 && position_1 == app_core.Vector3{4, 5, 6})
 }
 
+//   Verify an invalid tail command rejects the whole batch atomically.
 @(test)
 scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -127,6 +137,7 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     testing.expect(t, position == app_core.Vector3{9, 9, 9})
 }
 
+//   Verify overflow and stale-animation commands reject the batch atomically.
 @(test)
 scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -149,8 +160,11 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
     testing.expect(t, !app_bridge.validate_scene_command_batch(state, &stale_batch))
 }
 
+//   Verify the tick-reject reason classifies stale generation and stale sequence.
 @(test)
-animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(t: ^testing.T) {
+animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
+    t: ^testing.T) {
+
     state := new(app_core.Euclid_General_State)
     defer free(state)
     service := new(app_bridge.Julia_Runtime_Service)
@@ -171,14 +185,17 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(t:
         animation = current,
     }
     testing.expect_value(
-        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_generation")
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot),
+        "stale_generation")
 
     slot.generation = 3
     slot.sequence = 7
     testing.expect_value(
-        t, app_bridge.animation_tick_reject_reason(state, service, &slot), "stale_sequence")
+        t, app_bridge.animation_tick_reject_reason(state, service, &slot),
+        "stale_sequence")
 }
 
+//   Verify general point properties are deferred until the batch commits.
 @(test)
 scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -206,8 +223,11 @@ scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^tes
     testing.expect_value(t, point_system^.points[0].offset, f32(2))
 }
 
+//   Verify an invalid implicit compass handle rejects the batch atomically.
 @(test)
-scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(t: ^testing.T) {
+scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
+    t: ^testing.T) {
+
     state := new(app_core.Euclid_General_State)
     defer free(state)
     interface := new(app_core.Euclid_Julia_Interface)
@@ -232,6 +252,7 @@ scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(t
     testing.expect(t, position == app_core.Vector3{9, 9, 9})
 }
 
+//   Verify the animation query snapshot is immutable while the worker ticks.
 @(test)
 animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -249,12 +270,15 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
     point_system^.points[0].position = app_core.Vector3{4, 5, 6}
     state^.animation_query_snapshot_target = &snapshot
     testing.expect_value(t, app_bridge.get_animation_meta(state, 3), f32(7))
-    testing.expect(t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
+    testing.expect(
+        t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
     point_view := app_bridge.get_point_view(state, 0)
-    testing.expect(t, point_view.has_position && point_view.position == app_core.Vector3{1, 2, 3})
+    testing.expect(
+        t, point_view.has_position && point_view.position == app_core.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil
 }
 
+//   Verify an animation tick rejects stale generation and stale sequence.
 @(test)
 animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State)
@@ -284,6 +308,7 @@ animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
     testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
 }
 
+//   Verify tick coalescing caps the backlog without growing the queue.
 @(test)
 animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -298,6 +323,7 @@ animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.
     testing.expect_value(t, service^.animation_ticks_coalesced, u64(100))
 }
 
+//   Verify a runtime failure event records the request identity.
 @(test)
 julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -319,6 +345,7 @@ julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, service^.active_request_id, u64(8))
 }
 
+//   Verify a terminal runtime failure does not report a clean stopped state.
 @(test)
 julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -336,6 +363,7 @@ julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
     testing.expect(t, service^.lifecycle == .Failed)
 }
 
+//   Verify runtime diagnostics report failure and saturation counters.
 @(test)
 julia_runtime_diagnostics_report_failure_and_saturation :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -359,6 +387,7 @@ julia_runtime_diagnostics_report_failure_and_saturation :: proc(t: ^testing.T) {
     testing.expect_value(t, diagnostics.runtime_generation, u64(9))
 }
 
+//   Verify a reload failure records the package revision.
 @(test)
 julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -371,6 +400,7 @@ julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
     testing.expect_value(t, service^.runtime_generation, u64(0))
 }
 
+//   Verify text-wrapping helpers handle empty input and over-long tokens.
 @(test)
 text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
     // Validates wrapping helpers handle empty input and long tokens while still advancing span boundaries.
@@ -388,6 +418,7 @@ text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
     testing.expect(t, rows >= 3)
 }
 
+//   Verify font weight resolution prefers the heaviest requested flag.
 @(test)
 font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
     // Ensures font-weight resolution chooses the heaviest requested weight when multiple flags are set.
@@ -401,12 +432,13 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
 
     heavier := app_core.Font_Variant_Flags(
         u32(flags) |
-        u32(app_core.Font_Variant_Flags.ExtraBold) |
+        u32(app_core.Font_Variant_Flags.Extrabold) |
         u32(app_core.Font_Variant_Flags.Black))
     resolved_heavier := app_core.font_resolve_weight_from_flags(heavier)
     testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
 }
 
+//   Verify a view snapshot copy preserves recursive math spans.
 @(test)
 view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     snapshot := new(app_bridge.View_Snapshot)
@@ -415,7 +447,7 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     defer free(runtime)
 
     snapshot^.command_buffer.command_count = 1
-    snapshot^.command_buffer.commands[0].kind = .MathBlock
+    snapshot^.command_buffer.commands[0].kind = .Math_Block
     snapshot^.math_program_count = 1
     snapshot^.math_programs[0] = app_core.Dynview_Math_Program{
         valid = true,
@@ -423,9 +455,9 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
         node_count = 1,
     }
     snapshot^.math_node_count = 1
-    snapshot^.math_nodes[0].kind = .GlyphRun
+    snapshot^.math_nodes[0].kind = .Glyph_Run
     snapshot^.math_command_count = 1
-    snapshot^.math_commands[0].kind = .MathGlyphRun
+    snapshot^.math_commands[0].kind = .Math_Glyph_Run
     runtime^.compile_cache.is_valid = true
     runtime^.compile_cache.layout_is_valid = true
 
@@ -435,13 +467,14 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
     testing.expect(t, runtime^.compile_cache.math_programs[0].valid)
     testing.expect_value(t, runtime^.compile_cache.math_nodes[0].kind,
-        app_core.Dynview_Math_Node_Kind.GlyphRun)
+        app_core.Dynview_Math_Node_Kind.Glyph_Run)
     testing.expect_value(t, runtime^.compile_cache.math_commands[0].kind,
-        app_core.Dynview_Command_Kind.MathGlyphRun)
+        app_core.Dynview_Command_Kind.Math_Glyph_Run)
     testing.expect(t, !runtime^.compile_cache.is_valid)
     testing.expect(t, !runtime^.compile_cache.layout_is_valid)
 }
 
+//   Verify view snapshot validation rejects incomplete command streams.
 @(test)
 view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
     snapshot := new(app_bridge.View_Snapshot)
@@ -455,6 +488,7 @@ view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
 }
 
+//   Verify a completed view snapshot is found without needing its event index.
 @(test)
 completed_view_snapshot_is_found_without_event_index :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -474,6 +508,7 @@ completed_view_snapshot_is_found_without_event_index :: proc(t: ^testing.T) {
         app_bridge.View_Snapshot_Slot_State.Complete)
 }
 
+//   Verify the newest completed view snapshot supersedes an older completion.
 @(test)
 newest_completed_view_snapshot_supersedes_older_completion :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -493,6 +528,7 @@ newest_completed_view_snapshot_supersedes_older_completion :: proc(t: ^testing.T
         app_bridge.View_Snapshot_Slot_State.Complete)
 }
 
+//   Verify a stale view snapshot clears the previous animation commands.
 @(test)
 stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service)
@@ -521,6 +557,7 @@ stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
     testing.expect_value(t, state^.dynview.command_buffer.command_count, 0)
 }
 
+//   Verify the text-span and script-attach helpers respect buffer bounds.
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
     // Validates dynview text span extraction bounds checks for base and scripted spans.
@@ -551,8 +588,10 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
     testing.expect_value(t, base_text, "abc")
 }
 
+//   Verify layout style placement forces a line break and indent when requested.
 @(test)
-dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(t: ^testing.T) {
+dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
+    t: ^testing.T) {
     // Verifies style placement can force a line break and apply configured indentation at the next line start.
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
@@ -569,12 +608,14 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(t: ^
     testing.expect_value(t, cache.layout_lines[0].item_count, 1)
 }
 
+//   Verify layout push_item records the block and column metadata.
 @(test)
 dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T) {
     // Confirms pushed layout items capture block metadata and advance line-column bookkeeping correctly.
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
-    state := app_dynview.Dynview_Layout_State{active_block_id = 7, line_index = 2, col = 1}
+    state := app_dynview.Dynview_Layout_State{
+        active_block_id = 7, line_index = 2, col = 1}
     acc := app_dynview.Dynview_Layout_Line_Accumulator{}
     item := app_core.Dynview_Layout_Item{
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
@@ -593,6 +634,7 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
     testing.expect_value(t, acc.item_count, 1)
 }
 
+//   Verify layout text-run consumption wraps and places each segment.
 @(test)
 dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T) {
     // Checks wrapped text-run consumption emits layout items and lines with a valid reported last line index.
@@ -602,6 +644,8 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     cache.last_wrap_advance = 8
     cache.last_font_size = 12
 
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
     state := app_dynview.Dynview_Layout_State{}
     acc := app_dynview.Dynview_Layout_Line_Accumulator{}
     cmd := app_core.Dynview_Command{
@@ -610,15 +654,10 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
         brush_color = {64, 99, 216, 255},
     }
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
+    layout_context := app_dynview.layout_build_context(cache, buffer, &state, &acc)
 
     status, last_line := app_dynview.layout_consume_text_run(
-        cache,
-        &state,
-        &acc,
-        cmd,
-        "hello world",
-        style,
-        12)
+        &layout_context, cmd, "hello world", style)
 
     testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
     testing.expect(t, cache.layout_item_count > 0)
@@ -632,6 +671,7 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     }
 }
 
+//   Verify the math helpers scale script geometry with the script scale.
 @(test)
 dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
     // Ensures script math helper outputs produce sensible ascent, descent, offsets, and visual padding values.
@@ -651,14 +691,18 @@ dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
     testing.expect(t, bottom_pad > 0)
 }
 
+//   Verify the math size helpers scale with content and operator kind.
 @(test)
 dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
     // Verifies delimiter and large-operator sizing helpers scale with content height and operator kind.
     style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
 
-    width_none := app_dynview.stretch_delimiter_width(style, 8, 16, 10, app_dynview.DELIMITER_KIND_NONE)
-    width_paren := app_dynview.stretch_delimiter_width(style, 8, 16, 50, app_dynview.DELIMITER_KIND_LEFT_PAREN)
-    width_bigger := app_dynview.stretch_delimiter_width(style, 8, 16, 120, app_dynview.DELIMITER_KIND_LEFT_PAREN)
+    width_none := app_dynview.stretch_delimiter_width(
+        style, 8, 16, 10, app_dynview.DELIMITER_KIND_NONE)
+    width_paren := app_dynview.stretch_delimiter_width(
+        style, 8, 16, 50, app_dynview.DELIMITER_KIND_LEFT_PAREN)
+    width_bigger := app_dynview.stretch_delimiter_width(
+        style, 8, 16, 120, app_dynview.DELIMITER_KIND_LEFT_PAREN)
 
     testing.expect_value(t, width_none, f32(0))
     testing.expect(t, width_paren > 0)
@@ -667,7 +711,8 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
     glyph_scale_sum := app_dynview.large_op_glyph_scale(app_dynview.LARGE_OP_KIND_SUM)
     glyph_scale_int := app_dynview.large_op_glyph_scale(app_dynview.LARGE_OP_KIND_INT)
     limit_scale := app_dynview.large_op_limit_scale(0.8)
-    gap := app_dynview.large_op_limit_gap_for_kind(app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
+    gap := app_dynview.large_op_limit_gap_for_kind(
+        app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
 
     testing.expect(t, glyph_scale_sum > 1)
     testing.expect(t, glyph_scale_int > glyph_scale_sum)
@@ -675,6 +720,7 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
     testing.expect(t, gap > 0)
 }
 
+//   Verify measure_math_program aggregates child metrics into the program.
 @(test)
 dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     // Confirms math program measurement aggregates child command metrics into non-zero outer dimensions.
@@ -691,7 +737,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     buffer.text_bytes_len = 2
 
     cache^.math_commands[0] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
@@ -710,6 +756,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     testing.expect(t, program.descent > 0)
 }
 
+//   Verify the math spacing helpers produce stable positive sizes.
 @(test)
 dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T) {
     // Checks fraction and radical spacing helpers return positive values and scale upward with larger inputs.
@@ -730,17 +777,21 @@ dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T
     testing.expect(t, back_pad > 0)
 }
 
+//   Verify the integral large-operator gap is tighter than the sum operator gap.
 @(test)
 dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.T) {
     // Verifies integral stacked-limit gap is intentionally tighter than the sum/product stacked-limit gap.
-    gap_sum := app_dynview.large_op_limit_gap_for_kind(app_dynview.LARGE_OP_KIND_SUM, 16, 0.25)
-    gap_int := app_dynview.large_op_limit_gap_for_kind(app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
+    gap_sum := app_dynview.large_op_limit_gap_for_kind(
+        app_dynview.LARGE_OP_KIND_SUM, 16, 0.25)
+    gap_int := app_dynview.large_op_limit_gap_for_kind(
+        app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
 
     testing.expect(t, gap_sum > 0)
     testing.expect(t, gap_int > 0)
     testing.expect(t, gap_int < gap_sum)
 }
 
+//   Verify measure_math_program rejects invalid program shapes.
 @(test)
 dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
     // Ensures math program measurement rejects invalid or out-of-range command windows.
@@ -752,47 +803,60 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
 
     invalid_program := app_core.Dynview_Math_Program{}
     invalid_program.valid = false
-    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(
+        cache, buffer, &invalid_program, 12))
 
     invalid_program.valid = true
     invalid_program.command_start = 0
     invalid_program.command_count = 0
-    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(
+        cache, buffer, &invalid_program, 12))
 
     cache^.math_command_count = 1
     invalid_program.command_start = 1
     invalid_program.command_count = 1
-    testing.expect(t, !app_dynview.measure_math_program(cache, buffer, &invalid_program, 12))
+    testing.expect(t, !app_dynview.measure_math_program(
+        cache, buffer, &invalid_program, 12))
 }
 
-@(test)
-dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T) {
-    // Confirms measured width increases when additional child commands are included in the same math program.
-    cache := new(app_core.Dynview_Compile_Cache)
-    defer free(cache)
+//   Seed a cache with two text-run commands over a 3-byte buffer.
+dynview_seed_two_command_cache :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    buffer: ^app_core.Dynview_Command_Buffer) {
+
     cache^.last_wrap_advance = 8
     cache^.math_program_count = 2
     cache^.math_command_count = 2
 
-    buffer := new(app_core.Dynview_Command_Buffer)
-    defer free(buffer)
     buffer.text_bytes[0] = 'a'
     buffer.text_bytes[1] = 'b'
     buffer.text_bytes[2] = 'c'
     buffer.text_bytes_len = 3
 
     cache^.math_commands[0] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
     }
     cache^.math_commands[1] = app_core.Dynview_Command{
-        kind = .TextRun,
+        kind = .Text_Run,
         style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
         text_offset = 2,
         text_len = 1,
     }
+}
+
+//   Verify measure_math_program sums multiple command widths.
+@(test)
+dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T) {
+    // Confirms measured width increases when additional child commands are included in the same math program.
+    cache := new(app_core.Dynview_Compile_Cache)
+    defer free(cache)
+
+    buffer := new(app_core.Dynview_Command_Buffer)
+    defer free(buffer)
+    dynview_seed_two_command_cache(cache, buffer)
 
     one_cmd := &cache^.math_programs[0]
     one_cmd^.valid = true
@@ -812,6 +876,7 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
     testing.expect(t, two_cmd.draw_width > one_cmd.draw_width)
 }
 
+//   Verify reset_cache clears the dynview layout state.
 @(test)
 dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
     // Verifies layout cache reset clears counters, aggregate metrics, and layout validity state.
@@ -832,6 +897,7 @@ dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
     testing.expect(t, !cache.layout_is_valid)
 }
 
+//   Verify custom font style flags decode to the expected weight and italic.
 @(test)
 dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
     // Checks custom-font style ids decode expected flags and non-custom ids do not use that decoding path.
@@ -851,6 +917,7 @@ dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, style.line_height_multiplier, f32(1.0))
 
     // Non-custom style ids should not decode through the custom-font flag path.
-    _, normal_ok := app_dynview.style_from_custom_font_flags(app_dynview.DYNVIEW_STYLE_OUTPUT)
+    _, normal_ok := app_dynview.style_from_custom_font_flags(
+        app_dynview.DYNVIEW_STYLE_OUTPUT)
     testing.expect(t, !normal_ok)
 }

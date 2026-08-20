@@ -116,7 +116,8 @@ function resolve_document_text_color(
     haskey(DOCUMENT_LATEX_COLORS, normalized) && return DOCUMENT_LATEX_COLORS[normalized]
     try
         return OdinJuliaBridge.bridge_color(normalized)
-    catch
+    catch e
+        e isa Exception || rethrow()
         return inherited
     end
 end
@@ -294,7 +295,8 @@ function parse_document_shape_color(text::AbstractString)
     isempty(color_name) && return nothing
     try
         return OdinJuliaBridge.bridge_color(color_name)
-    catch
+    catch e
+        e isa Exception || rethrow()
         return nothing
     end
 end
@@ -813,9 +815,9 @@ function replay_document_angle_shape!(
         shape.end_angle,
         style_id,
         shape.filled,
-        fill_color,
-        arc_color,
-        shape.thickness)
+        fill_color;
+        arc_color=arc_color,
+        outline_stroke=shape.thickness)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -855,12 +857,12 @@ function replay_document_triangle_shape!(
         shape.width,
         shape.height,
         shape.thickness,
-        style_id,
-        shape.filled,
-        fill_color,
-        edge1_color,
-        edge2_color,
-        edge3_color)
+        style_id;
+        filled=shape.filled,
+        fill_color=fill_color,
+        edge1_color=edge1_color,
+        edge2_color=edge2_color,
+        edge3_color=edge3_color)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -885,14 +887,14 @@ function replay_document_pentagon_shape!(
         shape.width,
         shape.height,
         shape.thickness,
-        style_id,
-        shape.filled,
-        fill_color,
-        edge1_color,
-        edge2_color,
-        edge3_color,
-        edge4_color,
-        edge5_color)
+        style_id;
+        filled=shape.filled,
+        fill_color=fill_color,
+        edge1_color=edge1_color,
+        edge2_color=edge2_color,
+        edge3_color=edge3_color,
+        edge4_color=edge4_color,
+        edge5_color=edge5_color)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -918,22 +920,7 @@ function replay_document_outline_shape!(
     end
     if shape.edge_color_1 !== nothing || shape.edge_color_2 !== nothing ||
             shape.edge_color_3 !== nothing || shape.edge_color_4 !== nothing
-        default_color = something(shape.color, OdinJuliaBridge.bridge_color("white"))
-        edge1_color = something(shape.edge_color_1, default_color)
-        edge2_color = something(shape.edge_color_2, default_color)
-        edge3_color = something(shape.edge_color_3, default_color)
-        edge4_color = something(shape.edge_color_4, default_color)
-        status = OdinJuliaBridge.dynview_inline_box_edges(
-            state_ptr,
-            shape.width,
-            shape.height,
-            shape.thickness,
-            style_id,
-            edge1_color,
-            edge2_color,
-            edge3_color,
-            edge4_color)
-        return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+        return replay_document_box_edges!(state_ptr, shape, style_id)
     end
 
     status = shape.color === nothing ?
@@ -941,6 +928,28 @@ function replay_document_outline_shape!(
             state_ptr, shape.width, shape.height, shape.thickness, style_id) :
         OdinJuliaBridge.dynview_inline_box_brush(
             state_ptr, shape.width, shape.height, shape.thickness, style_id, shape.color)
+    return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Replay one box shape with per-edge colors, defaulting missing edges to the fill."""
+function replay_document_box_edges!(
+    state_ptr::Ptr{Cvoid}, shape::LatexDocumentShape, style_id::Int32)
+
+    default_color = something(shape.color, OdinJuliaBridge.bridge_color("white"))
+    edge1_color = something(shape.edge_color_1, default_color)
+    edge2_color = something(shape.edge_color_2, default_color)
+    edge3_color = something(shape.edge_color_3, default_color)
+    edge4_color = something(shape.edge_color_4, default_color)
+    status = OdinJuliaBridge.dynview_inline_box_edges(
+        state_ptr,
+        shape.width,
+        shape.height,
+        shape.thickness,
+        style_id;
+        edge1_color=edge1_color,
+        edge2_color=edge2_color,
+        edge3_color=edge3_color,
+        edge4_color=edge4_color)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 

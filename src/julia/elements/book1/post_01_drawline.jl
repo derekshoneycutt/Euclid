@@ -41,7 +41,7 @@ const PhaseMoveToJoint1 = 4f0
 const PhaseDrawLine = 5f0
 const PhaseEndLift = 6f0
 
-
+"""Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Postulates: Draw a Line
 
@@ -56,23 +56,27 @@ To draw a straight line \euclidline[color=steelblue,length=3,thickness=4] from a
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Reset the state of the animation cycle back to the start of the animation"""
 function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    lineJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
-    point1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
-    OdinJuliaBridge.hide_point(state_ptr, lineHostId)
+    OdinJuliaBridge.hide_point(state_ptr, line_host_id)
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineJoint1Id, StartPoint[1], StartPoint[2], StartPoint[3])
+        state_ptr, line_joint1_id, StartPoint[1], StartPoint[2], StartPoint[3])
     OdinJuliaBridge.set_point_position(
-        state_ptr, lineJoint2Id, StartPoint[1], StartPoint[2], StartPoint[3])
+        state_ptr, line_joint2_id, StartPoint[1], StartPoint[2], StartPoint[3])
 
-    OdinJuliaBridge.hide_point_batch(state_ptr, [point1Id, point2Id])
+    OdinJuliaBridge.hide_point_batch(state_ptr, [point1id, point2id])
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineColor)
@@ -80,6 +84,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
 end
 
+"""Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     point1 = OdinJuliaBridge.create_new_point(
         state_ptr,
@@ -92,31 +97,36 @@ function initialize(state_ptr::Ptr{Cvoid})
         Point2Color,
         0f0)
     line = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        StartPoint[1], StartPoint[2], StartPoint[3],
-        StartPoint[1], StartPoint[2], StartPoint[3],
+        state_ptr, StartPoint, StartPoint,
         LineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, Float32(line.hostId))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, Float32(line.joint1Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, Float32(line.joint2Id))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, Float32(point1.index))
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, Float32(point2.index))
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, line.host_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, line.joint1_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, line.joint2_id)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint1Id, point1.index)
+    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPoint2Id, point2.index)
 
     reset_cycle_state(state_ptr)
 end
 
+"""Clean any extra animation data at the end of performance"""
 function clean(state_ptr::Ptr{Cvoid})
 end
 
+"""Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lineHostId = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineHostId))
-    lineJoint1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint1Id))
-    lineJoint2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLineJoint2Id))
-    point1Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint1Id))
-    point2Id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPoint2Id))
+    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineHostId))
+    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint1Id))
+    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaLineJoint2Id))
+    point1id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint1Id))
+    point2id = Integer(OdinJuliaBridge.get_animation_meta(
+        state_ptr, MetaPoint2Id))
 
-    if lineHostId < 0
+    if line_host_id < 0
         return
     end
 
@@ -135,7 +145,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutJoint1
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, ExtremityTrailDuration, StartPoint,
-            PointMaxBrush, Point1Color, point1Id)
+            PointMaxBrush, Point1Color, point1id)
 
         timer += dt
         if timer >= ExtremityTrailDuration
@@ -155,7 +165,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhasePutJoint2
         EuclidAnimations.animate_draw_point(
             state_ptr, timer, ExtremityTrailDuration, EndPoint,
-            PointMaxBrush, Point2Color, point2Id)
+            PointMaxBrush, Point2Color, point2id)
 
         timer += dt
         if timer >= ExtremityTrailDuration
@@ -173,9 +183,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, StartPoint, EndPoint,
-            LineMaxBrush, LineColor, lineHostId, lineJoint1Id, lineJoint2Id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            StartPoint, EndPoint;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor,
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
