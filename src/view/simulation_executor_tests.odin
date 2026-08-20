@@ -1,9 +1,8 @@
-package view_tests
+package view
 
-import app_core "../../src/core"
-import app_files "../../src/files"
-import app_trace "../../src/trace"
-import app_view "../../src/view"
+import app_core "../core"
+import app_files "../files"
+import app_trace "../trace"
 
 import "core:math"
 import "core:os"
@@ -33,7 +32,7 @@ make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
 
 //   Assert the headless session started with a ready service and live state.
 expect_headless_session_ready :: proc(
-    t: ^testing.T, session: app_view.Euclid_Runtime_Session) {
+    t: ^testing.T, session: Euclid_Runtime_Session) {
 
     state := session.state
     service := session.julia_service
@@ -63,18 +62,18 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
         &asset_root_config))
 
     settings := make_headless_trace_settings()
-    session, ok := app_view.create_runtime_session(&settings)
+    session, ok := create_runtime_session(&settings)
     testing.expect(t, ok)
     if !ok {
         return
     }
-    defer app_view.shutdown_runtime_session(session)
+    defer shutdown_runtime_session(session)
 
     expect_headless_session_ready(t, session)
 
     state := session.state
-    testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
-    testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
@@ -95,11 +94,11 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     state^.trace_state.output_mode = .Sink
     state^.trace_state.categories = app_core.Trace_Category_Set{.Geometry}
 
-    executor := app_view.create_simulation_executor(state)
+    executor := create_simulation_executor(state)
     state^.simulation_executor = executor
-    defer app_view.destroy_simulation_executor(executor)
+    defer destroy_simulation_executor(executor)
 
-    testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(1))
     testing.expectf(t, math.abs(state^.simulation_time - 0.025) <= 0.0001,
         "expected simulation_time near 0.025, got %v", state^.simulation_time)
@@ -112,7 +111,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     testing.expect(t, strings.contains(first_payload, "\"fixed_step\":1"))
     testing.expect(t, strings.contains(first_payload, "\"simulation_time\":0.025"))
 
-    testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
@@ -145,11 +144,11 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     state^.trace_state.output_mode = .Sink
     state^.trace_state.categories = app_core.Trace_Category_Set{.Trace, .Geometry}
 
-    executor := app_view.create_simulation_executor(state)
+    executor := create_simulation_executor(state)
     state^.simulation_executor = executor
-    defer app_view.destroy_simulation_executor(executor)
+    defer destroy_simulation_executor(executor)
 
-    testing.expect(t, app_view.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.trace_state.records_count, 2)
 
     checkpoint := &state^.trace_state.records[1]
@@ -189,11 +188,11 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
         do_apply = true,
     }
 
-    executor := app_view.create_simulation_executor(state)
-    defer app_view.destroy_simulation_executor(executor)
-    app_view.run_parallel_simulation_step(executor, 0.01)
+    executor := create_simulation_executor(state)
+    defer destroy_simulation_executor(executor)
+    run_parallel_simulation_step(executor, 0.01)
     first_batch_x := particles^.low_particles.pos_x[0]
-    app_view.run_parallel_simulation_step(executor, 0.01)
+    run_parallel_simulation_step(executor, 0.01)
 
     testing.expect_value(t, first_batch_x, f32(0.25))
     testing.expect(t, particles^.low_particles.pos_x[0] > first_batch_x)
@@ -214,17 +213,17 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     state^.point_system^.points[0].position = app_core.Vector3{1, 2, 3}
     state^.dynview.enabled = true
 
-    executor := app_view.create_simulation_executor(state)
+    executor := create_simulation_executor(state)
     state^.simulation_executor = executor
-    defer app_view.destroy_simulation_executor(executor)
+    defer destroy_simulation_executor(executor)
 
-    app_view.run_parallel_frame_preparation(state, 0.25)
+    run_parallel_frame_preparation(state, 0.25)
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
     testing.expect(t, thread.pool_is_empty(&executor^.pool))
 
-    app_view.run_parallel_frame_preparation(state, 0.75)
+    run_parallel_frame_preparation(state, 0.75)
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect(t, thread.pool_is_empty(&executor^.pool))
 }

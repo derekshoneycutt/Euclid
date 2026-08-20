@@ -1,12 +1,11 @@
-package view_tests
+package trace
 
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:testing"
 
-import app_core "../../src/core"
-import app_trace "../../src/trace"
+import app_core "../core"
 
 //   Set the trace run id from a string.
 set_trace_run_id :: proc(state: ^app_core.Trace_State, run_id: string) {
@@ -48,8 +47,8 @@ configure_enabled_trace :: proc(
         semantic_trace_output = output_path,
         semantic_trace_events = "",
     }
-    testing.expect(t, app_trace.initialize_trace_state(state, &settings))
-    testing.expect(t, app_trace.begin_trace(state))
+    testing.expect(t, initialize_trace_state(state, &settings))
+    testing.expect(t, begin_trace(state))
 }
 
 //   Verify the semantic-trace argument parser accepts the supported flag forms.
@@ -57,25 +56,25 @@ configure_enabled_trace :: proc(
 semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
     settings := app_core.Euclid_Run_Settings{}
 
-    handled, valid := app_trace.parse_semantic_trace_argument(
+    handled, valid := parse_semantic_trace_argument(
         &settings, "--semantic-trace")
     testing.expect(t, handled)
     testing.expect(t, valid)
     testing.expect(t, settings.semantic_trace_enabled)
 
-    handled, valid = app_trace.parse_semantic_trace_argument(
+    handled, valid = parse_semantic_trace_argument(
         &settings, "--semantic-trace-events=runtime,animation")
     testing.expect(t, handled)
     testing.expect(t, valid)
     testing.expect_value(t, settings.semantic_trace_events, "runtime,animation")
 
-    handled, valid = app_trace.parse_semantic_trace_argument(
+    handled, valid = parse_semantic_trace_argument(
         &settings, "--semantic-trace-output=/tmp/euclid-trace.jsonl")
     testing.expect(t, handled)
     testing.expect(t, valid)
     testing.expect_value(t, settings.semantic_trace_output, "/tmp/euclid-trace.jsonl")
 
-    handled, valid = app_trace.parse_semantic_trace_argument(
+    handled, valid = parse_semantic_trace_argument(
         &settings, "--semantic-trace-strict")
     testing.expect(t, handled)
     testing.expect(t, valid)
@@ -87,7 +86,7 @@ semantic_trace_argument_parsing_accepts_supported_forms :: proc(t: ^testing.T) {
 semantic_trace_argument_parsing_rejects_unknown_categories :: proc(t: ^testing.T) {
     settings := app_core.Euclid_Run_Settings{}
 
-    handled, valid := app_trace.parse_semantic_trace_argument(
+    handled, valid := parse_semantic_trace_argument(
         &settings, "--semantic-trace-events=runtime,unknown")
     testing.expect(t, handled)
     testing.expect(t, !valid)
@@ -107,7 +106,7 @@ trace_json_serialization_escapes_strings_and_writes_envelope :: proc(t: ^testing
     record.payload_len = set_trace_record_text(record.payload[:], "{\"note\":\"a\\nb\"}")
 
     buffer: [app_core.TRACE_SERIALIZE_BUFFER_CAPACITY]u8
-    out_len, ok := app_trace.serialize_event_record(state, &record, buffer[:])
+    out_len, ok := serialize_event_record(state, &record, buffer[:])
     testing.expect(t, ok)
     line := string(buffer[:out_len])
 
@@ -131,12 +130,12 @@ trace_ring_wraps_and_preserves_monotonic_sequence_order :: proc(t: ^testing.T) {
     state^.next_sequence = 1
 
     for _ in 0..<app_core.TRACE_RECORD_CAPACITY {
-        testing.expect(t, app_trace.record_event(state, .Trace, "trace.started", ""))
+        testing.expect(t, record_event(state, .Trace, "trace.started", ""))
     }
 
-    testing.expect(t, app_trace.drain_trace(state))
+    testing.expect(t, drain_trace(state))
     for _ in 0..<3 {
-        testing.expect(t, app_trace.record_event(state, .Trace, "trace.started", ""))
+        testing.expect(t, record_event(state, .Trace, "trace.started", ""))
     }
 
     testing.expect_value(t, state^.records_count, 3)
@@ -156,13 +155,13 @@ trace_strict_overflow_marks_state_invalid :: proc(t: ^testing.T) {
     set_trace_run_id(state, "run-strict")
 
     for _ in 0..<app_core.TRACE_RECORD_CAPACITY {
-        testing.expect(t, app_trace.record_event(state, .Trace, "trace.started", ""))
+        testing.expect(t, record_event(state, .Trace, "trace.started", ""))
     }
 
-    testing.expect(t, !app_trace.record_event(state, .Trace, "trace.started", ""))
+    testing.expect(t, !record_event(state, .Trace, "trace.started", ""))
     testing.expect(t, state^.invalid)
     testing.expect_value(t, state^.dropped_count, u64(1))
-    testing.expect(t, app_trace.should_fail_process(state))
+    testing.expect(t, should_fail_process(state))
 }
 
 //   Verify the file lifecycle writes started, configuration, and finished records.
@@ -180,9 +179,9 @@ trace_file_lifecycle_writes_started_config_and_finished_records :: proc(t: ^test
     state := new(app_core.Trace_State)
     defer free(state)
     configure_enabled_trace(t, state, output_path, true)
-    testing.expect(t, app_trace.record_runtime_event(state, "runtime.starting"))
-    testing.expect(t, app_trace.record_animation_event(state, "animation.selected"))
-    testing.expect(t, app_trace.finish_trace(state))
+    testing.expect(t, record_runtime_event(state, "runtime.starting"))
+    testing.expect(t, record_animation_event(state, "animation.selected"))
+    testing.expect(t, finish_trace(state))
 
     content := read_text_file(t, output_path)
     testing.expect(t, strings.contains(content, "\"event\":\"trace.started\""))
@@ -199,11 +198,11 @@ trace_disabled_state_is_inert_and_does_not_emit :: proc(t: ^testing.T) {
     state := new(app_core.Trace_State)
     defer free(state)
     settings := app_core.Euclid_Run_Settings{}
-    testing.expect(t, app_trace.initialize_trace_state(state, &settings))
-    testing.expect(t, app_trace.begin_trace(state))
-    testing.expect(t, app_trace.record_runtime_event(state, "runtime.starting"))
-    testing.expect(t, app_trace.drain_trace(state))
-    testing.expect(t, app_trace.finish_trace(state))
+    testing.expect(t, initialize_trace_state(state, &settings))
+    testing.expect(t, begin_trace(state))
+    testing.expect(t, record_runtime_event(state, "runtime.starting"))
+    testing.expect(t, drain_trace(state))
+    testing.expect(t, finish_trace(state))
     testing.expect_value(t, state^.emitted_count, u64(0))
     testing.expect_value(t, state^.dropped_count, u64(0))
     testing.expect(t, !state^.invalid)
@@ -225,17 +224,17 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
     defer free(state)
     configure_enabled_trace(t, state, output_path, true)
 
-    testing.expect(t, app_trace.record_runtime_event_ex(
+    testing.expect(t, record_runtime_event_ex(
         state, "runtime.reload_committed", 9, 2, 77))
-    testing.expect(t, app_trace.record_animation_event_ex(
+    testing.expect(t, record_animation_event_ex(
         state, "animation.tick_rejected",
-        app_trace.Trace_Animation_Event{
+        Trace_Animation_Event{
             generation = 8,
             tick = 126,
             animation_id = "anim-1",
             reason = "stale_sequence",
         }))
-    testing.expect(t, app_trace.finish_trace(state))
+    testing.expect(t, finish_trace(state))
 
     content := read_text_file(t, output_path)
     testing.expect(t, strings.contains(content, "\"event\":\"runtime.reload_committed\""))
@@ -251,29 +250,29 @@ trace_phase2_structured_events_include_expected_payload_fields :: proc(t: ^testi
 
 //   Record the phase-3 geometry, tool, particle, and constraint events.
 record_phase3_events :: proc(t: ^testing.T, state: ^app_core.Trace_State) {
-    testing.expect(t, app_trace.record_point_event(
+    testing.expect(t, record_point_event(
         state,
         "point.position_changed",
         14,
-        app_trace.Trace_Point_Event_Fields{
+        Trace_Point_Event_Fields{
             from_position = app_core.Vector3{0.25, 0.40, 0.0},
             to_position = app_core.Vector3{0.50, 0.40, 0.0},
         }))
-    testing.expect(t, app_trace.record_tool_event(
+    testing.expect(t, record_tool_event(
         state,
         "pen.visibility_changed",
         "pen",
-        app_trace.Trace_Tool_Event_Fields{visible = true}))
-    testing.expect(t, app_trace.record_particles_emitted(
+        Trace_Tool_Event_Fields{visible = true}))
+    testing.expect(t, record_particles_emitted(
         state,
-        app_trace.Trace_Particle_Emission{
+        Trace_Particle_Emission{
             kind = "flicker",
             layer = "high",
             count = 10,
             source = app_core.Vector3{0.5, 0.4, 0.0},
             color = app_core.Bridge_Color{r = 70, g = 130, b = 180, a = 255},
         }))
-    testing.expect(t, app_trace.record_constraint_solve_summary(
+    testing.expect(t, record_constraint_solve_summary(
         state,
         130,
         2.166667,
@@ -318,7 +317,7 @@ trace_phase3_summary_events_include_geometry_tool_and_particle_payloads :: proc(
     configure_enabled_trace(t, state, output_path, true)
 
     record_phase3_events(t, state)
-    testing.expect(t, app_trace.finish_trace(state))
+    testing.expect(t, finish_trace(state))
 
     expect_phase3_payload_fields(t, read_text_file(t, output_path))
 }
@@ -419,8 +418,8 @@ trace_checkpoint_snapshot_serializes_bounded_post_join_state :: proc(t: ^testing
     configure_enabled_trace(t, state, output_path, true)
 
     snapshot := seed_checkpoint_snapshot()
-    testing.expect(t, app_trace.record_checkpoint_snapshot(state, &snapshot))
-    testing.expect(t, app_trace.finish_trace(state))
+    testing.expect(t, record_checkpoint_snapshot(state, &snapshot))
+    testing.expect(t, finish_trace(state))
 
     expect_checkpoint_payload_fields(t, read_text_file(t, output_path))
 }

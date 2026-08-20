@@ -109,7 +109,7 @@ combined gate as passing when a phase was skipped.
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
 | Odin build/style | Compiler strict flags | No warnings or style failures. |
-| Odin behavior | `odin test tests -all-packages` through `make.jl` | All tests pass. |
+| Odin behavior | `odin test src -all-packages` through `make.jl` | All tests pass. |
 | Julia behavior | `src/julia/test/runtests.jl` through `make.jl` | All tests pass. |
 | Julia static analysis | JET vet phase | No actionable reports. |
 | Julia complexity | CodeComplexity vet phase | No blocking rows; approved content warnings only. |

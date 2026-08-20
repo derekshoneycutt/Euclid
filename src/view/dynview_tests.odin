@@ -1,10 +1,10 @@
-package view_tests
+package view
 
 import "core:testing"
 
-import app_bridge "../../src/bridge"
-import app_core "../../src/core"
-import app_dynview "../../src/dynview"
+import app_bridge "../bridge"
+import app_core "../core"
+import app_dynview "../dynview"
 
 //   Verify the scratchpad history prompt style matches the live input indent.
 @(test)

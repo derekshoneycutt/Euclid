@@ -287,7 +287,13 @@ AnalysisSettings(
             EuclidAnalysisRoots.EuclidLatex.latex_to_plain_text,
             (String,)),
     ]),
-    OdinBuildSettings(OdinBuildTarget[]),
+    OdinBuildSettings([
+        OdinBuildTarget(
+            "application",
+            "src",
+            "euclid-analysis",
+            ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"]),
+    ]),
     ReturnTupleSettings(2, 2),
     ParameterCountSettings(8, 5, 8),
     FunctionMetricSettings(
@@ -504,7 +510,7 @@ AnalysisSettings(
             # Test Allocations -- every site is a test fixture destroyed by defer free
             ReviewedAllocationPolicy(
                 "test-gif-encode-collect-gce-packed-bytes",
-                "tests/files/gif_encode_tests.odin",
+                "src/files/gif_encode_tests.odin",
                 "collect_gce_packed_bytes",
                 :temporary,
                 "Test helper buffer on the temporary allocator, freed by test teardown.";
@@ -514,7 +520,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-reserve-dead-low-prefers-dead",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "reserve_dead_low_particle_slot_prefers_dead_then_wraps",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -524,7 +530,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-reserve-dead-ring-advances",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "reserve_dead_particle_slot_ring_advances",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -534,7 +540,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-resolve-pair-no-collision",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "resolve_dust_pair_no_collision_keeps_state",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -544,7 +550,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-resolve-pair-approach-impulse",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "resolve_dust_pair_overlap_with_approach_applies_impulse",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -554,7 +560,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-resolve-pair-separating-skips",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "resolve_dust_pair_overlap_with_separating_velocity_skips_impulse",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -564,7 +570,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-resolve-pair-exact-overlap",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "resolve_dust_pair_exact_overlap_uses_deterministic_separation",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -574,7 +580,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-random-ranges-independent",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "particle_random_ranges_use_independent_seeded_generators",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -586,7 +592,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-particles-resolve-collisions-rotates-samples",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "resolve_dust_collisions_rotates_dense_bucket_samples",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -596,7 +602,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-reset-clears-runtime-state",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "reset_particles_clears_runtime_state_and_marks_all_slots_dead",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -606,7 +612,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-reserve-dead-low-wraps",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "reserve_dead_low_particle_slot_wraps_when_all_slots_alive",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -616,7 +622,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-emit-shapes-hide-burst",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "emit_shapes_hide_burst_spawns_dust_for_supported_shapes",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -626,7 +632,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-particles-clamp-xy-bounds-bounces",
-                "tests/particles/particles_tests.odin",
+                "src/particles/particles_tests.odin",
                 "clamp_xy_bounds_index_bounces_particles_back_inside_bounds",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -636,7 +642,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-shapes-clear-animation-data",
-                "tests/shapes/system_tests.odin",
+                "src/shapes/system_tests.odin",
                 "clear_animation_data_clears_animation_owned_slots",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -646,7 +652,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-generation-slots-alternate",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "julia_interface_generation_slots_are_stable_and_alternate",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -655,7 +661,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-snapshot-rejects-recycled-interface",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "view_snapshot_rejects_recycled_interface_pointer_from_old_generation",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -666,7 +672,7 @@ AnalysisSettings(
                 maximum_matches=3),
             ReviewedAllocationPolicy(
                 "test-dynview-batch-commits-point-positions",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "scene_command_batch_commits_point_positions_in_order",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -677,7 +683,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-batch-rejects-invalid-tail",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "scene_command_batch_rejects_invalid_tail_atomically",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -688,7 +694,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-batch-rejects-overflow-stale",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "scene_command_batch_rejects_overflow_and_stale_animation",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -699,7 +705,7 @@ AnalysisSettings(
                 maximum_matches=5),
             ReviewedAllocationPolicy(
                 "test-dynview-tick-reject-reason-classifies",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "animation_tick_reject_reason_classifies_stale_generation_and_sequence",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -710,7 +716,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-batch-defers-point-properties",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "scene_command_batch_defers_general_point_properties_until_commit",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -721,7 +727,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-batch-rejects-implicit-compass",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "scene_command_batch_rejects_invalid_implicit_compass_handle_atomically",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -732,7 +738,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-query-snapshot-immutable",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "animation_query_snapshot_is_immutable_during_worker_tick",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -743,7 +749,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-tick-rejects-stale-generation",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "animation_tick_rejects_stale_generation_and_sequence",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -754,7 +760,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-dynview-tick-coalescing-caps-backlog",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "animation_tick_coalescing_caps_backlog_without_queue_growth",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -763,7 +769,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-runtime-failure-event-identity",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "julia_runtime_failure_event_records_request_identity",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -772,7 +778,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-runtime-terminal-failure",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "julia_runtime_terminal_failure_does_not_report_stopped",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -781,7 +787,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-runtime-diagnostics-failure",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "julia_runtime_diagnostics_report_failure_and_saturation",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -790,7 +796,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-reload-failure-records-revision",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "julia_reload_failure_records_package_revision",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -799,7 +805,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-snapshot-copy-preserves-spans",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "view_snapshot_copy_preserves_recursive_math_spans",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -810,7 +816,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-snapshot-validation-rejects",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "view_snapshot_validation_rejects_incomplete_streams",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -819,7 +825,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-completed-snapshot-found",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "completed_view_snapshot_is_found_without_event_index",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -828,7 +834,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-newest-snapshot-supersedes",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "newest_completed_view_snapshot_supersedes_older_completion",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -837,7 +843,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-stale-snapshot-clears-commands",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "stale_view_snapshot_clears_previous_animation_commands",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -848,7 +854,7 @@ AnalysisSettings(
                 maximum_matches=5),
             ReviewedAllocationPolicy(
                 "test-dynview-text-span-script-attach-bounds",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_text_span_and_script_attach_helpers_respect_bounds",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -857,7 +863,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-layout-prepare-style-placement",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_layout_prepare_style_placement_forces_line_break_and_indent",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -866,7 +872,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-layout-push-item-metadata",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_layout_push_item_records_block_and_column_metadata",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -875,7 +881,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-dynview-layout-consume-text-run-wraps",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_layout_consume_text_run_wraps_and_places_segments",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -886,7 +892,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-measure-math-aggregates-children",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_measure_math_program_aggregates_child_metrics",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -897,7 +903,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-measure-math-rejects-invalid",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_measure_math_program_rejects_invalid_shapes",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -908,7 +914,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-measure-math-sums-widths",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_measure_math_program_sums_multiple_command_widths",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -919,7 +925,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-dynview-reset-cache-clears-layout",
-                "tests/view/dynview_tests.odin",
+                "src/view/dynview_tests.odin",
                 "dynview_reset_cache_clears_layout_state",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -928,7 +934,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-gif-capture-status-note-truncation",
-                "tests/view/gif_capture_tests.odin",
+                "src/view/gif_capture_tests.odin",
                 "clear_and_set_gif_status_note_handles_truncation",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -938,7 +944,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-gif-capture-last-path-truncation",
-                "tests/view/gif_capture_tests.odin",
+                "src/view/gif_capture_tests.odin",
                 "clear_and_set_last_gif_path_handles_truncation",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -948,7 +954,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-gif-capture-cycle-boundary-consumes-once",
-                "tests/view/gif_capture_tests.odin",
+                "src/view/gif_capture_tests.odin",
                 "gif_capture_consume_cycle_boundary_consumes_once_per_generation",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -958,7 +964,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-gif-capture-batch-splits-hide-points",
-                "tests/view/gif_capture_tests.odin",
+                "src/view/gif_capture_tests.odin",
                 "scene_command_batch_splits_large_hide_point_batches",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -969,7 +975,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-sim-executor-fixed-step-advances-identity",
-                "tests/view/simulation_executor_tests.odin",
+                "src/view/simulation_executor_tests.odin",
                 "deterministic_fixed_step_advances_identity_after_worker_join",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -980,7 +986,7 @@ AnalysisSettings(
                 maximum_matches=3),
             ReviewedAllocationPolicy(
                 "test-sim-executor-fixed-step-emits-snapshot",
-                "tests/view/simulation_executor_tests.odin",
+                "src/view/simulation_executor_tests.odin",
                 "deterministic_fixed_step_emits_post_join_checkpoint_snapshot",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -991,7 +997,7 @@ AnalysisSettings(
                 maximum_matches=4),
             ReviewedAllocationPolicy(
                 "test-sim-executor-parallel-step-joins-updates",
-                "tests/view/simulation_executor_tests.odin",
+                "src/view/simulation_executor_tests.odin",
                 "parallel_simulation_step_joins_particle_and_constraint_updates",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -1002,7 +1008,7 @@ AnalysisSettings(
                 maximum_matches=3),
             ReviewedAllocationPolicy(
                 "test-sim-executor-frame-prep-joins-caches",
-                "tests/view/simulation_executor_tests.odin",
+                "src/view/simulation_executor_tests.odin",
                 "parallel_frame_preparation_joins_shape_and_dynview_cache_updates",
                 :implicit,
                 "Test fixtures destroyed by defer free in the test body.";
@@ -1013,7 +1019,7 @@ AnalysisSettings(
                 maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-trace-json-serialization-escapes",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_json_serialization_escapes_strings_and_writes_envelope",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1023,7 +1029,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-ring-wraps-monotonic-sequence",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_ring_wraps_and_preserves_monotonic_sequence_order",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1033,7 +1039,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-strict-overflow-marks-invalid",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_strict_overflow_marks_state_invalid",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1043,7 +1049,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-file-lifecycle-writes-records",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_file_lifecycle_writes_started_config_and_finished_records",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1053,7 +1059,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-disabled-state-inert",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_disabled_state_is_inert_and_does_not_emit",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1063,7 +1069,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-phase2-structured-events",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_phase2_structured_events_include_expected_payload_fields",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1073,7 +1079,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-phase3-summary-events",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_phase3_summary_events_include_geometry_tool_and_particle_payloads",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";
@@ -1083,7 +1089,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-trace-checkpoint-snapshot-serializes",
-                "tests/view/trace_tests.odin",
+                "src/trace/trace_tests.odin",
                 "trace_checkpoint_snapshot_serializes_bounded_post_join_state",
                 :implicit,
                 "Test fixture destroyed by defer free in the test body.";

@@ -1,11 +1,11 @@
-package view_tests
+package view
 
 import "core:strings"
 import "core:testing"
 
-import app_core "../../src/core"
-import app_bridge "../../src/bridge"
-import app_view "../../src/view/core"
+import app_core "../core"
+import app_bridge "../bridge"
+import app_view "./core"
 
 //   Verify clearing then setting a long GIF status note truncates with a terminator.
 @(test)

@@ -1,8 +1,7 @@
-package view_tests
+package view_core
 
 import "core:testing"
 
-import app_view_core "../../src/view/core"
 
 // Verifies representative bundled language scripts and composed/decomposed accents remain loaded.
 @(test)
@@ -20,7 +19,7 @@ font_codepoint_policy_covers_languages_and_diacritics :: proc(t: ^testing.T) {
     }
 
     for codepoint in codepoints {
-        testing.expect(t, app_view_core.font_codepoint_is_supported(codepoint))
+        testing.expect(t, font_codepoint_is_supported(codepoint))
     }
 }
 
@@ -39,18 +38,18 @@ font_codepoint_policy_covers_core_and_supplemental_math :: proc(t: ^testing.T) {
     }
 
     for codepoint in codepoints {
-        testing.expect(t, app_view_core.font_codepoint_is_supported(codepoint))
+        testing.expect(t, font_codepoint_is_supported(codepoint))
     }
 }
 
 // Verifies the policy remains comprehensive without returning to a contiguous Unicode sweep.
 @(test)
 font_codepoint_policy_is_broad_but_bounded :: proc(t: ^testing.T) {
-    codepoint_set := app_view_core.font_codepoint_set()
+    codepoint_set := font_codepoint_set()
 
     testing.expect(t, codepoint_set.count > 7000)
-    testing.expect(t, codepoint_set.count < app_view_core.FONT_CODEPOINT_CAPACITY)
-    testing.expect(t, app_view_core.font_codepoint_is_supported(0x2500))
-    testing.expect(t, !app_view_core.font_codepoint_is_supported(0x2502))
-    testing.expect(t, !app_view_core.font_codepoint_is_supported('漢'))
+    testing.expect(t, codepoint_set.count < FONT_CODEPOINT_CAPACITY)
+    testing.expect(t, font_codepoint_is_supported(0x2500))
+    testing.expect(t, !font_codepoint_is_supported(0x2502))
+    testing.expect(t, !font_codepoint_is_supported('漢'))
 }

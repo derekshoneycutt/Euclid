@@ -110,7 +110,7 @@ struct BuildPlanToggles
 end
 
 # The driver lives in tools/; the repository root (which owns src/, bin/,
-# tests/, and the other build inputs) is its parent directory.
+# and the other build inputs) is its parent directory.
 const SCRIPT_DIR = abspath(joinpath(@__DIR__, ".."))
 const SRC_DIR = joinpath(SCRIPT_DIR, "src")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
@@ -120,7 +120,7 @@ const JULIA_SYSIMAGE_PATH = joinpath(BIN_DIR, "euclid-sysimage." * Libdl.dlext)
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_RUNNER = joinpath(SRC_DIR, "julia", "test", "runtests.jl")
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
-const ODIN_TEST_ROOT = joinpath(SCRIPT_DIR, "tests")
+const ODIN_TEST_ROOT = SRC_DIR
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
 const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 

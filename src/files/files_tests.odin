@@ -1,10 +1,9 @@
-package files_tests
+package files
 
 import "core:os"
 import "core:path/filepath"
 import "core:testing"
 
-import app_files "../../src/files"
 
 //   Create a clean per-test sandbox directory under the OS temp directory.
 prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
@@ -83,10 +82,10 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
     defer _ = os.remove_all(unpack_dir)
     testing.expect(t, ok)
 
-    testing.expect(t, !app_files.is_assets_unpack_ready(unpack_dir))
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir))
 
     testing.expect(t, build_ready_unpack_tree(unpack_dir))
-    testing.expect(t, app_files.is_assets_unpack_ready(unpack_dir))
+    testing.expect(t, is_assets_unpack_ready(unpack_dir))
 }
 
 //   Verify should_continue_unpack across the missing/partial/complete/forced matrix.
@@ -106,31 +105,31 @@ should_continue_unpack_matrix :: proc(t: ^testing.T) {
     testing.expect(t, archive_join_err == nil)
     testing.expect(t, unpack_join_err == nil)
 
-    continue_unpack, result := app_files.should_continue_unpack(
+    continue_unpack, result := should_continue_unpack(
         archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, !result)
 
     testing.expect(t, os.make_directory_all(unpack_dir) == nil)
-    continue_unpack, result = app_files.should_continue_unpack(
+    continue_unpack, result = should_continue_unpack(
         archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, result)
 
     testing.expect(t, os.write_entire_file(archive_path, []u8{'a'}) == nil)
 
-    continue_unpack, result = app_files.should_continue_unpack(
+    continue_unpack, result = should_continue_unpack(
         archive_path, unpack_dir, false)
     testing.expect(t, continue_unpack)
     testing.expect(t, !result)
 
     testing.expect(t, build_ready_unpack_tree(unpack_dir))
-    continue_unpack, result = app_files.should_continue_unpack(
+    continue_unpack, result = should_continue_unpack(
         archive_path, unpack_dir, false)
     testing.expect(t, !continue_unpack)
     testing.expect(t, result)
 
-    continue_unpack, result = app_files.should_continue_unpack(
+    continue_unpack, result = should_continue_unpack(
         archive_path, unpack_dir, true)
     testing.expect(t, continue_unpack)
     testing.expect(t, !result)
@@ -153,7 +152,7 @@ prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
     testing.expect(t, nested_err == nil)
     testing.expect(t, os.exists(nested_file_path))
 
-    testing.expect(t, app_files.prepare_unpack_directory(sandbox))
+    testing.expect(t, prepare_unpack_directory(sandbox))
     testing.expect(t, os.is_directory(sandbox))
     testing.expect(t, !os.exists(nested_file_path))
 }
@@ -161,7 +160,7 @@ prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
 //   Verify resolve_writable_gif_output_dir rejects empty input and creates the dir.
 @(test)
 resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
-    output_dir, ok := app_files.resolve_writable_gif_output_dir("")
+    output_dir, ok := resolve_writable_gif_output_dir("")
     testing.expect(t, !ok)
     testing.expect_value(t, output_dir, "")
 
@@ -171,11 +170,11 @@ resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
     testing.expect(t, base_ok)
 
     expected_output, expected_err := filepath.join(
-        []string{base_dir, app_files.GIF_OUTPUT_DIR_NAME}, context.allocator)
+        []string{base_dir, GIF_OUTPUT_DIR_NAME}, context.allocator)
     defer delete(expected_output)
     testing.expect(t, expected_err == nil)
 
-    output_dir, ok = app_files.resolve_writable_gif_output_dir(base_dir)
+    output_dir, ok = resolve_writable_gif_output_dir(base_dir)
     testing.expect(t, ok)
     testing.expect_value(t, output_dir, expected_output)
     testing.expect(t, os.is_directory(output_dir))

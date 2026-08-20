@@ -1,12 +1,11 @@
-package particles_tests
+package particles
 
 import "core:math"
 import "core:testing"
 
-import app_core "../../src/core"
-import app_particles "../../src/particles"
-import app_view_core "../../src/view/core"
-import test_helpers "../helpers"
+import app_core "../core"
+import app_view_core "../view/core"
+import test_helpers "../test_helpers"
 
 EPS :: f32(1e-5)
 
@@ -21,11 +20,11 @@ Dust_Slot_Snapshot :: struct {
 //   Verify theta normalization and sweep delta wrap correctly across zero.
 @(test)
 normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
-    theta := app_particles.normalize_theta(f32(-0.5))
+    theta := normalize_theta(f32(-0.5))
     test_helpers.expect_close(t, theta, f32(2.0 * math.PI - 0.5),
         "normalize_theta should wrap negatives")
 
-    delta := app_particles.compute_sweep_delta(
+    delta := compute_sweep_delta(
         f32(1.5 * math.PI),
         f32(0.5 * math.PI))
     test_helpers.expect_close(t, delta, f32(math.PI),
@@ -35,10 +34,10 @@ normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
 //   Verify dust_grid_cell_index clamps out-of-range coordinates to the grid.
 @(test)
 dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
-    testing.expect_value(t, app_particles.dust_grid_cell_index(-1, -1), 0)
+    testing.expect_value(t, dust_grid_cell_index(-1, -1), 0)
 
-    max_idx := app_particles.DUST_GRID_DIM * app_particles.DUST_GRID_DIM - 1
-    testing.expect_value(t, app_particles.dust_grid_cell_index(99, 99), max_idx)
+    max_idx := DUST_GRID_DIM * DUST_GRID_DIM - 1
+    testing.expect_value(t, dust_grid_cell_index(99, 99), max_idx)
 }
 
 //   Verify slot reservation prefers dead slots and wraps at the particle cap.
@@ -49,13 +48,13 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
     ps^.use_max_dust_particles = 3
     ps^.next_index = 0
 
-    idx0, ok0 := app_particles.reserve_dead_low_particle_slot(ps)
+    idx0, ok0 := reserve_dead_low_particle_slot(ps)
     testing.expect(t, ok0)
     testing.expect_value(t, idx0, 0)
     testing.expect_value(t, ps^.next_index, 1)
 
     ps^.low_particles.alive[1] = true
-    idx1, ok1 := app_particles.reserve_dead_low_particle_slot(ps)
+    idx1, ok1 := reserve_dead_low_particle_slot(ps)
     testing.expect(t, ok1)
     testing.expect_value(t, idx1, 2)
     testing.expect_value(t, ps^.next_index, 0)
@@ -63,7 +62,7 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
     ps^.low_particles.alive[0] = true
     ps^.low_particles.alive[1] = true
     ps^.low_particles.alive[2] = true
-    idx2, ok2 := app_particles.reserve_dead_low_particle_slot(ps)
+    idx2, ok2 := reserve_dead_low_particle_slot(ps)
     testing.expect(t, ok2)
     testing.expect_value(t, idx2, 0)
 }
@@ -73,11 +72,11 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
 reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
     ps := new(app_core.Particle_System)
     defer free(ps)
-    ps^.next_index = app_particles.MAX_PARTICLES - 1
+    ps^.next_index = MAX_PARTICLES - 1
 
-    idx, ok := app_particles.reserve_dead_particle_slot(ps)
+    idx, ok := reserve_dead_particle_slot(ps)
     testing.expect(t, ok)
-    testing.expect_value(t, idx, app_particles.MAX_PARTICLES - 1)
+    testing.expect_value(t, idx, MAX_PARTICLES - 1)
     testing.expect_value(t, ps^.next_index, 0)
 }
 
@@ -129,10 +128,10 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     before_a := dust_slot_snapshot(ps, 0)
     before_b := dust_slot_snapshot(ps, 1)
 
-    min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
-        app_particles.DUST_COLLISION_RADIUS
-    app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
+    radius_sq: f32 = DUST_COLLISION_RADIUS *
+        DUST_COLLISION_RADIUS
+    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     expect_dust_slot_unchanged(t, ps, 0, before_a)
     expect_dust_slot_unchanged(t, ps, 1, before_b)
@@ -157,10 +156,10 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
     before_x0 := ps^.low_particles.pos_x[0]
     before_x1 := ps^.low_particles.pos_x[1]
 
-    min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
-        app_particles.DUST_COLLISION_RADIUS
-    app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
+    radius_sq: f32 = DUST_COLLISION_RADIUS *
+        DUST_COLLISION_RADIUS
+    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
@@ -187,10 +186,10 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
     before_x0 := ps^.low_particles.pos_x[0]
     before_x1 := ps^.low_particles.pos_x[1]
 
-    min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
-        app_particles.DUST_COLLISION_RADIUS
-    app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
+    radius_sq: f32 = DUST_COLLISION_RADIUS *
+        DUST_COLLISION_RADIUS
+    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
@@ -211,10 +210,10 @@ resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testin
     ps^.low_particles.pos_x[1] = 0.5
     ps^.low_particles.pos_y[1] = 0.5
 
-    min_sep: f32 = app_particles.DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = app_particles.DUST_COLLISION_RADIUS *
-        app_particles.DUST_COLLISION_RADIUS
-    app_particles.resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
+    radius_sq: f32 = DUST_COLLISION_RADIUS *
+        DUST_COLLISION_RADIUS
+    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
 
     dx := ps^.low_particles.pos_x[1] - ps^.low_particles.pos_x[0]
     dy := ps^.low_particles.pos_y[1] - ps^.low_particles.pos_y[0]
@@ -230,11 +229,11 @@ particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) 
     defer free(second)
 
     testing.expect_value(t,
-        app_particles.random_f32_range(first, -1, 1),
-        app_particles.random_f32_range(second, -1, 1))
+        random_f32_range(first, -1, 1),
+        random_f32_range(second, -1, 1))
     testing.expect_value(t,
-        app_particles.random_i32_range(first, -10, 10),
-        app_particles.random_i32_range(second, -10, 10))
+        random_i32_range(first, -10, 10),
+        random_i32_range(second, -10, 10))
 }
 
 //   Verify dense-bucket collision resolution rotates samples and tracks counts.
@@ -250,14 +249,14 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
         ps^.low_particles.pos_y[i] = 0.5
     }
 
-    app_particles.resolve_dust_collisions(ps)
+    resolve_dust_collisions(ps)
 
     testing.expect_value(t, ps^.dust_collision_frame, u64(1))
     testing.expect_value(t,
-        ps^.dust_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+        ps^.dust_counts[dust_grid_cell_index(0.5, 0.5)],
         i32(app_core.DUST_GRID_BUCKET_CAP))
     testing.expect_value(t,
-        ps^.dust_seen_counts[app_particles.dust_grid_cell_index(0.5, 0.5)],
+        ps^.dust_seen_counts[dust_grid_cell_index(0.5, 0.5)],
         i32(ps^.use_max_dust_particles))
 }
 
@@ -277,7 +276,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     ps^.high_particles.alive[0] = true
     ps^.high_particles.age[0] = 0.75
 
-    app_particles.reset_particles(ps)
+    reset_particles(ps)
 
     testing.expect_value(t, ps^.next_index, 0)
     testing.expect_value(t, ps^.spawn_timer, 0.0)
@@ -344,7 +343,7 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
     ps^.low_particles.alive[0] = true
     ps^.low_particles.alive[1] = true
 
-    idx, ok := app_particles.reserve_dead_low_particle_slot(ps)
+    idx, ok := reserve_dead_low_particle_slot(ps)
     testing.expect(t, ok)
     testing.expect_value(t, idx, 0)
     testing.expect_value(t, ps^.next_index, 1)
@@ -362,7 +361,7 @@ emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
     ks.points[0].kind = .Point
     ks.points[0].position = app_core.Vector3{1, 2, 0}
 
-    app_particles.emit_shapes_hide_burst(ps, &ks, 0, false)
+    emit_shapes_hide_burst(ps, &ks, 0, false)
 
     testing.expect(t, ps^.low_particles.alive[0])
     testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] ||
@@ -381,10 +380,10 @@ clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T
     ps^.low_particles.vel_x[0] = -0.1
     ps^.low_particles.vel_y[0] = 0.2
 
-    app_particles.clamp_xy_bounds_index(ps, 0)
+    clamp_xy_bounds_index(ps, 0)
 
-    testing.expect_value(t, ps^.low_particles.pos_x[0], app_particles.DUST_XY_MIN)
-    testing.expect_value(t, ps^.low_particles.pos_y[0], app_particles.DUST_XY_MAX)
+    testing.expect_value(t, ps^.low_particles.pos_x[0], DUST_XY_MIN)
+    testing.expect_value(t, ps^.low_particles.pos_y[0], DUST_XY_MAX)
     testing.expect(t, ps^.low_particles.vel_x[0] > 0)
     testing.expect(t, ps^.low_particles.vel_y[0] < 0)
 }
