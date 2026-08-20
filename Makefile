@@ -1,13 +1,13 @@
 # Standard Makefile entry point for Euclid.
 #
 # This is a thin, conventional wrapper around the project's real build system:
-# the `configure` script (toolchain check + Julia dependency install) and
-# `make.jl` (the actual build/test/vet driver). It exists so that the usual
+# tools/configure.sh (toolchain check + Julia dependency install) and
+# tools/make.jl (the actual build/test/vet driver). It exists so that the usual
 # `make` / `make test` / `make clean` muscle memory — and tools that expect a
-# Makefile — just work. All real logic lives in `make.jl`.
+# Makefile — just work. All real logic lives under tools/.
 #
-# On Windows, use this through a POSIX-capable `make` (e.g. MSYS2) with
-# PowerShell available; `configure` handles both sh and PowerShell.
+# On Windows, use make.ps1 instead; it performs the same configure steps
+# natively in PowerShell.
 
 JULIA ?= julia
 MAKEJL := $(JULIA) tools/make.jl
@@ -24,12 +24,12 @@ all: build
 
 # Run the configure script and record completion so it is not re-run needlessly.
 $(CONFIGURE_STAMP):
-	./configure
+	sh tools/configure.sh
 	@touch $(CONFIGURE_STAMP)
 
 # Explicit configure target (forces a re-run).
 configure:
-	./configure
+	sh tools/configure.sh
 	@touch $(CONFIGURE_STAMP)
 
 # Build the project (the default `make`). Runs configure first if needed.
@@ -47,7 +47,7 @@ test: $(CONFIGURE_STAMP)
 # Alias for the combined vet+test verification baseline.
 check: test
 
-# Build with validation flags (vet build, no tests).
+# Build, then run repository analysis through the verification gate.
 vet: $(CONFIGURE_STAMP)
 	$(MAKEJL) --vet
 

@@ -49,11 +49,11 @@ jobs:
       - name: Run verification gate (make test)
         run: make test
 
-      - name: Upload vet report artifact
+      - name: Upload analysis report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: euclid-vet-report-${{ github.sha }}
-          path: bin/vet-report.md
+          name: euclid-analysis-report-${{ github.sha }}
+          path: .build/reports/analysis.md
           if-no-files-found: warn
           retention-days: 90

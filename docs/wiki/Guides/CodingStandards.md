@@ -97,24 +97,24 @@ Before work is complete, run the standard Makefile target:
 make test
 ```
 
-`make test` is the preferred path on systems that support `make`. It runs the
-`configure` script once (verifying the toolchain and installing Julia dependencies)
+`make test` is the preferred path on systems that support `make`. It runs
+`tools/configure.sh` once (verifying the toolchain and installing Julia dependencies)
 and then the full driver gate, equivalent to `julia make.jl -vt`. `make check` is an
 alias.
 
 `make vet` alone is insufficient because it omits tests. Running tests alone is
-insufficient because it omits the validated build and vet analysis. Do not report the
+insufficient because it omits the build and repository analysis. Do not report the
 combined gate as passing when a phase was skipped.
 
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
-| Odin build/style | Compiler strict flags | No warnings or style failures. |
-| Odin behavior | `odin test src -all-packages` through `make.jl` | All tests pass. |
-| Julia behavior | `src/julia/test/runtests.jl` through `make.jl` | All tests pass. |
-| Julia static analysis | JET vet phase | No actionable reports. |
-| Julia complexity | CodeComplexity vet phase | No blocking rows; approved content warnings only. |
-| Vet report | `bin/vet-report.md` | No blocking section and no unexplained new warning. |
-| Documentation structure | Focused checks and review | Valid headings, links, fences, and line length. |
+| Odin build/style | Analysis engine's strict analytical Odin build | No warnings or style failures. |
+| Odin behavior | `odin test src -all-packages` through the verification gate | All tests pass. |
+| Julia behavior | `src/julia/test/runtests.jl` through the verification gate | All tests pass. |
+| Julia static analysis | JET entry-point analysis via OdinJuliaAnalysis | No actionable reports. |
+| Julia/Odin complexity | Function metric rules with reviewed exceptions | No blocking rows; reviewed warnings only. |
+| Analysis report | `.build/reports/analysis.md` | No failures and no unexplained new warning. |
+| Documentation structure | Markdown rules and review | Valid headings, links, fences, and line length. |
 
 Run the narrowest relevant test while developing, then run the complete gate
 before delivery. A new warning is work to understand, even when the current
@@ -182,24 +182,21 @@ Code review MUST reject a violation even when the compiler or formatter accepts 
   unless a documented exception is granted.
 - Do not split into trivial wrappers only to satisfy line-count rules.
 
-The vet report records NLOC, parameter count, and cyclomatic complexity for
-both languages.
-Julia complexity above 10 is blocking outside configured content-script exceptions. Odin
-complexity is measured by the parser-based analyzer in `tools/vet`: complexity
-at or above 15
-is blocking unless the procedure carries an inline `#vet forgives(cyclomatic_complexity)`
-documented exception; complexity 11-14 produces a warning. NLOC and parameter count remain
-review signals in both languages.
+The analysis report records executable lines, parameter count, and cyclomatic
+complexity for both languages.
+Julia complexity above 10 is blocking outside configured content-script exceptions.
+Odin complexity at or above 15 is blocking, and 11-14 produces a warning. Executable
+line and parameter count remain review signals in both languages. Exceptions are
+reviewed entries in `tools/analysis_settings.jl` with drift detection rather than
+inline markers.
 
-The analyzer also classifies every allocation call site by allocator source. An allocation
-without an explicit allocator argument (silently using the default heap) is a
-**blocking** vet failure; an explicit default-heap allocator
-(`context.allocator`, `heap.allocator()`) produces a warning. Dynamic-array
-mutators (`append`, `reserve`, `resize`) are exempt because the array carries
-its allocator from creation. Documented exceptions use
-`#vet forgives(implicit_allocator)` or `#vet forgives(heap_allocator)` with a
-following comment explaining why the default heap is correct there, such as a
-process-lifetime singleton created once at startup.
+The analyzer also classifies every allocation call site by allocator source. An
+allocation it cannot classify is a **blocking** analysis failure; an implicit or
+explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
+a warning. Dynamic-array mutators (`append`, `reserve`, `resize`) are exempt because
+the array carries its allocator from creation. Documented exceptions are
+`ReviewedAllocationPolicy` entries in `tools/analysis_settings.jl` with a reason,
+such as a process-lifetime singleton created once at startup.
 
 Use this decision path when a function grows:
 

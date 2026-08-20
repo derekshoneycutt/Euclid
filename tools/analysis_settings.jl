@@ -34,6 +34,7 @@ const RuleResponses = Dict(
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
     "COMMON-NO-TABS" => Fail,
+    "JULIA-BROAD-CATCH" => Warn,
     "JULIA-SYNTAX" => Fail,
     "JULIA-CLOSING-PAREN-PLACEMENT" => Fail,
     "JULIA-JET-POSSIBLE-ERROR" => Fail,
