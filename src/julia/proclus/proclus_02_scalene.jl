@@ -40,7 +40,6 @@ const EndLiftDuration = 1.8f0
 const CompassDescendDuration = 1.8f0
 const CircleDrawDuration = 4.4f0
 const CompassArcMoveDuration = 1.6f0
-const CompassArcMoveHeight = 0.25f0
 const CompassRiseDuration = 2.8f0
 const EndArcMovePenDuration = 2f0
 const HidePauseDuration = 1.5f0
@@ -190,9 +189,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     circle_a_c_e = OdinJuliaBridge.create_new_circle(
         state_ptr, BPoint, Radius, 3f0 * π / 4f0, 3f0 * π / 4f0, Circle2Color, 0f0)
     line_c_a = OdinJuliaBridge.create_new_line(
-        state_ptr, CPoint, CPoint, LineCAColor, 0f0)
+        state_ptr, CPoint, CPoint,
+        LineCAColor, 0f0)
     line_d_b = OdinJuliaBridge.create_new_line(
-        state_ptr, DPoint, DPoint, LineDBColor, 0f0)
+        state_ptr, DPoint, DPoint,
+        LineDBColor, 0f0)
 
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
@@ -303,10 +304,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
         end
     elseif phase == PhaseDrawLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, APoint, BPoint,
-            LineMaxBrush, LineABColor, line_a_b_host_id,
-            line_a_b_joint1_id, line_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            APoint, BPoint;
+            penbrush=LineMaxBrush,
+            pencolor=LineABColor,
+            line_host_id=line_a_b_host_id,
+            line_joint1_id=line_a_b_joint1_id,
+            line_joint2_id=line_a_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -335,10 +340,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCircle1
-        EuclidAnimations.animate_draw_circle(
-            state_ptr, timer, CircleDrawDuration, APoint, BPoint,
-            CircleSweepTheta, Radius, CircleBrush, Circle1Color,
-            circle_b_c_d_host_id, circle_b_c_d_start_id, circle_b_c_d_end_id)
+        EuclidAnimations.animate_draw_circle(state_ptr,
+            timer, CircleDrawDuration, APoint,
+            BPoint, CircleSweepTheta, Radius;
+            brush=CircleBrush,
+            color=Circle1Color,
+            marker_host_id=circle_b_c_d_host_id,
+            marker_start_id=circle_b_c_d_start_id,
+            marker_end_id=circle_b_c_d_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
@@ -352,8 +361,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseCompassArcToBA
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, CompassArcMoveDuration,
-            APoint, BPoint, BPoint, APoint,
-            CompassArcMoveHeight, 1, :none)
+            APoint, BPoint, BPoint, APoint)
 
         timer += dt
         if timer >= CompassArcMoveDuration
@@ -361,10 +369,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCircle2
-        EuclidAnimations.animate_draw_circle(
-            state_ptr, timer, CircleDrawDuration, BPoint, APoint,
-            CircleSweepTheta, Radius, CircleBrush, Circle2Color,
-            circle_a_c_e_host_id, circle_a_c_e_start_id, circle_a_c_e_end_id)
+        EuclidAnimations.animate_draw_circle(state_ptr,
+            timer, CircleDrawDuration, BPoint,
+            APoint, CircleSweepTheta, Radius;
+            brush=CircleBrush,
+            color=Circle2Color,
+            marker_host_id=circle_a_c_e_host_id,
+            marker_start_id=circle_a_c_e_start_id,
+            marker_end_id=circle_a_c_e_end_id)
 
         timer += dt
         if timer >= CircleDrawDuration
@@ -397,10 +409,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
         end
     elseif phase == PhaseDrawLineCA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, CPoint, APoint,
-            LineMaxBrush, LineCAColor, line_c_a_host_id,
-            line_c_a_joint1_id, line_c_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            CPoint, APoint;
+            penbrush=LineMaxBrush,
+            pencolor=LineCAColor,
+            line_host_id=line_c_a_host_id,
+            line_joint1_id=line_c_a_joint1_id,
+            line_joint2_id=line_c_a_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -419,10 +435,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.show_point(state_ptr, label_d_id)
         end
     elseif phase == PhaseDrawLineDB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, DPoint, BPoint,
-            LineMaxBrush, LineDBColor, line_d_b_host_id,
-            line_d_b_joint1_id, line_d_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            DPoint, BPoint;
+            penbrush=LineMaxBrush,
+            pencolor=LineDBColor,
+            line_host_id=line_d_b_host_id,
+            line_joint1_id=line_d_b_joint1_id,
+            line_joint2_id=line_d_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

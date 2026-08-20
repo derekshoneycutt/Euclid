@@ -117,6 +117,72 @@ Bridge_Pie_Colors :: struct {
     arc:  Bridge_Color,
 }
 
+//   Width, height, and stroke for one rectangular inline atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Inline_Box_Dims :: struct {
+    width:  f32,
+    height: f32,
+    stroke: f32,
+}
+
+//   Width and height for one sized inline atom, grouped so the C export
+//   signature stays within the bridge parameter budget.
+Bridge_Inline_Size :: struct {
+    width:  f32,
+    height: f32,
+}
+
+//   Top-bar length, stem height, and stroke for one inline perpendicular atom,
+//   grouped so the C export signature stays within the bridge parameter budget.
+Bridge_Inline_Perpendicular_Dims :: struct {
+    length:      f32,
+    stem_height: f32,
+    stroke:      f32,
+}
+
+//   Top and stem colors for one inline perpendicular atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Perpendicular_Colors :: struct {
+    top:  Bridge_Color,
+    stem: Bridge_Color,
+}
+
+//   Radius and sweep angles for one inline pie-section atom, grouped so the
+//   C export signature stays within the bridge parameter budget.
+Bridge_Pie_Section_Geometry :: struct {
+    radius:               f32,
+    start_angle_degrees:  f32,
+    end_angle_degrees:    f32,
+    outline_stroke:       f32,
+}
+
+//   Radius and arc angle bounds for one circle shape, grouped so the C export
+//   signature stays within the bridge parameter budget.
+Bridge_Arc_Geometry :: struct {
+    radius:      f32,
+    start_theta: f32,
+    end_theta:   f32,
+}
+
+//   Glyph and decoration for one label point, grouped so the C export
+//   signature stays within the bridge parameter budget.
+Bridge_Label_Glyph :: struct {
+    label:           rune,
+    decoration_kind: i32,
+}
+
+//   Four vertices for one square shape, grouped so the C export signature
+//   stays within the bridge parameter budget.
+Bridge_Square_Vertices :: struct {
+    vertices: [4]Vector3,
+}
+
+//   Five vertices for one pentagon shape, grouped so the C export signature
+//   stays within the bridge parameter budget.
+Bridge_Pentagon_Vertices :: struct {
+    vertices: [5]Vector3,
+}
+
 Scene_Command_Kind :: enum u8 {
     Set_Point_Position,
     Set_Point_Color,

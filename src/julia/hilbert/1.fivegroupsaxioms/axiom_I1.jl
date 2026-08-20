@@ -118,9 +118,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         PointBColor,
         0f0)
     line = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        APoint[1], APoint[2], APoint[3],
-        APoint[1], APoint[2], APoint[3],
+        state_ptr, APoint, APoint,
         LineColor, 0f0)
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
@@ -225,9 +223,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, APoint, BPoint,
-            LineMaxBrush, LineColor, line_host_id, line_point_a_id, line_point_b_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            APoint, BPoint;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor,
+            line_host_id=line_host_id,
+            line_joint1_id=line_point_a_id,
+            line_joint2_id=line_point_b_id)
 
         if timer / DrawLineDuration >= 0.5
             OdinJuliaBridge.show_point(state_ptr, labellinea_id)

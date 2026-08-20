@@ -144,13 +144,8 @@ end
 
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    plane_beta = OdinJuliaBridge.create_new_square(
-        state_ptr,
-        PlaneEdgeLeft,
-        PlaneTopLeft,
-        PlaneTopRight,
-        PlaneEdgeRight,
-        PlaneColor)
+    plane_beta = OdinJuliaBridge.create_new_square(state_ptr,
+        PlaneEdgeLeft, PlaneTopLeft, PlaneTopRight, PlaneEdgeRight, PlaneColor)
     point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointA, PointAColor, 0f0)
     point_b = OdinJuliaBridge.create_new_point(

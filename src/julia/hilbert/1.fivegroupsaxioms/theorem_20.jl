@@ -469,10 +469,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeCBStart, EdgeCBEnd,
-            EdgeBrush, EdgeCBColor, edge_c_b_host_id,
-            edge_c_b_joint1_id, edge_c_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeCBStart, EdgeCBEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeCBColor,
+            line_host_id=edge_c_b_host_id,
+            line_joint1_id=edge_c_b_joint1_id,
+            line_joint2_id=edge_c_b_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeBAColor)
@@ -480,10 +484,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawBA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeBAStart, EdgeBAEnd,
-            EdgeBrush, EdgeBAColor, edge_b_a_host_id,
-            edge_b_a_joint1_id, edge_b_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeBAStart, EdgeBAEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeBAColor,
+            line_host_id=edge_b_a_host_id,
+            line_joint1_id=edge_b_a_joint1_id,
+            line_joint2_id=edge_b_a_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeACColor)
@@ -491,10 +499,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawAC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeACStart, EdgeACEnd,
-            EdgeBrush, EdgeACColor, edge_a_c_host_id,
-            edge_a_c_joint1_id, edge_a_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeACStart, EdgeACEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeACColor,
+            line_host_id=edge_a_c_host_id,
+            line_joint1_id=edge_a_c_joint1_id,
+            line_joint2_id=edge_a_c_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeCDColor)
@@ -502,10 +514,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCD
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeCDStart, EdgeCDEnd,
-            EdgeBrush, EdgeCDColor, edge_c_d_host_id,
-            edge_c_d_joint1_id, edge_c_d_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeCDStart, EdgeCDEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeCDColor,
+            line_host_id=edge_c_d_host_id,
+            line_joint1_id=edge_c_d_joint1_id,
+            line_joint2_id=edge_c_d_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseDrawPointD
@@ -531,10 +547,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCE
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeCEStart, EdgeCEEnd,
-            EdgeBrush, EdgeCEColor, edge_c_e_host_id,
-            edge_c_e_joint1_id, edge_c_e_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeCEStart, EdgeCEEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeCEColor,
+            line_host_id=edge_c_e_host_id,
+            line_joint1_id=edge_c_e_joint1_id,
+            line_joint2_id=edge_c_e_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             phase = PhaseDrawPointE
@@ -591,7 +611,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointC,
-            MarkerAStart, MarkerCACEStart, 0.22f0, 1, :none)
+            MarkerAStart, MarkerCACEStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightACEForward
@@ -619,7 +639,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointC, PointC,
-            MarkerCACEStart, MarkerCECDStart, 0.18f0, 1, :none)
+            MarkerCACEStart, MarkerCECDStart; height=0.18f0)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightECDForward
@@ -647,7 +667,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointC, PointB,
-            MarkerCECDStart, MarkerBStart, 0.22f0, 1, :none)
+            MarkerCECDStart, MarkerBStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightABCForward
@@ -675,7 +695,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointB, PointC,
-            MarkerBStart, MarkerCACBStart, 0.22f0, 1, :none)
+            MarkerBStart, MarkerCACBStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightACBForward

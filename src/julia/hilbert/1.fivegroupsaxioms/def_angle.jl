@@ -157,10 +157,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, HalfRayHStart, HalfRayHStart, HalfRayHColor, 0f0)
     half_ray_k = OdinJuliaBridge.create_new_line(
         state_ptr, HalfRayKStart, HalfRayKStart, HalfRayKColor, 0f0)
-    marker = OdinJuliaBridge.create_new_filledcircle(
-        state_ptr,
-        PointO[1], PointO[2], PointO[3],
-        MarkerRadius, 0f0, 0f0,
+    marker = OdinJuliaBridge.create_new_filledcircle(state_ptr,
+        PointO, MarkerRadius, 0f0, 0f0,
         MarkerColor, 0f0)
     point_o = OdinJuliaBridge.create_new_point(state_ptr, PointO, PointOColor, 0f0)
 
@@ -254,10 +252,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, HalfRayHColor)
         end
     elseif phase == PhaseDrawHalfRayH
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawRayDuration, HalfRayHStart, HalfRayHEnd,
-            LineMaxBrush, HalfRayHColor,
-            half_ray_h_host_id, half_ray_h_joint1_id, half_ray_h_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawRayDuration,
+            HalfRayHStart, HalfRayHEnd;
+            penbrush=LineMaxBrush,
+            pencolor=HalfRayHColor,
+            line_host_id=half_ray_h_host_id,
+            line_joint1_id=half_ray_h_joint1_id,
+            line_joint2_id=half_ray_h_joint2_id)
 
         timer += dt
         if timer >= DrawRayDuration
@@ -277,10 +279,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, HalfRayKColor)
         end
     elseif phase == PhaseDrawHalfRayK
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawRayDuration, HalfRayKStart, HalfRayKEnd,
-            LineMaxBrush, HalfRayKColor,
-            half_ray_k_host_id, half_ray_k_joint1_id, half_ray_k_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawRayDuration,
+            HalfRayKStart, HalfRayKEnd;
+            penbrush=LineMaxBrush,
+            pencolor=HalfRayKColor,
+            line_host_id=half_ray_k_host_id,
+            line_joint1_id=half_ray_k_joint1_id,
+            line_joint2_id=half_ray_k_joint2_id)
 
         timer += dt
         if timer >= DrawRayDuration
@@ -303,11 +309,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseCompassDrawMarker
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, CompassDrawDuration,
-            PointO, MarkerStart,
-            AngleTheta, MarkerRadius, MarkerBrush, MarkerColor,
-            marker_host_id, marker_start_id, marker_end_id)
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, CompassDrawDuration, PointO,
+            MarkerStart, AngleTheta, MarkerRadius;
+            brush=MarkerBrush,
+            color=MarkerColor,
+            marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id,
+            marker_end_id=marker_end_id)
 
         timer += dt
         if timer >= CompassDrawDuration

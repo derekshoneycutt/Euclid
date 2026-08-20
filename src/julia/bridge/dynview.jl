@@ -121,13 +121,13 @@ function dynview_math_block_from_ops(
     op_count = Int32(length(ops))
     GC.@preserve ops plain_text text_blob begin
         ops_ptr = op_count > 0 ? pointer(ops) : Ptr{BridgeDynviewMathOp}(C_NULL)
+        program = BridgeDynviewMathProgram(
+            ops_ptr, op_count, Int32(top_level_op_count))
         @ccall dynview_math_block_from_ops(
             state_ptr::Ptr{Cvoid},
             plain_text::Cstring,
             Int32(style_id)::Int32,
-            ops_ptr::Ptr{BridgeDynviewMathOp},
-            op_count::Int32,
-            Int32(top_level_op_count)::Int32,
+            program::BridgeDynviewMathProgram,
             text_blob::Cstring)::Int32
     end
 end
@@ -270,11 +270,10 @@ function dynview_inline_box_brush(
     style_id::Integer,
     brush_color::BridgeColor)
 
+    dims = BridgeInlineBoxDims(Cfloat(width), Cfloat(height), Cfloat(stroke))
     @ccall dynview_inline_box_brush(
         state_ptr::Ptr{Cvoid},
-        Cfloat(width)::Cfloat,
-        Cfloat(height)::Cfloat,
-        Cfloat(stroke)::Cfloat,
+        dims::BridgeInlineBoxDims,
         Int32(style_id)::Int32,
         brush_color::BridgeColor)::Int32
 end
@@ -377,10 +376,10 @@ function dynview_inline_filled_box(
     fill_color::BridgeColor,
     outline_stroke::Real=0)
 
+    size = BridgeInlineSize(Cfloat(width), Cfloat(height))
     @ccall dynview_inline_filled_box(
         state_ptr::Ptr{Cvoid},
-        Cfloat(width)::Cfloat,
-        Cfloat(height)::Cfloat,
+        size::BridgeInlineSize,
         Int32(style_id)::Int32,
         fill_color::BridgeColor,
         Cfloat(outline_stroke)::Cfloat)::Int32
@@ -484,20 +483,20 @@ function dynview_inline_pie_section(
     end_angle_degrees::Real,
     style_id::Integer,
     filled::Bool,
-    fill_color::BridgeColor,
+    fill_color::BridgeColor;
     arc_color::BridgeColor=fill_color,
     outline_stroke::Real=0)
 
     colors = BridgePieColors(fill_color, arc_color)
+    geometry = BridgePieSectionGeometry(
+        Cfloat(radius), Cfloat(start_angle_degrees),
+        Cfloat(end_angle_degrees), Cfloat(outline_stroke))
     @ccall dynview_inline_pie_section(
         state_ptr::Ptr{Cvoid},
-        Cfloat(radius)::Cfloat,
-        Cfloat(start_angle_degrees)::Cfloat,
-        Cfloat(end_angle_degrees)::Cfloat,
+        geometry::BridgePieSectionGeometry,
         Int32(style_id)::Int32,
         filled::Bool,
-        colors::BridgePieColors,
-        Cfloat(outline_stroke)::Cfloat)::Int32
+        colors::BridgePieColors)::Int32
 end
 function dynview_inline_pie_section(
     state_ptr::Ptr{Cvoid},
@@ -506,8 +505,38 @@ function dynview_inline_pie_section(
     end_angle_degrees::Real,
     style_id::Integer,
     filled::Bool,
-    fill_color::Colorant,
+    fill_color::Colorant;
     arc_color::Colorant=fill_color,
+    outline_stroke::Real=0)
+
+    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
+        style_id, filled, bridge_color(fill_color),
+        bridge_color(arc_color), outline_stroke)
+end
+function dynview_inline_pie_section(
+    state_ptr::Ptr{Cvoid},
+    radius::Real,
+    start_angle_degrees::Real,
+    end_angle_degrees::Real,
+    style_id::Integer,
+    filled::Bool,
+    fill_color::Symbol;
+    arc_color::Symbol=fill_color,
+    outline_stroke::Real=0)
+
+    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
+        style_id, filled, bridge_color(fill_color),
+        bridge_color(arc_color), outline_stroke)
+end
+function dynview_inline_pie_section(
+    state_ptr::Ptr{Cvoid},
+    radius::Real,
+    start_angle_degrees::Real,
+    end_angle_degrees::Real,
+    style_id::Integer,
+    filled::Bool,
+    fill_color::AbstractString;
+    arc_color::AbstractString=fill_color,
     outline_stroke::Real=0)
 
     dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
@@ -530,14 +559,14 @@ function dynview_inline_perpendicular(
     top_color::BridgeColor,
     stem_color::BridgeColor)
 
+    dims = BridgeInlinePerpendicularDims(
+        Cfloat(length), Cfloat(stem_height), Cfloat(stroke))
+    colors = BridgePerpendicularColors(top_color, stem_color)
     @ccall dynview_inline_perpendicular(
         state_ptr::Ptr{Cvoid},
-        Cfloat(length)::Cfloat,
-        Cfloat(stem_height)::Cfloat,
-        Cfloat(stroke)::Cfloat,
+        dims::BridgeInlinePerpendicularDims,
         Int32(style_id)::Int32,
-        top_color::BridgeColor,
-        stem_color::BridgeColor)::Int32
+        colors::BridgePerpendicularColors)::Int32
 end
 
 """
@@ -551,19 +580,18 @@ function dynview_inline_triangle(
     width::Real,
     height::Real,
     stroke::Real,
-    style_id::Integer,
-    filled::Bool,
-    fill_color::BridgeColor,
-    edge1_color::BridgeColor,
-    edge2_color::BridgeColor,
-    edge3_color::BridgeColor)
+    style_id::Integer;
+    filled::Bool=false,
+    fill_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge1_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge2_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge3_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)))
 
     colors = BridgeTriangleColors(fill_color, edge1_color, edge2_color, edge3_color)
+    dims = BridgeInlineBoxDims(Cfloat(width), Cfloat(height), Cfloat(stroke))
     @ccall dynview_inline_triangle(
         state_ptr::Ptr{Cvoid},
-        Cfloat(width)::Cfloat,
-        Cfloat(height)::Cfloat,
-        Cfloat(stroke)::Cfloat,
+        dims::BridgeInlineBoxDims,
         Int32(style_id)::Int32,
         filled::Bool,
         colors::BridgeTriangleColors)::Int32
@@ -580,18 +608,17 @@ function dynview_inline_box_edges(
     width::Real,
     height::Real,
     stroke::Real,
-    style_id::Integer,
-    edge1_color::BridgeColor,
-    edge2_color::BridgeColor,
-    edge3_color::BridgeColor,
-    edge4_color::BridgeColor)
+    style_id::Integer;
+    edge1_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge2_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge3_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge4_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)))
 
     colors = BridgeBoxEdgeColors(edge1_color, edge2_color, edge3_color, edge4_color)
+    dims = BridgeInlineBoxDims(Cfloat(width), Cfloat(height), Cfloat(stroke))
     @ccall dynview_inline_box_edges(
         state_ptr::Ptr{Cvoid},
-        Cfloat(width)::Cfloat,
-        Cfloat(height)::Cfloat,
-        Cfloat(stroke)::Cfloat,
+        dims::BridgeInlineBoxDims,
         Int32(style_id)::Int32,
         colors::BridgeBoxEdgeColors)::Int32
 end
@@ -607,55 +634,24 @@ function dynview_inline_pentagon(
     width::Real,
     height::Real,
     stroke::Real,
-    style_id::Integer,
-    filled::Bool,
-    fill_color::BridgeColor,
-    edge1_color::BridgeColor,
-    edge2_color::BridgeColor,
-    edge3_color::BridgeColor,
-    edge4_color::BridgeColor,
-    edge5_color::BridgeColor)
+    style_id::Integer;
+    filled::Bool=false,
+    fill_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge1_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge2_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge3_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge4_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)),
+    edge5_color::BridgeColor=BridgeColor(Uint8(0), Uint8(0), Uint8(0), Uint8(0)))
 
     colors = BridgePentagonColors(fill_color, edge1_color, edge2_color,
         edge3_color, edge4_color, edge5_color)
+    dims = BridgeInlineBoxDims(Cfloat(width), Cfloat(height), Cfloat(stroke))
     @ccall dynview_inline_pentagon(
         state_ptr::Ptr{Cvoid},
-        Cfloat(width)::Cfloat,
-        Cfloat(height)::Cfloat,
-        Cfloat(stroke)::Cfloat,
+        dims::BridgeInlineBoxDims,
         Int32(style_id)::Int32,
         filled::Bool,
         colors::BridgePentagonColors)::Int32
-end
-function dynview_inline_pie_section(
-    state_ptr::Ptr{Cvoid},
-    radius::Real,
-    start_angle_degrees::Real,
-    end_angle_degrees::Real,
-    style_id::Integer,
-    filled::Bool,
-    fill_color::Symbol,
-    arc_color::Symbol=fill_color,
-    outline_stroke::Real=0)
-
-    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
-        style_id, filled, bridge_color(fill_color),
-        bridge_color(arc_color), outline_stroke)
-end
-function dynview_inline_pie_section(
-    state_ptr::Ptr{Cvoid},
-    radius::Real,
-    start_angle_degrees::Real,
-    end_angle_degrees::Real,
-    style_id::Integer,
-    filled::Bool,
-    fill_color::AbstractString,
-    arc_color::AbstractString=fill_color,
-    outline_stroke::Real=0)
-
-    dynview_inline_pie_section(state_ptr, radius, start_angle_degrees, end_angle_degrees,
-        style_id, filled, bridge_color(fill_color),
-        bridge_color(arc_color), outline_stroke)
 end
 
 """

@@ -276,7 +276,8 @@ end
     formatted = try
         1 + "a"
         ""
-    catch
+    catch e
+        @test e isa MethodError
         Scratchpad.format_current_exception_text(runtime)
     end
 
@@ -306,7 +307,8 @@ end
     formatted = try
         Core.eval(runtime, :(f(2)))
         ""
-    catch
+    catch e
+        @test e isa MethodError
         Scratchpad.format_current_exception_text(runtime)
     end
 

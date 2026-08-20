@@ -225,38 +225,22 @@ function initialize(state_ptr::Ptr{Cvoid})
     point_k = OdinJuliaBridge.create_new_point(state_ptr, VertexK, PointKColor, 0f0)
 
     line1 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexA[1], VertexA[2], VertexA[3],
+        state_ptr, VertexA, VertexA,
         PentagonColor, 0f0)
     line2 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexB[1], VertexB[2], VertexB[3],
-        VertexB[1], VertexB[2], VertexB[3],
+        state_ptr, VertexB, VertexB,
         PentagonColor, 0f0)
     line3 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexC[1], VertexC[2], VertexC[3],
+        state_ptr, VertexC, VertexC,
         PentagonColor, 0f0)
     line4 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexD[1], VertexD[2], VertexD[3],
-        VertexD[1], VertexD[2], VertexD[3],
+        state_ptr, VertexD, VertexD,
         PentagonColor, 0f0)
     line5 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexK[1], VertexK[2], VertexK[3],
-        VertexK[1], VertexK[2], VertexK[3],
+        state_ptr, VertexK, VertexK,
         PentagonColor, 0f0)
-    pentagon = OdinJuliaBridge.create_new_pentagon(
-        state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexK[1], VertexK[2], VertexK[3],
-        VertexD[1], VertexD[2], VertexD[3],
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexB[1], VertexB[2], VertexB[3],
-        PentagonColor)
+    pentagon = OdinJuliaBridge.create_new_pentagon(state_ptr,
+        VertexA, VertexK, VertexD, VertexC, VertexB, PentagonColor)
 
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
@@ -475,10 +459,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, VertexA, VertexB,
-            PentagonMaxBrush, PentagonColor,
-            line1_host_id, line1_joint1_id, line1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            VertexA, VertexB;
+            penbrush=PentagonMaxBrush,
+            pencolor=PentagonColor,
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -486,10 +474,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawBC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, VertexB, VertexC,
-            PentagonMaxBrush, PentagonColor,
-            line2_host_id, line2_joint1_id, line2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            VertexB, VertexC;
+            penbrush=PentagonMaxBrush,
+            pencolor=PentagonColor,
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -497,10 +489,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCD
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, VertexC, VertexD,
-            PentagonMaxBrush, PentagonColor,
-            line3_host_id, line3_joint1_id, line3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            VertexC, VertexD;
+            penbrush=PentagonMaxBrush,
+            pencolor=PentagonColor,
+            line_host_id=line3_host_id,
+            line_joint1_id=line3_joint1_id,
+            line_joint2_id=line3_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -508,10 +504,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawDK
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, VertexD, VertexK,
-            PentagonMaxBrush, PentagonColor,
-            line4_host_id, line4_joint1_id, line4_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            VertexD, VertexK;
+            penbrush=PentagonMaxBrush,
+            pencolor=PentagonColor,
+            line_host_id=line4_host_id,
+            line_joint1_id=line4_joint1_id,
+            line_joint2_id=line4_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -519,10 +519,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawKA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, VertexK, VertexA,
-            PentagonMaxBrush, PentagonColor,
-            line5_host_id, line5_joint1_id, line5_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            VertexK, VertexA;
+            penbrush=PentagonMaxBrush,
+            pencolor=PentagonColor,
+            line_host_id=line5_host_id,
+            line_joint1_id=line5_joint1_id,
+            line_joint2_id=line5_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

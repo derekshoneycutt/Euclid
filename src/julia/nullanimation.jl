@@ -47,13 +47,9 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.lock_compass_joint2(state_ptr, StartRotationPos, sweep = false)
 
     line1 = OdinJuliaBridge.create_new_line(state_ptr,
-        0f0, 0f0, 0f0,
-        0f0, 0f0, 0f0,
-        PenDrawColor1, 5f0)
+        [0f0, 0f0, 0f0], [0f0, 0f0, 0f0], PenDrawColor1, 5f0)
     line2 = OdinJuliaBridge.create_new_line(state_ptr,
-        0f0, 0f0, 0f0,
-        0f0, 0f0, 0f0,
-        PenDrawColor2, 5f0)
+        [0f0, 0f0, 0f0], [0f0, 0f0, 0f0], PenDrawColor2, 5f0)
     OdinJuliaBridge.set_animation_meta(state_ptr, 4, Float32(line1.host_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, 5, Float32(line1.joint1_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, 6, Float32(line1.joint2_id))
@@ -62,8 +58,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_animation_meta(state_ptr, 9, Float32(line2.joint2_id))
 
     circle = OdinJuliaBridge.create_new_circle(state_ptr,
-        0.5f0, 0.5f0, 0f0,
-        CircleRadius, StartRotation, StartRotation, CompassDrawColor, 5f0)
+        [0.5f0, 0.5f0, 0f0], CircleRadius, StartRotation, StartRotation,
+        CompassDrawColor, 5f0)
     OdinJuliaBridge.set_animation_meta(state_ptr, 10, Float32(circle.host_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, 11, Float32(circle.start_id))
     OdinJuliaBridge.set_animation_meta(state_ptr, 12, Float32(circle.end_id))

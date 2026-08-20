@@ -77,9 +77,7 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
-            state_ptr,
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
+            state_ptr, SideStarts[i], SideStarts[i],
             SideColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(state_ptr,
@@ -129,11 +127,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 ||
            phase == PhaseDrawSide3 || phase == PhaseDrawSide4
         side_index = Int(phase)
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, SideStarts[side_index], SideEnds[side_index],
-            QuadMaxBrush, SideColors[side_index],
-            line_host_ids[side_index], line_joint1_ids[side_index],
-            line_joint2_ids[side_index])
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            SideStarts[side_index], SideEnds[side_index];
+            penbrush=QuadMaxBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=line_host_ids[side_index],
+            line_joint1_id=line_joint1_ids[side_index],
+            line_joint2_id=line_joint2_ids[side_index])
 
         timer += dt
         if timer >= DrawDuration

@@ -383,12 +383,12 @@ function render_payload!(
         Float32(elapsed),
         Float32(duration),
         payload.start_pos,
-        payload.end_pos,
-        payload.brush,
-        payload.color,
-        payload.host_id,
-        payload.start_id,
-        payload.end_id)
+        payload.end_pos;
+        penbrush=payload.brush,
+        pencolor=payload.color,
+        line_host_id=payload.host_id,
+        line_joint1_id=payload.start_id,
+        line_joint2_id=payload.end_id)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -402,13 +402,13 @@ function render_payload!(
             payload.center,
             payload.start_pos,
             payload.angle_theta,
-            payload.radius,
-            payload.brush,
-            payload.color,
-            payload.host_id,
-            payload.start_id,
-            payload.end_id,
-            payload.full_sweep)
+            payload.radius;
+            brush=payload.brush,
+            color=payload.color,
+            marker_host_id=payload.host_id,
+            marker_start_id=payload.start_id,
+            marker_end_id=payload.end_id,
+            full_sweep=payload.full_sweep)
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
@@ -417,13 +417,13 @@ function render_payload!(
             payload.center,
             payload.start_pos,
             payload.angle_theta,
-            payload.radius,
-            payload.brush,
-            payload.color,
-            payload.host_id,
-            payload.start_id,
-            payload.end_id,
-            payload.full_sweep)
+            payload.radius;
+            brush=payload.brush,
+            color=payload.color,
+            marker_host_id=payload.host_id,
+            marker_start_id=payload.start_id,
+            marker_end_id=payload.end_id,
+            full_sweep=payload.full_sweep)
     end
 end
 
@@ -821,8 +821,7 @@ function line!(
         state_ptr,
         start_pos3,
         start_pos3,
-        color,
-        brush_value)
+        color, brush_value)
 
     payload = LinePayload(
         Int(line_shape.host_id),

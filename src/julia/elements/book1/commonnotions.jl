@@ -118,11 +118,14 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line2 = OdinJuliaBridge.create_new_line(
-        state_ptr, StartPoint2, StartPoint2, Line2Color, 0f0)
+        state_ptr, StartPoint2, StartPoint2,
+        Line2Color, 0f0)
     line3 = OdinJuliaBridge.create_new_line(
-        state_ptr, StartPoint3, StartPoint3, Line3Color, 0f0)
+        state_ptr, StartPoint3, StartPoint3,
+        Line3Color, 0f0)
     line1 = OdinJuliaBridge.create_new_line(
-        state_ptr, StartPoint1, StartPoint1, Line1Color, 0f0)
+        state_ptr, StartPoint1, StartPoint1,
+        Line1Color, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, line1.host_id)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, line1.joint1_id)
@@ -183,9 +186,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint1,
-            LineMaxBrush, Line1Color, line1_host_id, line1_joint1_id, line1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint1, EndPoint1;
+            penbrush=LineMaxBrush,
+            pencolor=Line1Color,
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -203,9 +211,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint2,
-            LineMaxBrush, Line2Color, line2_host_id, line2_joint1_id, line2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint2, EndPoint2;
+            penbrush=LineMaxBrush,
+            pencolor=Line2Color,
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -223,9 +236,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint3, EndPoint3,
-            LineMaxBrush, Line3Color, line3_host_id, line3_joint1_id, line3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint3, EndPoint3;
+            penbrush=LineMaxBrush,
+            pencolor=Line3Color,
+            line_host_id=line3_host_id,
+            line_joint1_id=line3_joint1_id,
+            line_joint2_id=line3_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

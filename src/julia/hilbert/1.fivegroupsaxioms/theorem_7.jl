@@ -234,13 +234,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     segment_a_a_prime = OdinJuliaBridge.create_new_line(
         state_ptr, PointA, PointA, SegmentAAPrimeColor, 0f0)
 
-    plane_alpha = OdinJuliaBridge.create_new_square(
-        state_ptr,
-        PlaneEdgeLeft,
-        PlaneEdgeRight,
-        PlaneTopRight,
-        PlaneTopLeft,
-        PlaneColor)
+    plane_alpha = OdinJuliaBridge.create_new_square(state_ptr,
+        PlaneEdgeLeft, PlaneEdgeRight, PlaneTopRight, PlaneTopLeft, PlaneColor)
     alpha_label = OdinJuliaBridge.create_new_label(
         state_ptr, 'α', AlphaLabelPoint, LabelColor, 16f0)
 
@@ -368,10 +363,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         show_plane(state_ptr, plane_host_id)
         OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
 
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
-            LineMaxBrush, DividerLineColor,
-            divider_host_id, divider_joint1_id, divider_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineStart, LineEnd;
+            penbrush=LineMaxBrush,
+            pencolor=DividerLineColor,
+            line_host_id=divider_host_id,
+            line_joint1_id=divider_joint1_id,
+            line_joint2_id=divider_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -443,10 +442,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         fade = (timer / DrawSegmentDuration) * PlaneMaxAlpha01
         set_plane_alpha(state_ptr, plane_host_id, fade)
 
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointB, PointA,
-            LineMaxBrush, SegmentABColor,
-            segment_a_b_host_id, segment_a_b_joint1_id, segment_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointB, PointA;
+            penbrush=LineMaxBrush,
+            pencolor=SegmentABColor,
+            line_host_id=segment_a_b_host_id,
+            line_joint1_id=segment_a_b_joint1_id,
+            line_joint2_id=segment_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -495,11 +498,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSegmentAAPrime
         OdinJuliaBridge.show_point(state_ptr, divider_host_id)
 
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointA, PointAPrime,
-            LineMaxBrush, SegmentAAPrimeColor,
-            segment_a_a_prime_host_id, segment_a_a_prime_joint1_id,
-            segment_a_a_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointA, PointAPrime;
+            penbrush=LineMaxBrush,
+            pencolor=SegmentAAPrimeColor,
+            line_host_id=segment_a_a_prime_host_id,
+            line_joint1_id=segment_a_a_prime_joint1_id,
+            line_joint2_id=segment_a_a_prime_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration

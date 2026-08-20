@@ -7,12 +7,6 @@ import app_view "../../src/view/core"
 
 TEST_EPSILON :: f32(1e-4)
 
-//   Assert that two f32 values match within TEST_EPSILON.
-expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
-    testing.expectf(t, math.abs(actual - expected) <= TEST_EPSILON,
-        "%s | expected=%v got=%v", msg, expected, actual)
-}
-
 //   Assert that two Vector2 values match component-wise within TEST_EPSILON.
 expect_vec2_close :: proc(
     t: ^testing.T,

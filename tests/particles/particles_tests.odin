@@ -18,12 +18,6 @@ Dust_Slot_Snapshot :: struct {
     vy: f32,
 }
 
-//   Assert that two f32 values match within EPS.
-expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
-    testing.expectf(t, math.abs(actual - expected) <= EPS,
-        "%s | expected=%v got=%v", msg, expected, actual)
-}
-
 //   Verify theta normalization and sweep delta wrap correctly across zero.
 @(test)
 normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {

@@ -191,9 +191,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -213,9 +218,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineBStart, LineBEnd,
-            LineMaxBrush, LineBColor, line_b_host_id, line_b_joint1_id, line_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineBStart, LineBEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineBColor,
+            line_host_id=line_b_host_id,
+            line_joint1_id=line_b_joint1_id,
+            line_joint2_id=line_b_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -235,9 +245,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineCStart, LineCEnd,
-            LineMaxBrush, LineCColor, line_c_host_id, line_c_joint1_id, line_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineCStart, LineCEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineCColor,
+            line_host_id=line_c_host_id,
+            line_joint1_id=line_c_joint1_id,
+            line_joint2_id=line_c_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

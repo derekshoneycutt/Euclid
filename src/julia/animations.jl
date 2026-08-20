@@ -723,14 +723,14 @@ function animate_reflect2d_filled_angle_marker(
     state_ptr::Ptr{Cvoid},
     marker_host_id::Integer,
     marker_start_id::Integer,
-    marker_end_id::Integer,
-    start_center::AbstractVector{<:Real},
-    start_point::AbstractVector{<:Real},
-    end_point::AbstractVector{<:Real},
-    line_point_a::AbstractVector{<:Real},
-    line_point_b::AbstractVector{<:Real},
-    current_time::Real,
-    total_duration::Real;
+    marker_end_id::Integer;
+    start_center::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    start_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    end_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    line_point_a::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    line_point_b::AbstractVector{<:Real}=[0f0,0f0,0f0],
+    current_time::Real=0f0,
+    total_duration::Real=0f0,
     preserve_interior::Bool=true)
 
     # TODO : This looks like ass lmfao we should fix this.
@@ -1012,16 +1012,6 @@ Returns:
 function animate_pen_tilt(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
-    penx::Real, peny::Real, penz::Real,
-    startθ::Real, endθ::Real, azimuth::Real)
-
-    animate_pen_tilt(state_ptr, timer, duration,
-        [penx, peny, penz], startθ, endθ, azimuth)
-end
-
-function animate_pen_tilt(
-    state_ptr::Ptr{Cvoid},
-    timer::Real, duration::Real,
     penpos::AbstractVector{<:Real},
     startθ::Real, endθ::Real, azimuth::Real)
 
@@ -1170,25 +1160,22 @@ Return whether a point lies on a segment within a tolerance in the xy plane.
 end
 
 """
-Return whether two collinear segments overlap in the xy plane.
-
-Parameters:
-- a1, a2 : First segment endpoints.
-- b1, b2 : Second segment endpoints.
-- o1..o4 : Precomputed orientation cross-products.
-- eps : Collinearity tolerance.
+Return whether the two cross-product signs straddle zero, meaning the tested
+points lie on opposite sides of the reference line.
 """
-@inline function has_collinear_segment_overlap_xy(
-    a1::AbstractVector{<:Real}, a2::AbstractVector{<:Real},
-    b1::AbstractVector{<:Real}, b2::AbstractVector{<:Real},
-    o1::Real, o2::Real, o3::Real, o4::Real,
-    eps::Real)
+@inline xy_orientations_straddle(p::Real, q::Real, eps::Real) =
+    (p > eps && q < -eps) || (p < -eps && q > eps)
 
-    return ((abs(o1) <= eps && point_on_segment_xy(a1, a2, b1, eps)) ||
-        (abs(o2) <= eps && point_on_segment_xy(a1, a2, b2, eps)) ||
-        (abs(o3) <= eps && point_on_segment_xy(b1, b2, a1, eps)) ||
-        (abs(o4) <= eps && point_on_segment_xy(b1, b2, a2, eps)))
-end
+"""
+Return whether a cross product is collinear within `eps` and its point lies on
+the segment between `seg_a` and `seg_b`.
+"""
+@inline xy_collinear_on_segment(
+    orientation::Real,
+    seg_a::AbstractVector{<:Real}, seg_b::AbstractVector{<:Real},
+    point::AbstractVector{<:Real}, eps::Real) =
+
+    abs(orientation) <= eps && point_on_segment_xy(seg_a, seg_b, point, eps)
 
 """
 Return whether two segments intersect in the xy plane, including collinear overlap.
@@ -1204,12 +1191,13 @@ Return whether two segments intersect in the xy plane, including collinear overl
     o3 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a1[1] - b1[1], a1[2] - b1[2])
     o4 = xy_cross(b2[1] - b1[1], b2[2] - b1[2], a2[1] - b1[1], a2[2] - b1[2])
 
-    if ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
-       ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))
-        return true
-    end
+    xy_orientations_straddle(o1, o2, eps) &&
+        xy_orientations_straddle(o3, o4, eps) && return true
 
-    return has_collinear_segment_overlap_xy(a1, a2, b1, b2, o1, o2, o3, o4, eps)
+    return (xy_collinear_on_segment(o1, a1, a2, b1, eps) ||
+        xy_collinear_on_segment(o2, a1, a2, b2, eps) ||
+        xy_collinear_on_segment(o3, b1, b2, a1, eps) ||
+        xy_collinear_on_segment(o4, b1, b2, a2, eps))
 end
 
 """
@@ -1323,8 +1311,10 @@ function animate_compass_arcmove(
     start_joint1::AbstractVector{<:Real},
     end_joint1::AbstractVector{<:Real},
     start_joint2::AbstractVector{<:Real},
-    end_joint2::AbstractVector{<:Real},
-    height::Real, periods::Integer, strikecolor)
+    end_joint2::AbstractVector{<:Real};
+    height::Real=0.22f0,
+    periods::Integer=1,
+    strikecolor=:none)
 
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
@@ -1507,16 +1497,6 @@ function animate_draw_point(
     end
 end
 
-function animate_draw_point(
-    state_ptr::Ptr{Cvoid},
-    timer::Real, duration::Real,
-    penx::Real, peny::Real, penz::Real, penbrush::Real, pencolor,
-    pointid::Integer)
-
-    animate_draw_point(
-        state_ptr, timer, duration, [penx, peny, penz], penbrush, pencolor, pointid)
-end
-
 """
 Animate drawing a line primitive with pen motion and endpoint updates.
 
@@ -1542,9 +1522,12 @@ Returns:
 function animate_draw_line(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
-    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
-    penbrush::Real, pencolor,
-    line_host_id::Integer, line_joint1_id::Integer, line_joint2_id::Integer)
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real};
+    penbrush::Real,
+    pencolor,
+    line_host_id::Integer,
+    line_joint1_id::Integer,
+    line_joint2_id::Integer)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1603,7 +1586,7 @@ function animate_draw_two_line_segments(
     timer::Real, duration::Real,
     startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
     endpos::AbstractVector{<:Real},
-    penbrush::Real, pencolor,
+    penbrush::Real, pencolor;
     line1_host_id::Integer, line1_joint1_id::Integer, line1_joint2_id::Integer,
     line2_host_id::Integer, line2_joint1_id::Integer, line2_joint2_id::Integer)
 
@@ -1723,8 +1706,10 @@ function animate_extend_line(
     timer::Real, duration::Real,
     startpos::AbstractVector{<:Real}, midpos::AbstractVector{<:Real},
     endpos::AbstractVector{<:Real},
-    penbrush::Real, pencolor,
-    line_host_id::Integer, line_joint1_id::Integer, line_joint2_id::Integer)
+    penbrush::Real, pencolor;
+    line_host_id::Integer=0,
+    line_joint1_id::Integer=0,
+    line_joint2_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -1782,8 +1767,12 @@ function animate_draw_circle(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
-    angle_theta::Real, radius::Real, brush::Real, color,
-    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,)
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
@@ -1837,8 +1826,12 @@ function animate_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
-    angle_theta::Real, radius::Real, brush::Real, color,
-    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,)
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
@@ -2002,9 +1995,12 @@ end
 function animate_repl_draw_line(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
-    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real},
-    penbrush::Real, pencolor,
-    line_host_id::Integer, line_joint1_id::Integer, line_joint2_id::Integer)
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real};
+    penbrush::Real=0f0,
+    pencolor=:black,
+    line_host_id::Integer=0,
+    line_joint1_id::Integer=0,
+    line_joint2_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -2021,8 +2017,10 @@ function animate_repl_draw_line(
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_line(
             state_ptr, timer - draw_start, duration * ReplDrawShare,
-            startpos, endpos, penbrush, pencolor,
-            line_host_id, line_joint1_id, line_joint2_id)
+            startpos, endpos; penbrush=penbrush, pencolor=pencolor,
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
         return
     end
 
@@ -2066,8 +2064,13 @@ function animate_repl_draw_circle(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
-    angle_theta::Real, radius::Real, brush::Real, color,
-    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,
+    angle_theta::Real,
+    radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0,
     full_sweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -2093,8 +2096,9 @@ function animate_repl_draw_circle(
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_circle(
             state_ptr, timer - draw_start, draw_duration,
-            joint_point, start_point, angle_theta, radius, brush, color,
-            marker_host_id, marker_start_id, marker_end_id)
+            joint_point, start_point, angle_theta, radius;
+            brush=brush, color=color, marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
         return
     end
 
@@ -2108,8 +2112,12 @@ function animate_repl_draw_filledcircle(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
-    angle_theta::Real, radius::Real, brush::Real, color,
-    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,
+    angle_theta::Real, radius::Real;
+    brush::Real=0f0,
+    color=:black,
+    marker_host_id::Integer=0,
+    marker_start_id::Integer=0,
+    marker_end_id::Integer=0,
     full_sweep::Bool=false)
 
     t = clamp(timer / duration, 0f0, 1f0)
@@ -2135,8 +2143,9 @@ function animate_repl_draw_filledcircle(
     if t < (ReplDescendShare + ReplDrawShare)
         animate_draw_filledcircle(
             state_ptr, timer - draw_start, draw_duration,
-            joint_point, start_point, angle_theta, radius, brush, color,
-            marker_host_id, marker_start_id, marker_end_id)
+            joint_point, start_point, angle_theta, radius;
+            brush=brush, color=color, marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
         return
     end
 

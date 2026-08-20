@@ -30,16 +30,19 @@ create_new_label :: proc "c" (
     color: Bridge_Color, brush_size: f32) -> Bridge_Point_View {
 
     return create_new_label_decorated(
-        state, label, i32(core.Shapes_Label_Decoration_Kind.None), pos, color, brush_size)
+        state,
+        core.Bridge_Label_Glyph{
+            label = label,
+            decoration_kind = i32(core.Shapes_Label_Decoration_Kind.None),
+        },
+        pos, color, brush_size)
 }
 
 //   Create a new label shape in the shapes system for Julia-driven animation state.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - label: Rune glyph used by label point shapes.
-//   - decoration_kind: Decoration enum encoded as integer.
-//     none=0, prime=1, doubleprime=2, tripleprime=3, hat=4, bar=5.
+//   - glyph: Label rune and decoration kind.
 //   - pos: 3D position used for shape/tool placement in world space.
 //   - color: RGBA color payload in bridge format.
 //   - brush_size: Stroke thickness for rendered point/shape geometry.
@@ -49,17 +52,17 @@ create_new_label :: proc "c" (
 @(export)
 create_new_label_decorated :: proc "c" (
     state: ^core.Euclid_General_State,
-    label: rune,
-    decoration_kind: i32,
+    glyph: core.Bridge_Label_Glyph,
     pos: core.Vector3,
     color: Bridge_Color,
     brush_size: f32) -> Bridge_Point_View {
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
-    use_decoration_kind := label_decoration_kind_from_i32(decoration_kind)
+    use_decoration_kind := label_decoration_kind_from_i32(glyph.decoration_kind)
     point, index := shapes.init_label(
-        state^.point_system, {label, use_decoration_kind, pos, {rl_color, brush_size}})
+        state^.point_system,
+        {glyph.label, use_decoration_kind, pos, {rl_color, brush_size}})
 
     view := point_view_from_point(point^, index)
     view.point_type = 1
@@ -152,9 +155,7 @@ create_new_line :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - center: 3D position used for shape/tool placement in world space.
-//   - radius: Circle radius in world units.
-//   - start_theta: Arc angle bound in radians.
-//   - end_theta: Arc angle bound in radians.
+//   - arc: Radius and arc angle bounds in radians.
 //   - color: RGBA color payload in bridge format.
 //   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
@@ -163,13 +164,13 @@ create_new_line :: proc "c" (
 @(export)
 create_new_circle :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3, radius, start_theta, end_theta: f32,
+    center: core.Vector3, arc: core.Bridge_Arc_Geometry,
     color: Bridge_Color, brush_size: f32) -> core.Shapes_Circle {
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     circle := shapes.init_circle(state^.point_system,
-        {center, radius, start_theta, end_theta, {rl_color, brush_size}})
+        {center, arc.radius, arc.start_theta, arc.end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -179,9 +180,7 @@ create_new_circle :: proc "c" (
 // Parameters:
 //   - state: Global runtime state passed from the host application.
 //   - center: 3D position used for shape/tool placement in world space.
-//   - radius: Circle radius in world units.
-//   - start_theta: Arc angle bound in radians.
-//   - end_theta: Arc angle bound in radians.
+//   - arc: Radius and arc angle bounds in radians.
 //   - color: RGBA color payload in bridge format.
 //   - brush_size: Stroke thickness for rendered point/shape geometry.
 //
@@ -190,13 +189,13 @@ create_new_circle :: proc "c" (
 @(export)
 create_new_filledcircle :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3, radius, start_theta, end_theta: f32,
+    center: core.Vector3, arc: core.Bridge_Arc_Geometry,
     color: Bridge_Color, brush_size: f32) -> core.Shapes_Filled_Circle {
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     circle := shapes.init_filledcircle(state^.point_system,
-        {center, radius, start_theta, end_theta, {rl_color, brush_size}})
+        {center, arc.radius, arc.start_theta, arc.end_theta, {rl_color, brush_size}})
 
     return circle
 }
@@ -229,10 +228,7 @@ create_new_triangle :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - point1: 3D position used for shape/tool placement in world space.
-//   - point2: 3D position used for shape/tool placement in world space.
-//   - point3: 3D position used for shape/tool placement in world space.
-//   - point4: 3D position used for shape/tool placement in world space.
+//   - vertices: Four 3D vertex positions for the square corners.
 //   - color: RGBA color payload in bridge format.
 //
 // Returns:
@@ -240,13 +236,13 @@ create_new_triangle :: proc "c" (
 @(export)
 create_new_square :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4: core.Vector3,
+    vertices: core.Bridge_Square_Vertices,
     color: Bridge_Color) -> core.Shapes_Square {
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_square(
-        state^.point_system, {{point1, point2, point3, point4}, rl_color})
+        state^.point_system, {vertices.vertices, rl_color})
 
     return line
 }
@@ -255,11 +251,7 @@ create_new_square :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - point1: 3D position used for shape/tool placement in world space.
-//   - point2: 3D position used for shape/tool placement in world space.
-//   - point3: 3D position used for shape/tool placement in world space.
-//   - point4: 3D position used for shape/tool placement in world space.
-//   - point5: 3D position used for shape/tool placement in world space.
+//   - vertices: Five 3D vertex positions for the pentagon corners.
 //   - color: RGBA color payload in bridge format.
 //
 // Returns:
@@ -267,13 +259,13 @@ create_new_square :: proc "c" (
 @(export)
 create_new_pentagon :: proc "c" (
     state: ^core.Euclid_General_State,
-    point1, point2, point3, point4, point5: core.Vector3,
+    vertices: core.Bridge_Pentagon_Vertices,
     color: Bridge_Color) -> core.Shapes_Pentagon {
 
     context = state^.saved_context
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     line := shapes.init_pentagon(
-        state^.point_system, {{point1, point2, point3, point4, point5}, rl_color})
+        state^.point_system, {vertices.vertices, rl_color})
 
     return line
 }

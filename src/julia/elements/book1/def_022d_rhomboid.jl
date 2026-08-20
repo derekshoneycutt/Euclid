@@ -54,7 +54,6 @@ const PenRiseDuration = 1.8f0
 const CompassDescendDuration = 1.8f0
 const MarkerDrawDuration = 1.0f0
 const CompassArcMoveDuration = 1.5f0
-const CompassArcMoveHeight = 0.25f0
 const CompassRiseDuration = 2.0f0
 const HidePauseDuration = 1.5f0
 
@@ -141,10 +140,8 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:4
-        marker = OdinJuliaBridge.create_new_filledcircle(
-            state_ptr,
-            MarkerCenters[i], MarkerRadius,
-            MarkerStartThetas[i], MarkerStartThetas[i],
+        marker = OdinJuliaBridge.create_new_filledcircle(state_ptr,
+            MarkerCenters[i], MarkerRadius, MarkerStartThetas[i], MarkerStartThetas[i],
             MarkerColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(
@@ -156,9 +153,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     end
     for i in 1:4
         line = OdinJuliaBridge.create_new_line(
-            state_ptr,
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
-            SideStarts[i][1], SideStarts[i][2], SideStarts[i][3],
+            state_ptr, SideStarts[i], SideStarts[i],
             SideColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(
@@ -215,11 +210,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawSide1 || phase == PhaseDrawSide2 ||
            phase == PhaseDrawSide3 || phase == PhaseDrawSide4
         side_index = Int(phase)
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, SideStarts[side_index], SideEnds[side_index],
-            TriangleMaxBrush, SideColors[side_index],
-            line_host_ids[side_index], line_joint1_ids[side_index],
-            line_joint2_ids[side_index])
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            SideStarts[side_index], SideEnds[side_index];
+            penbrush=TriangleMaxBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=line_host_ids[side_index],
+            line_joint1_id=line_joint1_ids[side_index],
+            line_joint2_id=line_joint2_ids[side_index])
 
         timer += dt
         if timer >= DrawDuration
@@ -255,13 +253,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawMarker1 || phase == PhaseDrawMarker2 ||
            phase == PhaseDrawMarker3 || phase == PhaseDrawMarker4
         marker_index = Int((phase - PhaseDrawMarker1) / 2f0 + 1f0)
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, MarkerDrawDuration,
-            MarkerCenters[marker_index], MarkerStarts[marker_index],
-            MarkerSweeps[marker_index], MarkerRadius,
-            MarkerBrush, MarkerColors[marker_index],
-            marker_host_ids[marker_index], marker_start_ids[marker_index],
-            marker_end_ids[marker_index])
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, MarkerDrawDuration, MarkerCenters[marker_index],
+            MarkerStarts[marker_index], MarkerSweeps[marker_index], MarkerRadius;
+            brush=MarkerBrush,
+            color=MarkerColors[marker_index],
+            marker_host_id=marker_host_ids[marker_index],
+            marker_start_id=marker_start_ids[marker_index],
+            marker_end_id=marker_end_ids[marker_index])
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -284,8 +283,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, CompassArcMoveDuration,
             MarkerCenters[from_index], MarkerCenters[to_index],
-            MarkerEnds[from_index], MarkerStarts[to_index],
-            CompassArcMoveHeight, 1, :none)
+            MarkerEnds[from_index], MarkerStarts[to_index])
 
         timer += dt
         if timer >= CompassArcMoveDuration

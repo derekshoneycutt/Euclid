@@ -125,24 +125,16 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     edge1 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner1[1], Corner1[2], Corner1[3],
-        Corner1[1], Corner1[2], Corner1[3],
+        state_ptr, Corner1, Corner1,
         LineColor1, 0f0)
     edge2 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner2[1], Corner2[2], Corner2[3],
-        Corner2[1], Corner2[2], Corner2[3],
+        state_ptr, Corner2, Corner2,
         LineColor2, 0f0)
     edge3 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner3[1], Corner3[2], Corner3[3],
-        Corner3[1], Corner3[2], Corner3[3],
+        state_ptr, Corner3, Corner3,
         LineColor3, 0f0)
     edge4 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Corner4[1], Corner4[2], Corner4[3],
-        Corner4[1], Corner4[2], Corner4[3],
+        state_ptr, Corner4, Corner4,
         LineColor4, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdge1HostId, edge1.host_id)
@@ -215,9 +207,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner1, Corner2,
-            LineBrush, LineColor1, edge1_host_id, edge1_joint1_id, edge1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner1, Corner2;
+            penbrush=LineBrush,
+            pencolor=LineColor1,
+            line_host_id=edge1_host_id,
+            line_joint1_id=edge1_joint1_id,
+            line_joint2_id=edge1_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -225,9 +222,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner2, Corner3,
-            LineBrush, LineColor2, edge2_host_id, edge2_joint1_id, edge2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner2, Corner3;
+            penbrush=LineBrush,
+            pencolor=LineColor2,
+            line_host_id=edge2_host_id,
+            line_joint1_id=edge2_joint1_id,
+            line_joint2_id=edge2_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -235,9 +237,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner3, Corner4,
-            LineBrush, LineColor3, edge3_host_id, edge3_joint1_id, edge3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner3, Corner4;
+            penbrush=LineBrush,
+            pencolor=LineColor3,
+            line_host_id=edge3_host_id,
+            line_joint1_id=edge3_joint1_id,
+            line_joint2_id=edge3_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -245,9 +252,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine4
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Corner4, Corner1,
-            LineBrush, LineColor4, edge4_host_id, edge4_joint1_id, edge4_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Corner4, Corner1;
+            penbrush=LineBrush,
+            pencolor=LineColor4,
+            line_host_id=edge4_host_id,
+            line_joint1_id=edge4_joint1_id,
+            line_joint2_id=edge4_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

@@ -26,10 +26,7 @@ set_null_animations :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - get_view_text: Julia function pointer used to bind animation callback behavior.
-//   - init: Julia function pointer used to bind animation callback behavior.
-//   - loop: Julia function pointer used to bind animation callback behavior.
-//   - clean: Julia function pointer used to bind animation callback behavior.
+//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
 //   - name: Null-terminated animation label string from Julia.
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //
@@ -39,10 +36,14 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    get_view_text, init, loop, clean : ^julialib.jl_value_t,
+    callbacks : ^Animation_Callbacks,
     name, stable_id : cstring) -> int {
 
     context = state^.saved_context
+
+    if callbacks == nil {
+        return -1
+    }
 
     parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
     if !parsed_ok {
@@ -54,7 +55,7 @@ add_root_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        Animation_Callbacks{get_view_text, init, loop, clean},
+        callbacks^,
         name,
         parsed_stable_id,
         nil)
@@ -69,10 +70,7 @@ add_root_animation_interface :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - get_view_text: Julia function pointer used to bind animation callback behavior.
-//   - init: Julia function pointer used to bind animation callback behavior.
-//   - loop: Julia function pointer used to bind animation callback behavior.
-//   - clean: Julia function pointer used to bind animation callback behavior.
+//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
 //   - name: Null-terminated animation label string from Julia.
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //   - parent_stable_id: Parent animation UUID string that receives the new child entry.
@@ -83,11 +81,15 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    get_view_text, init, loop, clean : ^julialib.jl_value_t,
+    callbacks : ^Animation_Callbacks,
     name, stable_id : cstring,
     parent_stable_id: cstring) -> int {
 
     context = state^.saved_context
+
+    if callbacks == nil {
+        return -1
+    }
 
     parent, ok := resolve_parent_animation_by_stable_id(state, parent_stable_id)
     if !ok {
@@ -105,7 +107,7 @@ add_child_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        Animation_Callbacks{get_view_text, init, loop, clean},
+        callbacks^,
         name,
         parsed_stable_id,
         parent)

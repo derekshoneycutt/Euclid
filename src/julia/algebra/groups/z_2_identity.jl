@@ -221,11 +221,7 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     for i in 1:3
         line = OdinJuliaBridge.create_new_line(
-            state_ptr,
-            SideStarts[i],
-            SideStarts[i],
-            SideColors[i],
-            0f0)
+            state_ptr, SideStarts[i], SideStarts[i], SideColors[i], 0f0)
 
         OdinJuliaBridge.set_animation_meta(
             state_ptr, MetaLineHostIds[i], Float32(line.host_id))
@@ -308,17 +304,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         line_joint2_id = side_index == 1 ? line_joint2_id_1 :
             (side_index == 2 ? line_joint2_id_2 : line_joint2_id_3)
 
-        EuclidAnimations.animate_draw_line(
-            state_ptr,
-            timer,
-            SideDrawDuration,
-            SideStarts[side_index],
-            SideEnds[side_index],
-            TriangleBrush,
-            SideColors[side_index],
-            line_host_id,
-            line_joint1_id,
-            line_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, SideDrawDuration,
+            SideStarts[side_index], SideEnds[side_index];
+            penbrush=TriangleBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
 
         timer += dt
         if timer >= SideDrawDuration

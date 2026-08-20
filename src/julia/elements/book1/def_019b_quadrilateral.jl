@@ -139,32 +139,19 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line1 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexA[1], VertexA[2], VertexA[3],
+        state_ptr, VertexA, VertexA,
         SquareColor, 0f0)
     line2 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexB[1], VertexB[2], VertexB[3],
-        VertexB[1], VertexB[2], VertexB[3],
+        state_ptr, VertexB, VertexB,
         SquareColor, 0f0)
     line3 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexC[1], VertexC[2], VertexC[3],
+        state_ptr, VertexC, VertexC,
         SquareColor, 0f0)
     line4 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        VertexD[1], VertexD[2], VertexD[3],
-        VertexD[1], VertexD[2], VertexD[3],
+        state_ptr, VertexD, VertexD,
         SquareColor, 0f0)
-    square = OdinJuliaBridge.create_new_square(
-        state_ptr,
-        VertexA[1], VertexA[2], VertexA[3],
-        VertexD[1], VertexD[2], VertexD[3],
-        VertexC[1], VertexC[2], VertexC[3],
-        VertexB[1], VertexB[2], VertexB[3],
-        SquareColor)
+    square = OdinJuliaBridge.create_new_square(state_ptr,
+        VertexA, VertexD, VertexC, VertexB, SquareColor)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, line1.host_id)
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1Joint1Id, line1.joint1_id)
@@ -245,9 +232,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSide1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexA, VertexB,
-            SquareMaxBrush, SquareColor, line1_host_id, line1_joint1_id, line1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            VertexA, VertexB;
+            penbrush=SquareMaxBrush,
+            pencolor=SquareColor,
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -255,9 +247,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSide2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexB, VertexC,
-            SquareMaxBrush, SquareColor, line2_host_id, line2_joint1_id, line2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            VertexB, VertexC;
+            penbrush=SquareMaxBrush,
+            pencolor=SquareColor,
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -265,9 +262,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSide3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexC, VertexD,
-            SquareMaxBrush, SquareColor, line3_host_id, line3_joint1_id, line3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            VertexC, VertexD;
+            penbrush=SquareMaxBrush,
+            pencolor=SquareColor,
+            line_host_id=line3_host_id,
+            line_joint1_id=line3_joint1_id,
+            line_joint2_id=line3_joint2_id)
 
         timer += dt
         if timer >= DrawDuration
@@ -275,9 +277,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawSide4
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, VertexD, VertexA,
-            SquareMaxBrush, SquareColor, line4_host_id, line4_joint1_id, line4_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            VertexD, VertexA;
+            penbrush=SquareMaxBrush,
+            pencolor=SquareColor,
+            line_host_id=line4_host_id,
+            line_joint1_id=line4_joint1_id,
+            line_joint2_id=line4_joint2_id)
 
         timer += dt
         if timer >= DrawDuration

@@ -203,11 +203,14 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     lower_line = OdinJuliaBridge.create_new_line(
-        state_ptr, LowerLineStart, LowerLineStart, LowerLineColor, 0f0)
+        state_ptr, LowerLineStart, LowerLineStart,
+        LowerLineColor, 0f0)
     upper_line = OdinJuliaBridge.create_new_line(
-        state_ptr, UpperLineStart, UpperLineStart, UpperLineColor, 0f0)
+        state_ptr, UpperLineStart, UpperLineStart,
+        UpperLineColor, 0f0)
     transversal = OdinJuliaBridge.create_new_line(
-        state_ptr, TransversalStart, TransversalStart, TransversalColor, 0f0)
+        state_ptr, TransversalStart, TransversalStart,
+        TransversalColor, 0f0)
 
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaLowerHostId, lower_line.host_id)
@@ -274,9 +277,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLower
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, LowerLineStart, LowerLineEnd,
-            EdgeBrush, LowerLineColor, lower_host_id, lower_joint1_id, lower_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            LowerLineStart, LowerLineEnd;
+            penbrush=EdgeBrush,
+            pencolor=LowerLineColor,
+            line_host_id=lower_host_id,
+            line_joint1_id=lower_joint1_id,
+            line_joint2_id=lower_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhaseArcToUpper
@@ -293,9 +301,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawUpper
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, UpperLineStart, UpperLineEnd,
-            EdgeBrush, UpperLineColor, upper_host_id, upper_joint1_id, upper_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            UpperLineStart, UpperLineEnd;
+            penbrush=EdgeBrush,
+            pencolor=UpperLineColor,
+            line_host_id=upper_host_id,
+            line_joint1_id=upper_joint1_id,
+            line_joint2_id=upper_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhaseArcToTransversal
@@ -312,10 +325,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawTransversal
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawDuration, TransversalStart, TransversalEnd,
-            EdgeBrush, TransversalColor,
-            transversal_host_id, transversal_joint1_id, transversal_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            TransversalStart, TransversalEnd;
+            penbrush=EdgeBrush,
+            pencolor=TransversalColor,
+            line_host_id=transversal_host_id,
+            line_joint1_id=transversal_joint1_id,
+            line_joint2_id=transversal_joint2_id)
         timer += dt
         if timer >= DrawDuration
             phase = PhasePenRise
@@ -366,7 +383,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             TopIntersection, BottomIntersection,
-            MarkerAlt1Start, MarkerAlt2Start, 0.22f0, 1, :none)
+            MarkerAlt1Start, MarkerAlt2Start)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseAlt2Forward
@@ -396,7 +413,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             BottomIntersection, TopIntersection,
-            MarkerAlt2Start, MarkerExtInt1Start, 0.22f0, 1, :none)
+            MarkerAlt2Start, MarkerExtInt1Start)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseExtInt1Forward
@@ -426,7 +443,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             TopIntersection, BottomIntersection,
-            MarkerExtInt1Start, MarkerExtInt2Start, 0.22f0, 1, :none)
+            MarkerExtInt1Start, MarkerExtInt2Start)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseExtInt2Forward

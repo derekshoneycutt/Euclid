@@ -26,7 +26,7 @@ get_scratchpad_submission :: proc(
         text = text,
         caret_byte = caret_byte,
         input_mode = input_mode,
-        input_generation = input_generation
+        input_generation = input_generation,
     }
 }
 

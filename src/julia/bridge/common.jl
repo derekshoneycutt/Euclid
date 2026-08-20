@@ -137,6 +137,110 @@ struct BridgePieColors
     arc::BridgeColor
 end
 
+"""
+Flat op payload for one inline math block.
+
+Mirrors the Odin `Bridge_Dynview_Math_Program` ABI struct field-for-field.
+"""
+struct BridgeDynviewMathProgram
+    ops::Ptr{BridgeDynviewMathOp}
+    op_count::Int32
+    top_level_op_count::Int32
+end
+
+"""
+Width, height, and stroke for one rectangular inline atom.
+
+Mirrors the Odin `Bridge_Inline_Box_Dims` ABI struct field-for-field.
+"""
+struct BridgeInlineBoxDims
+    width::Cfloat
+    height::Cfloat
+    stroke::Cfloat
+end
+
+"""
+Width and height for one sized inline atom.
+
+Mirrors the Odin `Bridge_Inline_Size` ABI struct field-for-field.
+"""
+struct BridgeInlineSize
+    width::Cfloat
+    height::Cfloat
+end
+
+"""
+Top-bar length, stem height, and stroke for one inline perpendicular atom.
+
+Mirrors the Odin `Bridge_Inline_Perpendicular_Dims` ABI struct field-for-field.
+"""
+struct BridgeInlinePerpendicularDims
+    length::Cfloat
+    stem_height::Cfloat
+    stroke::Cfloat
+end
+
+"""
+Top and stem colors for one inline perpendicular atom.
+
+Mirrors the Odin `Bridge_Perpendicular_Colors` ABI struct field-for-field.
+"""
+struct BridgePerpendicularColors
+    top::BridgeColor
+    stem::BridgeColor
+end
+
+"""
+Radius and sweep angles for one inline pie-section atom.
+
+Mirrors the Odin `Bridge_Pie_Section_Geometry` ABI struct field-for-field.
+"""
+struct BridgePieSectionGeometry
+    radius::Cfloat
+    start_angle_degrees::Cfloat
+    end_angle_degrees::Cfloat
+    outline_stroke::Cfloat
+end
+
+"""
+Radius and arc angle bounds for one circle shape.
+
+Mirrors the Odin `Bridge_Arc_Geometry` ABI struct field-for-field.
+"""
+struct BridgeArcGeometry
+    radius::Cfloat
+    start_theta::Cfloat
+    end_theta::Cfloat
+end
+
+"""
+Glyph and decoration for one label point.
+
+Mirrors the Odin `Bridge_Label_Glyph` ABI struct field-for-field.
+"""
+struct BridgeLabelGlyph
+    label::UInt32
+    decoration_kind::Int32
+end
+
+"""
+Four vertices for one square shape.
+
+Mirrors the Odin `Bridge_Square_Vertices` ABI struct field-for-field.
+"""
+struct BridgeSquareVertices
+    vertices::NTuple{4, NTuple{3, Cfloat}}
+end
+
+"""
+Five vertices for one pentagon shape.
+
+Mirrors the Odin `Bridge_Pentagon_Vertices` ABI struct field-for-field.
+"""
+struct BridgePentagonVertices
+    vertices::NTuple{5, NTuple{3, Cfloat}}
+end
+
 struct BridgePointView
     valid::UInt8
     index::Int64

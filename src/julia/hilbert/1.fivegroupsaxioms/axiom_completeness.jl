@@ -196,10 +196,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawMainCircle
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, CircleDrawDuration, CircleCenter, CircleStartPoint,
-            CircleSweepTheta, CircleRadius, CircleBrush, CircleColor,
-            circle_hostid, circle_startid, circle_endid)
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, CircleDrawDuration, CircleCenter,
+            CircleStartPoint, CircleSweepTheta, CircleRadius;
+            brush=CircleBrush,
+            color=CircleColor,
+            marker_host_id=circle_hostid,
+            marker_start_id=circle_startid,
+            marker_end_id=circle_endid)
 
         timer += dt
         if timer >= CircleDrawDuration
@@ -232,8 +236,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             CircleCenter, CircleCenter,
-            CircleStartPoint, TangentPoint,
-            0.10f0, 1, :none)
+            CircleStartPoint, TangentPoint;
+            height=0.10f0)
         OdinJuliaBridge.set_compass_active(state_ptr, 3, CircleColor)
 
         timer += dt

@@ -114,11 +114,10 @@ function initialize(state_ptr::Ptr{Cvoid})
     center_point = OdinJuliaBridge.create_new_point(
         state_ptr, CenterPoint, CenterColor, 0f0)
     circle = OdinJuliaBridge.create_new_circle(
-        state_ptr, CenterPoint, Radius, 0f0, 0f0, CircleColor, 0f0)
+        state_ptr, CenterPoint, Radius, 0f0, 0f0,
+        CircleColor, 0f0)
     diameter = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3],
-        DiameterStartPoint[1], DiameterStartPoint[2], DiameterStartPoint[3],
+        state_ptr, DiameterStartPoint, DiameterStartPoint,
         DiameterColor, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, center_point.index)
@@ -206,10 +205,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCircle
-        EuclidAnimations.animate_draw_circle(
-            state_ptr, timer, CircleDrawDuration, CenterPoint, CircleStartPoint,
-            CircleSweepTheta, Radius, CircleBrush, CircleColor,
-            circle_hostid, circle_startid, circle_endid)
+        EuclidAnimations.animate_draw_circle(state_ptr,
+            timer, CircleDrawDuration, CenterPoint,
+            CircleStartPoint, CircleSweepTheta, Radius;
+            brush=CircleBrush,
+            color=CircleColor,
+            marker_host_id=circle_hostid,
+            marker_start_id=circle_startid,
+            marker_end_id=circle_endid)
 
         timer += dt
         if timer >= CircleDrawDuration
@@ -240,10 +243,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawDiameter
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DiameterDrawDuration, DiameterStartPoint, DiameterEndPoint,
-            DiameterBrush, DiameterColor,
-            diameter_host_id, diameter_joint1_id, diameter_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DiameterDrawDuration,
+            DiameterStartPoint, DiameterEndPoint;
+            penbrush=DiameterBrush,
+            pencolor=DiameterColor,
+            line_host_id=diameter_host_id,
+            line_joint1_id=diameter_joint1_id,
+            line_joint2_id=diameter_joint2_id)
 
         timer += dt
         if timer >= DiameterDrawDuration

@@ -60,7 +60,6 @@ const ArcMoveHeight = 0.25f0
 const PenRiseDuration1 = 1.8f0
 const MarkerDrawDuration = 1.5f0
 const CompassArcMoveDuration = 1.25f0
-const CompassArcMoveHeight = 0.25f0
 const CompassRiseDuration = 1.8f0
 const PointDrawDuration = 4f0
 const HidePauseDuration = 1.5f0
@@ -189,15 +188,11 @@ end
 
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    marker1 = OdinJuliaBridge.create_new_filledcircle(
-        state_ptr,
-        Marker1Center,
-        MarkerRadius, 0f0, 0f0,
+    marker1 = OdinJuliaBridge.create_new_filledcircle(state_ptr,
+        Marker1Center, MarkerRadius, 0f0, 0f0,
         Marker1Color, 0f0)
-    marker2 = OdinJuliaBridge.create_new_filledcircle(
-        state_ptr,
-        Marker2Center,
-        MarkerRadius, Angle2StartΘ, Angle2StartΘ,
+    marker2 = OdinJuliaBridge.create_new_filledcircle(state_ptr,
+        Marker2Center, MarkerRadius, Angle2StartΘ, Angle2StartΘ,
         Marker2Color, 0f0)
     line1 = OdinJuliaBridge.create_new_line(
         state_ptr, StartPoint1, StartPoint1, Line1Color, 0f0)
@@ -296,9 +291,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint11,
-            LineMaxBrush, Line1Color, line1_host_id, line1_joint1_id, line1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint1, EndPoint11;
+            penbrush=LineMaxBrush,
+            pencolor=Line1Color,
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -316,9 +316,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint21,
-            LineMaxBrush, Line2Color, line2_host_id, line2_joint1_id, line2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint2, EndPoint21;
+            penbrush=LineMaxBrush,
+            pencolor=Line2Color,
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -336,9 +341,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, StartPoint3, EndPoint3,
-            LineMaxBrush, Line3Color, line3_host_id, line3_joint1_id, line3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            StartPoint3, EndPoint3;
+            penbrush=LineMaxBrush,
+            pencolor=Line3Color,
+            line_host_id=line3_host_id,
+            line_joint1_id=line3_joint1_id,
+            line_joint2_id=line3_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -359,10 +369,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawMarker1
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, MarkerDrawDuration, Marker1Center, Marker1Start,
-            Angle1StartΘ, MarkerRadius, MarkerBrush, Marker1Color,
-            marker1_host_id, marker1_start_id, marker1_end_id)
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, MarkerDrawDuration, Marker1Center,
+            Marker1Start, Angle1StartΘ, MarkerRadius;
+            brush=MarkerBrush,
+            color=Marker1Color,
+            marker_host_id=marker1_host_id,
+            marker_start_id=marker1_start_id,
+            marker_end_id=marker1_end_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -372,8 +386,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseCompassArcToMarker2
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, CompassArcMoveDuration,
-            Marker1Center, Marker2Center, Marker1End, Marker2Start,
-            CompassArcMoveHeight, 1, :none)
+            Marker1Center, Marker2Center, Marker1End, Marker2Start)
 
         timer += dt
         if timer >= CompassArcMoveDuration
@@ -409,7 +422,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLine12
         EuclidAnimations.animate_extend_line(
             state_ptr, timer, LineDrawDuration, StartPoint1, EndPoint11, EndPoint12,
-            LineMaxBrush, Line1Color, line1_host_id, line1_joint1_id, line1_joint2_id)
+            LineMaxBrush, Line1Color;
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -429,7 +445,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseDrawLine22
         EuclidAnimations.animate_extend_line(
             state_ptr, timer, LineDrawDuration, StartPoint2, EndPoint21, EndPoint22,
-            LineMaxBrush, Line2Color, line2_host_id, line2_joint1_id, line2_joint2_id)
+            LineMaxBrush, Line2Color;
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

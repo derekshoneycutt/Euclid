@@ -157,6 +157,14 @@ Bridge_Dynview_Math_Op :: struct {
     accent_offset: f32,
 }
 
+//   Flat op payload for one inline math block, grouped so the C export
+//   signature stays within the bridge parameter budget.
+Bridge_Dynview_Math_Program :: struct {
+    ops:                [^]Bridge_Dynview_Math_Op,
+    op_count:           i32,
+    top_level_op_count: i32,
+}
+
 Bridge_Point_View :: struct {
     valid: bool,
     index: int,

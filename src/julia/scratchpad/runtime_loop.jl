@@ -115,10 +115,10 @@ function eval_scoped_input!(
         if result !== nothing
             append_eval_result_output!(session, result)
         end
-    catch
+    catch e
         session.metrics.eval_errors += 1
         append_native_error_block!(session,
-            format_current_exception_text(runtime; color=true))
+            format_current_exception_text(runtime, e; color=true))
     end
 end
 
@@ -130,7 +130,8 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
 
     dt32 = try
         Float32(dt)
-    catch
+    catch e
+        e isa Exception || rethrow()
         Float32(0)
     end
 
@@ -144,14 +145,14 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
             hook.fn(state_ptr, dt32)
             hook.consecutive_failures = 0
             maybe_warn_slow_hook!(session, hook, time_ns() - hook_started_at)
-        catch
+        catch e
             hook.failures += 1
             hook.consecutive_failures += 1
             session.metrics.hook_errors += 1
             append_native_error_block!(
                 session,
                 "Frame $(frame_hook_label(hook.id, hook.label)) failed:\n" *
-                format_current_exception_text(session.runtime; color=true))
+                format_current_exception_text(session.runtime, e; color=true))
             if hook.consecutive_failures >= MaxConsecutiveHookFailures
                 hook.enabled = false
                 append_output_line!(
@@ -221,9 +222,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
         end
 
         run_frame_hooks!(session, state_ptr, dt)
-    catch
+    catch e
         append_native_error_block!(
-            session, format_current_exception_text(session.runtime; color=true))
+            session, format_current_exception_text(session.runtime, e; color=true))
     end
 end
 

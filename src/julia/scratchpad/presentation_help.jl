@@ -124,7 +124,8 @@ function format_result_value(value, runtime::Module)
     context = IOContext(io, :color => false, :limit => true, :module => runtime)
     try
         Base.invokelatest(show, context, MIME("text/plain"), value)
-    catch
+    catch e
+        e isa Exception || rethrow()
         truncate(io, 0)
         seekstart(io)
         Base.invokelatest(show, context, value)
@@ -148,7 +149,8 @@ function format_result_latex_source(value, runtime::Module)
     context = IOContext(io, :color => false, :limit => true, :module => runtime)
     try
         Base.invokelatest(show, context, MIME("text/latex"), value)
-    catch
+    catch e
+        e isa Exception || rethrow()
         return nothing
     end
 
@@ -225,6 +227,11 @@ end
 
 """Capture and format the exception stack active in the current catch block."""
 format_current_exception_text(runtime::Module; color::Bool=false) =
+    format_exception_stack(current_exceptions(), runtime; color=color)
+
+"""Format the exception stack for one caught exception value."""
+format_current_exception_text(
+    runtime::Module, caught::Exception; color::Bool=false) =
     format_exception_stack(current_exceptions(), runtime; color=color)
 
 """Append one submitted input line with explicit prompt and input colors."""
@@ -659,7 +666,8 @@ function render_help_signatures(binding::Base.Docs.Binding)
         arg_parts = String[]
         try
             arg_parts = render_signature_parts_from_decl(method)
-        catch
+        catch e
+            e isa Exception || rethrow()
             arg_parts = render_signature_parts_from_sig(method)
         end
 
@@ -791,9 +799,9 @@ function append_native_help_query!(session::ScratchpadSession, query::AbstractSt
             append_output_block!(session,
                 format_result_value(rendered_help, session.runtime))
         end
-    catch
+    catch e
         append_native_error_block!(
-            session, format_current_exception_text(session.runtime; color=true))
+            session, format_current_exception_text(session.runtime, e; color=true))
     end
 end
 

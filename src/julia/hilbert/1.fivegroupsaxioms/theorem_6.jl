@@ -236,17 +236,23 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     poly1 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV1, PolygonV1, OutlineColor, 0f0)
+        state_ptr, PolygonV1, PolygonV1,
+        OutlineColor, 0f0)
     poly2 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV2, PolygonV2, OutlineColor, 0f0)
+        state_ptr, PolygonV2, PolygonV2,
+        OutlineColor, 0f0)
     poly3 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV3, PolygonV3, OutlineColor, 0f0)
+        state_ptr, PolygonV3, PolygonV3,
+        OutlineColor, 0f0)
     poly4 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV4, PolygonV4, OutlineColor, 0f0)
+        state_ptr, PolygonV4, PolygonV4,
+        OutlineColor, 0f0)
     poly5 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV5, PolygonV5, OutlineColor, 0f0)
+        state_ptr, PolygonV5, PolygonV5,
+        OutlineColor, 0f0)
     poly6 = OdinJuliaBridge.create_new_line(
-        state_ptr, PolygonV6, PolygonV6, OutlineColor, 0f0)
+        state_ptr, PolygonV6, PolygonV6,
+        OutlineColor, 0f0)
 
     point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointA, PointAColor, 0f0)
@@ -258,17 +264,23 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, PointBPrime, PointBPrimeColor, 0f0)
 
     segment_a_b = OdinJuliaBridge.create_new_line(
-        state_ptr, PointB, PointB, SegmentABColor, 0f0)
+        state_ptr, PointB, PointB,
+        SegmentABColor, 0f0)
     inside1 = OdinJuliaBridge.create_new_line(
-        state_ptr, PointA, PointA, BrokenInsideColor, 0f0)
+        state_ptr, PointA, PointA,
+        BrokenInsideColor, 0f0)
     inside2 = OdinJuliaBridge.create_new_line(
-        state_ptr, BrokenInsideMid, BrokenInsideMid, BrokenInsideColor, 0f0)
+        state_ptr, BrokenInsideMid, BrokenInsideMid,
+        BrokenInsideColor, 0f0)
     outside1 = OdinJuliaBridge.create_new_line(
-        state_ptr, PointB, PointB, BrokenOutsideColor, 0f0)
+        state_ptr, PointB, PointB,
+        BrokenOutsideColor, 0f0)
     outside2 = OdinJuliaBridge.create_new_line(
-        state_ptr, BrokenOutsideMid1, BrokenOutsideMid1, BrokenOutsideColor, 0f0)
+        state_ptr, BrokenOutsideMid1, BrokenOutsideMid1,
+        BrokenOutsideColor, 0f0)
     outside3 = OdinJuliaBridge.create_new_line(
-        state_ptr, BrokenOutsideMid2, BrokenOutsideMid2, BrokenOutsideColor, 0f0)
+        state_ptr, BrokenOutsideMid2, BrokenOutsideMid2,
+        BrokenOutsideColor, 0f0)
 
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
@@ -481,9 +493,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV1, PolygonV2,
-            LineMaxBrush, OutlineColor, poly1_host_id, poly1_joint1_id, poly1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV1, PolygonV2;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly1_host_id,
+            line_joint1_id=poly1_joint1_id,
+            line_joint2_id=poly1_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -491,9 +508,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV2, PolygonV3,
-            LineMaxBrush, OutlineColor, poly2_host_id, poly2_joint1_id, poly2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV2, PolygonV3;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly2_host_id,
+            line_joint1_id=poly2_joint1_id,
+            line_joint2_id=poly2_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -501,9 +523,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV3, PolygonV4,
-            LineMaxBrush, OutlineColor, poly3_host_id, poly3_joint1_id, poly3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV3, PolygonV4;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly3_host_id,
+            line_joint1_id=poly3_joint1_id,
+            line_joint2_id=poly3_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -511,9 +538,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly4
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV4, PolygonV5,
-            LineMaxBrush, OutlineColor, poly4_host_id, poly4_joint1_id, poly4_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV4, PolygonV5;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly4_host_id,
+            line_joint1_id=poly4_joint1_id,
+            line_joint2_id=poly4_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -521,9 +553,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly5
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV5, PolygonV6,
-            LineMaxBrush, OutlineColor, poly5_host_id, poly5_joint1_id, poly5_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV5, PolygonV6;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly5_host_id,
+            line_joint1_id=poly5_joint1_id,
+            line_joint2_id=poly5_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -531,9 +568,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawPoly6
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawPolygonDuration, PolygonV6, PolygonV1,
-            LineMaxBrush, OutlineColor, poly6_host_id, poly6_joint1_id, poly6_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawPolygonDuration,
+            PolygonV6, PolygonV1;
+            penbrush=LineMaxBrush,
+            pencolor=OutlineColor,
+            line_host_id=poly6_host_id,
+            line_joint1_id=poly6_joint1_id,
+            line_joint2_id=poly6_joint2_id)
 
         timer += dt
         if timer >= DrawPolygonDuration
@@ -584,10 +626,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, SegmentABColor)
         end
     elseif phase == PhaseDrawAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointB, PointA,
-            LineMaxBrush, SegmentABColor,
-            segment_a_b_host_id, segment_a_b_joint1_id, segment_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointB, PointA;
+            penbrush=LineMaxBrush,
+            pencolor=SegmentABColor,
+            line_host_id=segment_a_b_host_id,
+            line_joint1_id=segment_a_b_joint1_id,
+            line_joint2_id=segment_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -627,10 +673,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, BrokenInsideColor)
         end
     elseif phase == PhaseDrawInside1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointA, BrokenInsideMid,
-            LineMaxBrush, BrokenInsideColor,
-            inside1_host_id, inside1_joint1_id, inside1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointA, BrokenInsideMid;
+            penbrush=LineMaxBrush,
+            pencolor=BrokenInsideColor,
+            line_host_id=inside1_host_id,
+            line_joint1_id=inside1_joint1_id,
+            line_joint2_id=inside1_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -638,10 +688,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawInside2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, BrokenInsideMid, PointAPrime,
-            LineMaxBrush, BrokenInsideColor,
-            inside2_host_id, inside2_joint1_id, inside2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            BrokenInsideMid, PointAPrime;
+            penbrush=LineMaxBrush,
+            pencolor=BrokenInsideColor,
+            line_host_id=inside2_host_id,
+            line_joint1_id=inside2_joint1_id,
+            line_joint2_id=inside2_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -681,10 +735,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, BrokenOutsideColor)
         end
     elseif phase == PhaseDrawOutside1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointB, BrokenOutsideMid1,
-            LineMaxBrush, BrokenOutsideColor,
-            outside1_host_id, outside1_joint1_id, outside1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointB, BrokenOutsideMid1;
+            penbrush=LineMaxBrush,
+            pencolor=BrokenOutsideColor,
+            line_host_id=outside1_host_id,
+            line_joint1_id=outside1_joint1_id,
+            line_joint2_id=outside1_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -692,10 +750,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawOutside2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, BrokenOutsideMid1, BrokenOutsideMid2,
-            LineMaxBrush, BrokenOutsideColor,
-            outside2_host_id, outside2_joint1_id, outside2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            BrokenOutsideMid1, BrokenOutsideMid2;
+            penbrush=LineMaxBrush,
+            pencolor=BrokenOutsideColor,
+            line_host_id=outside2_host_id,
+            line_joint1_id=outside2_joint1_id,
+            line_joint2_id=outside2_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -703,10 +765,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawOutside3
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, BrokenOutsideMid2, PointBPrime,
-            LineMaxBrush, BrokenOutsideColor,
-            outside3_host_id, outside3_joint1_id, outside3_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            BrokenOutsideMid2, PointBPrime;
+            penbrush=LineMaxBrush,
+            pencolor=BrokenOutsideColor,
+            line_host_id=outside3_host_id,
+            line_joint1_id=outside3_joint1_id,
+            line_joint2_id=outside3_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration

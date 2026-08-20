@@ -6,26 +6,9 @@ import "core:testing"
 
 import "../../src/shapes"
 
+import test_helpers "../helpers"
+
 TEST_EPSILON :: f32(1e-4)
-
-//   Assert that two f32 values match within TEST_EPSILON.
-expect_close :: proc(t: ^testing.T, actual, expected: f32, msg: string) {
-    testing.expectf(t, math.abs(actual - expected) <= TEST_EPSILON,
-        "%s | expected=%v got=%v", msg, expected, actual)
-}
-
-//   Assert that two Vector3 values match component-wise within TEST_EPSILON.
-expect_vec3_close :: proc(
-    t: ^testing.T,
-    actual, expected: shapes.Vector3,
-    msg: string) {
-    testing.expectf(t, math.abs(actual.x - expected.x) <= TEST_EPSILON,
-        "%s (x) | expected=%v got=%v", msg, expected.x, actual.x)
-    testing.expectf(t, math.abs(actual.y - expected.y) <= TEST_EPSILON,
-        "%s (y) | expected=%v got=%v", msg, expected.y, actual.y)
-    testing.expectf(t, math.abs(actual.z - expected.z) <= TEST_EPSILON,
-        "%s (z) | expected=%v got=%v", msg, expected.z, actual.z)
-}
 
 //   Build a test point with a fixed position.
 make_point :: proc(x, y, z: f32) -> shapes.Shapes_Point {
@@ -53,9 +36,9 @@ rotate_around_axis_preserves_length :: proc(t: ^testing.T) {
     input_len := linalg.length(input)
     output_len := linalg.length(output)
 
-    expect_close(t, output_len, input_len,
+    test_helpers.expect_close(t, output_len, input_len,
         "rotate_around_axis must preserve vector length")
-    expect_vec3_close(t, output, shapes.Vector3{-4, 3, 0},
+    test_helpers.expect_vec3_close(t, output, shapes.Vector3{-4, 3, 0},
         "rotation around +Z by 90 degrees")
 }
 
@@ -69,9 +52,11 @@ apply_constraint_distance_depend_on_positive_moves_point1 :: proc(t: ^testing.T)
     shapes.apply_constraint_distance(&constraint, &p1, &p2)
 
     expected_p1 := shapes.Vector3{-2, 0, 0}
-    expect_vec3_close(t, p1.position.? or_else shapes.Vector3{}, expected_p1,
+    test_helpers.expect_vec3_close(t, p1.position.? or_else shapes.Vector3{},
+        expected_p1,
         "depend_on>0 should move point1 only")
-    expect_vec3_close(t, p2.position.? or_else shapes.Vector3{}, shapes.Vector3{1, 0, 0},
+    test_helpers.expect_vec3_close(t, p2.position.? or_else shapes.Vector3{},
+        shapes.Vector3{1, 0, 0},
         "depend_on>0 should keep point2 fixed")
 }
 
@@ -84,9 +69,11 @@ apply_constraint_distance_depend_on_zero_splits_motion :: proc(t: ^testing.T) {
 
     shapes.apply_constraint_distance(&constraint, &p1, &p2)
 
-    expect_vec3_close(t, p1.position.? or_else shapes.Vector3{}, shapes.Vector3{-3, 0, 0},
+    test_helpers.expect_vec3_close(t, p1.position.? or_else shapes.Vector3{},
+        shapes.Vector3{-3, 0, 0},
         "depend_on==0 should move point1 around midpoint")
-    expect_vec3_close(t, p2.position.? or_else shapes.Vector3{}, shapes.Vector3{3, 0, 0},
+    test_helpers.expect_vec3_close(t, p2.position.? or_else shapes.Vector3{},
+        shapes.Vector3{3, 0, 0},
         "depend_on==0 should move point2 around midpoint")
 }
 
@@ -99,9 +86,11 @@ apply_constraint_distance_depend_on_negative_moves_point2 :: proc(t: ^testing.T)
 
     shapes.apply_constraint_distance(&constraint, &p1, &p2)
 
-    expect_vec3_close(t, p1.position.? or_else shapes.Vector3{}, shapes.Vector3{0, 0, 0},
+    test_helpers.expect_vec3_close(t, p1.position.? or_else shapes.Vector3{},
+        shapes.Vector3{0, 0, 0},
         "depend_on<0 should keep point1 fixed")
-    expect_vec3_close(t, p2.position.? or_else shapes.Vector3{}, shapes.Vector3{4, 0, 0},
+    test_helpers.expect_vec3_close(t, p2.position.? or_else shapes.Vector3{},
+        shapes.Vector3{4, 0, 0},
         "depend_on<0 should move point2 only")
 }
 

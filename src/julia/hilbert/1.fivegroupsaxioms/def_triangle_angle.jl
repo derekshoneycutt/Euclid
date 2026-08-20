@@ -179,10 +179,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     edge_b_c = OdinJuliaBridge.create_new_line(
         state_ptr, EdgeBCStart, EdgeBCStart, EdgeBCColor, 0f0)
 
-    marker = OdinJuliaBridge.create_new_filledcircle(
-        state_ptr,
-        PointA[1], PointA[2], PointA[3],
-        MarkerRadius, 0f0, 0f0,
+    marker = OdinJuliaBridge.create_new_filledcircle(state_ptr,
+        PointA, MarkerRadius, 0f0, 0f0,
         MarkerColor, 0f0)
 
     label_a = OdinJuliaBridge.create_new_label(
@@ -276,10 +274,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeABColor)
         end
     elseif phase == PhaseDrawAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeABStart, EdgeABEnd,
-            EdgeBrush, EdgeABColor,
-            edge_a_b_host_id, edge_a_b_joint1_id, edge_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeABStart, EdgeABEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeABColor,
+            line_host_id=edge_a_b_host_id,
+            line_joint1_id=edge_a_b_joint1_id,
+            line_joint2_id=edge_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawEdgeDuration
@@ -299,10 +301,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeACColor)
         end
     elseif phase == PhaseDrawAC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeACStart, EdgeACEnd,
-            EdgeBrush, EdgeACColor,
-            edge_a_c_host_id, edge_a_c_joint1_id, edge_a_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeACStart, EdgeACEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeACColor,
+            line_host_id=edge_a_c_host_id,
+            line_joint1_id=edge_a_c_joint1_id,
+            line_joint2_id=edge_a_c_joint2_id)
 
         timer += dt
         if timer >= DrawEdgeDuration
@@ -324,10 +330,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeBCColor)
         end
     elseif phase == PhaseDrawBC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, EdgeBCStart, EdgeBCEnd,
-            EdgeBrush, EdgeBCColor,
-            edge_b_c_host_id, edge_b_c_joint1_id, edge_b_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            EdgeBCStart, EdgeBCEnd;
+            penbrush=EdgeBrush,
+            pencolor=EdgeBCColor,
+            line_host_id=edge_b_c_host_id,
+            line_joint1_id=edge_b_c_joint1_id,
+            line_joint2_id=edge_b_c_joint2_id)
 
         timer += dt
         if timer >= DrawEdgeDuration
@@ -348,11 +358,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawMarker
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, MarkerDrawDuration,
-            PointA, MarkerStart,
-            AngleTheta, MarkerRadius, MarkerBrush, MarkerColor,
-            marker_host_id, marker_start_id, marker_end_id)
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, MarkerDrawDuration, PointA,
+            MarkerStart, AngleTheta, MarkerRadius;
+            brush=MarkerBrush,
+            color=MarkerColor,
+            marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id,
+            marker_end_id=marker_end_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

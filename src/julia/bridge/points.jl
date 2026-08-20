@@ -124,8 +124,9 @@ function create_new_label_decorated(state_ptr::Ptr{Cvoid},
     label::UInt32, decoration_kind::Integer, x::Real, y::Real, z::Real,
     color::BridgeColor, brush_size::Real)
     pos = (Float32(x), Float32(y), Float32(z))
-    return @ccall create_new_label_decorated(state_ptr::Ptr{Cvoid}, label::UInt32,
-        Int32(decoration_kind)::Int32, pos::NTuple{3, Cfloat},
+    glyph = BridgeLabelGlyph(label, Int32(decoration_kind))
+    return @ccall create_new_label_decorated(state_ptr::Ptr{Cvoid},
+        glyph::BridgeLabelGlyph, pos::NTuple{3, Cfloat},
         color::BridgeColor, brush_size::Cfloat)::BridgePointView
 end
 function create_new_label_decorated(state_ptr::Ptr{Cvoid},
@@ -309,8 +310,9 @@ Returns: a `BridgeShapeLine` describing the newly created line
 """
 function create_new_line(state_ptr::Ptr{Cvoid},
     x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    color::BridgeColor, brush_size::Real)
+    x2::Real, y2::Real, z2::Real;
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)),
+    brush_size::Real=0f0)
     pos1 = (Float32(x1), Float32(y1), Float32(z1))
     pos2 = (Float32(x2), Float32(y2), Float32(z2))
     return @ccall create_new_line(state_ptr::Ptr{Cvoid}, pos1::NTuple{3, Cfloat},
@@ -319,44 +321,26 @@ end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::BridgeColor, brush_size::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
-        color, brush_size)
-end
-function create_new_line(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    color::Colorant, brush_size::Real)
-    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brush_size)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3];
+        color=color, brush_size=brush_size)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::Colorant, brush_size::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
-        bridge_color(color), brush_size)
-end
-function create_new_line(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    color::Symbol, brush_size::Real)
-    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brush_size)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3];
+        color=bridge_color(color), brush_size=brush_size)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::Symbol, brush_size::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
-        bridge_color(color), brush_size)
-end
-function create_new_line(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    color::AbstractString, brush_size::Real)
-    create_new_line(state_ptr, x1, y1, z1, x2, y2, z2, bridge_color(color), brush_size)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3];
+        color=bridge_color(color), brush_size=brush_size)
 end
 function create_new_line(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     color::AbstractString, brush_size::Real)
-    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3],
-        bridge_color(color), brush_size)
+    create_new_line(state_ptr, pos1[1], pos1[2], pos1[3], pos2[1], pos2[2], pos2[3];
+        color=bridge_color(color), brush_size=brush_size)
 end
 
 """
@@ -381,11 +365,13 @@ Returns: a `BridgeShapeCircle` describing the newly created circle
 """
 function create_new_circle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::BridgeColor, brush_size::Real)
+    radius::Real, start_θ::Real, end_θ::Real;
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)),
+    brush_size::Real=0f0)
     pos = (Float32(x), Float32(y), Float32(z))
+    arc = BridgeArcGeometry(Cfloat(radius), Cfloat(start_θ), Cfloat(end_θ))
     return @ccall create_new_circle(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat},
-        radius::Cfloat, start_θ::Cfloat, end_θ::Cfloat,
+        arc::BridgeArcGeometry,
         color::BridgeColor, brush_size::Cfloat)::BridgeShapeCircle
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
@@ -393,50 +379,34 @@ function create_new_circle(state_ptr::Ptr{Cvoid},
     radius::Real, start_θ::Real, end_θ::Real,
     color::BridgeColor, brush_size::Real)
     create_new_circle(
-        state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ,
-        color, brush_size)
-end
-function create_new_circle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::Colorant, brush_size::Real)
-    create_new_circle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+        state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=color,
+        brush_size=brush_size)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::Colorant, brush_size::Real)
     create_new_circle(state_ptr, center[1], center[2], center[3], radius,
-        start_θ, end_θ, bridge_color(color), brush_size)
-end
-function create_new_circle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::Symbol, brush_size::Real)
-    create_new_circle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+        start_θ, end_θ;
+        color=bridge_color(color),
+        brush_size=brush_size)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::Symbol, brush_size::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
-end
-function create_new_circle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::AbstractString, brush_size::Real)
-    create_new_circle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=bridge_color(color),
+        brush_size=brush_size)
 end
 function create_new_circle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::AbstractString, brush_size::Real)
-    create_new_circle(state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+    create_new_circle(state_ptr, center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=bridge_color(color),
+        brush_size=brush_size)
 end
 
 """
@@ -461,61 +431,46 @@ Returns: a `BridgeShapeCircle` describing the newly created circle
 """
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::BridgeColor, brush_size::Real)
+    radius::Real, start_θ::Real, end_θ::Real;
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)),
+    brush_size::Real=0f0)
     pos = (Float32(x), Float32(y), Float32(z))
+    arc = BridgeArcGeometry(Cfloat(radius), Cfloat(start_θ), Cfloat(end_θ))
     return @ccall create_new_filledcircle(state_ptr::Ptr{Cvoid}, pos::NTuple{3, Cfloat},
-        radius::Cfloat, start_θ::Cfloat, end_θ::Cfloat,
+        arc::BridgeArcGeometry,
         color::BridgeColor, brush_size::Cfloat)::BridgeShapeFilledCircle
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::BridgeColor, brush_size::Real)
-    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
-        start_θ, end_θ, color, brush_size)
-end
-function create_new_filledcircle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::Colorant, brush_size::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+    create_new_filledcircle(state_ptr,
+        center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=color, brush_size=brush_size)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::Colorant, brush_size::Real)
-    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
-        start_θ, end_θ, bridge_color(color), brush_size)
-end
-function create_new_filledcircle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::Symbol, brush_size::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+    create_new_filledcircle(state_ptr,
+        center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=bridge_color(color), brush_size=brush_size)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::Symbol, brush_size::Real)
-    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
-        start_θ, end_θ, bridge_color(color), brush_size)
-end
-function create_new_filledcircle(state_ptr::Ptr{Cvoid},
-    x::Real, y::Real, z::Real,
-    radius::Real, start_θ::Real, end_θ::Real,
-    color::AbstractString, brush_size::Real)
-    create_new_filledcircle(state_ptr, x, y, z, radius, start_θ, end_θ,
-        bridge_color(color), brush_size)
+    create_new_filledcircle(state_ptr,
+        center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=bridge_color(color), brush_size=brush_size)
 end
 function create_new_filledcircle(state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     radius::Real, start_θ::Real, end_θ::Real,
     color::Symbol, brush_size::Real)
-    create_new_filledcircle(state_ptr, center[1], center[2], center[3], radius,
-        start_θ, end_θ, bridge_color(color), brush_size)
+    create_new_filledcircle(state_ptr,
+        center[1], center[2], center[3], radius, start_θ, end_θ;
+        color=bridge_color(color), brush_size=brush_size)
 end
 
 """
@@ -542,11 +497,11 @@ Parameters:
 
 Returns: a `BridgeShapeTriangle` describing the newly created triangle
 """
-function create_new_triangle(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    color::BridgeColor)
+function create_new_triangle(state_ptr::Ptr{Cvoid};
+    x1::Real=0f0, y1::Real=0f0, z1::Real=0f0,
+    x2::Real=0f0, y2::Real=0f0, z2::Real=0f0,
+    x3::Real=0f0, y3::Real=0f0, z3::Real=0f0,
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)))
     pos1 = (Float32(x1), Float32(y1), Float32(z1))
     pos2 = (Float32(x2), Float32(y2), Float32(z2))
     pos3 = (Float32(x3), Float32(y3), Float32(z3))
@@ -558,62 +513,38 @@ end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, color::BridgeColor)
-    create_new_triangle(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        color)
-end
-function create_new_triangle(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    color::Colorant)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
-        bridge_color(color))
+    create_new_triangle(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        color=color)
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, color::Colorant)
-    create_new_triangle(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        bridge_color(color))
-end
-function create_new_triangle(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    color::Symbol)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
-        bridge_color(color))
+    create_new_triangle(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        color=bridge_color(color))
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, color::Symbol)
-    create_new_triangle(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        bridge_color(color))
-end
-function create_new_triangle(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    color::AbstractString)
-    create_new_triangle(state_ptr, x1, y1, z1, x2, y2, z2, x3, y3, z3,
-        bridge_color(color))
+    create_new_triangle(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        color=bridge_color(color))
 end
 function create_new_triangle(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, color::AbstractString)
-    create_new_triangle(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        bridge_color(color))
+    create_new_triangle(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        color=bridge_color(color))
 end
 
 """
@@ -644,103 +575,64 @@ Parameters:
 
 Returns: a `BridgeShapeSquare` describing the newly created square
 """
-function create_new_square(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    color::BridgeColor)
+function create_new_square(state_ptr::Ptr{Cvoid};
+    x1::Real=0f0, y1::Real=0f0, z1::Real=0f0,
+    x2::Real=0f0, y2::Real=0f0, z2::Real=0f0,
+    x3::Real=0f0, y3::Real=0f0, z3::Real=0f0,
+    x4::Real=0f0, y4::Real=0f0, z4::Real=0f0,
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)))
     pos1 = (Float32(x1), Float32(y1), Float32(z1))
     pos2 = (Float32(x2), Float32(y2), Float32(z2))
     pos3 = (Float32(x3), Float32(y3), Float32(z3))
     pos4 = (Float32(x4), Float32(y4), Float32(z4))
+    vertices = BridgeSquareVertices((pos1, pos2, pos3, pos4))
     return @ccall create_new_square(
-        state_ptr::Ptr{Cvoid}, pos1::NTuple{3, Cfloat},
-        pos2::NTuple{3, Cfloat}, pos3::NTuple{3, Cfloat}, pos4::NTuple{3, Cfloat},
+        state_ptr::Ptr{Cvoid}, vertices::BridgeSquareVertices,
         color::BridgeColor)::BridgeShapeSquare
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::BridgeColor)
-    create_new_square(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        color)
-end
-function create_new_square(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    color::Colorant)
-    create_new_square(
-        state_ptr, x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        bridge_color(color))
+    create_new_square(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        color=color)
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::Colorant)
-    create_new_square(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        bridge_color(color))
-end
-function create_new_square(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    color::Symbol)
-    create_new_square(
-        state_ptr, x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        bridge_color(color))
+    create_new_square(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        color=bridge_color(color))
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::Symbol)
-    create_new_square(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        color)
-end
-function create_new_square(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    color::AbstractString)
-    create_new_square(
-        state_ptr, x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        bridge_color(color))
+    create_new_square(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        color=bridge_color(color))
 end
 function create_new_square(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     color::AbstractString)
-    create_new_square(
-        state_ptr, pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        color)
+    create_new_square(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        color=bridge_color(color))
 end
 
 """
@@ -757,123 +649,70 @@ Parameters:
 
 Returns: a `BridgeShapePentagon` describing the newly created pentagon
 """
-function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    x5::Real, y5::Real, z5::Real,
-    color::BridgeColor)
+function create_new_pentagon(state_ptr::Ptr{Cvoid};
+    x1::Real=0f0, y1::Real=0f0, z1::Real=0f0,
+    x2::Real=0f0, y2::Real=0f0, z2::Real=0f0,
+    x3::Real=0f0, y3::Real=0f0, z3::Real=0f0,
+    x4::Real=0f0, y4::Real=0f0, z4::Real=0f0,
+    x5::Real=0f0, y5::Real=0f0, z5::Real=0f0,
+    color::BridgeColor=BridgeColor(Uint8(0),Uint8(0),Uint8(0),Uint8(0)))
     pos1 = (Float32(x1), Float32(y1), Float32(z1))
     pos2 = (Float32(x2), Float32(y2), Float32(z2))
     pos3 = (Float32(x3), Float32(y3), Float32(z3))
     pos4 = (Float32(x4), Float32(y4), Float32(z4))
     pos5 = (Float32(x5), Float32(y5), Float32(z5))
+    vertices = BridgePentagonVertices((pos1, pos2, pos3, pos4, pos5))
     return @ccall create_new_pentagon(
-        state_ptr::Ptr{Cvoid},
-        pos1::NTuple{3, Cfloat}, pos2::NTuple{3, Cfloat}, pos3::NTuple{3, Cfloat},
-        pos4::NTuple{3, Cfloat}, pos5::NTuple{3, Cfloat},
+        state_ptr::Ptr{Cvoid}, vertices::BridgePentagonVertices,
         color::BridgeColor)::BridgeShapePentagon
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     pos5::AbstractVector{<:Real}, color::BridgeColor)
-    create_new_pentagon(
-        state_ptr,
-        pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        pos5[1], pos5[2], pos5[3],
-        color)
-end
-function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    x5::Real, y5::Real, z5::Real,
-    color::Colorant)
-    create_new_pentagon(
-        state_ptr,
-        x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        x5, y5, z5,
-        bridge_color(color))
+    create_new_pentagon(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        x5=pos5[1], y5=pos5[2], z5=pos5[3],
+        color=color)
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     pos5::AbstractVector{<:Real}, color::Colorant)
-    create_new_pentagon(
-        state_ptr,
-        pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        pos5[1], pos5[2], pos5[3],
-        bridge_color(color))
-end
-function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    x5::Real, y5::Real, z5::Real,
-    color::Symbol)
-    create_new_pentagon(
-        state_ptr,
-        x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        x5, y5, z5,
-        bridge_color(color))
+    create_new_pentagon(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        x5=pos5[1], y5=pos5[2], z5=pos5[3],
+        color=bridge_color(color))
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     pos5::AbstractVector{<:Real}, color::Symbol)
-    create_new_pentagon(
-        state_ptr,
-        pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        pos5[1], pos5[2], pos5[3],
-        bridge_color(color))
-end
-function create_new_pentagon(state_ptr::Ptr{Cvoid},
-    x1::Real, y1::Real, z1::Real,
-    x2::Real, y2::Real, z2::Real,
-    x3::Real, y3::Real, z3::Real,
-    x4::Real, y4::Real, z4::Real,
-    x5::Real, y5::Real, z5::Real,
-    color::AbstractString)
-    create_new_pentagon(
-        state_ptr,
-        x1, y1, z1,
-        x2, y2, z2,
-        x3, y3, z3,
-        x4, y4, z4,
-        x5, y5, z5,
-        bridge_color(color))
+    create_new_pentagon(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        x5=pos5[1], y5=pos5[2], z5=pos5[3],
+        color=bridge_color(color))
 end
 function create_new_pentagon(state_ptr::Ptr{Cvoid},
     pos1::AbstractVector{<:Real}, pos2::AbstractVector{<:Real},
     pos3::AbstractVector{<:Real}, pos4::AbstractVector{<:Real},
     pos5::AbstractVector{<:Real}, color::AbstractString)
-    create_new_pentagon(
-        state_ptr,
-        pos1[1], pos1[2], pos1[3],
-        pos2[1], pos2[2], pos2[3],
-        pos3[1], pos3[2], pos3[3],
-        pos4[1], pos4[2], pos4[3],
-        pos5[1], pos5[2], pos5[3],
-        bridge_color(color))
+    create_new_pentagon(state_ptr;
+        x1=pos1[1], y1=pos1[2], z1=pos1[3],
+        x2=pos2[1], y2=pos2[2], z2=pos2[3],
+        x3=pos3[1], y3=pos3[2], z3=pos3[3],
+        x4=pos4[1], y4=pos4[2], z4=pos4[3],
+        x5=pos5[1], y5=pos5[2], z5=pos5[3],
+        color=bridge_color(color))
 end
 
 """

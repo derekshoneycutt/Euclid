@@ -477,10 +477,12 @@ end
 function apply_softscope(runtime::Module, expr)
     try
         return REPL.softscope(runtime, expr)
-    catch
+    catch e
+        e isa Exception || rethrow()
         try
             return REPL.softscope(expr)
-        catch
+        catch inner
+            inner isa Exception || rethrow()
             return expr
         end
     end

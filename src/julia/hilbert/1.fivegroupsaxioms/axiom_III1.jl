@@ -105,11 +105,13 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line_a = OdinJuliaBridge.create_new_line(
-        state_ptr, LineAStart, LineAStart, LineAColor, 0f0)
+        state_ptr, LineAStart, LineAStart,
+        LineAColor, 0f0)
     point_a = OdinJuliaBridge.create_new_point(
         state_ptr, PointA, PointAColor, 0f0)
     parallel_line = OdinJuliaBridge.create_new_line(
-        state_ptr, ParallelStart, ParallelStart, ParallelColor, 0f0)
+        state_ptr, ParallelStart, ParallelStart,
+        ParallelColor, 0f0)
     labela = OdinJuliaBridge.create_new_label(
         state_ptr, 'a', LineaLabelPoint, LabelColor, 16f0)
     label_a = OdinJuliaBridge.create_new_label(
@@ -171,9 +173,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.show_point(state_ptr, labela_id)
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -213,10 +220,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawParallel
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, ParallelStart, ParallelEnd,
-            LineMaxBrush, ParallelColor,
-            parallel_host_id, parallel_joint1_id, parallel_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            ParallelStart, ParallelEnd;
+            penbrush=LineMaxBrush,
+            pencolor=ParallelColor,
+            line_host_id=parallel_host_id,
+            line_joint1_id=parallel_joint1_id,
+            line_joint2_id=parallel_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

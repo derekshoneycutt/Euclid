@@ -156,13 +156,17 @@ function initialize(state_ptr::Ptr{Cvoid})
     point_c = OdinJuliaBridge.create_new_point(
         state_ptr, CPoint, PointCColor, 0f0)
     line_a_b = OdinJuliaBridge.create_new_line(
-        state_ptr, LineABStart, LineABStart, LineABColor, 0f0)
+        state_ptr, LineABStart, LineABStart,
+        LineABColor, 0f0)
     line_a_c = OdinJuliaBridge.create_new_line(
-        state_ptr, LineACStart, LineACStart, LineACColor, 0f0)
+        state_ptr, LineACStart, LineACStart,
+        LineACColor, 0f0)
     line_b_c = OdinJuliaBridge.create_new_line(
-        state_ptr, LineBCStart, LineBCStart, LineBCColor, 0f0)
+        state_ptr, LineBCStart, LineBCStart,
+        LineBCColor, 0f0)
     linea = OdinJuliaBridge.create_new_line(
-        state_ptr, LineaStart, LineaStart, LineaColor, 0f0)
+        state_ptr, LineaStart, LineaStart,
+        LineaColor, 0f0)
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
     label_b = OdinJuliaBridge.create_new_label(
@@ -292,10 +296,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineABStart, LineABEnd,
-            LineMaxBrush, LineABColor,
-            line_a_b_host_id, line_a_b_joint1_id, line_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineABStart, LineABEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineABColor,
+            line_host_id=line_a_b_host_id,
+            line_joint1_id=line_a_b_joint1_id,
+            line_joint2_id=line_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -334,10 +342,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineAC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineACStart, LineACEnd,
-            LineMaxBrush, LineACColor,
-            line_a_c_host_id, line_a_c_joint1_id, line_a_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineACStart, LineACEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineACColor,
+            line_host_id=line_a_c_host_id,
+            line_joint1_id=line_a_c_joint1_id,
+            line_joint2_id=line_a_c_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -355,10 +367,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineBC
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineBCStart, LineBCEnd,
-            LineMaxBrush, LineBCColor,
-            line_b_c_host_id, line_b_c_joint1_id, line_b_c_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineBCStart, LineBCEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineBCColor,
+            line_host_id=line_b_c_host_id,
+            line_joint1_id=line_b_c_joint1_id,
+            line_joint2_id=line_b_c_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -376,10 +392,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLinea
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineaStart, LineaEnd,
-            LineMaxBrush, LineaColor,
-            linea_host_id, linea_joint1_id, linea_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineaStart, LineaEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineaColor,
+            line_host_id=linea_host_id,
+            line_joint1_id=linea_joint1_id,
+            line_joint2_id=linea_joint2_id)
 
         if timer / DrawLineDuration >= 0.18f0
             OdinJuliaBridge.show_point(state_ptr, labela_id)

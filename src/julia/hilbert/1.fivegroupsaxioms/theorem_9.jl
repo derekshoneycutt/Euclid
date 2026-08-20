@@ -291,9 +291,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             phase = PhaseArcToUnprimedPoint
@@ -339,10 +344,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLinePrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LinePrimeStart, LinePrimeEnd,
-            LineMaxBrush, LineColor, line_prime_host_id,
-            line_prime_joint1_id, line_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LinePrimeStart, LinePrimeEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor,
+            line_host_id=line_prime_host_id,
+            line_joint1_id=line_prime_joint1_id,
+            line_joint2_id=line_prime_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             OdinJuliaBridge.show_point(state_ptr,

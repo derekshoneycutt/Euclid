@@ -195,9 +195,11 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line_a = OdinJuliaBridge.create_new_line(
-        state_ptr, LineAStart, LineAStart, LineAColor, 0f0)
+        state_ptr, LineAStart, LineAStart,
+        LineAColor, 0f0)
     line_a_prime = OdinJuliaBridge.create_new_line(
-        state_ptr, LineAPrimeStart, LineAPrimeStart, LineAPrimeColor, 0f0)
+        state_ptr, LineAPrimeStart, LineAPrimeStart,
+        LineAPrimeColor, 0f0)
 
     point_a = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAColor, 0f0)
     point_b = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointBColor, 0f0)
@@ -322,10 +324,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, line_a_host_id,
-            line_a_joint1_id, line_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -403,10 +409,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineAPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAPrimeStart, LineAPrimeEnd,
-            LineMaxBrush, LineAPrimeColor,
-            line_a_prime_host_id, line_a_prime_joint1_id, line_a_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAPrimeStart, LineAPrimeEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAPrimeColor,
+            line_host_id=line_a_prime_host_id,
+            line_joint1_id=line_a_prime_joint1_id,
+            line_joint2_id=line_a_prime_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

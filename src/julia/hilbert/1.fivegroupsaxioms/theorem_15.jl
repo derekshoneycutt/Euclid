@@ -381,17 +381,23 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     base_line = OdinJuliaBridge.create_new_line(
-        state_ptr, BaseLineStart, BaseLineStart, BaseLineColor, 0f0)
+        state_ptr, BaseLineStart, BaseLineStart,
+        BaseLineColor, 0f0)
     right_ray = OdinJuliaBridge.create_new_line(
-        state_ptr, RightRayStart, RightRayStart, RightRayColor, 0f0)
+        state_ptr, RightRayStart, RightRayStart,
+        RightRayColor, 0f0)
     base_line_prime = OdinJuliaBridge.create_new_line(
-        state_ptr, BaseLinePrimeStart, BaseLinePrimeStart, BaseLineColor, 0f0)
+        state_ptr, BaseLinePrimeStart, BaseLinePrimeStart,
+        BaseLineColor, 0f0)
     right_ray_prime = OdinJuliaBridge.create_new_line(
-        state_ptr, RightRayPrimeStart, RightRayPrimeStart, RightRayColor, 0f0)
+        state_ptr, RightRayPrimeStart, RightRayPrimeStart,
+        RightRayColor, 0f0)
     right_ray_double = OdinJuliaBridge.create_new_line(
-        state_ptr, RightRayStart, RightRayStart, ContradictionColor, 0f0)
+        state_ptr, RightRayStart, RightRayStart,
+        ContradictionColor, 0f0)
     right_ray_triple = OdinJuliaBridge.create_new_line(
-        state_ptr, RightRayStart, RightRayStart, ContradictionColor, 0f0)
+        state_ptr, RightRayStart, RightRayStart,
+        ContradictionColor, 0f0)
 
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
@@ -559,10 +565,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawBaseLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, BaseLineStart, BaseLineEnd,
-            EdgeBrush, BaseLineColor, base_line_host_id,
-            base_line_joint1_id, base_line_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            BaseLineStart, BaseLineEnd;
+            penbrush=EdgeBrush,
+            pencolor=BaseLineColor,
+            line_host_id=base_line_host_id,
+            line_joint1_id=base_line_joint1_id,
+            line_joint2_id=base_line_joint2_id)
         if timer >= DrawEdgeDuration * BaseLineAMidShare
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
         end
@@ -582,10 +592,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRightRay
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RightRayStart, RightRayEnd,
-            EdgeBrush, RightRayColor, right_ray_host_id,
-            right_ray_joint1_id, right_ray_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RightRayStart, RightRayEnd;
+            penbrush=EdgeBrush,
+            pencolor=RightRayColor,
+            line_host_id=right_ray_host_id,
+            line_joint1_id=right_ray_joint1_id,
+            line_joint2_id=right_ray_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_id)
@@ -603,11 +617,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawBaseLinePrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, BaseLinePrimeStart, BaseLinePrimeEnd,
-            EdgeBrush, BaseLineColor,
-            base_line_prime_host_id, base_line_prime_joint1_id,
-            base_line_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            BaseLinePrimeStart, BaseLinePrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=BaseLineColor,
+            line_host_id=base_line_prime_host_id,
+            line_joint1_id=base_line_prime_joint1_id,
+            line_joint2_id=base_line_prime_joint2_id)
         if timer >= DrawEdgeDuration * BaseLinePrimeAMidShare
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
         end
@@ -628,11 +645,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRightRayPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RightRayPrimeStart, RightRayPrimeEnd,
-            EdgeBrush, RightRayColor,
-            right_ray_prime_host_id, right_ray_prime_joint1_id,
-            right_ray_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RightRayPrimeStart, RightRayPrimeEnd;
+            penbrush=EdgeBrush,
+            pencolor=RightRayColor,
+            line_host_id=right_ray_prime_host_id,
+            line_joint1_id=right_ray_prime_joint1_id,
+            line_joint2_id=right_ray_prime_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_prime_id)
@@ -680,7 +700,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointA,
-            MarkerBADStart, MarkerCADStart, 0.18f0, 1, :none)
+            MarkerBADStart, MarkerCADStart; height=0.18f0)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightCADForward
@@ -708,7 +728,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerCADStart, MarkerBPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerCADStart, MarkerBPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeBADForward
@@ -738,7 +758,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointAPrime,
-            MarkerBPrimeADPrimeStart, MarkerCPrimeADPrimeStart, 0.18f0, 1, :none)
+            MarkerBPrimeADPrimeStart, MarkerCPrimeADPrimeStart; height=0.18f0)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeCADForward
@@ -786,11 +806,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRightRayDouble
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RightRayStart, RightRayDoubleEnd,
-            EdgeBrush, ContradictionColor,
-            right_ray_double_host_id, right_ray_double_joint1_id,
-            right_ray_double_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RightRayStart, RightRayDoubleEnd;
+            penbrush=EdgeBrush,
+            pencolor=ContradictionColor,
+            line_host_id=right_ray_double_host_id,
+            line_joint1_id=right_ray_double_joint1_id,
+            line_joint2_id=right_ray_double_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_double_id)
@@ -840,7 +863,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerBADDoubleStart, MarkerBPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerBADDoubleStart, MarkerBPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeBADFireForward
@@ -870,7 +893,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointA,
-            MarkerBPrimeADPrimeStart, MarkerCADDoubleStart, 0.22f0, 1, :none)
+            MarkerBPrimeADPrimeStart, MarkerCADDoubleStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightCADDoubleForward
@@ -900,7 +923,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerCADDoubleStart, MarkerCPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerCADDoubleStart, MarkerCPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeCADFireForward
@@ -950,11 +973,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawRightRayTriple
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawEdgeDuration, RightRayStart, RightRayTripleEnd,
-            EdgeBrush, ContradictionColor,
-            right_ray_triple_host_id, right_ray_triple_joint1_id,
-            right_ray_triple_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawEdgeDuration,
+            RightRayStart, RightRayTripleEnd;
+            penbrush=EdgeBrush,
+            pencolor=ContradictionColor,
+            line_host_id=right_ray_triple_host_id,
+            line_joint1_id=right_ray_triple_joint1_id,
+            line_joint2_id=right_ray_triple_joint2_id)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_triple_id)
@@ -1005,7 +1031,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerBADTripleStart, MarkerBPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerBADTripleStart, MarkerBPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeBADFireAgainForward
@@ -1035,7 +1061,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointA,
-            MarkerBPrimeADPrimeStart, MarkerCADTripleStart, 0.22f0, 1, :none)
+            MarkerBPrimeADPrimeStart, MarkerCADTripleStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightCADTripleForward
@@ -1065,7 +1091,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerCADTripleStart, MarkerCPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerCADTripleStart, MarkerCPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeCADFireAgainForward
@@ -1097,7 +1123,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointA,
-            MarkerCPrimeADPrimeStart, MarkerBADStart, 0.22f0, 1, :none)
+            MarkerCPrimeADPrimeStart, MarkerBADStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightBADLightForward
@@ -1125,7 +1151,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointA,
-            MarkerBADStart, MarkerCADStart, 0.18f0, 1, :none)
+            MarkerBADStart, MarkerCADStart; height=0.18f0)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightCADLightForward
@@ -1153,7 +1179,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointA, PointAPrime,
-            MarkerCADStart, MarkerBPrimeADPrimeStart, 0.22f0, 1, :none)
+            MarkerCADStart, MarkerBPrimeADPrimeStart)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeBADLightForward
@@ -1183,7 +1209,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         EuclidAnimations.animate_compass_arcmove(
             state_ptr, timer, ArcMoveDuration,
             PointAPrime, PointAPrime,
-            MarkerBPrimeADPrimeStart, MarkerCPrimeADPrimeStart, 0.18f0, 1, :none)
+            MarkerBPrimeADPrimeStart, MarkerCPrimeADPrimeStart; height=0.18f0)
         timer += dt
         if timer >= ArcMoveDuration
             phase = PhaseHighlightPrimeCADLightForward

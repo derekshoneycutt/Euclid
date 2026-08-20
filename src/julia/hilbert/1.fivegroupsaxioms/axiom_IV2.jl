@@ -204,15 +204,20 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     line_a_b = OdinJuliaBridge.create_new_line(
-        state_ptr, LineABStart, LineABStart, LineABColor, 0f0)
+        state_ptr, LineABStart, LineABStart,
+        LineABColor, 0f0)
     line_a_prime = OdinJuliaBridge.create_new_line(
-        state_ptr, LineAPrimeStart, LineAPrimeStart, LineAPrimeColor, 0f0)
+        state_ptr, LineAPrimeStart, LineAPrimeStart,
+        LineAPrimeColor, 0f0)
     line_a_double_prime = OdinJuliaBridge.create_new_line(
         state_ptr, LineADoublePrimeStart,
-        LineADoublePrimeStart, LineADoublePrimeColor, 0f0)
+        LineADoublePrimeStart,
+        LineADoublePrimeColor, 0f0)
 
-    point_a = OdinJuliaBridge.create_new_point(state_ptr, PointA, PointAColor, 0f0)
-    point_b = OdinJuliaBridge.create_new_point(state_ptr, PointB, PointBColor, 0f0)
+    point_a = OdinJuliaBridge.create_new_point(
+        state_ptr, PointA, PointAColor, 0f0)
+    point_b = OdinJuliaBridge.create_new_point(
+        state_ptr, PointB, PointBColor, 0f0)
     point_a_prime = OdinJuliaBridge.create_new_point(
         state_ptr, PointAPrime, PointAPrimeColor, 0f0)
     point_b_prime = OdinJuliaBridge.create_new_point(
@@ -327,7 +332,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     label_b_double_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
         state_ptr, MetaLabelBDoublePrimeId))
 
-    if line_a_b_host_id < 0 || line_a_prime_host_id < 0 || line_a_double_prime_host_id < 0
+    if line_a_b_host_id < 0 || line_a_prime_host_id < 0 ||
+        line_a_double_prime_host_id < 0
         return
     end
 
@@ -344,10 +350,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineABStart, LineABEnd,
-            LineMaxBrush, LineABColor, line_a_b_host_id,
-            line_a_b_joint1_id, line_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineABStart, LineABEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineABColor,
+            line_host_id=line_a_b_host_id,
+            line_joint1_id=line_a_b_joint1_id,
+            line_joint2_id=line_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -404,10 +414,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineAPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineAPrimeStart, LineAPrimeEnd,
-            LineMaxBrush, LineAPrimeColor, line_a_prime_host_id,
-            line_a_prime_joint1_id, line_a_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineAPrimeStart, LineAPrimeEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAPrimeColor,
+            line_host_id=line_a_prime_host_id,
+            line_joint1_id=line_a_prime_joint1_id,
+            line_joint2_id=line_a_prime_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -467,11 +481,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineADoublePrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineADoublePrimeStart,
-            LineADoublePrimeEnd, LineMaxBrush, LineADoublePrimeColor,
-            line_a_double_prime_host_id, line_a_double_prime_joint1_id,
-            line_a_double_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineADoublePrimeStart, LineADoublePrimeEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineADoublePrimeColor,
+            line_host_id=line_a_double_prime_host_id,
+            line_joint1_id=line_a_double_prime_joint1_id,
+            line_joint2_id=line_a_double_prime_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration

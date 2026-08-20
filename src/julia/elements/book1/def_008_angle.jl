@@ -128,19 +128,13 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     marker = OdinJuliaBridge.create_new_filledcircle(
-        state_ptr,
-        JointPoint[1], JointPoint[2], JointPoint[3],
-        MarkerRadius, 0f0, 0f0,
+        state_ptr, JointPoint, MarkerRadius, 0f0, 0f0,
         MarkerColor, 0f0)
     line1 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Line1Start[1], Line1Start[2], Line1Start[3],
-        Line1Start[1], Line1Start[2], Line1Start[3],
+        state_ptr, Line1Start, Line1Start,
         LineColor1, 0f0)
     line2 = OdinJuliaBridge.create_new_line(
-        state_ptr,
-        Line2Start[1], Line2Start[2], Line2Start[3],
-        Line2Start[1], Line2Start[2], Line2Start[3],
+        state_ptr, Line2Start, Line2Start,
         LineColor2, 0f0)
 
     OdinJuliaBridge.set_animation_meta(state_ptr, MetaLine1HostId, line1.host_id)
@@ -202,9 +196,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine1
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Line1Start, Line1End,
-            LineMaxBrush, LineColor1, line1_host_id, line1_joint1_id, line1_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Line1Start, Line1End;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor1,
+            line_host_id=line1_host_id,
+            line_joint1_id=line1_joint1_id,
+            line_joint2_id=line1_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -222,9 +221,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine2
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, Line2Start, Line2End,
-            LineMaxBrush, LineColor2, line2_host_id, line2_joint1_id, line2_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            Line2Start, Line2End;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor2,
+            line_host_id=line2_host_id,
+            line_joint1_id=line2_joint1_id,
+            line_joint2_id=line2_joint2_id)
 
         timer += dt
         if timer >= DrawLineDuration
@@ -246,10 +250,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseCompassDrawMarker
-        EuclidAnimations.animate_draw_filledcircle(
-            state_ptr, timer, CompassDrawDuration, JointPoint, MarkerStart,
-            AngleTheta, MarkerRadius, MarkerBrush, MarkerColor,
-            marker_host_id, marker_start_id, marker_end_id)
+        EuclidAnimations.animate_draw_filledcircle(state_ptr,
+            timer, CompassDrawDuration, JointPoint,
+            MarkerStart, AngleTheta, MarkerRadius;
+            brush=MarkerBrush,
+            color=MarkerColor,
+            marker_host_id=marker_host_id,
+            marker_start_id=marker_start_id,
+            marker_end_id=marker_end_id)
 
         timer += dt
         if timer >= CompassDrawDuration

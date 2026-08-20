@@ -318,10 +318,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawCircle
-        EuclidAnimations.animate_draw_circle(
-            state_ptr, timer, CircleDrawDuration, CenterPoint, CircleStartPoint,
-            CircleSweepTheta, Radius, CircleBrush, CircleColor,
-            circle_hostid, circle_startid, circle_endid)
+        EuclidAnimations.animate_draw_circle(state_ptr,
+            timer, CircleDrawDuration, CenterPoint,
+            CircleStartPoint, CircleSweepTheta, Radius;
+            brush=CircleBrush,
+            color=CircleColor,
+            marker_host_id=circle_hostid,
+            marker_start_id=circle_startid,
+            marker_end_id=circle_endid)
 
         timer += dt
         if timer >= CircleDrawDuration

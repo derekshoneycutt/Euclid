@@ -267,10 +267,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
         end
     elseif phase == PhaseDrawBoundaryLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
-            LineMaxBrush, LineColor,
-            boundary_line_host_id, boundary_line_joint1_id, boundary_line_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineStart, LineEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineColor,
+            line_host_id=boundary_line_host_id,
+            line_joint1_id=boundary_line_joint1_id,
+            line_joint2_id=boundary_line_joint2_id)
 
         if timer / DrawLineDuration >= 0.5f0
             OdinJuliaBridge.show_point(state_ptr, line_label_id)
@@ -335,10 +339,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, SegmentABColor)
         end
     elseif phase == PhaseDrawSegmentAB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointA, PointB,
-            LineMaxBrush, SegmentABColor,
-            segment_a_b_host_id, segment_a_b_joint1_id, segment_a_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointA, PointB;
+            penbrush=LineMaxBrush,
+            pencolor=SegmentABColor,
+            line_host_id=segment_a_b_host_id,
+            line_joint1_id=segment_a_b_joint1_id,
+            line_joint2_id=segment_a_b_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration
@@ -378,11 +386,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, SegmentAAPrimeColor)
         end
     elseif phase == PhaseDrawSegmentAAPrime
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawSegmentDuration, PointA, PointAPrime,
-            LineMaxBrush, SegmentAAPrimeColor,
-            segment_a_a_prime_host_id, segment_a_a_prime_joint1_id,
-            segment_a_a_prime_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawSegmentDuration,
+            PointA, PointAPrime;
+            penbrush=LineMaxBrush,
+            pencolor=SegmentAAPrimeColor,
+            line_host_id=segment_a_a_prime_host_id,
+            line_joint1_id=segment_a_a_prime_joint1_id,
+            line_joint2_id=segment_a_a_prime_joint2_id)
 
         timer += dt
         if timer >= DrawSegmentDuration

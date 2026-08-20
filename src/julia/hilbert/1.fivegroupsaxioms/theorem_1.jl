@@ -172,13 +172,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, LineBStart, LineBStart, LineBColor, 0f0)
     intersection_point = OdinJuliaBridge.create_new_point(
         state_ptr, IntersectionPoint, IntersectionColor, 0f0)
-    plane_beta = OdinJuliaBridge.create_new_square(
-        state_ptr,
-        PlaneEdgeLeft,
-        PlaneEdgeRight,
-        PlaneTopRight,
-        PlaneTopLeft,
-        PlaneColor)
+    plane_beta = OdinJuliaBridge.create_new_square(state_ptr,
+        PlaneEdgeLeft, PlaneEdgeRight, PlaneTopRight, PlaneTopLeft, PlaneColor)
 
     OdinJuliaBridge.set_animation_meta(
         state_ptr, MetaPlaneHostId, plane_beta.host_id)
@@ -240,9 +235,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineA
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, LineAStart, LineAEnd,
-            LineMaxBrush, LineAColor, line_a_host_id, line_a_joint1_id, line_a_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            LineAStart, LineAEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineAColor,
+            line_host_id=line_a_host_id,
+            line_joint1_id=line_a_joint1_id,
+            line_joint2_id=line_a_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration
@@ -260,9 +260,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLineB
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, LineDrawDuration, LineBStart, LineBEnd,
-            LineMaxBrush, LineBColor, line_b_host_id, line_b_joint1_id, line_b_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, LineDrawDuration,
+            LineBStart, LineBEnd;
+            penbrush=LineMaxBrush,
+            pencolor=LineBColor,
+            line_host_id=line_b_host_id,
+            line_joint1_id=line_b_joint1_id,
+            line_joint2_id=line_b_joint2_id)
 
         timer += dt
         if timer >= LineDrawDuration

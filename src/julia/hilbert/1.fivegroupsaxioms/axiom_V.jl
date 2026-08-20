@@ -253,9 +253,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
         end
     elseif phase == PhaseDrawLine
-        EuclidAnimations.animate_draw_line(
-            state_ptr, timer, DrawLineDuration, LineStart, LineEnd,
-            EdgeBrush, LineColor, line_host_id, line_joint1_id, line_joint2_id)
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawLineDuration,
+            LineStart, LineEnd;
+            penbrush=EdgeBrush,
+            pencolor=LineColor,
+            line_host_id=line_host_id,
+            line_joint1_id=line_joint1_id,
+            line_joint2_id=line_joint2_id)
         timer += dt
         if timer >= DrawLineDuration
             phase = PhaseArcToA
