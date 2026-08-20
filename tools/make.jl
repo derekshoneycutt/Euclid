@@ -804,9 +804,9 @@ function load_verification_adapter()
         joinpath(SCRIPT_DIR, "tools", "analysis"))
     isfile(joinpath(analysis_project, "Project.toml")) || error(
         "Analysis submodule is not initialized. " *
-        "Run `git submodule update --init --recursive` and `./configure`.")
+        "Run `git submodule update --init --recursive`, then `make configure`.")
     include(verify_path)
-    return getglobal(Main, :EuclidVerification)
+    return Base.invokelatest(getglobal, Main, :EuclidVerification)
 end
 
 """Return verification arguments with the canonical report default applied."""
@@ -819,14 +819,16 @@ end
 function run_verification_gate(
     selection::Symbol, build_result, build_elapsed_ns::UInt64,
     verify_args::Vector{String})
-    verification = getglobal(Main, :EuclidVerification)
+    verification = Base.invokelatest(getglobal, Main, :EuclidVerification)
+    gate_args = with_default_report(verify_args)
     build_data = build_result === nothing ? nothing : (
         detail="Euclid application",
         elapsed_ns=build_elapsed_ns,
         exit_code=build_result.exit_code,
         output=build_result.stdout * build_result.stderr)
-    return Base.invokelatest(verification.driver_gate,
-        with_default_report(verify_args), selection, build_data)
+    return Base.invokelatest() do
+        verification.driver_gate(gate_args, selection, build_data)
+    end
 end
 
 """Copy all files under a source directory into a destination directory tree."""
