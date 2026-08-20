@@ -1,23 +1,25 @@
 """
-C-compatible bundle of animation callback pointers passed to the native bridge
-when registering animation interfaces. Field order must match the Odin
-`Animation_Callbacks` struct.
+C-compatible bundle of animation callback function objects passed to the native
+bridge when registering animation interfaces. Field order must match the Odin
+`Animation_Callbacks` struct; each `Any` field is laid out as a `jl_value_t*`,
+so the struct is ABI-identical to four opaque object pointers. The struct is
+mutable because functions are immutable Julia objects that cannot be passed
+through `pointer_from_objref`; the mutable wrapper owns the object references
+and is passed to C as a data pointer instead.
 """
-struct AnimationCallbacksABI
-    get_view_text::Ptr{Cvoid}
-    init::Ptr{Cvoid}
-    loop::Ptr{Cvoid}
-    clean::Ptr{Cvoid}
+mutable struct AnimationCallbacksABI
+    get_view_text::Any
+    init::Any
+    loop::Any
+    clean::Any
 end
 
 """
 Pack the four animation callback function objects into a C-compatible
-`AnimationCallbacksABI` struct by converting each to its object pointer.
+`AnimationCallbacksABI` struct.
 """
 function _animation_callbacks_abi(get_view_text, init, loop, clean)
-    AnimationCallbacksABI(
-        pointer_from_objref(get_view_text), pointer_from_objref(init),
-        pointer_from_objref(loop), pointer_from_objref(clean))
+    AnimationCallbacksABI(get_view_text, init, loop, clean)
 end
 
 """
@@ -62,7 +64,7 @@ function add_root_animation_interface(
     stable_id::String)
 
     callbacks = _animation_callbacks_abi(get_view_text, init, loop, clean)
-    GC.@preserve get_view_text init loop clean begin
+    GC.@preserve callbacks get_view_text init loop clean begin
         @ccall add_root_animation_interface(
             state_ptr::Ptr{Cvoid}, callbacks::Ref{AnimationCallbacksABI},
             name::Cstring, stable_id::Cstring)::Int64
@@ -92,7 +94,7 @@ function add_child_animation_interface(
     stable_id::String, parent_stable_id::String)
 
     callbacks = _animation_callbacks_abi(get_view_text, init, loop, clean)
-    GC.@preserve get_view_text init loop clean begin
+    GC.@preserve callbacks get_view_text init loop clean begin
         @ccall add_child_animation_interface(
             state_ptr::Ptr{Cvoid}, callbacks::Ref{AnimationCallbacksABI},
             name::Cstring, stable_id::Cstring, parent_stable_id::Cstring)::Int64
