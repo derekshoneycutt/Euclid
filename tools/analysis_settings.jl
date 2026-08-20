@@ -292,7 +292,8 @@ AnalysisSettings(
             "application",
             "src",
             "euclid-analysis",
-            ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"]),
+            ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"];
+            include_julia_linker_flags=true),
     ]),
     ReturnTupleSettings(2, 2),
     ParameterCountSettings(8, 5, 8),
