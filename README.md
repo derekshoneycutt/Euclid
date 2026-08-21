@@ -1,17 +1,19 @@
 # Euclid
 
-This is a basic project to create an application that animates Euclid's Elements.
+Euclid is a desktop visualization application for viewing geometric constructions based on
+pen, compass, and plane constructions. We focus on Euclid's Elements, and we also include
+sections such as Proclus's Commentaries, Hilbert's Foundations of Geometry, and algebraic
+demonstrations.
 
 This is primarily a Julia-focused application, utilizing the interactive nature of the
 langauge for animations and a REPL-like Scratchpad. Featuring the
 [JuliaMono](https://juliamono.netlify.app/) font, available under the OFL/SIL license.
 
-The code and documentation of this project is CC0 licensed.
+The code and documentation of this project is under The Unlicense, being public domain.
 
 The core application is coded in Odin, with Raylib used for rendering.
 
 1. [Building from Source](#building-from-source)
-1. [Documentation](#documentation)
 1. [Questions?](#questions)
     1. [Q: Why?](#q-why)
     1. [Q: What's the utility?](#q-whats-the-utility)
@@ -110,19 +112,6 @@ same steps natively in PowerShell; it additionally verifies the MSVC environment
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
 
-## Documentation
-
-- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki):
- published project documentation.
-- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
- generated Odin and
-  Julia APIs.
-- [Guides](docs/wiki/Guides/ArchitectureSummary.md):
- canonical authored architecture, coding, animation, and syntax documentation.
-
-Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
-The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
-against a fresh generation without modifying the retained artifact.
 
 ## Questions?
 
@@ -147,36 +136,25 @@ or some other tool.
 
 This is not going to be as strong as some would wish. For a project being released into
 the public domain, I just do not have the energy for a stronger stance in this project.
-The concerns are ethical and especially political. In that realm, this project is
-inherently hostile to copyright by its own licensing. The remaining concerns largely boil
-down to the sustainability. I feel absolutely no need to give AI any benefit of the doubt
-that it is actually sustainable enough to be worth its relatively low quality output.
-Otherwise, these concerns are difficult to address with a simple public domain geometry
-software project. A public domain project is really not the place for many of these
-ethical and political discussions. I will not be fighting that in this project. This will
-not be a project that is concerned with any stronger stance than demanding a human take
-full responsibility.
+A public domain project is really not the place for many of the ethical and political
+discussions. I will not be fighting that in this project. This will not be a project that
+is concerned with any stronger stance than demanding a human take full responsibility.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
 code sucks, and even AI will gladly point it out the second someone points a code review
-agent at it. Sometimes I see AI's suggested code and want to find the closest, highest
-bridge to save my eyes via a nice long fall. My recommendation for the vibecoders is to go
-try and program an OS with a basic text file editor to run in a VM using nothing but ASM,
-and no AI. Something difficult that you will get some taste from. Then whatever, man. Just
-read the code and fix the stupid shit.
+agent at it. The code suggested by AI is quite often not very good without modification.
 
-Finally, yes, there is code that has used AI in this. As the developer here, I do need to
-point out I often continue to experiment with the AIs in order to show potential employers
-that I know how to use the things. They really are not very good on their own.
-Additionally, I (Derek) am getting my Masters in Computer Science, specializing in AI. So
-yes, I do practice in this codebase. Again, my rule at the very start stands. I take full
-responsibility and hand-work on all code. Sometimes, less than other times. I have added a
-comprehensive, opinionated static analysis engine *even moreso* because I forget things
-and do embarrasingly stupid things even when I am coding by hand. If an AI driver cannot
-explain how they have gotten code through this static analysis in this project, I will
-probably ban them without warning beyond this. You can use AI, but you **do** have to take
-full responsibility for that use with me.
+Finally, yes, there is code that has used AI in this. Again, my conclusion remains: They
+really are not very good on their own. I do need to point out I often continue to
+experiment with the AIs in order to show potential employers that I know how to use the
+things. Additionally, I am getting my Masters in Computer Science, specializing in AI. So
+yes, I do practice in this codebase. Again, I take full responsibility and hand-work on
+all code. I have added a comprehensive, opinionated static analysis engine; I did this
+*even moreso* because I forget things and do embarrasingly stupid things even when I am
+coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain how
+they have gotten code through this static analysis in this project, I'm not really
+interested in their code. I think that is a strong enough stance.
 
 ### Q: What is the "Scratchpad"?
 
@@ -195,8 +173,8 @@ via using Julia's `REPL` package directly, even scope issues should follow simil
 REPL standards for those already familiar.
 
 `:help` will show most of the important information for how to use the Scratchpad in
-practice. Importantly, starting a line with `?` will attempt to do a focused documentation
-query.
+practice. You can also type `?` to immediately enter the standard Julia REPL help mode,
+navigating the code documentation in the project.
 
 A quick cheatsheet for drawing the standard Euclidean matters:
 
@@ -207,19 +185,6 @@ A quick cheatsheet for drawing the standard Euclidean matters:
   : Animates drawing a line from [x1, y1, z1] to [x2, y2, z2].
 - `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
   : Animates drawing a circle centered at [x, y, z], with a radius of r.
-
-For additional help:
-
-- Following `?` with a variable name that contains a value of some struct type, a list of
-  properties of that struct type will be listed.
-- Following `?` with a module name (e.g. `?OdinJuliaBridge`) will attempt to list all
-  unique function names available in the name module.
-- Following `?` with a function name (e.g. `?OdinJuliaBrige.create_new_point`) will
-  attempt to display the documentation comment for that function and all parameter
-  variants.
-
-Not so secretly, this can be a helpful way to navigate the OdinJuliaBridge most of all,
-even if not using the Scratchpad for any other purpose. Kind of like man pages.
 
 #### Some details about using the Scratchpad
 
@@ -298,7 +263,7 @@ if vsync is on (the default). Additionally, you can toggle SIMD use for use in i
 projection, which is on by default. The SIMD has little effect either way on most modern
 computers, to be honest, especially given LLVM may make this optimization in either case.
 The single biggest performance tweak is the default-enabled GPU Dust Instancing, which
-will draw the dust particles with the GPU and O(1) on the CPU to instance the data.
+will draw the dust particles with the GPU.
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
@@ -362,7 +327,7 @@ The build driver (`tools/make.jl`, normally reached through `make` or `make.ps1`
 has several helpful parameters if the simple stuff above is not enough.
 
 ```text
-Usage: ./make.jl [options]
+Usage: make.jl [options]
 
 Options:
     --build, -b         Build the project. (default)
@@ -416,13 +381,16 @@ I have added an initial architecture summary and coding standards that can be yo
 - [Coding Standards](docs/wiki/Guides/CodingStandards.md): describes how any new code
   should be written
 
-The project was initially quite messy, without a standard and with all the artifacts of
-exploring and learning a new-to-me language, as well as me not really being a traditional
-animation programmer in any sense of the restriction. I am more an application or backend
-engineer by trade. Additionally, some of the code was initially prototyped for a very
-different purpose. The result is some code not quite being as nice to the code standard.
-Nonetheless, the goal is to follow it moving forward, and probably fix up the bits that
-remain a bit off as I go.
+Some additional documentation is also available in the wiki, including the above:
+
+- [Euclid Wiki](https://github.com/derekshoneycutt/Euclid/wiki):
+ published project documentation.
+- [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
+ generated Odin and Julia API documentation.
+
+Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
+The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
+against a fresh generation without modifying the retained artifact.
 
 ### Q: What's this about hot-reload?
 
@@ -551,10 +519,8 @@ A derived **Complexity/Code** ratio is reported for Odin, Julia, and Total. This
 the average number of branch points per line of code. In general, if the Odin code
 remains moderately high (0.13-0.18) it is considered pretty good, and we generally
 expect the Julia code to remain low-moderate (0.05-0.13). The total being a moderate
-0.09-0.13 would be a great expectation. Treat the cross-language gap with some care:
-the two engines tokenize branch constructs slightly differently, so the ratio is most
-meaningful as a per-language trend over time rather than a precise side-by-side
-comparison. For meaningful per-function and per-file signal, the analyzer's
-function metric rules are more telling than these aggregate ratios.
-Nonetheless, the repository statistics can indicate issues with stupid code decisions
-we should feel bad about. And make us feel like 100x developers or something.
+0.09-0.13 would be a great expectation. The ratio is most meaningful as a per-language
+trend over time rather than a precise side-by-side comparison. For meaningful per-function
+and per-file signal, the analyzer's function metric rules are more telling than these
+aggregate ratios. Nonetheless, the repository statistics can indicate issues with stupid
+code decisions we should feel bad about.

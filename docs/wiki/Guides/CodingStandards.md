@@ -1,6 +1,9 @@
 # Coding Standards
 
-This document is the coding source of truth for this repository.
+This document and `tools/analysis_settings.jl` are the coding sources of truth
+for this repository. This guide defines the reviewable human standard;
+`tools/analysis_settings.jl` is the living configuration for its automated
+enforcement.
 
 ## Table Of Contents
 
@@ -35,9 +38,22 @@ Normative language and enforcement labels:
 | **Automated** | Checked by `make test` (the `julia make.jl -vt` gate), compiler flags, tests, or vet analysis. |
 | **Review** | Checked during code review because reliable automation is not yet available. |
 
+### Living Automated Policy
+
+`tools/analysis_settings.jl` is the current source of truth for analyzer rule
+responses, thresholds, scan configuration, and reviewed exceptions. It layers
+Euclid-specific policy over the analysis engine's baseline settings in
+`tools/analysis/settings.jl`.
+
+When a standard is automated, this document must agree with the active project
+settings. Update both surfaces when changing policy; do not document an
+enforcement level, threshold, or exception that the active settings do not
+implement.
+
 When guidance conflicts, use this precedence:
 
 1. Safety, correctness, ownership, and ABI requirements.
+1. Active automated policy in `tools/analysis_settings.jl`.
 1. Repository-specific rules in this document and `ArchitectureSummary.md`.
 1. Established local module conventions.
 1. Upstream Odin or Julia style guidance.
@@ -727,6 +743,8 @@ declaration's review contract.
 ## Standard Updates
 
 - Changes to this document must preserve clarity and enforceability.
+- When a change affects automated policy, update `tools/analysis_settings.jl`
+  in the same change and verify the resulting analysis behavior.
 - Avoid optimizing this document for line count when doing so removes
   rationale, scope, exceptions, or enforcement guidance.
 - Use tables and diagrams when they compress repeated structure without hiding nuance.

@@ -73,7 +73,7 @@ If you are new, read in this order:
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
 | **Julia** | Shared Animation Utilities | Reusable animation and geometry helper routines. | `src/julia/animations.jl`, `src/julia/geometry.jl`, `src/julia/nullanimation.jl` |
 | **Julia** | Interactive Runtime | Scratchpad/REPL session lifecycle, queueing, and evaluation flow. | `src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl` |
-| **Julia** | LaTeX Compiler | Compiles LaTeX to dynview command instructions. | `src/julia/latex.jl` |
+| **Julia** | LaTeX Compiler | Compiles LaTeX to dynview command instructions. | `src/julia/latex.jl`, `src/julia/latex/` |
 | **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
 
 Content-module contract:
@@ -155,23 +155,24 @@ Snapshot and display flow:
 ## Dynamic LaTeX Pipeline (Julia Parse + Odin Layout)
 
 Dynamic LaTeX support is now a first-class dynview path, not a special case.
-The parser and compiler live in `src/julia/latex.jl`; host import, measure,
-and draw live in `src/dynview/**` with bridge import boundaries in
-`src/bridge/dynview.odin`.
+`src/julia/latex.jl` defines the `EuclidLatex` module and includes the parser,
+cache, compiler, document-mode, and dynview-math implementations from
+`src/julia/latex/`. Host import, measure, and draw live in `src/dynview/**`
+with bridge import boundaries in `src/bridge/dynview.odin`.
 
 ### Parsing Algorithm (Julia)
 
-`src/julia/latex.jl` uses a recursive-descent parser with normalization and
-payload compilation:
+The `EuclidLatex` implementation uses a recursive-descent parser with
+normalization and payload compilation:
 
-| Stage | Core functions in `src/julia/latex.jl` | Result |
+| Stage | Implementation | Core functions | Result |
 | --- | --- | --- |
-| Tokenize | `tokenize_latex`, `read_command_token`, `read_text_token` | `LatexToken[]` stream |
-| Parse | `parse_sequence`, `parse_atom`, `parse_command_atom`, `consume_scripts!` | `LatexRun[]` semantic tree |
-| Normalize | `normalize_runs` and script canonicalization | Stable AST form |
-| Compile | `compile_emit_program`, `math_payload_ops_for_runs` | Recursive `MathPayloadOp[]` |
-| Serialize/Cache | `resolve_cache_entry`, `latex_to_plain_text` | Cached parse + canonical fallback |
-| Bridge Encode | `bridge_math_payload_preorder`, `replay_emit_math_block!` | Flat op stream + shared text blob |
+| Tokenize | `latex/lexer_parser.jl` | `tokenize_latex`, `read_command_token`, `read_text_token` | `LatexToken[]` stream |
+| Parse | `latex/lexer_parser.jl` | `parse_sequence`, `parse_atom`, `parse_command_atom`, `consume_scripts!` | `LatexRun[]` semantic tree |
+| Normalize | `latex/lexer_parser.jl` | `normalize_runs` and script canonicalization | Stable AST form |
+| Compile | `latex/compiler.jl`, `latex/dynview_math.jl` | `compile_emit_program`, `math_payload_ops_for_runs` | Recursive `MathPayloadOp[]` |
+| Serialize/Cache | `latex/compiler.jl`, `latex/cache.jl` | `resolve_cache_entry`, `latex_to_plain_text` | Cached parse + canonical fallback |
+| Bridge Encode | `latex/dynview_math.jl` | `bridge_math_payload_preorder`, `replay_emit_math_block!` | Flat op stream + shared text blob |
 
 Key parsing behavior now covered in tests includes nested scripts, accents,
 radicals, fractions, stretch delimiters, and matrix environments.
@@ -181,7 +182,7 @@ radicals, fractions, stretch delimiters, and matrix environments.
 ```mermaid
 flowchart LR
     A[Julia source string]
-    B[src/julia/latex.jl\nparse_latex]
+    B[src/julia/latex/lexer_parser.jl\nparse_latex]
     C[LatexRun tree]
     D[compile_emit_program\nMathPayloadOp tree]
     E[bridge_math_payload_preorder\nops + text blob]
@@ -497,7 +498,8 @@ make animations "fit in".
   and dedicated arenas for targeted subsystems.
 - Dynview is now a dual-path text system: fallback plain text plus validated
   structured streams.
-- LaTeX is parsed and compiled in Julia (`src/julia/latex.jl`) and laid
-  out/rendered in Odin dynview.
+- LaTeX is parsed and compiled by the Julia `EuclidLatex` module
+  (`src/julia/latex.jl` and `src/julia/latex/`) and laid out/rendered in Odin
+  dynview.
 - Assets are packaged and loaded at runtime, enabling script/content iteration
   without redesigning host architecture.
