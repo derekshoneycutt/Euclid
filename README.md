@@ -151,7 +151,7 @@ experiment with the AIs in order to show potential employers that I know how to 
 things. Additionally, I am getting my Masters in Computer Science, specializing in AI. So
 yes, I do practice in this codebase. Again, I take full responsibility and hand-work on
 all code. I have added a comprehensive, opinionated static analysis engine; I did this
-*even moreso* because I forget things and do embarrasingly stupid things even when I am
+*even moreso* because I forget things and do embarrassingly stupid things even when I am
 coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain how
 they have gotten code through this static analysis in this project, I'm not really
 interested in their code. I think that is a strong enough stance.

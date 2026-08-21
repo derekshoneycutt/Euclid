@@ -166,7 +166,7 @@ The `EuclidLatex` implementation uses a recursive-descent parser with
 normalization and payload compilation:
 
 | Stage | Implementation | Core functions | Result |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | Tokenize | `latex/lexer_parser.jl` | `tokenize_latex`, `read_command_token`, `read_text_token` | `LatexToken[]` stream |
 | Parse | `latex/lexer_parser.jl` | `parse_sequence`, `parse_atom`, `parse_command_atom`, `consume_scripts!` | `LatexRun[]` semantic tree |
 | Normalize | `latex/lexer_parser.jl` | `normalize_runs` and script canonicalization | Stable AST form |
