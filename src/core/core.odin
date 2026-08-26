@@ -1189,18 +1189,36 @@ Dynview_System :: struct {
 */
 
 
+MAX_TOOL_BRUSH_OCCLUDERS :: 2
+
 Tool_Render_State :: struct {
     shader: rl.Shader,
     ready: bool,
     loc_light_dir: i32,
     loc_ambient: i32,
     loc_diffuse: i32,
-    loc_specular_strength: i32,
-    loc_specular_power: i32,
+    loc_material_roughness: i32,
+    loc_material_fresnel_0: i32,
+    loc_material_specular_tint: i32,
+    loc_material_shadow_limit: i32,
     loc_p0: i32,
     loc_p1: i32,
     loc_radius: i32,
     loc_viewport_height: i32,
+    loc_stroke_mode: i32,
+    loc_strip_alpha: i32,
+    loc_strip_color: i32,
+    loc_strip_side_extent: i32,
+    loc_arc_intersections_enabled: i32,
+    loc_intersection_depth_width: i32,
+    loc_attachment_extent: i32,
+    loc_occluder_count: i32,
+    loc_occluder_p0: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
+    loc_occluder_p1: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
+    loc_occluder_radius: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
+    loc_occluder_depth0: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
+    loc_occluder_depth1: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
+    loc_occluder_tangent: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
 }
 
 Dust_Render_State :: struct {

@@ -458,6 +458,7 @@ Choose the owning module first, then touch that module's highlighted files.
 - **Rendering/UI behavior**:
   - Rendering and UI Module (`src/view/elements.odin`, `src/view/ui/ui.odin`,
     `src/view/core/view_core.odin`).
+  - Pen and compass shading contract: [ToolRendering.md](ToolRendering.md).
 - **Dynview text/math behavior**:
   - Dynview Runtime Module (`src/dynview/dynview.odin`,
     `src/dynview/compile.odin`, `src/dynview/layout_build.odin`,

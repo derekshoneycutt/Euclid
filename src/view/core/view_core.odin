@@ -32,7 +32,7 @@ WINDOW_TITLE :: "Euclid's Elements"
 JULIA_MONO_FONT_LOAD_SIZE :: 64
 
 BACKGROUND_COLOR :: rl.Color{36, 5, 16, 255}
-TOOL_COLOR :: rl.Color{96, 72, 82, 255}
+TOOL_COLOR :: rl.Color{175, 150, 150, 255}
 
 UI_BACK_COLOR :: rl.Color{66, 35, 46, 255}
 UI_BORDER_COLOR :: rl.Color{86, 55, 66, 255}
