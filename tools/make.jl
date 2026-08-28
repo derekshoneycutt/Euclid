@@ -19,6 +19,9 @@ Options:
     --vet, -v           Build, then run repository analysis. With --test, run the
                         full verification gate (build, tests, analyzer tests,
                         analyzer self-analysis, and repository analysis).
+    --stats=FILE        Show targeted statistics for one project Julia or Odin file.
+    --function=NAME     With --stats, select every exact function-name match.
+    --line=LINE         With --stats, select the innermost function at LINE.
     --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
     --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
     --                  Pass all remaining args directly to bin/euclid (only with --run).
@@ -36,6 +39,10 @@ Notes:
     - If no options are provided, the default is --build --assets.
     - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
     - Short options can be combined, e.g. -rvas or -Ba.
+
+Targeted statistics examples:
+    ./make.jl --stats=src/view/view.odin
+    ./make.jl --stats=src/view/view.odin --function=run_window_loop
 """
 end
 
@@ -43,6 +50,19 @@ end
 using Dates
 using Libdl
 using UUIDs
+
+struct SourceStatisticsRequest
+    path::String
+    function_name::Union{Nothing, String}
+    line::Union{Nothing, String}
+    format::String
+end
+
+mutable struct SourceStatisticsParseState
+    path::Union{Nothing, String}
+    function_name::Union{Nothing, String}
+    line::Union{Nothing, String}
+end
 
 struct Args
     run::Bool
@@ -59,6 +79,7 @@ struct Args
     no_assets::Bool
     help::Bool
     verify_args::Vector{String}
+    statistics::Union{Nothing, SourceStatisticsRequest}
 end
 
 struct CommandResult
@@ -260,6 +281,42 @@ function is_verification_option(arg::String)
         startswith(arg, "--report=")
 end
 
+"""Apply one targeted source-statistics option when recognized."""
+function apply_statistics_option!(state::SourceStatisticsParseState, arg::String)
+    if startswith(arg, "--stats=")
+        state.path === nothing || error("Only one --stats file may be requested.")
+        state.path = split(arg, "="; limit=2)[2]
+    elseif startswith(arg, "--function=")
+        state.function_name = split(arg, "="; limit=2)[2]
+    elseif startswith(arg, "--line=")
+        state.line = split(arg, "="; limit=2)[2]
+    else
+        return false
+    end
+    return true
+end
+
+"""Validate and construct an optional targeted source-statistics request."""
+function source_statistics_request(
+    state::SourceStatisticsParseState, verify_args::Vector{String})
+    selectors_present = state.function_name !== nothing || state.line !== nothing
+    state.path === nothing && selectors_present && error(
+        "--function and --line require --stats=FILE.")
+    state.path === nothing && return nothing
+    isempty(state.path) && error("The --stats file must not be empty.")
+    state.function_name !== nothing && isempty(state.function_name) && error(
+        "The --function name must not be empty.")
+    state.line !== nothing && isempty(state.line) && error(
+        "The --line value must not be empty.")
+    state.function_name !== nothing && state.line !== nothing && error(
+        "--function and --line are mutually exclusive.")
+    format_arg = findlast(arg -> startswith(arg, "--format="), verify_args)
+    format = format_arg === nothing ? "text" :
+        split(verify_args[format_arg], "="; limit=2)[2]
+    return SourceStatisticsRequest(
+        state.path, state.function_name, state.line, format)
+end
+
 """
 Parse command-line arguments into structured build flags, optional run arguments,
 and verification presentation options forwarded to the analysis gate.
@@ -278,9 +335,12 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
 
     parsed = Dict{Symbol,Bool}(field => false for field in ARG_FIELDS)
     verify_args = String[]
+    statistics = SourceStatisticsParseState(nothing, nothing, nothing)
 
     for arg in cli_args
-        if is_verification_option(arg)
+        if apply_statistics_option!(statistics, arg)
+            continue
+        elseif is_verification_option(arg)
             push!(verify_args, arg)
         else
             apply_cli_option!(parsed, arg)
@@ -291,7 +351,9 @@ function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
         error("Run arguments after -- are only valid with --run.")
     end
 
-    return Args((parsed[field] for field in ARG_FIELDS)..., verify_args), run_args
+    request = source_statistics_request(statistics, verify_args)
+    args = Args((parsed[field] for field in ARG_FIELDS)..., verify_args, request)
+    return args, run_args
 end
 
 """Resolve the full path to `vswhere.exe` on Windows."""
@@ -1107,7 +1169,7 @@ end
 
 """Return true when any build/run action flag was explicitly requested."""
 explicit_action_requested(args::Args) =
-    any(getfield(args, field) for field in (
+    args.statistics !== nothing || any(getfield(args, field) for field in (
         :run, :build, :assets, :sysimage, :harness,
         :vet, :test, :wiki, :check_wiki, :no_build, :no_assets))
 
@@ -1135,13 +1197,17 @@ end
 
 """Apply the build overrides implied by assets-only, test-only, and wiki-only runs."""
 function apply_build_overrides(args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    (assets_only_run(args) || test_only_run(args) || wiki_only_run(args)) && return false
+    (assets_only_run(args) || test_only_run(args) || wiki_only_run(args) ||
+        args.statistics !== nothing) && return false
     return do_build
 end
 
-"""Apply the asset overrides implied by test-only and wiki-only runs."""
-function apply_asset_overrides(args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    (test_only_run(args) || wiki_only_run(args)) && return false
+"""Apply the asset overrides implied by test-only, wiki-only, and statistics runs."""
+function apply_asset_overrides(
+    args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
+    skip_assets = test_only_run(args) || wiki_only_run(args) ||
+        args.statistics !== nothing
+    skip_assets && return false
     return do_assets
 end
 
@@ -1293,6 +1359,25 @@ function prepare_build_plan(args::Args, plan::BuildPlanToggles)
     return julia_flags, julia_bindir
 end
 
+"""Run targeted source statistics through the vendored analysis engine."""
+function run_source_statistics(request::SourceStatisticsRequest)
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    analyzer_script = joinpath(analysis_project, "analyze.jl")
+    isfile(analyzer_script) || error(
+        "Analysis submodule is not initialized. " *
+        "Run `git submodule update --init --recursive`, then `make configure`.")
+    source_path = isabspath(request.path) ? normpath(request.path) :
+        normpath(joinpath(SCRIPT_DIR, request.path))
+    arguments = String["stats", source_path, "--format=$(request.format)"]
+    request.function_name === nothing || push!(
+        arguments, "--function=$(request.function_name)")
+    request.line === nothing || push!(arguments, "--line=$(request.line)")
+    command = Cmd(vcat(
+        [JULIA_EXE, "--project=$analysis_project", analyzer_script], arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(args::Args, plan::BuildPlanToggles, run_args::Vector{String})
     julia_flags, julia_bindir = prepare_build_plan(args, plan)
@@ -1344,10 +1429,18 @@ function execute_requested_actions(
     try
         args.wiki && args.check_wiki && error(
             "Choose either --wiki or --check-wiki, not both.")
+        if args.statistics !== nothing && any(getfield(args, field) for field in (
+                :run, :build, :assets, :sysimage, :harness, :clean,
+                :vet, :test, :wiki, :check_wiki))
+            error("--stats must be used as a standalone action.")
+        end
         ensure_required_commands(
             plan.do_build, plan.do_assets, run_tests, args.wiki || args.check_wiki)
         plan_status = execute_build_plan(args, plan, run_args)
         plan_status == 0 || return plan_status
+        if args.statistics !== nothing
+            return run_source_statistics(args.statistics)
+        end
         if args.wiki || args.check_wiki
             run_wiki_action(args.check_wiki)
         end

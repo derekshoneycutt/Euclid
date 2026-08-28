@@ -6,11 +6,42 @@
 using Test
 
 include(joinpath(@__DIR__, "..", "verify.jl"))
+include(joinpath(@__DIR__, "..", "make.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
 
 @testset "Euclid tooling" begin
+    @testset "targeted source statistics" begin
+        file_args, run_args = parse_args(["--stats=src/view/view.odin"])
+        @test isempty(run_args)
+        @test file_args.statistics.path == "src/view/view.odin"
+        @test file_args.statistics.function_name === nothing
+        @test file_args.statistics.line === nothing
+        @test file_args.statistics.format == "text"
+
+        function_args, _ = parse_args([
+            "--stats=tools/make.jl",
+            "--function=run_source_statistics",
+            "--format=json",
+        ])
+        @test function_args.statistics.function_name == "run_source_statistics"
+        @test function_args.statistics.format == "json"
+
+        line_args, _ = parse_args([
+            "--stats=src/view/view.odin", "--line=211"])
+        @test line_args.statistics.line == "211"
+        plan = resolve_build_plan(line_args)
+        @test !plan.do_build
+        @test !plan.do_vet
+        @test !plan.do_assets
+
+        @test_throws ErrorException parse_args(["--function=missing_stats"])
+        @test_throws ErrorException parse_args(["--stats="])
+        @test_throws ErrorException parse_args([
+            "--stats=tools/make.jl", "--function=main", "--line=1"])
+    end
+
     @testset "suite definitions" begin
         suites = TestRunner.suite_definitions()
         @test [suite.name for suite in suites] == ["julia", "odin"]
