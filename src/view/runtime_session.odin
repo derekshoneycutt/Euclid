@@ -3,13 +3,18 @@ package view
 import view_core "core"
 import "../core"
 import "../dynview"
+import evidence_allocation "../evidence/allocation"
+import evidence_artifact "../evidence/artifact"
+import evidence_export "../evidence/export"
+import "../evidence/observe"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import "../files"
 import "../shapes"
 import julia "../bridge"
-import "../trace"
 
-import "base:runtime"
 import "core:fmt"
+import "core:log"
 import "core:math/linalg"
 import "core:time"
 
@@ -46,6 +51,8 @@ wait_for_julia_request :: proc(
         }
         if time.duration_seconds(time.tick_since(started_at)) >= timeout_seconds {
             fmt.eprintln("Julia request timed out; request id: ", request_id)
+            log.errorf("julia_request_timeout request_id=%d expected_kind=%d",
+                request_id, int(expected_kind))
             return false
         }
         free_all(context.temp_allocator)
@@ -56,22 +63,53 @@ wait_for_julia_request :: proc(
 //
 // Returns:
 //   - ok: true when the service was created and initialized.
-session_start_julia_service :: proc(out: ^Session_Julia_Service) -> bool {
-    julia_service, service_err := julia.create_julia_runtime_service()
+session_start_julia_service :: proc(
+    out: ^Session_Julia_Service, profile_path: string = "") -> bool {
+    julia_service, service_err := julia.create_julia_runtime_service(profile_path)
     if service_err != .None || julia_service == nil {
+        log.errorf("julia_startup_failed phase=service_create error=%d",
+            int(service_err))
         return false
     }
 
     initialize_id, initialize_sent :=
         julia.try_submit_julia_request(julia_service, .Initialize)
-    if !initialize_sent ||
-        !wait_for_julia_request(julia_service, initialize_id, .Initialized, 10.0) {
+    if !initialize_sent {
+        log.error("julia_startup_failed phase=initialize_submit")
+        julia.destroy_julia_runtime_service(julia_service)
+        return false
+    }
+    if !wait_for_julia_request(
+        julia_service, initialize_id, .Initialized, 10.0) {
         julia.destroy_julia_runtime_service(julia_service)
         return false
     }
     out.service = julia_service
     out.initialize_id = initialize_id
     return true
+}
+
+//   Derive the independent Julia-worker stream from the configured display path.
+julia_worker_profile_path :: proc(profile_path: string) -> string {
+    if len(profile_path) == 0 {
+        return ""
+    }
+    return fmt.tprintf("%s.worker.spall", profile_path)
+}
+
+//   Record one required Julia runtime lifecycle transition.
+record_runtime_lifecycle :: proc(
+    state: ^Euclid_General_State, kind: evidence_trace.Kind,
+    correlation: u64) {
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = kind,
+            correlation_kind = .Runtime_Request,
+            correlation = correlation,
+            generation = state^.julia_runtime_service^.runtime_generation,
+            flags = {.Required},
+        })
 }
 
 //   Allocate runtime state and complete the Julia content Invoke phase.
@@ -86,17 +124,24 @@ session_load_content :: proc(
 
     state := initiate_animations_state(julia_service, settings)
     if state == nil {
+        log.error("julia_startup_failed phase=state_create")
         julia.destroy_julia_runtime_service(julia_service)
         return false
     }
 
-    _ = trace.record_runtime_event_ex(
-        &state^.trace_state, "runtime.starting", julia_service^.runtime_generation,
-        int(julia_service^.reload_state), initialize_id)
+    record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
     content_id, content_sent := julia.try_submit_julia_request(
         julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
-    if !content_sent ||
-        !wait_for_julia_request(julia_service, content_id, .Invoke_Complete, 10.0) {
+    if !content_sent {
+        log.error("julia_startup_failed phase=content_submit")
+        shutdown_runtime_session(Euclid_Runtime_Session{
+            state = state,
+            julia_service = julia_service,
+        })
+        return false
+    }
+    if !wait_for_julia_request(
+        julia_service, content_id, .Invoke_Complete, 10.0) {
         shutdown_runtime_session(Euclid_Runtime_Session{
             state = state,
             julia_service = julia_service,
@@ -105,9 +150,9 @@ session_load_content :: proc(
     }
 
     julia.mark_julia_runtime_ready(julia_service)
-    _ = trace.record_runtime_event_ex(
-        &state^.trace_state, "runtime.ready", julia_service^.runtime_generation,
-        int(julia_service^.reload_state), content_id)
+    record_runtime_lifecycle(state, .Runtime_Ready, content_id)
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &state^.evidence_ring)
     out_state^ = state
     return true
 }
@@ -121,7 +166,8 @@ create_runtime_session :: proc(
 
     files.ensure_packaged_assets_unpacked_root()
     started: Session_Julia_Service
-    if !session_start_julia_service(&started) {
+    if !session_start_julia_service(
+        &started, julia_worker_profile_path(settings^.profile_path)) {
         return {}, false
     }
     julia_service := started.service
@@ -198,23 +244,30 @@ init_runtime_fields :: proc(
     view_core.screenshake_clear(state^.iso_scale)
 }
 
-//   Initialize trace state, freeing the state and returning false on failure.
-init_state_trace :: proc(
+//   Initialize typed evidence policy, freeing the state and returning false on failure.
+init_evidence_session :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) -> bool {
-    if !trace.initialize_trace_state(&state^.trace_state, settings) {
-        fmt.eprintln("Invalid semantic trace configuration.")
+    if !evidence_session.session_init(
+        &state^.evidence_session, settings^.evidence) {
+        fmt.eprintln("Invalid semantic evidence configuration.")
         destroy_simulation_executor(state^.simulation_executor)
         state^.simulation_executor = nil
         free_animations_state(state)
         return false
     }
-    if !trace.begin_trace(&state^.trace_state) {
-        fmt.eprintln("Failed to initialize semantic trace output.")
-        destroy_simulation_executor(state^.simulation_executor)
-        state^.simulation_executor = nil
-        free_animations_state(state)
-        return false
-    }
+    state^.julia_runtime_service^.evidence_session = &state^.evidence_session
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = .Session_Started,
+            flags = {.Required},
+        })
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = .Session_Configured,
+            flags = {.Required},
+        })
     return true
 }
 
@@ -230,6 +283,13 @@ initiate_animations_state :: proc(
     make_point_system(&point_system_parts)
 
     state := new(Euclid_General_State)
+    if !evidence_allocation.domain_init(
+        &state^.evidence_allocations, context.allocator, context.allocator) {
+        free(state)
+        free(particle_system)
+        free(point_system_parts.point_system)
+        return nil
+    }
     state^.saved_context = context
     state^.julia_runtime_service = julia_service
     state^.iso_scale = make_iso_scale()
@@ -238,6 +298,7 @@ initiate_animations_state :: proc(
     state^.particle_system = particle_system
     state^.compass = point_system_parts.compass
     state^.pen = point_system_parts.pen
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
     init_runtime_fields(state, settings)
     state^.simulation_executor = create_simulation_executor(state)
     if state^.simulation_executor == nil {
@@ -246,25 +307,78 @@ initiate_animations_state :: proc(
         return nil
     }
 
-    if !init_state_trace(state, settings) {
+    if !init_evidence_session(state, settings) {
         return nil
     }
 
     return state
 }
 
+//   Write the terminal scenario artifact when one was requested.
+write_scenario_artifact :: proc(
+    session: Euclid_Runtime_Session, runtime: ^Scenario_Runtime,
+    output: string) -> bool {
+    if runtime == nil || len(output) == 0 {
+        return true
+    }
+    result := evidence_artifact.Result.Inconclusive
+    if runtime.runner.status == .Passed {
+        result = .Passed
+    } else if runtime.runner.status == .Failed {
+        result = .Failed
+    }
+    events := session.state.evidence_session.events[
+        :session.state.evidence_session.event_count]
+    last_trace_sequence: u64
+    if len(events) > 0 {
+        last_trace_sequence = events[len(events) - 1].sequence
+    }
+    return evidence_artifact.write_bundle(output, {
+        manifest = {
+            result = result,
+            reason = runtime.terminal_reason,
+            failed_step = runtime.runner.step,
+            trace_complete = session.state.evidence_session.required_evidence_complete,
+            last_trace_sequence = last_trace_sequence,
+        },
+        events = events,
+        state = observe.display(session.state),
+        julia_host = observe.julia_host(session.julia_service),
+        allocations = observe.allocation(&session.state.evidence_allocations),
+    })
+}
+
 //   Shut down one runtime session in reverse ownership order.
-shutdown_runtime_session :: proc(session: Euclid_Runtime_Session) {
+shutdown_runtime_session :: proc(
+    session: Euclid_Runtime_Session,
+    scenario_runtime: ^Scenario_Runtime = nil,
+    artifact_output: string = "") -> int {
     if session.state == nil || session.julia_service == nil {
-        return
+        return 0
     }
 
-    trace_exit_code := trace.shutdown_trace_and_exit_code(&session.state^.trace_state)
     destroy_simulation_executor(session.state^.simulation_executor)
     session.state^.simulation_executor = nil
     shutdown_julia_runtime(session.state, session.julia_service)
+    _ = evidence_session.session_record(
+        &session.state^.evidence_session, &session.state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = .Session_Finished,
+            flags = {.Required},
+        })
+    evidence_session.session_accept_ring(
+        &session.state^.evidence_session, &session.state^.evidence_ring)
+    artifact_succeeded := write_scenario_artifact(
+        session, scenario_runtime, artifact_output)
+    export_succeeded := evidence_export.write_session_jsonl(
+        &session.state^.evidence_session) && artifact_succeeded
+    evidence_session.session_finish(
+        &session.state^.evidence_session, export_succeeded)
+    evidence_exit_failed := evidence_session.session_should_fail_process(
+        &session.state^.evidence_session)
     free_animations_state(session.state)
-    if trace_exit_code != 0 {
-        runtime.exit(trace_exit_code)
+    if evidence_exit_failed || !artifact_succeeded {
+        return 1
     }
+    return 0
 }

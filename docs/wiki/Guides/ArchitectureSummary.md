@@ -64,7 +64,8 @@ If you are new, read in this order:
 | **Odin** | Font Cache | JuliaMono residency, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Text/math command compilation, layout planning, and draw-ready dynview caches. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
-| **Odin** | Semantic Trace | Bounded trace configuration, JSONL serialization, overflow policy, and output lifecycle. | `src/trace/trace.odin` |
+| **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
+| **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle and strict bridge ABI surface. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
@@ -82,6 +83,12 @@ Content-module contract:
 - Root modules register tree/category nodes.
 - Leaf files provide `get_view_text`, `initialize`, `loop`, `clean`.
 - Bridge calls mutate host state while Julia controls pedagogical flow.
+
+Operational diagnostics are optional human-readable records written through the
+synchronized logger configured by `--diagnostics=PATH`. They describe process and
+subsystem lifecycle, degradation, and failures, but never determine application
+behavior. Typed semantic evidence remains authoritative for scenarios and behavioral
+verification, while `--profile=spall:PATH` records timing rather than diagnostics.
 
 ---
 

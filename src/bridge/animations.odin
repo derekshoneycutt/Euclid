@@ -3,8 +3,9 @@ package bridge
 import "../julialib"
 import "../core"
 import "../files"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import "../shapes"
-import "../trace"
 
 import "core:encoding/uuid"
 import "core:fmt"
@@ -242,8 +243,13 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
         return true
     }
 
-    _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_requested", {current_animation_generation(state), 0, "", ""})
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = .Animation_Reset_Requested,
+        correlation_kind = .Animation,
+        correlation = current_animation_generation(state),
+        generation = current_animation_generation(state),
+    })
     if !reset_current_animation_loop(state) {
         return false
     }
@@ -251,8 +257,14 @@ commit_pending_animation_reset :: proc(state: ^core.Euclid_General_State) -> boo
     state^.julia_interface^.animation_reset_cooldown_remaining =
         ANIMATION_RESET_MIN_INTERVAL
     state^.julia_interface^.pending_animation_reset = false
-    _ = trace.record_animation_event_ex(&state^.trace_state,
-        "animation.reset_committed", {current_animation_generation(state), 0, "", ""})
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = .Animation_Reset_Committed,
+        correlation_kind = .Animation,
+        correlation = current_animation_generation(state),
+        generation = current_animation_generation(state),
+        flags = {.Required},
+    })
     return true
 }
 
@@ -339,8 +351,14 @@ change_current_animation_loop :: proc(
     if state^.julia_runtime_service != nil {
         animation_generation = state^.julia_runtime_service^.animation_generation
     }
-    _ = trace.record_animation_event_ex(&state^.trace_state, "animation.selected",
-        {animation_generation, 0, animation^.name, ""})
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = .Animation_Selected,
+        correlation_kind = .Animation,
+        correlation = animation_generation,
+        generation = animation_generation,
+        flags = {.Required},
+    })
     return true
 }
 
@@ -586,12 +604,22 @@ record_runtime_reload_event :: proc(
         return
     }
     service := state^.julia_runtime_service
-    _ = trace.record_runtime_event_ex(
-        &state^.trace_state,
-        event_name,
-        service != nil ? service^.runtime_generation : 0,
-        service != nil ? int(service^.reload_state) : 0,
-        0)
+    kind := evidence_trace.Kind.Runtime_Reload_Started
+    flags: evidence_trace.Flags = {.Required}
+    if event_name == "runtime.reload_committed" {
+        kind = .Runtime_Reload_Committed
+    } else if event_name == "runtime.reload_rolled_back" {
+        kind = .Runtime_Reload_Rolled_Back
+        flags += {.Failure}
+    }
+    record_julia_evidence(state, {
+        lane = .Lifecycle,
+        kind = kind,
+        correlation_kind = .Animation_Tick,
+        correlation = service != nil ? service^.animation_tick_sequence : 0,
+        generation = service != nil ? service^.runtime_generation : 0,
+        flags = flags,
+    })
 }
 
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
@@ -601,12 +629,16 @@ reload_packaged_assets_if_updated :: proc(state: ^core.Euclid_General_State) -> 
         return true
     }
 
-    if asset_archive_mtime_current(state, archive_mtime) {
+    service := state^.julia_runtime_service
+    force_reload := service != nil && service^.reload_requested
+    if service != nil {
+        service^.reload_requested = false
+    }
+    if !force_reload && asset_archive_mtime_current(state, archive_mtime) {
         return true
     }
-
-    service := state^.julia_runtime_service
-    if service != nil && archive_mtime == service^.reload_failed_mtime_unix_nano {
+    if !force_reload && service != nil &&
+        archive_mtime == service^.reload_failed_mtime_unix_nano {
         return true
     }
     if service != nil {
@@ -773,8 +805,25 @@ notify_animation_cycle_boundary_local :: proc(state: ^core.Euclid_General_State)
     if state^.julia_runtime_service != nil {
         animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence
     }
-    _ = trace.record_animation_event_ex(&state^.trace_state, "animation.cycle_boundary",
-        {animation_generation, animation_tick_sequence, "", ""})
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = .Animation_Cycle_Boundary,
+        correlation_kind = .Animation_Tick,
+        correlation = animation_tick_sequence,
+        generation = animation_generation,
+        flags = {.Required},
+    })
+}
+
+//   Record one semantic event from the Julia owner without formatting or allocation.
+record_julia_evidence :: proc(
+    state: ^core.Euclid_General_State, event: evidence_trace.Event) {
+    if state == nil || state.julia_runtime_service == nil {
+        return
+    }
+    service := state.julia_runtime_service
+    _ = evidence_session.session_record(
+        service.evidence_session, &service.evidence_ring, event)
 }
 
 /* TODO : Can we kill this?

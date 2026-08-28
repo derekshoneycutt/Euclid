@@ -496,17 +496,192 @@ AnalysisSettings(
                 target="cache.preparation_arena",
                 certainty=:definite,
                 response=Ignore),
+            # Font preparation buffers use the dedicated preparation allocator and are
+            # released together when preparation is reset or destroyed.
             ReviewedAllocationPolicy(
-                "view-view-trace-snapshot",
-                "src/view/view.odin",
-                "record_checkpoint_trace_snapshot",
-                :implicit,
-                "Immediate destruction via defer immediately follows.";
-                operation="new",
-                target="core.Trace_Checkpoint_Snapshot",
+                "view-font-prepare-glyph-metadata",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_metadata",
+                :custom,
+                "Bounded glyph metadata owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
+                operation="make",
+                target="[]Prepared_Glyph",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-prepare-rectangle-metadata",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_metadata",
+                :custom,
+                "Bounded rectangle metadata owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
+                operation="make",
+                target="[]Prepared_Rectangle",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-prepare-atlas-pixels",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_atlas",
+                :custom,
+                "Sized font-atlas storage owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            # Task-pool storage is capacity-bounded and released by pool or fence teardown.
+            ReviewedAllocationPolicy(
+                "taskpool-backend-slots",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :custom,
+                "Fixed-capacity task slots allocated once during pool initialization and released during pool teardown.";
+                operation="make",
+                target="[]Task_Slot",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "taskpool-backend-completion-reserve",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :dynamic_growth,
+                "Completion storage is fully reserved to the configured task capacity before workers start.";
+                operation="reserve",
+                target="pool.backend.tasks_done",
+                certainty=:potential,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "taskpool-fence-handles",
+                "src/taskpool/taskpool.odin",
+                "task_fence_begin",
+                :custom,
+                "One handle per fixed task slot, released when the deterministic fence is completed.";
+                operation="make",
+                target="[]Task_Handle",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            # Evidence export allocates only at an explicit durable-output boundary.
+            ReviewedAllocationPolicy(
+                "evidence-artifact-trace-buffer",
+                "src/evidence/artifact/artifact.odin",
+                "artifact_trace_bytes",
+                :context,
+                "Bounded serialized trace buffer owned by bundle export and deleted after the write completes.";
+                operation="make",
+                target="[]byte",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             # Test Allocations -- every site is a test fixture destroyed by defer free
+            ReviewedAllocationPolicy(
+                "test-evidence-allocation-baseline-buffer",
+                "src/evidence/allocation/allocation_test.odin",
+                "allocation_test_baseline_restoration",
+                :custom,
+                "Bounded test allocation explicitly deleted before the tracked domain is destroyed.";
+                operation="make",
+                target="[]byte",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-allocation-foreign-buffer",
+                "src/evidence/allocation/allocation_test.odin",
+                "allocation_test_bad_free_is_evidence",
+                :context,
+                "Bounded bad-free test fixture released by defer in the test body.";
+                operation="make",
+                target="[]byte",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-observe-display-state",
+                "src/evidence/observe/observe_test.odin",
+                "observe_test_display_scalars",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="app_core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-observe-point-system",
+                "src/evidence/observe/observe_test.odin",
+                "observe_test_display_scalars",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="app_core.Shapes_Point_System",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-observe-particle-system",
+                "src/evidence/observe/observe_test.odin",
+                "observe_test_display_scalars",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="app_core.Particle_System",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-observe-display-julia-service",
+                "src/evidence/observe/observe_test.odin",
+                "observe_test_display_scalars",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="app_core.Julia_Runtime_Service",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-evidence-observe-julia-host-service",
+                "src/evidence/observe/observe_test.odin",
+                "observe_test_julia_host_scalars",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="app_core.Julia_Runtime_Service",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-font-preparation-arena-pages",
+                "src/view/font/font_test.odin",
+                "view_test_preparation_arena_reuses_committed_pages",
+                :custom,
+                "Two bounded test buffers verify reuse of the dedicated preparation arena before its explicit destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "test-view-scenario-actions-state",
+                "src/view/scenario_runtime_tests.odin",
+                "scenario_runtime_actions_use_display_owned_state",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-scenario-capture-state",
+                "src/view/scenario_runtime_tests.odin",
+                "scenario_runtime_waits_for_post_present_capture",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                target="Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
             ReviewedAllocationPolicy(
                 "test-gif-encode-collect-gce-packed-bytes",
                 "src/files/gif_encode_tests.odin",
@@ -1016,86 +1191,6 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=2,
                 maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-trace-json-serialization-escapes",
-                "src/trace/trace_tests.odin",
-                "trace_json_serialization_escapes_strings_and_writes_envelope",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-ring-wraps-monotonic-sequence",
-                "src/trace/trace_tests.odin",
-                "trace_ring_wraps_and_preserves_monotonic_sequence_order",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-strict-overflow-marks-invalid",
-                "src/trace/trace_tests.odin",
-                "trace_strict_overflow_marks_state_invalid",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-file-lifecycle-writes-records",
-                "src/trace/trace_tests.odin",
-                "trace_file_lifecycle_writes_started_config_and_finished_records",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-disabled-state-inert",
-                "src/trace/trace_tests.odin",
-                "trace_disabled_state_is_inert_and_does_not_emit",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-phase2-structured-events",
-                "src/trace/trace_tests.odin",
-                "trace_phase2_structured_events_include_expected_payload_fields",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-phase3-summary-events",
-                "src/trace/trace_tests.odin",
-                "trace_phase3_summary_events_include_geometry_tool_and_particle_payloads",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-checkpoint-snapshot-serializes",
-                "src/trace/trace_tests.odin",
-                "trace_checkpoint_snapshot_serializes_bounded_post_join_state",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
             ]),
     ReportSettings(
         BaseSettings.report.color,

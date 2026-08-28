@@ -103,20 +103,29 @@ cache_reload :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
 // Side effects:
 //   - Lazily initializes the arena and transitions one entry to Preparing and the
 //     operation to Retry; arena failure marks that entry Failed.
+cache_next_requested_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
+    for entry_index in 0..<FONT_KEY_COUNT {
+        if cache.entries[entry_index].state == .Requested {
+            return Font_Key(entry_index), true
+        }
+    }
+    return .Regular, false
+}
+
+//   Move the oldest recorded optional demand into the single preparation slot.
+//
+// Notes:
+//   - Selection follows `Font_Key` order, not original request timestamp.
+//
+// Side effects:
+//   - Lazily initializes the arena and transitions one entry to Preparing and the
+//     operation to Retry; arena failure marks that entry Failed.
 cache_begin_next_request :: proc(cache: ^Font_Cache) {
     if cache == nil || cache.shutting_down ||
         cache.preparation.state != .Idle {
         return
     }
-    key := Font_Key.Regular
-    found := false
-    for entry_index in 0..<FONT_KEY_COUNT {
-        if cache.entries[entry_index].state == .Requested {
-            key = Font_Key(entry_index)
-            found = true
-            break
-        }
-    }
+    key, found := cache_next_requested_key(cache)
     if !found {
         return
     }

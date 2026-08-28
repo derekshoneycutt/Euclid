@@ -2,7 +2,11 @@ package bridge
 
 import "base:runtime"
 import "../core"
-import "../trace"
+import evidence_profile "../evidence/profile"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
+import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:sync/chan"
 import "core:thread"
@@ -15,6 +19,7 @@ import "core:time"
 
 JULIA_REQUEST_CAPACITY :: core.JULIA_REQUEST_CAPACITY
 JULIA_EVENT_CAPACITY :: core.JULIA_EVENT_CAPACITY
+JULIA_EVIDENCE_HANDOFF_CAPACITY :: core.JULIA_EVIDENCE_HANDOFF_CAPACITY
 SCRATCHPAD_ASYNC_SLOT_COUNT :: core.SCRATCHPAD_ASYNC_SLOT_COUNT
 SCRATCHPAD_ASYNC_TEXT_CAPACITY :: core.SCRATCHPAD_ASYNC_TEXT_CAPACITY
 VIEW_SNAPSHOT_SLOT_COUNT :: core.VIEW_SNAPSHOT_SLOT_COUNT
@@ -191,17 +196,29 @@ record_animation_tick_outcome :: proc(
         service^.animation_last_latency_ms = latency_ms
         service^.animation_max_latency_ms =
             max(service^.animation_max_latency_ms, latency_ms)
-        _ = trace.record_animation_event_ex(
-            &state^.trace_state,
-            "animation.tick_committed",
-            {service^.animation_generation, slot^.sequence, "", ""})
+        _ = evidence_session.session_record(
+            &state^.evidence_session, &state^.evidence_ring, {
+                lane = .Transport,
+                kind = .Animation_Tick_Committed,
+                correlation_kind = .Animation_Tick,
+                correlation = slot^.sequence,
+                generation = service^.animation_generation,
+                tick = state^.fixed_step,
+                flags = {.Required},
+            })
         return
     }
     service^.animation_ticks_stale += 1
-    _ = trace.record_animation_event_ex(
-        &state^.trace_state,
-        "animation.tick_rejected",
-        {service^.animation_generation, slot^.sequence, "", reject_reason})
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Transport,
+            kind = .Animation_Tick_Rejected,
+            correlation_kind = .Animation_Tick,
+            correlation = slot^.sequence,
+            generation = service^.animation_generation,
+            tick = state^.fixed_step,
+            flags = {.Failure},
+        })
 }
 
 //   Classify why one completed tick was not committed against canonical state.
@@ -572,45 +589,68 @@ julia_runtime_diagnostics :: proc(
     }
 }
 
-//   Create the bounded channels, staging storage, and persistent Julia owner worker.
-// On partial failure, resources are released in reverse construction order. The caller owns
-// the returned service and must stop Julia before destroy_julia_runtime_service.
-create_julia_runtime_service :: proc() -> (
-    ^Julia_Runtime_Service, runtime.Allocator_Error) {
-    service := new(Julia_Runtime_Service)
+//   Create both bounded service channels, rolling back the request channel if needed.
+init_julia_runtime_channels :: proc(
+    service: ^Julia_Runtime_Service) -> runtime.Allocator_Error {
     requests, request_err := chan.create(
         chan.Chan(Julia_Request), JULIA_REQUEST_CAPACITY, context.allocator)
     if request_err != .None {
-        free(service)
-        return nil, request_err
+        return request_err
     }
-
     events, event_err := chan.create(
         chan.Chan(Julia_Event), JULIA_EVENT_CAPACITY, context.allocator)
     if event_err != .None {
         _ = chan.destroy(requests)
-        free(service)
-        return nil, event_err
+        return event_err
     }
-
     service^.requests = requests
     service^.events = events
+    return .None
+}
+
+//   Create the bounded channels, staging storage, and persistent Julia owner worker.
+// On partial failure, resources are released in reverse construction order. The caller owns
+// the returned service and must stop Julia before destroy_julia_runtime_service.
+create_julia_runtime_service :: proc(profile_path: string = "") -> (
+    ^Julia_Runtime_Service, runtime.Allocator_Error) {
+    service := new(Julia_Runtime_Service)
+    evidence_trace.ring_init(&service^.evidence_ring, .Julia_Host)
+    channel_error := init_julia_runtime_channels(service)
+    if channel_error != .None {
+        free(service)
+        return nil, channel_error
+    }
+
     service^.next_request_id = 1
     service^.lifecycle = .Not_Started
     service^.dynview_staging = new(core.Dynview_System)
     service^.dynview_staging^.enabled = true
     service^.published_view_snapshot_index = -1
+    if len(profile_path) > 0 &&
+        !evidence_profile.init_spall(&service^.profile, profile_path) {
+        fmt.eprintln("Failed to initialize Julia worker profile output.")
+        log.warn("julia_worker_profile_init_failed")
+    }
     service^.worker =
         thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
     if service^.worker == nil {
+        evidence_profile.destroy(&service^.profile)
         free(service^.dynview_staging)
-        _ = chan.destroy(events)
-        _ = chan.destroy(requests)
+        _ = chan.destroy(service^.events)
+        _ = chan.destroy(service^.requests)
         free(service)
         return nil, .Out_Of_Memory
     }
 
+    log.infof("julia_service_created request_capacity=%d event_capacity=%d",
+        JULIA_REQUEST_CAPACITY, JULIA_EVENT_CAPACITY)
     return service, .None
+}
+
+//   Report whether one cumulative occurrence count is a power of two.
+// This bounds repeated diagnostics while retaining increasing pressure visibility.
+diagnostic_occurrence_should_log :: proc(count: u64) -> bool {
+    return count > 0 && count & (count - 1) == 0
 }
 
 //   Receive one available worker event without blocking the display thread.
@@ -649,6 +689,10 @@ try_submit_julia_request :: proc(
     }
     if !chan.try_send(service^.requests, request) {
         service^.request_saturation_count += 1
+        if diagnostic_occurrence_should_log(service^.request_saturation_count) {
+            log.warnf("julia_request_saturated kind=%d count=%d",
+                int(kind), service^.request_saturation_count)
+        }
         return 0, false
     }
 
@@ -669,6 +713,12 @@ try_submit_julia_request :: proc(
 // Scratchpad completions enter a bounded FIFO; view and animation events release their
 // single-pending submission guards while payload slots retain the completed data.
 accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+    if service^.evidence_session != nil {
+        for evidence_index in 0..<event.evidence_count {
+            evidence_session.session_accept_event(
+                service^.evidence_session, event.evidence[evidence_index])
+        }
+    }
     if !event.succeeded {
         record_julia_event_failure(service, event)
     }
@@ -688,6 +738,8 @@ julia_event_on_shutdown :: proc(
     service: ^Julia_Runtime_Service, event: Julia_Event) {
     if event.succeeded {
         service^.lifecycle = .Stopped
+        log.infof("julia_service_stopped request_id=%d generation=%d",
+            event.request_id, service^.runtime_generation)
     }
 }
 
@@ -715,6 +767,10 @@ record_julia_event_failure :: proc(
     service^.failed_request_count += 1
     service^.last_failed_request_id = event.request_id
     service^.last_failed_request_kind = event.request_kind
+    log.errorf(
+        "julia_request_failed request_id=%d request_kind=%d event_kind=%d generation=%d count=%d",
+        event.request_id, int(event.request_kind), int(event.kind),
+        service^.runtime_generation, service^.failed_request_count)
     if event.kind == .Initialized || event.kind == .Shutdown_Complete {
         service^.lifecycle = .Failed
     }
@@ -735,6 +791,7 @@ record_completed_scratchpad_slot :: proc(
 mark_julia_runtime_ready :: proc(service: ^Julia_Runtime_Service) {
     assert(service != nil && service^.lifecycle == .Starting)
     service^.lifecycle = .Ready
+    log.infof("julia_service_ready generation=%d", service^.runtime_generation)
 }
 
 //   Assert that Julia work is executing on the persistent owner thread.
@@ -786,6 +843,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     if service^.worker != nil {
         thread.destroy(service^.worker)
     }
+    evidence_profile.destroy(&service^.profile)
     free(service^.dynview_staging)
     _ = chan.destroy(service^.events)
     _ = chan.destroy(service^.requests)
@@ -817,6 +875,8 @@ julia_runtime_worker :: proc(data: rawptr) {
     service := cast(^Julia_Runtime_Service)data
     worker_context := context
     service^.owner_thread_id = os.get_current_thread_id()
+    evidence_profile.thread_name(&service^.profile, "julia-worker")
+    log.info("julia_worker_started")
     for {
         request, ok := chan.recv(service^.requests)
         if !ok {
@@ -829,12 +889,69 @@ julia_runtime_worker :: proc(data: rawptr) {
             slot_index = request.slot_index,
             succeeded = true,
         }
-        if dispatch_julia_request(service, request, &event) {
+        evidence_profile.zone_begin(&service^.profile, "julia_request")
+        shutting_down := dispatch_julia_request(service, request, &event)
+        evidence_profile.zone_end(&service^.profile)
+        if shutting_down {
+            attach_julia_request_evidence(service, request, &event)
+            _ = chan.send(service^.events, event)
+            log.info("julia_worker_stopped")
             return
         }
+        attach_julia_request_evidence(service, request, &event)
         _ = chan.send(service^.events, event)
         context = worker_context
         free_all(context.temp_allocator)
+    }
+}
+
+//   Build one animation-tick completion event for the Julia channel handoff.
+animation_tick_request_evidence :: proc(
+    service: ^Julia_Runtime_Service, request: Julia_Request,
+    event: ^Julia_Event) -> evidence_trace.Event {
+    return {
+            lane = .Transport,
+            kind = event.succeeded ? .Animation_Tick_Accepted : .Animation_Tick_Rejected,
+            correlation_kind = .Runtime_Request,
+            correlation = request.request_id,
+            generation = service.animation_generation,
+            flags = event.succeeded ? {} : {.Failure},
+            payload = {request = {
+                status = event.succeeded ? 1 : 0,
+                slot = u32(max(request.slot_index, 0)),
+            }},
+        }
+}
+
+//   Attach one owner-recorded Julia completion event to its channel handoff.
+attach_julia_request_evidence :: proc(
+    service: ^Julia_Runtime_Service, request: Julia_Request, event: ^Julia_Event) {
+    if service == nil || event == nil || service.evidence_session == nil {
+        return
+    }
+    evidence: evidence_trace.Event
+    switch request.kind {
+    case .Animation_Tick:
+        evidence = animation_tick_request_evidence(service, request, event)
+    case .Shutdown:
+        evidence = {
+            lane = .Lifecycle,
+            kind = .Runtime_Shutdown_Complete,
+            correlation_kind = .Runtime_Request,
+            correlation = request.request_id,
+            generation = service.runtime_generation,
+            flags = {.Required},
+        }
+    case .Initialize, .Invoke, .Scratchpad, .View_Snapshot:
+        return
+    }
+    if evidence_session.session_record(
+        service.evidence_session, &service.evidence_ring, evidence) {
+        event.evidence_count = evidence_trace.ring_drain(
+            &service.evidence_ring, event.evidence[:])
+    }
+    if service.evidence_ring.count > 0 {
+        evidence_session.session_mark_incomplete(service.evidence_session)
     }
 }
 

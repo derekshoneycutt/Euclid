@@ -1,15 +1,25 @@
 package main
 
 import "core"
+import "diagnostics"
+import evidence_session "evidence/session"
 import "files"
-import "trace"
 import "view"
 
 import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:strconv"
 
+COMMAND_LINE_PATH_MAX_BYTES :: 4096
+DIAGNOSTICS_OPTION_PREFIX :: "--diagnostics="
 DUST_PARTICLE_MAX_PREFIX :: "--dust-particle-max="
+TIMING_PROFILE_PREFIX :: "--timing-profile="
+PROFILE_OPTION_PREFIX :: "--profile=spall:"
+SCENARIO_INPUT_PREFIX :: "--scenario="
+SCENARIO_ARTIFACT_PREFIX :: "--scenario-artifacts="
+SEMANTIC_TRACE_OUTPUT_PREFIX :: "--semantic-trace-output="
+SEMANTIC_TRACE_EVENTS_PREFIX :: "--semantic-trace-events="
 
 // The main entry point for the Euclid application
 main :: proc() {
@@ -18,16 +28,36 @@ main :: proc() {
         return
     }
 
-    fmt.println("Initiating Euclid...")
+    logging_state: diagnostics.Logging_State
+    selected_logger := context.logger
+    if len(settings.diagnostics_path) > 0 {
+        if diagnostics.logging_start(
+            &logging_state, settings.diagnostics_path, .Debug) {
+            selected_logger = logging_state.logger
+        } else {
+            fmt.eprintln("Unable to open diagnostics: ", settings.diagnostics_path)
+        }
+    }
+    context.logger = selected_logger
+    defer {
+        context.logger = log.nil_logger()
+        diagnostics.logging_stop(&logging_state)
+    }
 
-    trace_exit_code := view.run_window_loop(&settings)
+    fmt.println("Initiating Euclid...")
+    log.info("application_start")
+
+    exit_code := view.run_window_loop(&settings)
 
     files.cleanup_packaged_assets_dir()
     free_all(context.temp_allocator)
-    
+
+    log.infof("application_stop exit_code=%d", exit_code)
+    context.logger = log.nil_logger()
+    diagnostics.logging_stop(&logging_state)
     fmt.println("Euclid ended")
-    if trace_exit_code != 0 {
-        os.exit(trace_exit_code)
+    if exit_code != 0 {
+        os.exit(exit_code)
     }
 }
 
@@ -72,8 +102,55 @@ parse_window_flag :: proc(arg: string, settings: ^core.Euclid_Run_Settings) -> b
     return true
 }
 
+//  Parse one bounded nonempty path option without replacing a prior valid value.
+parse_command_line_path :: proc(
+    arg: string, prefix: string, invalid_message: string,
+    destination: ^string) -> bool {
+    if len(arg) < len(prefix) || arg[:len(prefix)] != prefix {
+        return false
+    }
+    path := arg[len(prefix):]
+    if len(path) > 0 && len(path) <= COMMAND_LINE_PATH_MAX_BYTES {
+        destination^ = path
+    } else {
+        fmt.println(invalid_message)
+    }
+    return true
+}
+
+//  Apply one runtime option carrying a string value.
+parse_runtime_value_flag :: proc(
+    arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
+    if parse_command_line_path(arg, DIAGNOSTICS_OPTION_PREFIX,
+        "Invalid diagnostics path", &settings.diagnostics_path) {
+        return true
+    }
+    if parse_command_line_path(arg, PROFILE_OPTION_PREFIX,
+        "Invalid profile path", &settings.profile_path) {
+        return true
+    }
+    if parse_command_line_path(arg, TIMING_PROFILE_PREFIX,
+        "Invalid timing profile path", &settings.profile_path) {
+        return true
+    }
+    if len(arg) > len(SCENARIO_INPUT_PREFIX) &&
+        arg[:len(SCENARIO_INPUT_PREFIX)] == SCENARIO_INPUT_PREFIX {
+        settings.scenario_input = arg[len(SCENARIO_INPUT_PREFIX):]
+        return true
+    }
+    if len(arg) > len(SCENARIO_ARTIFACT_PREFIX) &&
+        arg[:len(SCENARIO_ARTIFACT_PREFIX)] == SCENARIO_ARTIFACT_PREFIX {
+        settings.scenario_artifact_output = arg[len(SCENARIO_ARTIFACT_PREFIX):]
+        return true
+    }
+    return false
+}
+
 //  Apply one runtime-performance flag and report whether it matched.
 parse_runtime_flag :: proc(arg: string, settings: ^core.Euclid_Run_Settings) -> bool {
+    if parse_runtime_value_flag(arg, settings) {
+        return true
+    }
     switch arg {
     case "--limit-fps":
         settings.limit_fps = true
@@ -162,6 +239,46 @@ parse_short_flags_param :: proc(
     return true
 }
 
+//  Enable evidence recording and select stdout when no destination is configured.
+enable_semantic_evidence :: proc(config: ^evidence_session.Config) {
+    config.enabled = true
+    if config.output_mode == .Disabled {
+        config.output_mode = .Stdout
+    }
+}
+
+//  Parse one retained semantic-trace CLI option into typed evidence policy.
+parse_semantic_trace_argument :: proc(
+    arg: string, config: ^evidence_session.Config) -> (bool, bool) {
+    switch arg {
+    case "--semantic-trace":
+        enable_semantic_evidence(config)
+        return true, true
+    case "--semantic-trace-strict":
+        enable_semantic_evidence(config)
+        config.strict = true
+        return true, true
+    }
+    if len(arg) >= len(SEMANTIC_TRACE_OUTPUT_PREFIX) &&
+        arg[:len(SEMANTIC_TRACE_OUTPUT_PREFIX)] == SEMANTIC_TRACE_OUTPUT_PREFIX {
+        config.enabled = true
+        config.output_mode = .File
+        config.output_path = arg[len(SEMANTIC_TRACE_OUTPUT_PREFIX):]
+        return true, len(config.output_path) > 0
+    }
+    if len(arg) >= len(SEMANTIC_TRACE_EVENTS_PREFIX) &&
+        arg[:len(SEMANTIC_TRACE_EVENTS_PREFIX)] == SEMANTIC_TRACE_EVENTS_PREFIX {
+        lanes, valid := evidence_session.parse_lane_selection(
+            arg[len(SEMANTIC_TRACE_EVENTS_PREFIX):])
+        if valid {
+            enable_semantic_evidence(config)
+            config.lanes = lanes
+        }
+        return true, valid
+    }
+    return false, false
+}
+
 //  Print supported application options and their defaults.
 print_command_line_help :: proc() {
     fmt.println("Usage: ./euclid [options]")
@@ -183,10 +300,15 @@ print_command_line_help :: proc() {
     fmt.println(
         "  -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)")
     fmt.println("  -G, --no-gpu-dust-instancing Disable GPU dust instancing.")
+    fmt.println("  --diagnostics=PATH       Write synchronized diagnostic logs.")
+    fmt.println("  --profile=spall:PATH     Write display and worker Spall timelines.")
     fmt.println("  --semantic-trace         Enable semantic trace output.")
     fmt.println("  --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.")
-    fmt.println("  --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).")
-    fmt.println("  --semantic-trace-strict  Fail the run when trace overflow or serialization fails.")
+    fmt.println("  --semantic-trace-events=LIST   Limit evidence lanes (lifecycle,domain,transport,presentation,scenario,diagnostic).")
+    fmt.println("  --semantic-trace-strict  Fail on required evidence loss or export failure.")
+    fmt.println("  --timing-profile=PATH    Alias for --profile=spall:PATH.")
+    fmt.println("  --scenario=PATH          Run a bounded semantic scenario from JSONL.")
+    fmt.println("  --scenario-artifacts=DIR Write the scenario evidence bundle to DIR.")
     fmt.println("  -h, --help               Show this help text.")
     fmt.println("")
     fmt.println("Short options can be combined, for example: -vasg or -VAFSG")
@@ -194,7 +316,7 @@ print_command_line_help :: proc() {
 
 //  Parse a single command line argument, updating settings accordingly.
 parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Settings) {
-    handled_trace, valid_trace := trace.parse_semantic_trace_argument(settings, arg)
+    handled_trace, valid_trace := parse_semantic_trace_argument(arg, &settings.evidence)
     if handled_trace {
         if !valid_trace {
             fmt.println("Invalid semantic trace parameter: ", arg)
@@ -224,15 +346,21 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         limit_fps = true,
         use_simd_batch_projection = true,
         use_gpu_dust_instancing = true,
-        semantic_trace_enabled = false,
-        semantic_trace_strict = false,
-        semantic_trace_output = "",
-        semantic_trace_events = "",
+        evidence = {
+            lanes = evidence_session.ALL_LANES,
+        },
     }
 
     for i in 1..<len(os.args) {
         arg := os.args[i]
         parse_command_line_param(arg, &settings)
+    }
+
+    if len(settings.scenario_input) > 0 {
+        settings.evidence.enabled = true
+        if len(settings.evidence.output_path) == 0 {
+            settings.evidence.output_mode = .Sink
+        }
     }
 
     if settings.do_run {

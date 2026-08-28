@@ -2,6 +2,7 @@ package main
 
 import "../bridge"
 import "../core"
+import evidence_session "../evidence/session"
 import "../files"
 import "../view"
 
@@ -135,10 +136,13 @@ harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Se
         limit_fps = false,
         use_simd_batch_projection = false,
         use_gpu_dust_instancing = false,
-        semantic_trace_enabled = true,
-        semantic_trace_strict = true,
-        semantic_trace_output = options.trace_output,
-        semantic_trace_events = "",
+        evidence = {
+            enabled = true,
+            strict = true,
+            output_mode = .File,
+            lanes = evidence_session.ALL_LANES,
+            output_path = options.trace_output,
+        },
     }
 }
 

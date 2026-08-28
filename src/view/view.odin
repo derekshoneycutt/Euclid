@@ -10,11 +10,16 @@ import "../core"
 import "../audio"
 import "../shapes"
 import julia "../bridge"
+import evidence_allocation "../evidence/allocation"
+import capture "../evidence/capture"
+import evidence_checkpoint "../evidence/checkpoint"
+import evidence_profile "../evidence/profile"
+import evidence_session "../evidence/session"
 import "../files"
-import "../trace"
 
 import "base:runtime"
 import "core:fmt"
+import "core:log"
 import "core:strings"
 import "core:thread"
 import "core:time"
@@ -101,8 +106,31 @@ run_gif_capture_frame :: proc(state: ^Euclid_General_State) {
         "Error: failed to submit GIF frame.")
 }
 
+//   Publish frame evidence, close profiling zones, and release temporary storage.
+finish_window_frame :: proc(
+    state: ^Euclid_General_State, display_profile: ^evidence_profile.State) {
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Frame_Presented,
+            correlation_kind = .Fixed_Step,
+            correlation = state^.fixed_step,
+            tick = state^.fixed_step,
+        })
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &state^.evidence_ring)
+    evidence_profile.zone_end(display_profile)
+    evidence_profile.frame(display_profile)
+    free_all(context.temp_allocator)
+}
+
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
-run_window_frame :: proc(state: ^Euclid_General_State) {
+run_window_frame :: proc(
+    state: ^Euclid_General_State,
+    scenario_runtime: ^Scenario_Runtime = nil,
+    capture_sink: capture.Sink = {},
+    display_profile: ^evidence_profile.State = nil) {
+    evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
@@ -111,15 +139,65 @@ run_window_frame :: proc(state: ^Euclid_General_State) {
     run_parallel_frame_preparation(state, alpha)
     julia.try_request_view_snapshot(state)
     audio.update_chalk_runtime(&state^.chalk_audio)
+    if scenario_runtime != nil {
+        _ = scenario_runtime_update(
+            scenario_runtime, u64(i64(time.tick_since({}))))
+    }
 
+    evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
         draw_frame(state, alpha)
     rl.EndDrawing()
+    evidence_profile.zone_end(display_profile)
 
+    if scenario_runtime != nil {
+        _ = scenario_runtime_after_present(scenario_runtime, capture_sink)
+    }
     run_gif_capture_frame(state)
+    finish_window_frame(state, display_profile)
+}
 
-    _ = trace.drain_trace(&state^.trace_state)
-    free_all(context.temp_allocator)
+//   Build the screenshot sink routed through one active scenario runtime.
+scenario_capture_sink :: proc(runtime: ^Scenario_Runtime) -> capture.Sink {
+    return {
+        user_data = rawptr(runtime),
+        capture = scenario_runtime_capture_screenshot,
+    }
+}
+
+//   Initialize optional display profiling and begin the startup zone.
+init_display_profile :: proc(
+    profile: ^evidence_profile.State, path: string) {
+    if len(path) > 0 && !evidence_profile.init_spall(profile, path) {
+        fmt.eprintln("Failed to initialize display profile output.")
+        log.warn("display_profile_init_failed")
+    }
+    evidence_profile.thread_name(profile, "display")
+    evidence_profile.zone_begin(profile, "total startup")
+}
+
+//   Process display frames until the window or active scenario requests completion.
+run_window_frames :: proc(
+    state: ^Euclid_General_State, scenario_runtime: ^Scenario_Runtime,
+    capture_sink: capture.Sink, display_profile: ^evidence_profile.State) {
+    for !rl.WindowShouldClose() {
+        run_window_frame(state, scenario_runtime, capture_sink, display_profile)
+        if scenario_runtime_finished(scenario_runtime) {
+            return
+        }
+    }
+}
+
+//   Shut down a completed window session and convert scenario failure to process status.
+finish_window_session :: proc(
+    session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
+    artifact_output: string) -> int {
+    exit_code := shutdown_window_runtime(
+        session, scenario_runtime, artifact_output)
+    if scenario_runtime != nil && !scenario_runtime_succeeded(scenario_runtime) {
+        return 1
+    }
+    return exit_code
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -131,36 +209,64 @@ run_window_frame :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - exit_code: non-zero when strict trace validation failed.
 run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
+    display_profile: evidence_profile.State
+    init_display_profile(&display_profile, settings^.profile_path)
+    defer evidence_profile.destroy(&display_profile)
+
     open_window(settings)
     defer rl.CloseWindow()
 
-    session, ok := initialize_window_runtime_with_loading(settings)
+    session, ok := initialize_window_runtime_with_loading(
+        settings, &display_profile)
+    evidence_profile.zone_end(&display_profile)
     if !ok {
+        log.error("display_runtime_start_failed")
         return 1
     }
     state := session.state
-    defer shutdown_runtime_session(session)
-    defer shutdown_window_resources(state)
+    log.info("display_runtime_ready")
+
+    scenario_runtime: Scenario_Runtime
+    active_scenario: ^Scenario_Runtime
+    capture_sink: capture.Sink
+    if len(settings^.scenario_input) > 0 {
+        if !scenario_runtime_load_file(
+            &scenario_runtime, state, settings^.scenario_input) {
+            fmt.eprintln("Failed to load semantic scenario: ", settings^.scenario_input)
+            log.error("scenario_load_failed")
+            _ = shutdown_window_runtime(session)
+            return 1
+        }
+        active_scenario = &scenario_runtime
+        capture_sink = scenario_capture_sink(active_scenario)
+    }
 
     free_all(context.temp_allocator)
 
-    for !rl.WindowShouldClose() {
-        run_window_frame(state)
-    }
+    run_window_frames(
+        state, active_scenario, capture_sink, &display_profile)
+    log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
+        state^.fixed_step, active_scenario != nil)
 
-    if trace.should_fail_process(&state^.trace_state) {
-        return 1
-    }
-    return 0
+    return finish_window_session(
+        session, active_scenario, settings^.scenario_artifact_output)
+}
+
+//   Release graphics-owned resources before destroying their backing runtime state.
+shutdown_window_runtime :: proc(
+    session: Euclid_Runtime_Session,
+    scenario_runtime: ^Scenario_Runtime = nil,
+    artifact_output: string = "") -> int {
+    shutdown_window_resources(session.state)
+    return shutdown_runtime_session(session, scenario_runtime, artifact_output)
 }
 
 //   Allocate and initialize persistent runtime state for simulation and rendering.
 //
 // Notes:
 //   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
-shutdown_julia_runtime :: proc(
-    state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
-    started_at := time.tick_now()
+submit_julia_shutdown :: proc(
+    service: ^julia.Julia_Runtime_Service, started_at: time.Tick) -> u64 {
     shutdown_id: u64
     sent := false
     for !sent {
@@ -174,13 +280,17 @@ shutdown_julia_runtime :: proc(
         }
         thread.yield()
     }
-    _ = trace.record_runtime_event_ex(
-        &state^.trace_state, "runtime.shutdown_started", service^.runtime_generation,
-        int(service^.reload_state), shutdown_id)
+    return shutdown_id
+}
+
+//   Wait for the matching shutdown completion within the shared timeout window.
+wait_for_julia_shutdown :: proc(
+    service: ^julia.Julia_Runtime_Service, shutdown_id: u64,
+    started_at: time.Tick) {
     for {
         event, ok := julia.try_receive_julia_event(service)
         if ok && event.request_id == shutdown_id && event.kind == .Shutdown_Complete {
-            break
+            return
         }
         if time.duration_seconds(time.tick_since(started_at)) >=
             JULIA_SHUTDOWN_TIMEOUT_SECONDS {
@@ -189,9 +299,28 @@ shutdown_julia_runtime :: proc(
         }
         thread.yield()
     }
-    _ = trace.record_runtime_event_ex(
-        &state^.trace_state, "runtime.shutdown_complete", service^.runtime_generation,
-        int(service^.reload_state), shutdown_id)
+}
+
+//   Allocate and initialize persistent runtime state for simulation and rendering.
+//
+// Notes:
+//   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
+shutdown_julia_runtime :: proc(
+    state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
+    started_at := time.tick_now()
+    shutdown_id := submit_julia_shutdown(service, started_at)
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = .Runtime_Shutdown_Started,
+            correlation_kind = .Runtime_Request,
+            correlation = shutdown_id,
+            generation = service^.runtime_generation,
+            flags = {.Required},
+        })
+    wait_for_julia_shutdown(service, shutdown_id, started_at)
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &state^.evidence_ring)
     julia.destroy_julia_runtime_service(service)
 }
 
@@ -204,6 +333,7 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
         return
     }
     view_core.gif_capture_destroy_session(&state^.gif_capture)
+    evidence_allocation.domain_destroy(&state^.evidence_allocations)
     julia.destroy_julia_interface_resources(state)
     free(state^.particle_system)
     free(state^.point_system)
@@ -407,7 +537,7 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
     state^.fixed_step += 1
     state^.simulation_time += dt
     record_constraint_trace_summary(state)
-    record_checkpoint_trace_snapshot(state)
+    record_evidence_checkpoint(state)
     return true
 }
 
@@ -439,123 +569,84 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
             active_constraints += 1
         }
     }
-    _ = trace.record_constraint_solve_summary(
-        &state^.trace_state,
-        state^.fixed_step,
-        state^.simulation_time,
-        active_constraints,
-        state^.point_system^.next_constraint_index)
-}
-
-//   Populate animation identity fields for one checkpoint snapshot.
-capture_checkpoint_animation_fields :: proc(
-    state: ^Euclid_General_State,
-    snapshot: ^core.Trace_Checkpoint_Snapshot) {
-
-    if state == nil || snapshot == nil || state^.julia_runtime_service == nil {
-        return
-    }
-
-    snapshot^.runtime_generation = state^.julia_runtime_service^.runtime_generation
-    snapshot^.animation_generation = state^.julia_runtime_service^.animation_generation
-    snapshot^.animation_tick_sequence =
-        state^.julia_runtime_service^.animation_tick_sequence
-    snapshot^.rejected_tick_count = state^.julia_runtime_service^.animation_ticks_stale
-    snapshot^.failed_request_count = state^.julia_runtime_service^.failed_request_count
-    snapshot^.dropped_record_count = state^.trace_state.dropped_count
-
-    if state^.julia_interface == nil || state^.julia_interface^.current_animation == nil {
-        return
-    }
-
-    animation_name := state^.julia_interface^.current_animation^.name
-    snapshot^.animation_name_len = min(len(snapshot^.animation_name), len(animation_name))
-    copy(snapshot^.animation_name[:snapshot^.animation_name_len],
-        transmute([]u8)animation_name)
-}
-
-//   Populate bounded point records for one checkpoint snapshot.
-capture_checkpoint_points :: proc(
-    state: ^Euclid_General_State,
-    snapshot: ^core.Trace_Checkpoint_Snapshot) {
-
-    if state == nil || snapshot == nil || state^.point_system == nil {
-        return
-    }
-
-    snapshot^.next_point_index = state^.point_system^.next_point_index
-    snapshot^.next_constraint_index = state^.point_system^.next_constraint_index
-    for constraint_index in 0..<state^.point_system^.next_constraint_index {
-        if state^.point_system^.constraints[constraint_index].do_apply {
-            snapshot^.active_constraint_count += 1
-        }
-    }
-
-    point_count := min(len(snapshot^.points), state^.point_system^.next_point_index)
-    snapshot^.point_count = point_count
-    for point_index in 0..<point_count {
-        point := &state^.point_system^.points[point_index]
-        snapshot_point := &snapshot^.points[point_index]
-        snapshot_point^.index = point_index
-        snapshot_point^.kind = point^.kind
-        snapshot_point^.do_draw = point^.do_draw
-        snapshot_point^.active_child = point^.active_child
-        snapshot_point^.brush_size = point^.brush_size
-        snapshot_point^.offset = point^.offset
-        if position, ok := point^.position.?; ok {
-            snapshot_point^.position = position
-            snapshot_point^.has_position = true
-        }
-    }
-}
-
-//   Populate tool summary fields for one checkpoint snapshot.
-capture_checkpoint_tools :: proc(
-    state: ^Euclid_General_State,
-    snapshot: ^core.Trace_Checkpoint_Snapshot) {
-
-    if state == nil || snapshot == nil || state^.point_system == nil {
-        return
-    }
-
-    snapshot^.pen_host_index = state^.pen.host_id
-    snapshot^.pen_joint1_index = state^.pen.joint1_id
-    snapshot^.pen_joint2_index = state^.pen.joint2_id
-    if state^.pen.host_id >= 0 &&
-        state^.pen.host_id < state^.point_system^.next_point_index {
-        pen_point := &state^.point_system^.points[state^.pen.host_id]
-        snapshot^.pen_visible = pen_point^.do_draw
-        snapshot^.pen_active_child = pen_point^.active_child
-    }
-
-    snapshot^.compass_host_index = state^.compass.host_id
-    snapshot^.compass_pivot_index = state^.compass.pivot_id
-    snapshot^.compass_joint1_index = state^.compass.joint1_id
-    snapshot^.compass_joint2_index = state^.compass.joint2_id
-    if state^.compass.host_id >= 0 &&
-        state^.compass.host_id < state^.point_system^.next_point_index {
-        compass_point := &state^.point_system^.points[state^.compass.host_id]
-        snapshot^.compass_visible = compass_point^.do_draw
-        snapshot^.compass_active_child = compass_point^.active_child
-    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Domain,
+            kind = .Constraint_Solve_Completed,
+            correlation_kind = .Fixed_Step,
+            correlation = state^.fixed_step,
+            tick = state^.fixed_step,
+            payload = {counts = {
+                first = u32(active_constraints),
+                second = u32(state^.point_system^.next_constraint_index),
+            }},
+        })
 }
 
 //   Capture and record one bounded canonical checkpoint after worker join.
-record_checkpoint_trace_snapshot :: proc(state: ^Euclid_General_State) {
+record_evidence_checkpoint :: proc(state: ^Euclid_General_State) {
     if state == nil || state^.point_system == nil || state^.julia_runtime_service == nil {
         return
     }
 
-    snapshot := new(core.Trace_Checkpoint_Snapshot)
-    defer free(snapshot)
-    snapshot^.checkpoint_id = state^.fixed_step
-    snapshot^.fixed_step = state^.fixed_step
-    snapshot^.simulation_time = state^.simulation_time
-    capture_checkpoint_animation_fields(state, snapshot)
-    capture_checkpoint_points(state, snapshot)
-    capture_checkpoint_tools(state, snapshot)
+    typed := capture_evidence_checkpoint(state)
+    handle := evidence_checkpoint.store_put(
+        &state^.evidence_checkpoints, typed, true)
+    if state^.evidence_checkpoints.required_evidence_lost {
+        evidence_session.session_mark_incomplete(&state^.evidence_session)
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Domain,
+            kind = .Checkpoint_Stored,
+            correlation_kind = .Checkpoint,
+            correlation = state^.fixed_step,
+            generation = u64(handle.generation),
+            tick = state^.fixed_step,
+            flags = {.Required},
+            payload = {handle = {
+                slot = handle.slot,
+                generation = handle.generation,
+            }},
+        })
+}
 
-    _ = trace.record_checkpoint_snapshot(&state^.trace_state, snapshot)
+//   Copy authoritative post-join Euclid state into one fixed checkpoint value.
+capture_evidence_checkpoint :: proc(
+    state: ^Euclid_General_State) -> evidence_checkpoint.Snapshot {
+    snapshot := evidence_checkpoint.Snapshot{
+        fixed_step = state^.fixed_step,
+        simulation_time = state^.simulation_time,
+        runtime_generation = state^.julia_runtime_service^.runtime_generation,
+        animation_generation = state^.julia_runtime_service^.animation_generation,
+        animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence,
+        point_count = min(
+            state^.point_system^.next_point_index,
+            evidence_checkpoint.CHECKPOINT_POINT_CAPACITY),
+        constraint_count = state^.point_system^.next_constraint_index,
+    }
+    for constraint in state^.point_system^.constraints[
+        :state^.point_system^.next_constraint_index] {
+        if constraint.do_apply {
+            snapshot.active_constraint_count += 1
+        }
+    }
+    for point_index in 0..<snapshot.point_count {
+        point := &state^.point_system^.points[point_index]
+        captured := &snapshot.points[point_index]
+        captured.index = i32(point_index)
+        captured.active_child = i32(point.active_child)
+        captured.visible = point.do_draw
+        captured.brush_size = point.brush_size
+        captured.offset = point.offset
+        if position, ok := point.position.?; ok {
+            captured.x = position.x
+            captured.y = position.y
+            captured.z = position.z
+            captured.has_position = true
+        }
+    }
+    return snapshot
 }
 
 //   Render one full frame including world, particles, UI panels, and capture step.

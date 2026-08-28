@@ -1,7 +1,8 @@
 package bridge
 
 import "../core"
-import "../trace"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
 // The Julia owner thread writes one bounded batch while the display thread reads an
@@ -73,6 +74,32 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Emit_Trailing_Particle = apply_emit_trailing_particle,
     .Emit_Flicker_Particle = apply_emit_flicker_particle,
     .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
+}
+
+SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
+    .Set_Point_Position = .Point_Position_Committed,
+    .Set_Point_Color = .Point_Style_Committed,
+    .Set_Point_Brush = .Point_Style_Committed,
+    .Set_Point_Offset = .Point_Style_Committed,
+    .Show_Point = .Point_Visibility_Committed,
+    .Hide_Point = .Point_Visibility_Committed,
+    .Hide_Point_Batch = .Point_Visibility_Committed,
+    .Lock_Pen_Joint1 = .Pen_Joint_Committed,
+    .Move_Pen_Joint2 = .Pen_Joint_Committed,
+    .Set_Pen_Active = .Pen_Active_Committed,
+    .Show_Pen = .Pen_Visibility_Committed,
+    .Hide_Pen = .Pen_Visibility_Committed,
+    .Show_Compass = .Compass_Visibility_Committed,
+    .Hide_Compass = .Compass_Visibility_Committed,
+    .Set_Compass_Active = .Compass_Active_Committed,
+    .Lock_Compass_Joint1 = .Compass_Joint_Committed,
+    .Lock_Compass_Joint2 = .Compass_Joint_Committed,
+    .Emit_Trailing_Particle = .Particle_Emission_Committed,
+    .Emit_Flicker_Particle = .Particle_Emission_Committed,
+    .Set_Animation_Meta = .Unknown,
+    .Set_Drawing_Sound_Enabled = .Unknown,
+    .Simulate_Drawing_Sound = .Unknown,
+    .Notify_Animation_Cycle_Boundary = .Unknown,
 }
 
 // Core owns these data shapes because they are referenced by Euclid_General_State.
@@ -447,60 +474,38 @@ validate_scene_command_batch :: proc(
 //   Apply one set-point-position command and record its position-change event.
 apply_set_point_position :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    previous_position := state^.point_system^.points[command^.point_index].position
     set_point_position_with_floor_crossing_dust(
         state, command^.point_index, command^.position)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.position_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{
-            from_position = previous_position,
-            to_position = command^.position,
-        })
 }
 
 //   Apply one set-point-color command and record its style-change event.
 apply_set_point_color :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_point_color(state, i32(command^.point_index), command^.color)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{color = command^.color})
 }
 
 //   Apply one set-point-brush command and record its style-change event.
 apply_set_point_brush :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_point_brush(state, i32(command^.point_index), command^.scalar)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{brush_size = command^.scalar})
 }
 
 //   Apply one set-point-offset command and record its style-change event.
 apply_set_point_offset :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     _ = set_point_offset(state, i32(command^.point_index), command^.scalar)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{offset = command^.scalar})
 }
 
 //   Apply one show-point command and record its visibility-change event.
 apply_show_point :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     show_point(state, i32(command^.point_index))
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.visibility_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{visible = true})
 }
 
 //   Apply one hide-point command and record its visibility-change event.
 apply_hide_point :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     hide_point(state, i32(command^.point_index))
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.visibility_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{visible = false})
 }
 
 //   Apply one hide-point-batch command.
@@ -513,90 +518,60 @@ apply_hide_point_batch :: proc(
 apply_lock_pen_joint1 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_pen_joint1(state, command^.position)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen",
-        {"joint1", command^.position, nil, nil})
 }
 
 //   Apply one pen-joint2 move command and record its joint-change event.
 apply_move_pen_joint2 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     move_pen_joint2(state, command^.position)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen",
-        {"joint2", command^.position, nil, nil})
 }
 
 //   Apply one set-pen-active command and record its active-change event.
 apply_set_pen_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_pen_active(state, i32(command^.integer), command^.color)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.active_changed", "pen",
-        {"", nil, nil, command^.integer})
 }
 
 //   Apply one show-pen command and record its visibility-change event.
 apply_show_pen :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     show_pen(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen",
-        {"", nil, true, nil})
 }
 
 //   Apply one hide-pen command and record its visibility-change event.
 apply_hide_pen :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     hide_pen(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen",
-        {"", nil, false, nil})
 }
 
 //   Apply one hide-compass command and record its visibility-change event.
 apply_hide_compass :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     hide_compass(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass",
-        {"", nil, false, nil})
 }
 
 //   Apply one show-compass command and record its visibility-change event.
 apply_show_compass :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     show_compass(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass",
-        {"", nil, true, nil})
 }
 
 //   Apply one set-compass-active command and record its active-change event.
 apply_set_compass_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     set_compass_active(state, i32(command^.integer), command^.color)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.active_changed", "compass",
-        {"", nil, nil, command^.integer})
 }
 
 //   Apply one compass-joint1 lock command and record its joint-change event.
 apply_lock_compass_joint1 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_compass_joint1(state, command^.position, command^.flag)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass",
-        {"joint1", command^.position, nil, nil})
 }
 
 //   Apply one compass-joint2 lock command and record its joint-change event.
 apply_lock_compass_joint2 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_compass_joint2(state, command^.position, command^.flag)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass",
-        {"joint2", command^.position, nil, nil})
 }
 
 //   Apply one set-animation-meta command.
@@ -621,16 +596,12 @@ apply_simulate_drawing_sound :: proc(
 apply_emit_trailing_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_trailing_particle(state, command^.position, command^.color)
-    _ = trace.record_particles_emitted(
-        &state^.trace_state, {"trail", "mid", 1, command^.position, command^.color})
 }
 
 //   Apply one emit-flicker-particle command and record its emission.
 apply_emit_flicker_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_flicker_particle(state, command^.position, command^.color)
-    _ = trace.record_particles_emitted(
-        &state^.trace_state, {"flicker", "high", 10, command^.position, command^.color})
 }
 
 //   Apply one animation-cycle-boundary notification command.
@@ -646,6 +617,7 @@ commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if !validate_scene_command_batch(state, batch) {
+        record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
 
@@ -655,7 +627,72 @@ commit_scene_command_batch :: proc(
         applier := appliers[command^.kind]
         if applier != nil {
             applier(state, command)
+            record_scene_command_evidence(state, command)
         }
     }
+    record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
     return true
+}
+
+//   Record one scene-batch outcome using the current animation tick identity.
+record_scene_batch_evidence :: proc(
+    state: ^core.Euclid_General_State, kind: evidence_trace.Kind,
+    failed: bool) {
+    service := state^.julia_runtime_service
+    flags: evidence_trace.Flags = {.Required}
+    if failed {
+        flags += {.Failure}
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Transport,
+            kind = kind,
+            correlation_kind = .Scene_Batch,
+            correlation = service != nil ? service^.animation_tick_sequence : 0,
+            generation = service != nil ? service^.animation_generation : 0,
+            tick = state^.fixed_step,
+            flags = flags,
+        })
+}
+
+//   Select compact typed evidence for one committed scene command.
+scene_command_evidence :: proc(
+    command: ^Scene_Command) -> (evidence_trace.Kind, evidence_trace.Event_Payload) {
+    evidence_kinds := SCENE_COMMAND_EVIDENCE_KINDS
+    kind := evidence_kinds[command^.kind]
+    payload := evidence_trace.Event_Payload{
+        point = {point_index = u32(max(command^.point_index, 0))},
+    }
+    #partial switch command^.kind {
+    case .Show_Point, .Hide_Point, .Hide_Point_Batch:
+        payload.point.visible = command^.kind == .Show_Point ? 1 : 0
+    case .Show_Pen, .Hide_Pen:
+        payload.point.visible = command^.kind == .Show_Pen ? 1 : 0
+    case .Show_Compass, .Hide_Compass:
+        payload.point.visible = command^.kind == .Show_Compass ? 1 : 0
+    case .Emit_Trailing_Particle, .Emit_Flicker_Particle:
+        payload.counts.first = command^.kind == .Emit_Trailing_Particle ? 1 : 10
+    case:
+    }
+    return kind, payload
+}
+
+//   Record one committed scene command using compact kind-specific payload fields.
+record_scene_command_evidence :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    kind, payload := scene_command_evidence(command)
+    if kind == .Unknown {
+        return
+    }
+    service := state^.julia_runtime_service
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Domain,
+            kind = kind,
+            correlation_kind = .Scene_Batch,
+            correlation = service != nil ? service^.animation_tick_sequence : 0,
+            generation = service != nil ? service^.animation_generation : 0,
+            tick = state^.fixed_step,
+            payload = payload,
+        })
 }

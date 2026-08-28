@@ -7,10 +7,15 @@ package core
 
 import "../julialib"
 import "../taskpool"
+import evidence_allocation "../evidence/allocation"
+import evidence_checkpoint "../evidence/checkpoint"
+import evidence_profile "../evidence/profile"
+import evidence_session "../evidence/session"
+import evidence_text "../evidence/text"
+import evidence_trace "../evidence/trace"
 import "base:runtime"
 import "core:encoding/uuid"
 import rand "core:math/rand"
-import "core:os"
 import vmem "core:mem/virtual"
 import "core:sync/chan"
 import "core:thread"
@@ -44,14 +49,6 @@ DYNVIEW_MAX_MATH_PROGRAMS :: 256
 DYNVIEW_MAX_MATH_NODES :: 4096
 DYNVIEW_MAX_MATH_COMMANDS :: 4096
 
-TRACE_RECORD_CAPACITY :: 256
-TRACE_EVENT_NAME_CAPACITY :: 96
-TRACE_EVENT_PAYLOAD_CAPACITY :: 2048
-TRACE_SERIALIZE_BUFFER_CAPACITY :: 4096
-TRACE_RUN_ID_CAPACITY :: 64
-TRACE_OUTPUT_PATH_CAPACITY :: 1024
-TRACE_CHECKPOINT_POINT_CAPACITY :: 8
-
 FONT_KEY_COUNT :: int(Font_Key.Black_Italic) + 1
 FONT_SOURCE_PATH_CAPACITY :: 1024
 
@@ -60,6 +57,7 @@ Vector3 :: rl.Vector3
 
 JULIA_REQUEST_CAPACITY :: 16
 JULIA_EVENT_CAPACITY :: 16
+JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
 SCRATCHPAD_ASYNC_SLOT_COUNT :: 16
 SCRATCHPAD_ASYNC_TEXT_CAPACITY :: 4096
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
@@ -369,9 +367,14 @@ Julia_Event :: struct {
     request_id: u64,
     slot_index: i32,
     succeeded: bool,
+    evidence: [JULIA_EVIDENCE_HANDOFF_CAPACITY]evidence_trace.Event,
+    evidence_count: int,
 }
 
 Julia_Runtime_Service :: struct {
+    evidence_ring: evidence_trace.Ring,
+    evidence_session: ^evidence_session.Session,
+    profile: evidence_profile.State,
     worker: ^thread.Thread,
     requests: chan.Chan(Julia_Request),
     events: chan.Chan(Julia_Event),
@@ -385,6 +388,7 @@ Julia_Runtime_Service :: struct {
     last_failed_request_kind: Julia_Request_Kind,
     request_saturation_count: u64,
     reload_state: Julia_Reload_State,
+    reload_requested: bool,
     runtime_generation: u64,
     reload_failed_mtime_unix_nano: i64,
     scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
@@ -1561,11 +1565,13 @@ Chalk_Audio_Runtime :: struct {
 Simulation_Task_Data :: struct {
     state: ^Euclid_General_State,
     dt: f32,
+    evidence_ring: evidence_trace.Ring,
 }
 
 Frame_Preparation_Task_Data :: struct {
     state: ^Euclid_General_State,
     interpolation_alpha: f32,
+    evidence_ring: evidence_trace.Ring,
 }
 
 Simulation_Executor :: struct {
@@ -1576,113 +1582,6 @@ Simulation_Executor :: struct {
     dynview_task: Frame_Preparation_Task_Data,
 }
 
-
-
-
-
-/****
-    Semantric trace system; used for deterministic testing and animation tracing
-*/
-
-
-
-Trace_Counters :: struct {
-    emitted_count: u64,
-    dropped_count: u64,
-    invalid: bool,
-}
-
-Trace_Output_Mode :: enum u8 {
-    Disabled,
-    Stdout,
-    File,
-    Sink,
-}
-
-Trace_Category :: enum u8 {
-    Trace,
-    Runtime,
-    Animation,
-    Geometry,
-    Tools,
-    Particles,
-    View,
-}
-
-Trace_Category_Set :: bit_set[Trace_Category]
-
-Trace_Event_Record :: struct {
-    sequence: u64,
-    category: Trace_Category,
-    event_len: int,
-    event: [TRACE_EVENT_NAME_CAPACITY]u8,
-    payload_len: int,
-    payload: [TRACE_EVENT_PAYLOAD_CAPACITY]u8,
-}
-
-Trace_Checkpoint_Point :: struct {
-    index: int,
-    kind: Shapes_Point_Type,
-    do_draw: bool,
-    active_child: int,
-    position: Vector3,
-    has_position: bool,
-    brush_size: f32,
-    offset: f32,
-}
-
-Trace_Checkpoint_Snapshot :: struct {
-    checkpoint_id: u64,
-    fixed_step: u64,
-    simulation_time: f32,
-    runtime_generation: u64,
-    animation_generation: u64,
-    animation_tick_sequence: u64,
-    animation_name_len: int,
-    animation_name: [96]u8,
-    point_count: int,
-    next_point_index: int,
-    next_constraint_index: int,
-    active_constraint_count: int,
-    rejected_tick_count: u64,
-    failed_request_count: u64,
-    dropped_record_count: u64,
-    points: [TRACE_CHECKPOINT_POINT_CAPACITY]Trace_Checkpoint_Point,
-    pen_host_index: int,
-    pen_joint1_index: int,
-    pen_joint2_index: int,
-    pen_visible: bool,
-    pen_active_child: int,
-    compass_host_index: int,
-    compass_pivot_index: int,
-    compass_joint1_index: int,
-    compass_joint2_index: int,
-    compass_visible: bool,
-    compass_active_child: int,
-}
-
-Trace_State :: struct {
-    enabled: bool,
-    strict: bool,
-    invalid: bool,
-    finished: bool,
-    overflow_reported: bool,
-    output_open: bool,
-    output_mode: Trace_Output_Mode,
-    categories: Trace_Category_Set,
-    records_head: int,
-    records_count: int,
-    next_sequence: u64,
-    emitted_count: u64,
-    dropped_count: u64,
-    run_id_len: int,
-    run_id: [TRACE_RUN_ID_CAPACITY]u8,
-    output_path_len: int,
-    output_path: [TRACE_OUTPUT_PATH_CAPACITY]u8,
-    output_handle: ^os.File,
-    records: [TRACE_RECORD_CAPACITY]Trace_Event_Record,
-    serialize_buffer: [TRACE_SERIALIZE_BUFFER_CAPACITY]u8,
-}
 
 
 
@@ -1731,7 +1630,11 @@ Euclid_General_State :: struct {
     cycle_boundary_generation: u64,
     consumed_cycle_boundary_generation: u64,
 
-    trace_state: Trace_State,
+    evidence_session: evidence_session.Session,
+    evidence_allocations: evidence_allocation.Domain,
+    evidence_ring: evidence_trace.Ring,
+    evidence_text: evidence_text.Store,
+    evidence_checkpoints: evidence_checkpoint.Store,
 
     fixed_step: u64,
     simulation_time: f32,
@@ -1749,12 +1652,9 @@ Euclid_Run_Settings :: struct {
     limit_fps: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
-    semantic_trace_enabled: bool,
-    semantic_trace_strict: bool,
-    semantic_trace_output: string,
-    semantic_trace_events: string,
-    // When true, tracing runs and records are validated but discarded instead of
-    // written to stdout or a file. Used by tests to exercise the trace pipeline
-    // without producing output bytes.
-    semantic_trace_sink: bool,
+    evidence: evidence_session.Config,
+    profile_path: string,
+    scenario_input: string,
+    scenario_artifact_output: string,
+    diagnostics_path : string,
 }

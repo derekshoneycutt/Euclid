@@ -1,14 +1,26 @@
 package view
 
 import app_core "../core"
+import evidence_checkpoint "../evidence/checkpoint"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import app_files "../files"
-import app_trace "../trace"
 
 import "core:math"
 import "core:os"
 import "core:path/filepath"
-import "core:strings"
 import "core:testing"
+
+//   Enable all typed evidence lanes on one lightweight test state.
+init_test_evidence :: proc(state: ^app_core.Euclid_General_State) {
+    testing_config := evidence_session.Config{
+        enabled = true,
+        output_mode = .Sink,
+        lanes = {.Lifecycle, .Domain, .Transport, .Presentation, .Scenario, .Diagnostic},
+    }
+    _ = evidence_session.session_init(&state^.evidence_session, testing_config)
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+}
 
 //   Build the run settings for one headless trace-enabled session.
 make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
@@ -20,12 +32,12 @@ make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
         limit_fps = true,
         use_simd_batch_projection = false,
         use_gpu_dust_instancing = false,
-        semantic_trace_enabled = true,
-        semantic_trace_strict = true,
-        semantic_trace_output = "",
-        semantic_trace_events = "",
-        // Exercise the trace pipeline without printing records to stdout.
-        semantic_trace_sink = true,
+        evidence = {
+            enabled = true,
+            strict = true,
+            output_mode = .Sink,
+            lanes = evidence_session.ALL_LANES,
+        },
     }
 }
 
@@ -52,6 +64,10 @@ expect_headless_session_ready :: proc(
 @(test)
 headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     t: ^testing.T) {
+    profile_path := ".build/test-artifacts/headless.spall"
+    worker_profile_path := ".build/test-artifacts/headless.spall.worker.spall"
+    os.make_directory_all(".build/test-artifacts")
+    os.remove(worker_profile_path)
     cwd, cwd_err := os.get_working_directory(context.temp_allocator)
     testing.expect(t, cwd_err == nil)
     testing.expect(t, len(cwd) > 0)
@@ -64,13 +80,12 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
         &asset_root_config))
 
     settings := make_headless_trace_settings()
+    settings.profile_path = profile_path
     session, ok := create_runtime_session(&settings)
     testing.expect(t, ok)
     if !ok {
         return
     }
-    defer shutdown_runtime_session(session)
-
     expect_headless_session_ready(t, session)
 
     state := session.state
@@ -79,7 +94,13 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
-    testing.expect(t, app_trace.state_is_valid(&state^.trace_state))
+    testing.expect(t, state^.evidence_session.required_evidence_complete)
+    testing.expect_value(t, shutdown_runtime_session(session), 0)
+
+    profile_info, profile_error := os.stat(worker_profile_path, context.allocator)
+    testing.expect(t, profile_error == nil)
+    testing.expect(t, profile_info.size > 0)
+    os.remove(worker_profile_path)
 }
 
 //   Verify a deterministic fixed step advances identity after the worker joins.
@@ -92,9 +113,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     defer free(state^.particle_system)
     state^.point_system = new(app_core.Shapes_Point_System)
     defer free(state^.point_system)
-    state^.trace_state.enabled = true
-    state^.trace_state.output_mode = .Sink
-    state^.trace_state.categories = app_core.Trace_Category_Set{.Geometry}
+    init_test_evidence(state)
 
     executor := create_simulation_executor(state)
     testing.expect(t, executor != nil)
@@ -105,25 +124,43 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     testing.expect_value(t, state^.fixed_step, u64(1))
     testing.expectf(t, math.abs(state^.simulation_time - 0.025) <= 0.0001,
         "expected simulation_time near 0.025, got %v", state^.simulation_time)
-    testing.expect_value(t, state^.trace_state.records_count, 1)
-
-    first_record := &state^.trace_state.records[0]
-    first_event := string(first_record^.event[:first_record^.event_len])
-    first_payload := string(first_record^.payload[:first_record^.payload_len])
-    testing.expect_value(t, first_event, "constraint.solve_summary")
-    testing.expect(t, strings.contains(first_payload, "\"fixed_step\":1"))
-    testing.expect(t, strings.contains(first_payload, "\"simulation_time\":0.025"))
+    testing.expect_value(t, state^.evidence_ring.count, 1)
+    first_event := state^.evidence_ring.events[0]
+    testing.expect_value(t, first_event.kind,
+        evidence_trace.Kind.Constraint_Solve_Completed)
+    testing.expect_value(t, first_event.tick, u64(1))
 
     testing.expect(t, run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
-    testing.expect_value(t, state^.trace_state.records_count, 2)
+    testing.expect_value(t, state^.evidence_ring.count, 2)
+    second_event := state^.evidence_ring.events[1]
+    testing.expect_value(t, second_event.kind,
+        evidence_trace.Kind.Constraint_Solve_Completed)
+    testing.expect_value(t, second_event.tick, u64(2))
+}
 
-    second_record := &state^.trace_state.records[1]
-    second_payload := string(second_record^.payload[:second_record^.payload_len])
-    testing.expect(t, strings.contains(second_payload, "\"fixed_step\":2"))
-    testing.expect(t, strings.contains(second_payload, "\"simulation_time\":0.05"))
+//   Verify the canonical one-point checkpoint captured by the fixed-step fixture.
+expect_single_point_checkpoint :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    event: evidence_trace.Event) {
+    handle := evidence_checkpoint.Handle{
+        slot = event.payload.handle.slot,
+        generation = event.payload.handle.generation,
+    }
+    checkpoint, found := evidence_checkpoint.store_get(
+        &state^.evidence_checkpoints, handle)
+    testing.expect(t, found)
+    testing.expect_value(t, checkpoint^.fixed_step, u64(1))
+    testing.expectf(t, math.abs(checkpoint^.simulation_time - 0.025) <= 0.0001,
+        "expected checkpoint simulation_time near 0.025, got %v",
+        checkpoint^.simulation_time)
+    testing.expect_value(t, checkpoint^.point_count, 1)
+    testing.expect_value(t, checkpoint^.points[0].index, i32(0))
+    testing.expect_value(t, checkpoint^.points[0].x, f32(1))
+    testing.expect_value(t, checkpoint^.points[0].y, f32(2))
+    testing.expect_value(t, checkpoint^.points[0].z, f32(3))
 }
 
 //   Verify a deterministic fixed step emits a post-join checkpoint snapshot.
@@ -143,9 +180,7 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     state^.point_system^.next_point_index = 1
     state^.point_system^.points[0].kind = .Point
     state^.point_system^.points[0].position = app_core.Vector3{1, 2, 3}
-    state^.trace_state.enabled = true
-    state^.trace_state.output_mode = .Sink
-    state^.trace_state.categories = app_core.Trace_Category_Set{.Trace, .Geometry}
+    init_test_evidence(state)
 
     executor := create_simulation_executor(state)
     testing.expect(t, executor != nil)
@@ -153,18 +188,12 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     defer destroy_simulation_executor(executor)
 
     testing.expect(t, run_deterministic_fixed_step(state, 0.025))
-    testing.expect_value(t, state^.trace_state.records_count, 2)
+    testing.expect_value(t, state^.evidence_ring.count, 2)
 
-    checkpoint := &state^.trace_state.records[1]
-    event_name := string(checkpoint^.event[:checkpoint^.event_len])
-    payload := string(checkpoint^.payload[:checkpoint^.payload_len])
-    testing.expect_value(t, event_name, "trace.checkpoint")
-    testing.expect(t, strings.contains(payload, "\"checkpoint_id\":1"))
-    testing.expect(t, strings.contains(payload, "\"fixed_step\":1"))
-    testing.expect(t, strings.contains(payload, "\"simulation_time\":0.025"))
-    testing.expect(t, strings.contains(payload, "\"animation_id\":\"null\""))
-    testing.expect(t, strings.contains(payload, "\"next_point_index\":1"))
-    testing.expect(t, strings.contains(payload, "\"points\":["))
+    checkpoint_event := state^.evidence_ring.events[1]
+    testing.expect_value(t, checkpoint_event.kind,
+        evidence_trace.Kind.Checkpoint_Stored)
+    expect_single_point_checkpoint(t, state, checkpoint_event)
 }
 
 //   Verify a parallel step joins the particle and constraint updates.

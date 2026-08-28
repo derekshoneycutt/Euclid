@@ -1,5 +1,10 @@
 package view
 
+import "../diagnostics"
+
+import "core:log"
+import "core:os"
+import "core:strings"
 import "core:testing"
 
 import app_bridge "../bridge"
@@ -326,6 +331,12 @@ animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.
 //   Verify a runtime failure event records the request identity.
 @(test)
 julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
+    path := ".build/test-artifacts/runtime-failure.log"
+    os.make_directory_all(".build/test-artifacts")
+    os.remove(path)
+    logging_state: diagnostics.Logging_State
+    testing.expect(t, diagnostics.logging_start(&logging_state, path, .Info))
+    context.logger = logging_state.logger
     service := new(app_bridge.Julia_Runtime_Service)
     defer free(service)
     service^.active_request_id = 8
@@ -343,11 +354,20 @@ julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, service^.last_failed_request_id, u64(7))
     testing.expect(t, service^.last_failed_request_kind == .Invoke)
     testing.expect_value(t, service^.active_request_id, u64(8))
+    context.logger = log.nil_logger()
+    diagnostics.logging_stop(&logging_state)
+    content_bytes, read_error := os.read_entire_file(path, context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(content_bytes)
+    defer os.remove(path)
+    testing.expect(t, strings.contains(string(content_bytes),
+        "julia_request_failed request_id=7 request_kind=1 event_kind=1 generation=0 count=1"))
 }
 
 //   Verify a terminal runtime failure does not report a clean stopped state.
 @(test)
 julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
+    context.logger = log.nil_logger()
     service := new(app_bridge.Julia_Runtime_Service)
     defer free(service)
     service^.lifecycle = .Shutdown_Requested
@@ -385,6 +405,17 @@ julia_runtime_diagnostics_report_failure_and_saturation :: proc(t: ^testing.T) {
     testing.expect_value(t, diagnostics.request_saturation_count, u64(5))
     testing.expect(t, diagnostics.reload_state == .Failed)
     testing.expect_value(t, diagnostics.runtime_generation, u64(9))
+}
+
+//   Verify repeated pressure diagnostics use exponentially sparse occurrence counts.
+@(test)
+julia_runtime_saturation_diagnostics_are_power_of_two_bounded :: proc(t: ^testing.T) {
+    for count: u64 = 1; count <= 16; count += 1 {
+        expected := count == 1 || count == 2 || count == 4 ||
+            count == 8 || count == 16
+        testing.expect_value(t,
+            app_bridge.diagnostic_occurrence_should_log(count), expected)
+    }
 }
 
 //   Verify a reload failure records the package revision.

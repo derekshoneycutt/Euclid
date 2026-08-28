@@ -2,6 +2,8 @@ package view
 
 import "../core"
 import "../dynview"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import "../particles"
 import "../shapes"
 import "../taskpool"
@@ -20,6 +22,14 @@ create_simulation_executor :: proc(
     executor^.constraint_task.state = state
     executor^.shape_cache_task.state = state
     executor^.dynview_task.state = state
+    evidence_trace.ring_init(
+        &executor^.particle_task.evidence_ring, .Particle_Worker)
+    evidence_trace.ring_init(
+        &executor^.constraint_task.evidence_ring, .Constraint_Worker)
+    evidence_trace.ring_init(
+        &executor^.shape_cache_task.evidence_ring, .Shape_Cache_Worker)
+    evidence_trace.ring_init(
+        &executor^.dynview_task.evidence_ring, .Dynview_Worker)
     if !taskpool.task_pool_init(&executor^.pool) {
         free(executor)
         return nil
@@ -40,6 +50,17 @@ destroy_simulation_executor :: proc(executor: ^Simulation_Executor) {
 update_particles_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     data := cast(^Simulation_Task_Data)payload
     particles.update_particles(data^.state^.particle_system, data^.dt)
+    _ = evidence_session.session_record(
+        &data^.state^.evidence_session, &data^.evidence_ring, {
+            lane = .Domain,
+            kind = .Particle_Emission_Committed,
+            correlation_kind = .Fixed_Step,
+            correlation = data^.state^.fixed_step + 1,
+            tick = data^.state^.fixed_step + 1,
+            payload = {counts = {
+                first = u32(max(data^.state^.particle_system^.next_index, 0)),
+            }},
+        })
     return .Succeeded
 }
 
@@ -48,6 +69,19 @@ solve_constraints_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     data := cast(^Simulation_Task_Data)payload
     shapes.apply_all_constraints_to_error(
         data^.state^.point_system, ALLOWED_CONSTRAINT_ERROR)
+    _ = evidence_session.session_record(
+        &data^.state^.evidence_session, &data^.evidence_ring, {
+            lane = .Domain,
+            kind = .Constraint_Solve_Completed,
+            correlation_kind = .Fixed_Step,
+            correlation = data^.state^.fixed_step + 1,
+            tick = data^.state^.fixed_step + 1,
+            flags = {.Required},
+            payload = {counts = {
+                first = u32(max(
+                    data^.state^.point_system^.next_constraint_index, 0)),
+            }},
+        })
     return .Succeeded
 }
 
@@ -55,6 +89,18 @@ solve_constraints_task :: proc(payload: rawptr) -> taskpool.Task_Result {
 build_shape_cache_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     data := cast(^Frame_Preparation_Task_Data)payload
     shapes.build_draw_cache(data^.state^.point_system, data^.interpolation_alpha)
+    _ = evidence_session.session_record(
+        &data^.state^.evidence_session, &data^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Shape_Cache_Prepared,
+            correlation_kind = .Fixed_Step,
+            correlation = data^.state^.fixed_step,
+            tick = data^.state^.fixed_step,
+            payload = {counts = {
+                first = u32(max(
+                    data^.state^.point_system^.draw_cache.item_count, 0)),
+            }},
+        })
     return .Succeeded
 }
 
@@ -62,6 +108,14 @@ build_shape_cache_task :: proc(payload: rawptr) -> taskpool.Task_Result {
 compile_dynview_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     data := cast(^Frame_Preparation_Task_Data)payload
     dynview.compile_if_needed(&data^.state^.dynview)
+    _ = evidence_session.session_record(
+        &data^.state^.evidence_session, &data^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Dynview_Compiled,
+            correlation_kind = .Fixed_Step,
+            correlation = data^.state^.fixed_step,
+            tick = data^.state^.fixed_step,
+        })
     return .Succeeded
 }
 
@@ -87,6 +141,12 @@ run_parallel_simulation_step :: proc(executor: ^Simulation_Executor, dt: f32) {
     submit_simulation_task(executor, &fence, solve_constraints_task,
         rawptr(&executor^.constraint_task))
     assert(taskpool.task_fence_wait(&executor^.pool, &fence) == .Succeeded)
+    evidence_session.session_accept_ring(
+        &executor^.particle_task.state^.evidence_session,
+        &executor^.particle_task.evidence_ring)
+    evidence_session.session_accept_ring(
+        &executor^.constraint_task.state^.evidence_session,
+        &executor^.constraint_task.evidence_ring)
 }
 
 //   Prepare frame-owned shape and text caches concurrently before rendering.
@@ -103,4 +163,8 @@ run_parallel_frame_preparation :: proc(state: ^core.Euclid_General_State, alpha:
             rawptr(&executor^.dynview_task))
     }
     assert(taskpool.task_fence_wait(&executor^.pool, &fence) == .Succeeded)
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &executor^.shape_cache_task.evidence_ring)
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &executor^.dynview_task.evidence_ring)
 }
