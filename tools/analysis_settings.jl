@@ -30,6 +30,7 @@ const RuleResponses = Dict(
     "FUNCTION-METRIC-POLICY-DRIFT" => Fail,
     "NAMING-POLICY-DRIFT" => Fail,
     "CALL-ROOT-POLICY-DRIFT" => Fail,
+    "IMPORT-POLICY-DRIFT" => Fail,
     "COMMON-LINE-90" => Warn,
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
@@ -271,9 +272,9 @@ function animation_loop_reviews()
 end
 
 AnalysisSettings(
-    :default,
-    Fail,
-    AnalysisThresholds(90, 100, 120, 20, 30, 5, 10, 15, 15),
+    BaseSettings.profile,
+    BaseSettings.failure_threshold,
+    BaseSettings.thresholds,
     [
         ScanProfile(:default, DefaultExcludes),
         ScanProfile(:all, AllExcludes),
@@ -299,19 +300,15 @@ AnalysisSettings(
     ReturnTupleSettings(2, 2),
     ParameterCountSettings(8, 5, 8),
     FunctionMetricSettings(
-        ResponseThresholds(35, 45, 65),
-        ResponseThresholds(35, 45, 65),
-        ResponseThresholds(10, 14, 200),
-        ResponseThresholds(10, 15, 200),
+        BaseSettings.function_metrics.julia_lines,
+        BaseSettings.function_metrics.odin_lines,
+        BaseSettings.function_metrics.julia_cyclomatic,
+        BaseSettings.function_metrics.odin_cyclomatic,
         animation_loop_reviews()),
     default_architecture_settings(),
     AllocationSettings(
-        KnownAllocatingProcedure[],
-        [
-            AllocatorSourcePattern("context.temp_allocator", :temporary),
-            AllocatorSourcePattern("context.allocator", :context),
-            AllocatorSourcePattern("heap.allocator()", :heap),
-        ],
+        BaseSettings.allocations.known_procedures,
+        BaseSettings.allocations.source_patterns,
         ReviewedAllocationPolicy[
             # Bridge Animations Allocations ; these use a dedicated arena
             ReviewedAllocationPolicy(
@@ -1100,7 +1097,11 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ]),
-    ReportSettings(:auto, 100, 100),
+    ReportSettings(
+        BaseSettings.report.color,
+        BaseSettings.report.warning_limit,
+        BaseSettings.report.report_limit;
+        staging_maximum_response=Ignore),
     AnalysisExtension[],
     default_duplicate_code_settings(),
     default_resource_lifetime_settings(),
@@ -1149,5 +1150,5 @@ AnalysisSettings(
             "the scratchpad REPL evaluates this command from user input"),
         CallRootEntryPoint(
             "scratchpad-repl:quit", :julia, "install_hook_helpers!.quit",
-            "the scratchpad REPL evaluates this command from user input"),
-    ]))
+            "the scratchpad REPL evaluates this command from user input")],
+        ReviewedImportPolicy[]))

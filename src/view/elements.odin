@@ -140,6 +140,16 @@ Compass_Arc_Samples :: struct {
     auxiliary:     [COMPASS_TOPCIRCLE_VECTORS]Vector2,
 }
 
+//   Cached geometry and optional pen occluder used to draw both compass legs.
+Compass_Leg_Draw_Context :: struct {
+    state:            ^Euclid_General_State,
+    comp:             ^core.Shapes_Compass_Draw,
+    c0, c1, c2:       Vector2,
+    leg1, leg2:       Tool_Brush_Occluder,
+    pen_occluder:     Tool_Brush_Occluder,
+    has_pen_occluder: bool,
+}
+
 //   One projected tool segment used as bounded shadow context.
 Tool_Brush_Occluder :: struct {
     p0:        Vector2,
@@ -163,7 +173,9 @@ tool_brush_view_depth :: #force_inline proc(point: Vector3) -> f32 {
 
 //   Build projected and view-space metadata for one world-space tool segment.
 make_tool_brush_occluder :: #force_inline proc(
-    state: ^Euclid_General_State, p0, p1: Vector3, thickness: f32) -> Tool_Brush_Occluder {
+    state: ^Euclid_General_State,
+    p0, p1: Vector3, thickness: f32) -> Tool_Brush_Occluder {
+
     direction := p1 - p0
     tangent := Vector3{}
     if linalg.dot(direction, direction) > 0.00000001 {
@@ -537,11 +549,36 @@ draw_cached_item_low :: proc(state: ^Euclid_General_State,
     }
 }
 
+//   Draw the cached pen with the compass caster selected by merged-layer ordering.
+draw_cached_pen_high_merged :: #force_inline proc(
+    state: ^Euclid_General_State,
+    pen: ^core.Shapes_Pen_Draw,
+    receives_compass: bool) {
+
+    compass_caster: ^core.Shapes_Compass_Draw = nil
+    if receives_compass {
+        compass_caster = &state^.point_system^.draw_cache.compass
+    }
+    draw_cached_pen_full(state, pen, compass_caster)
+}
+
+//   Draw the cached compass with the pen caster selected by merged-layer ordering.
+draw_cached_compass_high_merged :: #force_inline proc(
+    state: ^Euclid_General_State,
+    compass: ^core.Shapes_Compass_Draw,
+    receives_pen: bool) {
+
+    pen_caster: ^core.Shapes_Pen_Draw = nil
+    if receives_pen {
+        pen_caster = &state^.point_system^.draw_cache.pen
+    }
+    draw_cached_compass_full(state, compass, pen_caster)
+}
+
 //   Draw one cached item only when it belongs to the merged higher layer.
 draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
     item: ^core.Shapes_Draw_Cache_Item,
     pen_receives_compass, compass_receives_pen: bool) {
-    cache := &state^.point_system^.draw_cache
     switch &item_typed in item {
     case core.Shapes_Label_Draw:
     case core.Shapes_Point_Draw:
@@ -555,17 +592,9 @@ draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
     case core.Shapes_Polygon_Draw:
         draw_cached_polygon_high(state, &item_typed)
     case core.Shapes_Pen_Draw:
-        compass_caster: ^core.Shapes_Compass_Draw = nil
-        if pen_receives_compass {
-            compass_caster = &cache^.compass
-        }
-        draw_cached_pen_full(state, &item_typed, compass_caster)
+        draw_cached_pen_high_merged(state, &item_typed, pen_receives_compass)
     case core.Shapes_Compass_Draw:
-        pen_caster: ^core.Shapes_Pen_Draw = nil
-        if compass_receives_pen {
-            pen_caster = &cache^.pen
-        }
-        draw_cached_compass_full(state, &item_typed, pen_caster)
+        draw_cached_compass_high_merged(state, &item_typed, compass_receives_pen)
     }
 }
 
@@ -2166,6 +2195,53 @@ emit_tool_brush_strip_vertex :: #force_inline proc(
     rlgl.Vertex2f(position.x, position.y)
 }
 
+//   Upload shader parameters for one lit compass outside-arc strip.
+set_compass_arc_shader_uniforms :: proc(
+    draw: Compass_Arc_Draw,
+    basis: Compass_Top_Circle_Basis,
+    side_extent: f32) {
+
+    state := draw.state
+    shader := &state^.stroke_3d
+    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
+    set_tool_brush_uniform_float(
+        state, shader^.loc_strip_alpha, f32(draw.color.a) / 255.0)
+    set_tool_brush_uniform_vec3(state, shader^.loc_strip_color, Vector3{
+        f32(draw.color.r) / 255.0,
+        f32(draw.color.g) / 255.0,
+        f32(draw.color.b) / 255.0,
+    })
+    set_tool_brush_uniform_float(state, shader^.loc_strip_side_extent, side_extent)
+    depth_width := draw.brush_size /
+        math.max(state^.iso_scale^.half_scale, 0.0001)
+    attachment_extent := compass_arc_attachment_extent(
+        draw.brush_size, basis.radius, basis.theta_out,
+        state^.iso_scale^.half_scale)
+    set_tool_brush_uniform_float(
+        state, shader^.loc_intersection_depth_width, depth_width)
+    set_tool_brush_uniform_float(
+        state, shader^.loc_attachment_extent, attachment_extent)
+    set_tool_brush_uniform_float(state, shader^.loc_arc_intersections_enabled, 1.0)
+}
+
+//   Emit the triangles for one sampled compass outside-arc strip.
+emit_compass_arc_strip :: proc(samples: ^Compass_Arc_Samples) {
+    for i in 0..<COMPASS_TOPCIRCLE_SEGMENTS {
+        emit_tool_brush_strip_vertex(
+            samples^.left[i], samples^.auxiliary[i], samples^.tangents_view[i], 0)
+        emit_tool_brush_strip_vertex(
+            samples^.right[i], samples^.auxiliary[i], samples^.tangents_view[i], 255)
+        emit_tool_brush_strip_vertex(samples^.left[i + 1], samples^.auxiliary[i + 1],
+            samples^.tangents_view[i + 1], 0)
+        emit_tool_brush_strip_vertex(
+            samples^.right[i], samples^.auxiliary[i], samples^.tangents_view[i], 255)
+        emit_tool_brush_strip_vertex(samples^.right[i + 1], samples^.auxiliary[i + 1],
+            samples^.tangents_view[i + 1], 255)
+        emit_tool_brush_strip_vertex(samples^.left[i + 1], samples^.auxiliary[i + 1],
+            samples^.tangents_view[i + 1], 0)
+    }
+}
+
 
 //   Draw the compass outside arc without the tool shader.
 draw_outside_arc_compass_fallback :: proc(
@@ -2208,49 +2284,46 @@ draw_outside_arc_compass_cached :: proc(
         return
     }
 
-    s := &state^.stroke_3d
     rlgl.DrawRenderBatchActive()
-    set_tool_brush_uniform_float(state, s^.loc_stroke_mode, 1.0)
-    set_tool_brush_uniform_float(state, s^.loc_strip_alpha, f32(draw.color.a) / 255.0)
-    set_tool_brush_uniform_vec3(state, s^.loc_strip_color, Vector3{
-        f32(draw.color.r) / 255.0,
-        f32(draw.color.g) / 255.0,
-        f32(draw.color.b) / 255.0,
-    })
-    set_tool_brush_uniform_float(state, s^.loc_strip_side_extent, side_extent)
-    depth_width := draw.brush_size /
-        math.max(state^.iso_scale^.half_scale, 0.0001)
-    attachment_extent := compass_arc_attachment_extent(
-        draw.brush_size, basis.radius, basis.theta_out, state^.iso_scale^.half_scale)
-    set_tool_brush_uniform_float(state, s^.loc_intersection_depth_width, depth_width)
-    set_tool_brush_uniform_float(state, s^.loc_attachment_extent, attachment_extent)
-    set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 1.0)
+    set_compass_arc_shader_uniforms(draw, basis, side_extent)
 
     _ = rlgl.CheckRenderBatchLimit(COMPASS_TOPCIRCLE_SEGMENTS * 6)
     rlgl.SetTexture(rlgl.GetTextureIdDefault())
     rlgl.DisableBackfaceCulling()
     rlgl.Begin(rlgl.TRIANGLES)
-    for i in 0..<COMPASS_TOPCIRCLE_SEGMENTS {
-        emit_tool_brush_strip_vertex(
-            samples.left[i], samples.auxiliary[i], samples.tangents_view[i], 0)
-        emit_tool_brush_strip_vertex(
-            samples.right[i], samples.auxiliary[i], samples.tangents_view[i], 255)
-        emit_tool_brush_strip_vertex(samples.left[i + 1], samples.auxiliary[i + 1],
-            samples.tangents_view[i + 1], 0)
-
-        emit_tool_brush_strip_vertex(
-            samples.right[i], samples.auxiliary[i], samples.tangents_view[i], 255)
-        emit_tool_brush_strip_vertex(samples.right[i + 1], samples.auxiliary[i + 1],
-            samples.tangents_view[i + 1], 255)
-        emit_tool_brush_strip_vertex(samples.left[i + 1], samples.auxiliary[i + 1],
-            samples.tangents_view[i + 1], 0)
-    }
+    emit_compass_arc_strip(&samples)
     rlgl.End()
 
     rlgl.DrawRenderBatchActive()
     rlgl.EnableBackfaceCulling()
-    set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 0.0)
-    set_tool_brush_uniform_float(state, s^.loc_stroke_mode, 0.0)
+    set_tool_brush_uniform_float(
+        state, state^.stroke_3d.loc_arc_intersections_enabled, 0.0)
+    set_tool_brush_uniform_float(state, state^.stroke_3d.loc_stroke_mode, 0.0)
+}
+
+//   Draw one compass leg with its sibling and optional pen occluders.
+draw_cached_compass_leg :: proc(
+    ctx: ^Compass_Leg_Draw_Context,
+    joint1_leg: bool,
+    sibling_occludes: bool) {
+
+    start, finish := ctx^.c1, ctx^.c2
+    receiver, sibling := ctx^.leg2, ctx^.leg1
+    if joint1_leg {
+        start, finish = ctx^.c0, ctx^.c1
+        receiver, sibling = ctx^.leg1, ctx^.leg2
+    }
+
+    occluders := Tool_Brush_Occluder_Context{}
+    if sibling_occludes {
+        append_tool_brush_occluder(&occluders, receiver, sibling)
+    }
+    if ctx^.has_pen_occluder {
+        append_tool_brush_occluder(&occluders, receiver, ctx^.pen_occluder)
+    }
+    set_tool_brush_occluders(ctx^.state, &occluders)
+    draw_tool_brush_segment(ctx^.state, start, finish,
+        ctx^.comp^.brush_size, ctx^.comp^.color)
 }
 
 
@@ -2259,54 +2332,33 @@ draw_cached_compass :: proc(
     state: ^Euclid_General_State,
     comp: ^core.Shapes_Compass_Draw,
     pen_caster: ^core.Shapes_Pen_Draw) {
-    c0 := view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(comp^.pivot, state^.iso_scale^)
-    c2 := view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^)
-    leg1 := make_tool_brush_occluder(
-        state, comp^.joint1, comp^.pivot, comp^.brush_size)
-    leg2 := make_tool_brush_occluder(
-        state, comp^.pivot, comp^.joint2, comp^.brush_size)
-    pen_occluder := Tool_Brush_Occluder{}
-    has_pen_occluder := pen_caster != nil
-    if has_pen_occluder {
-        pen_occluder = make_tool_brush_occluder(
+    ctx := Compass_Leg_Draw_Context{
+        state = state,
+        comp = comp,
+        c0 = view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^),
+        c1 = view_core.iso_to_cartesian(comp^.pivot, state^.iso_scale^),
+        c2 = view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^),
+        leg1 = make_tool_brush_occluder(
+            state, comp^.joint1, comp^.pivot, comp^.brush_size),
+        leg2 = make_tool_brush_occluder(
+            state, comp^.pivot, comp^.joint2, comp^.brush_size),
+        has_pen_occluder = pen_caster != nil,
+    }
+    if ctx.has_pen_occluder {
+        ctx.pen_occluder = make_tool_brush_occluder(
             state, pen_caster^.joint1, pen_caster^.joint2, pen_caster^.brush_size)
     }
 
-    draw_joint1_last := compass_draw_joint1_leg_last(comp, c0, c1, c2)
+    draw_joint1_last := compass_draw_joint1_leg_last(comp, ctx.c0, ctx.c1, ctx.c2)
     if draw_joint1_last {
-        occluders := Tool_Brush_Occluder_Context{}
-        append_tool_brush_occluder(&occluders, leg2, leg1)
-        if has_pen_occluder {
-            append_tool_brush_occluder(&occluders, leg2, pen_occluder)
-        }
-        set_tool_brush_occluders(state, &occluders)
-        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
-
-        occluders = Tool_Brush_Occluder_Context{}
-        if has_pen_occluder {
-            append_tool_brush_occluder(&occluders, leg1, pen_occluder)
-        }
-        set_tool_brush_occluders(state, &occluders)
-        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
+        draw_cached_compass_leg(&ctx, false, true)
+        draw_cached_compass_leg(&ctx, true, false)
     } else {
-        occluders := Tool_Brush_Occluder_Context{}
-        append_tool_brush_occluder(&occluders, leg1, leg2)
-        if has_pen_occluder {
-            append_tool_brush_occluder(&occluders, leg1, pen_occluder)
-        }
-        set_tool_brush_occluders(state, &occluders)
-        draw_tool_brush_segment(state, c0, c1, comp^.brush_size, comp^.color)
-
-        occluders = Tool_Brush_Occluder_Context{}
-        if has_pen_occluder {
-            append_tool_brush_occluder(&occluders, leg2, pen_occluder)
-        }
-        set_tool_brush_occluders(state, &occluders)
-        draw_tool_brush_segment(state, c1, c2, comp^.brush_size, comp^.color)
+        draw_cached_compass_leg(&ctx, true, true)
+        draw_cached_compass_leg(&ctx, false, false)
     }
 
-    arc_occluders := make_compass_arc_occluders(leg1, leg2)
+    arc_occluders := make_compass_arc_occluders(ctx.leg1, ctx.leg2)
     set_tool_brush_occluders(state, &arc_occluders)
     draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
         Compass_Arc_Draw{state, comp^.brush_size, comp^.color})

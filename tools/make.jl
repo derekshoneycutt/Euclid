@@ -1279,20 +1279,23 @@ function run_plan_validation(
     return nothing
 end
 
-"""Execute the finalized build plan, verification gate, and optional run step."""
-function execute_build_plan(args::Args, plan::BuildPlanToggles, run_args::Vector{String})
+"""Prepare linker, sysimage, and verification dependencies for a build plan."""
+function prepare_build_plan(args::Args, plan::BuildPlanToggles)
     julia_flags, julia_bindir = resolve_julia_linker_flags(
         plan.do_build || args.harness)
     if args.run && is_windows() && julia_bindir === nothing
         julia_bindir = resolve_julia_bindir()
     end
-
     if (plan.do_build || plan.do_assets) && !args.sysimage
         remove_stale_julia_sysimage()
     end
-
     (plan.do_vet || args.test) && load_verification_adapter()
+    return julia_flags, julia_bindir
+end
 
+"""Execute the finalized build plan, verification gate, and optional run step."""
+function execute_build_plan(args::Args, plan::BuildPlanToggles, run_args::Vector{String})
+    julia_flags, julia_bindir = prepare_build_plan(args, plan)
     build_result, build_elapsed_ns = run_plan_build(args, plan, julia_flags)
     build_ok = build_result === nothing || build_result.exit_code == 0
     run_plan_packaging(args, plan, build_ok)
