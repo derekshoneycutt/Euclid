@@ -3,6 +3,7 @@ package ui_dynview
 import "../../../core"
 import "../../../dynview"
 import view_core "../../core"
+import "../../font"
 
 import "core:math"
 
@@ -129,9 +130,9 @@ style_font :: #force_inline proc(
 
     flags := style.font_flags
     if flags == .None {
-        flags = view_core.font_flags_from_bold_italic(style.bold, style.italic)
+        flags = font.font_flags_from_bold_italic(style.bold, style.italic)
     }
-    return view_core.font_runtime_resolve(
+    return font.font_runtime_resolve(
         draw_ctx^.state,
         flags,
         view_core.JULIA_MONO_FONT_LOAD_SIZE)

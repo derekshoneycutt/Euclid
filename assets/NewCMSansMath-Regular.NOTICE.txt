@@ -1,0 +1,51 @@
+New Computer Modern Sans Math
+=============================
+
+File: NewCMSansMath-Regular.otf
+Package: New Computer Modern 8.1.1 (2026-06-22)
+Author and maintainer: Antonis Tsolomitis
+Source: https://ctan.org/pkg/newcomputermodern
+Source archive: https://mirrors.ctan.org/fonts/newcomputermodern.zip
+Upstream repository: https://git.gnu.org.ua/newcm.git
+Upstream tag: 8.1.1
+SHA-256: 2976236474e4e92ea68d9140c5b05fa1b98818a0a4a30cf8881c4c45ca951fd3
+Embedded font version: 2.0
+
+The repository file is byte-for-byte identical to the OTF distributed in the
+New Computer Modern 8.1.1 CTAN archive.
+
+The package's License.txt states that all fonts are distributed under the GUST
+Font License except NewCM10-Regular, all NewCMUncial fonts, and all
+NewCM*Devanagari fonts. NewCMSansMath-Regular is not an exception and is
+therefore distributed under the GUST Font License.
+
+GUST Font License 1.0
+---------------------
+
+This is version 1.0, dated 22 June 2009, of the GUST Font License.
+(GUST is the Polish TeX Users Group, https://www.gust.org.pl.)
+
+For the most recent version of this license see
+https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt or
+https://tug.org/fonts/licenses/GUST-FONT-LICENSE.txt.
+
+This work may be distributed and/or modified under the conditions of the LaTeX
+Project Public License, either version 1.3c of this license or (at your option)
+any later version.
+
+Please also observe the following clause:
+
+1) It is requested, but not legally required, that derived works be distributed
+only after changing the names of the fonts comprising this work and given in an
+accompanying manifest, and that the files comprising the Work, as listed in the
+manifest, also be given new names. Any exceptions to this request are also given
+in the manifest.
+
+We recommend the manifest be given in a separate file named
+MANIFEST-<fontid>.txt, where <fontid> is some unique identification of the font
+family. If a separate readme file accompanies the Work, we recommend a name of
+the form README-<fontid>.txt.
+
+The latest version of the LaTeX Project Public License is at
+https://www.latex-project.org/lppl.txt. Version 1.3c or later is part of all
+LaTeX distributions from 2006/05/20 onward.

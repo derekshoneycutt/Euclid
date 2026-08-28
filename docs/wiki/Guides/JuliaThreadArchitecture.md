@@ -53,9 +53,11 @@ Euclid has three distinct execution roles:
 - The **Julia owner thread** owns Julia lifetime, C API calls, callback
   execution, Scratchpad runtime, content registration, and reload. It must not
   render or concurrently mutate canonical scene state.
-- The **CPU worker pool** runs particle, constraint, shape draw-cache, and
-  conditional Dynview compile/layout tasks. It must not call Julia or
-  thread-affine raylib APIs.
+- The **CPU worker pool** is the bounded `src/taskpool` service. Its persistent
+  workers run particle, constraint, shape draw-cache, and conditional Dynview
+  compile/layout tasks. The display owner may help execute queued tasks while
+  waiting on a deterministic fence. Tasks must not call Julia or thread-affine
+  raylib APIs.
 
 The Julia owner thread is not part of the CPU worker pool. It is a dedicated,
 long-lived command processor with different ownership and shutdown rules.

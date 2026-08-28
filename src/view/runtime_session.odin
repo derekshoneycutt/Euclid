@@ -203,11 +203,15 @@ init_state_trace :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) -> bool {
     if !trace.initialize_trace_state(&state^.trace_state, settings) {
         fmt.eprintln("Invalid semantic trace configuration.")
+        destroy_simulation_executor(state^.simulation_executor)
+        state^.simulation_executor = nil
         free_animations_state(state)
         return false
     }
     if !trace.begin_trace(&state^.trace_state) {
         fmt.eprintln("Failed to initialize semantic trace output.")
+        destroy_simulation_executor(state^.simulation_executor)
+        state^.simulation_executor = nil
         free_animations_state(state)
         return false
     }
@@ -236,6 +240,11 @@ initiate_animations_state :: proc(
     state^.pen = point_system_parts.pen
     init_runtime_fields(state, settings)
     state^.simulation_executor = create_simulation_executor(state)
+    if state^.simulation_executor == nil {
+        fmt.eprintln("Failed to initialize the simulation task pool.")
+        free_animations_state(state)
+        return nil
+    }
 
     if !init_state_trace(state, settings) {
         return nil

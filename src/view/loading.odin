@@ -1,6 +1,7 @@
 package view
 
 import view_core "core"
+import "font"
 import "../files"
 import julia "../bridge"
 import "../trace"
@@ -63,8 +64,8 @@ prepare_assets_worker :: proc() {
 
 //   Prepare baseline font glyphs and atlases without touching GPU resources.
 prepare_fonts_worker :: proc(data: rawptr) {
-    preparation := cast(^view_core.Baseline_Font_Preparation)data
-    view_core.font_runtime_prepare_baseline(preparation,
+    preparation := cast(^font.Baseline_Font_Preparation)data
+    font.font_runtime_prepare_baseline(preparation,
         view_core.JULIA_MONO_FONT_LOAD_SIZE)
 }
 
@@ -211,7 +212,7 @@ initialize_window_runtime_with_loading :: proc(
     end_startup_phase("Preparing assets", started_at)
 
     started_at = begin_startup_phase("Starting Julia", 0.35)
-    font_preparation := view_core.Baseline_Font_Preparation{}
+    font_preparation := font.Baseline_Font_Preparation{}
     font_worker := thread.create_and_start_with_data(
         rawptr(&font_preparation), prepare_fonts_worker)
     started_service: Loading_Julia_Service

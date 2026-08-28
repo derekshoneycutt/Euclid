@@ -9,7 +9,6 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:testing"
-import "core:thread"
 
 //   Build the run settings for one headless trace-enabled session.
 make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
@@ -42,6 +41,9 @@ expect_headless_session_ready :: proc(
     testing.expect(t, state^.julia_interface != nil)
     testing.expect(t, state^.julia_interface^.current_animation != nil)
     testing.expect(t, state^.simulation_executor != nil)
+    testing.expect(t, state^.simulation_executor^.pool.state == .Running)
+    testing.expect_value(t,
+        state^.simulation_executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.fixed_step, u64(0))
     testing.expect_value(t, state^.simulation_time, f32(0))
 }
@@ -95,6 +97,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     state^.trace_state.categories = app_core.Trace_Category_Set{.Geometry}
 
     executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
     state^.simulation_executor = executor
     defer destroy_simulation_executor(executor)
 
@@ -145,6 +148,7 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     state^.trace_state.categories = app_core.Trace_Category_Set{.Trace, .Geometry}
 
     executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
     state^.simulation_executor = executor
     defer destroy_simulation_executor(executor)
 
@@ -189,6 +193,7 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     }
 
     executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
     defer destroy_simulation_executor(executor)
     run_parallel_simulation_step(executor, 0.01)
     first_batch_x := particles^.low_particles.pos_x[0]
@@ -214,6 +219,7 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     state^.dynview.enabled = true
 
     executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
     state^.simulation_executor = executor
     defer destroy_simulation_executor(executor)
 
@@ -221,9 +227,9 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
-    testing.expect(t, thread.pool_is_empty(&executor^.pool))
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
 
     run_parallel_frame_preparation(state, 0.75)
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
-    testing.expect(t, thread.pool_is_empty(&executor^.pool))
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
 }

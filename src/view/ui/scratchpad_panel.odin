@@ -4,6 +4,7 @@ import "../../core"
 import "../../dynview"
 import julia "../../bridge"
 import view_core "../core"
+import "../font"
 import ui_dynview "./dynview"
 
 import "core:strings"
@@ -613,7 +614,7 @@ draw_scratchpad_input_box :: proc(
     mouse_input: Mouse_Input_State) {
 
     ui_runtime := ctx.ui_runtime
-    prompt_font := view_core.font_runtime_resolve(
+    prompt_font := font.font_runtime_resolve(
         ctx.state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
     prompt_color := rl.Color{56, 152, 38, 255}
     if ui_runtime^.scratchpad_input_mode == .Help {

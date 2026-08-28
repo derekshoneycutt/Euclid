@@ -6,6 +6,7 @@ package core
 // This creates some hard caps on e.g. the particle system, but it also prevents wildness.
 
 import "../julialib"
+import "../taskpool"
 import "base:runtime"
 import "core:encoding/uuid"
 import rand "core:math/rand"
@@ -1441,7 +1442,7 @@ Frame_Preparation_Task_Data :: struct {
 }
 
 Simulation_Executor :: struct {
-    pool: thread.Pool,
+    pool: taskpool.Task_Pool,
     particle_task: Simulation_Task_Data,
     constraint_task: Simulation_Task_Data,
     shape_cache_task: Frame_Preparation_Task_Data,

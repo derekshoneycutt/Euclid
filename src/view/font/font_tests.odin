@@ -1,4 +1,4 @@
-package view_core
+package font
 
 import "core:testing"
 

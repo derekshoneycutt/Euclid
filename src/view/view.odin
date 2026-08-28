@@ -4,6 +4,7 @@ package view
 // the loop for the lifetime of this instance.
 
 import view_core "core"
+import "font"
 import "ui"
 import "../core"
 import "../audio"
@@ -231,7 +232,7 @@ open_window :: proc(settings: ^Euclid_Run_Settings) {
 //   Initialize audio, icon, shader, and font resources after application state exists.
 initialize_window_resources :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings,
-    font_preparation: ^view_core.Baseline_Font_Preparation) {
+    font_preparation: ^font.Baseline_Font_Preparation) {
 
     rl.InitAudioDevice()
     if !rl.IsAudioDeviceReady() {
@@ -263,7 +264,7 @@ initialize_window_resources :: proc(
     init_tool_brush_shader(state)
 
     font_size: i32 = view_core.JULIA_MONO_FONT_LOAD_SIZE
-    if !view_core.font_runtime_init_from_preparation(state, font_preparation, font_size) {
+    if !font.font_runtime_init_from_preparation(state, font_preparation, font_size) {
         fmt.eprintln("warning: failed to preload baseline JuliaMono fonts (Regular/Bold/RegularItalic); text rendering may fallback")
     }
 }
@@ -279,7 +280,7 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
     }
     shutdown_particle_render_resources(state)
     shutdown_tool_brush_shader(state)
-    view_core.font_runtime_unload_all(state)
+    font.font_runtime_unload_all(state)
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
@@ -582,7 +583,7 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     if state^.ui_runtime.display_fps {
         fps_flags := core.Font_Variant_Flags.Medium
-        mono_font := view_core.font_runtime_resolve(
+        mono_font := font.font_runtime_resolve(
             state,
             fps_flags,
             view_core.JULIA_MONO_FONT_LOAD_SIZE)

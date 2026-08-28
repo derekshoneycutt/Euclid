@@ -487,16 +487,6 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "view-simulation-executor-threadpool",
-                "src/view/simulation_executor.odin",
-                "create_simulation_executor",
-                :dynamic_growth,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="reserve",
-                target="executor^.pool.tasks_done",
-                certainty=:potential,
-                response=Ignore),
-            ReviewedAllocationPolicy(
                 "view-view-trace-snapshot",
                 "src/view/view.odin",
                 "record_checkpoint_trace_snapshot",

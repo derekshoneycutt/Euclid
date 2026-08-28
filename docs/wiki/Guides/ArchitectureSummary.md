@@ -285,10 +285,11 @@ synchronization rules; no subsystem may treat the workers as interchangeable.
 - The **Julia owner thread** exclusively owns Julia initialization, every Julia
   C API operation, callback handles, script reload, and Julia shutdown. Bridge
   tasks that call Julia must assert this owner identity.
-- The **simulation pool** contains a persistent CPU-count set of workers reused
-  for independent fixed-step systems and per-frame cache preparation. These
-  workers must not call Julia or thread-affine raylib window, audio, or
-  rendering APIs.
+- The **simulation pool** is the bounded `src/taskpool` service. It reserves two
+  logical processors for display and Julia work, owns fixed TLSF-backed task and
+  queue storage, and reuses persistent workers for independent fixed-step systems
+  and per-frame cache preparation. Tasks must not call Julia or thread-affine
+  raylib window, audio, or rendering APIs.
 
 ### Julia Owner Thread
 
@@ -323,11 +324,13 @@ The interactive loop calls `run_windowed_fixed_step`, which layers GIF capture
 state on top of that deterministic step. GIF behavior is presentation-side
 policy and is not part of the core semantic step boundary.
 
-Particle workers exclusively mutate `Particle_System`; constraint workers
-exclusively mutate `Shapes_Point_System`. Their task payloads and pool
-completion storage are allocated at startup and reused. The display thread does
-not continue until both tasks complete, so canonical constraints always settle
-worker-commanded geometry before any dependent capture or rendering work.
+Particle tasks exclusively mutate `Particle_System`; constraint tasks exclusively
+mutate `Shapes_Point_System`. Their payloads are persistent executor fields.
+Each batch uses a deterministic fence allocated from the pool's fixed backing
+region and released at join. While waiting, the display owner may execute queued
+pool work itself. It does not continue past the fence until both tasks complete,
+so canonical constraints settle worker-commanded geometry before any dependent
+capture or rendering work.
 
 ### Per-Frame Preparation
 
