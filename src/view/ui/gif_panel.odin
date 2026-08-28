@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import "../font"
 
 import "core:fmt"
 
@@ -136,14 +137,14 @@ draw_gif_view :: proc(
     }
 
     ui_runtime := &state.ui_runtime
-    font := state.font
+    regular_font := font.cache_borrow(&state.font_cache, .Regular)
 
     _ = draw_container(panel, .Grey)
 
     gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
     view_core.ui_text("GIF Export",
         int(panel.x + SETTINGS_PANEL_INSET), int(gif_section_y), UI_TEXT_COLOR,
-        view_core.ui_text_font(font))
+        view_core.ui_text_font(regular_font))
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
@@ -162,14 +163,14 @@ draw_gif_view :: proc(
         SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE, frame_step_row.cursor_out)
     status_row := gif_stack_row(stack_rect, 0, save_button_row.cursor_out)
 
-    draw_gif_sliders(panel, mouse_input, ui_runtime, font,
+    draw_gif_sliders(panel, mouse_input, ui_runtime, regular_font,
         Gif_Slider_Rows{downsample_row.segment_rect.y, frame_step_row.segment_rect.y})
 
     draw_settings_save_gif_button(panel,
-        save_button_row.segment_rect.y, mouse_input, ui_runtime, font)
+        save_button_row.segment_rect.y, mouse_input, ui_runtime, regular_font)
 
     draw_settings_gif_status(panel,
-        status_row.segment_rect.y, ui_runtime, font)
+        status_row.segment_rect.y, ui_runtime, regular_font)
 }
 
 //   Draw the downsample and frame-step integer sliders for the GIF panel.

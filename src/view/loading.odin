@@ -1,7 +1,5 @@
 package view
 
-import view_core "core"
-import "font"
 import "../files"
 import julia "../bridge"
 import "../trace"
@@ -47,11 +45,12 @@ draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
         rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4},
         STARTUP_PROGRESS_COLOR)
     if show_julia_warning {
-        font := rl.GetFontDefault()
+        regular_font := rl.GetFontDefault()
         font_size: f32 = 18
-        text_width := rl.MeasureTextEx(font, STARTUP_WARNING_TEXT, font_size, 0).x
+        text_width := rl.MeasureTextEx(
+            regular_font, STARTUP_WARNING_TEXT, font_size, 0).x
         text_position := rl.Vector2{WINDOW_WIDTH / 2 - text_width / 2, 402}
-        rl.DrawTextEx(font, STARTUP_WARNING_TEXT, text_position, font_size, 0,
+        rl.DrawTextEx(regular_font, STARTUP_WARNING_TEXT, text_position, font_size, 0,
             UI_TEXT_COLOR)
     }
     rl.EndDrawing()
@@ -60,13 +59,6 @@ draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
 //   Prepare packaged assets on the startup worker's independent temp allocator.
 prepare_assets_worker :: proc() {
     files.ensure_packaged_assets_unpacked_root()
-}
-
-//   Prepare baseline font glyphs and atlases without touching GPU resources.
-prepare_fonts_worker :: proc(data: rawptr) {
-    preparation := cast(^font.Baseline_Font_Preparation)data
-    font.font_runtime_prepare_baseline(preparation,
-        view_core.JULIA_MONO_FONT_LOAD_SIZE)
 }
 
 //   Keep drawing and pumping window events until one startup worker is ready.
@@ -212,9 +204,6 @@ initialize_window_runtime_with_loading :: proc(
     end_startup_phase("Preparing assets", started_at)
 
     started_at = begin_startup_phase("Starting Julia", 0.35)
-    font_preparation := font.Baseline_Font_Preparation{}
-    font_worker := thread.create_and_start_with_data(
-        rawptr(&font_preparation), prepare_fonts_worker)
     started_service: Loading_Julia_Service
     if !loading_start_julia_service(&started_service) {
         return {}, false
@@ -231,8 +220,7 @@ initialize_window_runtime_with_loading :: proc(
     end_startup_phase("Loading content", started_at)
 
     started_at = begin_startup_phase("Loading fonts and graphics", 0.85)
-    finish_startup_worker(font_worker, 0.85)
-    initialize_window_resources(state, settings, &font_preparation)
+    initialize_window_resources(state, settings)
     end_startup_phase("Loading fonts and graphics", started_at)
     draw_startup_frame(1.0)
     end_startup_phase("Total startup", startup_started_at)

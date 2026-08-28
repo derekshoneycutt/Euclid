@@ -52,7 +52,8 @@ TRACE_RUN_ID_CAPACITY :: 64
 TRACE_OUTPUT_PATH_CAPACITY :: 1024
 TRACE_CHECKPOINT_POINT_CAPACITY :: 8
 
-FONT_VARIANT_SLOT_COUNT :: 14
+FONT_KEY_COUNT :: int(Font_Key.Black_Italic) + 1
+FONT_SOURCE_PATH_CAPACITY :: 1024
 
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
@@ -1299,15 +1300,141 @@ Gif_Capture_Session :: struct {
     active: bool,
 }
 
-Euclid_Font_Variant_Slot :: struct {
-    loaded: bool,
-    missing_warned: bool,
-    font: rl.Font,
+Font_Key :: enum {
+    Regular,
+    Regular_Italic,
+    Light,
+    Light_Italic,
+    Medium,
+    Medium_Italic,
+    Semi_Bold,
+    Semi_Bold_Italic,
+    Bold,
+    Bold_Italic,
+    Extra_Bold,
+    Extra_Bold_Italic,
+    Black,
+    Black_Italic,
 }
 
-Euclid_Font_Runtime :: struct {
-    regular_slot_index: int,
-    variants: [FONT_VARIANT_SLOT_COUNT]Euclid_Font_Variant_Slot,
+Font_Load_State :: enum {
+    Unrequested,
+    Requested,
+    Preparing,
+    Ready,
+    Failed,
+}
+
+Font_Cache_Entry :: struct {
+    font: rl.Font,
+    generation: u64,
+    requested_generation: u64,
+    resident: bool,
+    state: Font_Load_State,
+    request_count: u64,
+    coalesced_request_count: u64,
+    fallback_resolution_count: u64,
+}
+
+Prepared_Font_Allocation_Mode :: enum {
+    Individual,
+    Arena,
+}
+
+Prepared_Glyph :: struct {
+    value: rune,
+    offset_x: i32,
+    offset_y: i32,
+    advance_x: i32,
+    bitmap_width: i32,
+    bitmap_height: i32,
+}
+
+Prepared_Rectangle :: struct {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+Prepared_Font :: struct {
+    key: Font_Key,
+    generation: u64,
+    base_size: i32,
+    glyph_count: i32,
+    padding: i32,
+    atlas_width: i32,
+    atlas_height: i32,
+    atlas_pixels: []u8,
+    glyphs: []Prepared_Glyph,
+    rectangles: []Prepared_Rectangle,
+    allocator: runtime.Allocator,
+    allocation_mode: Prepared_Font_Allocation_Mode,
+}
+
+Font_Prepare_Operation_State :: enum {
+    Idle,
+    Retry,
+    Queued,
+}
+
+Font_Prepare_Task :: struct {
+    key: Font_Key,
+    generation: u64,
+    path_storage: [1024]u8,
+    path_length: int,
+    pixel_size: i32,
+    codepoints: [8192]rune,
+    codepoint_count: i32,
+    prepared: Prepared_Font,
+    allocator: runtime.Allocator,
+}
+
+Font_Prepare_Operation :: struct {
+    state: Font_Prepare_Operation_State,
+    task: Font_Prepare_Task,
+    handle: taskpool.Task_Handle,
+    queue_full_count: u64,
+    pending_poll_count: u64,
+    failure_count: u64,
+    publication_count: u64,
+    stale_completion_count: u64,
+}
+
+Font_Source_Signature :: struct {
+    modification_ns: i64,
+    size: i64,
+    present: bool,
+}
+
+Font_Source_Monitor_Entry :: struct {
+    observed: Font_Source_Signature,
+    pending: Font_Source_Signature,
+    reload_due_ns: i64,
+    pending_change: bool,
+}
+
+Font_Source_Monitor :: struct {
+    entries: [FONT_KEY_COUNT]Font_Source_Monitor_Entry,
+    next_poll_ns: i64,
+    change_count: u64,
+    reload_count: u64,
+    initialized: bool,
+}
+
+Font_Source_Path :: struct {
+    storage: [FONT_SOURCE_PATH_CAPACITY]u8,
+    length: int,
+}
+
+Font_Cache :: struct {
+    entries: [FONT_KEY_COUNT]Font_Cache_Entry,
+    source_paths: [FONT_KEY_COUNT]Font_Source_Path,
+    preparation: Font_Prepare_Operation,
+    preparation_arena: vmem.Arena,
+    preparation_arena_initialized: bool,
+    source_monitor: Font_Source_Monitor,
+    shutting_down: bool,
 }
 
 Ui_Layout_Mode :: enum {
@@ -1595,8 +1722,7 @@ Euclid_General_State :: struct {
     dust_render: Dust_Render_State,
     ui_runtime: Euclid_Ui_Runtime_State,
     gif_capture: Gif_Capture_Session,
-    font_runtime: Euclid_Font_Runtime,
-    font: rl.Font,
+    font_cache: Font_Cache,
 
     simulation_executor: ^Simulation_Executor,
     scene_command_batch_target: ^Scene_Command_Batch,

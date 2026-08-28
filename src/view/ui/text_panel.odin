@@ -4,6 +4,7 @@ import "../../core"
 import "../../dynview"
 import julia "../../bridge"
 import view_core "../core"
+import "../font"
 import ui_dynview "./dynview"
 
 import rl "vendor:raylib"
@@ -77,7 +78,7 @@ view_text_draw_content :: proc(
         ui_dynview.Scratchpad_Draw_Params{
             panel = text_panel,
             scroll_y = state^.ui_runtime.view_text_scroll_y,
-            font = state.font,
+            font = font.cache_borrow(&state.font_cache, .Regular),
             metrics = ui_dynview.Wrapped_Text_Metrics{
                 padding = TEXT_PADDING,
                 row_height = TEXT_ROW_HEIGHT,
@@ -126,7 +127,8 @@ draw_view_text_panel :: proc(
 
     if is_scratchpad_selected(state) {
         draw_scratchpad_output_and_prompt(
-            state, text_panel, ui_runtime, state.font, mouse_input)
+            state, text_panel, ui_runtime,
+            font.cache_borrow(&state.font_cache, .Regular), mouse_input)
         return
     }
 

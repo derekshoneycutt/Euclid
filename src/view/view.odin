@@ -103,6 +103,8 @@ run_gif_capture_frame :: proc(state: ^Euclid_General_State) {
 
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(state: ^Euclid_General_State) {
+    font.cache_service(
+        &state^.font_cache, &state^.simulation_executor^.pool)
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
     julia.publish_available_view_snapshot(state)
     alpha := accumulate_and_update_systems(state)
@@ -231,8 +233,7 @@ open_window :: proc(settings: ^Euclid_Run_Settings) {
 
 //   Initialize audio, icon, shader, and font resources after application state exists.
 initialize_window_resources :: proc(
-    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings,
-    font_preparation: ^font.Baseline_Font_Preparation) {
+    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
 
     rl.InitAudioDevice()
     if !rl.IsAudioDeviceReady() {
@@ -263,10 +264,13 @@ initialize_window_resources :: proc(
 
     init_tool_brush_shader(state)
 
-    font_size: i32 = view_core.JULIA_MONO_FONT_LOAD_SIZE
-    if !font.font_runtime_init_from_preparation(state, font_preparation, font_size) {
-        fmt.eprintln("warning: failed to preload baseline JuliaMono fonts (Regular/Bold/RegularItalic); text rendering may fallback")
+    font.cache_init(&state^.font_cache)
+    if !state^.font_cache.entries[int(font.Font_Key.Regular)].resident {
+        fmt.eprintln(
+            "warning: failed to load JuliaMono Regular; text rendering may fallback")
     }
+    _ = font.cache_request(&state^.font_cache, .Bold)
+    _ = font.cache_request(&state^.font_cache, .Regular_Italic)
 }
 
 //   Shutdown state-dependent render and audio resources before closing the window.
@@ -274,13 +278,15 @@ initialize_window_resources :: proc(
 // Notes:
 //   - Intended as the shutdown pair for initialize_window_resources.
 shutdown_window_resources :: proc(state : ^Euclid_General_State) {
+    font.cache_shutdown_service(
+        &state^.font_cache, &state^.simulation_executor^.pool)
+    font.cache_destroy(&state^.font_cache)
     audio.shutdown_chalk_runtime(&state^.chalk_audio)
     if rl.IsAudioDeviceReady() {
         rl.CloseAudioDevice()
     }
     shutdown_particle_render_resources(state)
     shutdown_tool_brush_shader(state)
-    font.font_runtime_unload_all(state)
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
@@ -583,10 +589,8 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     if state^.ui_runtime.display_fps {
         fps_flags := core.Font_Variant_Flags.Medium
-        mono_font := font.font_runtime_resolve(
-            state,
-            fps_flags,
-            view_core.JULIA_MONO_FONT_LOAD_SIZE)
+        mono_font := font.cache_resolve(
+            &state^.font_cache, font.font_key_from_flags(fps_flags))
 
         fps_text := fmt.tprintf("FPS: %d", rl.GetFPS())
         fps_text_c := strings.clone_to_cstring(fps_text, context.temp_allocator)

@@ -61,6 +61,7 @@ If you are new, read in this order:
 | **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
+| **Odin** | Font Cache | JuliaMono residency, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Text/math command compilation, layout planning, and draw-ready dynview caches. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Semantic Trace | Bounded trace configuration, JSONL serialization, overflow policy, and output lifecycle. | `src/trace/trace.odin` |
@@ -288,8 +289,9 @@ synchronization rules; no subsystem may treat the workers as interchangeable.
 - The **simulation pool** is the bounded `src/taskpool` service. It reserves two
   logical processors for display and Julia work, owns fixed TLSF-backed task and
   queue storage, and reuses persistent workers for independent fixed-step systems
-  and per-frame cache preparation. Tasks must not call Julia or thread-affine
-  raylib window, audio, or rendering APIs.
+  and per-frame cache preparation. It also prepares requested font variants on
+  CPU workers. Tasks must not call Julia or thread-affine raylib window, audio,
+  or rendering APIs.
 
 ### Julia Owner Thread
 
@@ -349,6 +351,20 @@ Dynview compile and layout caches. The tasks may run concurrently because
 their ownership does not overlap. Panel drawing consumes the joined caches;
 scroll state, copy-hit targets, and other interaction state remain on the
 display thread.
+
+### Font Cache
+
+`Euclid_General_State.font_cache` owns every resident JuliaMono GPU font and its
+resolved source paths. Regular loads synchronously as the permanent fallback.
+Other weights and italic variants are requested on demand, prepared serially
+through the shared taskpool using a reusable virtual arena, and finalized on the
+display thread. Frame service polls without waiting and publishes only the
+currently requested generation.
+
+Source changes are polled at a bounded cadence and debounced before replacement.
+Shutdown rejects new font requests, joins accepted preparation before destroying
+the taskpool, unloads resident fonts while the graphics context is live, and then
+releases the preparation arena.
 
 ### Lifecycle And Failure Rules
 

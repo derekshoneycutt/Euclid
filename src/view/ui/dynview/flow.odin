@@ -130,12 +130,17 @@ style_font :: #force_inline proc(
 
     flags := style.font_flags
     if flags == .None {
-        flags = font.font_flags_from_bold_italic(style.bold, style.italic)
+        flags = core.Font_Variant_Flags.Regular
+        if style.bold {
+            flags = .Bold
+        }
+        if style.italic {
+            flags = core.Font_Variant_Flags(
+                u32(flags) | u32(core.Font_Variant_Flags.Italic))
+        }
     }
-    return font.font_runtime_resolve(
-        draw_ctx^.state,
-        flags,
-        view_core.JULIA_MONO_FONT_LOAD_SIZE)
+    return font.cache_resolve(
+        &draw_ctx^.state^.font_cache, font.font_key_from_flags(flags))
 }
 
 //   Advance flow cursor to the next row when no columns remain in current row.

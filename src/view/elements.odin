@@ -8,6 +8,7 @@ package view
 import "../core"
 import "../files"
 import view_core "core"
+import "font"
 
 import "core:fmt"
 import "core:math"
@@ -1719,7 +1720,8 @@ project_iso_points_batch_with_components :: proc(
 //   Draw one prime decoration glyph at the resolved position and size.
 label_draw_prime :: #force_inline proc(
     state: ^Euclid_General_State, pos: rl.Vector2, size: f32, color: rl.Color) {
-    rl.DrawTextCodepoint(state^.font, '\'', pos, size, color)
+    regular_font := font.cache_borrow(&state^.font_cache, .Regular)
+    rl.DrawTextCodepoint(regular_font, '\'', pos, size, color)
 }
 
 //   Draw a run of prime decoration glyphs spaced across the label.
@@ -1747,7 +1749,8 @@ label_draw_prime_run :: proc(
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    rl.DrawTextCodepoint(state^.font, p^.label, c, p^.brush_size, p^.color)
+    regular_font := font.cache_borrow(&state^.font_cache, .Regular)
+    rl.DrawTextCodepoint(regular_font, p^.label, c, p^.brush_size, p^.color)
 
     switch p^.decoration_kind {
     case .None:

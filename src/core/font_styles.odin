@@ -31,7 +31,7 @@ font_has_flag :: #force_inline proc(flags, flag: Font_Variant_Flags) -> bool {
 font_resolve_weight_from_flags :: #force_inline proc(
     flags: Font_Variant_Flags) -> Font_Weight {
     resolved := Font_Weight.Regular
-    resolved_rank := font_weight_rank(resolved)
+    resolved_rank := 0
     flag_order := FONT_WEIGHT_FLAG_ORDER
     weight_order := FONT_WEIGHT_ORDER
 

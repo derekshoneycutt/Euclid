@@ -1,0 +1,362 @@
+package font
+
+import "../../core"
+
+import stbtt "vendor:stb/truetype"
+
+import "core:mem"
+import "core:os"
+
+// Empty pixels reserved around each glyph during row packing.
+FONT_GLYPH_PADDING :: i32(4)
+
+// Opaque white marker dimensions written into the atlas bottom-right corner.
+FONT_ATLAS_CORNER_SIZE :: 3
+
+// Immutable CPU preparation request; path/codepoints are borrowed for the call/task lifetime.
+Font_Prepare_Request :: struct {
+    key: Font_Key,
+    generation: u64,
+    path: string,
+    pixel_size: i32,
+    codepoints: []rune,
+}
+
+Prepared_Font_Allocation_Mode :: core.Prepared_Font_Allocation_Mode
+Prepared_Glyph :: core.Prepared_Glyph
+Prepared_Rectangle :: core.Prepared_Rectangle
+Prepared_Font :: core.Prepared_Font
+
+//   Release every allocation owned by a prepared CPU font result.
+//
+// Side effects:
+//   - Individually deletes slices in `.Individual` mode; arena mode only clears the
+//     record because the owning arena performs bulk reclamation.
+prepare_destroy :: proc(prepared: ^Prepared_Font) {
+    if prepared == nil {
+        return
+    }
+    if prepared.allocation_mode == .Individual {
+        delete(prepared.atlas_pixels, prepared.allocator)
+        delete(prepared.glyphs, prepared.allocator)
+        delete(prepared.rectangles, prepared.allocator)
+    }
+    prepared^ = {}
+}
+
+//   Lay out prepared glyphs and commit stable result metadata.
+prepare_commit_layout :: proc(
+    request: Font_Prepare_Request, prepared: ^Prepared_Font) {
+    atlas_width, atlas_height := prepare_layout(
+        prepared.glyphs, request.pixel_size, prepared.rectangles)
+    prepared.key = request.key
+    prepared.generation = request.generation
+    prepared.base_size = request.pixel_size
+    prepared.glyph_count = i32(len(prepared.glyphs))
+    prepared.padding = FONT_GLYPH_PADDING
+    prepared.atlas_width = atlas_width
+    prepared.atlas_height = atlas_height
+}
+
+//   Read one font source and initialize its stb font descriptor.
+prepare_open_font :: proc(
+    path: string, allocator: mem.Allocator,
+    info: ^stbtt.fontinfo) -> ([]u8, bool) {
+    file_data, file_error := os.read_entire_file(path, allocator)
+    if file_error != nil {
+        return nil, false
+    }
+    if !stbtt.InitFont(info, raw_data(file_data), 0) {
+        return file_data, false
+    }
+    return file_data, true
+}
+
+//   Count supported glyphs and allocate their parallel metadata slices.
+prepare_allocate_glyph_metadata :: proc(
+    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
+    glyph_count := prepare_count_glyphs(info, request.codepoints)
+    return glyph_count > 0 &&
+        prepare_allocate_metadata(prepared, glyph_count, allocator)
+}
+
+//   Parse, rasterize, and pack one TrueType font without calling raylib.
+//
+// Parameters:
+//   - request: Valid borrowed source path, positive size, and nonempty codepoint policy.
+//   - prepared: Destination reset to owned result state before allocation begins.
+//   - allocator: Allocation source retained in the result.
+//   - allocation_mode: Slice cleanup policy matching the allocator's lifetime.
+//
+// Returns:
+//   - True for a complete CPU font; false after rollback/clear where required.
+//
+// Notes:
+//   - This worker-safe path performs file I/O and stb rasterization but no raylib calls.
+prepare :: proc(
+    request: Font_Prepare_Request, prepared: ^Prepared_Font,
+    allocator: mem.Allocator,
+    allocation_mode := Prepared_Font_Allocation_Mode.Individual) -> bool {
+
+    if prepared == nil || request.pixel_size <= 0 || len(request.codepoints) == 0 {
+        return false
+    }
+    prepared^ = {allocator = allocator, allocation_mode = allocation_mode}
+    info: stbtt.fontinfo
+    file_data, opened := prepare_open_font(request.path, allocator, &info)
+    if !opened {
+        if file_data != nil && allocation_mode == .Individual {
+            delete(file_data, allocator)
+        }
+        return false
+    }
+    defer if allocation_mode == .Individual {
+        delete(file_data, allocator)
+    }
+
+    if !prepare_allocate_glyph_metadata(&info, request, prepared, allocator) {
+        return false
+    }
+    if !prepare_glyph_metrics(
+        &info, request, prepared.glyphs) {
+        prepare_destroy(prepared)
+        return false
+    }
+
+    prepare_commit_layout(request, prepared)
+    if !prepare_allocate_atlas(prepared, allocator) {
+        return false
+    }
+    prepare_render_atlas(&info, prepared)
+    return true
+}
+
+//   Allocate prepared metadata while preserving individual-allocation rollback.
+//
+// Returns:
+//   - True after equal-length glyph and rectangle slices are owned by `prepared`.
+prepare_allocate_metadata :: proc(
+    prepared: ^Prepared_Font, glyph_count: int,
+    allocator: mem.Allocator) -> bool {
+
+    glyphs, glyphs_error := make([]Prepared_Glyph, glyph_count, allocator)
+    if glyphs_error != nil {
+        return false
+    }
+    prepared.glyphs = glyphs
+    rectangles, rectangles_error := make(
+        []Prepared_Rectangle, glyph_count, allocator)
+    if rectangles_error != nil {
+        prepare_destroy(prepared)
+        return false
+    }
+    prepared.rectangles = rectangles
+    return true
+}
+
+//   Allocate the prepared atlas while preserving individual-allocation rollback.
+//
+// Returns:
+//   - True after allocating exactly `width * height * 2` zeroed bytes.
+prepare_allocate_atlas :: proc(
+    prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
+
+    atlas_size := int(prepared.atlas_width*prepared.atlas_height*2)
+    atlas_pixels, atlas_error := make([]u8, atlas_size, allocator)
+    if atlas_error != nil {
+        prepare_destroy(prepared)
+        return false
+    }
+    prepared.atlas_pixels = atlas_pixels
+    return true
+}
+
+//   Count requested codepoints represented by real glyphs in the font.
+//
+// Returns:
+//   - Number of codepoints whose stb glyph index is greater than zero.
+prepare_count_glyphs :: proc(
+    info: ^stbtt.fontinfo, codepoints: []rune) -> int {
+
+    result := 0
+    for codepoint in codepoints {
+        if stbtt.FindGlyphIndex(info, codepoint) > 0 {
+            result += 1
+        }
+    }
+    return result
+}
+
+//   Reproduce raylib's stb metrics and synthesized space bitmap dimensions.
+//
+// Returns:
+//   - True when every pre-counted real glyph receives one output record.
+prepare_glyph_metrics :: proc(
+    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    glyphs: []Prepared_Glyph) -> bool {
+
+    scale := stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
+    ascent: i32
+    descent: i32
+    line_gap: i32
+    stbtt.GetFontVMetrics(info, &ascent, &descent, &line_gap)
+    glyph_index := 0
+    for codepoint in request.codepoints {
+        if stbtt.FindGlyphIndex(info, codepoint) <= 0 {
+            continue
+        }
+        glyphs[glyph_index] = prepare_glyph_metric(
+            info, codepoint, request.pixel_size, scale, ascent)
+        glyph_index += 1
+    }
+    return glyph_index == len(glyphs)
+}
+
+//   Calculate one glyph's raylib-compatible offsets, advance, and bitmap bounds.
+//
+// Notes:
+//   - ASCII and ideographic spaces synthesize empty full-height rectangles using
+//     horizontal advance; nonempty glyph offsets are adjusted by scaled ascent.
+//
+// Returns:
+//   - Complete CPU metrics for the requested represented codepoint.
+prepare_glyph_metric :: proc(
+    info: ^stbtt.fontinfo, codepoint: rune, pixel_size: i32,
+    scale: f32, ascent: i32) -> Prepared_Glyph {
+
+    advance: i32
+    stbtt.GetCodepointHMetrics(info, codepoint, &advance, nil)
+    result := Prepared_Glyph{
+        value = codepoint,
+    }
+    if codepoint == ' ' || codepoint == rune(0x3000) {
+        result.advance_x = i32(f32(advance)*scale)
+        result.bitmap_width = result.advance_x
+        result.bitmap_height = pixel_size
+        return result
+    }
+
+    x0, y0, x1, y1: i32
+    stbtt.GetCodepointBitmapBox(
+        info, codepoint, scale, scale, &x0, &y0, &x1, &y1)
+    result.offset_x = x0
+    result.offset_y = y0
+    result.bitmap_width = x1 - x0
+    result.bitmap_height = y1 - y0
+    if result.bitmap_width > 0 && result.bitmap_height > 0 {
+        result.advance_x = i32(f32(advance)*scale)
+        result.offset_y += i32(f32(ascent)*scale)
+    }
+    return result
+}
+
+//   Reproduce raylib's default row packing and atlas growth policy.
+//
+// Parameters:
+//   - glyphs: Prepared metrics to place in order.
+//   - pixel_size: Positive base font height used for row spacing.
+//   - rectangles: Output parallel to glyphs.
+//
+// Returns:
+//   - Power-of-two atlas width and dynamically doubled height containing every glyph.
+prepare_layout :: proc(
+    glyphs: []Prepared_Glyph, pixel_size: i32,
+    rectangles: []Prepared_Rectangle) -> (i32, i32) {
+
+    total_width := i32(0)
+    for glyph in glyphs {
+        total_width += glyph.bitmap_width + 2*FONT_GLYPH_PADDING
+    }
+    padded_size := pixel_size + 2*FONT_GLYPH_PADDING
+    total_area := f32(total_width*padded_size)*1.2
+    atlas_width := i32(1)
+    for f32(atlas_width*atlas_width) < total_area {
+        atlas_width *= 2
+    }
+    atlas_height := atlas_width
+    if total_area < f32(atlas_width*atlas_width/2) {
+        atlas_height /= 2
+    }
+
+    offset_x := FONT_GLYPH_PADDING
+    offset_y := FONT_GLYPH_PADDING
+    for glyph, index in glyphs {
+        if offset_x >= atlas_width - glyph.bitmap_width - 2*FONT_GLYPH_PADDING {
+            offset_x = FONT_GLYPH_PADDING
+            offset_y += padded_size
+            if offset_y > atlas_height - pixel_size - FONT_GLYPH_PADDING {
+                atlas_height *= 2
+            }
+        }
+        rectangles[index] = {
+            x = offset_x,
+            y = offset_y,
+            width = glyph.bitmap_width,
+            height = glyph.bitmap_height,
+        }
+        offset_x += glyph.bitmap_width + 2*FONT_GLYPH_PADDING
+    }
+    return atlas_width, atlas_height
+}
+
+//   Rasterize glyph alpha into the packed two-channel atlas and add its white corner.
+//
+// Side effects:
+//   - Sets every gray channel byte to 255, writes non-space stb bitmap coverage into
+//     alpha, and marks the bottom-right corner opaque for downstream validation.
+prepare_render_atlas :: proc(
+    info: ^stbtt.fontinfo, prepared: ^Prepared_Font) {
+
+    for pixel_index in 0..<int(prepared.atlas_width*prepared.atlas_height) {
+        prepared.atlas_pixels[pixel_index*2] = 255
+    }
+    scale := stbtt.ScaleForPixelHeight(info, f32(prepared.base_size))
+    for glyph, index in prepared.glyphs {
+        if glyph.value == ' ' || glyph.value == rune(0x3000) ||
+            glyph.bitmap_width == 0 || glyph.bitmap_height == 0 {
+            continue
+        }
+        width, height, offset_x, offset_y: i32
+        bitmap := stbtt.GetCodepointBitmap(
+            info, scale, scale, glyph.value, &width, &height,
+            &offset_x, &offset_y)
+        if bitmap != nil {
+            prepare_copy_bitmap(
+                bitmap, width, height, prepared.rectangles[index], prepared)
+            stbtt.FreeBitmap(bitmap, info.userdata)
+        }
+    }
+
+    for corner_y in 0..<FONT_ATLAS_CORNER_SIZE {
+        for corner_x in 0..<FONT_ATLAS_CORNER_SIZE {
+            x := prepared.atlas_width - 1 - i32(corner_x)
+            y := prepared.atlas_height - 1 - i32(corner_y)
+            prepared.atlas_pixels[
+                int((y*prepared.atlas_width + x)*2 + 1)] = 255
+        }
+    }
+}
+
+//   Copy one grayscale stb bitmap into the atlas alpha channel.
+//
+// Side effects:
+//   - Copies only pixels whose rectangle-derived destination lies inside atlas bounds.
+prepare_copy_bitmap :: proc(
+    bitmap: [^]u8, width, height: i32, rectangle: Prepared_Rectangle,
+    prepared: ^Prepared_Font) {
+
+    for y in 0..<height {
+        for x in 0..<width {
+            destination_x := rectangle.x + x
+            destination_y := rectangle.y + y
+            if destination_x >= 0 && destination_x < prepared.atlas_width &&
+                destination_y >= 0 && destination_y < prepared.atlas_height {
+                source_index := y*width + x
+                destination_index :=
+                    (destination_y*prepared.atlas_width + destination_x)*2 + 1
+                prepared.atlas_pixels[int(destination_index)] = bitmap[source_index]
+            }
+        }
+    }
+}

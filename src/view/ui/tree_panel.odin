@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import "../font"
 
 import rl "vendor:raylib"
 
@@ -82,7 +83,7 @@ draw_tree_view :: proc(
         list_panel = list_panel,
         mouse_input = mouse_input,
         scroll_y = &state^.ui_runtime.tree_scroll_y,
-        font = state.font,
+        font = font.cache_borrow(&state.font_cache, .Regular),
     })
 }
 

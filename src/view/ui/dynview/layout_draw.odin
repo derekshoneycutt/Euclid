@@ -459,13 +459,18 @@ resolve_font_for_style :: #force_inline proc(
 
     flags := style.font_flags
     if flags == .None {
-        flags = font.font_flags_from_bold_italic(style.bold, style.italic)
+        flags = core.Font_Variant_Flags.Regular
+        if style.bold {
+            flags = .Bold
+        }
+        if style.italic {
+            flags = core.Font_Variant_Flags(
+                u32(flags) | u32(core.Font_Variant_Flags.Italic))
+        }
     }
 
-    resolved = font.font_runtime_resolve(
-        state,
-        flags,
-        view_core.JULIA_MONO_FONT_LOAD_SIZE)
+    resolved = font.cache_resolve(
+        &state^.font_cache, font.font_key_from_flags(flags))
     return resolved
 }
 

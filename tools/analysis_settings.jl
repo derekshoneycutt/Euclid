@@ -487,6 +487,16 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "view-font-preparation-arena",
+                "src/view/font/async.odin",
+                "cache_preparation_arena_init",
+                :arena,
+                "Reserved once on first optional-font demand, reused across preparations, and destroyed with the font cache.";
+                operation="arena_init_static",
+                target="cache.preparation_arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
                 "view-view-trace-snapshot",
                 "src/view/view.odin",
                 "record_checkpoint_trace_snapshot",

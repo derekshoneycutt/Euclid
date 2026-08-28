@@ -614,8 +614,7 @@ draw_scratchpad_input_box :: proc(
     mouse_input: Mouse_Input_State) {
 
     ui_runtime := ctx.ui_runtime
-    prompt_font := font.font_runtime_resolve(
-        ctx.state, core.Font_Variant_Flags.Bold, i32(TREE_FONT_SIZE))
+    prompt_font := font.cache_resolve(&ctx.state^.font_cache, .Bold)
     prompt_color := rl.Color{56, 152, 38, 255}
     if ui_runtime^.scratchpad_input_mode == .Help {
         prompt_color = rl.Color{217, 180, 74, 255}

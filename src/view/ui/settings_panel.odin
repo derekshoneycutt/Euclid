@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import "../font"
 
 import "core:fmt"
 
@@ -299,7 +300,7 @@ draw_settings_controls :: proc(
 
     ps := state.particle_system
     ui_runtime := &state.ui_runtime
-    font := state.font
+    regular_font := font.cache_borrow(&state.font_cache, .Regular)
 
     animation_entries_added := 0
     if state.julia_interface != nil {
@@ -315,20 +316,20 @@ draw_settings_controls :: proc(
         value = &ps.use_max_dust_particles,
         min_value = 0,
         max_value = core.MAX_LOW_PARTICLES,
-        font = font,
+        font = regular_font,
     })
     draw_settings_particle_stats(panel, rows.stats_y, ps,
-        animation_entries_added, font)
+        animation_entries_added, regular_font)
     draw_settings_fps_checkbox(panel, rows.fps_y,
-        mouse_input, ui_runtime, font)
+        mouse_input, ui_runtime, regular_font)
     draw_settings_limit_fps_checkbox(panel, rows.limit_y,
-        mouse_input, ui_runtime, font)
+        mouse_input, ui_runtime, regular_font)
     draw_settings_sound_checkbox(panel, rows.sound_y,
-        mouse_input, state, font)
+        mouse_input, state, regular_font)
     draw_settings_simd_projection_checkbox(panel, rows.simd_y,
-        mouse_input, ui_runtime, font)
+        mouse_input, ui_runtime, regular_font)
     draw_settings_gpu_dust_checkbox(panel, rows.gpu_dust_y, mouse_input,
-        ui_runtime, font)
+        ui_runtime, regular_font)
 }
 
 //   Render full settings panel and wire all settings controls.
@@ -345,7 +346,8 @@ draw_settings_view :: proc(
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
     view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y,
-        UI_TEXT_COLOR, view_core.ui_text_font(state.font))
+        UI_TEXT_COLOR, view_core.ui_text_font(
+            font.cache_borrow(&state.font_cache, .Regular)))
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,
