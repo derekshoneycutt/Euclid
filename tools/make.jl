@@ -1,50 +1,64 @@
 #!/usr/bin/env julia
 
 const HELP_TEXT = """
-Usage: ./make.jl [options]
-       (normally invoked via `make <target>` or `make.ps1 <target>`)
+Euclid repository driver
 
-Options:
-    --build, -b         Build the project. (default)
-    --no-build, -B      Skip any build, including vet builds.
-    --assets, -a        Build assets.pkg. (default)
-    --no-assets, -A     Skip assets.pkg build.
-    --sysimage, -s      Build a custom Julia sysimage beside the application.
-    --harness, -H       Build and run the headless semantic trace harness.
-    --clean, -c         Delete generated build artifacts.
-    --run, -r           Run bin/euclid after all other requests.
-    --test, -t          Run application and analyzer tests.
-    --vet, -v           Build, then run repository analysis. With --test, run the
-                        full verification gate (build, tests, analyzer tests,
-                        analyzer self-analysis, and repository analysis).
-    --stats=FILE        Show targeted statistics for one project Julia or Odin file.
-    --function=NAME     With --stats, select every exact function-name match.
-    --line=LINE         With --stats, select the innermost function at LINE.
-    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
-    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
-    --                  Pass all remaining args directly to bin/euclid (only with --run).
-    --help, -h          Show this help text.
+Usage: julia tools/make.jl COMMAND [ARGUMENTS]
 
-Verification options (forwarded to the analysis gate for --vet/--test):
+Commands:
+    help                         Show this help text.
+    build [--debug] [--strict]   Build the application and assets.
+    run [--debug] [--strict] [-- APP_ARGS]
+                                 Build and run the application.
+    run-only [--debug] [-- APP_ARGS]
+                                 Run an existing application binary.
+    assets                       Build assets.pkg only.
+    sysimage [--debug] [--strict]
+                                 Build the application, assets, and Julia sysimage.
+    harness                      Build and run the deterministic headless harness.
+    unit [julia|odin] [OPTS]     Run all application tests or one language suite.
+    vet [OPTS]                   Build and analyze the repository.
+    test [OPTS]                  Run the complete verification gate.
+    check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
+    stats FILE [OPTS]            Show targeted source statistics.
+    analyzer-test                Run the analyzer's own test suite.
+    wiki                         Generate the publishable Wiki artifact.
+    check-wiki                   Verify that the Wiki artifact is current.
+    clean                        Delete generated build artifacts.
+
+Build options:
+    --debug             Build with -debug -o:none under .build/debug.
+    --strict            Build with strict Odin validation flags.
+
+Verification options (forwarded by vet and test):
     --verbosity=0|1|2   Summary, details, or complete trace output.
     --verbose           Alias for --verbosity=2.
     --color=auto|always|never
     --format=text|json  Select human or complete machine output.
     --settings=PATH     Load analyzer settings from PATH.
-    --report=PATH       Write the comprehensive Markdown analysis report.
-
-Notes:
-    - If no options are provided, the default is --build --assets.
-    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
-    - Short options can be combined, e.g. -rvas or -Ba.
+    --report=PATH       Write the compact Markdown analysis report.
+    --full-report=PATH  Write the comprehensive Markdown analysis report.
 
 Targeted statistics examples:
-    ./make.jl --stats=src/view/view.odin
-    ./make.jl --stats=src/view/view.odin --function=run_window_loop
+    julia tools/make.jl stats src/view/view.odin
+    julia tools/make.jl stats tools/make.jl --function=run_plan_build
 """
 
 """Return CLI help text for the build script."""
 show_help() = HELP_TEXT
+
+const DRIVER_COMMANDS = Set([
+    "help", "build", "run", "run-only", "assets", "sysimage", "harness",
+    "unit", "vet", "test", "check", "stats", "analyzer-test", "wiki",
+    "check-wiki", "clean"])
+
+"""Parse one required repository-driver command and its scoped arguments."""
+function parse_driver_invocation(arguments::Vector{String})
+    isempty(arguments) && return DriverInvocation(:help, String[])
+    command = first(arguments)
+    command in DRIVER_COMMANDS || error("Unknown command: $command")
+    return DriverInvocation(Symbol(replace(command, '-' => '_')), arguments[2:end])
+end
 
 
 using Dates
@@ -54,35 +68,17 @@ using UUIDs
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags
 
-struct SourceStatisticsRequest
-    path::String
-    function_name::Union{Nothing, String}
-    line::Union{Nothing, String}
-    format::String
+struct BuildCommand
+    action::Symbol
+    debug::Bool
+    strict::Bool
+    arguments::Vector{String}
 end
 
-mutable struct SourceStatisticsParseState
-    path::Union{Nothing, String}
-    function_name::Union{Nothing, String}
-    line::Union{Nothing, String}
-end
-
-struct Args
-    run::Bool
-    build::Bool
-    assets::Bool
-    sysimage::Bool
-    harness::Bool
-    clean::Bool
-    test::Bool
-    vet::Bool
-    wiki::Bool
-    check_wiki::Bool
-    no_build::Bool
-    no_assets::Bool
-    help::Bool
-    verify_args::Vector{String}
-    statistics::Union{Nothing, SourceStatisticsRequest}
+"""Top-level command dispatch decision and its command-scoped arguments."""
+struct DriverInvocation
+    action::Symbol
+    arguments::Vector{String}
 end
 
 struct CommandResult
@@ -95,47 +91,6 @@ struct JuliaPackageDep
     name::String
     version::String
 end
-
-# Each short flag maps to the parsed-field mutations it applies.
-const SHORT_FLAG_EFFECTS = Dict{Char,Vector{Tuple{Symbol,Bool}}}(
-    'r' => [(:run, true)],
-    'b' => [(:build, true), (:no_build, false)],
-    'B' => [(:build, false), (:vet, false), (:no_build, true)],
-    'a' => [(:assets, true), (:no_assets, false)],
-    'A' => [(:assets, false), (:no_assets, true)],
-    's' => [(:sysimage, true)],
-    'H' => [(:harness, true)],
-    'c' => [(:clean, true)],
-    't' => [(:test, true)],
-    'v' => [(:vet, true), (:no_build, false)],
-    'w' => [(:wiki, true)],
-    'W' => [(:check_wiki, true)],
-    'h' => [(:help, true)])
-
-# Each long/short option maps to the parsed-field mutations it applies.
-const OPTION_FLAG_EFFECTS = Dict{String,Vector{Tuple{Symbol,Bool}}}(
-    "--run" => [(:run, true)], "-r" => [(:run, true)],
-    "--build" => [(:build, true), (:no_build, false)],
-    "-b" => [(:build, true), (:no_build, false)],
-    "--assets" => [(:assets, true), (:no_assets, false)],
-    "-a" => [(:assets, true), (:no_assets, false)],
-    "--sysimage" => [(:sysimage, true)], "-s" => [(:sysimage, true)],
-    "--harness" => [(:harness, true)], "-H" => [(:harness, true)],
-    "--clean" => [(:clean, true)], "-c" => [(:clean, true)],
-    "--test" => [(:test, true)], "-t" => [(:test, true)],
-    "--vet" => [(:vet, true), (:no_build, false)],
-    "-v" => [(:vet, true), (:no_build, false)],
-    "--wiki" => [(:wiki, true)], "-w" => [(:wiki, true)],
-    "--check-wiki" => [(:check_wiki, true)], "-W" => [(:check_wiki, true)],
-    "--no-build" => [(:build, false), (:vet, false), (:no_build, true)],
-    "-B" => [(:build, false), (:vet, false), (:no_build, true)],
-    "--no-assets" => [(:assets, false), (:no_assets, true)],
-    "-A" => [(:assets, false), (:no_assets, true)],
-    "--help" => [(:help, true)], "-h" => [(:help, true)])
-
-const ARG_FIELDS = [
-    :run, :build, :assets, :sysimage, :harness, :clean, :test, :vet,
-    :wiki, :check_wiki, :no_build, :no_assets, :help]
 
 """Resolved build/vet/assets toggles derived from CLI arguments."""
 struct BuildPlanToggles
@@ -156,6 +111,8 @@ const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
 const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
+const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
+const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
 
 
 """Return true when running on Windows."""
@@ -167,7 +124,23 @@ const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.jsonl")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
 
 """Return the expected output path for the Euclid application binary."""
-app_binary_path() = joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
+    joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+
+"""Return the isolated debug application output path."""
+debug_app_binary_path() = joinpath(
+    SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+
+"""Return the default synchronized diagnostics path for debug runs."""
+debug_diagnostics_path() = joinpath(SCRIPT_DIR, ".build", "debug", "euclid.log")
+
+"""Add default synchronized diagnostics to debug runs without an override."""
+function debug_application_arguments(arguments::Vector{String}, debug::Bool)
+    enabled = debug &&
+        !any(startswith(argument, "--diagnostics=") for argument in arguments)
+    return enabled ? vcat(["--diagnostics=$(debug_diagnostics_path())"], arguments) :
+        arguments
+end
 
 """Ensure a required command exists on PATH, otherwise raise a helpful error."""
 function require_command(command_name::String, install_hint::String)
@@ -247,33 +220,6 @@ function print_captured_output(label::String, output::String)
     println(normalized)
 end
 
-"""Set a single short option flag in the parsed CLI argument dictionary."""
-function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
-    effects = get(SHORT_FLAG_EFFECTS, flag, nothing)
-    effects === nothing && error("Unsupported parameter provided.")
-    for (field, value) in effects
-        args[field] = value
-    end
-end
-
-"""Apply one CLI option's parsed-field mutations from the lookup table."""
-function apply_cli_option!(parsed::Dict{Symbol,Bool}, arg::String)
-    effects = get(OPTION_FLAG_EFFECTS, arg, nothing)
-    if effects !== nothing
-        for (field, value) in effects
-            parsed[field] = value
-        end
-        return
-    end
-    if startswith(arg, "-") && !startswith(arg, "--") && length(arg) > 2
-        for flag in arg[2:end]
-            set_short_flag!(parsed, flag)
-        end
-        return
-    end
-    error("Unsupported parameter provided.")
-end
-
 """Return whether an argument is a verification presentation option to forward."""
 function is_verification_option(arg::String)
     return arg == "--verbose" ||
@@ -281,99 +227,46 @@ function is_verification_option(arg::String)
         startswith(arg, "--color=") ||
         startswith(arg, "--format=") ||
         startswith(arg, "--settings=") ||
-        startswith(arg, "--report=")
+        startswith(arg, "--report=") ||
+        startswith(arg, "--full-report=")
 end
 
-"""Apply one targeted source-statistics option when recognized."""
-function apply_statistics_option!(state::SourceStatisticsParseState, arg::String)
-    if startswith(arg, "--stats=")
-        state.path === nothing || error("Only one --stats file may be requested.")
-        state.path = split(arg, "="; limit=2)[2]
-    elseif startswith(arg, "--function=")
-        state.function_name = split(arg, "="; limit=2)[2]
-    elseif startswith(arg, "--line=")
-        state.line = split(arg, "="; limit=2)[2]
-    else
-        return false
+"""Split build options from application arguments following `--`."""
+function split_build_arguments(invocation::DriverInvocation)
+    split_index = findfirst(==("--"), invocation.arguments)
+    options = split_index === nothing ? invocation.arguments :
+        invocation.arguments[1:split_index-1]
+    application_arguments = split_index === nothing ? String[] :
+        invocation.arguments[split_index+1:end]
+    invocation.action in (:run, :run_only) || split_index === nothing || error(
+        "Only run and run-only accept application arguments after --.")
+    return options, application_arguments
+end
+
+"""Parse mode modifiers for a build, run, run-only, or sysimage command."""
+function parse_mode_build_command(invocation::DriverInvocation)
+    options, application_arguments = split_build_arguments(invocation)
+    all(option -> option in ("--debug", "--strict"), options) || error(
+        "$(replace(string(invocation.action), '_' => '-')) accepts only --debug and --strict.")
+    debug = "--debug" in options
+    strict = "--strict" in options
+    invocation.action == :run_only && strict && error(
+        "run-only cannot apply --strict to an existing binary.")
+    return BuildCommand(invocation.action, debug, strict, application_arguments)
+end
+
+"""Parse build modifiers and optional application arguments for one build command."""
+function parse_build_command(invocation::DriverInvocation)
+    if invocation.action in (:vet, :test)
+        all(is_verification_option, invocation.arguments) || error(
+            "$(invocation.action) accepts only verification options.")
+        return BuildCommand(invocation.action, false, false, invocation.arguments)
     end
-    return true
-end
-
-"""Validate source-statistics path presence and content."""
-function validate_statistics_path(state::SourceStatisticsParseState)
-    selectors_present = state.function_name !== nothing || state.line !== nothing
-    state.path === nothing && selectors_present && error(
-        "--function and --line require --stats=FILE.")
-    state.path === nothing && return
-    isempty(state.path) && error("The --stats file must not be empty.")
-end
-
-"""Validate source-statistics selector content and exclusivity."""
-function validate_statistics_selectors(state::SourceStatisticsParseState)
-    state.function_name !== nothing && isempty(state.function_name) && error(
-        "The --function name must not be empty.")
-    state.line !== nothing && isempty(state.line) && error(
-        "The --line value must not be empty.")
-    state.function_name !== nothing && state.line !== nothing && error(
-        "--function and --line are mutually exclusive.")
-end
-
-"""Resolve the final requested analyzer output format."""
-function statistics_output_format(verify_args::Vector{String})
-    format_arg = findlast(arg -> startswith(arg, "--format="), verify_args)
-    return format_arg === nothing ? "text" :
-        split(verify_args[format_arg], "="; limit=2)[2]
-end
-
-"""Validate and construct an optional targeted source-statistics request."""
-function source_statistics_request(
-    state::SourceStatisticsParseState, verify_args::Vector{String})
-
-    validate_statistics_path(state)
-    validate_statistics_selectors(state)
-    state.path === nothing && return nothing
-    return SourceStatisticsRequest(
-        state.path, state.function_name, state.line,
-        statistics_output_format(verify_args))
-end
-
-"""
-Parse command-line arguments into structured build flags, optional run arguments,
-and verification presentation options forwarded to the analysis gate.
-
-Returns a tuple of Args and trailing arguments passed after `--` for `--run`.
-"""
-function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
-    run_args = String[]
-    cli_args = argv
-
-    if "--" in argv
-        split_index = findfirst(==("--"), argv)
-        cli_args = argv[1:split_index-1]
-        run_args = argv[split_index+1:end]
+    if invocation.action in (:assets, :harness)
+        require_no_arguments(invocation)
+        return BuildCommand(invocation.action, false, false, String[])
     end
-
-    parsed = Dict{Symbol,Bool}(field => false for field in ARG_FIELDS)
-    verify_args = String[]
-    statistics = SourceStatisticsParseState(nothing, nothing, nothing)
-
-    for arg in cli_args
-        if apply_statistics_option!(statistics, arg)
-            continue
-        elseif is_verification_option(arg)
-            push!(verify_args, arg)
-        else
-            apply_cli_option!(parsed, arg)
-        end
-    end
-
-    if !isempty(run_args) && !parsed[:run]
-        error("Run arguments after -- are only valid with --run.")
-    end
-
-    request = source_statistics_request(statistics, verify_args)
-    args = Args((parsed[field] for field in ARG_FIELDS)..., verify_args, request)
-    return args, run_args
+    return parse_mode_build_command(invocation)
 end
 
 """Resolve the full path to `vswhere.exe` on Windows."""
@@ -791,17 +684,20 @@ function runtime_sbom_document(serial_uuid::AbstractString, runtime_libs, julia_
 end
 
 """Run the Odin build command and capture its output for the gate."""
-function execute_odin_build(julia_linker_flags::String)
+function execute_odin_build(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
     println("Building Odin...")
     mkpath(BIN_DIR)
+    debug && mkpath(dirname(debug_app_binary_path()))
 
-    cmd_parts = odin_build_command(julia_linker_flags)
+    cmd_parts = odin_build_command(julia_linker_flags, debug, strict)
     return run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
 end
 
 """Build the Odin application with standard parameters."""
-function build_odin(julia_linker_flags::String)
-    build_result = execute_odin_build(julia_linker_flags)
+function build_odin(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
+    build_result = execute_odin_build(julia_linker_flags, debug, strict)
 
     println("Build exited $(build_result.exit_code)")
     if build_result.exit_code != 0
@@ -812,15 +708,14 @@ function build_odin(julia_linker_flags::String)
     return nothing
 end
 
-"""Assemble the odin build command parts for the standard application build.
-
-Strict compiler-validation flags intentionally stay out of this command: the
-analysis engine performs its own dedicated strict build through
-`OdinBuildSettings`, so the application build only needs standard parameters.
-"""
-function odin_build_command(julia_linker_flags::String)
-    out_flag = is_windows() ? "-out:../bin/euclid.exe" : "-out:../bin/euclid"
+"""Assemble the Odin command for a standard, debug, or strict application build."""
+function odin_build_command(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
+    out_flag = "-out:$(app_binary_path(debug))"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
+    debug && append!(cmd_parts, ["-debug", "-o:none"])
+    strict && append!(cmd_parts,
+        ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     if is_windows()
         julia_linker_flags = string(julia_linker_flags, " /STACK:8388608")
     end
@@ -936,7 +831,7 @@ function create_assets_archive()
 end
 
 """Build and package runtime assets, then optionally generate runtime SBOM metadata."""
-function build_assets(do_build::Bool)
+function build_assets(do_build::Bool, debug::Bool=false)
     println("Building assets package...")
     prepare_julia_packages()
     stage_assets_content()
@@ -945,7 +840,7 @@ function build_assets(do_build::Bool)
     if do_build
         runtime_sbom_path = joinpath(BIN_DIR, "runtime-closure.generated.cdx.json")
         write_runtime_sbom(
-            app_binary_path(),
+            app_binary_path(debug),
             ASSETS_ARCHIVE_PATH,
             runtime_sbom_path,
             joinpath(SRC_DIR, "julia"))
@@ -1096,8 +991,9 @@ end
 
 """Run the built Euclid binary with optional trailing run arguments."""
 function run_binary(
-    run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString})
-    binary = app_binary_path()
+    run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString},
+    debug::Bool=false)
+    binary = app_binary_path(debug)
     if !isfile(binary)
         error("Error: Built binary not found in bin/.")
     end
@@ -1105,7 +1001,8 @@ function run_binary(
     if is_windows() && julia_bindir !== nothing
         new_path = string(julia_bindir, ';', get(ENV, "PATH", ""))
         withenv("PATH" => new_path) do
-            result = run_command(Cmd([binary; run_args...]); cwd=BIN_DIR)
+            arguments = debug_application_arguments(run_args, debug)
+            result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
             if result.exit_code != 0
                 error("Run step failed.")
             end
@@ -1113,7 +1010,8 @@ function run_binary(
         return
     end
 
-    result = run_command(Cmd([binary; run_args...]); cwd=BIN_DIR)
+    arguments = debug_application_arguments(run_args, debug)
+    result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
     if result.exit_code != 0
         error("Run step failed.")
     end
@@ -1134,6 +1032,7 @@ function clean_build_files()
         joinpath(BIN_DIR, ".julia_import_libs"),
         WIKI_ARTIFACT_DIR,
         joinpath(SCRIPT_DIR, ".build", "analysis"),
+        joinpath(SCRIPT_DIR, ".build", "debug"),
         joinpath(SCRIPT_DIR, ".build", "reports"),
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
@@ -1169,63 +1068,15 @@ function remove_build_targets(targets::Vector{String})
     return removed
 end
 
-"""Return true when any build/run action flag was explicitly requested."""
-explicit_action_requested(args::Args) =
-    args.statistics !== nothing || any(getfield(args, field) for field in (
-        :run, :build, :assets, :sysimage, :harness,
-        :vet, :test, :wiki, :check_wiki, :no_build, :no_assets))
-
-"""Resolve effective build, vet, and asset steps from CLI argument combinations."""
-function resolve_build_plan(args::Args)
-    do_build, do_vet = resolve_build_and_vet(args)
-    do_assets = resolve_assets(args)
-    do_build = apply_build_overrides(args, do_build, do_vet, do_assets)
-    do_assets = apply_asset_overrides(args, do_build, do_vet, do_assets)
-    return BuildPlanToggles(do_build, do_vet, do_assets)
+"""Return the fixed build, analysis, and asset plan for one command."""
+function build_plan_for(action::Symbol)
+    action == :assets && return BuildPlanToggles(false, false, true)
+    action in (:run_only, :harness) && return BuildPlanToggles(false, false, false)
+    action == :vet && return BuildPlanToggles(true, true, true)
+    action == :test && return BuildPlanToggles(true, true, true)
+    action in (:build, :run, :sysimage) && return BuildPlanToggles(true, false, true)
+    error("Command does not have a build plan: $action")
 end
-
-"""Resolve the build and vet toggles from the no-build/vet/build flags."""
-function resolve_build_and_vet(args::Args)
-    args.no_build && return false, false
-    args.vet && return true, true
-    return true, false
-end
-
-"""Resolve the assets toggle from the asset override flags."""
-function resolve_assets(args::Args)
-    args.no_assets && return false
-    return true
-end
-
-"""Apply the build overrides implied by assets-only, test-only, and wiki-only runs."""
-function apply_build_overrides(args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    (assets_only_run(args) || test_only_run(args) || wiki_only_run(args) ||
-        args.statistics !== nothing) && return false
-    return do_build
-end
-
-"""Apply the asset overrides implied by test-only, wiki-only, and statistics runs."""
-function apply_asset_overrides(
-    args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    skip_assets = test_only_run(args) || wiki_only_run(args) ||
-        args.statistics !== nothing
-    skip_assets && return false
-    return do_assets
-end
-
-"""Return true when only asset building was requested."""
-assets_only_run(args::Args) =
-    args.assets && !args.build && !args.vet && !args.no_build
-
-"""Return true when only the test step was requested."""
-test_only_run(args::Args) =
-    args.test && !args.build && !args.vet &&
-        !args.no_build && !args.assets && !args.no_assets
-
-"""Return true when only wiki generation or checking was requested."""
-wiki_only_run(args::Args) =
-    (args.wiki || args.check_wiki) && !args.run && !args.build &&
-        !args.assets && !args.sysimage && !args.vet && !args.test
 
 """Verify required external tooling exists for the selected build steps."""
 function ensure_required_commands(
@@ -1301,159 +1152,173 @@ function run_wiki_action(check_only::Bool)
         generate_wiki(candidate_root)
         candidate = wiki_tree_snapshot(candidate_root)
         expected == candidate || error(
-            "Wiki artifact is stale. Run `julia make.jl -w` and review the generated artifact.")
+            "Wiki artifact is stale. Run `julia tools/make.jl wiki` and review it.")
     end
     println("Wiki artifact is current and deterministic.")
 end
 
 """Run the build step, returning the captured build result for the gate."""
-function run_plan_build(args::Args, plan::BuildPlanToggles, julia_flags::String)
+function run_plan_build(
+    command::BuildCommand, plan::BuildPlanToggles, julia_flags::String)
     plan.do_build || return nothing, UInt64(0)
-    if plan.do_vet || args.test
+    if plan.do_vet
         build_started = time_ns()
-        build_result = execute_odin_build(julia_flags)
+        build_result = execute_odin_build(
+            julia_flags, command.debug, command.strict)
         build_elapsed_ns = UInt64(time_ns() - build_started)
         println("Build exited $(build_result.exit_code)")
         return build_result, build_elapsed_ns
     end
-    build_odin(julia_flags)
+    build_odin(julia_flags, command.debug, command.strict)
     return nothing, UInt64(0)
 end
 
 """Run the assets and sysimage packaging steps unless the build failed."""
-function run_plan_packaging(args::Args, plan::BuildPlanToggles, build_ok::Bool)
-    if !build_ok && (plan.do_assets || args.sysimage)
+function run_plan_packaging(
+    command::BuildCommand, plan::BuildPlanToggles, build_ok::Bool)
+    if !build_ok && (plan.do_assets || command.action == :sysimage)
         println(stderr, "Skipping assets and sysimage because the build failed.")
     end
-    plan.do_assets && build_ok && build_assets(plan.do_build)
-    args.sysimage && build_ok && build_julia_sysimage()
+    plan.do_assets && build_ok && build_assets(plan.do_build, command.debug)
+    command.action == :sysimage && build_ok && build_julia_sysimage()
     return nothing
 end
 
 """Run the verification gate selected by the resolved plan, when requested."""
 function run_plan_gate(
-    args::Args, plan::BuildPlanToggles, build_result, build_elapsed_ns::UInt64)
-    plan.do_vet || args.test || return 0
-    selection = plan.do_vet && args.test ? :full : plan.do_vet ? :analysis : :tests
+    command::BuildCommand, plan::BuildPlanToggles,
+    build_result, build_elapsed_ns::UInt64)
+    plan.do_vet || return 0
+    selection = command.action == :test ? :full : :analysis
     return run_verification_gate(
-        selection, build_result, build_elapsed_ns, args.verify_args)
+        selection, build_result, build_elapsed_ns, command.arguments)
 end
 
 """Run the harness and application run steps after a passing gate."""
 function run_plan_validation(
-    args::Args, run_args::Vector{String}, julia_flags::String, julia_bindir)
-    args.harness && run_harness(julia_flags)
-    args.run && run_binary(run_args, julia_bindir)
+    command::BuildCommand, julia_flags::String, julia_bindir)
+    command.action == :harness && run_harness(julia_flags)
+    command.action in (:run, :run_only) && run_binary(
+        command.arguments, julia_bindir, command.debug)
     return nothing
 end
 
 """Prepare linker, sysimage, and verification dependencies for a build plan."""
-function prepare_build_plan(args::Args, plan::BuildPlanToggles)
+function prepare_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, julia_bindir = resolve_native_linker_flags(
-        plan.do_build || args.harness)
-    if args.run && is_windows() && julia_bindir === nothing
+        plan.do_build || command.action == :harness)
+    if command.action in (:run, :run_only) && is_windows() && julia_bindir === nothing
         julia_bindir = resolve_julia_bindir()
     end
-    if (plan.do_build || plan.do_assets) && !args.sysimage
+    if (plan.do_build || plan.do_assets) && command.action != :sysimage
         remove_stale_julia_sysimage()
     end
-    (plan.do_vet || args.test) && load_verification_adapter()
+    plan.do_vet && load_verification_adapter()
     return julia_flags, julia_bindir
 end
 
-"""Run targeted source statistics through the vendored analysis engine."""
-function run_source_statistics(request::SourceStatisticsRequest)
+"""Translate a check or stats command into analyzer command arguments."""
+function analysis_command_arguments(action::Symbol, arguments::Vector{String})
+    paths = filter(argument -> !startswith(argument, "-"), arguments)
+    length(paths) <= 1 || error("$(action) accepts at most one path.")
+    action == :stats && isempty(paths) && error("stats requires a source file.")
+    path = isempty(paths) ? SCRIPT_DIR : only(paths)
+    options = filter(!=(path), arguments)
+    return [string(action), path, options...]
+end
+
+"""Run repository analysis or targeted source statistics without a build."""
+function run_analysis_command(action::Symbol, arguments::Vector{String})
     analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
         joinpath(SCRIPT_DIR, "tools", "analysis"))
-    analyzer_script = joinpath(analysis_project, "analyze.jl")
-    isfile(analyzer_script) || error(
-        "Analysis submodule is not initialized. " *
-        "Run `git submodule update --init --recursive`, then `make configure`.")
-    source_path = isabspath(request.path) ? normpath(request.path) :
-        normpath(joinpath(SCRIPT_DIR, request.path))
-    arguments = String["stats", source_path, "--format=$(request.format)"]
-    request.function_name === nothing || push!(
-        arguments, "--function=$(request.function_name)")
-    request.line === nothing || push!(arguments, "--line=$(request.line)")
-    command = Cmd(vcat(
-        [JULIA_EXE, "--project=$analysis_project", analyzer_script], arguments))
+    analyzer_arguments = analysis_command_arguments(action, arguments)
+    command = Cmd(vcat([
+        JULIA_EXE,
+        "--project=$analysis_project",
+        ANALYZER_SCRIPT,
+    ], analyzer_arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Run all application unit tests or one selected language suite."""
+function run_unit_command(arguments::Vector{String})
+    command = Cmd(vcat([JULIA_EXE, TEST_RUNNER_SCRIPT], arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Run the analyzer package's regression suite."""
+function run_analyzer_test_command(arguments::Vector{String})
+    isempty(arguments) || error("analyzer-test does not accept arguments.")
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    expression = "using Pkg; Pkg.test()"
+    command = Cmd([
+        JULIA_EXE, "--project=$analysis_project", "-e", expression])
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
 """Execute the finalized build plan, verification gate, and optional run step."""
-function execute_build_plan(args::Args, plan::BuildPlanToggles, run_args::Vector{String})
-    julia_flags, julia_bindir = prepare_build_plan(args, plan)
-    build_result, build_elapsed_ns = run_plan_build(args, plan, julia_flags)
+function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
+    julia_flags, julia_bindir = prepare_build_plan(command, plan)
+    build_result, build_elapsed_ns = run_plan_build(command, plan, julia_flags)
     build_ok = build_result === nothing || build_result.exit_code == 0
-    run_plan_packaging(args, plan, build_ok)
+    run_plan_packaging(command, plan, build_ok)
 
-    gate_status = run_plan_gate(args, plan, build_result, build_elapsed_ns)
+    gate_status = run_plan_gate(command, plan, build_result, build_elapsed_ns)
     gate_status == 0 || return gate_status
     build_ok || return 1
 
-    run_plan_validation(args, run_args, julia_flags, julia_bindir)
+    run_plan_validation(command, julia_flags, julia_bindir)
     return 0
 end
 
-"""Entrypoint for CLI execution. Returns process-style exit status."""
-function main()
-    args, run_args = try
-        parse_args(collect(ARGS))
-    catch err
-        println(stderr, sprint(showerror, err))
-        println(stderr, show_help())
-        return 1
-    end
+"""Require that a standalone command received no arguments."""
+function require_no_arguments(invocation::DriverInvocation)
+    isempty(invocation.arguments) || error(
+        "$(replace(string(invocation.action), '_' => '-')) does not accept arguments.")
+end
 
-    if args.help
+"""Execute one parsed repository-driver command."""
+function execute_driver_action(invocation::DriverInvocation)
+    if invocation.action == :help
+        require_no_arguments(invocation)
         print(show_help())
         return 0
     end
-
-    run_tests = args.test
-    has_explicit_action = explicit_action_requested(args)
-
-    if args.clean
-        clean_build_files()
-        if !has_explicit_action
-            return 0
-        end
+    invocation.action == :unit && return run_unit_command(invocation.arguments)
+    invocation.action in (:check, :stats) && return run_analysis_command(
+        invocation.action, invocation.arguments)
+    invocation.action == :analyzer_test &&
+        return run_analyzer_test_command(invocation.arguments)
+    if invocation.action in (:wiki, :check_wiki)
+        require_no_arguments(invocation)
+        ensure_required_commands(false, false, false, true)
+        run_wiki_action(invocation.action == :check_wiki)
+        return 0
     end
-
-    plan = resolve_build_plan(args)
-    return execute_requested_actions(args, plan, run_tests, run_args)
+    if invocation.action == :clean
+        require_no_arguments(invocation)
+        clean_build_files()
+        return 0
+    end
+    command = parse_build_command(invocation)
+    plan = build_plan_for(command.action)
+    ensure_required_commands(
+        plan.do_build, plan.do_assets, command.action == :test, false)
+    return execute_build_plan(command, plan)
 end
 
-"""Reject incompatible standalone or mutually exclusive CLI actions."""
-function validate_requested_actions(args::Args)
-    args.wiki && args.check_wiki && error(
-        "Choose either --wiki or --check-wiki, not both.")
-    conflicting_statistics_action = args.statistics !== nothing && any(
-        getfield(args, field) for field in (
-            :run, :build, :assets, :sysimage, :harness, :clean,
-            :vet, :test, :wiki, :check_wiki))
-    conflicting_statistics_action && error(
-        "--stats must be used as a standalone action.")
-end
-
-"""Run the requested post-build standalone action."""
-function execute_post_build_action(args::Args)
-    args.statistics !== nothing && return run_source_statistics(args.statistics)
-    (args.wiki || args.check_wiki) && run_wiki_action(args.check_wiki)
-    return 0
-end
-
-"""Run the resolved build plan and wiki action, returning the process exit status."""
-function execute_requested_actions(
-    args::Args, plan::BuildPlanToggles, run_tests::Bool, run_args::Vector{String})
-
-    try
-        validate_requested_actions(args)
-        ensure_required_commands(
-            plan.do_build, plan.do_assets, run_tests, args.wiki || args.check_wiki)
-        plan_status = execute_build_plan(args, plan, run_args)
-        plan_status == 0 || return plan_status
-        return execute_post_build_action(args)
+"""Entrypoint for CLI execution. Returns process-style exit status."""
+function main(arguments::Vector{String}=collect(ARGS))
+    invocation = try
+        parse_driver_invocation(arguments)
+    catch err
+        println(stderr, sprint(showerror, err))
+        println(stderr, "Run `julia tools/make.jl help` for usage.")
+        return 2
+    end
+    return try
+        execute_driver_action(invocation)
     catch err
         println(stderr, sprint(showerror, err))
         return 1

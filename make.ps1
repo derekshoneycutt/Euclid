@@ -108,51 +108,67 @@ function Invoke-MakeJl {
 switch ($Target.ToLowerInvariant()) {
     { $_ -in "build", "all", "" } {
         Ensure-Configured
-        Invoke-MakeJl @()
+        Invoke-MakeJl @("build")
     }
     "run" {
         Ensure-Configured
-        Invoke-MakeJl @("--run")
+        Invoke-MakeJl @("run")
+    }
+    "run-only" {
+        Ensure-Configured
+        Invoke-MakeJl @("run-only")
+    }
+    "assets" {
+        Ensure-Configured
+        Invoke-MakeJl @("assets")
+    }
+    "unit" {
+        Ensure-Configured
+        Invoke-MakeJl @("unit")
     }
     { $_ -in "test", "check" } {
         Ensure-Configured
-        Invoke-MakeJl @("--vet", "--test")
+        Invoke-MakeJl @("test")
     }
     "vet" {
         Ensure-Configured
-        Invoke-MakeJl @("--vet")
+        Invoke-MakeJl @("vet")
     }
     "sysimage" {
         Ensure-Configured
-        Invoke-MakeJl @("--sysimage")
+        Invoke-MakeJl @("sysimage")
     }
     "harness" {
         Ensure-Configured
-        Invoke-MakeJl @("--harness")
+        Invoke-MakeJl @("harness")
+    }
+    "analyzer-test" {
+        Ensure-Configured
+        Invoke-MakeJl @("analyzer-test")
     }
     "wiki" {
         Ensure-Configured
-        Invoke-MakeJl @("--wiki")
+        Invoke-MakeJl @("wiki")
     }
     "check-wiki" {
         Ensure-Configured
-        Invoke-MakeJl @("--check-wiki")
+        Invoke-MakeJl @("check-wiki")
     }
     "configure" {
         Invoke-Configure
     }
     "clean" {
-        Invoke-MakeJl @("--clean")
+        Invoke-MakeJl @("clean")
         if (Test-Path $ConfigureStamp) {
             Remove-Item $ConfigureStamp -Force
         }
     }
     "help" {
-        Invoke-MakeJl @("--help")
+        Invoke-MakeJl @("help")
     }
     default {
         Write-Host "Unknown target: $Target" -ForegroundColor Red
-        Write-Host "Valid targets: build, run, test, check, vet, sysimage, harness, wiki, check-wiki, configure, clean, help"
+        Write-Host "Valid targets: build, run, run-only, assets, unit, test, check, vet, sysimage, harness, analyzer-test, wiki, check-wiki, configure, clean, help"
         Exit 2
     }
 }

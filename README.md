@@ -71,8 +71,8 @@ point for your platform, then invoke `make.jl`:
 
 ```bash
 make configure    # or: .\make.ps1 configure
-julia tools/make.jl
-# To run immediately: julia tools/make.jl -r
+julia tools/make.jl build
+# To run immediately: julia tools/make.jl run
 ```
 
 ### Build targets
@@ -85,17 +85,17 @@ works after cloning. The targets are identical across both entry points:
 
 | Linux / macOS | Windows | What it runs |
 | --- | --- | --- |
-| `make` / `make build` | `.\make.ps1` | configure (once), then `julia tools/make.jl` |
-| `make run` | `.\make.ps1 run` | `julia tools/make.jl --run` |
-| `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl --vet --test` (the verification baseline) |
-| `make vet` | `.\make.ps1 vet` | `julia tools/make.jl --vet` |
-| `make sysimage` | `.\make.ps1 sysimage` | `julia tools/make.jl --sysimage` |
-| `make harness` | `.\make.ps1 harness` | `julia tools/make.jl --harness` |
-| `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl --wiki` |
-| `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl --check-wiki` |
+| `make` / `make build` | `.\make.ps1` | configure (once), then `julia tools/make.jl build` |
+| `make run` | `.\make.ps1 run` | `julia tools/make.jl run` |
+| `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl test` (the verification baseline) |
+| `make vet` | `.\make.ps1 vet` | `julia tools/make.jl vet` |
+| `make sysimage` | `.\make.ps1 sysimage` | `julia tools/make.jl sysimage` |
+| `make harness` | `.\make.ps1 harness` | `julia tools/make.jl harness` |
+| `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl wiki` |
+| `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl check-wiki` |
 | `make configure` | `.\make.ps1 configure` | re-run configure |
-| `make clean` | `.\make.ps1 clean` | `julia tools/make.jl --clean` (also clears the configure sentinel) |
-| `make help` | `.\make.ps1 help` | `julia tools/make.jl --help` |
+| `make clean` | `.\make.ps1 clean` | `julia tools/make.jl clean` (also clears the configure sentinel) |
+| `make help` | `.\make.ps1 help` | `julia tools/make.jl help` |
 
 ### Configure
 
@@ -112,7 +112,6 @@ same steps natively in PowerShell; it additionally verifies the MSVC environment
 - `gendef` : used in the script to bridge the fact that Julia is not built with
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
-
 
 ## Questions?
 
@@ -268,7 +267,8 @@ will draw the dust particles with the GPU.
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
 LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset
+executable. Build and run it with `julia tools/make.jl sysimage`, then
+`julia tools/make.jl run-only`. Ordinary build or asset
 commands remove an existing sysimage to prevent stale baked code from being used.
 
 Additionally, there are some startup options that can affect application performance.
@@ -325,41 +325,40 @@ used in this project that just make it an enjoyable experience!
 ### Q: Are there any more options with the make scripts?
 
 The build driver (`tools/make.jl`, normally reached through `make` or `make.ps1`)
-has several helpful parameters if the simple stuff above is not enough.
+provides focused commands when the simple targets above are not enough.
 
 ```text
-Usage: make.jl [options]
+Usage: julia tools/make.jl COMMAND [ARGUMENTS]
 
-Options:
-    --build, -b         Build the project. (default)
-    --no-build, -B      Skip any build, including vet builds.
-    --assets, -a        Build assets.pkg. (default)
-    --no-assets, -A     Skip assets.pkg build.
-    --sysimage, -s      Build a custom Julia sysimage beside the application.
-    --harness, -H       Build and run the headless semantic trace harness.
-    --clean, -c         Delete generated build artifacts.
-    --run, -r           Run bin/euclid after all other requests.
-    --test, -t          Run application and analyzer tests.
-    --vet, -v           Build, then run repository analysis. With --test, run the
-                        full verification gate (build, tests, analyzer tests,
-                        analyzer self-analysis, and repository analysis).
-    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
-    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
-    --                  Pass all remaining args directly to bin/euclid (only with --run).
-    --help, -h          Show this help text.
+Commands:
+  help                         Show this help text.
+  build [--debug] [--strict]   Build the application and assets.
+  run [--debug] [--strict] [-- APP_ARGS]
+                 Build and run the application.
+  run-only [--debug] [-- APP_ARGS]
+                 Run an existing application binary.
+  assets                       Build assets.pkg only.
+  sysimage [--debug] [--strict]
+                 Build the application, assets, and Julia sysimage.
+  harness                      Build and run the deterministic headless harness.
+  unit [julia|odin] [OPTS]     Run all application tests or one language suite.
+  vet [OPTS]                   Build and analyze the repository.
+  test [OPTS]                  Run the complete verification gate.
+  check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
+  stats FILE [OPTS]            Show targeted source statistics.
+  analyzer-test                Run the analyzer's own test suite.
+  wiki                         Generate the publishable Wiki artifact.
+  check-wiki                   Verify that the Wiki artifact is current.
+  clean                        Delete generated build artifacts.
 
-Verification options (forwarded to the analysis gate for --vet/--test):
+Verification options (forwarded by vet and test):
     --verbosity=0|1|2   Summary, details, or complete trace output.
     --verbose           Alias for --verbosity=2.
     --color=auto|always|never
     --format=text|json  Select human or complete machine output.
     --settings=PATH     Load analyzer settings from PATH.
-    --report=PATH       Write the comprehensive Markdown analysis report.
-
-Notes:
-    - If no options are provided, the default is --build --assets.
-    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
-    - Short options can be combined, e.g. -rvas or -Ba.
+    --report=PATH       Write the compact Markdown analysis report.
+    --full-report=PATH  Write the comprehensive Markdown analysis report.
 ```
 
 The harness target is intended for semantic trace and deterministic scenario work. Its
@@ -369,7 +368,7 @@ underlying executable accepts a smaller control surface:
 Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
 ```
 
-`julia tools/make.jl -H` builds and runs the default harness scenario and writes the
+`julia tools/make.jl harness` builds and runs the default harness scenario and writes the
 resulting trace to `bin/semantic-trace-harness.jsonl`.
 
 ### Q: Where should I start if I want in the code?
@@ -389,9 +388,10 @@ Some additional documentation is also available in the wiki, including the above
 - [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
  generated Odin and Julia API documentation.
 
-Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
-The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
-against a fresh generation without modifying the retained artifact.
+Generate the complete publishable Wiki artifact locally with
+`julia tools/make.jl wiki`. The artifact is written to ignored `bin/wiki/`. Run
+`julia tools/make.jl check-wiki` to compare it against a fresh generation without
+modifying the retained artifact.
 
 ### Q: What's this about hot-reload?
 
@@ -401,7 +401,7 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-julia tools/make.jl -Ba
+julia tools/make.jl assets
 ```
 
 Euclid will automatically notice the updated package file, unpack it, and reload all
@@ -442,7 +442,7 @@ code counter (such as `scc`) is required; everything is derived from the same pa
 streams the rest of the analysis pipeline uses.
 
 ```bash
-julia tools/make.jl -v
+julia tools/make.jl vet
 ```
 
 #### Report Output

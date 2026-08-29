@@ -68,6 +68,13 @@ navigation_order = 40
 owner = "guide_authors"
 
 [[guides]]
+title = "Tool Rendering"
+path = "Guides/ToolRendering.md"
+summary = "Pen and compass geometry, shading, and rendering contracts."
+navigation_order = 45
+owner = "guide_authors"
+
+[[guides]]
 title = "Scratchpad Architecture"
 path = "Guides/ScratchpadArchitecture.md"
 summary = "Interactive Julia terminal, evaluation pipeline, session model, and frame hook lifecycle."

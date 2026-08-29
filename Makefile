@@ -16,8 +16,8 @@ MAKEJL := $(JULIA) tools/make.jl
 # Configure installs Julia dependencies, so we re-run it only when missing.
 CONFIGURE_STAMP := .configure-done
 
-.PHONY: all build run test vet check sysimage harness wiki check-wiki clean \
-        configure help
+.PHONY: all build debug strict run run-debug run-only assets unit test vet check \
+	sysimage harness analyzer-test wiki check-wiki clean configure help
 
 # Default: configure (once), then build.
 all: build
@@ -34,44 +34,72 @@ configure:
 
 # Build the project (the default `make`). Runs configure first if needed.
 build: $(CONFIGURE_STAMP)
-	$(MAKEJL)
+	$(MAKEJL) build
+
+# Build an unoptimized debug binary with synchronized diagnostics enabled on run.
+debug: $(CONFIGURE_STAMP)
+	$(MAKEJL) build --debug
+
+# Build with the strict Odin validation flags.
+strict: $(CONFIGURE_STAMP)
+	$(MAKEJL) build --strict
 
 # Build and run the application.
 run: $(CONFIGURE_STAMP)
-	$(MAKEJL) --run
+	$(MAKEJL) run
+
+# Build and run the debug application.
+run-debug: $(CONFIGURE_STAMP)
+	$(MAKEJL) run --debug
+
+# Only run the application.
+run-only: $(CONFIGURE_STAMP)
+	$(MAKEJL) run-only
+
+# Rebuild the hot-reloadable asset package without rebuilding the application.
+assets: $(CONFIGURE_STAMP)
+	$(MAKEJL) assets
+
+# Run the Julia and Odin application test suites without the full gate.
+unit: $(CONFIGURE_STAMP)
+	$(MAKEJL) unit
 
 # Build with validation flags, then run the full test plan.
 test: $(CONFIGURE_STAMP)
-	$(MAKEJL) --vet --test
+	$(MAKEJL) test
 
 # Alias for the combined vet+test verification baseline.
 check: test
 
 # Build, then run repository analysis through the verification gate.
 vet: $(CONFIGURE_STAMP)
-	$(MAKEJL) --vet
+	$(MAKEJL) vet
 
 # Build a custom Julia sysimage beside the application.
 sysimage: $(CONFIGURE_STAMP)
-	$(MAKEJL) --sysimage
+	$(MAKEJL) sysimage
 
 # Build and run the headless semantic trace harness.
 harness: $(CONFIGURE_STAMP)
-	$(MAKEJL) --harness
+	$(MAKEJL) harness
+
+# Run the analyzer package's own regression suite.
+analyzer-test: $(CONFIGURE_STAMP)
+	$(MAKEJL) analyzer-test
 
 # Generate the publishable Wiki artifact in bin/wiki.
 wiki: $(CONFIGURE_STAMP)
-	$(MAKEJL) --wiki
+	$(MAKEJL) wiki
 
 # Compare bin/wiki with a fresh generation without modifying it.
 check-wiki: $(CONFIGURE_STAMP)
-	$(MAKEJL) --check-wiki
+	$(MAKEJL) check-wiki
 
 # Delete generated build artifacts and the configure stamp.
 clean:
-	$(MAKEJL) --clean
+	$(MAKEJL) clean
 	@rm -f $(CONFIGURE_STAMP)
 
 # Show the underlying make.jl help.
 help:
-	$(MAKEJL) --help
+	$(MAKEJL) help

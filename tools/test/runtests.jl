@@ -12,34 +12,86 @@ const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
 
 @testset "Euclid tooling" begin
-    @testset "targeted source statistics" begin
-        file_args, run_args = parse_args(["--stats=src/view/view.odin"])
-        @test isempty(run_args)
-        @test file_args.statistics.path == "src/view/view.odin"
-        @test file_args.statistics.function_name === nothing
-        @test file_args.statistics.line === nothing
-        @test file_args.statistics.format == "text"
+    @testset "repository driver commands" begin
+        build = parse_driver_invocation(["build", "--debug", "--strict"])
+        @test build.action == :build
+        @test build.arguments == ["--debug", "--strict"]
 
-        function_args, _ = parse_args([
-            "--stats=tools/make.jl",
-            "--function=run_source_statistics",
-            "--format=json",
-        ])
-        @test function_args.statistics.function_name == "run_source_statistics"
-        @test function_args.statistics.format == "json"
+        run = parse_driver_invocation(["run", "--debug", "--", "--no-vsync"])
+        @test run.action == :run
+        @test run.arguments == ["--debug", "--", "--no-vsync"]
 
-        line_args, _ = parse_args([
-            "--stats=src/view/view.odin", "--line=211"])
-        @test line_args.statistics.line == "211"
-        plan = resolve_build_plan(line_args)
-        @test !plan.do_build
-        @test !plan.do_vet
-        @test !plan.do_assets
+        test = parse_driver_invocation(["test", "--verbosity=1"])
+        @test test.action == :test
+        @test test.arguments == ["--verbosity=1"]
+        @test parse_driver_invocation(String[]).action == :help
+        @test parse_driver_invocation(["run-only"]).action == :run_only
+        @test parse_driver_invocation(["stats", "tools/make.jl"]).action == :stats
+        @test parse_driver_invocation(["unit", "odin"]).action == :unit
+        @test parse_driver_invocation(["check", "src"]).action == :check
+        @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
+        @test_throws ErrorException parse_driver_invocation(["--run"])
+        @test_throws ErrorException parse_driver_invocation(["-ABr"])
+        @test_throws ErrorException parse_driver_invocation(["unknown"])
+    end
 
-        @test_throws ErrorException parse_args(["--function=missing_stats"])
-        @test_throws ErrorException parse_args(["--stats="])
-        @test_throws ErrorException parse_args([
-            "--stats=tools/make.jl", "--function=main", "--line=1"])
+    @testset "check command arguments" begin
+        @test analysis_command_arguments(:check, String[]) == ["check", SCRIPT_DIR]
+        @test analysis_command_arguments(:check, ["src", "--color=never"]) ==
+            ["check", "src", "--color=never"]
+        @test analysis_command_arguments(:stats, [
+            "src/main.odin", "--line=61", "--format=json"]) == [
+            "stats", "src/main.odin", "--line=61", "--format=json"]
+        @test_throws ErrorException analysis_command_arguments(:stats, String[])
+        @test_throws ErrorException analysis_command_arguments(:check, [
+            "src/main.odin", "src/view/view.odin"])
+    end
+
+    @testset "debug and strict builds" begin
+        build = parse_build_command(
+            parse_driver_invocation(["build", "--debug", "--strict"]))
+        @test build.debug
+        @test build.strict
+        @test isempty(build.arguments)
+        command = odin_build_command("-ljulia", true, true)
+        @test "-out:$(debug_app_binary_path())" in command
+        @test "-debug" in command
+        @test "-o:none" in command
+        @test "-vet" in command
+        @test "-strict-style" in command
+        @test "-disallow-do" in command
+        @test "-warnings-as-errors" in command
+
+        debug_arguments = debug_application_arguments(["--no-vsync"], true)
+        @test first(debug_arguments) ==
+            "--diagnostics=$(debug_diagnostics_path())"
+        explicit = ["--diagnostics=custom.log"]
+        @test debug_application_arguments(explicit, true) == explicit
+
+        run = parse_build_command(parse_driver_invocation([
+            "run", "--debug", "--", "--no-vsync"]))
+        @test run.arguments == ["--no-vsync"]
+        @test run.debug
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["build", "--", "--no-vsync"]))
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["run-only", "--strict"]))
+    end
+
+    @testset "fixed command build plans" begin
+        @test build_plan_for(:build) == BuildPlanToggles(true, false, true)
+        @test build_plan_for(:run_only) == BuildPlanToggles(false, false, false)
+        @test build_plan_for(:assets) == BuildPlanToggles(false, false, true)
+        @test build_plan_for(:vet) == BuildPlanToggles(true, true, true)
+        @test build_plan_for(:test) == BuildPlanToggles(true, true, true)
+
+        test_command = parse_build_command(
+            parse_driver_invocation(["test", "--verbosity=1"]))
+        @test test_command.arguments == ["--verbosity=1"]
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["test", "--debug"]))
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["assets", "extra"]))
     end
 
     @testset "suite definitions" begin
