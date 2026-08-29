@@ -1,8 +1,6 @@
 #!/usr/bin/env julia
 
-"""Return CLI help text for the build script."""
-function show_help()
-    return """
+const HELP_TEXT = """
 Usage: ./make.jl [options]
        (normally invoked via `make <target>` or `make.ps1 <target>`)
 
@@ -44,12 +42,17 @@ Targeted statistics examples:
     ./make.jl --stats=src/view/view.odin
     ./make.jl --stats=src/view/view.odin --function=run_window_loop
 """
-end
+
+"""Return CLI help text for the build script."""
+show_help() = HELP_TEXT
 
 
 using Dates
 using Libdl
 using UUIDs
+
+include(joinpath(@__DIR__, "build_config.jl"))
+using .EuclidBuildConfiguration: native_linker_flags
 
 struct SourceStatisticsRequest
     path::String
@@ -296,25 +299,42 @@ function apply_statistics_option!(state::SourceStatisticsParseState, arg::String
     return true
 end
 
-"""Validate and construct an optional targeted source-statistics request."""
-function source_statistics_request(
-    state::SourceStatisticsParseState, verify_args::Vector{String})
+"""Validate source-statistics path presence and content."""
+function validate_statistics_path(state::SourceStatisticsParseState)
     selectors_present = state.function_name !== nothing || state.line !== nothing
     state.path === nothing && selectors_present && error(
         "--function and --line require --stats=FILE.")
-    state.path === nothing && return nothing
+    state.path === nothing && return
     isempty(state.path) && error("The --stats file must not be empty.")
+end
+
+"""Validate source-statistics selector content and exclusivity."""
+function validate_statistics_selectors(state::SourceStatisticsParseState)
     state.function_name !== nothing && isempty(state.function_name) && error(
         "The --function name must not be empty.")
     state.line !== nothing && isempty(state.line) && error(
         "The --line value must not be empty.")
     state.function_name !== nothing && state.line !== nothing && error(
         "--function and --line are mutually exclusive.")
+end
+
+"""Resolve the final requested analyzer output format."""
+function statistics_output_format(verify_args::Vector{String})
     format_arg = findlast(arg -> startswith(arg, "--format="), verify_args)
-    format = format_arg === nothing ? "text" :
+    return format_arg === nothing ? "text" :
         split(verify_args[format_arg], "="; limit=2)[2]
+end
+
+"""Validate and construct an optional targeted source-statistics request."""
+function source_statistics_request(
+    state::SourceStatisticsParseState, verify_args::Vector{String})
+
+    validate_statistics_path(state)
+    validate_statistics_selectors(state)
+    state.path === nothing && return nothing
     return SourceStatisticsRequest(
-        state.path, state.function_name, state.line, format)
+        state.path, state.function_name, state.line,
+        statistics_output_format(verify_args))
 end
 
 """
@@ -1028,31 +1048,13 @@ function resolve_julia_bindir()
     return strip(julia_bindir_result.stdout)
 end
 
-"""Resolve Julia linker flags and optional runtime bindir data for the current platform."""
-function resolve_julia_linker_flags(do_build::Bool)
+"""Resolve native linker flags and optional runtime bindir data."""
+function resolve_native_linker_flags(do_build::Bool)
     if !do_build
         return "", nothing
     end
     return is_windows() ?
-        windows_julia_linker_flags() : posix_julia_linker_flags()
-end
-
-"""Resolve Julia linker flags on non-Windows platforms via julia-config.jl."""
-function posix_julia_linker_flags()
-    julia_config_path = joinpath(
-        Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl")
-    if !isfile(julia_config_path)
-        error("Error: Could not resolve julia-config.jl path.")
-    end
-
-    flags_result = run_command(
-        Cmd([JULIA_EXE, julia_config_path, "--ldflags", "--ldlibs"]);
-        capture_output=true)
-    if flags_result.exit_code != 0
-        error("Error: Failed to query Julia linker flags.")
-    end
-
-    return join(split(flags_result.stdout), " "), nothing
+        windows_julia_linker_flags() : (native_linker_flags(), nothing)
 end
 
 """Resolve Julia linker flags on Windows by generating import libraries."""
@@ -1347,7 +1349,7 @@ end
 
 """Prepare linker, sysimage, and verification dependencies for a build plan."""
 function prepare_build_plan(args::Args, plan::BuildPlanToggles)
-    julia_flags, julia_bindir = resolve_julia_linker_flags(
+    julia_flags, julia_bindir = resolve_native_linker_flags(
         plan.do_build || args.harness)
     if args.run && is_windows() && julia_bindir === nothing
         julia_bindir = resolve_julia_bindir()
@@ -1422,29 +1424,36 @@ function main()
     return execute_requested_actions(args, plan, run_tests, run_args)
 end
 
+"""Reject incompatible standalone or mutually exclusive CLI actions."""
+function validate_requested_actions(args::Args)
+    args.wiki && args.check_wiki && error(
+        "Choose either --wiki or --check-wiki, not both.")
+    conflicting_statistics_action = args.statistics !== nothing && any(
+        getfield(args, field) for field in (
+            :run, :build, :assets, :sysimage, :harness, :clean,
+            :vet, :test, :wiki, :check_wiki))
+    conflicting_statistics_action && error(
+        "--stats must be used as a standalone action.")
+end
+
+"""Run the requested post-build standalone action."""
+function execute_post_build_action(args::Args)
+    args.statistics !== nothing && return run_source_statistics(args.statistics)
+    (args.wiki || args.check_wiki) && run_wiki_action(args.check_wiki)
+    return 0
+end
+
 """Run the resolved build plan and wiki action, returning the process exit status."""
 function execute_requested_actions(
     args::Args, plan::BuildPlanToggles, run_tests::Bool, run_args::Vector{String})
 
     try
-        args.wiki && args.check_wiki && error(
-            "Choose either --wiki or --check-wiki, not both.")
-        if args.statistics !== nothing && any(getfield(args, field) for field in (
-                :run, :build, :assets, :sysimage, :harness, :clean,
-                :vet, :test, :wiki, :check_wiki))
-            error("--stats must be used as a standalone action.")
-        end
+        validate_requested_actions(args)
         ensure_required_commands(
             plan.do_build, plan.do_assets, run_tests, args.wiki || args.check_wiki)
         plan_status = execute_build_plan(args, plan, run_args)
         plan_status == 0 || return plan_status
-        if args.statistics !== nothing
-            return run_source_statistics(args.statistics)
-        end
-        if args.wiki || args.check_wiki
-            run_wiki_action(args.check_wiki)
-        end
-        return 0
+        return execute_post_build_action(args)
     catch err
         println(stderr, sprint(showerror, err))
         return 1

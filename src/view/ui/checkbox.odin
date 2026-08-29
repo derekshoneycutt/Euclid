@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import view_font "../font"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -20,6 +21,7 @@ Checkbox_Params :: struct {
     label_font_size: f32,
     label_offset_x: f32,
     label_offset_y: f32,
+    font_resolver: view_font.Font_Resolver,
 }
 
 Checkbox_Result :: struct {
@@ -230,11 +232,15 @@ draw_checkbox :: proc(
     checkbox_draw_box_marks(box_rect, result.checked_out, result.pressed, border, mark)
 
     if len(params.label) > 0 {
-           view_core.ui_text(params.label,
-            int(label_rect.x),
-            int(label_rect.y),
-            label_color,
-            view_core.Ui_Text_Font{params.font, params.label_font_size})
+        text_font := view_core.Ui_Text_Font{params.font, params.label_font_size}
+        view_core.ui_text_shaped({
+            resolver = params.font_resolver,
+            key = .Regular,
+            text = params.label,
+            position = {label_rect.x, label_rect.y},
+            color = label_color,
+            font = text_font,
+        })
     }
 
     return result

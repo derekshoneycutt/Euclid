@@ -26,9 +26,16 @@ test_command() {
 # Verify the core build tools are on PATH.
 test_command "odin" || success=1
 test_command "julia" || success=1
+test_command "pkg-config" || success=1
 
 if [ "$success" -ne 0 ]; then
     printf "\033[31mConfiguration failed! Please install the missing tools.\033[0m\n" >&2
+    exit 1
+fi
+
+if ! pkg-config --exists harfbuzz; then
+    printf "\033[31mRequired HarfBuzz development package was not found.\033[0m\n" >&2
+    printf "\033[31mInstall harfbuzz-devel (Fedora) or libharfbuzz-dev (Debian/Ubuntu).\033[0m\n" >&2
     exit 1
 fi
 

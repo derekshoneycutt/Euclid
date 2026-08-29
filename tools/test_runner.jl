@@ -2,6 +2,9 @@
 
 module EuclidTestRunner
 
+include("build_config.jl")
+using .EuclidBuildConfiguration: native_linker_flags
+
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_RUNNER = joinpath(
@@ -35,30 +38,14 @@ function suite_definitions()
     ]
 end
 
-"""Resolve Julia linker flags via julia-config.jl, matching tools/make.jl."""
-function resolve_julia_linker_flags()
-    julia_config_path = joinpath(
-        Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl")
-    isfile(julia_config_path) || error("Could not resolve julia-config.jl path.")
-    output = IOBuffer()
-    process = run(pipeline(
-        ignorestatus(Cmd([
-            JULIA_EXE, julia_config_path, "--ldflags", "--ldlibs"])),
-        stdout=output,
-        stderr=devnull))
-    process.exitcode == 0 || error("Failed to query Julia linker flags.")
-    return join(split(String(take!(output))), " ")
-end
-
-"""Assemble the odin test command, mirroring run_odin_tests in tools/make.jl."""
-function odin_test_command(julia_linker_flags::String)
+"""Assemble the odin test command with complete native linkage."""
+function odin_test_command(linker_flags::String)
     odin_command = [
         "odin",
         "test",
         joinpath(REPOSITORY_ROOT, "src"),
         "-all-packages",
     ]
-    linker_flags = julia_linker_flags
     if !Sys.iswindows() && !Sys.isapple()
         linker_flags = strip(string(
             linker_flags,
@@ -150,7 +137,7 @@ end
 
 """Run the Odin application test suite."""
 function run_odin_suite(suite::SuiteDefinition)
-    command = Cmd(Cmd(odin_test_command(resolve_julia_linker_flags()));
+    command = Cmd(Cmd(odin_test_command(native_linker_flags()));
         dir=REPOSITORY_ROOT)
     result = capture_command(command)
     status = result.exit_code == 0 ? "PASS" : "FAIL"

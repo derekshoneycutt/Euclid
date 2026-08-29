@@ -2,6 +2,7 @@ package ui
 
 import view_core "../core"
 import "../../core"
+import view_font "../font"
 
 import "core:fmt"
 
@@ -13,25 +14,26 @@ SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 //   shared UI/press state, label, value cell, and the allowed range, grouped so
 //   the draw call passes one coherent value.
 Integer_Slider_Params :: struct {
-    panel:       rl.Rectangle,
-    row_y:       f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime:  ^core.Euclid_Ui_Runtime_State,
-    press_id:    int,
-    label:       string,
-    value:       ^int,
-    min_value:   int,
-    max_value:   int,
-    font:        rl.Font,
+    panel : rl.Rectangle,
+    row_y : f32,
+    mouse_input : Mouse_Input_State,
+    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    press_id : int,
+    label : string,
+    value : ^int,
+    min_value : int,
+    max_value : int,
+    font : rl.Font,
+    font_resolver : view_font.Font_Resolver,
 }
 
 //   Value range and drag inputs for one slider drag update.
 Slider_Drag_Input :: struct {
-    min_value:   int,
-    max_value:   int,
-    denom:       int,
-    mouse_input: Mouse_Input_State,
-    track:       rl.Rectangle,
+    min_value : int,
+    max_value : int,
+    denom : int,
+    mouse_input : Mouse_Input_State,
+    track : rl.Rectangle,
 }
 
 //   Build knob geometry from track bounds and normalized ratio.
@@ -235,16 +237,27 @@ slider_resolve_value :: proc(
     return clamped, owns_press
 }
 
+//   Draw one slider label or value at the requested horizontal position.
+slider_draw_text :: proc(
+    params: Integer_Slider_Params, text: string, x: f32) {
+
+    view_core.ui_text_shaped({
+        resolver = params.font_resolver,
+        key = .Regular,
+        text = text,
+        position = {x, params.row_y},
+        color = UI_TEXT_COLOR,
+        font = view_core.ui_text_font(params.font),
+    })
+}
+
 //   Render and update a reusable integer slider control.
 draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
 
     panel := params.panel
     row_y := params.row_y
     mouse_input := params.mouse_input
-    font := params.font
-
-    view_core.ui_text(params.label, int(panel.x + SETTINGS_PANEL_INSET),
-        int(row_y), UI_TEXT_COLOR, view_core.ui_text_font(font))
+    slider_draw_text(params, params.label, panel.x + SETTINGS_PANEL_INSET)
 
     track := slider_track_rect(panel, row_y)
     hit := slider_hit_rect(track)
@@ -271,7 +284,6 @@ draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
         UI_BORDER_COLOR)
     rl.DrawRectangleRec(knob_draw, knob_color)
 
-    view_core.ui_text(fmt.tprintf("%d", clamped),
-        int(panel.x + panel.width - SETTINGS_PANEL_INSET - 32), int(row_y),
-        UI_TEXT_COLOR, view_core.ui_text_font(font))
+    slider_draw_text(params, fmt.tprintf("%d", clamped),
+        panel.x + panel.width - SETTINGS_PANEL_INSET - 32)
 }

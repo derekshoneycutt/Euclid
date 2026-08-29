@@ -11,8 +11,8 @@ import rl "vendor:raylib"
 
 //   Grouped inputs for ending the view-text scroll container.
 View_Text_Scroll_End :: struct {
-    text_panel:  rl.Rectangle,
-    content_h:   f32,
+    text_panel: rl.Rectangle,
+    content_h: f32,
     mouse_input: Mouse_Input_State,
 }
 
@@ -79,6 +79,7 @@ view_text_draw_content :: proc(
             panel = text_panel,
             scroll_y = state^.ui_runtime.view_text_scroll_y,
             font = font.cache_borrow(&state.font_cache, .Regular),
+            font_cache = &state.font_cache,
             metrics = ui_dynview.Wrapped_Text_Metrics{
                 padding = TEXT_PADDING,
                 row_height = TEXT_ROW_HEIGHT,

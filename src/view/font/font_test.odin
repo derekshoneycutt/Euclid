@@ -5,6 +5,7 @@ import app_core "../../core"
 import "../../taskpool"
 
 import "core:mem"
+import "core:os"
 import "core:testing"
 import "core:thread"
 import vmem "core:mem/virtual"
@@ -104,6 +105,7 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
     testing.expect_value(t, len(prepared.rectangles), 6795)
     testing.expect_value(t, len(prepared.atlas_pixels), 4096*2048*2)
     testing.expect_value(t, prepared.glyphs[0].value, rune(' '))
+    testing.expect(t, prepared.glyphs[0].glyph_id > 0)
     testing.expect_value(t, prepared.glyphs[0].advance_x, i32(16))
     testing.expect_value(t, prepared.glyphs[0].bitmap_width, i32(16))
     testing.expect_value(t, prepared.glyphs[0].bitmap_height, i32(32))
@@ -111,6 +113,96 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
     prepare_destroy(&prepared)
     testing.expect_value(t, prepared.glyph_count, i32(0))
     testing.expect_value(t, len(prepared.atlas_pixels), 0)
+}
+
+// Verify complete preparation includes every Regular face glyph in ID order.
+@(test)
+view_test_prepare_complete_regular :: proc(t: ^testing.T) {
+    codepoints := codepoint_set()
+    prepared: Prepared_Font
+    success := prepare({
+        key = .Regular,
+        generation = 9,
+        path = "assets/JuliaMono-Regular.ttf",
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        codepoints = codepoints.values[:codepoints.count],
+        complete_face = true,
+    }, &prepared, context.allocator)
+
+    testing.expect(t, success)
+    testing.expect(t, prepared.glyph_count > 0)
+    testing.expect_value(t, prepared.glyphs[0].glyph_id, u32(0))
+    last_index := len(prepared.glyphs) - 1
+    testing.expect_value(t, prepared.glyphs[last_index].glyph_id, u32(last_index))
+    testing.expect(t, prepared.atlas_width > 0)
+    testing.expect(t, prepared.atlas_height > 0)
+
+    prepare_destroy(&prepared)
+}
+
+// Verify contextual alternates are repeatable and differ from disabled shaping.
+@(test)
+view_test_harfbuzz_contextual_alternates :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &shaping))
+    defer harfbuzz_shaper_destroy(&shaping)
+
+    enabled, repeated, disabled: [8]Shaped_Glyph
+    enabled_count, enabled_ok := harfbuzz_shape(
+        &shaping, "=>", true, enabled[:])
+    repeated_count, repeated_ok := harfbuzz_shape(
+        &shaping, "=>", true, repeated[:])
+    disabled_count, disabled_ok := harfbuzz_shape(
+        &shaping, "=>", false, disabled[:])
+
+    testing.expect(t, enabled_ok && repeated_ok && disabled_ok)
+    testing.expect_value(t, enabled_count, repeated_count)
+    testing.expect_value(t, enabled_count, disabled_count)
+    differs := false
+    for index in 0..<enabled_count {
+        testing.expect_value(t, enabled[index], repeated[index])
+        differs = differs || enabled[index].glyph_id != disabled[index].glyph_id
+    }
+    testing.expect(t, differs)
+}
+
+// Verify native source ownership survives arena release and output remains bounded.
+@(test)
+view_test_harfbuzz_owns_source_and_bounds_output :: proc(t: ^testing.T) {
+    arena: vmem.Arena
+    arena_error := vmem.arena_init_static(
+        &arena, 16*mem.Megabyte, mem.Megabyte)
+    testing.expect(t, arena_error == nil)
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", vmem.arena_allocator(&arena))
+    testing.expect(t, read_error == nil)
+
+    shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &shaping))
+    vmem.arena_destroy(&arena)
+
+    output: [8]Shaped_Glyph
+    glyph_count, shaped := harfbuzz_shape(
+        &shaping, "=>", true, output[:])
+    testing.expect(t, shaped)
+    testing.expect(t, glyph_count > 0)
+
+    bounded: [1]Shaped_Glyph
+    _, bounded_ok := harfbuzz_shape(
+        &shaping, "abcdef", true, bounded[:])
+    testing.expect(t, !bounded_ok)
+
+    harfbuzz_shaper_destroy(&shaping)
+    harfbuzz_shaper_destroy(&shaping)
+    testing.expect(t, shaping.font == nil)
+    testing.expect(t, shaping.buffer == nil)
 }
 
 // Verify the cache reuses committed preparation pages until explicit destruction.

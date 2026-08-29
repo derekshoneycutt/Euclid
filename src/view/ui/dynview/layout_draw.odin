@@ -11,186 +11,186 @@ import rl "vendor:raylib"
 
 //   Measured per-cell items plus per-column widths and per-row extents.
 Matrix_Draw_Cells :: struct {
-    items:        [256]core.Dynview_Layout_Item,
-    col_widths:   [16]f32,
-    row_ascents:  [16]f32,
-    row_descents: [16]f32,
+    items : [256]core.Dynview_Layout_Item,
+    col_widths : [16]f32,
+    row_ascents : [16]f32,
+    row_descents : [16]f32,
 }
 
 //   Matrix grid geometry: column alignments, grid extents, and inter-cell gaps.
 Matrix_Draw_Geometry :: struct {
-    alignments: [16]dynview.Dynview_Matrix_Column_Alignment,
-    rows:       int,
-    cols:       int,
-    column_gap: f32,
-    row_gap:    f32,
+    alignments : [16]dynview.Dynview_Matrix_Column_Alignment,
+    rows : int,
+    cols : int,
+    column_gap : f32,
+    row_gap : f32,
 }
 
 //   Control points and style for one normalized cubic Bezier segment.
 Cubic_Segment_Params :: struct {
-    p0, p1, p2, p3: rl.Vector2,
-    color:          rl.Color,
-    thickness:      f32,
-    segment_count:  int,
+    p0, p1, p2, p3 : rl.Vector2,
+    color : rl.Color,
+    thickness : f32,
+    segment_count : int,
 }
 
 //   Vertical stem run endpoints and stroke for one stretched brace.
 Brace_Stem :: struct {
-    y0:        f32,
-    y1:        f32,
-    thickness: f32,
-    color:     rl.Color,
+    y0 : f32,
+    y1 : f32,
+    thickness : f32,
+    color : rl.Color,
 }
 
 //   Radical bar/hook geometry derived from one radical layout item.
 Radical_Bar_Geometry :: struct {
-    bar_y:        f32,
-    bar_start_x:  f32,
-    bar_end_x:    f32,
-    hook_start_x: f32,
-    hook_start_y: f32,
-    hook_flag_x:  f32,
-    root_low_x:   f32,
-    root_low_y:   f32,
-    root_rise_x:  f32,
-    root_rise_y:  f32,
-    root_high_x:  f32,
-    root_high_y:  f32,
-    bar_thickness: f32,
-    hook_stroke:   f32,
+    bar_y : f32,
+    bar_start_x : f32,
+    bar_end_x : f32,
+    hook_start_x : f32,
+    hook_start_y : f32,
+    hook_flag_x : f32,
+    root_low_x : f32,
+    root_low_y : f32,
+    root_rise_x : f32,
+    root_rise_y : f32,
+    root_high_x : f32,
+    root_high_y : f32,
+    bar_thickness : f32,
+    hook_stroke : f32,
 }
 
 //   Per-side variant for one stretch delimiter glyph (which delimiter, where).
 Stretch_Glyph_Side :: struct {
-    delimiter_kind: i32,
-    draw_x:         f32,
+    delimiter_kind : i32,
+    draw_x : f32,
 }
 
 //   Measured limit/glyph metrics for one large operator item.
 Large_Op_Metrics :: struct {
-    script_style:    Dynview_Text_Style,
-    script_font:     rl.Font,
-    glyph_font_size: f32,
-    glyph_ascent:    f32,
-    glyph_descent:   f32,
-    glyph_width:     f32,
-    limit_font_size: f32,
-    limit_height:    f32,
-    limit_advance:   f32,
-    limit_gap:       f32,
-    sup_text:        string,
-    sub_text:        string,
-    sup_cols:        int,
-    sub_cols:        int,
+    script_style : Dynview_Text_Style,
+    script_font : rl.Font,
+    glyph_font_size : f32,
+    glyph_ascent : f32,
+    glyph_descent : f32,
+    glyph_width : f32,
+    limit_font_size : f32,
+    limit_height : f32,
+    limit_advance : f32,
+    limit_gap : f32,
+    sup_text : string,
+    sub_text : string,
+    sup_cols : int,
+    sub_cols : int,
 }
 
 //   Normalized control-point geometry for one stretched brace glyph.
 Brace_Control_Geometry :: struct {
-    r_norm: f32,
-    tip_x:  f32,
-    stem_x: f32,
-    cusp_x: f32,
-    bend:   f32,
+    r_norm : f32,
+    tip_x : f32,
+    stem_x : f32,
+    cusp_x : f32,
+    bend : f32,
 }
 
 //   Resolved text payload and font for one cached text item.
 Cached_Item_Text :: struct {
-    text:          string,
-    resolved_font: rl.Font,
-    draw_x:        f32,
+    text : string,
+    resolved_font : rl.Font,
+    draw_x : f32,
 }
 
 //   Grouped inputs for one matrix cell grid draw pass.
 Matrix_Cell_Draw :: struct {
-    ctx:          Layout_Draw_Context,
-    cell_program: ^core.Dynview_Math_Program,
-    cells:        ^Matrix_Draw_Cells,
-    geometry:     Matrix_Draw_Geometry,
-    draw_x:       f32,
-    item_y:       f32,
+    ctx : Layout_Draw_Context,
+    cell_program : ^core.Dynview_Math_Program,
+    cells : ^Matrix_Draw_Cells,
+    geometry : Matrix_Draw_Geometry,
+    draw_x : f32,
+    item_y : f32,
 }
 
 //   Resolved script font and offsets for one script-attach item.
 Script_Attach_Style :: struct {
-    font:      rl.Font,
-    style:     Dynview_Text_Style,
-    ascent:    f32,
-    font_size: f32,
+    font : rl.Font,
+    style : Dynview_Text_Style,
+    ascent : f32,
+    font_size : f32,
 }
 
 //   Resolved numerator and denominator programs for one fraction item.
 Fraction_Programs :: struct {
-    numerator:   ^core.Dynview_Math_Program,
-    denominator: ^core.Dynview_Math_Program,
+    numerator : ^core.Dynview_Math_Program,
+    denominator : ^core.Dynview_Math_Program,
 }
 
 //   Shared inputs describing one radical item's placement and child content.
 Radical_Layout :: struct {
-    ctx:           Layout_Draw_Context,
-    item:          core.Dynview_Layout_Item,
-    draw_x:        f32,
-    baseline_y:    f32,
-    child_program: ^core.Dynview_Math_Program,
-    front_padding: f32,
-    back_padding:  f32,
-    lead_width:    f32,
+    ctx : Layout_Draw_Context,
+    item : core.Dynview_Layout_Item,
+    draw_x : f32,
+    baseline_y : f32,
+    child_program : ^core.Dynview_Math_Program,
+    front_padding : f32,
+    back_padding : f32,
+    lead_width : f32,
 }
 
 //   Grouped inputs for one structured math item draw variant.
 Math_Item_Draw :: struct {
-    ctx:           Layout_Draw_Context,
-    style:         Dynview_Text_Style,
-    item:          core.Dynview_Layout_Item,
-    resolved_font: rl.Font,
-    text:          string,
-    draw_x:        f32,
-    item_y:        f32,
+    ctx : Layout_Draw_Context,
+    style : Dynview_Text_Style,
+    item : core.Dynview_Layout_Item,
+    resolved_font : rl.Font,
+    text : string,
+    draw_x : f32,
+    item_y : f32,
 }
 
 //   Shared draw environment passed to cached layout item renderers so the
 //   state/runtime/panel/font tuple travels as one coherent value.
 Layout_Draw_Context :: struct {
-    state:     ^core.Euclid_General_State,
-    runtime:   ^core.Dynview_System,
-    panel:     rl.Rectangle,
-    font:      rl.Font,
-    font_size: f32,
+    state : ^core.Euclid_General_State,
+    runtime : ^core.Dynview_System,
+    panel : rl.Rectangle,
+    font : rl.Font,
+    font_size : f32,
 }
 
 //   Complete draw context for one stretched delimiter glyph invocation.
 //   Groups layout metrics, style/font state, and delimiter identity into one argument.
 Stretch_Delimiter_Glyph_Params :: struct {
-    state:           ^core.Euclid_General_State,
-    style:           Dynview_Text_Style,
-    fallback_font:   rl.Font,
-    wrap_advance:    f32,
-    font_size:       f32,
-    content_height:  f32,
-    content_ascent:  f32,
-    content_descent: f32,
-    delimiter_kind:  i32,
-    draw_x:          f32,
-    baseline_y:      f32,
+    state : ^core.Euclid_General_State,
+    style : Dynview_Text_Style,
+    fallback_font : rl.Font,
+    wrap_advance : f32,
+    font_size : f32,
+    content_height : f32,
+    content_ascent : f32,
+    content_descent : f32,
+    delimiter_kind : i32,
+    draw_x : f32,
+    baseline_y : f32,
 }
 
 //   Pixel-space geometry derived from baseline/ascent/descent for one delimiter glyph.
 //   The geometry is normalized so family renderers can share the same frame of reference.
 Stretch_Delimiter_Glyph_Geometry :: struct {
-    draw_x:     f32,
-    baseline_y: f32,
-    top_y:      f32,
-    bottom_y:   f32,
-    center_y:   f32,
-    width:      f32,
-    height:     f32,
-    thickness:  f32,
-    right_side: bool,
+    draw_x : f32,
+    baseline_y : f32,
+    top_y : f32,
+    bottom_y : f32,
+    center_y : f32,
+    width : f32,
+    height : f32,
+    thickness : f32,
+    right_side : bool,
 }
 
 //   Uniform handler shape for line-only delimiter family renderers.
 Delimiter_Line_Handler :: #type proc(
-    style: Dynview_Text_Style,
-    geom: Stretch_Delimiter_Glyph_Geometry,
+    style : Dynview_Text_Style,
+    geom : Stretch_Delimiter_Glyph_Geometry,
     family: dynview.Dynview_Delimiter_Family)
 
 //   Line-renderers indexed by delimiter family; nil means the family needs a
@@ -211,15 +211,16 @@ DELIMITER_LINE_HANDLERS ::
 //   Draw inputs for one text-run item: the runtime, style, resolved font,
 //   colors, and draw position, grouped so the renderer passes one coherent value.
 Text_Run_Draw_Params :: struct {
-    runtime:       ^core.Dynview_System,
-    font_size:     f32,
-    style:         Dynview_Text_Style,
-    item:          core.Dynview_Layout_Item,
-    text:          string,
-    resolved_font: rl.Font,
-    text_color:    rl.Color,
-    draw_x:        f32,
-    item_y:        f32,
+    state : ^core.Euclid_General_State,
+    runtime : ^core.Dynview_System,
+    font_size : f32,
+    style : Dynview_Text_Style,
+    item : core.Dynview_Layout_Item,
+    text : string,
+    resolved_font : rl.Font,
+    text_color : rl.Color,
+    draw_x : f32,
+    item_y : f32,
 }
 
 //   Fast vertical cull check for one layout line against panel bounds.
@@ -457,20 +458,8 @@ resolve_font_for_style :: #force_inline proc(
         return resolved
     }
 
-    flags := style.font_flags
-    if flags == .None {
-        flags = core.Font_Variant_Flags.Regular
-        if style.bold {
-            flags = .Bold
-        }
-        if style.italic {
-            flags = core.Font_Variant_Flags(
-                u32(flags) | u32(core.Font_Variant_Flags.Italic))
-        }
-    }
-
     resolved = font.cache_resolve(
-        &state^.font_cache, font.font_key_from_flags(flags))
+        &state^.font_cache, style_font_key(style))
     return resolved
 }
 
@@ -1358,6 +1347,7 @@ text_run_draw_params :: #force_inline proc(
 
     text_color := item.has_brush_color ? item.brush_color : style.color
     return Text_Run_Draw_Params{
+        state = ctx.state,
         runtime = ctx.runtime,
         font_size = ctx.font_size,
         style = style,
@@ -1429,8 +1419,21 @@ draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
     draw_x := params.draw_x
     item_y := params.item_y
 
-    view_core.ui_text(text, int(draw_x), int(item_y), text_color,
-        view_core.Ui_Text_Font{resolved_font, font_size})
+    text_font := view_core.Ui_Text_Font{resolved_font, font_size}
+    if item.kind == .Text_Run && params.state != nil {
+        resolver := font.cache_terminal_resolver(&params.state^.font_cache)
+        view_core.ui_text_shaped({
+            resolver = resolver,
+            key = style_font_key(style),
+            text = text,
+            position = {draw_x, item_y},
+            color = text_color,
+            font = text_font,
+        })
+    } else {
+        view_core.ui_text(
+            text, int(draw_x), int(item_y), text_color, text_font)
+    }
     if !style.underline {
         return
     }

@@ -2,35 +2,37 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import view_font "../font"
 import "core:strings"
 
 import rl "vendor:raylib"
 
 Text_Button_Params :: struct {
-    id: int,
-    rect: rl.Rectangle,
-    label: string,
-    enabled: bool,
-    mouse: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    interaction_enabled: bool,
-    font: rl.Font,
-    has_font_color_override: bool,
-    font_color_override: rl.Color,
+    id : int,
+    rect : rl.Rectangle,
+    label : string,
+    enabled : bool,
+    mouse : Mouse_Input_State,
+    scroll_offset : rl.Vector2,
+    interaction_space_rect : rl.Rectangle,
+    interaction_enabled : bool,
+    font : rl.Font,
+    has_font_color_override : bool,
+    font_color_override : rl.Color,
+    font_resolver : view_font.Font_Resolver,
 }
 
 Text_Button_Result :: struct {
-    button_drawn_rect: rl.Rectangle,
-    clicked: bool,
-    hovered: bool,
-    pressed: bool,
+    button_drawn_rect : rl.Rectangle,
+    clicked : bool,
+    hovered : bool,
+    pressed : bool,
 }
 
 Text_Button_Colors :: struct {
-    background: rl.Color,
-    foreground: rl.Color,
-    border:     rl.Color,
+    background : rl.Color,
+    foreground : rl.Color,
+    border : rl.Color,
 }
 
 //   Resolve whether this text button currently owns the shared press state.
@@ -122,6 +124,26 @@ text_button_local_mouse :: #force_inline proc(
     }
 }
 
+//   Center and draw one button label using the configured shaping resolver.
+text_button_draw_label :: proc(
+    params: Text_Button_Params, rect: rl.Rectangle, color: rl.Color) {
+
+    label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
+    measured := rl.MeasureTextEx(params.font, label_cstr, TREE_FONT_SIZE, 0)
+    position := rl.Vector2{
+        rect.x + (rect.width - measured.x)*0.5,
+        rect.y + (rect.height - measured.y)*0.5,
+    }
+    view_core.ui_text_shaped({
+        resolver = params.font_resolver,
+        key = .Regular,
+        text = params.label,
+        position = position,
+        color = color,
+        font = view_core.ui_text_font(params.font),
+    })
+}
+
 //   Draw one text button and resolve release-confirmed click interaction.
 draw_text_button :: proc(
     params: Text_Button_Params,
@@ -151,12 +173,7 @@ draw_text_button :: proc(
     rl.DrawRectangleRec(button_rect, colors.background)
     rl.DrawRectangleLinesEx(button_rect, 1, colors.border)
 
-    label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
-    measured := rl.MeasureTextEx(params.font, label_cstr, TREE_FONT_SIZE, 0)
-    text_x := int(button_rect.x + (button_rect.width - measured.x) * 0.5)
-    text_y := int(button_rect.y + (button_rect.height - measured.y) * 0.5)
-    view_core.ui_text(params.label, text_x, text_y, colors.foreground,
-        view_core.ui_text_font(params.font))
+    text_button_draw_label(params, button_rect, colors.foreground)
 
     return Text_Button_Result{
         button_drawn_rect = button_rect,

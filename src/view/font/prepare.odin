@@ -20,6 +20,7 @@ Font_Prepare_Request :: struct {
     path: string,
     pixel_size: i32,
     codepoints: []rune,
+    complete_face: bool,
 }
 
 Prepared_Font_Allocation_Mode :: core.Prepared_Font_Allocation_Mode
@@ -76,9 +77,33 @@ prepare_open_font :: proc(
 prepare_allocate_glyph_metadata :: proc(
     info: ^stbtt.fontinfo, request: Font_Prepare_Request,
     prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
-    glyph_count := prepare_count_glyphs(info, request.codepoints)
+    glyph_count := int(info.numGlyphs) if request.complete_face else
+        prepare_count_glyphs(info, request.codepoints)
     return glyph_count > 0 &&
         prepare_allocate_metadata(prepared, glyph_count, allocator)
+}
+
+//   Populate one opened font descriptor into prepared CPU atlas ownership.
+prepare_populate :: proc(
+    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
+
+    if !prepare_allocate_glyph_metadata(info, request, prepared, allocator) {
+        return false
+    }
+    metrics_ready := prepare_complete_glyph_metrics(
+        info, request, prepared.glyphs) if request.complete_face else
+        prepare_glyph_metrics(info, request, prepared.glyphs)
+    if !metrics_ready {
+        prepare_destroy(prepared)
+        return false
+    }
+    prepare_commit_layout(request, prepared)
+    if !prepare_allocate_atlas(prepared, allocator) {
+        return false
+    }
+    prepare_render_atlas(info, prepared)
+    return true
 }
 
 //   Parse, rasterize, and pack one TrueType font without calling raylib.
@@ -99,10 +124,15 @@ prepare :: proc(
     allocator: mem.Allocator,
     allocation_mode := Prepared_Font_Allocation_Mode.Individual) -> bool {
 
-    if prepared == nil || request.pixel_size <= 0 || len(request.codepoints) == 0 {
+    if prepared == nil || request.pixel_size <= 0 ||
+        (!request.complete_face && len(request.codepoints) == 0) {
         return false
     }
-    prepared^ = {allocator = allocator, allocation_mode = allocation_mode}
+    prepared^ = {
+        allocator = allocator,
+        allocation_mode = allocation_mode,
+        complete_face = request.complete_face,
+    }
     info: stbtt.fontinfo
     file_data, opened := prepare_open_font(request.path, allocator, &info)
     if !opened {
@@ -115,21 +145,7 @@ prepare :: proc(
         delete(file_data, allocator)
     }
 
-    if !prepare_allocate_glyph_metadata(&info, request, prepared, allocator) {
-        return false
-    }
-    if !prepare_glyph_metrics(
-        &info, request, prepared.glyphs) {
-        prepare_destroy(prepared)
-        return false
-    }
-
-    prepare_commit_layout(request, prepared)
-    if !prepare_allocate_atlas(prepared, allocator) {
-        return false
-    }
-    prepare_render_atlas(&info, prepared)
-    return true
+    return prepare_populate(&info, request, prepared, allocator)
 }
 
 //   Allocate prepared metadata while preserving individual-allocation rollback.
@@ -213,6 +229,55 @@ prepare_glyph_metrics :: proc(
     return glyph_index == len(glyphs)
 }
 
+//   Populate metrics for every face glyph ID, including missing glyph ID zero.
+prepare_complete_glyph_metrics :: proc(
+    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    glyphs: []Prepared_Glyph) -> bool {
+
+    if len(glyphs) != int(info.numGlyphs) {
+        return false
+    }
+    scale := stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
+    ascent: i32
+    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
+    for &glyph, glyph_index in glyphs {
+        glyph = prepare_face_glyph_metric(
+            info, i32(glyph_index), scale, ascent)
+    }
+    for codepoint in request.codepoints {
+        glyph_id := stbtt.FindGlyphIndex(info, codepoint)
+        if glyph_id > 0 {
+            glyphs[glyph_id].value = codepoint
+        }
+    }
+    return true
+}
+
+//   Calculate one face glyph's scaled advance, offsets, and bitmap bounds.
+prepare_face_glyph_metric :: proc(
+    info: ^stbtt.fontinfo, glyph_id: i32,
+    scale: f32, ascent: i32) -> Prepared_Glyph {
+
+    advance: i32
+    stbtt.GetGlyphHMetrics(info, glyph_id, &advance, nil)
+    x0, y0, x1, y1: i32
+    stbtt.GetGlyphBitmapBox(
+        info, glyph_id, scale, scale, &x0, &y0, &x1, &y1)
+    result := Prepared_Glyph{
+        value = rune(-1 - glyph_id),
+        glyph_id = u32(glyph_id),
+        offset_x = x0,
+        offset_y = y0,
+        advance_x = i32(f32(advance)*scale),
+        bitmap_width = x1 - x0,
+        bitmap_height = y1 - y0,
+    }
+    if result.bitmap_width > 0 && result.bitmap_height > 0 {
+        result.offset_y += i32(f32(ascent)*scale)
+    }
+    return result
+}
+
 //   Calculate one glyph's raylib-compatible offsets, advance, and bitmap bounds.
 //
 // Notes:
@@ -226,9 +291,11 @@ prepare_glyph_metric :: proc(
     scale: f32, ascent: i32) -> Prepared_Glyph {
 
     advance: i32
-    stbtt.GetCodepointHMetrics(info, codepoint, &advance, nil)
+    glyph_id := stbtt.FindGlyphIndex(info, codepoint)
+    stbtt.GetGlyphHMetrics(info, glyph_id, &advance, nil)
     result := Prepared_Glyph{
         value = codepoint,
+        glyph_id = u32(glyph_id),
     }
     if codepoint == ' ' || codepoint == rune(0x3000) {
         result.advance_x = i32(f32(advance)*scale)
@@ -318,8 +385,8 @@ prepare_render_atlas :: proc(
             continue
         }
         width, height, offset_x, offset_y: i32
-        bitmap := stbtt.GetCodepointBitmap(
-            info, scale, scale, glyph.value, &width, &height,
+        bitmap := stbtt.GetGlyphBitmap(
+            info, scale, scale, i32(glyph.glyph_id), &width, &height,
             &offset_x, &offset_y)
         if bitmap != nil {
             prepare_copy_bitmap(

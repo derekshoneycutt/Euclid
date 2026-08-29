@@ -15,32 +15,32 @@ SCRATCHPAD_HELP_PROMPT :: "help?> "
 SCRATCHPAD_SCROLL_BOTTOM_EPSILON :: 0.5
 
 Scratchpad_Terminal_Layout :: struct {
-    transcript_height: f32,
-    input_rows: int,
-    content_height: f32,
-    max_scroll: f32,
-    input_rect: rl.Rectangle,
+    transcript_height : f32,
+    input_rows : int,
+    content_height : f32,
+    max_scroll : f32,
+    input_rect : rl.Rectangle,
 }
 
 Scratchpad_Completion_Payload :: struct {
-    replace_start: int,
-    replace_end:   int,
-    replacement:   string,
-    ok:            bool,
+    replace_start : int,
+    replace_end : int,
+    replacement : string,
+    ok : bool,
 }
 
 Scratchpad_History_Payload :: struct {
-    mode: core.Scratchpad_Input_Mode,
-    text: string,
-    ok:   bool,
+    mode : core.Scratchpad_Input_Mode,
+    text : string,
+    ok : bool,
 }
 
 //   Shared panel/font context for scratchpad layout and scroll operations.
 Scratchpad_Panel_Context :: struct {
-    state:      ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    panel:      rl.Rectangle,
-    font:       rl.Font,
+    state : ^core.Euclid_General_State,
+    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    panel : rl.Rectangle,
+    font : rl.Font,
 }
 
 //   Return the live terminal prompt for the active Scratchpad editor mode.
@@ -517,6 +517,7 @@ draw_scratchpad_transcript :: proc(
             panel = terminal_panel,
             scroll_y = ctx.state^.ui_runtime.view_text_scroll_y,
             font = ctx.font,
+            font_cache = &ctx.state^.font_cache,
             metrics = ui_dynview.Wrapped_Text_Metrics{
                 padding = TEXT_PADDING,
                 row_height = TEXT_ROW_HEIGHT,
@@ -640,6 +641,8 @@ draw_scratchpad_input_box :: proc(
         terminal_background_color = UI_COMPONENT_BACKGROUND_COLOR,
         terminal_prompt_color = prompt_color,
         terminal_prompt_font = prompt_font,
+        font_cache = &ctx.state^.font_cache,
+        font_key = .Regular,
     })
 }
 

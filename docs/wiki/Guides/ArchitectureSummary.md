@@ -362,16 +362,31 @@ display thread.
 ### Font Cache
 
 `Euclid_General_State.font_cache` owns every resident JuliaMono GPU font and its
-resolved source paths. Regular loads synchronously as the permanent fallback.
+resolved source paths. Each resident generation pairs one complete glyph-ID atlas
+with generation-owned HarfBuzz handles; atlas index and HarfBuzz glyph ID are the
+same. Regular loads synchronously as the permanent fallback.
 Other weights and italic variants are requested on demand, prepared serially
 through the shared taskpool using a reusable virtual arena, and finalized on the
 display thread. Frame service polls without waiting and publishes only the
 currently requested generation.
 
+Shaping uses one reusable native HarfBuzz buffer per resident generation and one
+display-owned 4096-glyph workspace. Both are allocated during initialization or
+font publication, never per frame. A run is completely validated before drawing;
+workspace overflow, invalid glyph/cluster data, or non-horizontal metrics fall back
+atomically to the existing unshaped renderer. Hot reload publishes the GPU font and
+shaper together, preserving the prior pair when either candidate fails.
+
+Ordinary UI text, fallback prose, top-level dynview `Text_Run` items, transcripts,
+and scratchpad input are shape-eligible. Scratchpad runs split at the cursor and the
+covered UTF-8 character is drawn unshaped. Dynview math remains explicitly unshaped,
+including `Math_Glyph_Run`, `Math_Block`, scripts, fractions, delimiters, radicals,
+accents, matrices, large operators, and recursive children.
+
 Source changes are polled at a bounded cadence and debounced before replacement.
 Shutdown rejects new font requests, joins accepted preparation before destroying
 the taskpool, unloads resident fonts while the graphics context is live, and then
-releases the preparation arena.
+destroys HarfBuzz handles and releases the preparation arena.
 
 ### Lifecycle And Failure Rules
 

@@ -2,43 +2,45 @@ package ui
 
 import "../../core"
 import view_core "../core"
-import "../font"
+import view_font "../font"
 
 import rl "vendor:raylib"
 
 Tree_Hit :: struct {
-    selected_node: ^core.Euclid_Julia_Animation_Interface,
-    toggled_node: ^core.Euclid_Julia_Animation_Interface,
+    selected_node : ^core.Euclid_Julia_Animation_Interface,
+    toggled_node : ^core.Euclid_Julia_Animation_Interface,
 }
 
 //   Mutable walk cursor: running content y plus the remaining row budget.
 Tree_Walk_Cursor :: struct {
-    content_y: ^f32,
-    remaining: int,
+    content_y : ^f32,
+    remaining : int,
 }
 
 //   Inputs for one tree list panel frame, grouped so the call passes one value.
 Tree_List_Params :: struct {
-    ji:          ^core.Euclid_Julia_Interface,
-    ui_runtime:  ^core.Euclid_Ui_Runtime_State,
-    list_panel:  rl.Rectangle,
-    mouse_input: Mouse_Input_State,
-    scroll_y:    ^f32,
-    font:        rl.Font,
+    ji : ^core.Euclid_Julia_Interface,
+    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    list_panel : rl.Rectangle,
+    mouse_input : Mouse_Input_State,
+    scroll_y : ^f32,
+    font : rl.Font,
+    font_resolver : view_font.Font_Resolver,
 }
 
 //   Immutable per-frame tree walk inputs shared by every recursive row visit,
 //   grouped so the walk procs do not thread nine loose arguments.
 Tree_Walk_Context :: struct {
-    ji:                     ^core.Euclid_Julia_Interface,
-    ui_runtime:             ^core.Euclid_Ui_Runtime_State,
-    panel:                  rl.Rectangle,
-    scroll_y:               f32,
-    allow_clicks:           bool,
-    mouse_input:            Mouse_Input_State,
-    scroll_offset:          rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    font:                   rl.Font,
+    ji : ^core.Euclid_Julia_Interface,
+    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    panel : rl.Rectangle,
+    scroll_y : f32,
+    allow_clicks : bool,
+    mouse_input : Mouse_Input_State,
+    scroll_offset : rl.Vector2,
+    interaction_space_rect : rl.Rectangle,
+    font : rl.Font,
+    font_resolver : view_font.Font_Resolver,
 }
 
 //   Render the right-side tree panel and route toolbar interactions.
@@ -83,7 +85,8 @@ draw_tree_view :: proc(
         list_panel = list_panel,
         mouse_input = mouse_input,
         scroll_y = &state^.ui_runtime.tree_scroll_y,
-        font = font.cache_borrow(&state.font_cache, .Regular),
+        font = view_font.cache_borrow(&state.font_cache, .Regular),
+        font_resolver = view_font.cache_terminal_resolver(&state.font_cache),
     })
 }
 
@@ -319,6 +322,22 @@ draw_tree_node_expander :: proc(
     }
 }
 
+//   Draw one tree node label at its indented row position.
+draw_tree_node_label :: proc(
+    ctx: Tree_Walk_Context,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    x, y: f32) {
+
+    view_core.ui_text_shaped({
+        resolver = ctx.font_resolver,
+        key = .Regular,
+        text = node.name,
+        position = {x, y},
+        color = UI_TEXT_COLOR,
+        font = view_core.ui_text_font(ctx.font),
+    })
+}
+
 //   Render one tree row and capture selection/toggle interactions.
 draw_tree_node_row :: proc(
     ctx: Tree_Walk_Context,
@@ -338,8 +357,6 @@ draw_tree_node_row :: proc(
         TREE_ROW_ICON_SIZE,
         TREE_ROW_ICON_SIZE,
     }
-    label_x := int(indent_x + TREE_ROW_LABEL_OFFSET_X)
-
     list_item_result := draw_list_item(List_Item_Params{
         id = tree_node_press_id(node),
         rect = row_rect,
@@ -353,8 +370,8 @@ draw_tree_node_row :: proc(
 
     draw_tree_node_expander(ctx, node, icon_rect, list_item_result.clicked, hit)
 
-    view_core.ui_text(node.name, label_x, int(row_rect.y + TREE_ROW_LABEL_OFFSET_Y),
-        UI_TEXT_COLOR, view_core.ui_text_font(ctx.font))
+    draw_tree_node_label(ctx, node, indent_x + TREE_ROW_LABEL_OFFSET_X,
+        row_rect.y + TREE_ROW_LABEL_OFFSET_Y)
 
     if list_item_result.clicked {
         hit.selected_node = node
@@ -509,6 +526,7 @@ tree_list_walk_and_release :: proc(
         scroll_offset = rl.Vector2{},
         interaction_space_rect = scroll_begin.view_rect,
         font = params.font,
+        font_resolver = params.font_resolver,
     }
     hit := walk_draw_tree_roots(walk_ctx, &y_cursor)
     apply_tree_hit(params.ji, ui_runtime, hit)

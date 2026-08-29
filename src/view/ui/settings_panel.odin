@@ -2,7 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
-import "../font"
+import view_font "../font"
 
 import "core:fmt"
 
@@ -11,57 +11,67 @@ import rlgl "vendor:raylib/rlgl"
 
 //   Shared context for one settings toggle checkbox row.
 Settings_Toggle_Context :: struct {
-    panel:       rl.Rectangle,
-    row_y:       f32,
+    panel : rl.Rectangle,
+    row_y : f32,
+    mouse_input : Mouse_Input_State,
+    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    font : rl.Font,
+    font_resolver : view_font.Font_Resolver,
+}
+
+//   Shared dependencies for controls in one settings panel frame.
+Settings_View_Context :: struct {
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
     mouse_input: Mouse_Input_State,
-    ui_runtime:  ^core.Euclid_Ui_Runtime_State,
-    font:        rl.Font,
+    font: rl.Font,
+    font_resolver: view_font.Font_Resolver,
 }
 
 //   Row y-positions for the settings view's controls.
 Settings_View_Rows :: struct {
-    slider_label_y: f32,
-    stats_y:        f32,
-    fps_y:          f32,
-    limit_y:        f32,
-    sound_y:        f32,
-    simd_y:         f32,
-    gpu_dust_y:     f32,
+    slider_label_y : f32,
+    stats_y : f32,
+    fps_y : f32,
+    limit_y : f32,
+    sound_y : f32,
+    simd_y : f32,
+    gpu_dust_y : f32,
 }
 
 //   Render particle render-count statistics and Julia animation-entry counts in settings view.
 draw_settings_particle_stats :: proc(
-    panel: rl.Rectangle,
-    stats_y: f32,
-    ps: ^core.Particle_System,
-    animation_entries_added: int,
-    font: rl.Font) {
+    ctx: Settings_View_Context, stats_y: f32,
+    animation_entries_added: int) {
 
-    view_core.ui_text(fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
-        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y), UI_TEXT_COLOR,
-        view_core.ui_text_font(font))
-    view_core.ui_text(fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
-        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP),
-        UI_TEXT_COLOR, view_core.ui_text_font(font))
-    view_core.ui_text(fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
-        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 2),
-        UI_TEXT_COLOR, view_core.ui_text_font(font))
-    view_core.ui_text(fmt.tprintf(
-        "Julia animation entries added: %d", animation_entries_added),
-        int(panel.x + SETTINGS_PANEL_INSET), int(stats_y + SETTINGS_STATS_ROW_GAP * 3),
-        UI_TEXT_COLOR, view_core.ui_text_font(font))
+    ps := ctx.state.particle_system
+    labels := [4]string{
+        fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
+        fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
+        fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
+        fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+    }
+    for label, row in labels {
+        view_core.ui_text_shaped({
+            resolver = ctx.font_resolver,
+            key = .Regular,
+            text = label,
+            position = {
+                ctx.panel.x + SETTINGS_PANEL_INSET,
+                stats_y + f32(row)*SETTINGS_STATS_ROW_GAP,
+            },
+            color = UI_TEXT_COLOR,
+            font = view_core.ui_text_font(ctx.font),
+        })
+    }
 }
 
 //   Render and handle the Display FPS toggle control.
 draw_settings_fps_checkbox :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    font: rl.Font) {
+    ctx: Settings_View_Context, row_y: f32) {
 
     box := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
+        ctx.panel.x + SETTINGS_PANEL_INSET,
         row_y,
         SETTINGS_CHECKBOX_SIZE,
         SETTINGS_CHECKBOX_SIZE,
@@ -72,33 +82,30 @@ draw_settings_fps_checkbox :: proc(
     checkbox_result := draw_checkbox(Checkbox_Params{
         id = 4001,
         rect = box,
-        checked = ui_runtime.display_fps,
+        checked = ctx.state.ui_runtime.display_fps,
         enabled = true,
-        mouse = mouse_input,
+        mouse = ctx.mouse_input,
         scroll_offset = rl.Vector2{},
-        interaction_space_rect = panel,
+        interaction_space_rect = ctx.panel,
         interaction_enabled = true,
         label = label,
-        font = font,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.ui_press_owner)
+    }, &ctx.state.ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
-        ui_runtime.display_fps = checkbox_result.checked_out
+        ctx.state.ui_runtime.display_fps = checkbox_result.checked_out
     }
 }
 
 //   Render and handle the Limit FPS toggle control.
 draw_settings_limit_fps_checkbox :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    font: rl.Font) {
+    ctx: Settings_View_Context, row_y: f32) {
 
     box := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
+        ctx.panel.x + SETTINGS_PANEL_INSET,
         row_y,
         SETTINGS_CHECKBOX_SIZE,
         SETTINGS_CHECKBOX_SIZE,
@@ -109,20 +116,21 @@ draw_settings_limit_fps_checkbox :: proc(
     checkbox_result := draw_checkbox(Checkbox_Params{
         id = 4002,
         rect = box,
-        checked = ui_runtime.limit_fps,
+        checked = ctx.state.ui_runtime.limit_fps,
         enabled = true,
-        mouse = mouse_input,
+        mouse = ctx.mouse_input,
         scroll_offset = rl.Vector2{},
-        interaction_space_rect = panel,
+        interaction_space_rect = ctx.panel,
         interaction_enabled = true,
         label = label,
-        font = font,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.ui_press_owner)
+    }, &ctx.state.ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
-        ui_runtime.limit_fps = checkbox_result.checked_out
+        ctx.state.ui_runtime.limit_fps = checkbox_result.checked_out
         if checkbox_result.checked_out {
             rl.SetTargetFPS(LIMIT_FPS)
         } else {
@@ -159,6 +167,7 @@ draw_settings_toggle_checkbox :: proc(
         interaction_enabled = true,
         label = label,
         font = ctx.font,
+        font_resolver = ctx.font_resolver,
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
@@ -173,11 +182,7 @@ draw_settings_toggle_checkbox :: proc(
 
 //   Render and handle the SIMD batch projection toggle control.
 draw_settings_simd_projection_checkbox :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    font: rl.Font) {
+    ctx: Settings_View_Context, row_y: f32) {
 
     is_available := view_core.simd_batch_projection_available()
     label := "Use SIMD Projection"
@@ -185,17 +190,15 @@ draw_settings_simd_projection_checkbox :: proc(
         label = "Use SIMD Projection (Unavailable)"
     }
     draw_settings_toggle_checkbox(
-        Settings_Toggle_Context{panel, row_y, mouse_input, ui_runtime, font},
-        4003, label, is_available, &ui_runtime.use_simd_batch_projection)
+        Settings_Toggle_Context{
+            ctx.panel, row_y, ctx.mouse_input, &ctx.state.ui_runtime,
+            ctx.font, ctx.font_resolver},
+        4003, label, is_available, &ctx.state.ui_runtime.use_simd_batch_projection)
 }
 
 //   Render and handle the GPU dust instancing toggle control.
 draw_settings_gpu_dust_checkbox :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
-    mouse_input: Mouse_Input_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    font: rl.Font) {
+    ctx: Settings_View_Context, row_y: f32) {
 
     is_available := rlgl.GetVersion() >= .OPENGL_33
     label := "GPU Dust Instancing"
@@ -203,20 +206,18 @@ draw_settings_gpu_dust_checkbox :: proc(
         label = "GPU Dust Instancing (Unavailable)"
     }
     draw_settings_toggle_checkbox(
-        Settings_Toggle_Context{panel, row_y, mouse_input, ui_runtime, font},
-        4005, label, is_available, &ui_runtime.use_gpu_dust_instancing)
+        Settings_Toggle_Context{
+            ctx.panel, row_y, ctx.mouse_input, &ctx.state.ui_runtime,
+            ctx.font, ctx.font_resolver},
+        4005, label, is_available, &ctx.state.ui_runtime.use_gpu_dust_instancing)
 }
 
 //   Render and handle the drawing sound toggle control.
 draw_settings_sound_checkbox :: proc(
-    panel: rl.Rectangle,
-    row_y: f32,
-    mouse_input: Mouse_Input_State,
-    state: ^core.Euclid_General_State,
-    font: rl.Font) {
+    ctx: Settings_View_Context, row_y: f32) {
 
     box := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
+        ctx.panel.x + SETTINGS_PANEL_INSET,
         row_y,
         SETTINGS_CHECKBOX_SIZE,
         SETTINGS_CHECKBOX_SIZE,
@@ -225,20 +226,21 @@ draw_settings_sound_checkbox :: proc(
     checkbox_result := draw_checkbox(Checkbox_Params{
         id = 4004,
         rect = box,
-        checked = state.user_drawing_sound_enabled,
+        checked = ctx.state.user_drawing_sound_enabled,
         enabled = true,
-        mouse = mouse_input,
+        mouse = ctx.mouse_input,
         scroll_offset = rl.Vector2{},
-        interaction_space_rect = panel,
+        interaction_space_rect = ctx.panel,
         interaction_enabled = true,
         label = "Enable Drawing Sound",
-        font = font,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &state.ui_runtime.ui_press_owner)
+    }, &ctx.state.ui_runtime.ui_press_owner)
     if checkbox_result.toggled {
-        state.user_drawing_sound_enabled = checkbox_result.checked_out
+        ctx.state.user_drawing_sound_enabled = checkbox_result.checked_out
     }
 }
 
@@ -300,7 +302,10 @@ draw_settings_controls :: proc(
 
     ps := state.particle_system
     ui_runtime := &state.ui_runtime
-    regular_font := font.cache_borrow(&state.font_cache, .Regular)
+    regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
+    resolver := view_font.cache_terminal_resolver(&state.font_cache)
+    ctx := Settings_View_Context{
+        state, panel, mouse_input, regular_font, resolver}
 
     animation_entries_added := 0
     if state.julia_interface != nil {
@@ -317,19 +322,14 @@ draw_settings_controls :: proc(
         min_value = 0,
         max_value = core.MAX_LOW_PARTICLES,
         font = regular_font,
+        font_resolver = resolver,
     })
-    draw_settings_particle_stats(panel, rows.stats_y, ps,
-        animation_entries_added, regular_font)
-    draw_settings_fps_checkbox(panel, rows.fps_y,
-        mouse_input, ui_runtime, regular_font)
-    draw_settings_limit_fps_checkbox(panel, rows.limit_y,
-        mouse_input, ui_runtime, regular_font)
-    draw_settings_sound_checkbox(panel, rows.sound_y,
-        mouse_input, state, regular_font)
-    draw_settings_simd_projection_checkbox(panel, rows.simd_y,
-        mouse_input, ui_runtime, regular_font)
-    draw_settings_gpu_dust_checkbox(panel, rows.gpu_dust_y, mouse_input,
-        ui_runtime, regular_font)
+    draw_settings_particle_stats(ctx, rows.stats_y, animation_entries_added)
+    draw_settings_fps_checkbox(ctx, rows.fps_y)
+    draw_settings_limit_fps_checkbox(ctx, rows.limit_y)
+    draw_settings_sound_checkbox(ctx, rows.sound_y)
+    draw_settings_simd_projection_checkbox(ctx, rows.simd_y)
+    draw_settings_gpu_dust_checkbox(ctx, rows.gpu_dust_y)
 }
 
 //   Render full settings panel and wire all settings controls.
@@ -345,9 +345,16 @@ draw_settings_view :: proc(
     _ = draw_container(panel, .Grey)
 
     header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    view_core.ui_text("Settings", int(panel.x + SETTINGS_PANEL_INSET), header_y,
-        UI_TEXT_COLOR, view_core.ui_text_font(
-            font.cache_borrow(&state.font_cache, .Regular)))
+    regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
+    resolver := view_font.cache_terminal_resolver(&state.font_cache)
+    view_core.ui_text_shaped({
+        resolver = resolver,
+        key = .Regular,
+        text = "Settings",
+        position = {panel.x + SETTINGS_PANEL_INSET, f32(header_y)},
+        color = UI_TEXT_COLOR,
+        font = view_core.ui_text_font(regular_font),
+    })
 
     stack_rect := rl.Rectangle{
         panel.x + SETTINGS_PANEL_INSET,

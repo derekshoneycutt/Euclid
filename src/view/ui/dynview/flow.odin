@@ -12,10 +12,10 @@ import rl "vendor:raylib"
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
 Flow_Command_Handler :: #type proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
-    flow: ^Dynview_Flow_State,
-    style: Dynview_Text_Style,
+    cmd : core.Dynview_Command,
+    buffer : ^core.Dynview_Command_Buffer,
+    flow : ^Dynview_Flow_State,
+    style : Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context)
 
 //   Dispatch table mapping each dynview command kind to its flow handler.
@@ -48,86 +48,81 @@ FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
 }
 
 Dynview_Flow_State :: struct {
-    row: int,
-    col: int,
-    had_visible: bool,
+    row : int,
+    col : int,
+    had_visible : bool,
 }
 
 Dynview_Draw_Context :: struct {
-    enabled: bool,
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    scroll_y: f32,
-    text_padding: f32,
-    text_row_height: f32,
-    wrap_advance: f32,
-    font_size: f32,
-    fallback_font: rl.Font,
+    enabled : bool,
+    state : ^core.Euclid_General_State,
+    panel : rl.Rectangle,
+    scroll_y : f32,
+    text_padding : f32,
+    text_row_height : f32,
+    wrap_advance : f32,
+    font_size : f32,
+    fallback_font : rl.Font,
 }
 
 Perpendicular_Colors :: struct {
-    top: rl.Color,
-    stem: rl.Color,
+    top : rl.Color,
+    stem : rl.Color,
 }
 
 Triangle_Colors :: struct {
-    fill: rl.Color,
-    edge1: rl.Color,
-    edge2: rl.Color,
-    edge3: rl.Color,
+    fill : rl.Color,
+    edge1 : rl.Color,
+    edge2 : rl.Color,
+    edge3 : rl.Color,
 }
 
 Pentagon_Colors :: struct {
-    fill: rl.Color,
-    edge1: rl.Color,
-    edge2: rl.Color,
-    edge3: rl.Color,
-    edge4: rl.Color,
-    edge5: rl.Color,
+    fill : rl.Color,
+    edge1 : rl.Color,
+    edge2 : rl.Color,
+    edge3 : rl.Color,
+    edge4 : rl.Color,
+    edge5 : rl.Color,
 }
 
 Inline_Shape_Frame :: struct {
-    rect: rl.Rectangle,
-    cols: int,
-    max_cols: int,
-    visible: bool,
+    rect : rl.Rectangle,
+    cols : int,
+    max_cols : int,
+    visible : bool,
 }
 
 Pie_Section_Bounds :: struct {
-    x_min: f32,
-    x_max: f32,
-    y_min: f32,
-    y_max: f32,
+    x_min : f32,
+    x_max : f32,
+    y_min : f32,
+    y_max : f32,
 }
 
 //   Style inputs for one pie-section draw (stroke and color).
 Pie_Section_Style :: struct {
-    stroke: f32,
-    color:  rl.Color,
+    stroke : f32,
+    color : rl.Color,
 }
 
 //   Vertical span scales for one inline-shape frame within its row.
 Flow_Shape_Span :: struct {
-    y_start_scale: f32,
-    y_end_scale:   f32,
+    y_start_scale : f32,
+    y_end_scale : f32,
 }
 
 //   Geometry of one inline atom in the current flow row, when visible.
 Flow_Atom_Frame :: struct {
-    atom_x:   f32,
-    atom_w:   f32,
-    row_y:    f32,
-    advance:  f32,
-    visible:  bool,
+    atom_x : f32,
+    atom_w : f32,
+    row_y : f32,
+    advance : f32,
+    visible : bool,
 }
 
 //   Resolve the style-specific font for a draw context, falling back when state is nil.
-style_font :: #force_inline proc(
-    draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
-    if draw_ctx == nil || draw_ctx^.state == nil {
-        return draw_ctx^.fallback_font
-    }
-
+style_font_key :: #force_inline proc(style: Dynview_Text_Style) -> font.Font_Key {
     flags := style.font_flags
     if flags == .None {
         flags = core.Font_Variant_Flags.Regular
@@ -139,8 +134,18 @@ style_font :: #force_inline proc(
                 u32(flags) | u32(core.Font_Variant_Flags.Italic))
         }
     }
+    return font.font_key_from_flags(flags)
+}
+
+//   Resolve the style-specific font for a draw context, falling back when state is nil.
+style_font :: #force_inline proc(
+    draw_ctx: ^Dynview_Draw_Context, style: Dynview_Text_Style) -> rl.Font {
+    if draw_ctx == nil || draw_ctx^.state == nil {
+        return draw_ctx^.fallback_font
+    }
+
     return font.cache_resolve(
-        &draw_ctx^.state^.font_cache, font.font_key_from_flags(flags))
+        &draw_ctx^.state^.font_cache, style_font_key(style))
 }
 
 //   Advance flow cursor to the next row when no columns remain in current row.
@@ -478,6 +483,28 @@ flow_consume_text_span :: proc(
     return true
 }
 
+//   Draw one visible dynview text line at resolved coordinates.
+flow_draw_text_line_content :: proc(
+    line_text: string, line_x, row_y: f32,
+    style: Dynview_Text_Style, draw_ctx: ^Dynview_Draw_Context) {
+    text_font := view_core.Ui_Text_Font{
+        style_font(draw_ctx, style), draw_ctx^.font_size}
+    if draw_ctx^.state != nil {
+        resolver := font.cache_terminal_resolver(&draw_ctx^.state^.font_cache)
+        view_core.ui_text_shaped({
+            resolver = resolver,
+            key = style_font_key(style),
+            text = line_text,
+            position = {line_x, row_y},
+            color = style.color,
+            font = text_font,
+        })
+    } else {
+        view_core.ui_text(
+            line_text, int(line_x), int(row_y), style.color, text_font)
+    }
+}
+
 //   Draw one wrapped text line at the current flow position when it is visible.
 flow_draw_text_line :: proc(
     flow: ^Dynview_Flow_State,
@@ -496,23 +523,20 @@ flow_draw_text_line :: proc(
         return
     }
 
-    line_x := draw_ctx^.panel.x + draw_ctx^.text_padding + f32(flow^.col) *
-        dynview.effective_advance(style, draw_ctx^.wrap_advance)
+    advance := dynview.effective_advance(style, draw_ctx^.wrap_advance)
+    line_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
+        f32(flow^.col)*advance
     if style.alignment == .Center && flow^.col == 0 {
-        line_w := f32(line_len) * dynview.effective_advance(
-            style, draw_ctx^.wrap_advance)
-        line_x = draw_ctx^.panel.x + (draw_ctx^.panel.width - line_w) * 0.5
+        line_x = draw_ctx^.panel.x +
+            (draw_ctx^.panel.width - f32(line_len)*advance)*0.5
     }
 
-    view_core.ui_text(line_text, int(line_x), int(row_y), style.color,
-        view_core.Ui_Text_Font{style_font(draw_ctx, style), draw_ctx^.font_size})
+    flow_draw_text_line_content(line_text, line_x, row_y, style, draw_ctx)
     if style.underline {
         underline_y := row_y + draw_ctx^.font_size + 1
-        underline_width := f32(line_len) *
-            dynview.effective_advance(style, draw_ctx^.wrap_advance)
         rl.DrawLineEx(
             rl.Vector2{line_x, underline_y},
-            rl.Vector2{line_x + underline_width, underline_y},
+            rl.Vector2{line_x + f32(line_len)*advance, underline_y},
             1,
             style.color)
     }

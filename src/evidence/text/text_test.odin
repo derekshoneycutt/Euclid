@@ -13,7 +13,7 @@ text_test_generational_eviction :: proc(t: ^testing.T) {
     testing.expect(t, found)
     testing.expect_value(t, value, "first")
 
-    for index in 0..<TEXT_STORE_CAPACITY {
+    for _ in 0..<TEXT_STORE_CAPACITY {
         _, _ = store_put(&store, "replacement", false)
     }
     _, stale := store_get(&store, first)

@@ -34,13 +34,14 @@ The core application is coded in Odin, with Raylib used for rendering.
 
 ## Building from Source
 
-You must have Odin and Julia installed on your system to build from source, and both
-must be available on PATH.
+Linux source builds require Odin, Julia, `pkg-config`, and the HarfBuzz development
+package, with each tool available on PATH. Install `harfbuzz-devel` on Fedora or
+`libharfbuzz-dev` on Debian/Ubuntu. HarfBuzz packaging for macOS and Windows is not
+yet supported.
 
-Clone the git repository, then build. Both the conventional `make` entry point
-(on Linux/macOS) and the PowerShell entry point (on Windows) configure
-automatically the first time — verifying the toolchain and installing the
-required Julia packages — and then build via `make.jl`.
+Clone the git repository, then build. The conventional `make` entry point configures
+automatically the first time, verifying the toolchain and installing the required
+Julia packages before building through `make.jl`.
 
 ### Linux / macOS (shell + Makefile)
 

@@ -43,6 +43,7 @@ TOOL_LENGTH :: 0.35
 
 DYNVIEW_MAX_COMMANDS :: 1024
 DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
+FONT_SHAPED_GLYPH_CAPACITY :: SCRATCHPAD_ASYNC_TEXT_CAPACITY
 DYNVIEW_MAX_LAYOUT_LINES :: 4096
 DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
 DYNVIEW_MAX_MATH_PROGRAMS :: 256
@@ -1329,8 +1330,35 @@ Font_Load_State :: enum {
     Failed,
 }
 
+Shaped_Glyph :: struct {
+    glyph_id: u32,
+    cluster: u32,
+    x_advance: i32,
+    y_advance: i32,
+    x_offset: i32,
+    y_offset: i32,
+}
+
+Font_Shaping_Resource :: struct {
+    blob: rawptr,
+    face: rawptr,
+    font: rawptr,
+    buffer: rawptr,
+}
+
+Font_Shaping_Telemetry :: struct {
+    shape_calls: u64,
+    shaped_runs: u64,
+    shaped_glyphs: u64,
+    native_failures: u64,
+    workspace_overflows: u64,
+    invalid_results: u64,
+    invalid_clusters: u64,
+}
+
 Font_Cache_Entry :: struct {
     font: rl.Font,
+    shaping: Font_Shaping_Resource,
     generation: u64,
     requested_generation: u64,
     resident: bool,
@@ -1347,6 +1375,7 @@ Prepared_Font_Allocation_Mode :: enum {
 
 Prepared_Glyph :: struct {
     value: rune,
+    glyph_id: u32,
     offset_x: i32,
     offset_y: i32,
     advance_x: i32,
@@ -1374,6 +1403,7 @@ Prepared_Font :: struct {
     rectangles: []Prepared_Rectangle,
     allocator: runtime.Allocator,
     allocation_mode: Prepared_Font_Allocation_Mode,
+    complete_face: bool,
 }
 
 Font_Prepare_Operation_State :: enum {
@@ -1439,6 +1469,8 @@ Font_Cache :: struct {
     preparation_arena_initialized: bool,
     source_monitor: Font_Source_Monitor,
     shutting_down: bool,
+    shaping_telemetry: Font_Shaping_Telemetry,
+    shaped_glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
 }
 
 Ui_Layout_Mode :: enum {

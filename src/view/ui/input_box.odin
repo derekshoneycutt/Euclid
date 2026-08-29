@@ -2,6 +2,7 @@ package ui
 
 import "../../core"
 import view_core "../core"
+import "../font"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -9,160 +10,175 @@ import rl "vendor:raylib"
 INPUT_BOX_MAX_TEXT_EVENTS :: 64
 
 Input_Box_Events :: struct {
-    text_event_count: int,
-    text_events: [INPUT_BOX_MAX_TEXT_EVENTS]rune,
-    paste_requested: bool,
-    paste_text: string,
-    tab: bool,
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
-    home: bool,
-    end: bool,
-    backspace: bool,
-    delete: bool,
+    text_event_count : int,
+    text_events : [INPUT_BOX_MAX_TEXT_EVENTS]rune,
+    paste_requested : bool,
+    paste_text : string,
+    tab : bool,
+    up : bool,
+    down : bool,
+    left : bool,
+    right : bool,
+    home : bool,
+    end : bool,
+    backspace : bool,
+    delete : bool,
 }
 
 Input_Box_Params :: struct {
-    id: int,
-    rect: rl.Rectangle,
-    text_buffer: []u8,
-    text_len_in: int,
-    caret_col_in: int,
-    viewport_col_start_in: int,
-    enabled: bool,
-    has_focus: bool,
-    mouse: Mouse_Input_State,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
-    interaction_enabled: bool,
-    font: rl.Font,
-    font_color: rl.Color,
-    font_size: f32,
-    char_advance: f32,
-    prompt_prefix: string,
-    caret_blink_half_period_seconds: f64,
-    terminal_mode: bool,
-    terminal_row_height: f32,
+    id : int,
+    rect : rl.Rectangle,
+    text_buffer : []u8,
+    text_len_in : int,
+    caret_col_in : int,
+    viewport_col_start_in : int,
+    enabled : bool,
+    has_focus : bool,
+    mouse : Mouse_Input_State,
+    scroll_offset : rl.Vector2,
+    interaction_space_rect : rl.Rectangle,
+    interaction_enabled : bool,
+    font : rl.Font,
+    font_color : rl.Color,
+    font_size : f32,
+    char_advance : f32,
+    prompt_prefix : string,
+    caret_blink_half_period_seconds : f64,
+    terminal_mode : bool,
+    terminal_row_height : f32,
 }
 
 Input_Box_Result :: struct {
-    drawn_rect: rl.Rectangle,
-    text_len_out: int,
-    caret_col_out: int,
-    viewport_col_start_out: int,
-    changed: bool,
-    moved_up: bool,
-    moved_down: bool,
-    history_previous: bool,
-    history_next: bool,
-    tab_pressed: bool,
-    backspace_pressed: bool,
-    paste_applied: bool,
-    submit_pressed: bool,
-    hovered: bool,
-    pressed: bool,
+    drawn_rect : rl.Rectangle,
+    text_len_out : int,
+    caret_col_out : int,
+    viewport_col_start_out : int,
+    changed : bool,
+    moved_up : bool,
+    moved_down : bool,
+    history_previous : bool,
+    history_next : bool,
+    tab_pressed : bool,
+    backspace_pressed : bool,
+    paste_applied : bool,
+    submit_pressed : bool,
+    hovered : bool,
+    pressed : bool,
 }
 
 Input_Box_Draw_Params :: struct {
-    rect: rl.Rectangle,
-    text_buffer: []u8,
-    text_len: int,
-    caret_col: int,
-    viewport_col_start: int,
-    enabled: bool,
-    has_focus: bool,
-    mouse: Mouse_Input_State,
-    font: rl.Font,
-    font_color: rl.Color,
-    font_size: f32,
-    char_advance: f32,
-    prompt_prefix: string,
-    caret_blink_half_period_seconds: f64,
-    terminal_mode: bool,
-    terminal_row_height: f32,
-    terminal_background_color: rl.Color,
-    terminal_prompt_color: rl.Color,
-    terminal_prompt_font: rl.Font,
+    rect : rl.Rectangle,
+    text_buffer : []u8,
+    text_len : int,
+    caret_col : int,
+    viewport_col_start : int,
+    enabled : bool,
+    has_focus : bool,
+    mouse : Mouse_Input_State,
+    font : rl.Font,
+    font_color : rl.Color,
+    font_size : f32,
+    char_advance : f32,
+    prompt_prefix : string,
+    caret_blink_half_period_seconds : f64,
+    terminal_mode : bool,
+    terminal_row_height : f32,
+    terminal_background_color : rl.Color,
+    terminal_prompt_color : rl.Color,
+    terminal_prompt_font : rl.Font,
+    font_cache : ^core.Font_Cache,
+    font_key : core.Font_Key,
 }
 
 Terminal_Input_Position :: struct {
-    row: int,
-    col: int,
+    row : int,
+    col : int,
+}
+
+Input_Box_Cursor_Segments :: struct {
+    before : string,
+    cursor : string,
+    after : string,
+}
+
+//   Source span and draw styling for one terminal input row.
+Terminal_Input_Row_Draw :: struct {
+    text_start, text_end: int,
+    position: rl.Vector2,
+    color: rl.Color,
 }
 
 //   Mutable text/caret state threaded through one frame of keyboard input,
 //   grouped with the per-frame outcome flags so the apply step passes one
 //   coherent value instead of a long out-parameter list.
 Input_Box_Key_State :: struct {
-    text_len:      ^int,
-    caret:         ^int,
-    viewport:      ^int,
-    moved_up:      ^bool,
-    moved_down:    ^bool,
-    paste_applied: ^bool,
+    text_len : ^int,
+    caret : ^int,
+    viewport : ^int,
+    moved_up : ^bool,
+    moved_down : ^bool,
+    paste_applied : ^bool,
 }
 
 //   Mutable caret/text state shared by input-box edit operations.
 Input_Box_Edit_State :: struct {
-    text_len: ^int,
-    caret:    ^int,
+    text_len : ^int,
+    caret : ^int,
 }
 
 //   Mutable up/down movement flags produced by caret movement.
 Input_Box_Movement_Flags :: struct {
-    moved_up:   ^bool,
-    moved_down: ^bool,
+    moved_up : ^bool,
+    moved_down : ^bool,
 }
 
 //   Caret placement inputs for one focused non-terminal input box.
 Input_Box_Caret_Placement :: struct {
-    caret_col_in_line: int,
-    visible_start:     int,
-    visible_cols:      int,
-    content_x:         f32,
-    row_y:             f32,
+    caret_col_in_line : int,
+    visible_start : int,
+    visible_cols : int,
+    content_x : f32,
+    row_y : f32,
 }
 
 //   Keyboard edit outcome for one input box frame.
 Input_Box_Edit_Outcome :: struct {
-    moved_up:      bool,
-    moved_down:    bool,
-    paste_applied: bool,
-    changed:       bool,
+    moved_up : bool,
+    moved_down : bool,
+    paste_applied : bool,
+    changed : bool,
 }
 
 //   Interaction flags for one handled input box frame.
 Input_Box_Interaction_Flags :: struct {
-    owns_press:      bool,
-    mouse_left_down: bool,
-    hovered:         bool,
+    owns_press : bool,
+    mouse_left_down : bool,
+    hovered : bool,
 }
 
 //   Mutable text/caret/viewport state threaded through one input frame.
 Input_Box_Frame_State :: struct {
-    text_len: ^int,
-    caret:    ^int,
-    viewport: ^int,
+    text_len : ^int,
+    caret : ^int,
+    viewport : ^int,
 }
 
 //   Line context for one caret click within the visible text.
 Input_Box_Click_Context :: struct {
-    visible_cols: int,
-    viewport:     int,
-    line_start:   int,
-    line_end:     int,
+    visible_cols : int,
+    viewport : int,
+    line_start : int,
+    line_end : int,
 }
 
 //   Mouse-click geometry for one caret placement within the visible text.
 Input_Box_Click_Geometry :: struct {
-    hovered:     bool,
-    local_mouse: rl.Vector2,
-    text_rect:   rl.Rectangle,
-    viewport:    int,
-    line_start:  int,
-    line_end:    int,
+    hovered : bool,
+    local_mouse : rl.Vector2,
+    text_rect : rl.Rectangle,
+    viewport : int,
+    line_start : int,
+    line_end : int,
 }
 
 //   Resolve whether caret should be visible for the current blink phase.
@@ -204,6 +220,23 @@ input_box_clamp_cursor :: #force_inline proc(cursor, text_len: int) -> int {
 //   Return whether the byte is a UTF-8 continuation byte.
 input_box_is_utf8_trailing_byte :: #force_inline proc(b: u8) -> bool {
     return (b & 0xC0) == 0x80
+}
+
+//   Split one row around the complete UTF-8 codepoint under the caret.
+input_box_cursor_segments :: proc(
+    buffer: []u8, text_start, text_end, caret: int) ->
+    (Input_Box_Cursor_Segments, bool) {
+
+    if text_start < 0 || text_end > len(buffer) || text_start > caret ||
+        caret >= text_end || input_box_is_utf8_trailing_byte(buffer[caret]) {
+        return {}, false
+    }
+    next := input_box_next_codepoint_start(buffer, text_end, caret)
+    return {
+        before = string(buffer[text_start:caret]),
+        cursor = string(buffer[caret:next]),
+        after = string(buffer[next:text_end]),
+    }, true
 }
 
 //   Step backward to the previous UTF-8 codepoint boundary.
@@ -1159,6 +1192,56 @@ handle_input_box :: proc(
         Input_Box_Interaction_Flags{owns_press, params.mouse.left_down, hovered})
 }
 
+//   Draw one input fragment through shaping when a matching cache is available.
+input_box_draw_text :: proc(
+    params: Input_Box_Draw_Params, draw: view_core.Shaped_Text_Draw) {
+
+    if params.font_cache == nil {
+        view_core.ui_text_draw_unshaped(draw)
+        return
+    }
+    resolver := font.cache_terminal_resolver(params.font_cache)
+    request := draw
+    request.resolver = resolver
+    request.key = params.font_key
+    view_core.ui_text_shaped_f32(request)
+}
+
+//   Draw one terminal row with shaping split around the cursor codepoint.
+draw_terminal_input_row :: proc(
+    params: Input_Box_Draw_Params, draw: Terminal_Input_Row_Draw) {
+
+    text_font := view_core.Ui_Text_Font{params.font, params.font_size}
+    caret := input_box_clamp_cursor(params.caret_col, params.text_len)
+    if !params.has_focus || caret < draw.text_start || caret >= draw.text_end {
+        input_box_draw_text(params, {
+            text = string(params.text_buffer[draw.text_start:draw.text_end]),
+            position = draw.position, color = draw.color, font = text_font})
+        return
+    }
+
+    segments, segmented := input_box_cursor_segments(
+        params.text_buffer, draw.text_start, draw.text_end, caret)
+    if !segmented {
+        input_box_draw_text(params, {
+            text = string(params.text_buffer[draw.text_start:draw.text_end]),
+            position = draw.position, color = draw.color, font = text_font})
+        return
+    }
+    before_columns := input_box_count_codepoints(
+        params.text_buffer, draw.text_start, caret)
+    input_box_draw_text(params, {text = segments.before,
+        position = draw.position, color = draw.color, font = text_font})
+
+    cursor_x := draw.position.x + f32(before_columns)*max(1.0, params.char_advance)
+    view_core.ui_text_f32(
+        segments.cursor, cursor_x, draw.position.y, draw.color, text_font)
+
+    after_x := cursor_x + max(1.0, params.char_advance)
+    input_box_draw_text(params, {text = segments.after,
+        position = {after_x, draw.position.y}, color = draw.color, font = text_font})
+}
+
 //   Draw wrapped terminal input text aligned after the first-row prompt.
 draw_terminal_input_rows :: proc(
     params: Input_Box_Draw_Params, content_x: f32,
@@ -1180,10 +1263,12 @@ draw_terminal_input_rows :: proc(
             text_end := input_box_byte_offset_for_codepoint_col(
                 params.text_buffer, line_start, line_end, end_col)
             if text_end > text_start {
-                view_core.ui_text(string(params.text_buffer[text_start:text_end]),
-                    int(content_x), int(params.rect.y + f32(row) * row_height),
-                    display_color,
-                    view_core.Ui_Text_Font{params.font, params.font_size})
+                draw_terminal_input_row(params, {
+                    text_start = text_start,
+                    text_end = text_end,
+                    position = {content_x, params.rect.y + f32(row)*row_height},
+                    color = display_color,
+                })
             }
             row += 1
         }
@@ -1241,9 +1326,23 @@ draw_terminal_input_box :: proc(params: Input_Box_Draw_Params) {
         params.enabled ? params.terminal_prompt_color : rl.Color{110, 110, 110, 255}
 
     if len(params.prompt_prefix) > 0 {
-        view_core.ui_text(params.prompt_prefix, int(drawn_rect.x), int(drawn_rect.y),
-            prompt_color,
-            view_core.Ui_Text_Font{params.terminal_prompt_font, params.font_size})
+        prompt_font := view_core.Ui_Text_Font{
+            params.terminal_prompt_font, params.font_size}
+        if params.font_cache != nil {
+            resolver := font.cache_terminal_resolver(params.font_cache)
+            view_core.ui_text_shaped({
+                resolver = resolver,
+                key = .Bold,
+                text = params.prompt_prefix,
+                position = {drawn_rect.x, drawn_rect.y},
+                color = prompt_color,
+                font = prompt_font,
+            })
+        } else {
+            view_core.ui_text(
+                params.prompt_prefix, int(drawn_rect.x), int(drawn_rect.y),
+                prompt_color, prompt_font)
+        }
     }
     draw_terminal_input_rows(params, content_x, columns, display_color)
     draw_terminal_input_cursor(params, content_x, columns, display_color)
@@ -1325,11 +1424,12 @@ input_box_draw_content :: proc(
     }
 
     if len(visible_text) > 0 {
-        view_core.ui_text(visible_text,
-            int(content_x),
-            int(drawn_rect.y),
-            display_color,
-            view_core.Ui_Text_Font{params.font, params.font_size})
+        input_box_draw_text(params, {
+            text = visible_text,
+            position = {content_x, drawn_rect.y},
+            color = display_color,
+            font = {params.font, params.font_size},
+        })
     }
 
     if len(params.prompt_prefix) > 0 {

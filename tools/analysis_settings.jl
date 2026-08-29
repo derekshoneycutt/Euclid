@@ -1,5 +1,8 @@
 using OdinJuliaAnalysis
 
+Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
+using .EuclidBuildConfiguration: native_linker_flags
+
 const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
 const JuliaProject = joinpath(RepositoryRoot, "src", "julia")
 const AnalyzerRoot = dirname(dirname(pathof(OdinJuliaAnalysis)))
@@ -294,8 +297,13 @@ AnalysisSettings(
             "application",
             "src",
             "euclid-analysis",
-            ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"];
-            include_julia_linker_flags=true),
+            [
+                "-vet",
+                "-strict-style",
+                "-disallow-do",
+                "-warnings-as-errors",
+                "-extra-linker-flags:$(native_linker_flags())",
+            ]),
     ]),
     ReturnTupleSettings(2, 2),
     ParameterCountSettings(8, 5, 8),
@@ -494,6 +502,16 @@ AnalysisSettings(
                 "Reserved once on first optional-font demand, reused across preparations, and destroyed with the font cache.";
                 operation="arena_init_static",
                 target="cache.preparation_arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-harfbuzz-ownership-test-arena",
+                "src/view/font/font_test.odin",
+                "view_test_harfbuzz_owns_source_and_bounds_output",
+                :arena,
+                "Test-only arena is destroyed before shaping to verify HarfBuzz copied the source bytes.";
+                operation="arena_init_static",
+                target="arena",
                 certainty=:definite,
                 response=Ignore),
             # Font preparation buffers use the dedicated preparation allocator and are

@@ -108,9 +108,19 @@ prepared_is_valid :: proc(prepared: ^Prepared_Font) -> bool {
     }
     glyph_count := int(prepared.glyph_count)
     pixel_count := int(prepared.atlas_width*prepared.atlas_height*2)
-    return len(prepared.glyphs) == glyph_count &&
-        len(prepared.rectangles) == glyph_count &&
-        len(prepared.atlas_pixels) == pixel_count
+    if len(prepared.glyphs) != glyph_count ||
+        len(prepared.rectangles) != glyph_count ||
+        len(prepared.atlas_pixels) != pixel_count {
+        return false
+    }
+    if prepared.complete_face {
+        for glyph, index in prepared.glyphs {
+            if glyph.glyph_id != u32(index) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 //   Validate uploaded texture dimensions and copied raylib metadata.

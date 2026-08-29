@@ -3,6 +3,7 @@ package ui_dynview
 import "../../../core"
 import "../../../dynview"
 import view_core "../../core"
+import view_font "../../font"
 
 import rl "vendor:raylib"
 
@@ -20,30 +21,31 @@ Dynview_Text_Style :: core.Dynview_Text_Style
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.
 Wrapped_Text_Metrics :: struct {
-    padding:      f32,
-    row_height:   f32,
-    wrap_advance: f32,
-    font_size:    f32,
+    padding : f32,
+    row_height : f32,
+    wrap_advance : f32,
+    font_size : f32,
 }
 
 //   Fallback plain-text payload for the styled-or-fallback draw path.
 Fallback_Text_Content :: struct {
-    text:  string,
-    color: rl.Color,
+    text : string,
+    color : rl.Color,
 }
 
 //   Panel, font, and metrics for one scratchpad draw pass.
 Scratchpad_Draw_Params :: struct {
-    panel:   rl.Rectangle,
-    scroll_y: f32,
-    font:    rl.Font,
-    metrics: Wrapped_Text_Metrics,
+    panel : rl.Rectangle,
+    scroll_y : f32,
+    font : rl.Font,
+    font_cache : ^view_font.Font_Cache,
+    metrics : Wrapped_Text_Metrics,
 }
 
 //   Baseline draw position for one child math program.
 Program_Draw_Position :: struct {
-    draw_x:     f32,
-    baseline_y: f32,
+    draw_x : f32,
+    baseline_y : f32,
 }
 
 
@@ -61,6 +63,8 @@ draw_scratchpad_fallback_text :: proc(
             text_color = fallback.color,
             wrap_advance = params.metrics.wrap_advance,
             font_size = params.metrics.font_size,
+            font_cache = params.font_cache,
+            font_key = .Regular,
         })
 }
 

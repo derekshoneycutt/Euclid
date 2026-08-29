@@ -31,6 +31,7 @@ prepare_task_execute :: proc(payload: rawptr) -> taskpool.Task_Result {
         path = string(task.path_storage[:task.path_length]),
         pixel_size = task.pixel_size,
         codepoints = task.codepoints[:task.codepoint_count],
+        complete_face = true,
     }
     if prepare(request, &task.prepared, task.allocator, .Arena) {
         return .Succeeded

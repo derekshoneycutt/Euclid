@@ -4,9 +4,9 @@ import "../../core"
 import "../../files"
 
 import "core:mem"
+import vmem "core:mem/virtual"
 import "core:os"
 import "core:path/filepath"
-import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -47,6 +47,7 @@ Font_Key :: core.Font_Key
 Font_Load_State :: core.Font_Load_State
 Font_Cache_Entry :: core.Font_Cache_Entry
 Font_Cache :: core.Font_Cache
+Font_Shaping_Telemetry :: core.Font_Shaping_Telemetry
 
 // Inclusive Unicode interval included in the JuliaMono loading policy.
 Font_Codepoint_Range :: struct {
@@ -92,10 +93,28 @@ FONT_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
 // Resolve one cache-owned font handle for the requested semantic variant.
 Font_Resolve_Handler :: proc(user_data: rawptr, key: Font_Key) -> rl.Font
 
+// Shape one borrowed UTF-8 run into caller-owned bounded glyph storage.
+Font_Shape_Handler :: proc(
+    user_data: rawptr, key: Font_Key, text: string,
+    output: []Shaped_Glyph) -> (int, bool)
+
+Shape_Fallback_Reason :: enum {
+    Workspace_Overflow,
+    Invalid_Result,
+    Invalid_Cluster,
+}
+
+// Record one bounded shaped-presentation fallback without retaining source text.
+Font_Shape_Fallback_Handler :: proc(
+    user_data: rawptr, reason: Shape_Fallback_Reason)
+
 // Borrowing capability drawing to resolve semantic font keys.
 Font_Resolver :: struct {
     user_data: rawptr,
     resolve: Font_Resolve_Handler,
+    shape: Font_Shape_Handler,
+    record_shape_fallback: Font_Shape_Fallback_Handler,
+    workspace: []Shaped_Glyph,
 }
 
 //   Resolve one font source from packaged assets or the source-tree fallback.
@@ -189,6 +208,64 @@ rasterization_end :: proc() {
     rl.SetTraceLogLevel(.INFO)
 }
 
+//   Release one generation's shaping handles and native source copy.
+font_shaping_destroy :: proc(resource: ^Font_Shaping_Resource) {
+    harfbuzz_shaper_destroy(resource)
+}
+
+//   Read transient source through the preparation arena and acquire a native shaper.
+font_shaping_create :: proc(
+    cache: ^Font_Cache, path: string,
+    resource: ^Font_Shaping_Resource) -> bool {
+
+    if cache == nil || resource == nil || len(path) == 0 ||
+        !cache_preparation_arena_init(cache) {
+        return false
+    }
+    resource^ = {}
+    source, read_error := os.read_entire_file(
+        path, vmem.arena_allocator(&cache.preparation_arena))
+    if read_error != nil {
+        return false
+    }
+    return harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, resource)
+}
+
+//   Prepare and finalize the synchronous Regular complete-face generation.
+cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
+    if !cache_preparation_arena_init(cache) {
+        return false
+    }
+    defer cache_preparation_arena_reset(cache)
+    allocator := vmem.arena_allocator(&cache.preparation_arena)
+    codepoints := codepoint_set()
+    path := cache_source_path(cache, .Regular)
+    prepared: Prepared_Font
+    if !prepare({
+        key = .Regular,
+        path = path,
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        codepoints = codepoints.values[:codepoints.count],
+        complete_face = true,
+    }, &prepared, allocator, .Arena) {
+        return false
+    }
+    defer prepare_destroy(&prepared)
+    shaping: Font_Shaping_Resource
+    if !font_shaping_create(cache, path, &shaping) {
+        return false
+    }
+    candidate: rl.Font
+    if !finalize(&prepared, &candidate) {
+        font_shaping_destroy(&shaping)
+        return false
+    }
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.font = candidate
+    entry.shaping = shaping
+    return true
+}
+
 //   Load only the permanent Regular fallback during synchronous startup.
 //
 // Parameters:
@@ -201,14 +278,12 @@ cache_init :: proc(cache: ^Font_Cache) {
     assert(cache != nil)
     cache^ = {}
     cache_source_paths_init(cache)
-    codepoints := codepoint_set()
-    regular_path := cache_source_path(cache, .Regular)
     rasterization_begin()
     regular := &cache.entries[int(Font_Key.Regular)]
-    regular.font = cache_load(regular_path, &codepoints)
-    regular.resident = rl.IsFontValid(regular.font)
+    regular.resident = cache_load_regular(cache)
     regular.state = regular.resident ? .Ready : .Failed
     rasterization_end()
+    assert(regular.resident)
     source_monitor_init(cache, source_monitor_now_ns())
 }
 
@@ -223,10 +298,12 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     if cache == nil {
         return
     }
-    for entry in &cache.entries {
+    for entry_index in 0..<FONT_KEY_COUNT {
+        entry := &cache.entries[entry_index]
         if entry.resident {
             rl.UnloadFont(entry.font)
         }
+        font_shaping_destroy(&entry.shaping)
     }
     cache_preparation_arena_destroy(cache)
     cache^ = {}
@@ -274,12 +351,44 @@ cache_terminal_resolve :: proc(user_data: rawptr, key: Font_Key) -> rl.Font {
     return cache_resolve(cast(^Font_Cache)user_data, key)
 }
 
+//   Adapt cache shaping to a frame-local resolver capability.
+cache_terminal_shape :: proc(
+    user_data: rawptr, key: Font_Key, text: string,
+    output: []Shaped_Glyph) -> (int, bool) {
+
+    return cache_shape(cast(^Font_Cache)user_data, key, text, output)
+}
+
+//   Record one shaped-presentation rejection in aggregate cache telemetry.
+cache_terminal_record_shape_fallback :: proc(
+    user_data: rawptr, reason: Shape_Fallback_Reason) {
+
+    cache := cast(^Font_Cache)user_data
+    if cache == nil {
+        return
+    }
+    switch reason {
+    case .Workspace_Overflow:
+        cache.shaping_telemetry.workspace_overflows += 1
+    case .Invalid_Result:
+        cache.shaping_telemetry.invalid_results += 1
+    case .Invalid_Cluster:
+        cache.shaping_telemetry.invalid_clusters += 1
+    }
+}
+
 //   Create a frame-local terminal resolver borrowing from the cache.
 //
 // Returns:
 //   - Callback capability whose `user_data` remains valid only while `cache` does.
 cache_terminal_resolver :: proc(cache: ^Font_Cache) -> Font_Resolver {
-    return {user_data = cache, resolve = cache_terminal_resolve}
+    return {
+        user_data = cache,
+        resolve = cache_terminal_resolve,
+        shape = cache_terminal_shape,
+        record_shape_fallback = cache_terminal_record_shape_fallback,
+        workspace = cache.shaped_glyphs[:],
+    }
 }
 
 //   Convert dynview's weight and italic flags to one indexed cache key.
@@ -304,6 +413,22 @@ font_key_from_flags :: proc(flags: core.Font_Variant_Flags) -> Font_Key {
     return .Regular
 }
 
+//   Build generation-owned shaping and GPU candidates from one prepared font.
+cache_publication_candidates :: proc(
+    cache: ^Font_Cache, prepared: ^Prepared_Font,
+    shaping: ^Font_Shaping_Resource, candidate: ^rl.Font) -> bool {
+
+    path := cache_source_path(cache, prepared.key)
+    if !font_shaping_create(cache, path, shaping) {
+        return false
+    }
+    if !finalize(prepared, candidate) {
+        font_shaping_destroy(shaping)
+        return false
+    }
+    return true
+}
+
 //   Finalize and atomically publish a prepared font on the display thread.
 //
 // Returns:
@@ -323,13 +448,17 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
     }
 
     candidate: rl.Font
-    if !finalize(prepared, &candidate) {
+    shaping: Font_Shaping_Resource
+    if !cache_publication_candidates(
+        cache, prepared, &shaping, &candidate) {
         return false
     }
     previous := entry.font
+    previous_shaping := entry.shaping
     previous_resident := entry.resident
     entry^ = {
         font = candidate,
+        shaping = shaping,
         generation = generation,
         requested_generation = entry.requested_generation,
         resident = true,
@@ -341,20 +470,35 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
     if previous_resident {
         rl.UnloadFont(previous)
     }
+    font_shaping_destroy(&previous_shaping)
     return true
 }
 
-//   Load one cache entry using the shared JuliaMono codepoint policy.
-//
-// Returns:
-//   - Raylib-owned font loaded synchronously at `JULIA_MONO_FONT_SIZE`.
-cache_load :: proc(
-    path: string, codepoints: ^Font_Codepoint_Set) -> rl.Font {
+//   Shape one run through a resident variant's generation-owned native state.
+cache_shape :: proc(
+    cache: ^Font_Cache, key: Font_Key, text: string,
+    output: []Shaped_Glyph) -> (int, bool) {
 
-    if len(path) == 0 {
-        return {}
+    if cache == nil {
+        return 0, false
     }
-    path_cstring := strings.clone_to_cstring(path, context.temp_allocator)
-    return rl.LoadFontEx(path_cstring, JULIA_MONO_FONT_SIZE,
-        &codepoints.values[0], codepoints.count)
+    cache.shaping_telemetry.shape_calls += 1
+    entry := &cache.entries[int(key)]
+    if !entry.resident || entry.shaping.font == nil {
+        entry = &cache.entries[int(Font_Key.Regular)]
+    }
+    if !entry.resident || entry.shaping.font == nil {
+        cache.shaping_telemetry.native_failures += 1
+        return 0, false
+    }
+    glyph_count, shaped := harfbuzz_shape(
+        &entry.shaping, text, true, output)
+    if !shaped {
+        cache.shaping_telemetry.native_failures += 1
+        return 0, false
+    }
+    cache.shaping_telemetry.shaped_runs += 1
+    cache.shaping_telemetry.shaped_glyphs += u64(glyph_count)
+    return glyph_count, true
 }
+
