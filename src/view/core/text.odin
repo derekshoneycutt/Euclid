@@ -40,6 +40,43 @@ Shaped_Text_Draw :: struct {
     font: Ui_Text_Font,
 }
 
+//   Complete inputs for one page-aware unshaped text draw.
+Unshaped_Text_Draw :: struct {
+    resolver: view_font.Font_Resolver,
+    key: view_font.Font_Key,
+    text: string,
+    position: rl.Vector2,
+    color: rl.Color,
+    font: Ui_Text_Font,
+}
+
+//   Complete inputs for one normalized resolved-glyph draw.
+Resolved_Glyph_Draw :: struct {
+    resolved: view_font.Resolved_Glyph,
+    position: rl.Vector2,
+    font_size: f32,
+    color: rl.Color,
+    x_offset: i32,
+    y_offset: i32,
+}
+
+//   Complete inputs for one page-aware unshaped codepoint draw.
+Codepoint_Text_Draw :: struct {
+    resolver: view_font.Font_Resolver,
+    key: view_font.Font_Key,
+    codepoint: rune,
+    position: rl.Vector2,
+    font_size: f32,
+    color: rl.Color,
+}
+
+//   Resolved codepoint draw data plus original residency and drawability state.
+Codepoint_Resolution :: struct {
+    glyph: view_font.Resolved_Glyph,
+    status: view_font.Font_Glyph_Resolve_Status,
+    drawable: bool,
+}
+
 //   Wrap a font with the default UI text size.
 ui_text_font :: #force_inline proc(font: rl.Font) -> Ui_Text_Font {
     return Ui_Text_Font{font = font, font_size = TREE_FONT_SIZE}
@@ -102,10 +139,9 @@ ui_text_column_advance :: proc(atlas: rl.Font, font_size: f32) -> (f32, bool) {
 //   Validate a complete horizontal monospace shape result before drawing.
 ui_text_shape_is_valid :: proc(
     text: string, glyphs: []view_font.Shaped_Glyph,
-    glyph_count: int, atlas: rl.Font) -> bool {
+    glyph_count: int) -> bool {
 
-    if glyph_count <= 0 || glyph_count > len(glyphs) ||
-        !rl.IsFontValid(atlas) {
+    if glyph_count <= 0 || glyph_count > len(glyphs) {
         return false
     }
     codepoint_count := dynview.text_codepoint_count_span(text, 0, len(text))
@@ -114,8 +150,7 @@ ui_text_shape_is_valid :: proc(
     }
     total_advance := i64(0)
     for glyph in glyphs[:glyph_count] {
-        if glyph.glyph_id >= u32(atlas.glyphCount) || glyph.y_advance != 0 ||
-            glyph.x_advance <= 0 ||
+        if glyph.y_advance != 0 || glyph.x_advance <= 0 ||
             !ui_text_cluster_is_valid(text, glyph.cluster) {
             return false
         }
@@ -124,24 +159,84 @@ ui_text_shape_is_valid :: proc(
     return total_advance == i64(glyphs[0].x_advance)*i64(codepoint_count)
 }
 
-//   Draw one shaped glyph directly from its complete glyph-ID atlas.
-ui_text_draw_shaped_glyph :: proc(
-    atlas: rl.Font, glyph: view_font.Shaped_Glyph,
-    position: rl.Vector2, font_size: f32, color: rl.Color) {
+//   Draw one normalized resident glyph with optional HarfBuzz offsets.
+ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
 
-    source := atlas.recs[glyph.glyph_id]
-    metric := atlas.glyphs[glyph.glyph_id]
-    scale := font_size/f32(atlas.baseSize)
+    resolved := draw.resolved
+    scale := draw.font_size/f32(resolved.base_size)
     offset_scale := scale/64
     destination := rl.Rectangle{
-        x = position.x + f32(metric.offsetX)*scale +
-            f32(glyph.x_offset)*offset_scale,
-        y = position.y + f32(metric.offsetY)*scale +
-            f32(glyph.y_offset)*offset_scale,
-        width = source.width*scale,
-        height = source.height*scale,
+        x = draw.position.x + f32(resolved.offset_x)*scale +
+            f32(draw.x_offset)*offset_scale,
+        y = draw.position.y + f32(resolved.offset_y)*scale +
+            f32(draw.y_offset)*offset_scale,
+        width = resolved.source.width*scale,
+        height = resolved.source.height*scale,
     }
-    rl.DrawTexturePro(atlas.texture, source, destination, {}, 0, color)
+    rl.DrawTexturePro(
+        resolved.texture, resolved.source, destination, {}, 0, draw.color)
+}
+
+//   Resolve one codepoint or the resident replacement glyph while recording demand.
+ui_text_resolve_codepoint :: proc(
+    resolver: view_font.Font_Resolver, key: view_font.Font_Key,
+    codepoint: rune) -> Codepoint_Resolution {
+
+    if resolver.resolve_codepoint == nil {
+        return {status = .Unsupported}
+    }
+    resolved, status := resolver.resolve_codepoint(
+        resolver.user_data, key, codepoint)
+    if status == .Resident {
+        return {glyph = resolved, status = status, drawable = true}
+    }
+    replacement, replacement_status := resolver.resolve_codepoint(
+        resolver.user_data, key, rune(0xfffd))
+    return {
+        glyph = replacement,
+        status = status,
+        drawable = replacement_status == .Resident,
+    }
+}
+
+//   Draw one unshaped rune through cmap lookup and demand-loaded pages.
+ui_text_codepoint_paged :: proc(draw: Codepoint_Text_Draw) -> bool {
+
+    resolution := ui_text_resolve_codepoint(
+        draw.resolver, draw.key, draw.codepoint)
+    if !resolution.drawable {
+        return false
+    }
+    ui_text_draw_resolved_glyph({
+        resolved = resolution.glyph,
+        position = draw.position,
+        font_size = draw.font_size,
+        color = draw.color,
+    })
+    return resolution.status == .Resident
+}
+
+//   Draw UTF-8 without shaping while resolving every rune through glyph pages.
+ui_text_unshaped_paged :: proc(request: Unshaped_Text_Draw) -> bool {
+    draw_x := request.position.x
+    all_resident := true
+    for codepoint in request.text {
+        resolution := ui_text_resolve_codepoint(
+            request.resolver, request.key, codepoint)
+        if !resolution.drawable {
+            return false
+        }
+        all_resident = all_resident && resolution.status == .Resident
+        ui_text_draw_resolved_glyph({
+            resolved = resolution.glyph,
+            position = {draw_x, request.position.y},
+            font_size = request.font.font_size,
+            color = request.color,
+        })
+        draw_x += f32(resolution.glyph.advance_x)*
+            request.font.font_size/f32(resolution.glyph.base_size)
+    }
+    return all_resident
 }
 
 //   Draw one shaped request through the ordinary raylib text path.
@@ -170,12 +265,39 @@ ui_text_draw_shaped_run :: proc(
 
     for glyph in glyphs {
         column, _ := ui_text_cluster_column(request.text, glyph.cluster)
-        ui_text_draw_shaped_glyph(
-            request.font.font, glyph, rl.Vector2{
+        resolved, resident := request.resolver.resolve_glyph(
+            request.resolver.user_data, request.key, glyph.glyph_id)
+        assert(resident)
+        ui_text_draw_resolved_glyph({
+            resolved = resolved,
+            position = rl.Vector2{
                 request.position.x + f32(column)*column_advance,
                 request.position.y,
-            }, request.font.font_size, request.color)
+            },
+            font_size = request.font.font_size,
+            color = request.color,
+            x_offset = glyph.x_offset,
+            y_offset = glyph.y_offset,
+        })
     }
+}
+
+//   Resolve every shaped glyph before drawing to preserve whole-run fallback.
+ui_text_shape_glyphs_are_resident :: proc(
+    resolver: view_font.Font_Resolver, key: view_font.Font_Key,
+    glyphs: []view_font.Shaped_Glyph) -> bool {
+
+    if resolver.resolve_glyph == nil {
+        return false
+    }
+    for glyph in glyphs {
+        _, resident := resolver.resolve_glyph(
+            resolver.user_data, key, glyph.glyph_id)
+        if !resident {
+            return false
+        }
+    }
+    return true
 }
 
 //   Shape and draw one UTF-8 run, falling back atomically to ordinary raylib text.
@@ -197,7 +319,7 @@ ui_text_shaped_f32 :: proc(
     glyph_count, shaped := resolver.shape(
         resolver.user_data, request.key, text, resolver.workspace)
     if !shaped || !ui_text_shape_is_valid(
-        text, resolver.workspace, glyph_count, request.font.font) {
+        text, resolver.workspace, glyph_count) {
         ui_text_shape_fallback(resolver, .Invalid_Result)
         ui_text_draw_unshaped(request)
         return false
@@ -212,6 +334,11 @@ ui_text_shaped_f32 :: proc(
     glyphs := resolver.workspace[:glyph_count]
     if !ui_text_shape_clusters_are_valid(text, glyphs) {
         ui_text_shape_fallback(resolver, .Invalid_Cluster)
+        ui_text_draw_unshaped(request)
+        return false
+    }
+    if !ui_text_shape_glyphs_are_resident(resolver, request.key, glyphs) {
+        ui_text_shape_fallback(resolver, .Pending_Glyph)
         ui_text_draw_unshaped(request)
         return false
     }

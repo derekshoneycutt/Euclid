@@ -362,31 +362,53 @@ display thread.
 ### Font Cache
 
 `Euclid_General_State.font_cache` owns every resident JuliaMono GPU font and its
-resolved source paths. Each resident generation pairs one complete glyph-ID atlas
-with generation-owned HarfBuzz handles; atlas index and HarfBuzz glyph ID are the
-same. Regular loads synchronously as the permanent fallback.
-Other weights and italic variants are requested on demand, prepared serially
-through the shared taskpool using a reusable virtual arena, and finalized on the
-display thread. Frame service polls without waiting and publishes only the
-currently requested generation.
+resolved source paths. Each resident generation pairs a 96-codepoint printable-ASCII
+and U+FFFD compatibility seed with generation-owned HarfBuzz handles, an exact-size
+glyph-state table indexed by face glyph ID, and up to 32 immutable demand-loaded
+texture pages. Regular loads synchronously as the permanent fallback. Other weights
+and italic variants are requested on demand. Seed and page preparation are serialized
+through the shared taskpool using one reusable virtual arena and finalized on the
+display thread. Frame service polls without waiting and publishes only
+current-generation results.
+
+The resident font's cmap defines Unicode support; Euclid no longer maintains a broad
+Unicode allowlist. Shaped text uses HarfBuzz output glyph IDs directly. Unshaped
+geometry labels and dynview math map each Unicode scalar through the same generation's
+HarfBuzz font, then resolve the resulting glyph ID through the page table. Pending,
+unsupported, and capacity-blocked direct glyphs display the seed's U+FFFD replacement.
+Demand state lives directly in the exact-size glyph table, avoiding a growing set.
+
+Each page task admits genuine demand first, then deterministically fills unused batch
+capacity with missing face glyph IDs. Ordinary pages therefore contain 256 glyphs,
+making the append-only generation ceiling up to 8192 paged glyphs plus the seed.
+Published pages are never repacked or evicted. Demand beyond the reserved 32-page
+capacity becomes terminal for that generation and continues to display U+FFFD until
+source reload creates a new generation. Generation-local counters record page
+publication, prefetch, pending codepoint lookup, unsupported lookup, and first capacity
+rejection without retaining source text.
 
 Shaping uses one reusable native HarfBuzz buffer per resident generation and one
 display-owned 4096-glyph workspace. Both are allocated during initialization or
 font publication, never per frame. A run is completely validated before drawing;
-workspace overflow, invalid glyph/cluster data, or non-horizontal metrics fall back
-atomically to the existing unshaped renderer. Hot reload publishes the GPU font and
-shaper together, preserving the prior pair when either candidate fails.
+workspace overflow, invalid glyph/cluster data, non-horizontal metrics, or pending
+glyph pages fall back atomically to the existing unshaped renderer. Shaped drawing
+uses a second resolver that normalizes seed and page texture records rather than
+indexing `rl.Font` directly. Hot reload publishes the seed, exact-size metadata, and
+shaper together, preserving the prior generation when any candidate component fails.
+All old pages are retired with that prior generation.
 
 Ordinary UI text, fallback prose, top-level dynview `Text_Run` items, transcripts,
 and scratchpad input are shape-eligible. Scratchpad runs split at the cursor and the
 covered UTF-8 character is drawn unshaped. Dynview math remains explicitly unshaped,
 including `Math_Glyph_Run`, `Math_Block`, scripts, fractions, delimiters, radicals,
-accents, matrices, large operators, and recursive children.
+accents, matrices, large operators, and recursive children, but those unshaped glyphs
+now use cmap lookup and demand-loaded pages rather than requiring seed residency.
 
 Source changes are polled at a bounded cadence and debounced before replacement.
 Shutdown rejects new font requests, joins accepted preparation before destroying
-the taskpool, unloads resident fonts while the graphics context is live, and then
-destroys HarfBuzz handles and releases the preparation arena.
+the taskpool, unloads seed and page textures while the graphics context is live,
+releases exact-size generation metadata, destroys HarfBuzz handles, and finally
+releases the preparation arena.
 
 ### Lifecycle And Failure Rules
 
@@ -450,6 +472,8 @@ This policy is strict by design.
         documented allocation.
       1. Asset-unpack decompression staging allocation released immediately when
         unpack completes.
+      1. Exact-size font glyph-state metadata allocated once for a candidate
+        generation and released when that generation is retired.
    - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
 
 ### Current Arena Notes
@@ -460,6 +484,9 @@ This policy is strict by design.
 - Reload clears the inactive arena before staging. Rollback clears that same
   arena; publication clears the retired arena. Both arenas are destroyed only
   after the Julia owner thread has stopped during application teardown.
+- Font preparation uses one 96 MiB virtual scratch arena for seed and glyph-page
+  work. Each completed page uploads its pixels and copies scalar metrics into
+  generation-owned storage before the arena is reset.
 
 ### Not Allowed Without Explicit Approval
 

@@ -52,6 +52,7 @@ DYNVIEW_MAX_MATH_COMMANDS :: 4096
 
 FONT_KEY_COUNT :: int(Font_Key.Black_Italic) + 1
 FONT_SOURCE_PATH_CAPACITY :: 1024
+FONT_GLYPH_PAGE_CAPACITY :: 32
 
 Vector2 :: rl.Vector2
 Vector3 :: rl.Vector3
@@ -1354,6 +1355,30 @@ Font_Shaping_Telemetry :: struct {
     workspace_overflows: u64,
     invalid_results: u64,
     invalid_clusters: u64,
+    pending_glyph_runs: u64,
+}
+
+Font_Glyph_State :: enum u8 {
+    Missing,
+    Pending,
+    Queued,
+    Resident,
+    Capacity_Blocked,
+}
+
+Font_Glyph_Record :: struct {
+    rectangle: rl.Rectangle,
+    offset_x: i32,
+    offset_y: i32,
+    advance_x: i32,
+    page_index: u16,
+    state: Font_Glyph_State,
+}
+
+Font_Glyph_Page :: struct {
+    texture: rl.Texture2D,
+    generation: u64,
+    glyph_count: i32,
 }
 
 Font_Cache_Entry :: struct {
@@ -1366,6 +1391,17 @@ Font_Cache_Entry :: struct {
     request_count: u64,
     coalesced_request_count: u64,
     fallback_resolution_count: u64,
+    glyphs: []Font_Glyph_Record,
+    glyph_allocator: runtime.Allocator,
+    pages: [FONT_GLYPH_PAGE_CAPACITY]Font_Glyph_Page,
+    page_count: i32,
+    pending_glyph_count: i32,
+    queued_demand_count: i32,
+    page_publication_count: u64,
+    prefetched_glyph_count: u64,
+    pending_codepoint_count: u64,
+    unsupported_codepoint_count: u64,
+    capacity_rejection_count: u64,
 }
 
 Prepared_Font_Allocation_Mode :: enum {
@@ -1395,6 +1431,7 @@ Prepared_Font :: struct {
     generation: u64,
     base_size: i32,
     glyph_count: i32,
+    face_glyph_count: i32,
     padding: i32,
     atlas_width: i32,
     atlas_height: i32,
@@ -1412,14 +1449,23 @@ Font_Prepare_Operation_State :: enum {
     Queued,
 }
 
+Font_Prepare_Operation_Kind :: enum {
+    Seed,
+    Glyph_Page,
+}
+
 Font_Prepare_Task :: struct {
+    kind: Font_Prepare_Operation_Kind,
     key: Font_Key,
     generation: u64,
     path_storage: [1024]u8,
     path_length: int,
     pixel_size: i32,
-    codepoints: [8192]rune,
+    codepoints: [128]rune,
     codepoint_count: i32,
+    glyph_ids: [256]u32,
+    glyph_id_count: i32,
+    demanded_glyph_count: i32,
     prepared: Prepared_Font,
     allocator: runtime.Allocator,
 }

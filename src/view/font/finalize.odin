@@ -8,6 +8,37 @@ Font_Finalized_Metadata :: struct {
     rectangles: [^]rl.Rectangle,
 }
 
+//   Upload one prepared glyph page without allocating raylib font metadata.
+//
+// Returns:
+//   - A valid immutable texture and true, or zero and false after rollback.
+finalize_glyph_page :: proc(
+    prepared: ^Prepared_Font) -> (rl.Texture2D, bool) {
+
+    if prepared == nil || !prepared_is_valid(prepared) ||
+        prepared.complete_face {
+        return {}, false
+    }
+    image := rl.Image{
+        data = raw_data(prepared.atlas_pixels),
+        width = prepared.atlas_width,
+        height = prepared.atlas_height,
+        mipmaps = 1,
+        format = .UNCOMPRESSED_GRAY_ALPHA,
+    }
+    texture := rl.LoadTextureFromImage(image)
+    if !rl.IsTextureValid(texture) ||
+        texture.width != prepared.atlas_width ||
+        texture.height != prepared.atlas_height ||
+        texture.format != rl.PixelFormat.UNCOMPRESSED_GRAY_ALPHA {
+        if rl.IsTextureValid(texture) {
+            rl.UnloadTexture(texture)
+        }
+        return {}, false
+    }
+    return texture, true
+}
+
 //   Build and validate one display-owned raylib font from prepared CPU data.
 //
 // Parameters:

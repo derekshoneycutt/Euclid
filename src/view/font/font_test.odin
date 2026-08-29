@@ -15,44 +15,26 @@ test_task_succeed :: proc(payload: rawptr) -> taskpool.Task_Result {
     return .Succeeded
 }
 
-// Verify the flattened codepoint set matches the declared range policy.
+// Verify the production compatibility seed is bounded and prepares independently.
 @(test)
-view_test_codepoint_set :: proc(t: ^testing.T) {
-    codepoints := codepoint_set()
-
-    expected_count := i32(0)
-    for codepoint_range in FONT_CODEPOINT_RANGES {
-        expected_count += i32(codepoint_range.last - codepoint_range.first) + 1
-    }
-
-    testing.expect_value(t, codepoints.count, expected_count)
+view_test_seed_codepoint_set :: proc(t: ^testing.T) {
+    codepoints := seed_codepoint_set()
+    testing.expect_value(t, codepoints.count, i32(96))
     testing.expect_value(t, codepoints.values[0], rune(0x0020))
-}
+    testing.expect_value(t, codepoints.values[94], rune(0x007e))
+    testing.expect_value(t, codepoints.values[95], rune(0xfffd))
 
-// Verify codepoint support checks match the declared range policy.
-@(test)
-view_test_codepoint_is_supported :: proc(t: ^testing.T) {
-    testing.expect(t, codepoint_is_supported(rune(0x0041)))
-    testing.expect(t, codepoint_is_supported(rune(0x2500)))
-    testing.expect(t, !codepoint_is_supported(rune(0x3000)))
-}
-
-// Verify representative language, diacritic, and mathematical glyphs remain loaded.
-@(test)
-view_test_codepoint_policy_coverage :: proc(t: ^testing.T) {
-    supported := []rune{
-        'ä', 0x0308, 0x1eb0, 'α', 'Ж', 'Ա', 'א', 'ش', 'ა',
-        '∞', '∫', '⌈', '⟨', 0x27f6, 0x2a0c, 0x1d6fc, 0x1ee00,
-    }
-    for codepoint in supported {
-        testing.expect(t, codepoint_is_supported(codepoint))
-    }
-
-    codepoints := codepoint_set()
-    testing.expect(t, codepoints.count > 7000)
-    testing.expect(t, codepoints.count < FONT_CODEPOINT_CAPACITY)
-    testing.expect(t, !codepoint_is_supported(rune(0x2502)))
-    testing.expect(t, !codepoint_is_supported('漢'))
+    prepared: Prepared_Font
+    testing.expect(t, prepare({
+        key = .Regular,
+        path = "assets/JuliaMono-Regular.ttf",
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        codepoints = codepoints.values[:codepoints.count],
+    }, &prepared, context.allocator))
+    testing.expect_value(t, prepared.glyph_count, i32(96))
+    testing.expect(t, prepared.atlas_width <= 1024)
+    testing.expect(t, prepared.atlas_height <= 1024)
+    prepare_destroy(&prepared)
 }
 
 // Verify every existing dynview weight and italic combination maps to its cache key.
@@ -79,10 +61,10 @@ view_test_font_flags_map_to_cache_keys :: proc(t: ^testing.T) {
     }
 }
 
-// Verify CPU preparation reproduces the established Regular atlas contract.
+// Verify CPU preparation reproduces the production Regular seed contract.
 @(test)
 view_test_prepare_regular :: proc(t: ^testing.T) {
-    codepoint_set := codepoint_set()
+    codepoint_set := seed_codepoint_set()
     codepoints := codepoint_set.values[:codepoint_set.count]
     prepared: Prepared_Font
     success := prepare({
@@ -97,13 +79,12 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
     testing.expect_value(t, prepared.key, Font_Key.Regular)
     testing.expect_value(t, prepared.generation, u64(7))
     testing.expect_value(t, prepared.base_size, i32(32))
-    testing.expect_value(t, prepared.glyph_count, i32(6795))
+    testing.expect_value(t, prepared.glyph_count, i32(96))
     testing.expect_value(t, prepared.padding, i32(4))
-    testing.expect_value(t, prepared.atlas_width, i32(4096))
-    testing.expect_value(t, prepared.atlas_height, i32(2048))
-    testing.expect_value(t, len(prepared.glyphs), 6795)
-    testing.expect_value(t, len(prepared.rectangles), 6795)
-    testing.expect_value(t, len(prepared.atlas_pixels), 4096*2048*2)
+    testing.expect(t, prepared.atlas_width <= 1024)
+    testing.expect(t, prepared.atlas_height <= 1024)
+    testing.expect_value(t, len(prepared.glyphs), 96)
+    testing.expect_value(t, len(prepared.rectangles), 96)
     testing.expect_value(t, prepared.glyphs[0].value, rune(' '))
     testing.expect(t, prepared.glyphs[0].glyph_id > 0)
     testing.expect_value(t, prepared.glyphs[0].advance_x, i32(16))
@@ -118,7 +99,7 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
 // Verify complete preparation includes every Regular face glyph in ID order.
 @(test)
 view_test_prepare_complete_regular :: proc(t: ^testing.T) {
-    codepoints := codepoint_set()
+    codepoints := seed_codepoint_set()
     prepared: Prepared_Font
     success := prepare({
         key = .Regular,
@@ -138,6 +119,222 @@ view_test_prepare_complete_regular :: proc(t: ^testing.T) {
     testing.expect(t, prepared.atlas_height > 0)
 
     prepare_destroy(&prepared)
+}
+
+// Verify bounded subset preparation preserves face glyph IDs and deterministic packing.
+@(test)
+view_test_prepare_glyph_page :: proc(t: ^testing.T) {
+    glyph_ids := [3]u32{0, 17, 4000}
+    request := Font_Glyph_Page_Request{
+        key = .Regular,
+        generation = 11,
+        path = "assets/JuliaMono-Regular.ttf",
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        glyph_ids = glyph_ids[:],
+    }
+    first, second: Prepared_Font
+    testing.expect(t, prepare_glyph_page(request, &first, context.allocator))
+    testing.expect(t, prepare_glyph_page(request, &second, context.allocator))
+    testing.expect_value(t, first.glyph_count, i32(len(glyph_ids)))
+    testing.expect_value(t, first.atlas_width, second.atlas_width)
+    testing.expect_value(t, first.atlas_height, second.atlas_height)
+    for glyph, index in first.glyphs {
+        testing.expect_value(t, glyph.glyph_id, glyph_ids[index])
+        testing.expect_value(t, first.rectangles[index], second.rectangles[index])
+    }
+    prepare_destroy(&first)
+    prepare_destroy(&second)
+}
+
+// Verify page preparation rejects duplicate and out-of-range face glyph IDs.
+@(test)
+view_test_prepare_glyph_page_rejects_invalid_ids :: proc(t: ^testing.T) {
+    duplicate_ids := [2]u32{17, 17}
+    out_of_range_ids := [1]u32{65535}
+    prepared: Prepared_Font
+    request := Font_Glyph_Page_Request{
+        path = "assets/JuliaMono-Regular.ttf",
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        glyph_ids = duplicate_ids[:],
+    }
+    testing.expect(t, !prepare_glyph_page(request, &prepared, context.allocator))
+    testing.expect_value(t, len(prepared.glyphs), 0)
+    request.glyph_ids = out_of_range_ids[:]
+    testing.expect(t, !prepare_glyph_page(request, &prepared, context.allocator))
+    testing.expect_value(t, len(prepared.glyphs), 0)
+}
+
+// Verify generation glyph metadata is exact-size, deduplicated, and reclaimed whole.
+@(test)
+view_test_font_generation_glyph_demand_lifecycle :: proc(t: ^testing.T) {
+    entry: Font_Cache_Entry
+    testing.expect(t, font_generation_glyphs_init(
+        &entry, 6795, context.allocator))
+    testing.expect_value(t, len(entry.glyphs), 6795)
+    testing.expect(t, font_generation_request_glyph(&entry, 4000))
+    testing.expect(t, !font_generation_request_glyph(&entry, 4000))
+    testing.expect(t, !font_generation_request_glyph(&entry, 6795))
+    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    testing.expect_value(t, entry.glyphs[4000].state, Font_Glyph_State.Pending)
+
+    font_generation_glyphs_destroy(&entry)
+    testing.expect_value(t, len(entry.glyphs), 0)
+    testing.expect_value(t, entry.pending_glyph_count, i32(0))
+    font_generation_glyphs_destroy(&entry)
+}
+
+// Verify glyph resolution records one missing face glyph without duplicate demand.
+@(test)
+view_test_glyph_resolver_records_missing_demand :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 32, context.allocator))
+
+    _, first_resident := cache_terminal_resolve_glyph(
+        &cache, .Regular, 17)
+    _, second_resident := cache_terminal_resolve_glyph(
+        &cache, .Regular, 17)
+    testing.expect(t, !first_resident && !second_resident)
+    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
+    font_generation_glyphs_destroy(entry)
+}
+
+// Verify one page task takes a deterministic bounded batch and marks it queued.
+@(test)
+view_test_page_task_batches_pending_glyphs :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 3
+    entry.requested_generation = 3
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 300, context.allocator))
+    for glyph_id in 0..<300 {
+        testing.expect(t, font_generation_request_glyph(entry, u32(glyph_id)))
+    }
+    testing.expect(t, cache_preparation_arena_init(&cache))
+    task: Font_Prepare_Task
+    testing.expect(t, cache_prepare_page_task(&cache, .Regular, &task))
+    testing.expect_value(
+        t, task.glyph_id_count, i32(FONT_GLYPH_PAGE_REQUEST_CAPACITY))
+    testing.expect_value(
+        t, task.demanded_glyph_count, i32(FONT_GLYPH_PAGE_REQUEST_CAPACITY))
+    testing.expect_value(t, task.glyph_ids[0], u32(0))
+    testing.expect_value(t, task.glyph_ids[255], u32(255))
+    testing.expect_value(t, entry.glyphs[255].state, Font_Glyph_State.Queued)
+    testing.expect_value(t, entry.glyphs[256].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.queued_demand_count, i32(256))
+
+    cache.preparation.task = task
+    cache_fail_preparation(&cache)
+    testing.expect_value(t, entry.glyphs[0].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.queued_demand_count, i32(0))
+    cache.preparation.state = .Idle
+    cache_preparation_arena_destroy(&cache)
+    font_generation_glyphs_destroy(entry)
+}
+
+// Verify one sparse demand fills the remaining page with deterministic glyph IDs.
+@(test)
+view_test_page_task_fills_sparse_demand :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 3
+    entry.requested_generation = 3
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 300, context.allocator))
+    testing.expect(t, font_generation_request_glyph(entry, 17))
+    testing.expect(t, cache_preparation_arena_init(&cache))
+    task: Font_Prepare_Task
+    testing.expect(t, cache_prepare_page_task(&cache, .Regular, &task))
+    testing.expect_value(t, task.demanded_glyph_count, i32(1))
+    testing.expect_value(t, task.glyph_id_count, i32(256))
+    testing.expect_value(t, task.glyph_ids[0], u32(17))
+    testing.expect_value(t, task.glyph_ids[1], u32(0))
+    testing.expect_value(t, task.glyph_ids[18], u32(18))
+
+    cache.preparation.task = task
+    cache_restore_page_demand(&cache)
+    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.glyphs[0].state, Font_Glyph_State.Missing)
+    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    cache.preparation.state = .Idle
+    cache_preparation_arena_destroy(&cache)
+    font_generation_glyphs_destroy(entry)
+}
+
+// Verify a full page table rejects demand without leaving unschedulable work.
+@(test)
+view_test_page_capacity_blocks_scheduling :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
+    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 2, context.allocator))
+    testing.expect(t, !font_generation_request_glyph(entry, 1))
+    testing.expect_value(
+        t, entry.glyphs[1].state, Font_Glyph_State.Capacity_Blocked)
+    testing.expect_value(t, entry.pending_glyph_count, i32(0))
+    _, found := cache_next_page_key(&cache)
+    testing.expect(t, !found)
+    font_generation_glyphs_destroy(entry)
+}
+
+// Verify a queued final page reserves capacity against newly arriving demand.
+@(test)
+view_test_final_queued_page_blocks_new_demand :: proc(t: ^testing.T) {
+    entry: Font_Cache_Entry
+    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY - 1
+    entry.pending_glyph_count = 1
+    entry.queued_demand_count = 1
+    testing.expect(t, font_generation_glyphs_init(
+        &entry, 4, context.allocator))
+    entry.glyphs[0].state = .Queued
+
+    testing.expect(t, !font_generation_request_glyph(&entry, 1))
+    testing.expect_value(
+        t, entry.glyphs[1].state, Font_Glyph_State.Capacity_Blocked)
+    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    font_generation_glyphs_destroy(&entry)
+}
+
+// Verify superseded page work remains requestable while its old generation survives.
+@(test)
+view_test_stale_page_restores_old_generation_demand :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.generation = 4
+    entry.requested_generation = 5
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 32, context.allocator))
+    testing.expect(t, font_generation_request_glyph(entry, 17))
+    entry.glyphs[17].state = .Queued
+    cache.preparation.task = {
+        kind = .Glyph_Page,
+        key = .Regular,
+        generation = 4,
+        glyph_id_count = 1,
+        demanded_glyph_count = 1,
+    }
+    cache.preparation.task.glyph_ids[0] = 17
+
+    cache_restore_page_demand(&cache)
+    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    font_generation_glyphs_destroy(entry)
 }
 
 // Verify contextual alternates are repeatable and differ from disabled shaping.
@@ -170,6 +367,77 @@ view_test_harfbuzz_contextual_alternates :: proc(t: ^testing.T) {
         differs = differs || enabled[index].glyph_id != disabled[index].glyph_id
     }
     testing.expect(t, differs)
+}
+
+// Verify the resident HarfBuzz cmap defines Unicode support without a range policy.
+@(test)
+view_test_harfbuzz_nominal_glyph :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &shaping))
+    defer harfbuzz_shaper_destroy(&shaping)
+
+    ascii_glyph, ascii_found := harfbuzz_nominal_glyph(&shaping, 'A')
+    math_glyph, math_found := harfbuzz_nominal_glyph(&shaping, '∫')
+    _, unsupported_found := harfbuzz_nominal_glyph(&shaping, rune(0x10ffff))
+    _, surrogate_found := harfbuzz_nominal_glyph(&shaping, rune(0xd800))
+    testing.expect(t, ascii_found && ascii_glyph > 0)
+    testing.expect(t, math_found && math_glyph > 0)
+    testing.expect(t, !unsupported_found)
+    testing.expect(t, !surrogate_found)
+}
+
+// Verify direct codepoint resolution reports residency, demand, and hard bounds.
+@(test)
+view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &entry.shaping))
+    testing.expect(t, font_generation_glyphs_init(
+        entry, 10000, context.allocator))
+
+    ascii_id, _ := harfbuzz_nominal_glyph(&entry.shaping, 'A')
+    entry.glyphs[ascii_id].state = .Resident
+    _, ascii_status := cache_terminal_resolve_codepoint(
+        &cache, .Regular, 'A')
+    _, math_status := cache_terminal_resolve_codepoint(
+        &cache, .Regular, '∫')
+    pending_count := entry.pending_glyph_count
+    _, unsupported_status := cache_terminal_resolve_codepoint(
+        &cache, .Regular, rune(0x10ffff))
+    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY
+    _, capacity_status := cache_terminal_resolve_codepoint(
+        &cache, .Regular, 'α')
+
+    testing.expect_value(t, ascii_status, Font_Glyph_Resolve_Status.Resident)
+    testing.expect_value(t, math_status, Font_Glyph_Resolve_Status.Pending)
+    testing.expect_value(
+        t, unsupported_status, Font_Glyph_Resolve_Status.Unsupported)
+    testing.expect_value(
+        t, capacity_status, Font_Glyph_Resolve_Status.Capacity_Exhausted)
+    testing.expect_value(t, pending_count, i32(1))
+    testing.expect_value(t, entry.pending_glyph_count, pending_count)
+    testing.expect_value(t, entry.pending_codepoint_count, u64(1))
+    testing.expect_value(t, entry.unsupported_codepoint_count, u64(1))
+    testing.expect_value(t, entry.capacity_rejection_count, u64(1))
+
+    harfbuzz_shaper_destroy(&entry.shaping)
+    font_generation_glyphs_destroy(entry)
 }
 
 // Verify native source ownership survives arena release and output remains bounded.

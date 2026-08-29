@@ -66,6 +66,8 @@ foreign harfbuzz {
     hb_font_create :: proc(face: ^Harfbuzz_Face) -> ^Harfbuzz_Font ---
     hb_font_destroy :: proc(font: ^Harfbuzz_Font) ---
     hb_font_set_scale :: proc(font: ^Harfbuzz_Font, x_scale, y_scale: i32) ---
+    hb_font_get_nominal_glyph :: proc(
+        font: ^Harfbuzz_Font, unicode: u32, glyph: ^u32) -> c.int ---
     hb_ot_font_set_funcs :: proc(font: ^Harfbuzz_Font) ---
     hb_buffer_create :: proc() -> ^Harfbuzz_Buffer ---
     hb_buffer_destroy :: proc(buffer: ^Harfbuzz_Buffer) ---
@@ -185,6 +187,25 @@ harfbuzz_shaper_init :: proc(
         return false
     }
     return harfbuzz_shaper_finish_init(shaper, pixel_size)
+}
+
+//   Resolve one valid Unicode scalar through the immutable face cmap.
+//
+// Returns:
+//   - Face glyph ID and true when the resident font defines the codepoint.
+//   - Zero and false for invalid scalars, missing mappings, or invalid state.
+harfbuzz_nominal_glyph :: proc(
+    shaper: ^Font_Shaping_Resource, codepoint: rune) -> (u32, bool) {
+
+    scalar := u32(codepoint)
+    if shaper == nil || shaper.font == nil || scalar > 0x10ffff ||
+        scalar >= 0xd800 && scalar <= 0xdfff {
+        return 0, false
+    }
+    glyph_id: u32
+    found := hb_font_get_nominal_glyph(
+        cast(^Harfbuzz_Font)shaper.font, scalar, &glyph_id)
+    return glyph_id, found != 0 && glyph_id != 0
 }
 
 //   Copy one completed native shape result into caller-owned bounded storage.

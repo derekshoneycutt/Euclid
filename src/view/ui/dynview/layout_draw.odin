@@ -157,6 +157,15 @@ Layout_Draw_Context :: struct {
     font_size : f32,
 }
 
+//   Inputs for one unshaped math run resolved through demand-loaded glyph pages.
+Math_Text_Draw :: struct {
+    state: ^core.Euclid_General_State,
+    style: Dynview_Text_Style,
+    text: string,
+    position: rl.Vector2,
+    font: view_core.Ui_Text_Font,
+}
+
 //   Complete draw context for one stretched delimiter glyph invocation.
 //   Groups layout metrics, style/font state, and delimiter identity into one argument.
 Stretch_Delimiter_Glyph_Params :: struct {
@@ -221,6 +230,25 @@ Text_Run_Draw_Params :: struct {
     text_color : rl.Color,
     draw_x : f32,
     item_y : f32,
+}
+
+//   Draw math text without shaping while allowing any cmap-supported glyph.
+draw_math_text :: proc(draw: Math_Text_Draw) {
+    if draw.state == nil {
+        view_core.ui_text_f32(
+            draw.text, draw.position.x, draw.position.y,
+            draw.style.color, draw.font)
+        return
+    }
+    resolver := font.cache_terminal_resolver(&draw.state^.font_cache)
+    view_core.ui_text_unshaped_paged({
+        resolver = resolver,
+        key = style_font_key(draw.style),
+        text = draw.text,
+        position = draw.position,
+        color = draw.style.color,
+        font = draw.font,
+    })
 }
 
 //   Fast vertical cull check for one layout line against panel bounds.
@@ -372,8 +400,13 @@ draw_radical_index_text :: proc(
     index_x := index_right_limit - index_width
     index_y := layout.baseline_y - layout.child_program^.ascent * 0.62 -
         index_ascent * 0.50 - ctx.font_size * 0.25
-    view_core.ui_text_f32(index_text, index_x, index_y, script_style.color,
-        view_core.Ui_Text_Font{script_font, index_font_size})
+    draw_math_text({
+        state = ctx.state,
+        style = script_style,
+        text = index_text,
+        position = {index_x, index_y},
+        font = {script_font, index_font_size},
+    })
 }
 
 //   Resolve a radical item's child program and layout paddings, drawing the child.
@@ -519,7 +552,13 @@ draw_script_attach_scripts :: proc(
         item.script_sup_text_len)
     if len(sup_text) > 0 {
         sup_top := baseline_y - offsets.sup_raise_px - script.ascent
-        view_core.ui_text_f32(sup_text, script_x, sup_top, script.style.color, font)
+        draw_math_text({
+            state = ctx.state,
+            style = script.style,
+            text = sup_text,
+            position = {script_x, sup_top},
+            font = font,
+        })
     }
 
     sub_text := dynview.text_span_from_buffer(
@@ -528,7 +567,13 @@ draw_script_attach_scripts :: proc(
         item.script_sub_text_len)
     if len(sub_text) > 0 {
         sub_top := baseline_y + offsets.sub_drop_px - script.ascent
-        view_core.ui_text_f32(sub_text, script_x, sub_top, script.style.color, font)
+        draw_math_text({
+            state = ctx.state,
+            style = script.style,
+            text = sub_text,
+            position = {script_x, sub_top},
+            font = font,
+        })
     }
 }
 
@@ -928,9 +973,13 @@ draw_stretch_delimiter_text_fallback :: #force_inline proc(
     delim_ascent, _ := dynview.style_ascent_descent(params.style, delimiter_font_size)
     resolved_font :=
         resolve_font_for_style(params.state, params.style, params.fallback_font)
-    view_core.ui_text_f32(delimiter, params.draw_x, params.baseline_y - delim_ascent,
-        params.style.color,
-        view_core.Ui_Text_Font{resolved_font, delimiter_font_size})
+    draw_math_text({
+        state = params.state,
+        style = params.style,
+        text = delimiter,
+        position = {params.draw_x, params.baseline_y - delim_ascent},
+        font = {resolved_font, delimiter_font_size},
+    })
     _ = width
 }
 
@@ -1284,8 +1333,13 @@ large_op_draw_limit :: #force_inline proc(
 
     width := f32(cols) * m.limit_advance
     x := d.draw_x + (d.item.draw_width - width) * 0.5
-    view_core.ui_text_f32(text, x, top, m.script_style.color,
-        view_core.Ui_Text_Font{m.script_font, m.limit_font_size})
+    draw_math_text({
+        state = d.ctx.state,
+        style = m.script_style,
+        text = text,
+        position = {x, top},
+        font = {m.script_font, m.limit_font_size},
+    })
 }
 
 //   Draw one display-style large operator with stacked limits above and below.
@@ -1297,8 +1351,13 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
         glyph_top += m.limit_height + m.limit_gap
     }
     glyph_x := d.draw_x + (d.item.draw_width - m.glyph_width) * 0.5
-    view_core.ui_text_f32(d.text, glyph_x, glyph_top, d.style.color,
-        view_core.Ui_Text_Font{d.resolved_font, m.glyph_font_size})
+    draw_math_text({
+        state = d.ctx.state,
+        style = d.style,
+        text = d.text,
+        position = {glyph_x, glyph_top},
+        font = {d.resolved_font, m.glyph_font_size},
+    })
 
     if m.sup_cols > 0 {
         large_op_draw_limit(d, m, m.sup_text, m.sup_cols,
@@ -1431,8 +1490,13 @@ draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
             font = text_font,
         })
     } else {
-        view_core.ui_text(
-            text, int(draw_x), int(item_y), text_color, text_font)
+        draw_math_text({
+            state = params.state,
+            style = style,
+            text = text,
+            position = {draw_x, item_y},
+            font = text_font,
+        })
     }
     if !style.underline {
         return

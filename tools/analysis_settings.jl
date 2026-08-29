@@ -504,6 +504,20 @@ AnalysisSettings(
                 target="cache.preparation_arena",
                 certainty=:definite,
                 response=Ignore),
+            # TODO : This next is allocated on context.allocator i.e. the heap
+            #        re-review if safer allocator can fill
+            ReviewedAllocationPolicy(
+                "view-font-generation-glyph-metadata",
+                "src/view/font/font.odin",
+                "font_generation_glyphs_init",
+                :custom,
+                "Exact-size glyph state allocated once per resident font generation " *
+                    "and released during generation teardown.";
+                operation="make",
+                target="[]Font_Glyph_Record",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
             ReviewedAllocationPolicy(
                 "view-font-harfbuzz-ownership-test-arena",
                 "src/view/font/font_test.odin",

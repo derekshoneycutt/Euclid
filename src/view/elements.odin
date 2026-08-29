@@ -1749,8 +1749,15 @@ label_draw_prime_run :: proc(
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    regular_font := font.cache_borrow(&state^.font_cache, .Regular)
-    rl.DrawTextCodepoint(regular_font, p^.label, c, p^.brush_size, p^.color)
+    resolver := font.cache_terminal_resolver(&state^.font_cache)
+    view_core.ui_text_codepoint_paged({
+        resolver = resolver,
+        key = .Regular,
+        codepoint = p^.label,
+        position = c,
+        font_size = p^.brush_size,
+        color = p^.color,
+    })
 
     switch p^.decoration_kind {
     case .None:

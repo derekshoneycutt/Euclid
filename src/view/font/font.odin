@@ -10,8 +10,11 @@ import "core:path/filepath"
 
 import rl "vendor:raylib"
 
-// Maximum runes in the flattened JuliaMono loading policy.
-FONT_CODEPOINT_CAPACITY :: 8192
+// Maximum runes in the compatibility seed policy.
+FONT_SEED_CODEPOINT_CAPACITY :: 128
+
+// Maximum face glyphs admitted to one prepared atlas page.
+FONT_GLYPH_PAGE_REQUEST_CAPACITY :: 256
 
 // Number of indexed font variants through the final `Font_Key` value.
 FONT_KEY_COUNT :: core.FONT_KEY_COUNT
@@ -48,6 +51,26 @@ Font_Load_State :: core.Font_Load_State
 Font_Cache_Entry :: core.Font_Cache_Entry
 Font_Cache :: core.Font_Cache
 Font_Shaping_Telemetry :: core.Font_Shaping_Telemetry
+Font_Glyph_State :: core.Font_Glyph_State
+Font_Glyph_Record :: core.Font_Glyph_Record
+Font_Glyph_Page :: core.Font_Glyph_Page
+
+// Borrowed display-thread glyph data normalized across seed and paged textures.
+Resolved_Glyph :: struct {
+    texture: rl.Texture2D,
+    source: rl.Rectangle,
+    offset_x: i32,
+    offset_y: i32,
+    advance_x: i32,
+    base_size: i32,
+}
+
+Font_Glyph_Resolve_Status :: enum {
+    Resident,
+    Pending,
+    Unsupported,
+    Capacity_Exhausted,
+}
 
 // Inclusive Unicode interval included in the JuliaMono loading policy.
 Font_Codepoint_Range :: struct {
@@ -55,43 +78,31 @@ Font_Codepoint_Range :: struct {
     last: rune,
 }
 
-// Fixed flat rune set passed to raylib/stb font loading APIs.
-Font_Codepoint_Set :: struct {
-    values: [FONT_CODEPOINT_CAPACITY]rune,
+// Fixed flat rune set passed to raylib/stb seed loading APIs.
+Font_Seed_Codepoint_Set :: struct {
+    values: [FONT_SEED_CODEPOINT_CAPACITY]rune,
     count: i32,
 }
 
-// Broad language/math coverage excluding terminal-only box/block glyphs and large
-// unassigned holes; intervals are inclusive and flattened by `codepoint_set`.
-FONT_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
+// Startup and unshaped fallback coverage retained by every resident face.
+FONT_SEED_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
     {0x0020, 0x007e},
-    {0x00a0, 0x00ac},
-    {0x00ae, 0x0377},
-    {0x037a, 0x052f},
-    {0x0531, 0x058f},
-    {0x0591, 0x05f4},
-    {0x0600, 0x06ff},
-    {0x10a0, 0x10ff},
-    {0x1ab0, 0x1aff},
-    {0x1c80, 0x1cbf},
-    {0x1d00, 0x1fff},
-    {0x2000, 0x24ff},
-    {0x2500, 0x2500},
-    {0x25a0, 0x2bff},
-    {0x2c60, 0x2c7f},
-    {0x2d00, 0x2d2d},
-    {0xa640, 0xa69f},
-    {0xa708, 0xa7ff},
-    {0xab30, 0xab6f},
-    {0xfe20, 0xfe2f},
     {0xfffd, 0xfffd},
-    {0x1d400, 0x1d7ff},
-    {0x1ee00, 0x1ee0b},
 }
 
 
 // Resolve one cache-owned font handle for the requested semantic variant.
 Font_Resolve_Handler :: proc(user_data: rawptr, key: Font_Key) -> rl.Font
+
+// Resolve one shaped face glyph to immutable display-owned page data.
+Font_Resolve_Glyph_Handler :: proc(
+    user_data: rawptr, key: Font_Key,
+    glyph_id: u32) -> (Resolved_Glyph, bool)
+
+// Resolve one Unicode scalar through the effective face cmap and glyph pages.
+Font_Resolve_Codepoint_Handler :: proc(
+    user_data: rawptr, key: Font_Key,
+    codepoint: rune) -> (Resolved_Glyph, Font_Glyph_Resolve_Status)
 
 // Shape one borrowed UTF-8 run into caller-owned bounded glyph storage.
 Font_Shape_Handler :: proc(
@@ -102,6 +113,7 @@ Shape_Fallback_Reason :: enum {
     Workspace_Overflow,
     Invalid_Result,
     Invalid_Cluster,
+    Pending_Glyph,
 }
 
 // Record one bounded shaped-presentation fallback without retaining source text.
@@ -112,6 +124,8 @@ Font_Shape_Fallback_Handler :: proc(
 Font_Resolver :: struct {
     user_data: rawptr,
     resolve: Font_Resolve_Handler,
+    resolve_glyph: Font_Resolve_Glyph_Handler,
+    resolve_codepoint: Font_Resolve_Codepoint_Handler,
     shape: Font_Shape_Handler,
     record_shape_fallback: Font_Shape_Fallback_Handler,
     workspace: []Shaped_Glyph,
@@ -160,36 +174,23 @@ cache_source_path :: proc(cache: ^Font_Cache, key: Font_Key) -> string {
     return string(source.storage[:source.length])
 }
 
-//   Build the immutable JuliaMono codepoint policy in raylib's required flat form.
+//   Build the compatibility seed in raylib's required flat form.
 //
 // Returns:
-//   - Fixed storage containing every rune from `FONT_CODEPOINT_RANGES` in order.
-codepoint_set :: proc() -> Font_Codepoint_Set {
-    result: Font_Codepoint_Set
-    for codepoint_range in FONT_CODEPOINT_RANGES {
+//   - Fixed storage containing every rune from `FONT_SEED_CODEPOINT_RANGES`.
+seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
+    result: Font_Seed_Codepoint_Set
+    for codepoint_range in FONT_SEED_CODEPOINT_RANGES {
         for codepoint := codepoint_range.first;
             codepoint <= codepoint_range.last;
             codepoint += 1 {
 
-            assert(result.count < FONT_CODEPOINT_CAPACITY)
+            assert(result.count < FONT_SEED_CODEPOINT_CAPACITY)
             result.values[result.count] = codepoint
             result.count += 1
         }
     }
     return result
-}
-
-//   Report whether one codepoint belongs to the JuliaMono loading policy.
-//
-// Returns:
-//   - True when the rune falls in any configured inclusive range.
-codepoint_is_supported :: proc(codepoint: rune) -> bool {
-    for codepoint_range in FONT_CODEPOINT_RANGES {
-        if codepoint >= codepoint_range.first && codepoint <= codepoint_range.last {
-            return true
-        }
-    }
-    return false
 }
 
 //   Suppress raylib's expected oversized-glyph and sparse-range messages during rasterization.
@@ -211,6 +212,134 @@ rasterization_end :: proc() {
 //   Release one generation's shaping handles and native source copy.
 font_shaping_destroy :: proc(resource: ^Font_Shaping_Resource) {
     harfbuzz_shaper_destroy(resource)
+}
+
+//   Allocate one directly indexed glyph-state table for a candidate generation.
+//
+// Returns:
+//   - True after exact-size metadata allocation; false without changing the entry.
+font_generation_glyphs_init :: proc(
+    entry: ^Font_Cache_Entry, glyph_count: int,
+    allocator: mem.Allocator) -> bool {
+
+    if entry == nil || glyph_count <= 0 || entry.glyphs != nil {
+        return false
+    }
+    glyphs, allocation_error := make(
+        []Font_Glyph_Record, glyph_count, allocator)
+    if allocation_error != nil {
+        return false
+    }
+    entry.glyphs = glyphs
+    entry.glyph_allocator = allocator
+    return true
+}
+
+//   Release generation metadata after every page texture has been retired.
+font_generation_glyphs_destroy :: proc(entry: ^Font_Cache_Entry) {
+    if entry == nil {
+        return
+    }
+    if entry.glyphs != nil {
+        delete(entry.glyphs, entry.glyph_allocator)
+    }
+    entry.glyphs = nil
+    entry.glyph_allocator = {}
+    entry.page_count = 0
+    entry.pending_glyph_count = 0
+    entry.queued_demand_count = 0
+}
+
+//   Calculate page slots needed after admitting more unqueued demand.
+font_generation_required_page_count :: proc(
+    entry: ^Font_Cache_Entry, additional_demand: i32) -> i32 {
+
+    queued_page_count := i32(0)
+    if entry.queued_demand_count > 0 {
+        queued_page_count = 1
+    }
+    unqueued_count := entry.pending_glyph_count - entry.queued_demand_count +
+        additional_demand
+    unqueued_page_count := (unqueued_count + FONT_GLYPH_PAGE_REQUEST_CAPACITY - 1)/
+        FONT_GLYPH_PAGE_REQUEST_CAPACITY
+    return entry.page_count + queued_page_count + unqueued_page_count
+}
+
+//   Mark one unresolved glyph ID as pending without duplicate queue storage.
+//
+// Returns:
+//   - True only when this call creates new bounded demand.
+font_generation_request_glyph :: proc(
+    entry: ^Font_Cache_Entry, glyph_id: u32) -> bool {
+
+    if entry == nil || glyph_id >= u32(len(entry.glyphs)) {
+        return false
+    }
+    glyph := &entry.glyphs[glyph_id]
+    if glyph.state != .Missing {
+        return false
+    }
+    if font_generation_required_page_count(entry, 1) >
+        core.FONT_GLYPH_PAGE_CAPACITY {
+        glyph.state = .Capacity_Blocked
+        entry.capacity_rejection_count += 1
+        return false
+    }
+    glyph.state = .Pending
+    entry.pending_glyph_count += 1
+    return true
+}
+
+//   Copy one prepared seed's metrics into exact-size generation storage.
+//
+// Returns:
+//   - True when every prepared glyph maps uniquely inside the face glyph table.
+font_generation_seed_records_init :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
+    allocator: mem.Allocator) -> bool {
+
+    if entry == nil || prepared == nil || prepared.face_glyph_count <= 0 ||
+        !font_generation_glyphs_init(
+            entry, int(prepared.face_glyph_count), allocator) {
+        return false
+    }
+    for glyph, index in prepared.glyphs {
+        if glyph.glyph_id >= u32(len(entry.glyphs)) {
+            font_generation_glyphs_destroy(entry)
+            return false
+        }
+        rectangle := prepared.rectangles[index]
+        entry.glyphs[glyph.glyph_id] = {
+            rectangle = {
+                x = f32(rectangle.x),
+                y = f32(rectangle.y),
+                width = f32(rectangle.width),
+                height = f32(rectangle.height),
+            },
+            offset_x = glyph.offset_x,
+            offset_y = glyph.offset_y,
+            advance_x = glyph.advance_x,
+            state = .Resident,
+        }
+    }
+    return true
+}
+
+//   Destroy every display and native resource owned by one font generation.
+font_generation_destroy :: proc(entry: ^Font_Cache_Entry) {
+    if entry == nil {
+        return
+    }
+    for page_index in 0..<int(entry.page_count) {
+        if rl.IsTextureValid(entry.pages[page_index].texture) {
+            rl.UnloadTexture(entry.pages[page_index].texture)
+        }
+    }
+    if rl.IsFontValid(entry.font) {
+        rl.UnloadFont(entry.font)
+    }
+    font_shaping_destroy(&entry.shaping)
+    font_generation_glyphs_destroy(entry)
 }
 
 //   Read transient source through the preparation arena and acquire a native shaper.
@@ -238,7 +367,7 @@ cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
     }
     defer cache_preparation_arena_reset(cache)
     allocator := vmem.arena_allocator(&cache.preparation_arena)
-    codepoints := codepoint_set()
+    codepoints := seed_codepoint_set()
     path := cache_source_path(cache, .Regular)
     prepared: Prepared_Font
     if !prepare({
@@ -246,7 +375,6 @@ cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
         path = path,
         pixel_size = JULIA_MONO_FONT_SIZE,
         codepoints = codepoints.values[:codepoints.count],
-        complete_face = true,
     }, &prepared, allocator, .Arena) {
         return false
     }
@@ -255,12 +383,18 @@ cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
     if !font_shaping_create(cache, path, &shaping) {
         return false
     }
-    candidate: rl.Font
-    if !finalize(&prepared, &candidate) {
+    entry := &cache.entries[int(Font_Key.Regular)]
+    if !font_generation_seed_records_init(
+        entry, &prepared, context.allocator) {
         font_shaping_destroy(&shaping)
         return false
     }
-    entry := &cache.entries[int(Font_Key.Regular)]
+    candidate: rl.Font
+    if !finalize(&prepared, &candidate) {
+        font_shaping_destroy(&shaping)
+        font_generation_glyphs_destroy(entry)
+        return false
+    }
     entry.font = candidate
     entry.shaping = shaping
     return true
@@ -300,10 +434,7 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     }
     for entry_index in 0..<FONT_KEY_COUNT {
         entry := &cache.entries[entry_index]
-        if entry.resident {
-            rl.UnloadFont(entry.font)
-        }
-        font_shaping_destroy(&entry.shaping)
+        font_generation_destroy(entry)
     }
     cache_preparation_arena_destroy(cache)
     cache^ = {}
@@ -351,6 +482,188 @@ cache_terminal_resolve :: proc(user_data: rawptr, key: Font_Key) -> rl.Font {
     return cache_resolve(cast(^Font_Cache)user_data, key)
 }
 
+//   Select the same resident generation used by shaping and glyph resolution.
+cache_effective_entry :: proc(
+    cache: ^Font_Cache, key: Font_Key) -> ^Font_Cache_Entry {
+
+    if cache == nil {
+        return nil
+    }
+    entry := &cache.entries[int(key)]
+    if entry.resident {
+        return entry
+    }
+    return &cache.entries[int(Font_Key.Regular)]
+}
+
+//   Normalize one resident glyph record to borrowed draw data.
+font_generation_resolve_glyph :: proc(
+    entry: ^Font_Cache_Entry, glyph_id: u32) -> (Resolved_Glyph, bool) {
+
+    if entry == nil || glyph_id >= u32(len(entry.glyphs)) ||
+        entry.glyphs[glyph_id].state != .Resident {
+        return {}, false
+    }
+    glyph := entry.glyphs[glyph_id]
+    texture := entry.font.texture
+    if glyph.page_index > 0 {
+        page_index := int(glyph.page_index) - 1
+        if page_index >= int(entry.page_count) {
+            return {}, false
+        }
+        texture = entry.pages[page_index].texture
+    }
+    return {
+        texture = texture,
+        source = glyph.rectangle,
+        offset_x = glyph.offset_x,
+        offset_y = glyph.offset_y,
+        advance_x = glyph.advance_x,
+        base_size = entry.font.baseSize,
+    }, true
+}
+
+//   Resolve one shaped glyph from the effective resident generation.
+//
+// Returns:
+//   - Borrowed draw data and true when resident; otherwise zero and false.
+cache_terminal_resolve_glyph :: proc(
+    user_data: rawptr, key: Font_Key,
+    glyph_id: u32) -> (Resolved_Glyph, bool) {
+
+    cache := cast(^Font_Cache)user_data
+    if cache == nil {
+        return {}, false
+    }
+    entry := cache_effective_entry(cache, key)
+    resolved, resident := font_generation_resolve_glyph(entry, glyph_id)
+    if resident {
+        return resolved, true
+    }
+    _ = font_generation_request_glyph(entry, glyph_id)
+    return {}, false
+}
+
+//   Resolve one codepoint through the effective cmap and page state.
+cache_terminal_resolve_codepoint :: proc(
+    user_data: rawptr, key: Font_Key,
+    codepoint: rune) -> (Resolved_Glyph, Font_Glyph_Resolve_Status) {
+
+    cache := cast(^Font_Cache)user_data
+    entry := cache_effective_entry(cache, key)
+    if entry == nil {
+        return {}, .Unsupported
+    }
+    glyph_id, supported := harfbuzz_nominal_glyph(&entry.shaping, codepoint)
+    if !supported || glyph_id >= u32(len(entry.glyphs)) {
+        entry.unsupported_codepoint_count += 1
+        return {}, .Unsupported
+    }
+    resolved, resident := font_generation_resolve_glyph(entry, glyph_id)
+    if resident {
+        return resolved, .Resident
+    }
+    _ = font_generation_request_glyph(entry, glyph_id)
+    if entry.glyphs[glyph_id].state == .Capacity_Blocked {
+        return {}, .Capacity_Exhausted
+    }
+    entry.pending_codepoint_count += 1
+    return {}, .Pending
+}
+
+//   Validate one completed page against current generation and queued demand.
+//
+// Returns:
+//   - True when every compact glyph record can publish without partial mutation.
+cache_glyph_page_can_publish :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font) -> bool {
+
+    if entry == nil || prepared == nil ||
+        prepared.generation != entry.generation ||
+        entry.generation != entry.requested_generation ||
+        entry.page_count >= core.FONT_GLYPH_PAGE_CAPACITY {
+        return false
+    }
+    for glyph in prepared.glyphs {
+        if glyph.glyph_id >= u32(len(entry.glyphs)) ||
+            entry.glyphs[glyph.glyph_id].state != .Queued {
+            return false
+        }
+    }
+    return true
+}
+
+//   Report whether a prepared page exactly matches its submitted glyph-ID batch.
+//
+// Returns:
+//   - True when count and ordered face glyph IDs are unchanged by preparation.
+cache_glyph_page_matches_task :: proc(
+    prepared: ^Prepared_Font, task: ^Font_Prepare_Task) -> bool {
+
+    if prepared == nil || task == nil ||
+        prepared.glyph_count != task.glyph_id_count {
+        return false
+    }
+    for glyph, index in prepared.glyphs {
+        if glyph.glyph_id != task.glyph_ids[index] {
+            return false
+        }
+    }
+    return true
+}
+
+//   Publish one immutable page and resolve its queued glyph records atomically.
+//
+// Returns:
+//   - True after texture and lookup publication; false without glyph-state mutation.
+cache_publish_glyph_page :: proc(
+    cache: ^Font_Cache, prepared: ^Prepared_Font,
+    task: ^Font_Prepare_Task) -> bool {
+
+    if cache == nil || prepared == nil {
+        return false
+    }
+    entry := &cache.entries[int(prepared.key)]
+    if !cache_glyph_page_matches_task(prepared, task) ||
+        !cache_glyph_page_can_publish(entry, prepared) {
+        return false
+    }
+    texture, finalized := finalize_glyph_page(prepared)
+    if !finalized {
+        return false
+    }
+    page_index := entry.page_count
+    for glyph, index in prepared.glyphs {
+        rectangle := prepared.rectangles[index]
+        entry.glyphs[glyph.glyph_id] = {
+            rectangle = {
+                x = f32(rectangle.x), y = f32(rectangle.y),
+                width = f32(rectangle.width), height = f32(rectangle.height),
+            },
+            offset_x = glyph.offset_x,
+            offset_y = glyph.offset_y,
+            advance_x = glyph.advance_x,
+            page_index = u16(page_index + 1),
+            state = .Resident,
+        }
+        if i32(index) < task.demanded_glyph_count {
+            entry.pending_glyph_count -= 1
+        }
+    }
+    entry.pages[page_index] = {
+        texture = texture,
+        generation = prepared.generation,
+        glyph_count = prepared.glyph_count,
+    }
+    entry.page_count += 1
+    entry.page_publication_count += 1
+    entry.prefetched_glyph_count += u64(
+        task.glyph_id_count - task.demanded_glyph_count)
+    entry.queued_demand_count = 0
+    prepare_destroy(prepared)
+    return true
+}
+
 //   Adapt cache shaping to a frame-local resolver capability.
 cache_terminal_shape :: proc(
     user_data: rawptr, key: Font_Key, text: string,
@@ -374,6 +687,8 @@ cache_terminal_record_shape_fallback :: proc(
         cache.shaping_telemetry.invalid_results += 1
     case .Invalid_Cluster:
         cache.shaping_telemetry.invalid_clusters += 1
+    case .Pending_Glyph:
+        cache.shaping_telemetry.pending_glyph_runs += 1
     }
 }
 
@@ -385,6 +700,8 @@ cache_terminal_resolver :: proc(cache: ^Font_Cache) -> Font_Resolver {
     return {
         user_data = cache,
         resolve = cache_terminal_resolve,
+        resolve_glyph = cache_terminal_resolve_glyph,
+        resolve_codepoint = cache_terminal_resolve_codepoint,
         shape = cache_terminal_shape,
         record_shape_fallback = cache_terminal_record_shape_fallback,
         workspace = cache.shaped_glyphs[:],
@@ -416,16 +733,19 @@ font_key_from_flags :: proc(flags: core.Font_Variant_Flags) -> Font_Key {
 //   Build generation-owned shaping and GPU candidates from one prepared font.
 cache_publication_candidates :: proc(
     cache: ^Font_Cache, prepared: ^Prepared_Font,
-    shaping: ^Font_Shaping_Resource, candidate: ^rl.Font) -> bool {
+    candidate: ^Font_Cache_Entry) -> bool {
 
     path := cache_source_path(cache, prepared.key)
-    if !font_shaping_create(cache, path, shaping) {
+    if !font_shaping_create(cache, path, &candidate.shaping) {
         return false
     }
-    if !finalize(prepared, candidate) {
-        font_shaping_destroy(shaping)
+    if !font_generation_seed_records_init(
+        candidate, prepared, context.allocator) ||
+        !finalize(prepared, &candidate.font) {
+        font_generation_destroy(candidate)
         return false
     }
+    candidate.resident = true
     return true
 }
 
@@ -447,18 +767,14 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
         return false
     }
 
-    candidate: rl.Font
-    shaping: Font_Shaping_Resource
-    if !cache_publication_candidates(
-        cache, prepared, &shaping, &candidate) {
+    candidate: Font_Cache_Entry
+    if !cache_publication_candidates(cache, prepared, &candidate) {
         return false
     }
-    previous := entry.font
-    previous_shaping := entry.shaping
-    previous_resident := entry.resident
-    entry^ = {
-        font = candidate,
-        shaping = shaping,
+    previous := entry^
+    candidate = {
+        font = candidate.font,
+        shaping = candidate.shaping,
         generation = generation,
         requested_generation = entry.requested_generation,
         resident = true,
@@ -466,11 +782,11 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
         request_count = entry.request_count,
         coalesced_request_count = entry.coalesced_request_count,
         fallback_resolution_count = entry.fallback_resolution_count,
+        glyphs = candidate.glyphs,
+        glyph_allocator = candidate.glyph_allocator,
     }
-    if previous_resident {
-        rl.UnloadFont(previous)
-    }
-    font_shaping_destroy(&previous_shaping)
+    entry^ = candidate
+    font_generation_destroy(&previous)
     return true
 }
 
@@ -483,10 +799,7 @@ cache_shape :: proc(
         return 0, false
     }
     cache.shaping_telemetry.shape_calls += 1
-    entry := &cache.entries[int(key)]
-    if !entry.resident || entry.shaping.font == nil {
-        entry = &cache.entries[int(Font_Key.Regular)]
-    }
+    entry := cache_effective_entry(cache, key)
     if !entry.resident || entry.shaping.font == nil {
         cache.shaping_telemetry.native_failures += 1
         return 0, false

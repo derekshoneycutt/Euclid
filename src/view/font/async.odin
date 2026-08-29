@@ -10,6 +10,7 @@ import vmem "core:mem/virtual"
 // Retry owns an unsubmitted payload; Queued identifies pool-owned execution/polling;
 // Idle guarantees no worker can access task or arena storage.
 Font_Prepare_Operation_State :: core.Font_Prepare_Operation_State
+Font_Prepare_Operation_Kind :: core.Font_Prepare_Operation_Kind
 Font_Prepare_Task :: core.Font_Prepare_Task
 Font_Prepare_Operation :: core.Font_Prepare_Operation
 
@@ -25,15 +26,27 @@ Font_Prepare_Operation :: core.Font_Prepare_Operation
 //   - Writes only `task.prepared`; does not call raylib or mutate the cache.
 prepare_task_execute :: proc(payload: rawptr) -> taskpool.Task_Result {
     task := cast(^Font_Prepare_Task)payload
-    request := Font_Prepare_Request{
-        key = task.key,
-        generation = task.generation,
-        path = string(task.path_storage[:task.path_length]),
-        pixel_size = task.pixel_size,
-        codepoints = task.codepoints[:task.codepoint_count],
-        complete_face = true,
+    path := string(task.path_storage[:task.path_length])
+    prepared := false
+    switch task.kind {
+    case .Seed:
+        prepared = prepare({
+            key = task.key,
+            generation = task.generation,
+            path = path,
+            pixel_size = task.pixel_size,
+            codepoints = task.codepoints[:task.codepoint_count],
+        }, &task.prepared, task.allocator, .Arena)
+    case .Glyph_Page:
+        prepared = prepare_glyph_page({
+            key = task.key,
+            generation = task.generation,
+            path = path,
+            pixel_size = task.pixel_size,
+            glyph_ids = task.glyph_ids[:task.glyph_id_count],
+        }, &task.prepared, task.allocator, .Arena)
     }
-    if prepare(request, &task.prepared, task.allocator, .Arena) {
+    if prepared {
         return .Succeeded
     }
     return .Failed
@@ -113,6 +126,72 @@ cache_next_requested_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
     return .Regular, false
 }
 
+//   Select the first resident generation with unresolved glyph demand.
+//
+// Returns:
+//   - Font key and true when a bounded page can be prepared.
+cache_next_page_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
+    for entry_index in 0..<FONT_KEY_COUNT {
+        entry := &cache.entries[entry_index]
+        if entry.resident && entry.state == .Ready &&
+            entry.generation == entry.requested_generation &&
+            entry.pending_glyph_count > 0 &&
+            entry.page_count < core.FONT_GLYPH_PAGE_CAPACITY {
+            return Font_Key(entry_index), true
+        }
+    }
+    return .Regular, false
+}
+
+//   Copy pending IDs first, then fill the page with deterministic missing IDs.
+//
+// Returns:
+//   - True when at least one glyph ID was transferred to the task.
+cache_prepare_page_task :: proc(
+    cache: ^Font_Cache, key: Font_Key,
+    task: ^Font_Prepare_Task) -> bool {
+
+    entry := &cache.entries[int(key)]
+    task^ = {
+        kind = .Glyph_Page,
+        key = key,
+        generation = entry.generation,
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        allocator = vmem.arena_allocator(&cache.preparation_arena),
+    }
+    if !prepare_task_set_path(task, cache_source_path(cache, key)) {
+        return false
+    }
+    for &glyph, glyph_id in entry.glyphs {
+        if glyph.state != .Pending {
+            continue
+        }
+        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
+        task.glyph_id_count += 1
+        task.demanded_glyph_count += 1
+        glyph.state = .Queued
+        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
+            break
+        }
+    }
+    if task.demanded_glyph_count == 0 {
+        return false
+    }
+    entry.queued_demand_count = task.demanded_glyph_count
+    for &glyph, glyph_id in entry.glyphs {
+        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
+            break
+        }
+        if glyph.state != .Missing {
+            continue
+        }
+        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
+        task.glyph_id_count += 1
+        glyph.state = .Queued
+    }
+    return true
+}
+
 //   Move the oldest recorded optional demand into the single preparation slot.
 //
 // Notes:
@@ -128,6 +207,15 @@ cache_begin_next_request :: proc(cache: ^Font_Cache) {
     }
     key, found := cache_next_requested_key(cache)
     if !found {
+        page_key, page_found := cache_next_page_key(cache)
+        if page_found && cache_preparation_arena_init(cache) {
+            cache.preparation.state = .Retry
+            if !cache_prepare_page_task(
+                cache, page_key, &cache.preparation.task) {
+                cache.preparation.state = .Idle
+                cache.preparation.failure_count += 1
+            }
+        }
         return
     }
     entry := &cache.entries[int(key)]
@@ -139,6 +227,7 @@ cache_begin_next_request :: proc(cache: ^Font_Cache) {
     entry.state = .Preparing
     cache.preparation.state = .Retry
     cache.preparation.task = {
+        kind = .Seed,
         key = key,
         generation = entry.requested_generation,
         pixel_size = JULIA_MONO_FONT_SIZE,
@@ -151,9 +240,62 @@ cache_begin_next_request :: proc(cache: ^Font_Cache) {
         cache.preparation.failure_count += 1
         return
     }
-    codepoints := codepoint_set()
+    codepoints := seed_codepoint_set()
     copy(cache.preparation.task.codepoints[:], codepoints.values[:codepoints.count])
     cache.preparation.task.codepoint_count = codepoints.count
+}
+
+//   Report whether the active result still targets its owning generation.
+//
+// Returns:
+//   - True for a current seed request or a current published page generation.
+cache_preparation_is_current :: proc(cache: ^Font_Cache) -> bool {
+    task := &cache.preparation.task
+    entry := &cache.entries[int(task.key)]
+    switch task.kind {
+    case .Seed:
+        return task.generation == entry.requested_generation
+    case .Glyph_Page:
+        return task.generation == entry.generation &&
+            entry.generation == entry.requested_generation &&
+            entry.state == .Ready
+    }
+    return false
+}
+
+//   Publish one completed CPU product through its display-owned path.
+//
+// Returns:
+//   - True after seed or immutable page publication.
+cache_publish_preparation :: proc(cache: ^Font_Cache) -> bool {
+    task := &cache.preparation.task
+    switch task.kind {
+    case .Seed:
+        return cache_publish(cache, &task.prepared)
+    case .Glyph_Page:
+        return cache_publish_glyph_page(cache, &task.prepared, task)
+    }
+    return false
+}
+
+//   Restore demanded and prefetched page IDs after failure or supersession.
+cache_restore_page_demand :: proc(cache: ^Font_Cache) {
+    task := &cache.preparation.task
+    if task.kind != .Glyph_Page {
+        return
+    }
+    entry := &cache.entries[int(task.key)]
+    if task.generation != entry.generation {
+        return
+    }
+    for glyph_id, index in task.glyph_ids[:task.glyph_id_count] {
+        if glyph_id < u32(len(entry.glyphs)) &&
+            entry.glyphs[glyph_id].state == .Queued {
+            entry.glyphs[glyph_id].state =
+                .Pending if i32(index) < task.demanded_glyph_count else .Missing
+        }
+    }
+    entry.queued_demand_count = 0
 }
 
 //   Lazily reserve one fixed virtual arena shared by serialized preparations.
@@ -240,11 +382,12 @@ cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
     }
     result, joined := taskpool.task_pool_wait(pool, cache.preparation.handle)
     if joined == .Joined && result == .Succeeded &&
-        cache_publish(cache, &cache.preparation.task.prepared) {
+        cache_preparation_is_current(cache) &&
+        cache_publish_preparation(cache) {
         cache.preparation.publication_count += 1
-    } else if cache.preparation.task.generation !=
-        cache.entries[int(cache.preparation.task.key)].requested_generation {
+    } else if !cache_preparation_is_current(cache) {
         cache.preparation.stale_completion_count += 1
+        cache_restore_page_demand(cache)
     } else {
         cache.preparation.failure_count += 1
         cache_fail_preparation(cache)
@@ -333,7 +476,9 @@ cache_finish_preparation :: proc(cache: ^Font_Cache) {
 cache_fail_preparation :: proc(cache: ^Font_Cache) {
     key := cache.preparation.task.key
     entry := &cache.entries[int(key)]
-    if cache.preparation.task.generation == entry.requested_generation {
+    if cache.preparation.task.kind == .Glyph_Page {
+        cache_restore_page_demand(cache)
+    } else if cache.preparation.task.generation == entry.requested_generation {
         entry.state = .Failed
     }
 }

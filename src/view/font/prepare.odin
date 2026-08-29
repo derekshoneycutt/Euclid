@@ -23,6 +23,15 @@ Font_Prepare_Request :: struct {
     complete_face: bool,
 }
 
+// Immutable subset request whose glyph IDs are borrowed for the preparation call.
+Font_Glyph_Page_Request :: struct {
+    key: Font_Key,
+    generation: u64,
+    path: string,
+    pixel_size: i32,
+    glyph_ids: []u32,
+}
+
 Prepared_Font_Allocation_Mode :: core.Prepared_Font_Allocation_Mode
 Prepared_Glyph :: core.Prepared_Glyph
 Prepared_Rectangle :: core.Prepared_Rectangle
@@ -91,6 +100,7 @@ prepare_populate :: proc(
     if !prepare_allocate_glyph_metadata(info, request, prepared, allocator) {
         return false
     }
+    prepared.face_glyph_count = info.numGlyphs
     metrics_ready := prepare_complete_glyph_metrics(
         info, request, prepared.glyphs) if request.complete_face else
         prepare_glyph_metrics(info, request, prepared.glyphs)
@@ -146,6 +156,91 @@ prepare :: proc(
     }
 
     return prepare_populate(&info, request, prepared, allocator)
+}
+
+//   Report whether one page request contains unique glyph IDs from this face.
+//
+// Returns:
+//   - True for a nonempty bounded set of unique in-range glyph IDs.
+prepare_glyph_page_request_is_valid :: proc(
+    info: ^stbtt.fontinfo, glyph_ids: []u32) -> bool {
+
+    if info == nil || len(glyph_ids) == 0 ||
+        len(glyph_ids) > FONT_GLYPH_PAGE_REQUEST_CAPACITY {
+        return false
+    }
+    for glyph_id, index in glyph_ids {
+        if glyph_id >= u32(info.numGlyphs) {
+            return false
+        }
+        for previous in glyph_ids[:index] {
+            if previous == glyph_id {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+//   Populate compact page-local metrics while preserving original face glyph IDs.
+prepare_glyph_page_metrics :: proc(
+    info: ^stbtt.fontinfo, pixel_size: i32,
+    glyph_ids: []u32, glyphs: []Prepared_Glyph) {
+
+    scale := stbtt.ScaleForPixelHeight(info, f32(pixel_size))
+    ascent: i32
+    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
+    for glyph_id, index in glyph_ids {
+        glyphs[index] = prepare_face_glyph_metric(
+            info, i32(glyph_id), scale, ascent)
+    }
+}
+
+//   Parse, rasterize, and pack one bounded glyph-ID subset without raylib calls.
+//
+// Returns:
+//   - True for a complete compact CPU page; false after owned-result rollback.
+prepare_glyph_page :: proc(
+    request: Font_Glyph_Page_Request, prepared: ^Prepared_Font,
+    allocator: mem.Allocator,
+    allocation_mode := Prepared_Font_Allocation_Mode.Individual) -> bool {
+
+    if prepared == nil || request.pixel_size <= 0 || len(request.path) == 0 {
+        return false
+    }
+    prepared^ = {
+        allocator = allocator,
+        allocation_mode = allocation_mode,
+    }
+    info: stbtt.fontinfo
+    file_data, opened := prepare_open_font(request.path, allocator, &info)
+    if !opened {
+        if file_data != nil && allocation_mode == .Individual {
+            delete(file_data, allocator)
+        }
+        return false
+    }
+    defer if allocation_mode == .Individual {
+        delete(file_data, allocator)
+    }
+    if !prepare_glyph_page_request_is_valid(&info, request.glyph_ids) ||
+        !prepare_allocate_metadata(prepared, len(request.glyph_ids), allocator) {
+        prepare_destroy(prepared)
+        return false
+    }
+    prepared.face_glyph_count = info.numGlyphs
+    prepare_glyph_page_metrics(
+        &info, request.pixel_size, request.glyph_ids, prepared.glyphs)
+    prepare_commit_layout({
+        key = request.key,
+        generation = request.generation,
+        pixel_size = request.pixel_size,
+    }, prepared)
+    if !prepare_allocate_atlas(prepared, allocator) {
+        return false
+    }
+    prepare_render_atlas(&info, prepared)
+    return true
 }
 
 //   Allocate prepared metadata while preserving individual-allocation rollback.
