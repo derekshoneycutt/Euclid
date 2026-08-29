@@ -148,7 +148,7 @@ harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Se
 
 //   Refresh packaged assets using the root supplied by the harness invocation.
 initialize_harness_assets :: proc(asset_root: string) -> bool {
-    asset_root_config := files.make_asset_root_config(asset_root)
+    asset_root_config := files.make_asset_root_config(asset_root, context.allocator)
     defer files.destroy_asset_root_config(&asset_root_config)
     if files.reload_packaged_assets_root_with_config(&asset_root_config) {
         return true

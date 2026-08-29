@@ -6,6 +6,7 @@ package files
 import "core:bytes"
 import "core:compress/gzip"
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
@@ -36,7 +37,7 @@ Unpack_Targets :: struct {
 // Returns:
 //   - config: Config containing the override root when provided.
 make_asset_root_config :: proc(
-    root_dir: string, allocator := context.allocator) -> Asset_Root_Config {
+    root_dir: string, allocator: mem.Allocator) -> Asset_Root_Config {
     config := Asset_Root_Config{}
     if len(root_dir) > 0 {
         config.asset_root_override = strings.clone(root_dir, allocator)
@@ -194,7 +195,7 @@ packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
 // Returns:
 //   - asset_path: Joined absolute path when successful, otherwise "".
 packaged_asset_path :: proc(
-    relative_path: string, allocator := context.allocator) -> string {
+    relative_path: string, allocator: mem.Allocator) -> string {
     return packaged_asset_path_with_config(nil, relative_path, allocator)
 }
 
@@ -202,7 +203,7 @@ packaged_asset_path :: proc(
 packaged_asset_path_with_config :: proc(
     config: ^Asset_Root_Config,
     relative_path: string,
-    allocator := context.allocator) -> string {
+    allocator: mem.Allocator) -> string {
     exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
     if !exe_ok {
         return ""

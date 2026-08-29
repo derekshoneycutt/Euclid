@@ -182,7 +182,7 @@ artifact_encode_event :: proc(destination: []u8, event: trace.Event) {
 // The caller owns and must delete the returned bytes when successful.
 artifact_trace_bytes :: proc(events: []trace.Event) -> ([]byte, bool) {
     trace_size := size_of(Trace_Header) + len(events) * size_of(trace.Event)
-    trace_bytes, trace_error := make([]byte, trace_size, context.allocator)
+    trace_bytes, trace_error := make([]byte, trace_size, context.temp_allocator)
     if trace_error != nil {
         return nil, false
     }

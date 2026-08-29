@@ -17,7 +17,7 @@ FONT_CODEPOINT_CAPACITY :: 8192
 FONT_KEY_COUNT :: core.FONT_KEY_COUNT
 
 // Pixel height used for synchronous and asynchronously prepared JuliaMono fonts.
-JULIA_MONO_FONT_SIZE :: 64
+JULIA_MONO_FONT_SIZE :: 32
 
 // Virtual address-space reservation shared by serialized font preparations.
 FONT_PREPARATION_ARENA_RESERVE_SIZE :: 96 * mem.Megabyte
