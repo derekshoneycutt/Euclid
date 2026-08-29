@@ -196,6 +196,31 @@ prepare_glyph_page_metrics :: proc(
     }
 }
 
+//   Allocate, lay out, and rasterize one validated glyph page.
+prepare_glyph_page_populate :: proc(
+    info: ^stbtt.fontinfo, request: Font_Glyph_Page_Request,
+    prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
+
+    if !prepare_glyph_page_request_is_valid(info, request.glyph_ids) ||
+        !prepare_allocate_metadata(prepared, len(request.glyph_ids), allocator) {
+        prepare_destroy(prepared)
+        return false
+    }
+    prepared.face_glyph_count = info.numGlyphs
+    prepare_glyph_page_metrics(
+        info, request.pixel_size, request.glyph_ids, prepared.glyphs)
+    prepare_commit_layout({
+        key = request.key,
+        generation = request.generation,
+        pixel_size = request.pixel_size,
+    }, prepared)
+    if !prepare_allocate_atlas(prepared, allocator) {
+        return false
+    }
+    prepare_render_atlas(info, prepared)
+    return true
+}
+
 //   Parse, rasterize, and pack one bounded glyph-ID subset without raylib calls.
 //
 // Returns:
@@ -223,24 +248,7 @@ prepare_glyph_page :: proc(
     defer if allocation_mode == .Individual {
         delete(file_data, allocator)
     }
-    if !prepare_glyph_page_request_is_valid(&info, request.glyph_ids) ||
-        !prepare_allocate_metadata(prepared, len(request.glyph_ids), allocator) {
-        prepare_destroy(prepared)
-        return false
-    }
-    prepared.face_glyph_count = info.numGlyphs
-    prepare_glyph_page_metrics(
-        &info, request.pixel_size, request.glyph_ids, prepared.glyphs)
-    prepare_commit_layout({
-        key = request.key,
-        generation = request.generation,
-        pixel_size = request.pixel_size,
-    }, prepared)
-    if !prepare_allocate_atlas(prepared, allocator) {
-        return false
-    }
-    prepare_render_atlas(&info, prepared)
-    return true
+    return prepare_glyph_page_populate(&info, request, prepared, allocator)
 }
 
 //   Allocate prepared metadata while preserving individual-allocation rollback.

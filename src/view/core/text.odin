@@ -300,6 +300,15 @@ ui_text_shape_glyphs_are_resident :: proc(
     return true
 }
 
+//   Record one rejection and draw the complete run through the fallback path.
+ui_text_shaped_fallback :: proc(
+    request: Shaped_Text_Draw, reason: view_font.Shape_Fallback_Reason) -> bool {
+
+    ui_text_shape_fallback(request.resolver, reason)
+    ui_text_draw_unshaped(request)
+    return false
+}
+
 //   Shape and draw one UTF-8 run, falling back atomically to ordinary raylib text.
 ui_text_shaped_f32 :: proc(
     request: Shaped_Text_Draw) -> bool {
@@ -312,35 +321,25 @@ ui_text_shaped_f32 :: proc(
         return false
     }
     if len(text) > len(resolver.workspace) {
-        ui_text_shape_fallback(resolver, .Workspace_Overflow)
-        ui_text_draw_unshaped(request)
-        return false
+        return ui_text_shaped_fallback(request, .Workspace_Overflow)
     }
     glyph_count, shaped := resolver.shape(
         resolver.user_data, request.key, text, resolver.workspace)
     if !shaped || !ui_text_shape_is_valid(
         text, resolver.workspace, glyph_count) {
-        ui_text_shape_fallback(resolver, .Invalid_Result)
-        ui_text_draw_unshaped(request)
-        return false
+        return ui_text_shaped_fallback(request, .Invalid_Result)
     }
     column_advance, advance_valid := ui_text_column_advance(
         request.font.font, request.font.font_size)
     if !advance_valid {
-        ui_text_shape_fallback(resolver, .Invalid_Result)
-        ui_text_draw_unshaped(request)
-        return false
+        return ui_text_shaped_fallback(request, .Invalid_Result)
     }
     glyphs := resolver.workspace[:glyph_count]
     if !ui_text_shape_clusters_are_valid(text, glyphs) {
-        ui_text_shape_fallback(resolver, .Invalid_Cluster)
-        ui_text_draw_unshaped(request)
-        return false
+        return ui_text_shaped_fallback(request, .Invalid_Cluster)
     }
     if !ui_text_shape_glyphs_are_resident(resolver, request.key, glyphs) {
-        ui_text_shape_fallback(resolver, .Pending_Glyph)
-        ui_text_draw_unshaped(request)
-        return false
+        return ui_text_shaped_fallback(request, .Pending_Glyph)
     }
     ui_text_draw_shaped_run(request, glyphs, column_advance)
     return true

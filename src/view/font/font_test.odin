@@ -10,9 +10,35 @@ import "core:testing"
 import "core:thread"
 import vmem "core:mem/virtual"
 
+Codepoint_Resolver_Test_Result :: struct {
+    ascii : Font_Glyph_Resolve_Status,
+    math : Font_Glyph_Resolve_Status,
+    unsupported : Font_Glyph_Resolve_Status,
+    capacity : Font_Glyph_Resolve_Status,
+    pending_count : i32,
+}
+
 // Complete one pool slot without touching shared application state.
 test_task_succeed :: proc(payload: rawptr) -> taskpool.Task_Result {
     return .Succeeded
+}
+
+// Verify direct resolver statuses and telemetry remain mutually consistent.
+view_expect_codepoint_resolver_result :: proc(
+    t: ^testing.T, entry: ^Font_Cache_Entry,
+    result: Codepoint_Resolver_Test_Result) {
+
+    testing.expect_value(t, result.ascii, Font_Glyph_Resolve_Status.Resident)
+    testing.expect_value(t, result.math, Font_Glyph_Resolve_Status.Pending)
+    testing.expect_value(
+        t, result.unsupported, Font_Glyph_Resolve_Status.Unsupported)
+    testing.expect_value(
+        t, result.capacity, Font_Glyph_Resolve_Status.Capacity_Exhausted)
+    testing.expect_value(t, result.pending_count, i32(1))
+    testing.expect_value(t, entry.pending_glyph_count, result.pending_count)
+    testing.expect_value(t, entry.pending_codepoint_count, u64(1))
+    testing.expect_value(t, entry.unsupported_codepoint_count, u64(1))
+    testing.expect_value(t, entry.capacity_rejection_count, u64(1))
 }
 
 // Verify the production compatibility seed is bounded and prepares independently.
@@ -424,17 +450,13 @@ view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
     _, capacity_status := cache_terminal_resolve_codepoint(
         &cache, .Regular, 'α')
 
-    testing.expect_value(t, ascii_status, Font_Glyph_Resolve_Status.Resident)
-    testing.expect_value(t, math_status, Font_Glyph_Resolve_Status.Pending)
-    testing.expect_value(
-        t, unsupported_status, Font_Glyph_Resolve_Status.Unsupported)
-    testing.expect_value(
-        t, capacity_status, Font_Glyph_Resolve_Status.Capacity_Exhausted)
-    testing.expect_value(t, pending_count, i32(1))
-    testing.expect_value(t, entry.pending_glyph_count, pending_count)
-    testing.expect_value(t, entry.pending_codepoint_count, u64(1))
-    testing.expect_value(t, entry.unsupported_codepoint_count, u64(1))
-    testing.expect_value(t, entry.capacity_rejection_count, u64(1))
+    view_expect_codepoint_resolver_result(t, entry, {
+        ascii = ascii_status,
+        math = math_status,
+        unsupported = unsupported_status,
+        capacity = capacity_status,
+        pending_count = pending_count,
+    })
 
     harfbuzz_shaper_destroy(&entry.shaping)
     font_generation_glyphs_destroy(entry)

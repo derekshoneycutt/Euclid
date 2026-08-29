@@ -143,6 +143,42 @@ cache_next_page_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
     return .Regular, false
 }
 
+//   Queue pending demand first and report whether the task owns any demand.
+cache_page_task_queue_pending :: proc(
+    entry: ^Font_Cache_Entry, task: ^Font_Prepare_Task) -> bool {
+
+    for &glyph, glyph_id in entry.glyphs {
+        if glyph.state != .Pending {
+            continue
+        }
+        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
+        task.glyph_id_count += 1
+        task.demanded_glyph_count += 1
+        glyph.state = .Queued
+        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
+            break
+        }
+    }
+    return task.demanded_glyph_count > 0
+}
+
+//   Fill unused page slots with missing face glyphs in glyph-ID order.
+cache_page_task_fill_missing :: proc(
+    entry: ^Font_Cache_Entry, task: ^Font_Prepare_Task) {
+
+    for &glyph, glyph_id in entry.glyphs {
+        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
+            break
+        }
+        if glyph.state != .Missing {
+            continue
+        }
+        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
+        task.glyph_id_count += 1
+        glyph.state = .Queued
+    }
+}
+
 //   Copy pending IDs first, then fill the page with deterministic missing IDs.
 //
 // Returns:
@@ -162,34 +198,53 @@ cache_prepare_page_task :: proc(
     if !prepare_task_set_path(task, cache_source_path(cache, key)) {
         return false
     }
-    for &glyph, glyph_id in entry.glyphs {
-        if glyph.state != .Pending {
-            continue
-        }
-        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
-        task.glyph_id_count += 1
-        task.demanded_glyph_count += 1
-        glyph.state = .Queued
-        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
-            break
-        }
-    }
-    if task.demanded_glyph_count == 0 {
+    if !cache_page_task_queue_pending(entry, task) {
         return false
     }
     entry.queued_demand_count = task.demanded_glyph_count
-    for &glyph, glyph_id in entry.glyphs {
-        if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
-            break
-        }
-        if glyph.state != .Missing {
-            continue
-        }
-        task.glyph_ids[task.glyph_id_count] = u32(glyph_id)
-        task.glyph_id_count += 1
-        glyph.state = .Queued
-    }
+    cache_page_task_fill_missing(entry, task)
     return true
+}
+
+//   Start one glyph-page operation in the serialized preparation slot.
+cache_begin_page_request :: proc(cache: ^Font_Cache, key: Font_Key) {
+    if !cache_preparation_arena_init(cache) {
+        return
+    }
+    cache.preparation.state = .Retry
+    if !cache_prepare_page_task(cache, key, &cache.preparation.task) {
+        cache.preparation.state = .Idle
+        cache.preparation.failure_count += 1
+    }
+}
+
+//   Start one seed-generation operation in the serialized preparation slot.
+cache_begin_seed_request :: proc(cache: ^Font_Cache, key: Font_Key) {
+    entry := &cache.entries[int(key)]
+    if !cache_preparation_arena_init(cache) {
+        entry.state = .Failed
+        cache.preparation.failure_count += 1
+        return
+    }
+    entry.state = .Preparing
+    cache.preparation.state = .Retry
+    cache.preparation.task = {
+        kind = .Seed,
+        key = key,
+        generation = entry.requested_generation,
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        allocator = vmem.arena_allocator(&cache.preparation_arena),
+    }
+    if !prepare_task_set_path(
+        &cache.preparation.task, cache_source_path(cache, key)) {
+        entry.state = .Failed
+        cache.preparation.state = .Idle
+        cache.preparation.failure_count += 1
+        return
+    }
+    codepoints := seed_codepoint_set()
+    copy(cache.preparation.task.codepoints[:], codepoints.values[:codepoints.count])
+    cache.preparation.task.codepoint_count = codepoints.count
 }
 
 //   Move the oldest recorded optional demand into the single preparation slot.
@@ -208,41 +263,12 @@ cache_begin_next_request :: proc(cache: ^Font_Cache) {
     key, found := cache_next_requested_key(cache)
     if !found {
         page_key, page_found := cache_next_page_key(cache)
-        if page_found && cache_preparation_arena_init(cache) {
-            cache.preparation.state = .Retry
-            if !cache_prepare_page_task(
-                cache, page_key, &cache.preparation.task) {
-                cache.preparation.state = .Idle
-                cache.preparation.failure_count += 1
-            }
+        if page_found {
+            cache_begin_page_request(cache, page_key)
         }
         return
     }
-    entry := &cache.entries[int(key)]
-    if !cache_preparation_arena_init(cache) {
-        entry.state = .Failed
-        cache.preparation.failure_count += 1
-        return
-    }
-    entry.state = .Preparing
-    cache.preparation.state = .Retry
-    cache.preparation.task = {
-        kind = .Seed,
-        key = key,
-        generation = entry.requested_generation,
-        pixel_size = JULIA_MONO_FONT_SIZE,
-        allocator = vmem.arena_allocator(&cache.preparation_arena),
-    }
-    path := cache_source_path(cache, key)
-    if !prepare_task_set_path(&cache.preparation.task, path) {
-        entry.state = .Failed
-        cache.preparation.state = .Idle
-        cache.preparation.failure_count += 1
-        return
-    }
-    codepoints := seed_codepoint_set()
-    copy(cache.preparation.task.codepoints[:], codepoints.values[:codepoints.count])
-    cache.preparation.task.codepoint_count = codepoints.count
+    cache_begin_seed_request(cache, key)
 }
 
 //   Report whether the active result still targets its owning generation.
@@ -346,6 +372,25 @@ cache_preparation_arena_destroy :: proc(cache: ^Font_Cache) {
     cache.preparation_arena_initialized = false
 }
 
+//   Join and classify one terminal worker result, then release the operation.
+cache_complete_preparation :: proc(
+    cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
+
+    result, joined := taskpool.task_pool_wait(pool, cache.preparation.handle)
+    if joined == .Joined && result == .Succeeded &&
+        cache_preparation_is_current(cache) &&
+        cache_publish_preparation(cache) {
+        cache.preparation.publication_count += 1
+    } else if !cache_preparation_is_current(cache) {
+        cache.preparation.stale_completion_count += 1
+        cache_restore_page_demand(cache)
+    } else {
+        cache.preparation.failure_count += 1
+        cache_fail_preparation(cache)
+    }
+    cache_finish_preparation(cache)
+}
+
 //   Submit, poll, join, and publish optional preparation without frame waits.
 //
 // Parameters:
@@ -380,19 +425,7 @@ cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
         cache_finish_preparation(cache)
         return
     }
-    result, joined := taskpool.task_pool_wait(pool, cache.preparation.handle)
-    if joined == .Joined && result == .Succeeded &&
-        cache_preparation_is_current(cache) &&
-        cache_publish_preparation(cache) {
-        cache.preparation.publication_count += 1
-    } else if !cache_preparation_is_current(cache) {
-        cache.preparation.stale_completion_count += 1
-        cache_restore_page_demand(cache)
-    } else {
-        cache.preparation.failure_count += 1
-        cache_fail_preparation(cache)
-    }
-    cache_finish_preparation(cache)
+    cache_complete_preparation(cache, pool)
 }
 
 //   Attempt one bounded submission while retaining ownership on queue pressure.

@@ -251,6 +251,13 @@ draw_math_text :: proc(draw: Math_Text_Draw) {
     })
 }
 
+//   Draw one math text span only when it contains content.
+draw_optional_math_text :: proc(draw: Math_Text_Draw) {
+    if len(draw.text) > 0 {
+        draw_math_text(draw)
+    }
+}
+
 //   Fast vertical cull check for one layout line against panel bounds.
 //   Returns true only when the full line is strictly outside the visible span.
 layout_line_outside_panel :: #force_inline proc(
@@ -537,44 +544,33 @@ draw_script_attach_scripts :: proc(
     position: Program_Draw_Position) {
 
     baseline_y := position.baseline_y
-    offsets := dynview.script_draw_offsets(
-        ctx.font_size,
-        max(0.2, item.script_scale),
-        item.script_sup_raise,
-        item.script_sub_drop)
+    offsets := dynview.script_draw_offsets(ctx.font_size, max(0.2, item.script_scale),
+        item.script_sup_raise, item.script_sub_drop)
     script_x := position.draw_x + child_width +
         max(1.0, item.script_gap * ctx.font_size)
     font := view_core.Ui_Text_Font{script.font, script.font_size}
 
-    sup_text := dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sup_text_offset,
-        item.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_top := baseline_y - offsets.sup_raise_px - script.ascent
-        draw_math_text({
-            state = ctx.state,
-            style = script.style,
-            text = sup_text,
-            position = {script_x, sup_top},
-            font = font,
-        })
-    }
+    sup_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sup_text_offset, item.script_sup_text_len)
+    sup_top := baseline_y - offsets.sup_raise_px - script.ascent
+    draw_optional_math_text({
+        state = ctx.state,
+        style = script.style,
+        text = sup_text,
+        position = {script_x, sup_top},
+        font = font,
+    })
 
-    sub_text := dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sub_text_offset,
-        item.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_top := baseline_y + offsets.sub_drop_px - script.ascent
-        draw_math_text({
-            state = ctx.state,
-            style = script.style,
-            text = sub_text,
-            position = {script_x, sub_top},
-            font = font,
-        })
-    }
+    sub_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sub_text_offset, item.script_sub_text_len)
+    sub_top := baseline_y + offsets.sub_drop_px - script.ascent
+    draw_optional_math_text({
+        state = ctx.state,
+        style = script.style,
+        text = sub_text,
+        position = {script_x, sub_top},
+        font = font,
+    })
 }
 
 //   Draw one recursive ScriptAttach wrapper by drawing a child program and script text.
@@ -1465,51 +1461,51 @@ draw_cached_text_item :: proc(
     draw_cached_text_item_dispatch(ctx, style, item, resolved, item_y)
 }
 
-//   Draw one cached text-run item with optional underline.
-draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
+//   Draw the shaped or math content of one resolved text run.
+draw_text_run_content :: proc(
+    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) {
 
-    runtime := params.runtime
-    font_size := params.font_size
-    style := params.style
-    item := params.item
-    text := params.text
-    resolved_font := params.resolved_font
-    text_color := params.text_color
-    draw_x := params.draw_x
-    item_y := params.item_y
-
-    text_font := view_core.Ui_Text_Font{resolved_font, font_size}
-    if item.kind == .Text_Run && params.state != nil {
+    if params.item.kind == .Text_Run && params.state != nil {
         resolver := font.cache_terminal_resolver(&params.state^.font_cache)
         view_core.ui_text_shaped({
             resolver = resolver,
-            key = style_font_key(style),
-            text = text,
-            position = {draw_x, item_y},
-            color = text_color,
+            key = style_font_key(params.style),
+            text = params.text,
+            position = {params.draw_x, params.item_y},
+            color = params.text_color,
             font = text_font,
         })
-    } else {
-        draw_math_text({
-            state = params.state,
-            style = style,
-            text = text,
-            position = {draw_x, item_y},
-            font = text_font,
-        })
-    }
-    if !style.underline {
         return
     }
+    draw_math_text({
+        state = params.state,
+        style = params.style,
+        text = params.text,
+        position = {params.draw_x, params.item_y},
+        font = text_font,
+    })
+}
 
-    underline_width := f32(item.col_span) * dynview.effective_advance(
-        style, runtime^.compile_cache.last_wrap_advance)
-    underline_y := item_y + font_size + 1
+//   Draw the optional underline for one resolved text run.
+draw_text_run_underline :: proc(params: Text_Run_Draw_Params) {
+    if !params.style.underline {
+        return
+    }
+    underline_width := f32(params.item.col_span) * dynview.effective_advance(
+        params.style, params.runtime^.compile_cache.last_wrap_advance)
+    underline_y := params.item_y + params.font_size + 1
     rl.DrawLineEx(
-        rl.Vector2{draw_x, underline_y},
-        rl.Vector2{draw_x + underline_width, underline_y},
+        rl.Vector2{params.draw_x, underline_y},
+        rl.Vector2{params.draw_x + underline_width, underline_y},
         1,
-        text_color)
+        params.text_color)
+}
+
+//   Draw one cached text-run item with optional underline.
+draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
+    text_font := view_core.Ui_Text_Font{params.resolved_font, params.font_size}
+    draw_text_run_content(params, text_font)
+    draw_text_run_underline(params)
 }
 
 //   Draw one inline box outline with per-edge colors.

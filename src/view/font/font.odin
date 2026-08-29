@@ -360,6 +360,27 @@ font_shaping_create :: proc(
     return harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, resource)
 }
 
+//   Finalize and publish one synchronous Regular seed candidate.
+cache_publish_regular_seed :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
+    shaping: ^Font_Shaping_Resource) -> bool {
+
+    if !font_generation_seed_records_init(
+        entry, prepared, context.allocator) {
+        font_shaping_destroy(shaping)
+        return false
+    }
+    candidate: rl.Font
+    if !finalize(prepared, &candidate) {
+        font_shaping_destroy(shaping)
+        font_generation_glyphs_destroy(entry)
+        return false
+    }
+    entry.font = candidate
+    entry.shaping = shaping^
+    return true
+}
+
 //   Prepare and finalize the synchronous Regular complete-face generation.
 cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
     if !cache_preparation_arena_init(cache) {
@@ -384,20 +405,7 @@ cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
         return false
     }
     entry := &cache.entries[int(Font_Key.Regular)]
-    if !font_generation_seed_records_init(
-        entry, &prepared, context.allocator) {
-        font_shaping_destroy(&shaping)
-        return false
-    }
-    candidate: rl.Font
-    if !finalize(&prepared, &candidate) {
-        font_shaping_destroy(&shaping)
-        font_generation_glyphs_destroy(entry)
-        return false
-    }
-    entry.font = candidate
-    entry.shaping = shaping
-    return true
+    return cache_publish_regular_seed(entry, &prepared, &shaping)
 }
 
 //   Load only the permanent Regular fallback during synchronous startup.
@@ -612,6 +620,48 @@ cache_glyph_page_matches_task :: proc(
     return true
 }
 
+//   Publish page-local glyph records and resolve demanded counters.
+cache_publish_glyph_records :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
+    task: ^Font_Prepare_Task, page_index: i32) {
+
+    for glyph, index in prepared.glyphs {
+        rectangle := prepared.rectangles[index]
+        entry.glyphs[glyph.glyph_id] = {
+            rectangle = {
+                x = f32(rectangle.x), y = f32(rectangle.y),
+                width = f32(rectangle.width), height = f32(rectangle.height),
+            },
+            offset_x = glyph.offset_x,
+            offset_y = glyph.offset_y,
+            advance_x = glyph.advance_x,
+            page_index = u16(page_index + 1),
+            state = .Resident,
+        }
+        if i32(index) < task.demanded_glyph_count {
+            entry.pending_glyph_count -= 1
+        }
+    }
+}
+
+//   Commit one immutable page descriptor and its publication telemetry.
+cache_commit_glyph_page :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
+    task: ^Font_Prepare_Task, texture: rl.Texture2D) {
+
+    page_index := entry.page_count
+    entry.pages[page_index] = {
+        texture = texture,
+        generation = prepared.generation,
+        glyph_count = prepared.glyph_count,
+    }
+    entry.page_count += 1
+    entry.page_publication_count += 1
+    entry.prefetched_glyph_count += u64(
+        task.glyph_id_count - task.demanded_glyph_count)
+    entry.queued_demand_count = 0
+}
+
 //   Publish one immutable page and resolve its queued glyph records atomically.
 //
 // Returns:
@@ -633,33 +683,8 @@ cache_publish_glyph_page :: proc(
         return false
     }
     page_index := entry.page_count
-    for glyph, index in prepared.glyphs {
-        rectangle := prepared.rectangles[index]
-        entry.glyphs[glyph.glyph_id] = {
-            rectangle = {
-                x = f32(rectangle.x), y = f32(rectangle.y),
-                width = f32(rectangle.width), height = f32(rectangle.height),
-            },
-            offset_x = glyph.offset_x,
-            offset_y = glyph.offset_y,
-            advance_x = glyph.advance_x,
-            page_index = u16(page_index + 1),
-            state = .Resident,
-        }
-        if i32(index) < task.demanded_glyph_count {
-            entry.pending_glyph_count -= 1
-        }
-    }
-    entry.pages[page_index] = {
-        texture = texture,
-        generation = prepared.generation,
-        glyph_count = prepared.glyph_count,
-    }
-    entry.page_count += 1
-    entry.page_publication_count += 1
-    entry.prefetched_glyph_count += u64(
-        task.glyph_id_count - task.demanded_glyph_count)
-    entry.queued_demand_count = 0
+    cache_publish_glyph_records(entry, prepared, task, page_index)
+    cache_commit_glyph_page(entry, prepared, task, texture)
     prepare_destroy(prepared)
     return true
 }
