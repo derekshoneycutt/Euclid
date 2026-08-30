@@ -105,6 +105,84 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     testing.expect_value(t, expanded_first_child(&nodes[0]), &nodes[1])
 }
 
+//   Verify tree row lookup follows visible depth-first order across roots.
+@(test)
+tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {
+    ji := app_core.Euclid_Julia_Interface{}
+    nodes: [4]app_core.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    for index in 0..<len(nodes) - 1 {
+        nodes[index].next_in_registry = &nodes[index + 1]
+    }
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
+    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
+    seed_tree_node(&nodes[3], nil, nil, nil, false)
+
+    row, found := tree_visible_row(&ji, &nodes[2])
+    testing.expect(t, found)
+    testing.expect_value(t, row, 2)
+    row, found = tree_visible_row(&ji, &nodes[3])
+    testing.expect(t, found)
+    testing.expect_value(t, row, 3)
+
+    nodes[0].is_expanded = false
+    _, found = tree_visible_row(&ji, &nodes[2])
+    testing.expect(t, !found)
+}
+
+//   Verify tree reveal scrolling moves only enough to expose the target row.
+@(test)
+tree_reveal_scroll_is_minimal_and_clamped :: proc(t: ^testing.T) {
+    testing.expect_value(t, tree_reveal_scroll(44, 3, 66, 220), f32(44))
+    testing.expect_value(t, tree_reveal_scroll(88, 2, 66, 220), f32(44))
+    testing.expect_value(t, tree_reveal_scroll(0, 5, 66, 220), f32(66))
+    testing.expect_value(t, tree_reveal_scroll(200, 0, 66, 220), f32(0))
+    testing.expect_value(t, tree_reveal_scroll(30, 1, 100, 44), f32(0))
+}
+
+//   Verify a stable reveal request scrolls, cancels dragging, and is consumed.
+@(test)
+pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
+    ji := app_core.Euclid_Julia_Interface{}
+    nodes: [2]app_core.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    nodes[0].next_in_registry = &nodes[1]
+    nodes[0].stable_id[0] = 1
+    nodes[1].stable_id[0] = 2
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+        tree_reveal_pending = true,
+        tree_reveal_stable_id = nodes[1].stable_id,
+        tree_scroll_dragging = true,
+        tree_scroll_drag_off = 5,
+        ui_press_owner = {active = true, kind = .Scrollbar, id = 1003},
+    }
+    scroll_y: f32
+    apply_pending_tree_reveal(Tree_List_Params{
+        ji = &ji,
+        ui_runtime = &ui_runtime,
+        list_panel = {height = TREE_ROW_HEIGHT},
+        scroll_y = &scroll_y,
+    }, TREE_ROW_HEIGHT * 2)
+
+    testing.expect_value(t, scroll_y, TREE_ROW_HEIGHT)
+    testing.expect(t, !ui_runtime.tree_reveal_pending)
+    testing.expect(t, !ui_runtime.tree_scroll_dragging)
+    testing.expect(t, !ui_runtime.ui_press_owner.active)
+
+    ui_runtime.tree_reveal_pending = true
+    ui_runtime.tree_reveal_stable_id[0] = 3
+    apply_pending_tree_reveal(Tree_List_Params{
+        ji = &ji,
+        ui_runtime = &ui_runtime,
+        list_panel = {height = TREE_ROW_HEIGHT},
+        scroll_y = &scroll_y,
+    }, TREE_ROW_HEIGHT * 2)
+    testing.expect(t, ui_runtime.tree_reveal_pending)
+}
+
 //   Verify build_tree_view_panels clamps small panels to non-negative rects.
 @(test)
 build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
@@ -299,6 +377,58 @@ scratchpad_stale_submit_preserves_newer_input :: proc(t: ^testing.T) {
         t, string(ui_runtime.scratchpad_input[:ui_runtime.scratchpad_input_len]),
         "new input")
     testing.expect_value(t, ui_runtime.scratchpad_pending_submit_request_id, u64(0))
+}
+
+//   Verify only the matching submit reply releases scenario-forced bottom pinning.
+@(test)
+scratchpad_forced_bottom_requires_matching_submit_reply :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+        scratchpad_input_generation = 2,
+        scratchpad_forced_bottom_request_id = 9,
+    }
+    unrelated := app_bridge.Scratchpad_Async_Slot{
+        kind = .Complete,
+        request_id = 9,
+        input_generation = 2,
+    }
+    apply_scratchpad_async_result(&ui_runtime, &unrelated)
+    testing.expect_value(t, ui_runtime.scratchpad_forced_bottom_request_id, u64(9))
+
+    stale_submit := app_bridge.Scratchpad_Async_Slot{
+        kind = .Submit,
+        request_id = 9,
+        input_generation = 1,
+    }
+    apply_scratchpad_async_result(&ui_runtime, &stale_submit)
+    testing.expect_value(t, ui_runtime.scratchpad_forced_bottom_request_id, u64(0))
+    testing.expect(t, ui_runtime.scratchpad_bottom_pinned)
+}
+
+//   Verify the zero request sentinel cannot force ordinary submit scrolling.
+@(test)
+scratchpad_zero_request_does_not_force_bottom :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{}
+    slot := app_bridge.Scratchpad_Async_Slot{kind = .Submit}
+
+    apply_scratchpad_async_result(&ui_runtime, &slot)
+
+    testing.expect(t, !ui_runtime.scratchpad_bottom_pinned)
+    testing.expect_value(t, ui_runtime.scratchpad_forced_bottom_request_id, u64(0))
+}
+
+//   Verify changed Scratchpad output moves a pinned transcript to its new bottom.
+@(test)
+scratchpad_output_growth_repins_to_bottom :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    ui_runtime := &state^.ui_runtime
+    ui_runtime.scratchpad_bottom_pinned = true
+    ui_runtime.scratchpad_last_output_len = 4
+
+    scratchpad_track_output_length(state, ui_runtime, 12, 88)
+
+    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(88))
+    testing.expect_value(t, ui_runtime.scratchpad_last_output_len, 12)
 }
 
 //   Verify an incomplete submit appends a trailing newline.

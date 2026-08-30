@@ -172,6 +172,7 @@ The editor lives in `Euclid_UI_Runtime_State` and uses fixed storage:
 - `Julia` or `Help` input mode;
 - a monotonically increasing input generation;
 - pending submit and latest completion request IDs;
+- a scenario-forced bottom-pin request ID;
 - history-reset retry state;
 - transcript length and bottom-pinning state.
 
@@ -188,6 +189,14 @@ cannot edit a newer generation. This is the primary stale-editor defense.
 The terminal remains pinned to its newest content until the user scrolls away
 from the bottom. New output then preserves the user's reading position. A new
 submit pins it again.
+
+An accepted scenario submission additionally records its request ID as a
+display-owned forced-bottom intent. Scroll input cannot unpin the transcript
+until the matching asynchronous submit reply is applied. Applying that reply,
+including a failed, incomplete, or stale-generation reply, clears the forced
+intent while preserving ordinary bottom pinning so newly published response
+content remains visible. Scenario requests do not reuse the interactive
+editor's pending-submit identity.
 
 ## Scratchpad Communication Protocol
 

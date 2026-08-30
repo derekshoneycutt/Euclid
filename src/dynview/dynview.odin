@@ -1,6 +1,7 @@
 package dynview
 
 import "../core"
+import "../grid"
 
 import rl "vendor:raylib"
 
@@ -95,8 +96,7 @@ Dynview_Block_Format :: struct {
 Dynview_Layout_State :: struct {
     line_index: int,
     col: int,
-    y_offset: f32,
-    line_gap: f32,
+    row: int,
     active_block_id: i32,
     active_block_kind: i32,
     active_block_format: Dynview_Block_Format,
@@ -110,6 +110,7 @@ Dynview_Layout_Build_Context :: struct {
     font_size: f32,
     base_ascent: f32,
     base_descent: f32,
+    grid_metrics: grid.Cell_Metrics,
 }
 
 Dynview_Delimiter_Family :: enum {

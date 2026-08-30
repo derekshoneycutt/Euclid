@@ -266,30 +266,6 @@ layout_line_outside_panel :: #force_inline proc(
     return line_bottom < panel_top || line_top > panel_bottom
 }
 
-//   Return extra top/bottom culling margin for lines with script or accent items.
-line_visual_padding :: #force_inline proc(
-    cache: ^core.Dynview_Compile_Cache,
-    line: core.Dynview_Layout_Line,
-    font_size: f32) -> (f32, f32) {
-
-    top_pad: f32 = 0
-    bottom_pad: f32 = 0
-    item_end := line.item_start + line.item_count
-    for item_index in line.item_start..<item_end {
-        item := cache^.layout_items[item_index]
-        top_pad = max(top_pad, item.visual_padding_top)
-        bottom_pad = max(bottom_pad, item.visual_padding_bottom)
-
-        script_font_size := max(1.0, font_size * max(0.2, item.script_scale))
-        script_top_pad, script_bottom_pad :=
-            dynview.script_visual_padding(script_font_size)
-        top_pad = max(top_pad, script_top_pad)
-        bottom_pad = max(bottom_pad, script_bottom_pad)
-    }
-
-    return top_pad, bottom_pad
-}
-
 //   Draw one cached math-block item from its precomputed program slot.
 draw_math_block_item :: proc(
     ctx: Layout_Draw_Context,
@@ -308,7 +284,7 @@ draw_math_block_item :: proc(
         return
     }
 
-    baseline_y := item_y + item.ascent
+    baseline_y := item_y + item.visual_padding_top + item.ascent
     draw_math_program_at(ctx,
         program, Program_Draw_Position{item_x, baseline_y})
 }
@@ -400,7 +376,7 @@ draw_radical_index_text :: proc(
     index_cols :=
         max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
     index_advance := dynview.effective_advance(script_style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * index_scale
+        ctx.runtime^.compile_cache.last_cell_width) * index_scale
     index_width := f32(index_cols) * index_advance
     index_right_limit :=
         layout.draw_x + layout.front_padding + layout.lead_width * 0.36
@@ -436,7 +412,7 @@ radical_make_layout :: proc(
     baseline_y := item_y + item.ascent
     style := dynview.style_by_id(item.style_id)
     base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
+        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     lead_width := dynview.radical_lead_width(ctx.font_size, base_advance)
     front_padding, back_padding :=
         dynview.radical_side_paddings(ctx.font_size, base_advance)
@@ -661,7 +637,7 @@ draw_recursive_fraction_item :: #force_inline proc(
             baseline_y + divider_half + divider_gap + denominator_program^.ascent})
 
     base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
+        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     side_padding := dynview.fraction_side_padding(ctx.font_size, base_advance)
     rl.DrawLineEx(
         rl.Vector2{draw_x + side_padding, baseline_y},
@@ -1031,7 +1007,7 @@ stretch_delimiter_glyph_params :: #force_inline proc(
         state = ctx.state,
         style = style,
         fallback_font = ctx.font,
-        wrap_advance = ctx.runtime^.compile_cache.last_wrap_advance,
+        wrap_advance = ctx.runtime^.compile_cache.last_cell_width,
         font_size = ctx.font_size,
         content_height = item.ascent + item.descent,
         content_ascent = item.ascent,
@@ -1053,7 +1029,7 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
 
     baseline_y := item_y + item.ascent
     base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
+        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     side_padding := dynview.stretch_delimiter_side_padding(ctx.font_size, base_advance)
 
     left_draw_x := draw_x + side_padding
@@ -1117,7 +1093,7 @@ matrix_draw_geometry :: proc(
         },
         cols)
     base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
+        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     return Matrix_Draw_Geometry{
         alignments = alignments,
         rows = rows,
@@ -1291,7 +1267,7 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
         dynview.style_ascent_descent(style, m.glyph_font_size)
     glyph_cols := max(1, dynview.text_codepoint_count_span(text, 0, len(text)))
     glyph_advance := dynview.effective_advance(style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * glyph_scale
+        ctx.runtime^.compile_cache.last_cell_width) * glyph_scale
     m.glyph_width = f32(glyph_cols) * glyph_advance
 
     m.script_style = dynview.style_by_id(item.script_style_id)
@@ -1302,7 +1278,7 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
         dynview.style_ascent_descent(m.script_style, m.limit_font_size)
     m.limit_height = limit_ascent + limit_descent
     m.limit_advance = dynview.effective_advance(m.script_style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * limit_scale
+        ctx.runtime^.compile_cache.last_cell_width) * limit_scale
     m.limit_gap = dynview.large_op_limit_gap_for_kind(
         item.large_op_kind, ctx.font_size, item.script_gap)
 
@@ -1492,7 +1468,7 @@ draw_text_run_underline :: proc(params: Text_Run_Draw_Params) {
         return
     }
     underline_width := f32(params.item.col_span) * dynview.effective_advance(
-        params.style, params.runtime^.compile_cache.last_wrap_advance)
+        params.style, params.runtime^.compile_cache.last_cell_width)
     underline_y := params.item_y + params.font_size + 1
     rl.DrawLineEx(
         rl.Vector2{params.draw_x, underline_y},
@@ -1514,11 +1490,16 @@ draw_inline_box_outline :: #force_inline proc(
     item_x, item_y: f32,
     color: rl.Color) {
 
-    top_left := rl.Vector2{item_x, item_y}
-    top_right := rl.Vector2{item_x + item.draw_width, item_y}
-    bottom_left := rl.Vector2{item_x, item_y + item.draw_height}
-    bottom_right := rl.Vector2{item_x + item.draw_width, item_y + item.draw_height}
     stroke := max(1.0, item.inline_atom_stroke)
+    inset := stroke * 0.5
+    left := item_x + inset
+    right := item_x + item.draw_width - inset
+    top := item_y + inset
+    bottom := item_y + item.draw_height - inset
+    top_left := rl.Vector2{left, top}
+    top_right := rl.Vector2{right, top}
+    bottom_left := rl.Vector2{left, bottom}
+    bottom_right := rl.Vector2{right, bottom}
     rl.DrawLineEx(top_left, top_right, stroke,
         shape_edge_color_or(item.shape_edge_color_1, color))
     rl.DrawLineEx(top_right, bottom_right, stroke,
@@ -1535,16 +1516,15 @@ draw_inline_circle_outline :: #force_inline proc(
     item_x, item_y: f32,
     color: rl.Color) {
 
-    center := rl.Vector2{item_x + item.draw_width * 0.5,
-        item_y + item.draw_height * 0.5}
-    rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
-    if item.inline_atom_stroke > 1 {
-        rl.DrawCircleLines(
-            i32(center.x),
-            i32(center.y),
-            max(1.0, item.draw_height * 0.5 - 1),
-            color)
+    stroke := max(1.0, item.inline_atom_stroke)
+    center := rl.Vector2{
+        item_x + item.draw_width * 0.5,
+        item_y + item.draw_height * 0.5,
     }
+    radius := max(0.5, (min(item.draw_width, item.draw_height) - stroke) * 0.5)
+    rl.DrawRing(center,
+        max(0.0, radius - stroke * 0.5), radius + stroke * 0.5,
+        0, 360, 64, color)
 }
 
 //   Draw one cached inline shape item.
@@ -1556,11 +1536,13 @@ draw_cached_inline_basic_item :: #force_inline proc(
 
     switch item.kind {
     case .Inline_Line:
+        stroke := max(1.0, item.inline_atom_stroke)
+        half_stroke := stroke * 0.5
         center_y := item_y + item.draw_height * 0.5
         rl.DrawLineEx(
-            rl.Vector2{item_x, center_y},
-            rl.Vector2{item_x + item.draw_width, center_y},
-            max(1.0, item.inline_atom_stroke),
+            rl.Vector2{item_x + half_stroke, center_y},
+            rl.Vector2{item_x + item.draw_width - half_stroke, center_y},
+            stroke,
             color)
     case .Inline_Box:
         draw_inline_box_outline(item, item_x, item_y, color)
@@ -1573,6 +1555,47 @@ draw_cached_inline_basic_item :: #force_inline proc(
     }
 }
 
+//   Draw one filled box and optional outline inside its intrinsic visual bounds.
+draw_inline_filled_box :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    item_x, item_y: f32,
+    color: rl.Color) {
+
+    stroke := max(0.0, item.inline_outline_stroke)
+    inset := stroke * 0.5
+    rect := rl.Rectangle{
+        item_x + inset,
+        item_y + inset,
+        max(0.5, item.draw_width - stroke),
+        max(0.5, item.draw_height - stroke),
+    }
+    rl.DrawRectangleRec(rect, color)
+    if stroke > 0 {
+        rl.DrawRectangleLinesEx(rect, max(1.0, stroke), style.color)
+    }
+}
+
+//   Draw one filled circle and optional outline inside its intrinsic visual bounds.
+draw_inline_filled_circle :: #force_inline proc(
+    style: Dynview_Text_Style,
+    item: core.Dynview_Layout_Item,
+    item_x, item_y: f32,
+    color: rl.Color) {
+
+    stroke := max(0.0, item.inline_outline_stroke)
+    center := rl.Vector2{item_x + item.draw_width * 0.5,
+        item_y + item.draw_height * 0.5}
+    radius := max(0.5,
+        (min(item.draw_width, item.draw_height) - stroke) * 0.5)
+    rl.DrawCircleV(center, radius, color)
+    if stroke > 0 {
+        rl.DrawRing(center,
+            max(0.0, radius - stroke * 0.5), radius + stroke * 0.5,
+            0, 360, 64, style.color)
+    }
+}
+
 //   Draw one cached filled inline shape item.
 draw_cached_inline_filled_item :: #force_inline proc(
     style: Dynview_Text_Style,
@@ -1582,25 +1605,9 @@ draw_cached_inline_filled_item :: #force_inline proc(
 
     switch item.kind {
     case .Inline_Filled_Box:
-        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-        rl.DrawRectangleRec(rect, color)
-        if item.inline_outline_stroke > 0 {
-            rl.DrawRectangleLinesEx(
-                rect, max(1.0, item.inline_outline_stroke), style.color)
-        }
+        draw_inline_filled_box(style, item, item_x, item_y, color)
     case .Inline_Filled_Circle:
-        center := rl.Vector2{item_x + item.draw_width * 0.5,
-            item_y + item.draw_height * 0.5}
-        radius := item.draw_height * 0.5
-        rl.DrawCircleV(center, radius, color)
-        if item.inline_outline_stroke > 0 {
-            stroke := max(1.0, item.inline_outline_stroke)
-            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
-            if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y),
-                    max(1.0, radius - 1), style.color)
-            }
-        }
+        draw_inline_filled_circle(style, item, item_x, item_y, color)
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
          .Stretch_Delimiter, .Matrix, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
@@ -1618,9 +1625,10 @@ draw_inline_pie_section_item :: #force_inline proc(
 
     center := rl.Vector2{item_x + item.pie_center_offset_x,
         item_y + item.pie_center_offset_y}
-    radius := max(
+    visual_radius := max(
         max(item.pie_center_offset_x, item.draw_width - item.pie_center_offset_x),
         max(item.pie_center_offset_y, item.draw_height - item.pie_center_offset_y))
+    radius := max(0.5, visual_radius - item.inline_atom_stroke * 0.5)
     outline_color := item.has_outline_color ? item.outline_color : style.color
     stroke := max(1.0, item.inline_outline_stroke)
     if item.pie_is_filled {
@@ -1640,7 +1648,10 @@ draw_inline_triangle_item :: #force_inline proc(
     item_x, item_y: f32,
     color: rl.Color) {
 
-    rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+    stroke := max(1.0, item.inline_atom_stroke)
+    inset := stroke * 0.5
+    rect := rl.Rectangle{item_x + inset, item_y + inset,
+        max(0.5, item.draw_width - stroke), max(0.5, item.draw_height - stroke)}
     draw_triangle_shape(rect,
         item.shape_is_filled,
         Triangle_Colors{
@@ -1649,7 +1660,7 @@ draw_inline_triangle_item :: #force_inline proc(
             shape_edge_color_or(item.shape_edge_color_2, color),
             shape_edge_color_or(item.shape_edge_color_3, color),
         },
-        max(1.0, item.inline_atom_stroke))
+        stroke)
 }
 
 //   Draw one inline pentagon atom with optional fill and per-edge colors.
@@ -1658,7 +1669,10 @@ draw_inline_pentagon_item :: #force_inline proc(
     item_x, item_y: f32,
     color: rl.Color) {
 
-    rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+    stroke := max(1.0, item.inline_atom_stroke)
+    inset := stroke * 0.5
+    rect := rl.Rectangle{item_x + inset, item_y + inset,
+        max(0.5, item.draw_width - stroke), max(0.5, item.draw_height - stroke)}
     draw_pentagon_shape(rect,
         item.shape_is_filled,
         Pentagon_Colors{
@@ -1669,7 +1683,7 @@ draw_inline_pentagon_item :: #force_inline proc(
             shape_edge_color_or(item.shape_edge_color_4, color),
             shape_edge_color_or(item.shape_edge_color_5, color),
         },
-        max(1.0, item.inline_atom_stroke))
+        stroke)
 }
 
 //   Draw one cached advanced inline shape item.
@@ -1683,10 +1697,14 @@ draw_cached_inline_advanced_item :: #force_inline proc(
     case .Inline_Pie_Section:
         draw_inline_pie_section_item(style, item, item_x, item_y, color)
     case .Inline_Perpendicular:
-        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+        stroke := max(1.0, item.inline_atom_stroke)
+        inset := stroke * 0.5
+        rect := rl.Rectangle{item_x + inset, item_y + inset,
+            max(0.5, item.draw_width - stroke),
+            max(0.5, item.draw_height - stroke)}
         draw_perpendicular_shape(
             rect,
-            max(1.0, item.inline_atom_stroke),
+            stroke,
             Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
     case .Inline_Triangle:
         draw_inline_triangle_item(item, item_x, item_y, color)
@@ -1726,12 +1744,15 @@ draw_cached_line :: proc(
     line_top, text_padding: f32) {
 
     runtime := ctx.runtime
+    cache := &runtime^.compile_cache
     item_end := line.item_start + line.item_count
     for item_index in line.item_start..<item_end {
         item := runtime^.compile_cache.layout_items[item_index]
         style := dynview.style_by_id(item.style_id)
-        item_x := ctx.panel.x + text_padding + item.x_offset
-        item_y := line_top + item.y_offset
+        item_x := ctx.panel.x + text_padding +
+            f32(item.col_start) * cache^.last_cell_width + item.content_offset_x
+        item_y := line_top + f32(item.row_offset) * cache^.last_cell_height +
+            item.content_offset_y
 
         if item.kind == .Text_Run ||
             item.kind == .Math_Block ||
@@ -1769,12 +1790,12 @@ draw_cached_layout :: proc(
     panel_bottom := panel.y + panel.height
     for line_index in 0..<cache^.layout_line_count {
         line := cache^.layout_lines[line_index]
-        line_top := panel.y + text_padding + line.y_offset - scroll_y
-        line_bottom := line_top + line.line_height
-        top_pad, bottom_pad := line_visual_padding(cache, line, ctx.font_size)
+        line_top := panel.y + text_padding +
+            f32(line.row_start) * cache^.last_cell_height - scroll_y
+        line_bottom := line_top + f32(line.row_span) * cache^.last_cell_height
         if layout_line_outside_panel(
-            line_top - top_pad,
-            line_bottom + bottom_pad,
+            line_top,
+            line_bottom,
             panel_top,
             panel_bottom) {
             continue

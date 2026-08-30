@@ -211,6 +211,106 @@ count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> i
     return count
 }
 
+//   Find a target's row in one visible depth-first tree branch.
+tree_visible_row_limited :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    node, target: ^core.Euclid_Julia_Animation_Interface,
+    row: ^int,
+    remaining: int) -> (int, bool) {
+
+    if ji == nil || node == nil || target == nil || remaining <= 0 {
+        return 0, false
+    }
+    current_row := row^
+    row^ += 1
+    if node == target {
+        return current_row, true
+    }
+    if !node^.is_expanded {
+        return 0, false
+    }
+    for child, steps := node^.first_child, 0;
+        child != nil && steps < ji^.animation_count;
+        child, steps = child^.next_sibling, steps + 1 {
+
+        if found_row, found := tree_visible_row_limited(
+            ji, child, target, row, remaining - 1); found {
+            return found_row, true
+        }
+    }
+    return 0, false
+}
+
+//   Find a target's row across all visible root trees.
+tree_visible_row :: proc(
+    ji: ^core.Euclid_Julia_Interface,
+    target: ^core.Euclid_Julia_Animation_Interface) -> (int, bool) {
+
+    if ji == nil || target == nil {
+        return 0, false
+    }
+    row := 0
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        if node^.parent != nil {
+            continue
+        }
+        if found_row, found := tree_visible_row_limited(
+            ji, node, target, &row, ji^.animation_count); found {
+            return found_row, true
+        }
+    }
+    return 0, false
+}
+
+//   Return the smallest clamped scroll that fully reveals one tree row.
+tree_reveal_scroll :: proc(
+    current_scroll: f32,
+    row_index: int,
+    viewport_height, content_height: f32) -> f32 {
+
+    safe_viewport_height := max(viewport_height, 0)
+    max_scroll := max(content_height - safe_viewport_height, 0)
+    scroll := clamp(current_scroll, 0, max_scroll)
+    row_top := f32(row_index) * TREE_ROW_HEIGHT
+    row_bottom := row_top + TREE_ROW_HEIGHT
+    if row_top < scroll {
+        scroll = row_top
+    } else if row_bottom > scroll + safe_viewport_height {
+        scroll = row_bottom - safe_viewport_height
+    }
+    return clamp(scroll, 0, max_scroll)
+}
+
+//   Resolve and consume one stable tree reveal request when its row is visible.
+apply_pending_tree_reveal :: proc(
+    params: Tree_List_Params,
+    content_height: f32) {
+
+    ui_runtime := params.ui_runtime
+    if ui_runtime == nil || !ui_runtime^.tree_reveal_pending {
+        return
+    }
+    target: ^core.Euclid_Julia_Animation_Interface
+    for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
+        if node^.stable_id == ui_runtime^.tree_reveal_stable_id {
+            target = node
+            break
+        }
+    }
+    row, found := tree_visible_row(params.ji, target)
+    if !found {
+        return
+    }
+    params.scroll_y^ = tree_reveal_scroll(
+        params.scroll_y^, row, params.list_panel.height, content_height)
+    ui_runtime^.tree_scroll_dragging = false
+    ui_runtime^.tree_scroll_drag_off = 0
+    if scroll_container_owns_press(&ui_runtime^.ui_press_owner, 1003) {
+        ui_runtime^.ui_press_owner = {}
+    }
+    ui_runtime^.tree_reveal_pending = false
+}
+
 //   Merge child tree hit results into a single accumulator.
 merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
     if src.selected_node != nil {
@@ -574,6 +674,7 @@ draw_tree_list_panel :: proc(params: Tree_List_Params) {
     }
 
     content_h := f32(total_rows) * TREE_ROW_HEIGHT
+    apply_pending_tree_reveal(params, content_h)
     scroll_begin := tree_list_scroll_begin(params, content_h)
     tree_list_walk_and_release(params, scroll_begin)
     tree_list_scroll_end(params, content_h, scroll_begin)

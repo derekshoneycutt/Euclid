@@ -1,9 +1,11 @@
 package view
 
+import "../core"
 import capture "../evidence/capture"
 import "../diagnostics"
 import artifact "../evidence/artifact"
 import scenario "../evidence/scenario"
+import evidence_trace "../evidence/trace"
 
 import "core:log"
 import "core:os"
@@ -100,4 +102,78 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
     testing.expect_value(t, captured.fixed_step, u64(11))
     testing.expect_value(t,
         scenario_runtime_update(&runtime, 2), scenario.Run_Status.Passed)
+}
+
+// Verify accepted scenario Scratchpad work owns bottom scrolling until its reply.
+@(test)
+scenario_scratchpad_submission_marks_forced_bottom_scroll :: proc(t: ^testing.T) {
+    ui_runtime := core.Euclid_Ui_Runtime_State{
+        text_scroll_dragging = true,
+        text_scroll_drag_off = 7,
+        ui_press_owner = {
+            active = true,
+            kind = .Scrollbar,
+            id = 1002,
+        },
+    }
+
+    scenario_mark_scratchpad_submitted(&ui_runtime, 42)
+
+    testing.expect(t, ui_runtime.scratchpad_bottom_pinned)
+    testing.expect_value(t, ui_runtime.scratchpad_forced_bottom_request_id, u64(42))
+    testing.expect(t, !ui_runtime.text_scroll_dragging)
+    testing.expect_value(t, ui_runtime.text_scroll_drag_off, f32(0))
+    testing.expect(t, !ui_runtime.ui_press_owner.active)
+}
+
+// Verify scenario selection uses the programmatic tree synchronization path.
+@(test)
+scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State)
+    defer free(state)
+    service := new(core.Julia_Runtime_Service)
+    defer free(service)
+    state^.julia_runtime_service = service
+    ji := &state^.julia_interface_slots[0]
+    state^.julia_interface = ji
+    nodes: [2]core.Euclid_Julia_Animation_Interface
+    nodes[0].name = "Group"
+    nodes[1].name = "Target"
+    nodes[0].next_in_registry = &nodes[1]
+    nodes[0].first_child = &nodes[1]
+    nodes[1].parent = &nodes[0]
+    nodes[1].stable_id[0] = 7
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    command_text, copied := scenario.text_copy("Target")
+    testing.expect(t, copied)
+    command := scenario.Command{kind = .Select_Animation, text = command_text}
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+
+    handled, accepted := scenario_issue_julia_action(&runtime, &command, &identity)
+
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, ji.selected_animation, &nodes[1])
+    testing.expect(t, nodes[0].is_expanded && nodes[1].is_selected)
+    testing.expect(t, state^.ui_runtime.tree_reveal_pending)
+    testing.expect_value(t, identity.kind, evidence_trace.Correlation_Kind.Animation)
+}
+
+// Verify rejected scenario Scratchpad work does not mutate display scroll state.
+@(test)
+scenario_rejected_scratchpad_submission_preserves_scroll_state :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State)
+    defer free(state)
+    state^.ui_runtime.text_scroll_dragging = true
+    command_text, copied := scenario.text_copy("1 + 1")
+    testing.expect(t, copied)
+    command := scenario.Command{kind = .Submit_Scratchpad, text = command_text}
+    identity: evidence_trace.Identity
+
+    testing.expect(t, !scenario_submit_scratchpad(state, &command, &identity))
+    testing.expect(t, state^.ui_runtime.text_scroll_dragging)
+    testing.expect(t, !state^.ui_runtime.scratchpad_bottom_pinned)
+    testing.expect_value(t,
+        state^.ui_runtime.scratchpad_forced_bottom_request_id, u64(0))
 }

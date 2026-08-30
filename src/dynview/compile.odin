@@ -641,9 +641,10 @@ rebuild_one_copy_hit_target :: proc(
     start_line := cache^.layout_lines[line_span.first_line]
     end_line := cache^.layout_lines[line_span.last_line]
     row_top := layout.panel.y + layout.text_padding +
-        start_line.y_offset - layout.scroll_y
-    row_bottom := layout.panel.y + layout.text_padding + end_line.y_offset +
-        end_line.line_height - layout.scroll_y
+        f32(start_line.row_start) * cache^.last_cell_height - layout.scroll_y
+    row_bottom := layout.panel.y + layout.text_padding +
+        f32(end_line.row_start + end_line.row_span) * cache^.last_cell_height -
+        layout.scroll_y
     if row_bottom < panel_top || row_top > panel_bottom {
         return last_hover_bottom
     }

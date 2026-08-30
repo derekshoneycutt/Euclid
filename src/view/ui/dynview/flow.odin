@@ -358,7 +358,8 @@ draw_pentagon_shape :: proc(
 
     center_x := rect.x + rect.width * 0.5
     center_y := rect.y + rect.height * 0.5
-    radius := max(1.0, min(rect.width, rect.height) * 0.5)
+    radius_x := max(1.0, rect.width * 0.5)
+    radius_y := max(1.0, rect.height * 0.5)
     start_angle: f32 = -90.0
 
     points: [5]rl.Vector2
@@ -366,8 +367,8 @@ draw_pentagon_shape :: proc(
         angle := start_angle + f32(i) * 72.0
         radians := angle * f32(math.PI) / 180.0
         points[i] = rl.Vector2{
-            center_x + radius * math.cos_f32(radians),
-            center_y + radius * math.sin_f32(radians),
+            center_x + radius_x * math.cos_f32(radians),
+            center_y + radius_y * math.sin_f32(radians),
         }
     }
 
@@ -404,7 +405,7 @@ flow_inline_shape_frame :: proc(
         max_cols = 1
     }
 
-    cols := dynview.inline_box_cols(cmd, style, max_cols)
+    cols := dynview.inline_box_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
     if flow^.col > 0 && flow^.col + cols > max_cols {
         flow^.row += 1
         flow^.col = 0
@@ -621,7 +622,7 @@ flow_consume_inline_box :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynview.inline_box_cols(cmd, style, max_cols)
+    cols := dynview.inline_box_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
     flow_wrap_for_cols(flow, cols, max_cols)
 
     row_y, visible := flow_row_position(flow, draw_ctx)
@@ -716,7 +717,8 @@ flow_consume_inline_circle :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynview.inline_pie_section_cols(cmd, style, max_cols)
+    cols := dynview.inline_pie_section_cols(
+        cmd, style, draw_ctx^.wrap_advance, max_cols)
     flow_wrap_for_cols(flow, cols, max_cols)
 
     frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
@@ -737,7 +739,7 @@ flow_consume_inline_filled_box :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynview.inline_box_cols(cmd, style, max_cols)
+    cols := dynview.inline_box_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
     flow_wrap_for_cols(flow, cols, max_cols)
 
     frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
@@ -784,7 +786,8 @@ flow_consume_inline_filled_circle :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynview.inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_circle_cols(
+        cmd, style, draw_ctx^.wrap_advance, max_cols)
     flow_wrap_for_cols(flow, cols, max_cols)
 
     frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
@@ -844,7 +847,8 @@ flow_consume_inline_pie_section :: proc(
     draw_ctx: ^Dynview_Draw_Context) {
 
     max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynview.inline_circle_cols(cmd, style, max_cols)
+    cols := dynview.inline_circle_cols(
+        cmd, style, draw_ctx^.wrap_advance, max_cols)
     flow_wrap_for_cols(flow, cols, max_cols)
 
     frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)

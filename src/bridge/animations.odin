@@ -420,6 +420,38 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
     return true
 }
 
+//   Synchronize one programmatic animation selection and request its tree reveal.
+select_animation_programmatically :: proc(
+    state: ^core.Euclid_General_State,
+    selected: ^core.Euclid_Julia_Animation_Interface) -> bool {
+
+    if state == nil || state^.julia_interface == nil || selected == nil {
+        return false
+    }
+
+    ji := state^.julia_interface
+    found := false
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        found = found || node == selected
+    }
+    if !found {
+        return false
+    }
+
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        node^.is_selected = node == selected
+    }
+    ji^.selected_animation = selected
+    ancestor := selected^.parent
+    for steps := 0; ancestor != nil && steps < ji^.animation_count; steps += 1 {
+        ancestor^.is_expanded = true
+        ancestor = ancestor^.parent
+    }
+    state^.ui_runtime.tree_reveal_pending = true
+    state^.ui_runtime.tree_reveal_stable_id = selected^.stable_id
+    return true
+}
+
 //   Select the first non-scratchpad animation as default selection.
 select_default_animation :: proc(state: ^core.Euclid_General_State) {
     if state == nil || state^.julia_interface == nil {
@@ -447,16 +479,7 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
         return
     }
 
-    it = animation_iterator_begin(ji)
-    for {
-        node := animation_iterator_next(&it)
-        if node == nil {
-            break
-        }
-        node^.is_selected = (node == target)
-    }
-
-    ji^.selected_animation = target
+    _ = select_animation_programmatically(state, target)
 }
 
 //   Select one animation by stable UUID without involving UI input handling.
@@ -480,12 +503,7 @@ select_animation_by_stable_id :: proc(
         return false
     }
 
-    ji := state^.julia_interface
-    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        node^.is_selected = node == selected
-    }
-    ji^.selected_animation = selected
-    return true
+    return select_animation_programmatically(state, selected)
 }
 
 //   Invoke one harness scenario callback on the Julia owner thread.
@@ -581,7 +599,9 @@ restore_current_animation_after_reload :: proc(
 
     restored_animation := find_animation_by_stable_id(state, animation_stable_id)
     if restored_animation != nil {
-        state^.julia_interface^.selected_animation = restored_animation
+        if !select_animation_programmatically(state, restored_animation) {
+            return false
+        }
         return change_current_animation_loop(state, restored_animation)
     }
 

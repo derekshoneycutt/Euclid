@@ -1012,6 +1012,9 @@ Dynview_Layout_Item :: struct {
     line_index: int,
     col_start: int,
     col_span: int,
+    row_offset: int,
+    row_span: int,
+    baseline_row: int,
     text_offset: int,
     text_len: int,
     script_sup_text_offset: int,
@@ -1048,8 +1051,9 @@ Dynview_Layout_Item :: struct {
     shape_edge_color_3: rl.Color,
     shape_edge_color_4: rl.Color,
     shape_edge_color_5: rl.Color,
-    x_offset: f32,
-    y_offset: f32,
+    content_offset_x: f32,
+    content_offset_y: f32,
+    overflows_horizontally: bool,
     draw_width: f32,
     draw_height: f32,
     pie_center_offset_x: f32,
@@ -1110,9 +1114,9 @@ Dynview_Math_Program :: struct {
 Dynview_Layout_Line :: struct {
     item_start: int,
     item_count: int,
-    y_offset: f32,
-    line_height: f32,
-    baseline: f32,
+    row_start: int,
+    row_span: int,
+    baseline_row: int,
     max_ascent: f32,
     max_descent: f32,
 }
@@ -1153,7 +1157,8 @@ Dynview_Compile_Cache :: struct {
     last_panel_width: f32,
     last_panel_height: f32,
     last_font_size: f32,
-    last_wrap_advance: f32,
+    last_cell_width: f32,
+    last_cell_height: f32,
     last_style_revision: u64,
 
     last_invalidation_mask: u32,
@@ -1551,6 +1556,8 @@ Ui_Press_Owner_State :: struct {
 
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
+    tree_reveal_pending: bool,
+    tree_reveal_stable_id: uuid.Identifier,
     view_text_scroll_y: f32,
 
     tree_scroll_dragging: bool,
@@ -1596,6 +1603,7 @@ Euclid_Ui_Runtime_State :: struct {
     scratchpad_input_mode: Scratchpad_Input_Mode,
     scratchpad_input_generation: u64,
     scratchpad_pending_submit_request_id: u64,
+    scratchpad_forced_bottom_request_id: u64,
     scratchpad_latest_completion_request_id: u64,
     scratchpad_history_reset_pending: bool,
     scratchpad_last_output_len: int,

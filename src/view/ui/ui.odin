@@ -128,7 +128,8 @@ prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
 
     text_panel := view_text_content_panel(regions.text_rect)
     dynview.track_panel(&state^.dynview, text_panel)
-    dynview.track_font(&state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE)
+    dynview.track_font(
+        &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
     dynview.track_style(&state^.dynview, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
     return dynview.compile_is_needed(&state^.dynview)
 }

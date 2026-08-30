@@ -185,7 +185,24 @@ scenario_runtime_after_present :: proc(
     return status
 }
 
-//   Route one animation or Julia-service command through its ordinary owner API.
+//   Record display-owned scrolling intent for one accepted scenario submission.
+scenario_mark_scratchpad_submitted :: proc(
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    request_id: u64) {
+
+    ui_runtime^.scratchpad_bottom_pinned = true
+    ui_runtime^.scratchpad_forced_bottom_request_id = request_id
+    ui_runtime^.text_scroll_dragging = false
+    ui_runtime^.text_scroll_drag_off = 0
+    if ui_runtime^.ui_press_owner.active &&
+        ui_runtime^.ui_press_owner.kind == .Scrollbar &&
+        ui_runtime^.ui_press_owner.id == 1002 {
+
+        ui_runtime^.ui_press_owner = {}
+    }
+}
+
+//   Route one Scratchpad command through its ordinary owner API.
 scenario_submit_scratchpad :: proc(
     state: ^Euclid_General_State, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> bool {
@@ -195,6 +212,7 @@ scenario_submit_scratchpad :: proc(
     if !submitted {
         return false
     }
+    scenario_mark_scratchpad_submitted(&state^.ui_runtime, request_id)
     identity.kind = .Runtime_Request
     identity.id = request_id
     identity.generation = state.julia_runtime_service.runtime_generation
@@ -216,7 +234,9 @@ scenario_issue_julia_action :: proc(
         if selected == nil {
             return true, false
         }
-        state.julia_interface.selected_animation = selected
+        if !julia.select_animation_programmatically(state, selected) {
+            return true, false
+        }
         identity.kind = .Animation
         identity.id = state.julia_runtime_service.animation_generation + 1
         identity.generation = identity.id

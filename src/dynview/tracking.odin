@@ -58,19 +58,25 @@ track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
     invalidate(runtime, DYNVIEW_INVALIDATE_PANEL)
 }
 
-//   Track font/wrap metrics and invalidate when text layout metrics shift.
-track_font :: proc(runtime: ^core.Dynview_System, font_size, wrap_advance: f32) {
+//   Track canonical font and cell metrics, invalidating when text layout shifts.
+track_font :: proc(
+    runtime: ^core.Dynview_System,
+    font_size, cell_width, cell_height: f32) {
+
     if runtime == nil {
         return
     }
 
     cache := &runtime^.compile_cache
-    if font_size == cache^.last_font_size && wrap_advance == cache^.last_wrap_advance {
+    if font_size == cache^.last_font_size &&
+        cell_width == cache^.last_cell_width &&
+        cell_height == cache^.last_cell_height {
         return
     }
 
     cache^.last_font_size = font_size
-    cache^.last_wrap_advance = wrap_advance
+    cache^.last_cell_width = cell_width
+    cache^.last_cell_height = cell_height
     invalidate(runtime, DYNVIEW_INVALIDATE_FONT)
 }
 

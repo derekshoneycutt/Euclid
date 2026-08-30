@@ -333,9 +333,16 @@ apply_scratchpad_async_result :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     slot: ^julia.Scratchpad_Async_Slot) {
 
+    forced_submit := ui_runtime^.scratchpad_forced_bottom_request_id != 0 &&
+        slot^.kind == .Submit &&
+        slot^.request_id == ui_runtime^.scratchpad_forced_bottom_request_id
     if slot^.kind == .Submit &&
         slot^.request_id == ui_runtime^.scratchpad_pending_submit_request_id {
         ui_runtime^.scratchpad_pending_submit_request_id = 0
+    }
+    if forced_submit {
+        ui_runtime^.scratchpad_forced_bottom_request_id = 0
+        ui_runtime^.scratchpad_bottom_pinned = true
     }
     if slot^.input_generation != ui_runtime^.scratchpad_input_generation {
         return
@@ -472,7 +479,9 @@ scratchpad_sync_scroll :: proc(
     })
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_begin.scroll_y_out
 
-    if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll {
+    if state^.ui_runtime.view_text_scroll_y != pre_wheel_scroll &&
+        ui_runtime^.scratchpad_forced_bottom_request_id == 0 {
+
         ui_runtime^.scratchpad_bottom_pinned = scratchpad_scroll_is_at_bottom(
             state^.ui_runtime.view_text_scroll_y, layout.max_scroll)
     }
@@ -669,7 +678,9 @@ scratchpad_finish_scroll :: proc(
     state^.ui_runtime.view_text_scroll_y = scratch_scroll_end.scroll_y_out
     ui_runtime.text_scroll_dragging = scratch_scroll_end.state_out.is_dragging_thumb
     ui_runtime.text_scroll_drag_off = scratch_scroll_end.state_out.drag_offset_y
-    if state^.ui_runtime.view_text_scroll_y != pre_drag_scroll {
+    if state^.ui_runtime.view_text_scroll_y != pre_drag_scroll &&
+        ui_runtime^.scratchpad_forced_bottom_request_id == 0 {
+
         ui_runtime^.scratchpad_bottom_pinned = scratchpad_scroll_is_at_bottom(
             state^.ui_runtime.view_text_scroll_y, layout.max_scroll)
     }

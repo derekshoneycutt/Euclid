@@ -113,7 +113,7 @@ script_metrics :: #force_inline proc(
         descent = descent,
         top_pad = top_pad,
         bottom_pad = bottom_pad,
-        advance = effective_advance(style, cache^.last_wrap_advance) * resolved_scale,
+        advance = effective_advance(style, cache^.last_cell_width) * resolved_scale,
     }
 }
 
@@ -191,7 +191,7 @@ math_program_text_item :: #force_inline proc(
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
         text_len = cmd.text_len,
-        draw_width = f32(cols) * effective_advance(style, cache^.last_wrap_advance),
+        draw_width = f32(cols) * effective_advance(style, cache^.last_cell_width),
         draw_height = ascent + descent,
         ascent = ascent,
         descent = descent,
@@ -316,7 +316,7 @@ large_op_metrics :: proc(
     glyph_cols := max(1, text_codepoint_count_span(
         text_for_command(buffer, cmd), 0, len(text_for_command(buffer, cmd))))
     glyph_width := f32(glyph_cols) *
-        effective_advance(style, cache^.last_wrap_advance) * glyph_scale
+        effective_advance(style, cache^.last_cell_width) * glyph_scale
     gap := large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
     ascent := glyph_ascent if sup.cols == 0 else
         glyph_ascent + sup.ascent + sup.descent + gap
@@ -384,7 +384,7 @@ math_program_recursive_fraction_item :: #force_inline proc(
         return core.Dynview_Layout_Item{}, false
     }
 
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    base_advance := effective_advance(style, cache^.last_cell_width)
     side_padding := fraction_side_padding(font_size, base_advance)
     divider_gap := fraction_vertical_gap(font_size)
     divider_thickness := max(1.0, cmd.accent_thickness * font_size)
@@ -442,13 +442,13 @@ stretch_delimiter_widths :: #force_inline proc(
     style: Dynview_Text_Style,
     dimensions: Stretch_Delimiter_Dimensions) -> f32 {
 
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    base_advance := effective_advance(style, cache^.last_cell_width)
     side_padding := stretch_delimiter_side_padding(dimensions.font_size, base_advance)
     left_width := stretch_delimiter_width(
-        style, cache^.last_wrap_advance, dimensions.font_size,
+        style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.accent_mode)
     right_width := stretch_delimiter_width(
-        style, cache^.last_wrap_advance, dimensions.font_size,
+        style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.radical_mode)
     return max(dimensions.content_width + left_width + right_width + side_padding * 2.0,
         base_advance)
@@ -597,7 +597,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
     top_pad := cell_dims.top_pad
     bottom_pad := cell_dims.bottom_pad
 
-    base_advance := effective_advance(style, cache^.last_wrap_advance)
+    base_advance := effective_advance(style, cache^.last_cell_width)
     draw_width, total_height := matrix_aggregate_dims(
         &cell_dims,
         matrix_info.rows,
@@ -699,7 +699,7 @@ radical_geometry :: proc(
         ascent = max(ascent, ctx.child^.ascent * 0.62 + index.ascent * 0.50 + script_top)
         descent = max(descent, index.descent * 0.2)
     }
-    advance := effective_advance(ctx.style, ctx.cache^.last_wrap_advance)
+    advance := effective_advance(ctx.style, ctx.cache^.last_cell_width)
     lead := max(radical_lead_width(ctx.font_size, advance),
         f32(index.cols) * index.advance + max(1.0, advance * 1.05))
     front, back := radical_side_paddings(ctx.font_size, advance)
