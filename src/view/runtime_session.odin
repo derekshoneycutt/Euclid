@@ -381,6 +381,8 @@ shutdown_runtime_session :: proc(
         &session.state^.evidence_session, export_succeeded)
     evidence_exit_failed := evidence_session.session_should_fail_process(
         &session.state^.evidence_session)
+    julia.destroy_julia_runtime_service(session.julia_service)
+    session.state^.julia_runtime_service = nil
     free_animations_state(session.state)
     if evidence_exit_failed || !artifact_succeeded {
         return 1

@@ -80,8 +80,9 @@ const SCENARIO_ACTIONS = [
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
     "animation_selected", "animation_cycle_boundary", "scene_batch_committed",
-    "constraint_solve_completed", "frame_presented", "capture_completed",
-    "gif_completed", "checkpoint_stored", "runtime_shutdown_complete"]
+    "constraint_solve_completed", "dynview_published", "frame_presented",
+    "capture_completed", "gif_completed", "checkpoint_stored",
+    "runtime_shutdown_complete"]
 
 const SCENARIO_STATES = [
     "runtime_ready", "runtime_idle", "animation_idle", "scratchpad_idle",

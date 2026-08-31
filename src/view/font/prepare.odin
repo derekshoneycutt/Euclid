@@ -101,6 +101,10 @@ prepare_populate :: proc(
         return false
     }
     prepared.face_glyph_count = info.numGlyphs
+    ascent: i32
+    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
+    prepared.raster_ascent = f32(ascent) *
+        stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
     metrics_ready := prepare_complete_glyph_metrics(
         info, request, prepared.glyphs) if request.complete_face else
         prepare_glyph_metrics(info, request, prepared.glyphs)

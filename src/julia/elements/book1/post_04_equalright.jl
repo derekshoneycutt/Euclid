@@ -72,35 +72,29 @@ const CompassRiseDuration = 1.8f0
 const MoveAngleDuration = 2.0f0
 const HidePauseDuration = 1.5f0
 
-const MetaAngle1Line1HostId = 1
-const MetaAngle1Line1Joint1Id = 2
-const MetaAngle1Line1Joint2Id = 3
-const MetaAngle1Line2HostId = 4
-const MetaAngle1Line2Joint1Id = 5
-const MetaAngle1Line2Joint2Id = 6
-const MetaMarker1HostId = 7
-const MetaMarker1StartId = 8
-const MetaMarker1EndId = 9
-const MetaAngle2Line1HostId = 11
-const MetaAngle2Line1Joint1Id = 12
-const MetaAngle2Line1Joint2Id = 13
-const MetaAngle2Line2HostId = 14
-const MetaAngle2Line2Joint1Id = 15
-const MetaAngle2Line2Joint2Id = 16
-const MetaMarker2HostId = 17
-const MetaMarker2StartId = 18
-const MetaMarker2EndId = 19
-const MetaAngle3Line1HostId = 21
-const MetaAngle3Line1Joint1Id = 22
-const MetaAngle3Line1Joint2Id = 23
-const MetaAngle3Line2HostId = 24
-const MetaAngle3Line2Joint1Id = 25
-const MetaAngle3Line2Joint2Id = 26
-const MetaMarker3HostId = 27
-const MetaMarker3StartId = 28
-const MetaMarker3EndId = 29
-const MetaPhase = 200
-const MetaTimer = 201
+"""Stable native handles for one line owned by the animation."""
+struct LineIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Stable native handles for one circle owned by the animation."""
+struct CircleIds
+    host::Int64
+    start::Int64
+    finish::Int64
+end
+
+"""Complete immutable state for one equal-right-angles animation generation."""
+struct AnimationState
+    lines::NTuple{6,LineIds}
+    markers::NTuple{3,CircleIds}
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescend = 0f0
 const PhaseDrawLine = 10f0
@@ -125,6 +119,11 @@ const PhaseMoveAngle2 = 200f0
 const PhaseMoveAngle3 = 201f0
 const PhaseHideAll = 500f0
 
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.lines, state.markers, phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """Euclid Elements - Book I - Postulate: Equal Right Angles
@@ -140,70 +139,39 @@ That all right angles \euclidangle[color=grey60,radius=2,thickness=2] are equal 
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    angle1_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1HostId))
-    angle1_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1Joint1Id))
-    angle1_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1Joint2Id))
-    angle1_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2HostId))
-    angle1_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2Joint1Id))
-    angle1_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2Joint2Id))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    angle1_line1_host_id = state.lines[1].host
+    angle1_line1_joint1_id = state.lines[1].joint1
+    angle1_line1_joint2_id = state.lines[1].joint2
+    angle1_line2_host_id = state.lines[2].host
+    angle1_line2_joint1_id = state.lines[2].joint1
+    angle1_line2_joint2_id = state.lines[2].joint2
+    angle2_line1_host_id = state.lines[3].host
+    angle2_line1_joint1_id = state.lines[3].joint1
+    angle2_line1_joint2_id = state.lines[3].joint2
+    angle2_line2_host_id = state.lines[4].host
+    angle2_line2_joint1_id = state.lines[4].joint1
+    angle2_line2_joint2_id = state.lines[4].joint2
+    angle3_line1_host_id = state.lines[5].host
+    angle3_line1_joint1_id = state.lines[5].joint1
+    angle3_line1_joint2_id = state.lines[5].joint2
+    angle3_line2_host_id = state.lines[6].host
+    angle3_line2_joint1_id = state.lines[6].joint1
+    angle3_line2_joint2_id = state.lines[6].joint2
+    marker1_host_id = state.markers[1].host
+    marker1_start_id = state.markers[1].start
+    marker1_end_id = state.markers[1].finish
+    marker2_host_id = state.markers[2].host
+    marker2_start_id = state.markers[2].start
+    marker2_end_id = state.markers[2].finish
+    marker3_host_id = state.markers[3].host
+    marker3_start_id = state.markers[3].start
+    marker3_end_id = state.markers[3].finish
 
-    angle2_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1HostId))
-    angle2_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1Joint1Id))
-    angle2_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1Joint2Id))
-    angle2_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2HostId))
-    angle2_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2Joint1Id))
-    angle2_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2Joint2Id))
-
-    angle3_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1HostId))
-    angle3_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1Joint1Id))
-    angle3_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1Joint2Id))
-    angle3_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2HostId))
-    angle3_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2Joint1Id))
-    angle3_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2Joint2Id))
-
-    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1HostId))
-    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1StartId))
-    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1EndId))
-
-    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2HostId))
-    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2StartId))
-    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2EndId))
-
-    marker3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3HostId))
-    marker3_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3StartId))
-    marker3_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3EndId))
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [marker1_host_id, marker2_host_id, marker3_host_id,
@@ -263,6 +231,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
         state_ptr, marker3_end_id, Marker3Start)
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -302,58 +271,19 @@ function initialize(state_ptr::Ptr{Cvoid})
         Angle3LineColor, 0f0)
 
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1HostId, marker1.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1StartId, marker1.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker1EndId, marker1.end_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2HostId, marker2.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2StartId, marker2.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker2EndId, marker2.end_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker3HostId, marker3.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker3StartId, marker3.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarker3EndId, marker3.end_id)
-
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line1HostId, angle1_line1.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line1Joint1Id, angle1_line1.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line1Joint2Id, angle1_line1.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line2HostId, angle1_line2.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line2Joint1Id, angle1_line2.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle1Line2Joint2Id, angle1_line2.joint2_id)
-
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line1HostId, angle2_line1.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line1Joint1Id, angle2_line1.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line1Joint2Id, angle2_line1.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line2HostId, angle2_line2.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line2Joint1Id, angle2_line2.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle2Line2Joint2Id, angle2_line2.joint2_id)
-
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line1HostId, angle3_line1.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line1Joint1Id, angle3_line1.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line1Joint2Id, angle3_line1.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line2HostId, angle3_line2.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line2Joint1Id, angle3_line2.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaAngle3Line2Joint2Id, angle3_line2.joint2_id)
-
-    reset_cycle_state(state_ptr)
+    lines = (
+        LineIds(angle1_line1.host_id, angle1_line1.joint1_id, angle1_line1.joint2_id),
+        LineIds(angle1_line2.host_id, angle1_line2.joint1_id, angle1_line2.joint2_id),
+        LineIds(angle2_line1.host_id, angle2_line1.joint1_id, angle2_line1.joint2_id),
+        LineIds(angle2_line2.host_id, angle2_line2.joint1_id, angle2_line2.joint2_id),
+        LineIds(angle3_line1.host_id, angle3_line1.joint1_id, angle3_line1.joint2_id),
+        LineIds(angle3_line2.host_id, angle3_line2.joint1_id, angle3_line2.joint2_id))
+    markers = (
+        CircleIds(marker1.host_id, marker1.start_id, marker1.end_id),
+        CircleIds(marker2.host_id, marker2.start_id, marker2.end_id),
+        CircleIds(marker3.host_id, marker3.start_id, marker3.end_id))
+    reset_cycle_state(
+        state_ptr, AnimationState(lines, markers, PhaseDescend, 0f0))
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -362,65 +292,35 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    angle1_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1HostId))
-    angle1_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1Joint1Id))
-    angle1_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line1Joint2Id))
-    angle1_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2HostId))
-    angle1_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2Joint1Id))
-    angle1_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle1Line2Joint2Id))
-
-    angle2_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1HostId))
-    angle2_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1Joint1Id))
-    angle2_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line1Joint2Id))
-    angle2_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2HostId))
-    angle2_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2Joint1Id))
-    angle2_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle2Line2Joint2Id))
-
-    angle3_line1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1HostId))
-    angle3_line1_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1Joint1Id))
-    angle3_line1_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line1Joint2Id))
-    angle3_line2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2HostId))
-    angle3_line2_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2Joint1Id))
-    angle3_line2_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaAngle3Line2Joint2Id))
-
-    marker1_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1HostId))
-    marker1_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1StartId))
-    marker1_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker1EndId))
-
-    marker2_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2HostId))
-    marker2_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2StartId))
-    marker2_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker2EndId))
-
-    marker3_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3HostId))
-    marker3_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3StartId))
-    marker3_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarker3EndId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    angle1_line1_host_id = state.lines[1].host
+    angle1_line1_joint1_id = state.lines[1].joint1
+    angle1_line1_joint2_id = state.lines[1].joint2
+    angle1_line2_host_id = state.lines[2].host
+    angle1_line2_joint1_id = state.lines[2].joint1
+    angle1_line2_joint2_id = state.lines[2].joint2
+    angle2_line1_host_id = state.lines[3].host
+    angle2_line1_joint1_id = state.lines[3].joint1
+    angle2_line1_joint2_id = state.lines[3].joint2
+    angle2_line2_host_id = state.lines[4].host
+    angle2_line2_joint1_id = state.lines[4].joint1
+    angle2_line2_joint2_id = state.lines[4].joint2
+    angle3_line1_host_id = state.lines[5].host
+    angle3_line1_joint1_id = state.lines[5].joint1
+    angle3_line1_joint2_id = state.lines[5].joint2
+    angle3_line2_host_id = state.lines[6].host
+    angle3_line2_joint1_id = state.lines[6].joint1
+    angle3_line2_joint2_id = state.lines[6].joint2
+    marker1_host_id = state.markers[1].host
+    marker1_start_id = state.markers[1].start
+    marker1_end_id = state.markers[1].finish
+    marker2_host_id = state.markers[2].host
+    marker2_start_id = state.markers[2].start
+    marker2_end_id = state.markers[2].finish
+    marker3_host_id = state.markers[3].host
+    marker3_start_id = state.markers[3].start
+    marker3_end_id = state.markers[3].finish
 
     if angle1_line1_host_id < 0 || angle1_line2_host_id < 0 ||
         angle2_line1_host_id < 0 || angle2_line2_host_id < 0 ||
@@ -431,8 +331,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -754,13 +654,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseHideAll
         timer += dt
         if timer >= HidePauseDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

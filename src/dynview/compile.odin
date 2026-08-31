@@ -2,6 +2,7 @@ package dynview
 
 import "../core"
 
+import "core:os"
 import rl "vendor:raylib"
 
 //   Uniform handler shape for one dynview command kind during compilation.
@@ -693,7 +694,7 @@ append_visible_copy_hit_target :: proc(
 
 //   Return compiled copy payload string for one hit target index.
 copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) -> string {
-    if runtime == nil {
+    if runtime == nil || runtime^.cache_access_state != .Display_Readable {
         return ""
     }
 
@@ -714,8 +715,29 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
             target.payload_offset:target.payload_offset + target.payload_len])
 }
 
-//   Compile command buffer metadata plus plain-text stream projection when needed.
-compile_if_needed :: proc(runtime: ^core.Dynview_System) {
+//   Clear worker-built views after a failed compile without touching semantic input.
+clear_partial_derived_views :: proc(cache: ^core.Dynview_Compile_Cache) {
+    if cache == nil {
+        return
+    }
+    cache^.compiled_plain_text_len = 0
+    cache^.compiled_copy_payload_len = 0
+    cache^.copy_block_count = 0
+    cache^.copy_hit_target_count = 0
+    layout_reset_cache(cache)
+    cache^.is_valid = false
+}
+
+//   Compile invalidated command and layout caches through worker-owned arena lifetime.
+//
+// Side effects:
+//   - Resets `cache_arena` before mutating derived cache state for one rebuild.
+//   - Leaves the arena and cache unchanged when no rebuild is required.
+compile_if_needed :: proc(
+    runtime: ^core.Dynview_System,
+    cache_arena: ^core.Arena_Owner,
+    shaping_service: Math_Shaping_Service = {}) {
+
     if runtime == nil || !runtime^.enabled {
         return
     }
@@ -724,7 +746,13 @@ compile_if_needed :: proc(runtime: ^core.Dynview_System) {
         return
     }
 
+    if !compile_worker_can_rebuild(runtime, cache_arena) {
+        return
+    }
+    core.arena_owner_reset(cache_arena)
+
     cache := &runtime^.compile_cache
+    clear_shaped_records(cache)
     buffer := &runtime^.command_buffer
     cache^.last_error_code = DYNVIEW_STATUS_OK
     status := rebuild_compiled_plain_text(runtime)
@@ -735,22 +763,63 @@ compile_if_needed :: proc(runtime: ^core.Dynview_System) {
     runtime^.pending_invalidation_mask = 0
 
     if status != DYNVIEW_STATUS_OK {
-        mark_stream_error(runtime, status)
-        cache^.copy_hit_target_count = 0
-        cache^.layout_is_valid = false
+        fail_compile_rebuild(runtime, status)
+        return
+    }
+
+    shaping_status := rebuild_shaped_math_cache(
+        runtime, cache_arena, shaping_service)
+    if shaping_status != .Ok {
+        fail_compile_rebuild(runtime, shaped_builder_error_status(shaping_status))
         return
     }
 
     layout_status := rebuild_layout_cache(runtime)
     if layout_status != DYNVIEW_STATUS_OK {
-        mark_stream_error(runtime, layout_status)
-        cache^.copy_hit_target_count = 0
-        cache^.layout_is_valid = false
+        fail_compile_rebuild(runtime, layout_status)
         return
     }
 
     buffer^.has_stream_error = false
     cache^.is_valid = true
+}
+
+//   Mark one rebuild failure and discard all partially derived cache views.
+fail_compile_rebuild :: proc(runtime: ^core.Dynview_System, status: i32) {
+    mark_stream_error(runtime, status)
+    clear_partial_derived_views(&runtime^.compile_cache)
+    clear_shaped_records(&runtime^.compile_cache)
+}
+
+//   Validate worker ownership and arena lifetime before one invalidated rebuild.
+compile_worker_can_rebuild :: #force_inline proc(
+    runtime: ^core.Dynview_System,
+    cache_arena: ^core.Arena_Owner) -> bool {
+
+    if runtime^.cache_access_state != .Worker_Mutable ||
+        runtime^.cache_worker_thread_id != os.get_current_thread_id() {
+        return false
+    }
+    if cache_arena == nil || !cache_arena^.initialized {
+        mark_stream_error(runtime, DYNVIEW_STATUS_ILLEGAL_STATE)
+        return false
+    }
+    return true
+}
+
+//   Translate bounded shaping storage failures into stable Dynview status values.
+shaped_builder_error_status :: #force_inline proc(
+    status: core.Bounded_Builder_Status) -> i32 {
+
+    switch status {
+    case .Invalid_Argument:
+        return DYNVIEW_STATUS_INVALID_ARGUMENT
+    case .Sealed:
+        return DYNVIEW_STATUS_ILLEGAL_STATE
+    case .Ok, .Limit_Exceeded, .Allocation_Failed:
+        return DYNVIEW_STATUS_OUT_OF_CAPACITY
+    }
+    return DYNVIEW_STATUS_ILLEGAL_STATE
 }
 
 //   Return whether the current command stream or layout inputs require compilation.
@@ -770,7 +839,9 @@ scratchpad_text_or_fallback :: proc(
     runtime: ^core.Dynview_System,
     fallback_text: string) -> string {
 
-    if runtime == nil || !runtime^.enabled || !runtime^.compile_cache.is_valid ||
+    if runtime == nil || !runtime^.enabled ||
+        runtime^.cache_access_state != .Display_Readable ||
+        !runtime^.compile_cache.is_valid ||
         runtime^.command_buffer.has_stream_error {
         return fallback_text
     }

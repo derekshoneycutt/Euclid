@@ -681,38 +681,6 @@ function get_compass_joint2_position(state_ptr::Ptr{Cvoid})
 end
 
 """
-Set one animation metadata slot by index.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `pos` : Metadata slot index
-- `metadata` : Value to store in the slot
-"""
-function set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer, metadata::Real)
-    @ccall set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint, metadata::Cfloat)::Cvoid
-end
-
-"""
-Read one animation metadata slot by index.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `pos` : Metadata slot index
-
-Returns: slot value as `Real`
-"""
-function get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
-    ret = @ccall get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint)::Cfloat
-    return Real(ret)
-end
-
-"""
 Enable or disable drawing sound emission for the active animation.
 
 ------

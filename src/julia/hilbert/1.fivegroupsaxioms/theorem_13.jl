@@ -193,56 +193,57 @@ const CompassLiftDuration = 1.8f0
 const CompassSweepDuration = 0.95f0
 const FinalHoldDuration = 0.35f0
 
-const MetaRayHHostId = 1
-const MetaRayHJoint1Id = 2
-const MetaRayHJoint2Id = 3
-const MetaRayKHostId = 11
-const MetaRayKJoint1Id = 12
-const MetaRayKJoint2Id = 13
-const MetaRayHPrimeHostId = 21
-const MetaRayHPrimeJoint1Id = 22
-const MetaRayHPrimeJoint2Id = 23
-const MetaRayKPrimeHostId = 31
-const MetaRayKPrimeJoint1Id = 32
-const MetaRayKPrimeJoint2Id = 33
-const MetaRayLHostId = 41
-const MetaRayLJoint1Id = 42
-const MetaRayLJoint2Id = 43
-const MetaRayLPrimeHostId = 51
-const MetaRayLPrimeJoint1Id = 52
-const MetaRayLPrimeJoint2Id = 53
+"""Complete immutable state for one Theorem 13 animation generation."""
+struct AnimationState
+    ray_hhost_id::Int64
+    ray_hjoint1_id::Int64
+    ray_hjoint2_id::Int64
+    ray_khost_id::Int64
+    ray_kjoint1_id::Int64
+    ray_kjoint2_id::Int64
+    ray_hprime_host_id::Int64
+    ray_hprime_joint1_id::Int64
+    ray_hprime_joint2_id::Int64
+    ray_kprime_host_id::Int64
+    ray_kprime_joint1_id::Int64
+    ray_kprime_joint2_id::Int64
+    ray_lhost_id::Int64
+    ray_ljoint1_id::Int64
+    ray_ljoint2_id::Int64
+    ray_lprime_host_id::Int64
+    ray_lprime_joint1_id::Int64
+    ray_lprime_joint2_id::Int64
+    segment_abhost_id::Int64
+    segment_abjoint1_id::Int64
+    segment_abjoint2_id::Int64
+    segment_aprime_bprime_host_id::Int64
+    segment_aprime_bprime_joint1_id::Int64
+    segment_aprime_bprime_joint2_id::Int64
+    point_aid::Int64
+    point_bid::Int64
+    point_aprime_id::Int64
+    point_bprime_id::Int64
+    point_cid::Int64
+    point_cprime_id::Int64
+    label_oid::Int64
+    label_oprime_id::Int64
+    label_aid::Int64
+    label_bid::Int64
+    label_aprime_id::Int64
+    label_bprime_id::Int64
+    label_cid::Int64
+    label_cprime_id::Int64
+    label_hid::Int64
+    label_kid::Int64
+    label_hprime_id::Int64
+    label_kprime_id::Int64
+    label_lid::Int64
+    label_lprime_id::Int64
+    phase::Float32
+    timer::Float32
+end
 
-const MetaSegmentABHostId = 61
-const MetaSegmentABJoint1Id = 62
-const MetaSegmentABJoint2Id = 63
-const MetaSegmentAPrimeBPrimeHostId = 71
-const MetaSegmentAPrimeBPrimeJoint1Id = 72
-const MetaSegmentAPrimeBPrimeJoint2Id = 73
-
-const MetaPointAId = 81
-const MetaPointBId = 82
-const MetaPointAPrimeId = 83
-const MetaPointBPrimeId = 84
-const MetaPointCId = 85
-const MetaPointCPrimeId = 86
-
-const MetaLabelOId = 91
-const MetaLabelOPrimeId = 92
-const MetaLabelAId = 93
-const MetaLabelBId = 94
-const MetaLabelAPrimeId = 95
-const MetaLabelBPrimeId = 96
-const MetaLabelCId = 97
-const MetaLabelCPrimeId = 98
-const MetaLabelHId = 111
-const MetaLabelKId = 112
-const MetaLabelHPrimeId = 113
-const MetaLabelKPrimeId = 114
-const MetaLabelLId = 115
-const MetaLabelLPrimeId = 116
-
-const MetaPhase = 101
-const MetaTimer = 102
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescendToO = 0f0
 const PhaseDrawRayH = 1f0
@@ -334,6 +335,24 @@ const PhaseDrawRayLPrime = 80f0
 const PhasePenRiseEnd = 81f0
 const PhaseFinalHold = 82f0
 
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.ray_hhost_id, state.ray_hjoint1_id, state.ray_hjoint2_id, state.ray_khost_id,
+        state.ray_kjoint1_id, state.ray_kjoint2_id, state.ray_hprime_host_id, state.ray_hprime_joint1_id,
+        state.ray_hprime_joint2_id, state.ray_kprime_host_id, state.ray_kprime_joint1_id, state.ray_kprime_joint2_id,
+        state.ray_lhost_id, state.ray_ljoint1_id, state.ray_ljoint2_id, state.ray_lprime_host_id,
+        state.ray_lprime_joint1_id, state.ray_lprime_joint2_id, state.segment_abhost_id, state.segment_abjoint1_id,
+        state.segment_abjoint2_id, state.segment_aprime_bprime_host_id,
+        state.segment_aprime_bprime_joint1_id, state.segment_aprime_bprime_joint2_id,
+        state.point_aid, state.point_bid, state.point_aprime_id, state.point_bprime_id,
+        state.point_cid, state.point_cprime_id, state.label_oid, state.label_oprime_id,
+        state.label_aid, state.label_bid, state.label_aprime_id, state.label_bprime_id,
+        state.label_cid, state.label_cprime_id, state.label_hid, state.label_kid,
+        state.label_hprime_id, state.label_kprime_id, state.label_lid, state.label_lprime_id,
+        phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 13
@@ -397,73 +416,47 @@ With this our proposition is demonstrated."""
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHHostId))
-    ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHJoint2Id))
-    ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKHostId))
-    ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKJoint2Id))
-    ray_h_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHPrimeHostId))
-    ray_h_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHPrimeJoint2Id))
-    ray_k_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKPrimeHostId))
-    ray_k_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKPrimeJoint2Id))
-    ray_l_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLHostId))
-    ray_l_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLJoint2Id))
-    ray_l_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLPrimeHostId))
-    ray_l_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLPrimeJoint2Id))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    ray_h_host_id = state.ray_hhost_id
+    ray_h_joint2_id = state.ray_hjoint2_id
+    ray_k_host_id = state.ray_khost_id
+    ray_k_joint2_id = state.ray_kjoint2_id
+    ray_h_prime_host_id = state.ray_hprime_host_id
+    ray_h_prime_joint2_id = state.ray_hprime_joint2_id
+    ray_k_prime_host_id = state.ray_kprime_host_id
+    ray_k_prime_joint2_id = state.ray_kprime_joint2_id
+    ray_l_host_id = state.ray_lhost_id
+    ray_l_joint2_id = state.ray_ljoint2_id
+    ray_l_prime_host_id = state.ray_lprime_host_id
+    ray_l_prime_joint2_id = state.ray_lprime_joint2_id
 
-    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentABHostId))
-    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentABJoint2Id))
-    segment_a_prime_b_prime_host_id = Integer(
-        OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeHostId))
-    segment_a_prime_b_prime_joint2_id = Integer(
-        OdinJuliaBridge.get_animation_meta(state_ptr, MetaSegmentAPrimeBPrimeJoint2Id))
+    segment_a_b_host_id = state.segment_abhost_id
+    segment_a_b_joint2_id = state.segment_abjoint2_id
+    segment_a_prime_b_prime_host_id = state.segment_aprime_bprime_host_id
+    segment_a_prime_b_prime_joint2_id = state.segment_aprime_bprime_joint2_id
 
-    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointAPrimeId))
-    point_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointBPrimeId))
-    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointCId))
-    point_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointCPrimeId))
+    point_a_id = state.point_aid
+    point_b_id = state.point_bid
+    point_a_prime_id = state.point_aprime_id
+    point_b_prime_id = state.point_bprime_id
+    point_c_id = state.point_cid
+    point_c_prime_id = state.point_cprime_id
 
-    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelOId))
-    label_o_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelOPrimeId))
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelAPrimeId))
-    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelBPrimeId))
-    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelCPrimeId))
-    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
-    label_h_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelHPrimeId))
-    label_k_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelKPrimeId))
-    label_l_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelLId))
-    label_l_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelLPrimeId))
+    label_o_id = state.label_oid
+    label_o_prime_id = state.label_oprime_id
+    label_a_id = state.label_aid
+    label_b_id = state.label_bid
+    label_a_prime_id = state.label_aprime_id
+    label_b_prime_id = state.label_bprime_id
+    label_c_id = state.label_cid
+    label_c_prime_id = state.label_cprime_id
+    label_h_id = state.label_hid
+    label_k_id = state.label_kid
+    label_h_prime_id = state.label_hprime_id
+    label_k_prime_id = state.label_kprime_id
+    label_l_id = state.label_lid
+    label_l_prime_id = state.label_lprime_id
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [ray_h_host_id, ray_k_host_id, ray_h_prime_host_id, ray_k_prime_host_id,
@@ -493,8 +486,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(
         state_ptr, segment_a_prime_b_prime_joint2_id, SegmentAPrimeBPrimeStart)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendToO)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -513,7 +504,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.set_pen_active(state_ptr, 0, RayHColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, HighlightColor)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, 0f0, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -584,99 +580,25 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'l', OdinJuliaBridge.LABEL_DECORATION_PRIME,
         LabelLPrimePoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHHostId, ray_h.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHJoint1Id, ray_h.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHJoint2Id, ray_h.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKHostId, ray_k.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKJoint1Id, ray_k.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKJoint2Id, ray_k.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHPrimeHostId, ray_h_prime.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHPrimeJoint1Id, ray_h_prime.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayHPrimeJoint2Id, ray_h_prime.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKPrimeHostId, ray_k_prime.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKPrimeJoint1Id, ray_k_prime.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayKPrimeJoint2Id, ray_k_prime.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLHostId, ray_l.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLJoint1Id, ray_l.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLJoint2Id, ray_l.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLPrimeHostId, ray_l_prime.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLPrimeJoint1Id, ray_l_prime.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaRayLPrimeJoint2Id, ray_l_prime.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentABHostId, segment_a_b.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentABJoint1Id, segment_a_b.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentABJoint2Id, segment_a_b.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeHostId, segment_a_prime_b_prime.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint1Id, segment_a_prime_b_prime.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint2Id, segment_a_prime_b_prime.joint2_id)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointAId, point_a.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointBId, point_b.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointAPrimeId, point_a_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointBPrimeId, point_b_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointCId, point_c.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPointCPrimeId, point_c_prime.index)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelOId, label_o.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelOPrimeId, label_o_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelAId, label_a.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelBId, label_b.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelAPrimeId, label_a_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelBPrimeId, label_b_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelCId, label_c.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelCPrimeId, label_c_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelHId, label_h.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelKId, label_k.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelHPrimeId, label_h_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelKPrimeId, label_k_prime.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelLId, label_l.index)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLabelLPrimeId, label_l_prime.index)
 
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        ray_h.host_id, ray_h.joint1_id, ray_h.joint2_id, ray_k.host_id,
+        ray_k.joint1_id, ray_k.joint2_id, ray_h_prime.host_id, ray_h_prime.joint1_id,
+        ray_h_prime.joint2_id, ray_k_prime.host_id, ray_k_prime.joint1_id, ray_k_prime.joint2_id,
+        ray_l.host_id, ray_l.joint1_id, ray_l.joint2_id, ray_l_prime.host_id,
+        ray_l_prime.joint1_id, ray_l_prime.joint2_id, segment_a_b.host_id, segment_a_b.joint1_id,
+        segment_a_b.joint2_id, segment_a_prime_b_prime.host_id,
+        segment_a_prime_b_prime.joint1_id, segment_a_prime_b_prime.joint2_id,
+        point_a.index, point_b.index, point_a_prime.index, point_b_prime.index,
+        point_c.index, point_c_prime.index, label_o.index, label_o_prime.index,
+        label_a.index, label_b.index, label_a_prime.index, label_b_prime.index,
+        label_c.index, label_c_prime.index, label_h.index, label_k.index,
+        label_h_prime.index, label_k_prime.index, label_l.index, label_l_prime.index,
+        0f0, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -685,105 +607,63 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    ray_h_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHHostId))
-    ray_h_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHJoint1Id))
-    ray_h_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHJoint2Id))
-    ray_k_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKHostId))
-    ray_k_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKJoint1Id))
-    ray_k_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKJoint2Id))
-    ray_h_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHPrimeHostId))
-    ray_h_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHPrimeJoint1Id))
-    ray_h_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayHPrimeJoint2Id))
-    ray_k_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKPrimeHostId))
-    ray_k_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKPrimeJoint1Id))
-    ray_k_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayKPrimeJoint2Id))
-    ray_l_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLHostId))
-    ray_l_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLJoint1Id))
-    ray_l_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLJoint2Id))
-    ray_l_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLPrimeHostId))
-    ray_l_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLPrimeJoint1Id))
-    ray_l_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaRayLPrimeJoint2Id))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    ray_h_host_id = state.ray_hhost_id
+    ray_h_joint1_id = state.ray_hjoint1_id
+    ray_h_joint2_id = state.ray_hjoint2_id
+    ray_k_host_id = state.ray_khost_id
+    ray_k_joint1_id = state.ray_kjoint1_id
+    ray_k_joint2_id = state.ray_kjoint2_id
+    ray_h_prime_host_id = state.ray_hprime_host_id
+    ray_h_prime_joint1_id = state.ray_hprime_joint1_id
+    ray_h_prime_joint2_id = state.ray_hprime_joint2_id
+    ray_k_prime_host_id = state.ray_kprime_host_id
+    ray_k_prime_joint1_id = state.ray_kprime_joint1_id
+    ray_k_prime_joint2_id = state.ray_kprime_joint2_id
+    ray_l_host_id = state.ray_lhost_id
+    ray_l_joint1_id = state.ray_ljoint1_id
+    ray_l_joint2_id = state.ray_ljoint2_id
+    ray_l_prime_host_id = state.ray_lprime_host_id
+    ray_l_prime_joint1_id = state.ray_lprime_joint1_id
+    ray_l_prime_joint2_id = state.ray_lprime_joint2_id
 
-    segment_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentABHostId))
-    segment_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentABJoint1Id))
-    segment_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentABJoint2Id))
-    segment_a_prime_b_prime_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeHostId))
-    segment_a_prime_b_prime_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint1Id))
-    segment_a_prime_b_prime_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaSegmentAPrimeBPrimeJoint2Id))
+    segment_a_b_host_id = state.segment_abhost_id
+    segment_a_b_joint1_id = state.segment_abjoint1_id
+    segment_a_b_joint2_id = state.segment_abjoint2_id
+    segment_a_prime_b_prime_host_id = state.segment_aprime_bprime_host_id
+    segment_a_prime_b_prime_joint1_id = state.segment_aprime_bprime_joint1_id
+    segment_a_prime_b_prime_joint2_id = state.segment_aprime_bprime_joint2_id
 
-    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointAId))
-    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointBId))
-    point_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointAPrimeId))
-    point_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointBPrimeId))
-    point_c_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointCId))
-    point_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPointCPrimeId))
+    point_a_id = state.point_aid
+    point_b_id = state.point_bid
+    point_a_prime_id = state.point_aprime_id
+    point_b_prime_id = state.point_bprime_id
+    point_c_id = state.point_cid
+    point_c_prime_id = state.point_cprime_id
 
-    label_o_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelOId))
-    label_o_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelOPrimeId))
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelBId))
-    label_a_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelAPrimeId))
-    label_b_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelBPrimeId))
-    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelCId))
-    label_c_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelCPrimeId))
-    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelHId))
-    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelKId))
-    label_h_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelHPrimeId))
-    label_k_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelKPrimeId))
-    label_l_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelLId))
-    label_l_prime_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelLPrimeId))
+    label_o_id = state.label_oid
+    label_o_prime_id = state.label_oprime_id
+    label_a_id = state.label_aid
+    label_b_id = state.label_bid
+    label_a_prime_id = state.label_aprime_id
+    label_b_prime_id = state.label_bprime_id
+    label_c_id = state.label_cid
+    label_c_prime_id = state.label_cprime_id
+    label_h_id = state.label_hid
+    label_k_id = state.label_kid
+    label_h_prime_id = state.label_hprime_id
+    label_k_prime_id = state.label_kprime_id
+    label_l_id = state.label_lid
+    label_l_prime_id = state.label_lprime_id
 
     if ray_h_host_id < 0 || ray_k_host_id < 0 ||
        ray_h_prime_host_id < 0 || ray_k_prime_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescendToO
         EuclidAnimations.animate_pen_descend(
@@ -1561,13 +1441,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseFinalHold
         timer += dt
         if timer >= FinalHoldDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
 end
 
 end

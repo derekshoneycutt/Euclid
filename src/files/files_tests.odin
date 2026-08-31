@@ -62,6 +62,7 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
         "julia/script.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
+        "NewCMSansMath-Regular.otf",
         "manifest.txt",
     }
 
@@ -86,6 +87,13 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
 
     testing.expect(t, build_ready_unpack_tree(unpack_dir))
     testing.expect(t, is_assets_unpack_ready(unpack_dir))
+
+    math_path, join_error := filepath.join(
+        []string{unpack_dir, "NewCMSansMath-Regular.otf"}, context.allocator)
+    defer delete(math_path)
+    testing.expect(t, join_error == nil)
+    testing.expect(t, os.remove(math_path) == nil)
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir))
 }
 
 //   Verify should_continue_unpack across the missing/partial/complete/forced matrix.

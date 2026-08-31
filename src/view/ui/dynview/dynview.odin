@@ -81,7 +81,8 @@ draw_scratchpad_styled_or_fallback :: proc(
     }
 
     runtime := &state^.dynview
-    if runtime^.enabled && runtime^.compile_cache.is_valid &&
+    if runtime^.enabled && runtime^.cache_access_state == .Display_Readable &&
+        runtime^.compile_cache.is_valid &&
         !runtime^.command_buffer.has_stream_error &&
         runtime^.command_buffer.command_count > 0 {
         if runtime^.compile_cache.layout_is_valid {
@@ -114,7 +115,8 @@ draw_math_program_at :: proc(
             &runtime^.compile_cache,
             &runtime^.command_buffer,
             cmd,
-            ctx.font_size)
+            ctx.font_size,
+            command_index)
         if !ok {
             continue
         }

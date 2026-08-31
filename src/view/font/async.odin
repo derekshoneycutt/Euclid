@@ -3,6 +3,7 @@ package font
 import "../../core"
 import "../../taskpool"
 
+import "core:log"
 import vmem "core:mem/virtual"
 
 // Display-owned lifecycle of the single optional-font preparation slot.
@@ -242,7 +243,7 @@ cache_begin_seed_request :: proc(cache: ^Font_Cache, key: Font_Key) {
         cache.preparation.failure_count += 1
         return
     }
-    codepoints := seed_codepoint_set()
+    codepoints := required_seed_codepoints(key)
     copy(cache.preparation.task.codepoints[:], codepoints.values[:codepoints.count])
     cache.preparation.task.codepoint_count = codepoints.count
 }
@@ -376,16 +377,25 @@ cache_preparation_arena_destroy :: proc(cache: ^Font_Cache) {
 cache_complete_preparation :: proc(
     cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
 
+    task := &cache.preparation.task
     result, joined := taskpool.task_pool_wait(pool, cache.preparation.handle)
     if joined == .Joined && result == .Succeeded &&
         cache_preparation_is_current(cache) &&
         cache_publish_preparation(cache) {
         cache.preparation.publication_count += 1
+        if task.kind == .Seed {
+            log.infof("font_generation_published key=%d generation=%d",
+                int(task.key), task.generation)
+        }
     } else if !cache_preparation_is_current(cache) {
         cache.preparation.stale_completion_count += 1
         cache_restore_page_demand(cache)
     } else {
         cache.preparation.failure_count += 1
+        if task.kind == .Seed {
+            log.warnf("font_generation_failed key=%d generation=%d",
+                int(task.key), task.generation)
+        }
         cache_fail_preparation(cache)
     }
     cache_finish_preparation(cache)

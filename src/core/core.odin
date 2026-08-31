@@ -25,7 +25,6 @@ import rl "vendor:raylib"
 
 MAX_LOW_PARTICLES :: 65536
 MAX_PARTICLES :: 2048
-MAX_METAVALUES :: 256
 MAX_SHAPESPOINTS :: 256
 MAX_SHAPESCONSTRAINTS :: 256
 MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_SHAPESPOINTS
@@ -49,8 +48,9 @@ DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
 DYNVIEW_MAX_MATH_PROGRAMS :: 256
 DYNVIEW_MAX_MATH_NODES :: 4096
 DYNVIEW_MAX_MATH_COMMANDS :: 4096
+DYNVIEW_MAX_SHAPED_RUNS :: DYNVIEW_MAX_MATH_COMMANDS
 
-FONT_KEY_COUNT :: int(Font_Key.Black_Italic) + 1
+FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
 FONT_SOURCE_PATH_CAPACITY :: 1024
 FONT_GLYPH_PAGE_CAPACITY :: 32
 
@@ -203,7 +203,6 @@ Scene_Command_Kind :: enum u8 {
     Set_Compass_Active,
     Lock_Compass_Joint1,
     Lock_Compass_Joint2,
-    Set_Animation_Meta,
     Set_Drawing_Sound_Enabled,
     Simulate_Drawing_Sound,
     Emit_Trailing_Particle,
@@ -233,7 +232,6 @@ Scene_Command_Batch :: struct {
 
 Animation_Query_Snapshot :: struct {
     points: [MAX_SHAPESPOINTS]Shapes_Point,
-    metadata: [MAX_METAVALUES]f32,
     pen: Shapes_Pen,
     compass: Shapes_Compass,
     animation_values_valid: bool,
@@ -289,6 +287,7 @@ View_Snapshot :: struct {
     request_id: u64,
     generation: u64,
     runtime_generation: u64,
+    animation_generation: u64,
     host_state: ^Euclid_General_State,
     animation: ^Euclid_Julia_Animation_Interface,
     fallback_text_len: int,
@@ -925,6 +924,7 @@ Dynview_Command :: struct {
     style_id: i32,
     math_program_id: i32,
     secondary_math_program_id: i32,
+    shaped_run_indices: [4]i32,
     text_offset: int,
     text_len: int,
     script_base_text_offset: int,
@@ -1010,6 +1010,7 @@ Dynview_Layout_Item :: struct {
     kind: Dynview_Layout_Item_Kind,
     block_id: i32,
     style_id: i32,
+    math_command_index: i32,
     math_program_id: i32,
     secondary_math_program_id: i32,
     line_index: int,
@@ -1065,6 +1066,8 @@ Dynview_Layout_Item :: struct {
     descent: f32,
     visual_padding_top: f32,
     visual_padding_bottom: f32,
+    italic_correction: f32,
+    top_accent_attachment: f32,
 }
 
 Dynview_Math_Node_Kind :: enum {
@@ -1112,6 +1115,34 @@ Dynview_Math_Program :: struct {
     descent: f32,
     visual_padding_top: f32,
     visual_padding_bottom: f32,
+    italic_correction: f32,
+    top_accent_attachment: f32,
+}
+
+Dynview_Shaped_Site :: enum u8 {
+    Primary,
+    Superscript,
+    Subscript,
+    Radical_Index,
+}
+
+Dynview_Shaped_Run :: struct {
+    math_command_index: int,
+    site: Dynview_Shaped_Site,
+    text_offset: int,
+    text_len: int,
+    glyph_start: int,
+    glyph_count: int,
+    font_generation: u64,
+    base_pixel_size: f32,
+    raster_ascent: f32,
+    advance: f32,
+    ink_left: f32,
+    ink_right: f32,
+    ascent: f32,
+    descent: f32,
+    italic_correction: f32,
+    top_accent_attachment: f32,
 }
 
 Dynview_Layout_Line :: struct {
@@ -1167,6 +1198,10 @@ Dynview_Compile_Cache :: struct {
     last_invalidation_mask: u32,
     last_error_code: i32,
 
+    shaped_runs: []Dynview_Shaped_Run,
+    shaped_glyphs: []Shaped_Glyph,
+    shaped_font_generation: u64,
+
     compiled_plain_text: [DYNVIEW_MAX_TEXT_BYTES]u8,
     compiled_copy_payload: [DYNVIEW_MAX_TEXT_BYTES]u8,
     copy_blocks: [DYNVIEW_MAX_COMMANDS]Dynview_Copy_Block,
@@ -1178,9 +1213,20 @@ Dynview_Compile_Cache :: struct {
     math_nodes: [DYNVIEW_MAX_MATH_NODES]Dynview_Math_Node,
 }
 
+Dynview_Cache_Access_State :: enum {
+    Uninitialized,
+    Worker_Mutable,
+    Display_Readable,
+}
+
 Dynview_System :: struct {
     enabled: bool,
     pending_invalidation_mask: u32,
+
+    cache_arena: Arena_Owner,
+    cache_access_state: Dynview_Cache_Access_State,
+    cache_worker_thread_id: int,
+    math_shaping: Font_Math_Shaping_Capability,
 
     copy_icon_hover_active: bool,
     copy_icon_hover_block_id: i32,
@@ -1329,6 +1375,7 @@ Font_Key :: enum {
     Extra_Bold_Italic,
     Black,
     Black_Italic,
+    Math_Regular,
 }
 
 Font_Load_State :: enum {
@@ -1353,6 +1400,20 @@ Font_Shaping_Resource :: struct {
     face: rawptr,
     font: rawptr,
     buffer: rawptr,
+}
+
+Font_Math_Shaping_Capability :: struct {
+    resource: Font_Shaping_Resource,
+    generation: u64,
+    failed_generation: u64,
+    raster_ascent: f32,
+}
+
+Font_Glyph_Extents :: struct {
+    x_bearing: i32,
+    y_bearing: i32,
+    width: i32,
+    height: i32,
 }
 
 Font_Shaping_Telemetry :: struct {
@@ -1392,6 +1453,7 @@ Font_Glyph_Page :: struct {
 Font_Cache_Entry :: struct {
     font: rl.Font,
     shaping: Font_Shaping_Resource,
+    raster_ascent: f32,
     generation: u64,
     requested_generation: u64,
     resident: bool,
@@ -1438,6 +1500,7 @@ Prepared_Font :: struct {
     key: Font_Key,
     generation: u64,
     base_size: i32,
+    raster_ascent: f32,
     glyph_count: i32,
     face_glyph_count: i32,
     padding: i32,
@@ -1469,7 +1532,7 @@ Font_Prepare_Task :: struct {
     path_storage: [1024]u8,
     path_length: int,
     pixel_size: i32,
-    codepoints: [128]rune,
+    codepoints: [256]rune,
     codepoint_count: i32,
     glyph_ids: [256]u32,
     glyph_id_count: i32,
@@ -1657,10 +1720,16 @@ Simulation_Task_Data :: struct {
     evidence_ring: evidence_trace.Ring,
 }
 
+Math_Shaping_Workspace :: struct {
+    projection: [DYNVIEW_MAX_TEXT_BYTES]u8,
+    glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
+}
+
 Frame_Preparation_Task_Data :: struct {
     state: ^Euclid_General_State,
     interpolation_alpha: f32,
     evidence_ring: evidence_trace.Ring,
+    math_shaping_workspace: ^Math_Shaping_Workspace,
 }
 
 Simulation_Executor :: struct {
@@ -1669,6 +1738,7 @@ Simulation_Executor :: struct {
     constraint_task: Simulation_Task_Data,
     shape_cache_task: Frame_Preparation_Task_Data,
     dynview_task: Frame_Preparation_Task_Data,
+    math_shaping_workspace: Math_Shaping_Workspace,
 }
 
 
@@ -1731,7 +1801,6 @@ Euclid_General_State :: struct {
     accumulator : f32,
 
     animation_values : Animation_Value_Store,
-    anim_metadata : [MAX_METAVALUES]f32,
 }
 
 Euclid_Run_Settings :: struct {

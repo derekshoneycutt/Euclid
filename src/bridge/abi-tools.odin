@@ -649,47 +649,6 @@ get_compass_joint2_position :: proc "c" (
     return {0, 0, 0}
 }
 
-//   Store animation metadata at a slot index.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - pos: Metadata slot index.
-//   - metadata: Value to store when pos is in range.
-@(export)
-set_animation_meta :: proc "c" (
-    state: ^core.Euclid_General_State, pos_abi: i32, metadata: f32) {
-    pos := int(pos_abi)
-    if capture_animation_meta_command(state, pos, metadata) {
-        return
-    }
-    if pos >= 0 && pos < len(state^.anim_metadata) {
-        state^.anim_metadata[pos] = metadata
-    }
-}
-
-//   Read animation metadata from a slot index.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - pos: Metadata slot index.
-//
-// Returns:
-//   - Metadata value when pos is in range, otherwise 0.
-@(export)
-get_animation_meta :: proc "c" (
-    state: ^core.Euclid_General_State, pos_abi: i32) -> f32 {
-
-    pos := int(pos_abi)
-    query_snapshot := active_animation_query_snapshot(state)
-    if query_snapshot != nil && pos >= 0 && pos < len(query_snapshot^.metadata) {
-        return query_snapshot^.metadata[pos]
-    }
-    if pos >= 0 && pos < len(state^.anim_metadata) {
-        return state^.anim_metadata[pos]
-    }
-    return 0
-}
-
 //   Emit trailing particles at a position using bridge color data.
 //
 // Parameters:

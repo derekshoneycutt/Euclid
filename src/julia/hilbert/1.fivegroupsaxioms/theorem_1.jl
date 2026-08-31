@@ -47,16 +47,24 @@ const SurfaceHoverDuration = 1.8f0
 const EndLiftDuration = 1.8f0
 const FinalHoldDuration = 1.2f0
 
-const MetaPlaneHostId = 1
-const MetaLineAHostId = 2
-const MetaLineAJoint1Id = 3
-const MetaLineAJoint2Id = 4
-const MetaLineBHostId = 5
-const MetaLineBJoint1Id = 6
-const MetaLineBJoint2Id = 7
-const MetaIntersectionPointId = 11
-const MetaPhase = 101
-const MetaTimer = 102
+"""Stable native handles for one line owned by the animation."""
+struct LineIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Complete immutable state for one Theorem 1 animation generation."""
+struct AnimationState
+    plane::Int64
+    line_a::LineIds
+    line_b::LineIds
+    intersection_point::Int64
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescend = 0f0
 const PhaseDrawLineA = 1f0
@@ -70,6 +78,13 @@ const PhaseMoveToIntersectionHover = 9f0
 const PhaseHoverIntersection = 10f0
 const PhaseEndLift = 11f0
 const PhaseFinalHold = 12f0
+
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.plane, state.line_a, state.line_b, state.intersection_point,
+        phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -121,30 +136,19 @@ function random_vertical_plane_point()
     random_triangle_point(PlaneEdgeLeft, PlaneTopRight, PlaneEdgeRight)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPlaneHostId))
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAJoint2Id))
-    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBHostId))
-    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBJoint1Id))
-    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBJoint2Id))
-    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaIntersectionPointId))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    plane_host_id = state.plane
+    line_a_host_id = state.line_a.host
+    line_a_joint1_id = state.line_a.joint1
+    line_a_joint2_id = state.line_a.joint2
+    line_b_host_id = state.line_b.host
+    line_b_joint1_id = state.line_b.joint1
+    line_b_joint2_id = state.line_b.joint2
+    intersection_point_id = state.intersection_point
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [plane_host_id, line_a_host_id, line_b_host_id, intersection_point_id])
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.set_point_position(
         state_ptr, line_a_joint1_id, LineAStart[1], LineAStart[2], LineAStart[3])
@@ -161,7 +165,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LineAColor)
 
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -175,24 +184,12 @@ function initialize(state_ptr::Ptr{Cvoid})
     plane_beta = OdinJuliaBridge.create_new_square(state_ptr,
         PlaneEdgeLeft, PlaneEdgeRight, PlaneTopRight, PlaneTopLeft, PlaneColor)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaPlaneHostId, plane_beta.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineAHostId, line_a.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineAJoint1Id, line_a.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineAJoint2Id, line_a.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineBHostId, line_b.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineBJoint1Id, line_b.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLineBJoint2Id, line_b.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaIntersectionPointId, intersection_point.index)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        plane_beta.host_id,
+        LineIds(line_a.host_id, line_a.joint1_id, line_a.joint2_id),
+        LineIds(line_b.host_id, line_b.joint1_id, line_b.joint2_id),
+        intersection_point.index, PhaseDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -201,29 +198,23 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPlaneHostId))
-    line_a_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAHostId))
-    line_a_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAJoint1Id))
-    line_a_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineAJoint2Id))
-    line_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBHostId))
-    line_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBJoint1Id))
-    line_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineBJoint2Id))
-    intersection_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaIntersectionPointId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    plane_host_id = state.plane
+    line_a_host_id = state.line_a.host
+    line_a_joint1_id = state.line_a.joint1
+    line_a_joint2_id = state.line_a.joint2
+    line_b_host_id = state.line_b.host
+    line_b_joint1_id = state.line_b.joint1
+    line_b_joint2_id = state.line_b.joint2
+    intersection_point_id = state.intersection_point
 
     if plane_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -373,13 +364,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= FinalHoldDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
 end
 
 end

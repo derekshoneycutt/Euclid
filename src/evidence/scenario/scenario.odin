@@ -29,6 +29,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"animation_cycle_boundary", .Animation_Cycle_Boundary},
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
+    {"dynview_published", .Dynview_Published},
     {"frame_presented", .Frame_Presented},
     {"capture_completed", .Capture_Completed},
     {"gif_completed", .Gif_Completed},

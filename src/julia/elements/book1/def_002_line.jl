@@ -19,11 +19,21 @@ const DescendDuration = 1.8f0
 const LineDrawDuration = 4.2f0
 const EndLiftDuration = 1.8f0
 
-const MetaLineHostId = 1
-const MetaLineJoint1Id = 2
-const MetaLineJoint2Id = 3
-const MetaPhase = 4
-const MetaTimer = 5
+"""Stable native handles for the line owned by the animation."""
+struct LineIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Complete immutable state for one line-definition animation generation."""
+struct AnimationState
+    line::LineIds
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescend = 0f0
 const PhaseDrawLine = 1f0
@@ -37,28 +47,33 @@ const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definit
 
 A line \euclidline[color=steelblue,length=3,thickness=4] is breadthless length."""
 
+"""Return state with updated cycle timing and the same native line handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.line, phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(
         state_ptr, DefinitionLatexDocument, DefinitionViewText)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostId))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Id))
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+"""Reset the animation cycle while preserving its native line handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    line_host_id = state.line.host
+    line_joint2_id = state.line.joint2
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_point(state_ptr, line_host_id)
     OdinJuliaBridge.set_point_position(
         state_ptr, line_joint2_id, StartPoint[1], StartPoint[2], StartPoint[3])
 
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -67,11 +82,9 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, StartPoint, StartPoint,
         LineColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineHostId, line.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint1Id, line.joint1_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLineJoint2Id, line.joint2_id)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        LineIds(line.host_id, line.joint1_id, line.joint2_id), PhaseDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -80,19 +93,18 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostId))
-    line_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Id))
-    line_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Id))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    line_host_id = state.line.host
+    line_joint1_id = state.line.joint1
+    line_joint2_id = state.line.joint2
 
     if line_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -124,13 +136,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

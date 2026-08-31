@@ -12,7 +12,10 @@ Check that the animated point matches the expected position after eight steps.
 function scenario_point_after_eight_steps(state_ptr::Ptr{Cvoid}, step_count::Integer)
     step_count == 8 || return false
 
-    point_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, 1))
+    point_state, status = OdinJuliaBridge.get_animation_value(
+        state_ptr, Main.ElementsOne.ElementsOneDefinitionPoint.StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    point_id = point_state.point_id
     point_id >= 0 || return false
 
     point = OdinJuliaBridge.get_point(state_ptr, point_id)

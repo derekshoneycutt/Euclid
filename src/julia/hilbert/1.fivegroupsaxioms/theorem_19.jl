@@ -105,18 +105,22 @@ const PenLiftDuration = 1.6f0
 const CompassLiftDuration = 1.8f0
 const FinalHoldDuration = 0.35f0
 
-const MetaLowerHostId = 1
-const MetaLowerJoint1Id = 2
-const MetaLowerJoint2Id = 3
-const MetaUpperHostId = 11
-const MetaUpperJoint1Id = 12
-const MetaUpperJoint2Id = 13
-const MetaTransversalHostId = 21
-const MetaTransversalJoint1Id = 22
-const MetaTransversalJoint2Id = 23
+"""Complete immutable state for one Theorem 19 animation generation."""
+struct AnimationState
+    lower_host_id::Int64
+    lower_joint1_id::Int64
+    lower_joint2_id::Int64
+    upper_host_id::Int64
+    upper_joint1_id::Int64
+    upper_joint2_id::Int64
+    transversal_host_id::Int64
+    transversal_joint1_id::Int64
+    transversal_joint2_id::Int64
+    phase::Float32
+    timer::Float32
+end
 
-const MetaPhase = 101
-const MetaTimer = 102
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhasePenDescendLowerStart = 0f0
 const PhaseDrawLower = 1f0
@@ -141,6 +145,15 @@ const PhaseExtInt2Back = 18f0
 const PhaseCompassRise = 19f0
 const PhaseFinalHold = 20f0
 
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.lower_host_id, state.lower_joint1_id, state.lower_joint2_id, state.upper_host_id,
+        state.upper_joint1_id, state.upper_joint2_id, state.transversal_host_id, state.transversal_joint1_id,
+        state.transversal_joint2_id,
+        phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     fallback = """David Hilbert - Foundations of Geometry - Theorem 19
@@ -154,20 +167,14 @@ and also the exterior-interior angles are congruent. Conversely, if the alternat
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLowerHostId))
-    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLowerJoint2Id))
-    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaUpperHostId))
-    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaUpperJoint2Id))
-    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTransversalHostId))
-    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTransversalJoint2Id))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    lower_host_id = state.lower_host_id
+    lower_joint2_id = state.lower_joint2_id
+    upper_host_id = state.upper_host_id
+    upper_joint2_id = state.upper_joint2_id
+    transversal_host_id = state.transversal_host_id
+    transversal_joint2_id = state.transversal_joint2_id
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         lower_host_id, upper_host_id, transversal_host_id])
@@ -177,8 +184,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(
         state_ptr, transversal_joint2_id, TransversalStart)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescendLowerStart)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -197,7 +202,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     OdinJuliaBridge.set_pen_active(state_ptr, 0, LowerLineColor)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, HighlightColor)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, 0f0, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -212,26 +222,13 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, TransversalStart, TransversalStart,
         TransversalColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLowerHostId, lower_line.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLowerJoint1Id, lower_line.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaLowerJoint2Id, lower_line.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaUpperHostId, upper_line.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaUpperJoint1Id, upper_line.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaUpperJoint2Id, upper_line.joint2_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalHostId, transversal.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint1Id, transversal.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTransversalJoint2Id, transversal.joint2_id)
 
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        lower_line.host_id, lower_line.joint1_id, lower_line.joint2_id, upper_line.host_id,
+        upper_line.joint1_id, upper_line.joint2_id, transversal.host_id, transversal.joint1_id,
+        transversal.joint2_id,
+        0f0, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -240,31 +237,24 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    lower_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLowerHostId))
-    lower_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLowerJoint1Id))
-    lower_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLowerJoint2Id))
-    upper_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaUpperHostId))
-    upper_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaUpperJoint1Id))
-    upper_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaUpperJoint2Id))
-    transversal_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTransversalHostId))
-    transversal_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTransversalJoint1Id))
-    transversal_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTransversalJoint2Id))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    lower_host_id = state.lower_host_id
+    lower_joint1_id = state.lower_joint1_id
+    lower_joint2_id = state.lower_joint2_id
+    upper_host_id = state.upper_host_id
+    upper_joint1_id = state.upper_joint1_id
+    upper_joint2_id = state.upper_joint2_id
+    transversal_host_id = state.transversal_host_id
+    transversal_joint1_id = state.transversal_joint1_id
+    transversal_joint2_id = state.transversal_joint2_id
 
     if lower_host_id < 0 || upper_host_id < 0 || transversal_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhasePenDescendLowerStart
         EuclidAnimations.animate_pen_descend(
@@ -483,13 +473,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseFinalHold
         timer += dt
         if timer >= FinalHoldDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
 end
 
 end

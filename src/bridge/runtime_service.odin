@@ -329,6 +329,7 @@ try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
         request_id = service^.next_request_id,
         generation = service^.view_snapshot_generation,
         runtime_generation = service^.runtime_generation,
+        animation_generation = service^.animation_generation,
         host_state = state,
     }
     request_id, sent := try_submit_julia_request(
@@ -379,6 +380,16 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
     }
     slot^.state = .Published
     service^.published_view_snapshot_index = slot_index
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Dynview_Published,
+            correlation_kind = .Animation,
+            correlation = slot^.animation_generation,
+            generation = slot^.animation_generation,
+            revision = u64(slot^.generation),
+            flags = {.Required},
+        })
     return true
 }
 
@@ -438,8 +449,9 @@ view_snapshot_matches_current :: proc(
     slot: ^View_Snapshot) -> bool {
 
     return state != nil && service != nil && slot != nil &&
-        state^.julia_interface != nil && 
+        state^.julia_interface != nil &&
         slot^.runtime_generation == service^.runtime_generation &&
+        slot^.animation_generation == service^.animation_generation &&
         slot^.animation == state^.julia_interface^.current_animation
 }
 

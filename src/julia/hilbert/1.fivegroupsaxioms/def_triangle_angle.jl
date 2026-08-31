@@ -62,28 +62,29 @@ const MarkerDrawDuration = 1.2f0
 const CompassLiftDuration = 1.8f0
 const FinalHoldDuration = 0.9f0
 
-const MetaEdgeABHostId = 1
-const MetaEdgeABJoint1Id = 2
-const MetaEdgeABJoint2Id = 3
-const MetaEdgeACHostId = 11
-const MetaEdgeACJoint1Id = 12
-const MetaEdgeACJoint2Id = 13
-const MetaEdgeBCHostId = 21
-const MetaEdgeBCJoint1Id = 22
-const MetaEdgeBCJoint2Id = 23
+struct AnimationState
+    edge_a_b_host::Int64
+    edge_a_b_joint1::Int64
+    edge_a_b_joint2::Int64
+    edge_a_c_host::Int64
+    edge_a_c_joint1::Int64
+    edge_a_c_joint2::Int64
+    edge_b_c_host::Int64
+    edge_b_c_joint1::Int64
+    edge_b_c_joint2::Int64
+    marker_host::Int64
+    marker_start::Int64
+    marker_end::Int64
+    label_a::Int64
+    label_b::Int64
+    label_c::Int64
+    label_h::Int64
+    label_k::Int64
+    phase::Float32
+    timer::Float32
+end
 
-const MetaMarkerHostId = 31
-const MetaMarkerStartId = 32
-const MetaMarkerEndId = 33
-
-const MetaLabelAId = 41
-const MetaLabelBId = 42
-const MetaLabelCId = 43
-const MetaLabelHId = 44
-const MetaLabelKId = 45
-
-const MetaPhase = 101
-const MetaTimer = 102
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescendToA = 0f0
 const PhaseDrawAB = 1f0
@@ -95,6 +96,17 @@ const PhasePenLiftForMarker = 6f0
 const PhaseDrawMarker = 7f0
 const PhaseCompassLift = 8f0
 const PhaseFinalHold = 9f0
+
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.edge_a_b_host, state.edge_a_b_joint1, state.edge_a_b_joint2,
+        state.edge_a_c_host, state.edge_a_c_joint1, state.edge_a_c_joint2,
+        state.edge_b_c_host, state.edge_b_c_joint1, state.edge_b_c_joint2,
+        state.marker_host, state.marker_start, state.marker_end,
+        state.label_a, state.label_b, state.label_c, state.label_h,
+        state.label_k, phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -117,31 +129,21 @@ and is represented by the symbol $\angle BAC$ \euclidangle[color=khaki3,radius=2
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    edge_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeABHostId))
-    edge_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeABJoint2Id))
-    edge_a_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeACHostId))
-    edge_a_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeACJoint2Id))
-    edge_b_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeBCHostId))
-    edge_b_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeBCJoint2Id))
-
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarkerHostId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarkerEndId))
-
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
+"""Reset the animation objects and transactionally restart cycle timing."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    edge_a_b_host_id = state.edge_a_b_host
+    edge_a_b_joint2_id = state.edge_a_b_joint2
+    edge_a_c_host_id = state.edge_a_c_host
+    edge_a_c_joint2_id = state.edge_a_c_joint2
+    edge_b_c_host_id = state.edge_b_c_host
+    edge_b_c_joint2_id = state.edge_b_c_joint2
+    marker_host_id = state.marker_host
+    marker_end_id = state.marker_end
+    label_a_id = state.label_a
+    label_b_id = state.label_b
+    label_c_id = state.label_c
+    label_h_id = state.label_h
+    label_k_id = state.label_k
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [edge_a_b_host_id, edge_a_c_host_id, edge_b_c_host_id, marker_host_id,
@@ -152,8 +154,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(state_ptr, edge_b_c_joint2_id, EdgeBCStart)
     OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, MarkerStart)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescendToA)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescendToA, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -168,6 +171,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_compass_active(state_ptr, 0, MarkerColor)
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -194,27 +198,14 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_k = OdinJuliaBridge.create_new_label(
         state_ptr, 'k', LabelKPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeABHostId, edge_a_b.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeABJoint1Id, edge_a_b.joint1_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeABJoint2Id, edge_a_b.joint2_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACHostId, edge_a_c.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint1Id, edge_a_c.joint1_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeACJoint2Id, edge_a_c.joint2_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeBCHostId, edge_b_c.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeBCJoint1Id, edge_b_c.joint1_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaEdgeBCJoint2Id, edge_b_c.joint2_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerHostId, marker.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerStartId, marker.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaMarkerEndId, marker.end_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, label_a.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, label_b.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelCId, label_c.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelHId, label_h.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelKId, label_k.index)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        edge_a_b.host_id, edge_a_b.joint1_id, edge_a_b.joint2_id,
+        edge_a_c.host_id, edge_a_c.joint1_id, edge_a_c.joint2_id,
+        edge_b_c.host_id, edge_b_c.joint1_id, edge_b_c.joint2_id,
+        marker.host_id, marker.start_id, marker.end_id,
+        label_a.index, label_b.index, label_c.index, label_h.index, label_k.index,
+        PhaseDescendToA, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -223,44 +214,32 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    edge_a_b_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeABHostId))
-    edge_a_b_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeABJoint1Id))
-    edge_a_b_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeABJoint2Id))
-    edge_a_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeACHostId))
-    edge_a_c_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeACJoint1Id))
-    edge_a_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeACJoint2Id))
-    edge_b_c_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeBCHostId))
-    edge_b_c_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeBCJoint1Id))
-    edge_b_c_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaEdgeBCJoint2Id))
-
-    marker_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarkerHostId))
-    marker_start_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarkerStartId))
-    marker_end_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaMarkerEndId))
-
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
-    label_c_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelCId))
-    label_h_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelHId))
-    label_k_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelKId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    edge_a_b_host_id = state.edge_a_b_host
+    edge_a_b_joint1_id = state.edge_a_b_joint1
+    edge_a_b_joint2_id = state.edge_a_b_joint2
+    edge_a_c_host_id = state.edge_a_c_host
+    edge_a_c_joint1_id = state.edge_a_c_joint1
+    edge_a_c_joint2_id = state.edge_a_c_joint2
+    edge_b_c_host_id = state.edge_b_c_host
+    edge_b_c_joint1_id = state.edge_b_c_joint1
+    edge_b_c_joint2_id = state.edge_b_c_joint2
+    marker_host_id = state.marker_host
+    marker_start_id = state.marker_start
+    marker_end_id = state.marker_end
+    label_a_id = state.label_a
+    label_b_id = state.label_b
+    label_c_id = state.label_c
+    label_h_id = state.label_h
+    label_k_id = state.label_k
 
     if edge_a_b_host_id < 0 || edge_a_c_host_id < 0 || edge_b_c_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescendToA
         EuclidAnimations.animate_pen_descend(
@@ -386,13 +365,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseFinalHold
         timer += dt
         if timer >= FinalHoldDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
 end
 
 end

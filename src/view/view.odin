@@ -8,6 +8,7 @@ import "font"
 import "ui"
 import "../core"
 import "../audio"
+import "../dynview"
 import "../shapes"
 import julia "../bridge"
 import evidence_allocation "../evidence/allocation"
@@ -134,6 +135,21 @@ run_window_frame :: proc(
     evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
+    math_entry := &state^.font_cache.entries[int(font.Font_Key.Math_Regular)]
+    math_generation_changed :=
+        state^.dynview.math_shaping.generation != math_entry.generation &&
+        state^.dynview.math_shaping.failed_generation != math_entry.generation
+    if math_generation_changed {
+        if font.math_shaping_sync(
+            &state^.font_cache, &state^.dynview.math_shaping) {
+            log.infof("dynview_math_shaper_ready generation=%d",
+                state^.dynview.math_shaping.generation)
+        } else {
+            log.errorf("dynview_math_shaper_failed generation=%d",
+                math_entry.generation)
+        }
+        dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
+    }
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
     julia.publish_available_view_snapshot(state)
     alpha := accumulate_and_update_systems(state)
@@ -322,7 +338,6 @@ shutdown_julia_runtime :: proc(
     wait_for_julia_shutdown(service, shutdown_id, started_at)
     evidence_session.session_accept_ring(
         &state^.evidence_session, &state^.evidence_ring)
-    julia.destroy_julia_runtime_service(service)
 }
 
 //   Release runtime state allocations and finalize Julia/GIF runtime resources.
@@ -396,11 +411,19 @@ initialize_window_resources :: proc(
 
     init_tool_brush_shader(state)
 
-    font.cache_init(&state^.font_cache)
-    if !state^.font_cache.entries[int(font.Font_Key.Regular)].resident {
-        fmt.eprintln(
-            "warning: failed to load JuliaMono Regular; text rendering may fallback")
+    required_fonts_ready := font.cache_init(&state^.font_cache)
+    if !required_fonts_ready {
+        fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
     }
+    assert(required_fonts_ready)
+    math_shaping_ready := font.math_shaping_sync(
+        &state^.font_cache, &state^.dynview.math_shaping)
+    if !math_shaping_ready {
+        fmt.eprintln("error: failed to initialize Dynview NewCM shaping")
+    }
+    assert(math_shaping_ready)
+    log.infof("dynview_math_shaper_ready generation=%d",
+        state^.dynview.math_shaping.generation)
     _ = font.cache_request(&state^.font_cache, .Bold)
     _ = font.cache_request(&state^.font_cache, .Regular_Italic)
 }
@@ -412,6 +435,7 @@ initialize_window_resources :: proc(
 shutdown_window_resources :: proc(state : ^Euclid_General_State) {
     font.cache_shutdown_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
+    font.math_shaping_destroy(&state^.dynview.math_shaping)
     font.cache_destroy(&state^.font_cache)
     audio.shutdown_chalk_runtime(&state^.chalk_audio)
     if rl.IsAudioDeviceReady() {

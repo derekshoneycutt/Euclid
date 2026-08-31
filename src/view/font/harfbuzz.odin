@@ -18,6 +18,15 @@ Harfbuzz_Font :: struct {}
 // Opaque reusable HarfBuzz input and shaped-output buffer.
 Harfbuzz_Buffer :: struct {}
 
+// HarfBuzz buffer direction values used by explicit math shaping setup.
+Harfbuzz_Direction :: enum c.int {
+    Invalid = 0,
+    Left_To_Right = 4,
+    Right_To_Left = 5,
+    Top_To_Bottom = 6,
+    Bottom_To_Top = 7,
+}
+
 // HarfBuzz policy controlling whether a blob copies or borrows source bytes.
 Harfbuzz_Memory_Mode :: enum c.int {
     Duplicate = 0,
@@ -52,27 +61,66 @@ Harfbuzz_Glyph_Position :: struct {
     private: i32,
 }
 
+// ABI-compatible HarfBuzz glyph ink extents in configured 26.6 units.
+Harfbuzz_Glyph_Extents :: struct {
+    x_bearing: i32,
+    y_bearing: i32,
+    width: i32,
+    height: i32,
+}
+
 Shaped_Glyph :: core.Shaped_Glyph
 Font_Shaping_Resource :: core.Font_Shaping_Resource
+Font_Math_Shaping_Capability :: core.Font_Math_Shaping_Capability
+Font_Glyph_Extents :: core.Font_Glyph_Extents
+
+Math_Shaping_Role :: enum {
+    Upright,
+    Italic,
+}
+
+Math_Projection_Decode_Result :: struct {
+    value: rune,
+    width: int,
+    valid: bool,
+}
+
+Math_Shaping_Input :: struct {
+    text: string,
+    role: Math_Shaping_Role,
+    workspace: []u8,
+}
 
 foreign harfbuzz {
     hb_blob_create :: proc(
         data: rawptr, length: u32, mode: Harfbuzz_Memory_Mode,
         user_data, destroy: rawptr) -> ^Harfbuzz_Blob ---
     hb_blob_destroy :: proc(blob: ^Harfbuzz_Blob) ---
+    hb_blob_get_length :: proc(blob: ^Harfbuzz_Blob) -> u32 ---
     hb_face_create :: proc(blob: ^Harfbuzz_Blob, index: u32) -> ^Harfbuzz_Face ---
     hb_face_destroy :: proc(face: ^Harfbuzz_Face) ---
     hb_face_get_glyph_count :: proc(face: ^Harfbuzz_Face) -> u32 ---
+    hb_face_reference_table :: proc(
+        face: ^Harfbuzz_Face, tag: u32) -> ^Harfbuzz_Blob ---
     hb_font_create :: proc(face: ^Harfbuzz_Face) -> ^Harfbuzz_Font ---
     hb_font_destroy :: proc(font: ^Harfbuzz_Font) ---
     hb_font_set_scale :: proc(font: ^Harfbuzz_Font, x_scale, y_scale: i32) ---
     hb_font_get_nominal_glyph :: proc(
         font: ^Harfbuzz_Font, unicode: u32, glyph: ^u32) -> c.int ---
+    hb_font_get_glyph_extents :: proc(
+        font: ^Harfbuzz_Font, glyph: u32,
+        extents: ^Harfbuzz_Glyph_Extents) -> c.int ---
     hb_ot_font_set_funcs :: proc(font: ^Harfbuzz_Font) ---
     hb_buffer_create :: proc() -> ^Harfbuzz_Buffer ---
     hb_buffer_destroy :: proc(buffer: ^Harfbuzz_Buffer) ---
     hb_buffer_pre_allocate :: proc(buffer: ^Harfbuzz_Buffer, size: u32) -> c.int ---
     hb_buffer_clear_contents :: proc(buffer: ^Harfbuzz_Buffer) ---
+    hb_buffer_set_direction :: proc(
+        buffer: ^Harfbuzz_Buffer, direction: Harfbuzz_Direction) ---
+    hb_buffer_get_direction :: proc(
+        buffer: ^Harfbuzz_Buffer) -> Harfbuzz_Direction ---
+    hb_buffer_set_script :: proc(buffer: ^Harfbuzz_Buffer, script: u32) ---
+    hb_buffer_get_script :: proc(buffer: ^Harfbuzz_Buffer) -> u32 ---
     hb_buffer_add_utf8 :: proc(
         buffer: ^Harfbuzz_Buffer, text: cstring, text_length: c.int,
         item_offset: u32, item_length: c.int) ---
@@ -86,6 +134,10 @@ foreign harfbuzz {
     hb_shape :: proc(
         font: ^Harfbuzz_Font, buffer: ^Harfbuzz_Buffer,
         features: [^]Harfbuzz_Feature, feature_count: u32) ---
+    hb_ot_math_get_glyph_italics_correction :: proc(
+        font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
+    hb_ot_math_get_glyph_top_accent_attachment :: proc(
+        font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
 }
 
 //   Pack four ASCII bytes into HarfBuzz's canonical OpenType tag order.
@@ -97,6 +149,20 @@ foreign harfbuzz {
 //   - One 32-bit OpenType tag suitable for `Harfbuzz_Feature.tag`.
 harfbuzz_tag :: proc(a, b, c, d: u8) -> u32 {
     return u32(a) << 24 | u32(b) << 16 | u32(c) << 8 | u32(d)
+}
+
+//   Report whether one initialized face exposes a nonempty OpenType MATH table.
+harfbuzz_face_has_math_table :: proc(shaper: ^Font_Shaping_Resource) -> bool {
+    if shaper == nil || shaper.face == nil {
+        return false
+    }
+    table := hb_face_reference_table(
+        cast(^Harfbuzz_Face)shaper.face, harfbuzz_tag('M', 'A', 'T', 'H'))
+    if table == nil {
+        return false
+    }
+    defer hb_blob_destroy(table)
+    return hb_blob_get_length(table) > 0
 }
 
 //   Release every native handle owned by one shaper in reverse acquisition order.
@@ -208,6 +274,86 @@ harfbuzz_nominal_glyph :: proc(
     return glyph_id, found != 0 && glyph_id != 0
 }
 
+//   Report whether one capability is ready for an exact resident generation.
+math_shaping_generation_matches :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64) -> bool {
+
+    return capability != nil && generation != 0 &&
+        capability.generation == generation &&
+        capability.resource.face != nil && capability.resource.font != nil &&
+        capability.resource.buffer != nil
+}
+
+//   Release one worker-owned math capability and clear its generation identity.
+math_shaping_destroy :: proc(capability: ^Font_Math_Shaping_Capability) {
+    if capability == nil {
+        return
+    }
+    harfbuzz_shaper_destroy(&capability.resource)
+    capability^ = {}
+}
+
+//   Report whether a glyph identity belongs to the capability's immutable face.
+math_shaping_has_glyph :: proc(
+    capability: ^Font_Math_Shaping_Capability, glyph_id: u32) -> bool {
+
+    if capability == nil || capability.resource.face == nil || glyph_id == 0 {
+        return false
+    }
+    glyph_count := hb_face_get_glyph_count(
+        cast(^Harfbuzz_Face)capability.resource.face)
+    return glyph_id < glyph_count
+}
+
+//   Query one math glyph's ink extents in configured 26.6 pixel units.
+math_shaping_glyph_extents :: proc(
+    capability: ^Font_Math_Shaping_Capability, generation: u64,
+    glyph_id: u32) -> (Font_Glyph_Extents, bool) {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) {
+        return {}, false
+    }
+    native: Harfbuzz_Glyph_Extents
+    found := hb_font_get_glyph_extents(
+        cast(^Harfbuzz_Font)capability.resource.font, glyph_id, &native)
+    return {
+        x_bearing = native.x_bearing,
+        y_bearing = native.y_bearing,
+        width = native.width,
+        height = native.height,
+    }, found != 0
+}
+
+//   Query one math glyph's italic correction in configured 26.6 pixel units.
+math_shaping_italic_correction :: proc(
+    capability: ^Font_Math_Shaping_Capability, generation: u64,
+    glyph_id: u32) -> (i32, bool) {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) {
+        return 0, false
+    }
+    value := hb_ot_math_get_glyph_italics_correction(
+        cast(^Harfbuzz_Font)capability.resource.font, glyph_id)
+    return value, true
+}
+
+//   Query one math glyph's top-accent attachment in configured 26.6 pixel units.
+math_shaping_top_accent_attachment :: proc(
+    capability: ^Font_Math_Shaping_Capability, generation: u64,
+    glyph_id: u32) -> (i32, bool) {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) {
+        return 0, false
+    }
+    value := hb_ot_math_get_glyph_top_accent_attachment(
+        cast(^Harfbuzz_Font)capability.resource.font, glyph_id)
+    return value, true
+}
+
 //   Copy one completed native shape result into caller-owned bounded storage.
 //
 // Parameters:
@@ -245,6 +391,173 @@ harfbuzz_copy_result :: proc(
         }
     }
     return int(glyph_count), true
+}
+
+//   Decode one strict UTF-8 scalar and its byte width at `offset`.
+math_projection_decode_utf8 :: proc(
+    text: string, offset: int) -> Math_Projection_Decode_Result {
+
+    if offset < 0 || offset >= len(text) {
+        return {}
+    }
+    first := text[offset]
+    width := 1
+    minimum: u32 = 0
+    scalar := u32(first)
+    if first >= 0xc2 && first <= 0xdf {
+        width, minimum, scalar = 2, 0x80, u32(first & 0x1f)
+    } else if first >= 0xe0 && first <= 0xef {
+        width, minimum, scalar = 3, 0x800, u32(first & 0x0f)
+    } else if first >= 0xf0 && first <= 0xf4 {
+        width, minimum, scalar = 4, 0x10000, u32(first & 0x07)
+    } else if first > 0x7f {
+        return {}
+    }
+    if offset + width > len(text) {
+        return {}
+    }
+    for index in 1..<width {
+        continuation := text[offset + index]
+        if continuation & 0xc0 != 0x80 {
+            return {}
+        }
+        scalar = scalar << 6 | u32(continuation & 0x3f)
+    }
+    valid := scalar >= minimum && scalar <= 0x10ffff &&
+        !(scalar >= 0xd800 && scalar <= 0xdfff)
+    return {value = rune(scalar), width = width, valid = valid}
+}
+
+//   Encode one valid Unicode scalar into caller-provided four-byte storage.
+math_projection_encode_utf8 :: proc(value: rune, output: ^[4]u8) -> int {
+    scalar := u32(value)
+    if scalar <= 0x7f {
+        output[0] = u8(scalar)
+        return 1
+    } else if scalar <= 0x7ff {
+        output[0] = u8(0xc0 | scalar >> 6)
+        output[1] = u8(0x80 | scalar & 0x3f)
+        return 2
+    } else if scalar <= 0xffff {
+        output[0] = u8(0xe0 | scalar >> 12)
+        output[1] = u8(0x80 | scalar >> 6 & 0x3f)
+        output[2] = u8(0x80 | scalar & 0x3f)
+        return 3
+    }
+    output[0] = u8(0xf0 | scalar >> 18)
+    output[1] = u8(0x80 | scalar >> 12 & 0x3f)
+    output[2] = u8(0x80 | scalar >> 6 & 0x3f)
+    output[3] = u8(0x80 | scalar & 0x3f)
+    return 4
+}
+
+//   Map one source scalar to NewCM's mathematical italic alphabet repertoire.
+math_projection_italic_scalar :: proc(value: rune) -> rune {
+    scalar := u32(value)
+    if scalar >= 'A' && scalar <= 'Z' {
+        return rune(0x1d434 + scalar - 'A')
+    } else if scalar >= 'a' && scalar <= 'z' {
+        return rune(0x210e) if value == 'h' else rune(0x1d44e + scalar - 'a')
+    } else if scalar >= 0x03b1 && scalar <= 0x03c9 {
+        return rune(0x1d6fc + scalar - 0x03b1)
+    }
+    switch value {
+    case '∂': return rune(0x1d715)
+    case 'ϵ': return rune(0x1d716)
+    case 'ϑ': return rune(0x1d717)
+    case 'ϰ': return rune(0x1d718)
+    case 'ϕ': return rune(0x1d719)
+    case 'ϱ': return rune(0x1d71a)
+    case 'ϖ': return rune(0x1d71b)
+    }
+    return value
+}
+
+//   Project source math into bounded worker-owned shaping bytes without mutation.
+//
+// Returns:
+//   - A workspace-backed projected string and true when all source is valid and fits.
+//   - An empty string and false for malformed UTF-8, role, or insufficient capacity.
+math_shaping_project_source :: proc(
+    text: string, role: Math_Shaping_Role, workspace: []u8) -> (string, bool) {
+
+    if len(text) == 0 || role < .Upright || role > .Italic {
+        return "", false
+    }
+    read_offset, write_offset := 0, 0
+    for read_offset < len(text) {
+        decoded := math_projection_decode_utf8(text, read_offset)
+        if !decoded.valid {
+            return "", false
+        }
+        projected := decoded.value
+        if role == .Italic {
+            projected = math_projection_italic_scalar(decoded.value)
+        }
+        encoded: [4]u8
+        encoded_len := math_projection_encode_utf8(projected, &encoded)
+        if write_offset + encoded_len > len(workspace) {
+            return "", false
+        }
+        copy(workspace[write_offset:write_offset + encoded_len], encoded[:encoded_len])
+        read_offset += decoded.width
+        write_offset += encoded_len
+    }
+    return string(workspace[:write_offset]), true
+}
+
+//   Shape one math run with explicit left-to-right mathematical script properties.
+//
+// Returns:
+//   - Complete bounded glyph output and true, or zero/false for invalid input,
+//     role, workspace, generation, missing glyphs, or native result failure.
+//
+// Side effects:
+//   - Mutates the caller's temporary workspace and worker-owned reusable buffer.
+math_shaping_shape :: proc(
+    capability: ^Font_Math_Shaping_Capability, generation: u64,
+    input: Math_Shaping_Input, output: []Shaped_Glyph) -> (int, bool) {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        len(input.text) == 0 || len(input.text) > int(max(c.int)) || len(output) == 0 {
+        return 0, false
+    }
+    shaping_text, projected := math_shaping_project_source(
+        input.text, input.role, input.workspace)
+    if !projected || len(shaping_text) > int(max(c.int)) {
+        return 0, false
+    }
+    buffer := cast(^Harfbuzz_Buffer)capability.resource.buffer
+    hb_buffer_clear_contents(buffer)
+    hb_buffer_set_direction(buffer, .Left_To_Right)
+    hb_buffer_set_script(buffer, harfbuzz_tag('m', 'a', 't', 'h'))
+    hb_buffer_add_utf8(
+        buffer, cstring(raw_data(shaping_text)), c.int(len(shaping_text)), 0, -1)
+    hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, nil, 0)
+    glyph_count := hb_buffer_get_length(buffer)
+    info_count := glyph_count
+    infos := hb_buffer_get_glyph_infos(buffer, &info_count)
+    if infos == nil || info_count != glyph_count {
+        return 0, false
+    }
+    for index in 0..<int(glyph_count) {
+        if infos[index].codepoint == 0 {
+            return 0, false
+        }
+    }
+    return harfbuzz_copy_result(buffer, output)
+}
+
+//   Report whether explicit math direction and script remain installed on the buffer.
+math_shaping_has_math_properties :: proc(
+    capability: ^Font_Math_Shaping_Capability) -> bool {
+
+    if capability == nil || capability.resource.buffer == nil {
+        return false
+    }
+    buffer := cast(^Harfbuzz_Buffer)capability.resource.buffer
+    return hb_buffer_get_direction(buffer) == .Left_To_Right &&
+        hb_buffer_get_script(buffer) == harfbuzz_tag('m', 'a', 't', 'h')
 }
 
 //   Shape borrowed UTF-8 into bounded presentation glyphs using JuliaMono `calt`.

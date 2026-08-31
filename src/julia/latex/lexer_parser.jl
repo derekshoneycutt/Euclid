@@ -175,11 +175,11 @@ function parse_atom(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     idx[] += 1
 
     if token.kind == :text
-        return [latex_atom_run(normalize_text_whitespace(token.text), :math)]
+        return normal_math_atom_runs(normalize_text_whitespace(token.text))
     end
 
     if token.kind != :command
-        return [latex_atom_run(token.text, :math)]
+        return normal_math_atom_runs(token.text)
     end
 
     return parse_command_atom(token.text, tokens, idx)
@@ -225,7 +225,7 @@ function parse_command_atom(
         return structured_runs
     end
 
-    return [latex_atom_run(command, :math)]
+    return normal_math_atom_runs(command)
 end
 
 """Parse display-style large operators that accept stacked upper/lower limits."""
@@ -258,7 +258,7 @@ end
 """Parse direct Unicode command substitutions."""
 function parse_unicode_command(command::AbstractString)
     if haskey(UNICODE_COMMAND_MAP, command)
-        return [latex_atom_run(UNICODE_COMMAND_MAP[command], :math)]
+        return normal_math_atom_runs(UNICODE_COMMAND_MAP[command])
     end
 
     return nothing
@@ -279,7 +279,7 @@ function parse_mathbb_atom(
         return [latex_atom_run(unicode, :mathbb)]
     end
 
-    return [latex_atom_run("\\mathbb", :math)]
+    return normal_math_atom_runs("\\mathbb")
 end
 
 """Parse upright text-operator commands."""
@@ -483,7 +483,8 @@ end
 
 """Return true when run is one plain math atom with no structured children."""
 is_plain_math_atom(run::LatexRun) =
-    run.segment == :atom && run.role == :math && isempty(run.children) &&
+    run.segment == :atom &&
+    run.role in (:math, :math_italic, :math_upright) && isempty(run.children) &&
     isempty(run.secondary_children)
 
 """Trim left edge whitespace from first matrix/array cell run when plain atom text."""

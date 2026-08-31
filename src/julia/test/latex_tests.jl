@@ -171,12 +171,29 @@ end
     @test command_nonbreaking_space_plain == "∠\u00a0ABC"
 
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
-    @test length(program) == 2
+    @test length(program) == 5
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN
     @test program[1].text == "sin"
     @test program[2].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
-    @test program[2].text == "(x)+x"
-    @test program[2].style_role == :math
+    @test program[2].text == "("
+    @test program[2].style_role == :math_upright
+    @test program[3].text == "x"
+    @test program[3].style_role == :math_italic
+    @test program[4].text == ")+"
+    @test program[4].style_role == :math_upright
+    @test program[5].text == "x"
+    @test program[5].style_role == :math_italic
+end
+
+@testset "normal math semantic roles" begin
+    program = EuclidLatex.compiled_program_for("Ax+Γα=2")
+    @test [(op.text, op.style_role) for op in program] == [
+        ("Ax", :math_italic),
+        ("+Γ", :math_upright),
+        ("α", :math_italic),
+        ("=2", :math_upright),
+    ]
+    @test EuclidLatex.latex_to_plain_text("Ax+Γα=2") == "Ax+Γα=2"
 end
 
 @testset "text command and scripts" begin
@@ -210,14 +227,14 @@ end
 
 @testset "mathbb segmentation and style role" begin
     program = EuclidLatex.compiled_program_for("A + \\mathbb{R} + B")
-    @test length(program) == 3
+    @test length(program) == 5
     @test program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
-    @test program[1].style_role == :math
-    @test program[2].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
-    @test program[2].text == "ℝ"
-    @test program[2].style_role == :mathbb
+    @test program[1].style_role == :math_italic
     @test program[3].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
-    @test program[3].style_role == :math
+    @test program[3].text == "ℝ"
+    @test program[3].style_role == :mathbb
+    @test program[5].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
+    @test program[5].style_role == :math_italic
 end
 
 @testset "script attach emit program" begin
@@ -227,7 +244,7 @@ end
     @test program[1].text == "A"
     @test program[1].sup_text == "2"
     @test program[1].sub_text == "1"
-    @test program[1].style_role == :math
+    @test program[1].style_role == :math_italic
 
     mathbb_program = EuclidLatex.compiled_program_for("\\mathbb{R}_0")
     @test length(mathbb_program) == 1
@@ -235,7 +252,7 @@ end
     @test mathbb_program[1].text == "ℝ"
     @test mathbb_program[1].sup_text == ""
     @test mathbb_program[1].sub_text == "0"
-    @test mathbb_program[1].style_role == :math
+    @test mathbb_program[1].style_role == :mathbb
 
     recursive_parent_program = EuclidLatex.compiled_program_for("\\overline{AB}_1^2")
     @test length(recursive_parent_program) == 1
@@ -269,7 +286,7 @@ end
     @test sum_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_SUM
 
     lim_program = EuclidLatex.compiled_program_for("\\lim_{x \\to 0} f(x)")
-    @test length(lim_program) == 2
+    @test length(lim_program) == 5
     @test lim_program[1].kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
     @test lim_program[1].text == "lim"
     @test lim_program[1].sup_text == ""
@@ -289,19 +306,17 @@ end
 
     accent_program = EuclidLatex.compiled_program_for(
         "f(\\overline{AB}) + \\underline{CD}")
-    @test length(accent_program) == 4
+    @test length(accent_program) == 5
     @test accent_program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
-    @test accent_program[1].style_role == :math
-    @test accent_program[2].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
-    @test accent_program[2].accent_mode == :overline
-    @test length(accent_program[2].children) == 1
-    @test accent_program[2].children[1].text == "AB"
-    @test accent_program[2].style_role == :math
-    @test accent_program[4].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
-    @test accent_program[4].accent_mode == :underline
-    @test length(accent_program[4].children) == 1
-    @test accent_program[4].children[1].text == "CD"
-    @test accent_program[4].style_role == :math
+    @test accent_program[1].style_role == :math_italic
+    @test accent_program[3].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+    @test accent_program[3].accent_mode == :overline
+    @test length(accent_program[3].children) == 1
+    @test accent_program[3].children[1].text == "AB"
+    @test accent_program[5].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+    @test accent_program[5].accent_mode == :underline
+    @test length(accent_program[5].children) == 1
+    @test accent_program[5].children[1].text == "CD"
 
     embedded_scripts = EuclidLatex.compiled_program_for(
         "\\overline{AB^2} + \\underline{CD_4}")

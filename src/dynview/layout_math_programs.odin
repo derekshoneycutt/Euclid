@@ -41,7 +41,17 @@ Matrix_Cell_Dims :: struct {
 
 Script_Metrics :: struct {
     cols: int,
-    scale, ascent, descent, top_pad, bottom_pad, advance: f32,
+    scale, ascent, descent, top_pad, bottom_pad, advance, draw_width: f32,
+}
+
+Script_Metrics_Context :: struct {
+    cache: ^core.Dynview_Compile_Cache,
+    command: core.Dynview_Command,
+    site: core.Dynview_Shaped_Site,
+    text: string,
+    style_id: i32,
+    scale: f32,
+    font_size: f32,
 }
 
 Math_Measure_Context :: struct {
@@ -96,25 +106,32 @@ Radical_Geometry_Context :: struct {
 
 //   Measure script text and its scaled typography for a recursive math item.
 script_metrics :: #force_inline proc(
-    cache: ^core.Dynview_Compile_Cache,
-    text: string,
-    style_id: i32,
-    scale, font_size: f32) -> Script_Metrics {
+    ctx: Script_Metrics_Context) -> Script_Metrics {
 
-    resolved_scale := max(0.2, scale)
-    style := style_by_id(style_id)
-    scaled_font_size := max(1.0, font_size * resolved_scale)
+    resolved_scale := max(0.2, ctx.scale)
+    style := style_by_id(ctx.style_id)
+    scaled_font_size := max(1.0, ctx.font_size * resolved_scale)
     ascent, descent := style_ascent_descent(style, scaled_font_size)
     top_pad, bottom_pad := script_visual_padding(scaled_font_size)
-    return Script_Metrics{
-        cols = text_codepoint_count_span(text, 0, len(text)),
+    metrics := Script_Metrics{
+        cols = text_codepoint_count_span(ctx.text, 0, len(ctx.text)),
         scale = resolved_scale,
         ascent = ascent,
         descent = descent,
         top_pad = top_pad,
         bottom_pad = bottom_pad,
-        advance = effective_advance(style, cache^.last_cell_width) * resolved_scale,
+        advance = effective_advance(style, ctx.cache^.last_cell_width) * resolved_scale,
     }
+    metrics.draw_width = f32(metrics.cols) * metrics.advance
+    run, shaped := shaped_run_for_command(ctx.cache, ctx.command, ctx.site)
+    shaped_metrics, measured := shaped_run_layout_metrics(run, scaled_font_size)
+    if shaped && measured {
+        metrics.ascent = shaped_metrics.ascent
+        metrics.descent = shaped_metrics.descent
+        metrics.advance = shaped_metrics.advance
+        metrics.draw_width = shaped_metrics.draw_width
+    }
+    return metrics
 }
 
 // Reset a cache structure for the dynview layout engine
@@ -186,7 +203,7 @@ math_program_text_item :: #force_inline proc(
         kind = .Math_Glyph_Run
     }
 
-    return core.Dynview_Layout_Item{
+    item := core.Dynview_Layout_Item{
         kind = kind,
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
@@ -196,6 +213,17 @@ math_program_text_item :: #force_inline proc(
         ascent = ascent,
         descent = descent,
     }
+    run, shaped := shaped_run_for_command(cache, cmd, .Primary)
+    metrics, measured := shaped_run_layout_metrics(run, font_size)
+    if cmd.kind == .Math_Glyph_Run && shaped && measured {
+        item.draw_width = metrics.draw_width
+        item.draw_height = metrics.ascent + metrics.descent
+        item.ascent = metrics.ascent
+        item.descent = metrics.descent
+        item.italic_correction = metrics.italic_correction
+        item.top_accent_attachment = metrics.top_accent_attachment
+    }
+    return item
 }
 
 //   Build one layout-like item for a recursive script wrapper around a child math program.
@@ -232,12 +260,12 @@ script_attach_metrics :: proc(
     script_scale := max(0.2, cmd.script_scale)
     offsets := script_draw_offsets(
         font_size, script_scale, cmd.script_sup_raise, cmd.script_sub_drop)
-    sup := script_metrics(cache, text_span_from_buffer(
+    sup := script_metrics({cache, cmd, .Superscript, text_span_from_buffer(
         buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len),
-        cmd.script_style_id, script_scale, font_size)
-    sub := script_metrics(cache, text_span_from_buffer(
+        cmd.script_style_id, script_scale, font_size})
+    sub := script_metrics({cache, cmd, .Subscript, text_span_from_buffer(
         buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len),
-        cmd.script_style_id, script_scale, font_size)
+        cmd.script_style_id, script_scale, font_size})
     ascent := child^.ascent
     descent := child^.descent
     if sup.cols > 0 {
@@ -249,8 +277,10 @@ script_attach_metrics :: proc(
     cols := max(sup.cols, sub.cols)
     draw_width := child^.draw_width
     if cols > 0 {
+        script_width := max(sup.draw_width, sub.draw_width)
+        italic_correction := child^.italic_correction if sup.cols > 0 else 0
         draw_width += max(1.0, cmd.script_gap * font_size) +
-            f32(cols) * max(sup.advance, sub.advance)
+            italic_correction + script_width
     }
     return {
         scale = script_scale, draw_width = draw_width, ascent = ascent,
@@ -304,12 +334,12 @@ large_op_metrics :: proc(
     font_size: f32) -> Large_Op_Metrics {
 
     limit_scale := large_op_limit_scale(max(0.2, cmd.script_scale))
-    sup := script_metrics(cache, text_span_from_buffer(
+    sup := script_metrics({cache, cmd, .Superscript, text_span_from_buffer(
         buffer, cmd.script_sup_text_offset, cmd.script_sup_text_len),
-        cmd.script_style_id, limit_scale, font_size)
-    sub := script_metrics(cache, text_span_from_buffer(
+        cmd.script_style_id, limit_scale, font_size})
+    sub := script_metrics({cache, cmd, .Subscript, text_span_from_buffer(
         buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len),
-        cmd.script_style_id, limit_scale, font_size)
+        cmd.script_style_id, limit_scale, font_size})
     glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
     glyph_ascent, glyph_descent := style_ascent_descent(
         style, max(1.0, font_size * glyph_scale))
@@ -317,6 +347,14 @@ large_op_metrics :: proc(
         text_for_command(buffer, cmd), 0, len(text_for_command(buffer, cmd))))
     glyph_width := f32(glyph_cols) *
         effective_advance(style, cache^.last_cell_width) * glyph_scale
+    glyph_run, glyph_shaped := shaped_run_for_command(cache, cmd, .Primary)
+    glyph_metrics, glyph_measured := shaped_run_layout_metrics(
+        glyph_run, font_size * glyph_scale)
+    if glyph_shaped && glyph_measured {
+        glyph_width = glyph_metrics.draw_width
+        glyph_ascent = glyph_metrics.ascent
+        glyph_descent = glyph_metrics.descent
+    }
     gap := large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
     ascent := glyph_ascent if sup.cols == 0 else
         glyph_ascent + sup.ascent + sup.descent + gap
@@ -324,8 +362,7 @@ large_op_metrics :: proc(
         glyph_descent + sub.ascent + sub.descent + gap
     return {
         scale = limit_scale,
-        draw_width = max(glyph_width, max(f32(sup.cols) * sup.advance,
-            f32(sub.cols) * sub.advance)),
+        draw_width = max(glyph_width, max(sup.draw_width, sub.draw_width)),
         ascent = ascent, descent = descent,
         top_pad = sup.top_pad, bottom_pad = sub.bottom_pad,
     }
@@ -651,6 +688,8 @@ math_program_recursive_accent_item :: #force_inline proc(
         descent = descent,
         visual_padding_top = max(child_program^.visual_padding_top, bar_half),
         visual_padding_bottom = max(child_program^.visual_padding_bottom, bar_half),
+        italic_correction = child_program^.italic_correction,
+        top_accent_attachment = child_program^.top_accent_attachment,
     }, true
 }
 
@@ -683,9 +722,9 @@ radical_geometry :: proc(
     ctx: Radical_Geometry_Context) -> Radical_Geometry {
 
     scale := max(0.2, ctx.cmd.script_scale)
-    index := script_metrics(ctx.cache, text_span_from_buffer(
+    index := script_metrics({ctx.cache, ctx.cmd, .Radical_Index, text_span_from_buffer(
         ctx.buffer, ctx.cmd.radical_index_text_offset, ctx.cmd.radical_index_text_len),
-        ctx.cmd.script_style_id, scale, ctx.font_size)
+        ctx.cmd.script_style_id, scale, ctx.font_size})
     offsets := script_draw_offsets(ctx.font_size, scale, ctx.cmd.script_sup_raise,
         ctx.cmd.script_sub_drop)
     script_top, script_bottom := script_visual_padding(offsets.script_font_size)
@@ -701,7 +740,7 @@ radical_geometry :: proc(
     }
     advance := effective_advance(ctx.style, ctx.cache^.last_cell_width)
     lead := max(radical_lead_width(ctx.font_size, advance),
-        f32(index.cols) * index.advance + max(1.0, advance * 1.05))
+        index.draw_width + max(1.0, advance * 1.05))
     front, back := radical_side_paddings(ctx.font_size, advance)
     accent_pad := accent_script_clearance(ctx.font_size, scale, false)
     return {
@@ -777,7 +816,8 @@ math_program_item :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     buffer: ^core.Dynview_Command_Buffer,
     cmd: core.Dynview_Command,
-    font_size: f32) -> (core.Dynview_Layout_Item, bool) {
+    font_size: f32,
+    command_index: int = -1) -> (core.Dynview_Layout_Item, bool) {
 
     handlers := MATH_PROGRAM_ITEM_HANDLERS
     handler := handlers[cmd.kind]
@@ -785,7 +825,9 @@ math_program_item :: #force_inline proc(
         return core.Dynview_Layout_Item{}, false
     }
     style := style_by_id(cmd.style_id)
-    return handler(cache, buffer, cmd, style, font_size)
+    item, ok := handler(cache, buffer, cmd, style, font_size)
+    item.math_command_index = i32(command_index)
+    return item, ok
 }
 
 //   Measure one flat child-command math program and cache its deterministic outer metrics.
@@ -815,10 +857,13 @@ measure_math_program :: proc(
     max_descent: f32 = 0
     max_top_pad: f32 = 0
     max_bottom_pad: f32 = 0
+    trailing_italic_correction: f32 = 0
+    trailing_top_accent_attachment: f32 = 0
     command_end := program^.command_start + program^.command_count
     for command_index in program^.command_start..<command_end {
         cmd := cache^.math_commands[command_index]
-        item, ok := math_program_item(cache, buffer, cmd, font_size)
+        item, ok := math_program_item(
+            cache, buffer, cmd, font_size, command_index)
         if !ok {
             return false
         }
@@ -828,6 +873,8 @@ measure_math_program :: proc(
         max_descent = max(max_descent, item.descent)
         max_top_pad = max(max_top_pad, item.visual_padding_top)
         max_bottom_pad = max(max_bottom_pad, item.visual_padding_bottom)
+        trailing_italic_correction = item.italic_correction
+        trailing_top_accent_attachment = item.top_accent_attachment
     }
 
     program^.draw_width = total_width
@@ -835,6 +882,8 @@ measure_math_program :: proc(
     program^.descent = max(1.0, max_descent)
     program^.visual_padding_top = max_top_pad
     program^.visual_padding_bottom = max_bottom_pad
+    program^.italic_correction = trailing_italic_correction
+    program^.top_accent_attachment = trailing_top_accent_attachment
     return true
 }
 

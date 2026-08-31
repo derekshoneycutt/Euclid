@@ -43,6 +43,10 @@ function math_payload_style_id(kind::Int32, role::Symbol,
     if role == :mathbb
         return Int32(mathbb_style)
     end
+    if role == :math_upright
+        return OdinJuliaBridge.dynview_style_with_font_flags(
+            OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR)
+    end
     return Int32(math_style)
 end
 
@@ -83,7 +87,7 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         :none,
         :none,
         LARGE_OP_KIND_NONE,
-        :math,
+        op.style_role,
         [op],
         MathPayloadOp[])
 end

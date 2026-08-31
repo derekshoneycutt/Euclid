@@ -29,12 +29,22 @@ const CircleDrawDuration = 4.4f0
 const CompassRiseDuration = 2.8f0
 const HidePauseDuration = 1.5f0
 
-const MetaCenterPointId = 1
-const MetaCircleHostId = 2
-const MetaCircleStartId = 3
-const MetaCircleEndId = 4
-const MetaPhase = 5
-const MetaTimer = 6
+"""Stable native handles for one circle owned by the animation."""
+struct CircleIds
+    host::Int64
+    start::Int64
+    finish::Int64
+end
+
+"""Complete immutable state for one circle animation generation."""
+struct AnimationState
+    center::Int64
+    circle::CircleIds
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhasePenDescend = 0f0
 const PhaseDrawCenter = 1f0
@@ -44,6 +54,10 @@ const PhaseDrawCircle = 4f0
 const PhaseCompassRise = 5f0
 const PhaseHideAll = 6f0
 
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.center, state.circle, phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -56,14 +70,11 @@ A circle \euclidcircle[color=steelblue,size=1,thickness=2] is a plane figure con
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleHostId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleEndId))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    center_point_id = state.center
+    circle_hostid = state.circle.host
+    circle_endid = state.circle.finish
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [center_point_id, circle_hostid])
     OdinJuliaBridge.set_point_position(
@@ -82,10 +93,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.lock_compass_joint2(
         state_ptr, CircleStartPoint[1], CircleStartPoint[2], CompassTopZ)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhasePenDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -95,13 +108,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     circle = OdinJuliaBridge.create_new_circle(
         state_ptr, CenterPoint, Radius, 0f0, 0f0, CircleColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCenterPointId, center_point.index)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, circle.end_id)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        center_point.index,
+        CircleIds(circle.host_id, circle.start_id, circle.end_id),
+        PhasePenDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -110,21 +121,19 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    center_point_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCenterPointId))
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleHostId))
-    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleStartId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleEndId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    center_point_id = state.center
+    circle_hostid = state.circle.host
+    circle_startid = state.circle.start
+    circle_endid = state.circle.finish
 
     if center_point_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhasePenDescend
         EuclidAnimations.animate_pen_descend(
@@ -199,13 +208,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseHideAll
         timer += dt
         if timer >= HidePauseDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

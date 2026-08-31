@@ -227,7 +227,7 @@ Before submission, the display thread copies every value asynchronous Julia
 animation code may query:
 
 - the fixed point array
-- animation metadata
+- packed typed animation values
 - pen state
 - compass state
 
@@ -249,13 +249,17 @@ The command vocabulary covers current recurring animation mutations:
 - point position, color, brush, offset, and visibility
 - bounded point-hide batches
 - pen and compass locks, movement, visibility, and active state
-- animation metadata
 - drawing-sound state
 - particle emission
 - animation cycle-boundary notification
 
 The batch holds 64 commands. A point batch within one command holds up to eight
 indices. Exceeding either bound marks the entire batch invalid.
+
+Typed animation writes use a separate bounded pending-value buffer in the same
+batch. Reads select the newest matching pending value before falling back to the
+immutable query snapshot. Validation and commit publish typed values and scene
+commands together, so a rejected scene command or typed write publishes neither.
 
 The display validates the complete batch before applying any command. Validation
 checks counts, overflow, producing-animation identity, explicit indices, tool
@@ -362,6 +366,44 @@ The per-frame CPU-pool window runs:
 
 - shape draw-cache construction every frame
 - Dynview compilation and layout only when invalidated
+
+`Dynview_System` owns one growing display-cache arena initialized before executor
+publication. Existing fixed compile and layout arrays remain authoritative during this
+phase. The submitted Dynview task alone enters worker-mutable ownership, resets the
+arena for an invalidated rebuild, and returns display-readable ownership before fence
+completion. Fence waiting may execute queued work on the display thread, so ownership
+is defined by task role and guarded execution identity rather than by requiring a
+distinct operating-system thread. Failed builds clear partial derived views, record a
+stable error, and retain source fallback. Unchanged frames do not reset the arena;
+shutdown destroys it after the task pool has joined and stopped. Shaped-run and glyph
+builders use this arena while enforcing the existing math-command and shaped-glyph
+limits. They publish complete populated slices only after validating the current font
+generation and every source, glyph, and command-site span. Failure clears all shaped
+aliases and restores every command-site fallback sentinel. Recursive math measurement
+consumes these records after the shaping pass. Recursive draw items retain their source
+math-command index so the display thread can consume the exact same command/site record
+without reshaping or reconstructing advances.
+
+Dynview owns a separate generation-tagged NewCM HarfBuzz capability. The display
+thread builds a complete candidate from the resident `Math_Regular` source after font
+service and before frame submission. Successful replacement invalidates font/layout
+state; failed replacement preserves the prior capability and suppresses repeated work
+for that failed generation. Its mutable HarfBuzz buffer is distinct from the font
+cache buffer and is available only to the Dynview frame-preparation worker. The joined
+fence returns read ownership before drawing. Shutdown destroys this capability after
+worker completion and before retiring font generations.
+
+The capability provides bounded left-to-right `math` script shaping, glyph extents,
+italic correction, and top-accent attachment. Julia distinguishes italic-variable and
+upright math runs through existing style IDs. The worker shaping call strictly projects
+eligible source scalars into caller-owned temporary bytes; command-buffer, fallback,
+and copy text remain unchanged. Malformed roles, UTF-8, or insufficient workspace fail
+without publishing a shape. Production math measurement consumes complete cached runs
+and approved MATH attachments while preserving whole-run fallback, existing prose
+measurement, and outer-grid policy. Drawing validates the matching resident
+`Math_Regular` generation and complete glyph residency before drawing cached 26.6
+offsets and advances. A stale generation, invalid slice, or pending glyph rejects the
+whole site before the existing fallback path runs.
 
 These tasks write disjoint caches and may run concurrently. The display joins
 the preparation batch before drawing, making panel rendering cache-only. Scroll

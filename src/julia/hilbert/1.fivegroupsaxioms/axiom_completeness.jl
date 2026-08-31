@@ -38,17 +38,23 @@ const ExtensionMoveDuration = 1.8f0
 const CompassRiseDuration = 1.6f0
 const FinalPauseDuration = 0.25f0
 
-const MetaCircleHostId = 1
-const MetaCircleStartId = 2
-const MetaCircleEndId = 3
-const MetaTangentHostId = 4
-const MetaTangentJoint1Id = 5
-const MetaTangentJoint2Id = 6
-const MetaTrailHostId = 7
-const MetaTrailJoint1Id = 8
-const MetaTrailJoint2Id = 9
-const MetaPhase = 101
-const MetaTimer = 102
+"""Stable native handles for one three-point animation object."""
+struct ObjectIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Complete immutable state for one completeness animation generation."""
+struct AnimationState
+    circle::ObjectIds
+    tangent::ObjectIds
+    trail::ObjectIds
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseCompassDescend = 0f0
 const PhaseDrawMainCircle = 1f0
@@ -59,6 +65,11 @@ const PhaseMoveCenterOut = 5f0
 const PhaseHideInvalidExtension = 6f0
 const PhaseCompassRise = 7f0
 const PhaseFinalPause = 8f0
+
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.circle, state.tangent, state.trail, phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -77,20 +88,18 @@ This axiom gives us nothing directly concerning the existence of limiting points
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleHostId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleEndId))
-    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTangentHostId))
-    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTangentJoint2Id))
-    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTrailHostId))
-    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTrailJoint2Id))
+"""Reset cycle timing transactionally before restoring visible animation state."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    circle_hostid = state.circle.host
+    circle_endid = state.circle.joint2
+    tangent_host_id = state.tangent.host
+    tangent_joint2_id = state.tangent.joint2
+    trail_host_id = state.trail.host
+    trail_joint2_id = state.trail.joint2
+
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseCompassDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         circle_hostid, tangent_host_id, trail_host_id])
@@ -117,9 +126,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
         state_ptr, ToolResetOffscreenJoint2[1], ToolResetOffscreenJoint2[2],
         ToolResetOffscreenJoint2[3], sweep = false)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseCompassDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -131,23 +139,12 @@ function initialize(state_ptr::Ptr{Cvoid})
     center_trail = OdinJuliaBridge.create_new_line(
         state_ptr, CircleCenter, CircleCenter, ExtensionColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleHostId, circle.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleStartId, circle.start_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaCircleEndId, circle.end_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTangentHostId, tangent_ray.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTangentJoint1Id, tangent_ray.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTangentJoint2Id, tangent_ray.joint2_id)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTrailHostId, center_trail.host_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTrailJoint1Id, center_trail.joint1_id)
-    OdinJuliaBridge.set_animation_meta(
-        state_ptr, MetaTrailJoint2Id, center_trail.joint2_id)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        ObjectIds(circle.host_id, circle.start_id, circle.end_id),
+        ObjectIds(tangent_ray.host_id, tangent_ray.joint1_id, tangent_ray.joint2_id),
+        ObjectIds(center_trail.host_id, center_trail.joint1_id, center_trail.joint2_id),
+        PhaseCompassDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -156,33 +153,24 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    circle_hostid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleHostId))
-    circle_startid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleStartId))
-    circle_endid = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaCircleEndId))
-
-    tangent_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTangentHostId))
-    tangent_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTangentJoint1Id))
-    tangent_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTangentJoint2Id))
-
-    trail_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTrailHostId))
-    trail_joint1_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTrailJoint1Id))
-    trail_joint2_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaTrailJoint2Id))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    circle_hostid = state.circle.host
+    circle_startid = state.circle.joint1
+    circle_endid = state.circle.joint2
+    tangent_host_id = state.tangent.host
+    tangent_joint1_id = state.tangent.joint1
+    tangent_joint2_id = state.tangent.joint2
+    trail_host_id = state.trail.host
+    trail_joint1_id = state.trail.joint1
+    trail_joint2_id = state.trail.joint2
 
     if circle_hostid < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseCompassDescend
         EuclidAnimations.animate_compass_descend(
@@ -301,13 +289,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     elseif phase == PhaseFinalPause
         timer += dt
         if timer >= FinalPauseDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

@@ -18,9 +18,67 @@ Codepoint_Resolver_Test_Result :: struct {
     pending_count : i32,
 }
 
+Math_Shaping_Task_Test_Result :: struct {
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    workspace: [32]u8,
+    glyphs: [8]Shaped_Glyph,
+    glyph_count: int,
+    shaped: bool,
+    properties_ready: bool,
+}
+
 // Complete one pool slot without touching shared application state.
 test_task_succeed :: proc(payload: rawptr) -> taskpool.Task_Result {
     return .Succeeded
+}
+
+// Shape one fixed math run through worker-exclusive capability ownership.
+test_math_shaping_task :: proc(payload: rawptr) -> taskpool.Task_Result {
+    result := cast(^Math_Shaping_Task_Test_Result)payload
+    result^.glyph_count, result^.shaped = math_shaping_shape(
+        result^.capability, result^.generation, {
+            text = "x+1", role = .Italic, workspace = result^.workspace[:],
+        }, result^.glyphs[:])
+    result^.properties_ready = math_shaping_has_math_properties(
+        result^.capability)
+    return .Succeeded if result^.shaped else .Failed
+}
+
+// Submit and join one math shape through the production task-pool boundary.
+view_run_math_shaping_task :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability,
+    generation: u64) -> Math_Shaping_Task_Test_Result {
+
+    pool: taskpool.Task_Pool
+    testing.expect(t, taskpool.task_pool_init(&pool, 1, 1))
+    defer taskpool.task_pool_destroy(&pool)
+    task := Math_Shaping_Task_Test_Result{
+        capability = capability,
+        generation = generation,
+    }
+    handle, outcome := taskpool.task_pool_submit(
+        &pool, test_math_shaping_task, &task)
+    testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
+    result, joined := taskpool.task_pool_wait(&pool, handle)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
+    return task
+}
+
+// Verify approved extents and MATH queries for one shaped NewCM glyph.
+view_expect_math_glyph_queries :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability,
+    generation: u64, glyph_id: u32) {
+
+    extents, extents_ok := math_shaping_glyph_extents(
+        capability, generation, glyph_id)
+    testing.expect(t, extents_ok && extents.width != 0 && extents.height != 0)
+    _, italic_ok := math_shaping_italic_correction(
+        capability, generation, glyph_id)
+    _, accent_ok := math_shaping_top_accent_attachment(
+        capability, generation, glyph_id)
+    testing.expect(t, italic_ok && accent_ok)
 }
 
 // Verify direct resolver statuses and telemetry remain mutually consistent.
@@ -61,6 +119,200 @@ view_test_seed_codepoint_set :: proc(t: ^testing.T) {
     testing.expect(t, prepared.atlas_width <= 1024)
     testing.expect(t, prepared.atlas_height <= 1024)
     prepare_destroy(&prepared)
+}
+
+// Verify the required NewCM seed is bounded and the shipped face has MATH data.
+@(test)
+view_test_math_seed_and_table :: proc(t: ^testing.T) {
+    codepoints := math_seed_codepoint_set()
+    testing.expect(t, codepoints.count > 0)
+    testing.expect(t, codepoints.count <= FONT_SEED_CODEPOINT_CAPACITY)
+    testing.expect_value(t, codepoints.values[0], rune(0x0020))
+
+    path := "assets/NewCMSansMath-Regular.otf"
+    prepared: Prepared_Font
+    testing.expect(t, prepare({
+        key = .Math_Regular,
+        path = path,
+        pixel_size = JULIA_MONO_FONT_SIZE,
+        codepoints = codepoints.values[:codepoints.count],
+    }, &prepared, context.allocator))
+    prepare_destroy(&prepared)
+
+    source, read_error := os.read_entire_file(path, context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+    shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &shaping))
+    testing.expect(t, harfbuzz_face_has_math_table(&shaping))
+    harfbuzz_shaper_destroy(&shaping)
+}
+
+// Verify the semantic math key maps only to the packaged NewCM source and seed.
+@(test)
+view_test_math_required_source_policy :: proc(t: ^testing.T) {
+    testing.expect_value(
+        t, FONT_FILENAMES[int(Font_Key.Math_Regular)],
+        "NewCMSansMath-Regular.otf")
+    testing.expect_value(t, FONT_KEY_COUNT, int(Font_Key.Math_Regular) + 1)
+    math_seed := required_seed_codepoints(.Math_Regular)
+    text_seed := required_seed_codepoints(.Regular)
+    testing.expect(t, math_seed.count > text_seed.count)
+    testing.expect_value(t, math_seed.count, i32(216))
+    testing.expect_value(t, text_seed.count, i32(96))
+}
+
+// Verify a face without OpenType MATH data cannot become the math generation.
+@(test)
+view_test_math_generation_rejects_missing_math_table :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    resource: Font_Shaping_Resource
+    testing.expect(t, !font_shaping_create(
+        &cache, .Math_Regular, "assets/JuliaMono-Regular.ttf", &resource))
+    testing.expect(t, resource.blob == nil)
+    testing.expect(t, resource.face == nil)
+    testing.expect(t, resource.font == nil)
+    testing.expect(t, resource.buffer == nil)
+    cache.preparation.state = .Idle
+    cache_preparation_arena_destroy(&cache)
+}
+
+// Verify math generation metadata and native shaping ownership retire together.
+@(test)
+view_test_math_generation_teardown :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/NewCMSansMath-Regular.otf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    entry: Font_Cache_Entry
+    entry.resident = true
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &entry.shaping))
+    testing.expect(t, font_generation_glyphs_init(
+        &entry, 128, context.allocator))
+    font_generation_destroy(&entry)
+
+    testing.expect(t, entry.shaping.blob == nil)
+    testing.expect(t, entry.shaping.face == nil)
+    testing.expect(t, entry.shaping.font == nil)
+    testing.expect(t, entry.shaping.buffer == nil)
+    testing.expect_value(t, len(entry.glyphs), 0)
+}
+
+// Verify worker math shaping is isolated, explicit, bounded, and query-capable.
+@(test)
+view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Math_Regular)]
+    entry.resident = true
+    entry.generation = 7
+    entry.requested_generation = 7
+    source, read_error := os.read_entire_file(
+        "assets/NewCMSansMath-Regular.otf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &entry.shaping))
+
+    capability: Font_Math_Shaping_Capability
+    testing.expect(t, math_shaping_sync(&cache, &capability))
+    testing.expect_value(t, capability.generation, u64(7))
+    testing.expect(t, capability.resource.buffer != entry.shaping.buffer)
+
+    task := view_run_math_shaping_task(t, &capability, 7)
+    testing.expect(t, task.shaped && task.glyph_count == 3)
+    italic_x, italic_x_ok := harfbuzz_nominal_glyph(
+        &capability.resource, rune(0x1d465))
+    testing.expect(t, italic_x_ok)
+    testing.expect_value(t, task.glyphs[0].glyph_id, italic_x)
+    testing.expect(t, task.properties_ready)
+    view_expect_math_glyph_queries(
+        t, &capability, 7, task.glyphs[0].glyph_id)
+
+    math_shaping_destroy(&capability)
+    font_shaping_destroy(&entry.shaping)
+}
+
+// Verify missing glyphs, invalid queries, and stale generations fail as a unit.
+@(test)
+view_test_worker_math_shaping_rejects_invalid_requests :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Math_Regular)]
+    entry.resident = true
+    entry.generation = 3
+    capability: Font_Math_Shaping_Capability
+    testing.expect(t, math_shaping_sync(&cache, &capability))
+    defer math_shaping_destroy(&capability)
+
+    output: [4]Shaped_Glyph
+    workspace: [16]u8
+    _, stale_ok := math_shaping_shape(
+        &capability, 2, {text = "x", role = .Italic, workspace = workspace[:]},
+        output[:])
+    _, missing_ok := math_shaping_shape(
+        &capability, 3, {
+            text = "\U0010ffff", role = .Upright, workspace = workspace[:],
+        }, output[:])
+    _, role_ok := math_shaping_shape(
+        &capability, 3, {
+            text = "x", role = Math_Shaping_Role(99), workspace = workspace[:],
+        }, output[:])
+    _, extents_ok := math_shaping_glyph_extents(
+        &capability, 3, max(u32))
+    testing.expect(t, !stale_ok && !missing_ok && !role_ok && !extents_ok)
+}
+
+// Verify role projection is bounded, strict, and leaves source bytes untouched.
+@(test)
+view_test_math_shaping_source_projection :: proc(t: ^testing.T) {
+    source := "Ahx αω ∂ϵϑϰϕϱϖ 𝑥+1"
+    expected := "𝐴ℎ𝑥 𝛼𝜔 𝜕𝜖𝜗𝜘𝜙𝜚𝜛 𝑥+1"
+    workspace: [128]u8
+    projected, projected_ok := math_shaping_project_source(
+        source, .Italic, workspace[:])
+    testing.expect(t, projected_ok)
+    testing.expect_value(t, projected, expected)
+    testing.expect_value(t, source, "Ahx αω ∂ϵϑϰϕϱϖ 𝑥+1")
+
+    upright, upright_ok := math_shaping_project_source(
+        "A1+Ω", .Upright, workspace[:])
+    testing.expect(t, upright_ok)
+    testing.expect_value(t, upright, "A1+Ω")
+
+    invalid_role := Math_Shaping_Role(99)
+    _, role_ok := math_shaping_project_source("x", invalid_role, workspace[:])
+    _, capacity_ok := math_shaping_project_source("x", .Italic, workspace[:3])
+    malformed_bytes := [?]u8{0xc0, 0x80}
+    malformed := string(malformed_bytes[:])
+    _, utf8_ok := math_shaping_project_source(malformed, .Italic, workspace[:])
+    testing.expect(t, !role_ok && !capacity_ok && !utf8_ok)
+}
+
+// Verify failed generation synchronization preserves the prior worker capability.
+@(test)
+view_test_worker_math_shaping_failed_sync_preserves_previous :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    entry := &cache.entries[int(Font_Key.Math_Regular)]
+    entry.resident = true
+    entry.generation = 1
+    capability: Font_Math_Shaping_Capability
+    testing.expect(t, math_shaping_sync(&cache, &capability))
+    previous_buffer := capability.resource.buffer
+
+    entry.generation = 2
+    invalid_path := "assets/JuliaMono-Regular.ttf"
+    source_path := &cache.source_paths[int(Font_Key.Math_Regular)]
+    copy(source_path.storage[:], transmute([]u8)invalid_path)
+    source_path.length = len(invalid_path)
+    testing.expect(t, !math_shaping_sync(&cache, &capability))
+    testing.expect_value(t, capability.generation, u64(1))
+    testing.expect_value(t, capability.failed_generation, u64(2))
+    testing.expect(t, capability.resource.buffer == previous_buffer)
+    testing.expect(t, !math_shaping_sync(&cache, &capability))
+    testing.expect(t, capability.resource.buffer == previous_buffer)
+    math_shaping_destroy(&capability)
 }
 
 // Verify every existing dynview weight and italic combination maps to its cache key.
@@ -633,6 +885,41 @@ view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     testing.expect(t, entry.resident)
     testing.expect_value(t, entry.generation, u64(3))
     testing.expect_value(t, entry.font.baseSize, i32(64))
+}
+
+// Verify a failed required-math replacement preserves its resident generation.
+@(test)
+view_test_math_reload_failure_preserves_resident :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    cache.entries[int(Font_Key.Math_Regular)] = {
+        font = {baseSize = 32},
+        generation = 4,
+        requested_generation = 4,
+        resident = true,
+        state = .Ready,
+    }
+    testing.expect(t, cache_reload(&cache, .Math_Regular))
+    cache_fail_preparation(&cache)
+
+    entry := cache.entries[int(Font_Key.Math_Regular)]
+    testing.expect_value(t, entry.state, Font_Load_State.Failed)
+    testing.expect(t, entry.resident)
+    testing.expect_value(t, entry.generation, u64(4))
+    testing.expect_value(t, entry.font.baseSize, i32(32))
+}
+
+// Verify cached drawing accepts only the exact resident math generation.
+@(test)
+view_test_math_cached_drawing_rejects_stale_generation :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    cache.entries[int(Font_Key.Math_Regular)] = {
+        generation = 4,
+        resident = true,
+    }
+
+    testing.expect(t, cache_generation_is_resident(&cache, .Math_Regular, 4))
+    testing.expect(t, !cache_generation_is_resident(&cache, .Math_Regular, 3))
+    testing.expect(t, !cache_generation_is_resident(&cache, .Regular, 4))
 }
 
 // Verify rapid source edits collapse into one newest replacement generation.

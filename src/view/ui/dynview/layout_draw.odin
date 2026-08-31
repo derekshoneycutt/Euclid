@@ -75,7 +75,10 @@ Large_Op_Metrics :: struct {
     glyph_descent : f32,
     glyph_width : f32,
     limit_font_size : f32,
-    limit_height : f32,
+    sup_height : f32,
+    sub_height : f32,
+    sup_width : f32,
+    sub_width : f32,
     limit_advance : f32,
     limit_gap : f32,
     sup_text : string,
@@ -164,6 +167,16 @@ Math_Text_Draw :: struct {
     text: string,
     position: rl.Vector2,
     font: view_core.Ui_Text_Font,
+}
+
+//   Exact cached math command/site presentation request.
+Cached_Math_Site_Draw :: struct {
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    site: core.Dynview_Shaped_Site,
+    position: rl.Vector2,
+    font_size: f32,
+    color: rl.Color,
 }
 
 //   Complete draw context for one stretched delimiter glyph invocation.
@@ -256,6 +269,68 @@ draw_optional_math_text :: proc(draw: Math_Text_Draw) {
     if len(draw.text) > 0 {
         draw_math_text(draw)
     }
+}
+
+//   Resolve the exact shaped run measured for one recursive math item site.
+cached_math_site_run :: proc(
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    site: core.Dynview_Shaped_Site) -> (^core.Dynview_Shaped_Run, bool) {
+
+    cache := &ctx.runtime^.compile_cache
+    command_index := int(item.math_command_index)
+    if command_index < 0 || command_index >= cache^.math_command_count {
+        return nil, false
+    }
+    command := cache^.math_commands[command_index]
+    run, ok := dynview.shaped_run_for_command(cache, command, site)
+    return run, ok && run^.math_command_index == command_index
+}
+
+//   Return the same scaled command/site metrics consumed during measurement.
+cached_math_site_metrics :: #force_inline proc(
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    site: core.Dynview_Shaped_Site,
+    font_size: f32) -> (dynview.Shaped_Run_Layout_Metrics, bool) {
+
+    run, ok := cached_math_site_run(ctx, item, site)
+    if !ok {
+        return {}, false
+    }
+    return dynview.shaped_run_layout_metrics(run, font_size)
+}
+
+//   Draw one measured command/site run through its exact Math_Regular generation.
+draw_cached_math_site :: proc(draw: Cached_Math_Site_Draw) -> bool {
+    if draw.ctx.state == nil || draw.ctx.runtime == nil {
+        return false
+    }
+    run, ok := cached_math_site_run(draw.ctx, draw.item, draw.site)
+    if !ok || !font.cache_generation_is_resident(
+        &draw.ctx.state^.font_cache, .Math_Regular, run^.font_generation) {
+        return false
+    }
+    cache := &draw.ctx.runtime^.compile_cache
+    glyphs, glyphs_ok := dynview.shaped_glyphs_for_run(cache, run)
+    if !glyphs_ok {
+        return false
+    }
+    scale := draw.font_size/run^.base_pixel_size
+    origin_x := draw.position.x - min(0, run^.ink_left)*scale
+    line_top_y := view_core.ui_text_cached_run_line_top(
+        draw.position.y, run^.ascent, run^.raster_ascent,
+        draw.font_size, run^.base_pixel_size)
+    resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
+    return view_core.ui_text_cached_shaped_run({
+        resolver = resolver,
+        key = .Math_Regular,
+        glyphs = glyphs,
+        position = {origin_x, line_top_y},
+        color = draw.color,
+        font_size = draw.font_size,
+        base_pixel_size = run^.base_pixel_size,
+    })
 }
 
 //   Fast vertical cull check for one layout line against panel bounds.
@@ -378,11 +453,27 @@ draw_radical_index_text :: proc(
     index_advance := dynview.effective_advance(script_style,
         ctx.runtime^.compile_cache.last_cell_width) * index_scale
     index_width := f32(index_cols) * index_advance
+    metrics, measured := cached_math_site_metrics(
+        ctx, layout.item, .Radical_Index, index_font_size)
+    if measured {
+        index_ascent = metrics.ascent
+        index_width = metrics.draw_width
+    }
     index_right_limit :=
         layout.draw_x + layout.front_padding + layout.lead_width * 0.36
     index_x := index_right_limit - index_width
     index_y := layout.baseline_y - layout.child_program^.ascent * 0.62 -
         index_ascent * 0.50 - ctx.font_size * 0.25
+    if draw_cached_math_site({
+        ctx = ctx,
+        item = layout.item,
+        site = .Radical_Index,
+        position = {index_x, index_y},
+        font_size = index_font_size,
+        color = script_style.color,
+    }) {
+        return
+    }
     draw_math_text({
         state = ctx.state,
         style = script_style,
@@ -528,25 +619,39 @@ draw_script_attach_scripts :: proc(
 
     sup_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
         item.script_sup_text_offset, item.script_sup_text_len)
-    sup_top := baseline_y - offsets.sup_raise_px - script.ascent
-    draw_optional_math_text({
-        state = ctx.state,
-        style = script.style,
-        text = sup_text,
-        position = {script_x, sup_top},
-        font = font,
-    })
+    sup_ascent := script.ascent
+    sup_metrics, sup_measured := cached_math_site_metrics(
+        ctx, item, .Superscript, script.font_size)
+    if sup_measured {
+        sup_ascent = sup_metrics.ascent
+    }
+    sup_top := baseline_y - offsets.sup_raise_px - sup_ascent
+    if len(sup_text) > 0 && !draw_cached_math_site({
+        ctx = ctx, item = item, site = .Superscript,
+        position = {script_x, sup_top}, font_size = script.font_size,
+        color = script.style.color}) {
+        draw_optional_math_text({
+            state = ctx.state, style = script.style, text = sup_text,
+            position = {script_x, sup_top}, font = font})
+    }
 
     sub_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
         item.script_sub_text_offset, item.script_sub_text_len)
-    sub_top := baseline_y + offsets.sub_drop_px - script.ascent
-    draw_optional_math_text({
-        state = ctx.state,
-        style = script.style,
-        text = sub_text,
-        position = {script_x, sub_top},
-        font = font,
-    })
+    sub_ascent := script.ascent
+    sub_metrics, sub_measured := cached_math_site_metrics(
+        ctx, item, .Subscript, script.font_size)
+    if sub_measured {
+        sub_ascent = sub_metrics.ascent
+    }
+    sub_top := baseline_y + offsets.sub_drop_px - sub_ascent
+    if len(sub_text) > 0 && !draw_cached_math_site({
+        ctx = ctx, item = item, site = .Subscript,
+        position = {script_x, sub_top}, font_size = script.font_size,
+        color = script.style.color}) {
+        draw_optional_math_text({
+            state = ctx.state, style = script.style, text = sub_text,
+            position = {script_x, sub_top}, font = font})
+    }
 }
 
 //   Draw one recursive ScriptAttach wrapper by drawing a child program and script text.
@@ -1209,7 +1314,8 @@ measure_matrix_draw_cells :: proc(
                 &runtime^.compile_cache,
                 &runtime^.command_buffer,
                 cell_cmd,
-                font_size)
+                font_size,
+                cmd_index)
             if !cell_ok {
                 return false
             }
@@ -1253,6 +1359,31 @@ draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
     }
 }
 
+//   Overlay exact cached glyph and limit dimensions used by measurement.
+large_op_apply_cached_metrics :: proc(
+    d: Math_Item_Draw, metrics: ^Large_Op_Metrics) {
+
+    glyph, glyph_ok := cached_math_site_metrics(
+        d.ctx, d.item, .Primary, metrics^.glyph_font_size)
+    if glyph_ok {
+        metrics^.glyph_ascent = glyph.ascent
+        metrics^.glyph_descent = glyph.descent
+        metrics^.glyph_width = glyph.draw_width
+    }
+    sup, sup_ok := cached_math_site_metrics(
+        d.ctx, d.item, .Superscript, metrics^.limit_font_size)
+    if sup_ok {
+        metrics^.sup_width = sup.draw_width
+        metrics^.sup_height = sup.ascent + sup.descent
+    }
+    sub, sub_ok := cached_math_site_metrics(
+        d.ctx, d.item, .Subscript, metrics^.limit_font_size)
+    if sub_ok {
+        metrics^.sub_width = sub.draw_width
+        metrics^.sub_height = sub.ascent + sub.descent
+    }
+}
+
 //   Compute glyph and limit metrics for one large operator item.
 large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
     ctx := d.ctx
@@ -1276,7 +1407,8 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
     m.limit_font_size = max(1.0, ctx.font_size * limit_scale)
     limit_ascent, limit_descent :=
         dynview.style_ascent_descent(m.script_style, m.limit_font_size)
-    m.limit_height = limit_ascent + limit_descent
+    m.sup_height = limit_ascent + limit_descent
+    m.sub_height = m.sup_height
     m.limit_advance = dynview.effective_advance(m.script_style,
         ctx.runtime^.compile_cache.last_cell_width) * limit_scale
     m.limit_gap = dynview.large_op_limit_gap_for_kind(
@@ -1292,7 +1424,26 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
         item.script_sub_text_len)
     m.sup_cols = dynview.text_codepoint_count_span(m.sup_text, 0, len(m.sup_text))
     m.sub_cols = dynview.text_codepoint_count_span(m.sub_text, 0, len(m.sub_text))
+    m.sup_width = f32(m.sup_cols) * m.limit_advance
+    m.sub_width = f32(m.sub_cols) * m.limit_advance
+    large_op_apply_cached_metrics(d, &m)
     return m
+}
+
+//   Compute the stacked superscript or subscript top within a large operator box.
+large_op_limit_top :: #force_inline proc(
+    m: Large_Op_Metrics,
+    item_y: f32,
+    site: core.Dynview_Shaped_Site) -> f32 {
+
+    if site == .Superscript {
+        return item_y
+    }
+    top := item_y + m.glyph_ascent + m.glyph_descent + m.limit_gap
+    if m.sup_cols > 0 {
+        top += m.sup_height + m.limit_gap
+    }
+    return top
 }
 
 //   Draw the stacked superscript or subscript limit for one large operator.
@@ -1300,11 +1451,20 @@ large_op_draw_limit :: #force_inline proc(
     d: Math_Item_Draw,
     m: Large_Op_Metrics,
     text: string,
-    cols: int,
-    top: f32) {
+    site: core.Dynview_Shaped_Site) {
 
-    width := f32(cols) * m.limit_advance
+    width := m.sup_width
+    if site == .Subscript {
+        width = m.sub_width
+    }
+    top := large_op_limit_top(m, d.item_y, site)
     x := d.draw_x + (d.item.draw_width - width) * 0.5
+    if draw_cached_math_site({
+        ctx = d.ctx, item = d.item, site = site,
+        position = {x, top}, font_size = m.limit_font_size,
+        color = m.script_style.color}) {
+        return
+    }
     draw_math_text({
         state = d.ctx.state,
         style = m.script_style,
@@ -1320,24 +1480,24 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
 
     glyph_top := d.item_y
     if m.sup_cols > 0 {
-        glyph_top += m.limit_height + m.limit_gap
+        glyph_top += m.sup_height + m.limit_gap
     }
     glyph_x := d.draw_x + (d.item.draw_width - m.glyph_width) * 0.5
-    draw_math_text({
-        state = d.ctx.state,
-        style = d.style,
-        text = d.text,
-        position = {glyph_x, glyph_top},
-        font = {d.resolved_font, m.glyph_font_size},
-    })
+    if !draw_cached_math_site({
+        ctx = d.ctx, item = d.item, site = .Primary,
+        position = {glyph_x, glyph_top}, font_size = m.glyph_font_size,
+        color = d.style.color}) {
+        draw_math_text({
+            state = d.ctx.state, style = d.style, text = d.text,
+            position = {glyph_x, glyph_top},
+            font = {d.resolved_font, m.glyph_font_size}})
+    }
 
     if m.sup_cols > 0 {
-        large_op_draw_limit(d, m, m.sup_text, m.sup_cols,
-            glyph_top - m.limit_gap - m.limit_height)
+        large_op_draw_limit(d, m, m.sup_text, .Superscript)
     }
     if m.sub_cols > 0 {
-        large_op_draw_limit(d, m, m.sub_text, m.sub_cols,
-            glyph_top + m.glyph_ascent + m.glyph_descent + m.limit_gap)
+        large_op_draw_limit(d, m, m.sub_text, .Subscript)
     }
 }
 
@@ -1451,6 +1611,20 @@ draw_text_run_content :: proc(
             color = params.text_color,
             font = text_font,
         })
+        return
+    }
+    if params.item.kind == .Math_Glyph_Run && draw_cached_math_site({
+        ctx = {
+            state = params.state,
+            runtime = params.runtime,
+            font_size = params.font_size,
+        },
+        item = params.item,
+        site = .Primary,
+        position = {params.draw_x, params.item_y},
+        font_size = text_font.font_size,
+        color = params.text_color,
+    }) {
         return
     }
     draw_math_text({

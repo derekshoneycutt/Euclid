@@ -7,7 +7,10 @@ import evidence_trace "../evidence/trace"
 import "../particles"
 import "../shapes"
 import "../taskpool"
+import "./font"
 import "./ui"
+
+import "core:os"
 
 Simulation_Task_Data :: core.Simulation_Task_Data
 Frame_Preparation_Task_Data :: core.Frame_Preparation_Task_Data
@@ -17,11 +20,16 @@ Simulation_Executor :: core.Simulation_Executor
 create_simulation_executor :: proc(
     state: ^Euclid_General_State) -> ^Simulation_Executor {
 
+    if state == nil || !core.arena_owner_init(&state^.dynview.cache_arena) {
+        return nil
+    }
+    state^.dynview.cache_access_state = .Display_Readable
     executor := new(Simulation_Executor)
     executor^.particle_task.state = state
     executor^.constraint_task.state = state
     executor^.shape_cache_task.state = state
     executor^.dynview_task.state = state
+    executor^.dynview_task.math_shaping_workspace = &executor^.math_shaping_workspace
     evidence_trace.ring_init(
         &executor^.particle_task.evidence_ring, .Particle_Worker)
     evidence_trace.ring_init(
@@ -32,6 +40,7 @@ create_simulation_executor :: proc(
         &executor^.dynview_task.evidence_ring, .Dynview_Worker)
     if !taskpool.task_pool_init(&executor^.pool) {
         free(executor)
+        core.arena_owner_destroy(&state^.dynview.cache_arena)
         return nil
     }
     return executor
@@ -43,6 +52,13 @@ destroy_simulation_executor :: proc(executor: ^Simulation_Executor) {
         return
     }
     taskpool.task_pool_destroy(&executor^.pool)
+    if executor^.dynview_task.state != nil {
+        runtime := &executor^.dynview_task.state^.dynview
+        runtime^.cache_access_state = .Uninitialized
+        dynview.clear_shaped_records(&runtime^.compile_cache)
+        core.arena_owner_destroy(
+            &runtime^.cache_arena)
+    }
     free(executor)
 }
 
@@ -107,7 +123,12 @@ build_shape_cache_task :: proc(payload: rawptr) -> taskpool.Task_Result {
 //   Compile invalidated Dynview text and layout caches on a frame-preparation worker.
 compile_dynview_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     data := cast(^Frame_Preparation_Task_Data)payload
-    dynview.compile_if_needed(&data^.state^.dynview)
+    runtime := &data^.state^.dynview
+    runtime^.cache_access_state = .Worker_Mutable
+    runtime^.cache_worker_thread_id = os.get_current_thread_id()
+    dynview.compile_if_needed(
+        runtime, &runtime^.cache_arena, math_shaping_service(data))
+    runtime^.cache_access_state = .Display_Readable
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Presentation,
@@ -117,6 +138,59 @@ compile_dynview_task :: proc(payload: rawptr) -> taskpool.Task_Result {
             tick = data^.state^.fixed_step,
         })
     return .Succeeded
+}
+
+//   Borrow the current capability and task-owned shaping workspaces for one rebuild.
+math_shaping_service :: proc(
+    data: ^Frame_Preparation_Task_Data) -> dynview.Math_Shaping_Service {
+
+    capability := &data^.state^.dynview.math_shaping
+    workspace := data^.math_shaping_workspace
+    if workspace == nil {
+        return {}
+    }
+    return {
+        user_data = capability,
+        generation = capability^.generation,
+        base_pixel_size = f32(font.JULIA_MONO_FONT_SIZE),
+        raster_ascent = capability^.raster_ascent,
+        shape = math_shape_run,
+        glyph_metrics = math_shape_glyph_metrics,
+        projection_workspace = workspace^.projection[:],
+        glyph_workspace = workspace^.glyphs[:],
+    }
+}
+
+//   Shape one math site through the generation-checked NewCM capability.
+math_shape_run :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Shape_Request) -> dynview.Math_Shape_Result {
+
+    role := font.Math_Shaping_Role.Upright
+    if request.italic {
+        role = .Italic
+    }
+    glyph_count, ok := font.math_shaping_shape(
+        cast(^core.Font_Math_Shaping_Capability)user_data,
+        request.generation,
+        {text = request.text, role = role, workspace = request.projection_workspace},
+        request.glyph_output)
+    return {glyph_count, ok}
+}
+
+//   Query complete extents and approved MATH values for one shaped glyph.
+math_shape_glyph_metrics :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Metrics_Request) -> dynview.Math_Glyph_Metrics_Result {
+
+    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    extents, extents_ok := font.math_shaping_glyph_extents(
+        capability, request.generation, request.glyph_id)
+    italic, italic_ok := font.math_shaping_italic_correction(
+        capability, request.generation, request.glyph_id)
+    accent, accent_ok := font.math_shaping_top_accent_attachment(
+        capability, request.generation, request.glyph_id)
+    return {extents, italic, accent, extents_ok && italic_ok && accent_ok}
 }
 
 //   Submit one task into a deterministic batch and require bounded admission.

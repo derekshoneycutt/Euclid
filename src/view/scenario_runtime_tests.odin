@@ -176,7 +176,8 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     handled, accepted := scenario_issue_julia_action(&runtime, &command, &identity)
 
     testing.expect(t, handled && accepted && service^.reload_requested)
-    testing.expect_value(t, identity.kind, evidence_trace.Correlation_Kind.Runtime_Request)
+    testing.expect_value(t, identity.kind,
+        evidence_trace.Correlation_Kind.Runtime_Request)
     testing.expect_value(t, identity.id, u64(8))
     testing.expect_value(t, identity.generation, u64(8))
 }

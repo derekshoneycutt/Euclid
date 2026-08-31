@@ -61,8 +61,8 @@ If you are new, read in this order:
 | **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
-| **Odin** | Font Cache | JuliaMono residency, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
-| **Odin** | Dynview Runtime | Text/math command compilation, layout planning, and draw-ready dynview caches. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
+| **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
+| **Odin** | Dynview Runtime | Text/math command compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
@@ -146,6 +146,8 @@ Snapshot and display flow:
   worker-owned staging runtime.
 1. The worker publishes a complete animation-tagged semantic snapshot.
 1. Odin validates and imports populated spans at a frame boundary.
+1. Odin emits required `Dynview_Published` evidence after animation identity
+  validation and display publication succeed.
 1. Odin compiles command buffers to cached plain/copy/layout state.
 1. If compile/layout is valid, Odin renders dynview output.
 1. If any stream stage fails, Odin falls back to plain text with no host crash.
@@ -354,10 +356,17 @@ After all fixed steps complete, the display thread opens a second pool window:
 
 Shape preparation reads settled point state and exclusively writes
 `Shapes_Point_System.draw_cache`. Dynview preparation exclusively writes the
-Dynview compile and layout caches. The tasks may run concurrently because
-their ownership does not overlap. Panel drawing consumes the joined caches;
-scroll state, copy-hit targets, and other interaction state remain on the
-display thread.
+Dynview compile and layout caches. Dynview owns one growing display-cache arena with a
+1 MiB initial reservation; existing fixed arrays remain in place. An invalidated
+Dynview task enters worker-mutable ownership, resets the arena, and builds derived
+views. Failure clears partial derived views and retains plain fallback. Task completion
+returns display-readable ownership, and the fence joins before panel drawing or copy
+access. Bounded shaped-run and glyph builders retain the existing logical maxima and
+publish populated arena slices only after generation, source, glyph, and command-site
+spans all validate. Rejection publishes no shaped records and leaves all command-site
+indices on their unshaped fallback sentinel. The tasks may run concurrently because
+their ownership does not overlap. Shutdown clears arena-backed aliases and destroys
+the arena only after the pool is quiescent.
 
 ### Font Cache
 
@@ -397,12 +406,27 @@ indexing `rl.Font` directly. Hot reload publishes the seed, exact-size metadata,
 shaper together, preserving the prior generation when any candidate component fails.
 All old pages are retired with that prior generation.
 
+Dynview owns a separate generation-tagged NewCM buffer on its preparation worker.
+Julia marks normal math runs as italic variables or upright symbols using existing
+style IDs. Before NewCM shaping, Odin strictly decodes the original run into bounded
+worker-owned temporary bytes and projects only eligible Latin and lowercase Greek
+variables to mathematical italic Unicode. Original command, fallback, and copy bytes
+are never rewritten by projection.
+
 Ordinary UI text, fallback prose, top-level dynview `Text_Run` items, transcripts,
 and scratchpad input are shape-eligible. Scratchpad runs split at the cursor and the
-covered UTF-8 character is drawn unshaped. Dynview math remains explicitly unshaped,
-including `Math_Glyph_Run`, `Math_Block`, scripts, fractions, delimiters, radicals,
-accents, matrices, large operators, and recursive children, but those unshaped glyphs
-now use cmap lookup and demand-loaded pages rather than requiring seed residency.
+covered UTF-8 character is drawn unshaped. During invalidated Dynview preparation,
+eligible math-command sites are shaped once and measured from cached NewCM advances,
+extents, italic correction, and top-accent attachment. Recursive scripts, fractions,
+delimiters, radicals, accents, matrices, and large operators inherit those dimensions;
+top-level prose and outer-grid policy remain unchanged. Recursive draw items retain the
+originating math-command index. The display thread resolves the exact sealed
+command/site glyph slice through its matching resident `Math_Regular` generation,
+preflights complete residency, and draws cached offsets and advances without reshaping.
+Script, radical-index, and large-operator placement reuse the measurement metric
+scaler. Stale generations, invalid spans, and pending glyphs reject the complete site
+before the existing whole-run fallback draws; copy bytes and non-math paths are
+unchanged.
 
 Source changes are polled at a bounded cadence and debounced before replacement.
 Shutdown rejects new font requests, joins accepted preparation before destroying

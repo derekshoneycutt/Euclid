@@ -17,9 +17,14 @@ const DescendDuration = 3f0
 const DrawDuration = 4f0
 const RiseDuration = 3f0
 
-const MetaPointId = 1
-const MetaPhase = 2
-const MetaTimer = 3
+"""Complete immutable state for one point-definition animation generation."""
+struct AnimationState
+    point_id::Int64
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescend = 0f0
 const PhaseDraw = 1f0
@@ -33,25 +38,32 @@ const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definit
 
 A point \euclidpoint[color=steelblue,size=1] is that which has no part."""
 
+"""Return state with updated cycle timing and the same native point handle."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.point_id, phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(
         state_ptr, DefinitionLatexDocument, DefinitionViewText)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+"""Reset the animation cycle while preserving its native point handle."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    pointid = state.point_id
 
     OdinJuliaBridge.hide_point(state_ptr, pointid)
 
     OdinJuliaBridge.show_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, PointColor)
 
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -59,8 +71,8 @@ function initialize(state_ptr::Ptr{Cvoid})
     point = OdinJuliaBridge.create_new_point(
         state_ptr, Point, PointColor, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointId, Float32(point.index))
-    reset_cycle_state(state_ptr)
+    state = AnimationState(point.index, PhaseDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -69,13 +81,15 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    pointid = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    pointid = state.point_id
     if pointid < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -104,13 +118,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= RiseDuration
             OdinJuliaBridge.hide_pen(state_ptr)
             OdinJuliaBridge.hide_point(state_ptr, pointid)
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

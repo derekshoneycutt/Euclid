@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(16)
+const PARSER_GRAMMAR_VERSION = Int32(17)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -461,6 +461,46 @@ const EMPTY_CHILD_RUNS = LatexRun[]
 """Return one normal atom run payload."""
 latex_atom_run(text::AbstractString, role::Symbol) =
     LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+
+"""Classify one normal-math scalar as an italic variable or upright math."""
+function normal_math_role(character::Char)
+    if isascii(character) && isletter(character)
+        return :math_italic
+    end
+    codepoint = UInt32(character)
+    if UInt32(0x03b1) <= codepoint <= UInt32(0x03c9) ||
+            character in ('ϵ', 'ϑ', 'ϰ', 'ϕ', 'ϱ', 'ϖ')
+        return :math_italic
+    end
+    return :math_upright
+end
+
+"""Split normal-math text whenever its italic-variable semantic role changes."""
+function normal_math_atom_runs(text::AbstractString)
+    runs = LatexRun[]
+    characters = collect(String(text))
+    current_role = :none
+    current = IOBuffer()
+    for (index, character) in pairs(characters)
+        role = if isspace(character)
+            next_index = findnext(candidate -> !isspace(candidate), characters, index + 1)
+            isnothing(next_index) ?
+                (current_role == :none ? :math_upright : current_role) :
+                normal_math_role(characters[next_index])
+        else
+            normal_math_role(character)
+        end
+        if current_role != :none && role != current_role
+            push!(runs, latex_atom_run(String(take!(current)), current_role))
+        end
+        current_role = role
+        write(current, character)
+    end
+    if current_role != :none
+        push!(runs, latex_atom_run(String(take!(current)), current_role))
+    end
+    return runs
+end
 
 """Return one superscript script-segment run payload."""
 latex_sup_run(text::AbstractString) =

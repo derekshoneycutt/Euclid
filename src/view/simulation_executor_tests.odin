@@ -1,6 +1,7 @@
 package view
 
 import app_core "../core"
+import "../dynview"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -234,6 +235,18 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     testing.expect_value(t, position.z, f32(0))
 }
 
+//   Verify terminal Dynview arena diagnostics after executor destruction.
+expect_dynview_cache_arena_destroyed :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State) {
+
+    diagnostics := app_core.arena_owner_diagnostics(
+        &state^.dynview.cache_arena)
+    testing.expect(t, !diagnostics.initialized)
+    testing.expect_value(t, diagnostics.destroy_count, u64(1))
+    testing.expect_value(t, len(state^.dynview.compile_cache.shaped_runs), 0)
+    testing.expect_value(t, len(state^.dynview.compile_cache.shaped_glyphs), 0)
+}
+
 //   Verify frame preparation joins the shape and dynview cache updates.
 @(test)
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
@@ -250,15 +263,74 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     executor := create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
-    defer destroy_simulation_executor(executor)
+    testing.expect(t, state^.dynview.cache_arena.initialized)
+
+    dynview.compile_if_needed(
+        &state^.dynview, &state^.dynview.cache_arena)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(0))
+    testing.expect(t, !state^.dynview.compile_cache.is_valid)
 
     run_parallel_frame_preparation(state, 0.25)
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_access_state,
+        app_core.Dynview_Cache_Access_State.Display_Readable)
+    testing.expect(t, state^.dynview.cache_worker_thread_id != 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
 
     run_parallel_frame_preparation(state, 0.75)
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
+
+    dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
+    run_parallel_frame_preparation(state, 0.75)
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
+
+    destroy_simulation_executor(executor)
+    expect_dynview_cache_arena_destroyed(t, state)
+}
+
+//   Verify failed worker rebuilds clear partial views and retain plain fallback.
+@(test)
+dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    state^.point_system = new(app_core.Shapes_Point_System)
+    defer free(state^.point_system)
+    state^.dynview.enabled = true
+
+    executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer destroy_simulation_executor(executor)
+    run_parallel_frame_preparation(state, 0)
+
+    buffer := &state^.dynview.command_buffer
+    buffer^.revision += 1
+    buffer^.command_count = 2
+    buffer^.text_bytes_len = 1
+    buffer^.text_bytes[0] = 'x'
+    buffer^.commands[0] = {kind = .Begin_Block, block_id = 1}
+    buffer^.commands[1] = {
+        kind = .Text_Run, block_id = 1, text_offset = 0, text_len = 1,
+    }
+    run_parallel_frame_preparation(state, 0)
+
+    cache := &state^.dynview.compile_cache
+    testing.expect(t, !cache^.is_valid && !cache^.layout_is_valid)
+    testing.expect_value(t, cache^.last_error_code,
+        dynview.DYNVIEW_STATUS_ILLEGAL_STATE)
+    testing.expect(t, buffer^.has_stream_error)
+    testing.expect_value(t, cache^.compiled_plain_text_len, 0)
+    testing.expect_value(t, cache^.copy_hit_target_count, 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
+    testing.expect_value(t, state^.dynview.cache_access_state,
+        app_core.Dynview_Cache_Access_State.Display_Readable)
+    testing.expect_value(t,
+        dynview.scratchpad_text_or_fallback(&state^.dynview, "fallback"),
+        "fallback")
 }

@@ -11,6 +11,7 @@ import "core:testing"
 import app_bridge "../bridge"
 import app_core "../core"
 import app_dynview "../dynview"
+import app_evidence_trace "../evidence/trace"
 import app_grid "../grid"
 
 //   Verify cell height participates in Dynview font invalidation identity.
@@ -291,15 +292,12 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
     defer free(point_system)
     state^.point_system = point_system
     state^.pen.joint1_id = 0
-    state^.anim_metadata[3] = 7
     point_system^.points[0].position = app_core.Vector3{1, 2, 3}
     snapshot: app_bridge.Animation_Query_Snapshot
     app_bridge.capture_animation_query_snapshot(state, &snapshot)
 
-    state^.anim_metadata[3] = 11
     point_system^.points[0].position = app_core.Vector3{4, 5, 6}
     state^.animation_query_snapshot_target = &snapshot
-    testing.expect_value(t, app_bridge.get_animation_meta(state, 3), f32(7))
     testing.expect(
         t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
     point_view := app_bridge.get_point_view(state, 0)
@@ -528,6 +526,40 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
         app_core.Dynview_Command_Kind.Math_Glyph_Run)
     testing.expect(t, !runtime^.compile_cache.is_valid)
     testing.expect(t, !runtime^.compile_cache.layout_is_valid)
+}
+
+//   Verify valid snapshot publication records the immutable animation identity.
+@(test)
+view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    defer free(animation)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    state^.julia_interface^.current_animation = animation
+    state^.julia_runtime_service = service
+    init_test_evidence(state)
+    service^.runtime_generation = 3
+    service^.animation_generation = 7
+    service^.view_snapshots[0] = {
+        state = .Complete,
+        runtime_generation = 3,
+        animation_generation = 7,
+        generation = 11,
+        animation = animation,
+    }
+
+    testing.expect(t, app_bridge.publish_available_view_snapshot(state))
+    testing.expect_value(t, state^.evidence_ring.count, 1)
+    event := state^.evidence_ring.events[0]
+    testing.expect_value(t, event.kind, app_evidence_trace.Kind.Dynview_Published)
+    testing.expect_value(t, event.correlation_kind,
+        app_evidence_trace.Correlation_Kind.Animation)
+    testing.expect_value(t, event.correlation, u64(7))
+    testing.expect_value(t, event.generation, u64(7))
+    testing.expect_value(t, event.revision, u64(11))
 }
 
 //   Verify view snapshot validation rejects incomplete command streams.

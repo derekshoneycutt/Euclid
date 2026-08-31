@@ -395,9 +395,6 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
         state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
     hide_compass(state)
-    for i in 0..<len(state^.anim_metadata) {
-        state^.anim_metadata[i] = 0.0
-    }
     state^.animation_drawing_sound_enabled = true
     return true
 }

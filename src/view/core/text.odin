@@ -50,6 +50,23 @@ Unshaped_Text_Draw :: struct {
     font: Ui_Text_Font,
 }
 
+//   One immutable cached shaped run ready for proportional glyph drawing.
+Cached_Shaped_Run_Draw :: struct {
+    resolver: view_font.Font_Resolver,
+    key: view_font.Font_Key,
+    glyphs: []view_font.Shaped_Glyph,
+    position: rl.Vector2,
+    color: rl.Color,
+    font_size: f32,
+    base_pixel_size: f32,
+}
+
+//   Pixel placement and next pen position for one cached shaped glyph.
+Cached_Glyph_Placement :: struct {
+    position: rl.Vector2,
+    next_pen_x: f32,
+}
+
 //   Complete inputs for one normalized resolved-glyph draw.
 Resolved_Glyph_Draw :: struct {
     resolved: view_font.Resolved_Glyph,
@@ -175,6 +192,62 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
     }
     rl.DrawTexturePro(
         resolved.texture, resolved.source, destination, {}, 0, draw.color)
+}
+
+//   Convert one cached 26.6 glyph position and advance to pixel coordinates.
+ui_text_cached_glyph_placement :: #force_inline proc(
+    glyph: view_font.Shaped_Glyph,
+    pen_x, top_y, font_size, base_pixel_size: f32) -> Cached_Glyph_Placement {
+
+    scale := font_size/base_pixel_size/64
+    return {
+        position = {
+            pen_x + f32(glyph.x_offset)*scale,
+            top_y + f32(glyph.y_offset)*scale,
+        },
+        next_pen_x = pen_x + f32(glyph.x_advance)*scale,
+    }
+}
+
+//   Convert a measured ink-top position to the resident font's stable line top.
+ui_text_cached_run_line_top :: #force_inline proc(
+    ink_top, ink_ascent, raster_ascent, font_size, base_pixel_size: f32) -> f32 {
+
+    scale := font_size/base_pixel_size
+    baseline := ink_top + ink_ascent*scale
+    return baseline - raster_ascent*scale
+}
+
+//   Draw one sealed shaped run without reshaping or reconstructing its advances.
+//
+// Returns:
+//   - True only when every cached glyph was resident and the complete run was drawn.
+ui_text_cached_shaped_run :: proc(request: Cached_Shaped_Run_Draw) -> bool {
+    if request.resolver.resolve_glyph == nil || len(request.glyphs) == 0 ||
+        request.font_size <= 0 || request.base_pixel_size <= 0 {
+        return false
+    }
+    if !ui_text_shape_glyphs_are_resident(
+        request.resolver, request.key, request.glyphs) {
+        return false
+    }
+    pen_x := request.position.x
+    for glyph in request.glyphs {
+        resolved, resident := request.resolver.resolve_glyph(
+            request.resolver.user_data, request.key, glyph.glyph_id)
+        assert(resident)
+        placement := ui_text_cached_glyph_placement(
+            glyph, pen_x, request.position.y,
+            request.font_size, request.base_pixel_size)
+        ui_text_draw_resolved_glyph({
+            resolved = resolved,
+            position = placement.position,
+            font_size = request.font_size,
+            color = request.color,
+        })
+        pen_x = placement.next_pen_x
+    }
+    return true
 }
 
 //   Resolve one codepoint or the resident replacement glyph while recording demand.

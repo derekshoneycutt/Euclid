@@ -23,14 +23,24 @@ const ArcMoveDuration = 2.1f0
 const EndLiftDuration = 1.8f0
 const ArcWaveHeight = 0.35f0
 
-const MetaPhase = 1
-const MetaTimer = 2
+"""Complete immutable timing state for one plane-surface animation generation."""
+struct AnimationState
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseDescend = 0f0
 const PhaseDrag1 = 1f0
 const PhaseArcMove1To2 = 2f0
 const PhaseDrag2 = 3f0
 const PhaseEndLift = 4f0
+
+"""Return a plane-surface animation state with updated cycle timing."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -43,17 +53,19 @@ A plane surface is a surface which lies evenly with the straight lines on itself
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+"""Reset the animation cycle timing to its initial phase."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    reset_cycle_state(state_ptr)
+    reset_cycle_state(state_ptr, AnimationState(PhaseDescend, 0f0))
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -62,8 +74,10 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseDescend
         EuclidAnimations.animate_pen_descend(
@@ -108,13 +122,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

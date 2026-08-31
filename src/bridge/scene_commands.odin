@@ -36,7 +36,6 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Compass_Active = validate_command_compass_host,
     .Lock_Compass_Joint1 = validate_command_lock_compass_joint1,
     .Lock_Compass_Joint2 = validate_command_lock_compass_joint2,
-    .Set_Animation_Meta = validate_command_animation_meta,
     .Set_Drawing_Sound_Enabled = validate_command_noop,
     .Simulate_Drawing_Sound = validate_command_noop,
     .Emit_Trailing_Particle = validate_command_noop,
@@ -68,7 +67,6 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Compass_Active = apply_set_compass_active,
     .Lock_Compass_Joint1 = apply_lock_compass_joint1,
     .Lock_Compass_Joint2 = apply_lock_compass_joint2,
-    .Set_Animation_Meta = apply_set_animation_meta,
     .Set_Drawing_Sound_Enabled = apply_set_drawing_sound_enabled,
     .Simulate_Drawing_Sound = apply_simulate_drawing_sound,
     .Emit_Trailing_Particle = apply_emit_trailing_particle,
@@ -96,7 +94,6 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Lock_Compass_Joint2 = .Compass_Joint_Committed,
     .Emit_Trailing_Particle = .Particle_Emission_Committed,
     .Emit_Flicker_Particle = .Particle_Emission_Committed,
-    .Set_Animation_Meta = .Unknown,
     .Set_Drawing_Sound_Enabled = .Unknown,
     .Simulate_Drawing_Sound = .Unknown,
     .Notify_Animation_Cycle_Boundary = .Unknown,
@@ -111,12 +108,11 @@ Animation_Query_Snapshot :: core.Animation_Query_Snapshot
 
 //   Copy the canonical values a Julia animation may query during one asynchronous tick.
 // The snapshot remains worker-owned until that tick completes; callbacks must not read
-// concurrently mutating point-system or animation metadata through another path.
+// concurrently mutating point-system or tool state through another path.
 capture_animation_query_snapshot :: proc(
     state: ^core.Euclid_General_State, snapshot: ^Animation_Query_Snapshot) {
 
     copy(snapshot^.points[:], state^.point_system^.points[:])
-    copy(snapshot^.metadata[:], state^.anim_metadata[:])
     snapshot^.pen = state^.pen
     snapshot^.compass = state^.compass
     snapshot^.animation_values_valid =
@@ -309,18 +305,6 @@ capture_active_command :: proc "contextless" (
     return captured
 }
 
-//   Capture one indexed animation metadata write for ordered commit with scene changes.
-capture_animation_meta_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, position: int, metadata: f32) -> bool {
-
-    command, captured := append_scene_command(state, .Set_Animation_Meta)
-    if command != nil {
-        command^.integer = position
-        command^.scalar = metadata
-    }
-    return captured
-}
-
 //   Capture a scalar-only scene command such as simulated drawing-sound intensity.
 capture_scalar_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind, scalar: f32) -> bool {
@@ -426,12 +410,6 @@ validate_command_lock_compass_joint2 :: proc(
         valid_scene_point_index(state, state^.compass.pivot_id) &&
         state^.compass.lock_point2_id >= 0 &&
         state^.compass.lock_point2_id < state^.point_system^.next_constraint_index
-}
-
-//   Validate an animation-metadata write: the metadata index must be in range.
-validate_command_animation_meta :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return command^.integer >= 0 && command^.integer < len(state^.anim_metadata)
 }
 
 //   Validate a command with no state dependency (always valid).
@@ -583,12 +561,6 @@ apply_lock_compass_joint1 :: proc(
 apply_lock_compass_joint2 :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     lock_compass_joint2(state, command^.position, command^.flag)
-}
-
-//   Apply one set-animation-meta command.
-apply_set_animation_meta :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_animation_meta(state, i32(command^.integer), command^.scalar)
 }
 
 //   Apply one set-drawing-sound-enabled command.

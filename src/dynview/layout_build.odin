@@ -566,6 +566,8 @@ math_block_item :: #force_inline proc(
         descent = layout.program^.descent,
         visual_padding_top = layout.program^.visual_padding_top,
         visual_padding_bottom = layout.program^.visual_padding_bottom,
+        italic_correction = layout.program^.italic_correction,
+        top_accent_attachment = layout.program^.top_accent_attachment,
         overflows_horizontally = layout.overflows_horizontally,
     }
 }

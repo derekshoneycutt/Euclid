@@ -30,11 +30,21 @@ const PenRiseDuration = 1.6f0
 const PauseDuration = 1.0f0
 const ReflectionDuration = 2.4f0
 
-const MetaLineHostIds = (1, 4, 7)
-const MetaLineJoint1Ids = (2, 5, 8)
-const MetaLineJoint2Ids = (3, 6, 9)
-const MetaPhase = 10
-const MetaTimer = 11
+"""Stable native handles for one line owned by the animation."""
+struct LineIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Complete immutable state for one Z₂ animation generation."""
+struct AnimationState
+    lines::NTuple{3,LineIds}
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhasePenDescend = 0f0
 const PhaseDrawAB = 1f0
@@ -113,6 +123,11 @@ const ReflectLineStartMirrored = (
 const ReflectLineEndBase = ReflectLineStartMirrored
 const ReflectLineEndMirrored = ReflectLineStartBase
 
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.lines, phase, timer)
+end
+
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
     EuclidLatex.emit_latex_view_text!(state_ptr, Z2LatexDocument, Z2FallbackText)
@@ -175,26 +190,17 @@ function reset_line_colors!(
     OdinJuliaBridge.set_point_color(state_ptr, line_host_id3, SideColors[3])
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    line_host_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[1])))
-    line_host_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[2])))
-    line_host_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[3])))
-    line_joint1_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[1])))
-    line_joint1_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[2])))
-    line_joint1_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[3])))
-    line_joint2_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[1])))
-    line_joint2_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[2])))
-    line_joint2_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[3])))
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    line_host_id1 = state.lines[1].host
+    line_host_id2 = state.lines[2].host
+    line_host_id3 = state.lines[3].host
+    line_joint1_id1 = state.lines[1].joint1
+    line_joint1_id2 = state.lines[2].joint1
+    line_joint1_id3 = state.lines[3].joint1
+    line_joint2_id1 = state.lines[1].joint2
+    line_joint2_id2 = state.lines[2].joint2
+    line_joint2_id3 = state.lines[3].joint2
 
     if line_host_id1 < 0 || line_host_id2 < 0 || line_host_id3 < 0
         return
@@ -212,8 +218,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id3, SideStarts[3])
     reset_line_colors!(state_ptr, line_host_id1, line_host_id2, line_host_id3)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhasePenDescend)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhasePenDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -229,24 +236,20 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
         ToolResetOffscreenJoint2[3])
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    for i in 1:3
+    lines = ntuple(3) do i
         line = OdinJuliaBridge.create_new_line(
             state_ptr, SideStarts[i], SideStarts[i],
             SideColors[i], 0f0)
-
-        OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaLineHostIds[i], Float32(line.host_id))
-        OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaLineJoint1Ids[i], Float32(line.joint1_id))
-        OdinJuliaBridge.set_animation_meta(
-            state_ptr, MetaLineJoint2Ids[i], Float32(line.joint2_id))
+        LineIds(line.host_id, line.joint1_id, line.joint2_id)
     end
 
-    reset_cycle_state(state_ptr)
+    reset_cycle_state(
+        state_ptr, AnimationState(lines, PhasePenDescend, 0f0))
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -255,28 +258,21 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    line_host_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[1])))
-    line_host_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[2])))
-    line_host_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineHostIds[3])))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    line_host_id1 = state.lines[1].host
+    line_host_id2 = state.lines[2].host
+    line_host_id3 = state.lines[3].host
     if line_host_id1 < 0
         return
     end
 
-    line_joint1_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[1])))
-    line_joint1_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[2])))
-    line_joint1_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint1Ids[3])))
-    line_joint2_id1 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[1])))
-    line_joint2_id2 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[2])))
-    line_joint2_id3 = Int(round(Int, OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLineJoint2Ids[3])))
+    line_joint1_id1 = state.lines[1].joint1
+    line_joint1_id2 = state.lines[2].joint1
+    line_joint1_id3 = state.lines[3].joint1
+    line_joint2_id1 = state.lines[1].joint2
+    line_joint2_id2 = state.lines[2].joint2
+    line_joint2_id3 = state.lines[3].joint2
 
     line_reflection_point_ids = (
         Int64(line_joint1_id1),
@@ -286,8 +282,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         Int64(line_joint1_id3),
         Int64(line_joint2_id3))
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     reset_line_colors!(state_ptr, line_host_id1, line_host_id2, line_host_id3)
 
@@ -348,7 +344,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             elseif phase == PhasePauseAfterOnce
                 phase = PhaseReflectTwiceFirst
             else
-                reset_cycle_state(state_ptr)
+                reset_cycle_state(state_ptr, state)
                 return
             end
             timer = 0f0
@@ -400,8 +396,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

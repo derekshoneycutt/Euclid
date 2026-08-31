@@ -107,8 +107,8 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     show_compass, hide_compass, set_compass_active, clear_compass_active,
     lock_compass_joint1, unlock_compass_joint1, move_compass_joint1,
     get_compass_joint1_position, lock_compass_joint2, unlock_compass_joint2,
-    move_compass_joint2, get_compass_joint2_position, set_animation_meta,
-    get_animation_meta, emit_trailing_particle, emit_flicker_particle
+    move_compass_joint2, get_compass_joint2_position,
+    emit_trailing_particle, emit_flicker_particle
 
 include("bridge/common.jl")
 include("bridge/points.jl")

@@ -343,6 +343,7 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
         "julia/script.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
+        "NewCMSansMath-Regular.otf",
         "manifest.txt",
     }
 

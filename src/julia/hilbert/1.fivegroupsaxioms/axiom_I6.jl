@@ -39,15 +39,20 @@ const MoveToPointBDuration = 2f0
 const EndLiftDuration = 1.8f0
 const StartHoldDuration = 1f0
 
-const MetaPlaneHostId = 1
-const MetaPointAId = 11
-const MetaPointBId = 12
-const MetaLabelAlphaId = 21
-const MetaLabelBetaId = 22
-const MetaLabelAId = 23
-const MetaLabelBId = 24
-const MetaPhase = 101
-const MetaTimer = 102
+"""Complete immutable state for one Axiom I,6 animation generation."""
+struct AnimationState
+    plane_host::Int64
+    point_a::Int64
+    point_b::Int64
+    label_alpha::Int64
+    label_beta::Int64
+    label_a::Int64
+    label_b::Int64
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
 const PhaseStartHold = 0f0
 const PhaseFadeInPlane = 1f0
@@ -56,6 +61,14 @@ const PhasePutPointA = 3f0
 const PhaseMoveToPointB = 4f0
 const PhasePutPointB = 5f0
 const PhaseEndLift = 6f0
+
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.plane_host, state.point_a, state.point_b,
+        state.label_alpha, state.label_beta, state.label_a, state.label_b,
+        phase, timer)
+end
 
 """Get the view text for this animation"""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -107,19 +120,19 @@ function random_plane_point()
     random_triangle_point(PlaneEdgeLeft, PlaneTopRight, PlaneEdgeRight)
 end
 
-"""Reset the state of the animation cycle back to the start of the animation"""
-function reset_cycle_state(state_ptr::Ptr{Cvoid})
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPlaneHostId))
-    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
+"""Reset cycle timing transactionally before restoring visible animation state."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    plane_host_id = state.plane_host
+    point_a_id = state.point_a
+    point_b_id = state.point_b
+    label_alpha_id = state.label_alpha
+    label_beta_id = state.label_beta
+    label_a_id = state.label_a
+    label_b_id = state.label_b
 
-    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelAlphaId))
-    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelBetaId))
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseStartHold, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [
@@ -130,9 +143,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
 
     set_plane_alpha(state_ptr, plane_host_id, 0f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, PhaseStartHold)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, 0f0)
-
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, PointAColor)
 
@@ -140,6 +150,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.move_pen_joint2(state_ptr, PointA[1], PointA[2], PenTopZ + 0.14f0)
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
 end
 
 """Initialize all objects for this animation"""
@@ -159,16 +170,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPlaneHostId, plane_beta.host_id)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointAId, point_a.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPointBId, point_b.index)
-
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAlphaId, label_alpha.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBetaId, label_beta.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelAId, label_a.index)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaLabelBId, label_b.index)
-
-    reset_cycle_state(state_ptr)
+    state = AnimationState(
+        plane_beta.host_id, point_a.index, point_b.index,
+        label_alpha.index, label_beta.index, label_a.index, label_b.index,
+        PhaseStartHold, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean any extra animation data at the end of performance"""
@@ -177,24 +183,22 @@ end
 
 """Perform an iteration of the animation loop for this animation"""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    plane_host_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaPlaneHostId))
-    point_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointAId))
-    point_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaPointBId))
-
-    label_alpha_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelAlphaId))
-    label_beta_id = Integer(OdinJuliaBridge.get_animation_meta(
-        state_ptr, MetaLabelBetaId))
-    label_a_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelAId))
-    label_b_id = Integer(OdinJuliaBridge.get_animation_meta(state_ptr, MetaLabelBId))
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    plane_host_id = state.plane_host
+    point_a_id = state.point_a
+    point_b_id = state.point_b
+    label_alpha_id = state.label_alpha
+    label_beta_id = state.label_beta
+    label_a_id = state.label_a
+    label_b_id = state.label_b
 
     if plane_host_id < 0
         return
     end
 
-    phase = OdinJuliaBridge.get_animation_meta(state_ptr, MetaPhase)
-    timer = OdinJuliaBridge.get_animation_meta(state_ptr, MetaTimer)
+    phase = state.phase
+    timer = state.timer
 
     if phase == PhaseStartHold
         timer += dt
@@ -286,13 +290,13 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         timer += dt
         if timer >= EndLiftDuration
-            reset_cycle_state(state_ptr)
+            reset_cycle_state(state_ptr, state)
             return
         end
     end
 
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaPhase, phase)
-    OdinJuliaBridge.set_animation_meta(state_ptr, MetaTimer, timer)
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 end

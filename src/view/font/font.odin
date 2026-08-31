@@ -5,13 +5,14 @@ import "../../files"
 
 import "core:mem"
 import vmem "core:mem/virtual"
+import "core:log"
 import "core:os"
 import "core:path/filepath"
 
 import rl "vendor:raylib"
 
-// Maximum runes in the compatibility seed policy.
-FONT_SEED_CODEPOINT_CAPACITY :: 128
+// Maximum runes in either required startup seed policy.
+FONT_SEED_CODEPOINT_CAPACITY :: 256
 
 // Maximum face glyphs admitted to one prepared atlas page.
 FONT_GLYPH_PAGE_REQUEST_CAPACITY :: 256
@@ -44,6 +45,7 @@ FONT_FILENAMES :: [FONT_KEY_COUNT]string{
     "JuliaMono-ExtraBoldItalic.ttf",
     "JuliaMono-Black.ttf",
     "JuliaMono-BlackItalic.ttf",
+    "NewCMSansMath-Regular.otf",
 }
 
 Font_Key :: core.Font_Key
@@ -88,6 +90,25 @@ Font_Seed_Codepoint_Set :: struct {
 FONT_SEED_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
     {0x0020, 0x007e},
     {0xfffd, 0xfffd},
+}
+
+// Required NewCM coverage for ordinary operators and projected math variables.
+MATH_SEED_CODEPOINT_RANGES :: [?]Font_Codepoint_Range {
+    {0x0020, 0x007e},
+    {0x0391, 0x03a1},
+    {0x03a3, 0x03a9},
+    {0x210e, 0x210e},
+    {0x2202, 0x2202},
+    {0x220f, 0x2211},
+    {0x2212, 0x2212},
+    {0x221a, 0x221a},
+    {0x221e, 0x221e},
+    {0x222b, 0x222b},
+    {0x2248, 0x2248},
+    {0x2260, 0x2260},
+    {0x2264, 0x2265},
+    {0x1d434, 0x1d467},
+    {0x1d6fc, 0x1d71b},
 }
 
 
@@ -178,9 +199,11 @@ cache_source_path :: proc(cache: ^Font_Cache, key: Font_Key) -> string {
 //
 // Returns:
 //   - Fixed storage containing every rune from `FONT_SEED_CODEPOINT_RANGES`.
-seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
+seed_codepoint_set_from_ranges :: proc(
+    ranges: []Font_Codepoint_Range) -> Font_Seed_Codepoint_Set {
+
     result: Font_Seed_Codepoint_Set
-    for codepoint_range in FONT_SEED_CODEPOINT_RANGES {
+    for codepoint_range in ranges {
         for codepoint := codepoint_range.first;
             codepoint <= codepoint_range.last;
             codepoint += 1 {
@@ -191,6 +214,18 @@ seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
         }
     }
     return result
+}
+
+//   Build the JuliaMono compatibility seed in raylib's required flat form.
+seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
+    ranges := FONT_SEED_CODEPOINT_RANGES
+    return seed_codepoint_set_from_ranges(ranges[:])
+}
+
+//   Build the required NewCM math seed in raylib's required flat form.
+math_seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
+    ranges := MATH_SEED_CODEPOINT_RANGES
+    return seed_codepoint_set_from_ranges(ranges[:])
 }
 
 //   Suppress raylib's expected oversized-glyph and sparse-range messages during rasterization.
@@ -344,7 +379,7 @@ font_generation_destroy :: proc(entry: ^Font_Cache_Entry) {
 
 //   Read transient source through the preparation arena and acquire a native shaper.
 font_shaping_create :: proc(
-    cache: ^Font_Cache, path: string,
+    cache: ^Font_Cache, key: Font_Key, path: string,
     resource: ^Font_Shaping_Resource) -> bool {
 
     if cache == nil || resource == nil || len(path) == 0 ||
@@ -357,11 +392,18 @@ font_shaping_create :: proc(
     if read_error != nil {
         return false
     }
-    return harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, resource)
+    if !harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, resource) {
+        return false
+    }
+    if key == .Math_Regular && !harfbuzz_face_has_math_table(resource) {
+        font_shaping_destroy(resource)
+        return false
+    }
+    return true
 }
 
-//   Finalize and publish one synchronous Regular seed candidate.
-cache_publish_regular_seed :: proc(
+//   Finalize and publish one synchronous required seed candidate.
+cache_publish_required_seed :: proc(
     entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
     shaping: ^Font_Shaping_Resource) -> bool {
 
@@ -378,21 +420,31 @@ cache_publish_regular_seed :: proc(
     }
     entry.font = candidate
     entry.shaping = shaping^
+    entry.raster_ascent = prepared^.raster_ascent
     return true
 }
 
-//   Prepare and finalize the synchronous Regular complete-face generation.
-cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
+//   Return the bounded startup seed policy for one required font key.
+required_seed_codepoints :: proc(key: Font_Key) -> Font_Seed_Codepoint_Set {
+    return math_seed_codepoint_set() if key == .Math_Regular else
+        seed_codepoint_set()
+}
+
+//   Prepare and finalize one synchronous required font generation.
+cache_load_required :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
+    if key != .Regular && key != .Math_Regular {
+        return false
+    }
     if !cache_preparation_arena_init(cache) {
         return false
     }
     defer cache_preparation_arena_reset(cache)
     allocator := vmem.arena_allocator(&cache.preparation_arena)
-    codepoints := seed_codepoint_set()
-    path := cache_source_path(cache, .Regular)
+    codepoints := required_seed_codepoints(key)
+    path := cache_source_path(cache, key)
     prepared: Prepared_Font
     if !prepare({
-        key = .Regular,
+        key = key,
         path = path,
         pixel_size = JULIA_MONO_FONT_SIZE,
         codepoints = codepoints.values[:codepoints.count],
@@ -401,32 +453,48 @@ cache_load_regular :: proc(cache: ^Font_Cache) -> bool {
     }
     defer prepare_destroy(&prepared)
     shaping: Font_Shaping_Resource
-    if !font_shaping_create(cache, path, &shaping) {
+    if !font_shaping_create(cache, key, path, &shaping) {
         return false
     }
-    entry := &cache.entries[int(Font_Key.Regular)]
-    return cache_publish_regular_seed(entry, &prepared, &shaping)
+    entry := &cache.entries[int(key)]
+    return cache_publish_required_seed(entry, &prepared, &shaping)
 }
 
-//   Load only the permanent Regular fallback during synchronous startup.
+//   Load the permanent Regular fallback and required NewCM math face at startup.
 //
 // Parameters:
 //   - cache: Zero-valued display-thread-owned cache.
 //
 // Side effects:
-//   - Loads the Regular GPU font synchronously, marks it resident/ready, and records
-//     source-file baselines without generating reload requests.
-cache_init :: proc(cache: ^Font_Cache) {
+//   - Loads both required GPU fonts synchronously and records source-file baselines.
+//   - Rolls back all cache ownership if either required generation fails.
+cache_init :: proc(cache: ^Font_Cache) -> bool {
     assert(cache != nil)
     cache^ = {}
     cache_source_paths_init(cache)
     rasterization_begin()
-    regular := &cache.entries[int(Font_Key.Regular)]
-    regular.resident = cache_load_regular(cache)
-    regular.state = regular.resident ? .Ready : .Failed
+    required_keys := [?]Font_Key{.Regular, .Math_Regular}
+    ready := true
+    for key in required_keys {
+        entry := &cache.entries[int(key)]
+        entry.requested_generation = 1
+        entry.resident = cache_load_required(cache, key)
+        entry.generation = 1 if entry.resident else 0
+        entry.state = entry.resident ? .Ready : .Failed
+        if entry.resident {
+            log.infof("required_font_ready key=%d", int(key))
+        } else {
+            log.errorf("required_font_failed key=%d", int(key))
+        }
+        ready = ready && entry.resident
+    }
     rasterization_end()
-    assert(regular.resident)
+    if !ready {
+        cache_destroy(cache)
+        return false
+    }
     source_monitor_init(cache, source_monitor_now_ns())
+    return true
 }
 
 //   Unload every resident font owned by the cache.
@@ -446,6 +514,56 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     }
     cache_preparation_arena_destroy(cache)
     cache^ = {}
+}
+
+//   Synchronize a separate Dynview math shaper to the resident NewCM generation.
+//
+// Returns:
+//   - True when the existing capability is current or a complete candidate replaces it.
+//   - False while no resident math generation exists or candidate construction fails.
+//
+// Side effects:
+//   - Reads source bytes into temporary display-thread storage, atomically replaces
+//     `runtime.math_shaping` on success, and preserves the prior capability on failure.
+math_shaping_sync :: proc(
+    cache: ^Font_Cache,
+    capability: ^Font_Math_Shaping_Capability) -> bool {
+
+    if cache == nil || capability == nil {
+        return false
+    }
+    entry := &cache.entries[int(Font_Key.Math_Regular)]
+    if !entry.resident || entry.generation == 0 {
+        return false
+    }
+    if math_shaping_generation_matches(capability, entry.generation) {
+        return true
+    }
+    if capability.failed_generation == entry.generation {
+        return false
+    }
+    path := cache_source_path(cache, .Math_Regular)
+    source, read_error := os.read_entire_file(path, context.allocator)
+    if read_error != nil {
+        capability.failed_generation = entry.generation
+        return false
+    }
+    defer delete(source)
+    candidate := Font_Math_Shaping_Capability{
+        generation = entry.generation,
+        raster_ascent = entry.raster_ascent,
+    }
+    if !harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &candidate.resource) ||
+        !harfbuzz_face_has_math_table(&candidate.resource) {
+        math_shaping_destroy(&candidate)
+        capability.failed_generation = entry.generation
+        return false
+    }
+    previous := capability^
+    capability^ = candidate
+    math_shaping_destroy(&previous)
+    return true
 }
 
 //   Borrow a resident font or Regular without recording new demand.
@@ -502,6 +620,17 @@ cache_effective_entry :: proc(
         return entry
     }
     return &cache.entries[int(Font_Key.Regular)]
+}
+
+//   Report whether one exact font generation is resident for cached drawing.
+cache_generation_is_resident :: #force_inline proc(
+    cache: ^Font_Cache, key: Font_Key, generation: u64) -> bool {
+
+    if cache == nil || generation == 0 {
+        return false
+    }
+    entry := &cache^.entries[int(key)]
+    return entry^.resident && entry^.generation == generation
 }
 
 //   Normalize one resident glyph record to borrowed draw data.
@@ -761,7 +890,8 @@ cache_publication_candidates :: proc(
     candidate: ^Font_Cache_Entry) -> bool {
 
     path := cache_source_path(cache, prepared.key)
-    if !font_shaping_create(cache, path, &candidate.shaping) {
+    if !font_shaping_create(
+        cache, prepared.key, path, &candidate.shaping) {
         return false
     }
     if !font_generation_seed_records_init(
