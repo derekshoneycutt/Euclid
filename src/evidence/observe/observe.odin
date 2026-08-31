@@ -42,6 +42,7 @@ Display :: struct {
     active_runtime_request_id : u64,
     failed_runtime_request_count : u64,
     runtime_request_saturation_count : u64,
+    scratchpad_idle : bool,
 
     // Animation publication identity and display-side tick state.
     animation_generation : u64,
@@ -202,6 +203,9 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
         fixed_step = state.fixed_step,
         simulation_time = state.simulation_time,
         simulation_paused = state.ui_runtime.simulation_paused,
+        scratchpad_idle =
+            state.ui_runtime.scratchpad_pending_submit_request_id == 0 &&
+            state.ui_runtime.scratchpad_forced_bottom_request_id == 0,
         dynview_enabled = state.dynview.enabled,
         dynview_pending_invalidation_mask = state.dynview.pending_invalidation_mask,
         gif_capture_active = state.gif_capture.active,

@@ -119,6 +119,11 @@ capture_animation_query_snapshot :: proc(
     copy(snapshot^.metadata[:], state^.anim_metadata[:])
     snapshot^.pen = state^.pen
     snapshot^.compass = state^.compass
+    snapshot^.animation_values_valid =
+        core.animation_value_store_pack(
+            &state^.animation_values,
+            state^.animation_values.generation,
+            &snapshot^.animation_values) == .Ok
 }
 
 //   Return the worker-owned immutable query snapshot active for the current callback.
@@ -459,6 +464,12 @@ validate_scene_command_batch :: proc(
     if !scene_command_batch_wellformed(state, batch) {
         return false
     }
+    if core.animation_value_store_validate_pending(
+        &state^.animation_values,
+        state^.animation_values.generation,
+        &batch^.animation_value_writes) != .Ok {
+        return false
+    }
 
     validators := SCENE_COMMAND_VALIDATORS
     for command_index in 0..<batch^.command_count {
@@ -617,6 +628,13 @@ commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if !validate_scene_command_batch(state, batch) {
+        record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
+        return false
+    }
+    if core.animation_value_store_apply_pending(
+        &state^.animation_values,
+        state^.animation_values.generation,
+        &batch^.animation_value_writes) != .Ok {
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }

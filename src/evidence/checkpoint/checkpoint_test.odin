@@ -22,3 +22,13 @@ checkpoint_test_generational_storage :: proc(t: ^testing.T) {
     testing.expect(t, !stale)
     testing.expect(t, store.required_evidence_lost)
 }
+
+// Verify rolling optional snapshots may wrap without invalidating required evidence.
+@(test)
+checkpoint_test_optional_rollover_preserves_completeness :: proc(t: ^testing.T) {
+    store: Store
+    for index in 0..<CHECKPOINT_STORE_CAPACITY * 3 {
+        _ = store_put(&store, {fixed_step = u64(index + 1)}, false)
+    }
+    testing.expect(t, !store.required_evidence_lost)
+}

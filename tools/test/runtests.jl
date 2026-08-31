@@ -29,6 +29,7 @@ const TestRunner = Verification.EuclidTestRunner
         @test parse_driver_invocation(["stats", "tools/make.jl"]).action == :stats
         @test parse_driver_invocation(["unit", "odin"]).action == :unit
         @test parse_driver_invocation(["check", "src"]).action == :check
+        @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
@@ -381,3 +382,5 @@ const TestRunner = Verification.EuclidTestRunner
         @test occursin("Verification: PASS", String(take!(io)))
     end
 end
+
+include("evidence_tests.jl")

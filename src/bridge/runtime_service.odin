@@ -930,6 +930,7 @@ attach_julia_request_evidence :: proc(
         return
     }
     evidence: evidence_trace.Event
+    record_completion := true
     switch request.kind {
     case .Animation_Tick:
         evidence = animation_tick_request_evidence(service, request, event)
@@ -942,10 +943,12 @@ attach_julia_request_evidence :: proc(
             generation = service.runtime_generation,
             flags = {.Required},
         }
-    case .Initialize, .Invoke, .Scratchpad, .View_Snapshot:
+    case .Invoke:
+        record_completion = false
+    case .Initialize, .Scratchpad, .View_Snapshot:
         return
     }
-    if evidence_session.session_record(
+    if !record_completion || evidence_session.session_record(
         service.evidence_session, &service.evidence_ring, evidence) {
         event.evidence_count = evidence_trace.ring_drain(
             &service.evidence_ring, event.evidence[:])

@@ -21,6 +21,7 @@ Commands:
     test [OPTS]                  Run the complete verification gate.
     check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
     stats FILE [OPTS]            Show targeted source statistics.
+    evidence COMMAND [ARGS]      Inspect canonical scenario evidence bundles.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -49,7 +50,7 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage", "harness",
-    "unit", "vet", "test", "check", "stats", "analyzer-test", "wiki",
+    "unit", "vet", "test", "check", "stats", "evidence", "analyzer-test", "wiki",
     "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
@@ -103,6 +104,7 @@ end
 # and the other build inputs) is its parent directory.
 const SCRIPT_DIR = abspath(joinpath(@__DIR__, ".."))
 const SRC_DIR = joinpath(SCRIPT_DIR, "src")
+const EVIDENCE_SCRIPT = joinpath(SCRIPT_DIR, "tools", "evidence.jl")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
@@ -1240,6 +1242,18 @@ function run_analysis_command(action::Symbol, arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
+"""Run the canonical evidence bundle inspection CLI."""
+function run_evidence_command(arguments::Vector{String})
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    command = Cmd(vcat([
+        JULIA_EXE,
+        "--project=$analysis_project",
+        EVIDENCE_SCRIPT,
+    ], arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Run all application unit tests or one selected language suite."""
 function run_unit_command(arguments::Vector{String})
     command = Cmd(vcat([JULIA_EXE, TEST_RUNNER_SCRIPT], arguments))
@@ -1288,6 +1302,7 @@ function execute_driver_action(invocation::DriverInvocation)
     invocation.action == :unit && return run_unit_command(invocation.arguments)
     invocation.action in (:check, :stats) && return run_analysis_command(
         invocation.action, invocation.arguments)
+    invocation.action == :evidence && return run_evidence_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)

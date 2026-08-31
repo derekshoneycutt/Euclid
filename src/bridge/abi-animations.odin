@@ -3,6 +3,139 @@ package bridge
 import "../julialib"
 import "../core"
 
+// Carry one animation key and deterministic schema identity across the C ABI.
+Animation_Value_Abi_Identity :: struct {
+    key : u64,
+    schema_low : u64,
+    schema_high : u64,
+}
+
+//   Convert a canonical animation-value result to its stable bridge status.
+animation_value_bridge_status :: proc "contextless" (
+    status: core.Animation_Value_Status) -> i32 {
+    switch status {
+    case .Ok:
+        return BRIDGE_STATUS_OK
+    case .Invalid_Argument:
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    case .Illegal_State:
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    case .Not_Found:
+        return BRIDGE_STATUS_NOT_FOUND
+    case .Schema_Mismatch:
+        return BRIDGE_STATUS_SCHEMA_MISMATCH
+    case .Out_Of_Capacity, .Allocation_Failed:
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+//   Build the canonical identity for the host's active animation generation.
+animation_value_identity :: proc "contextless" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity) -> core.Animation_Value_Identity {
+    return {
+        generation = state^.animation_values.generation,
+        key = identity_abi.key,
+        schema_low = identity_abi.schema_low,
+        schema_high = identity_abi.schema_high,
+    }
+}
+
+//   Copy one Julia-owned opaque value into canonical animation storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Nonzero key and deterministic 128-bit Julia schema identity.
+//   - source: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive payload size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; the source pointer is never retained.
+@(export)
+set_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    source: rawptr,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if source == nil || byte_count <= 0 ||
+        byte_count > i32(core.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    source_bytes := cast([^]u8)source
+    payload := source_bytes[:int(byte_count)]
+    if state^.scene_command_batch_target != nil {
+        if state^.animation_query_snapshot_target == nil {
+            return BRIDGE_STATUS_ILLEGAL_STATE
+        }
+        return animation_value_bridge_status(core.animation_value_pending_append(
+            &state^.scene_command_batch_target^.animation_value_writes,
+            identity,
+            payload))
+    }
+    if state^.animation_query_snapshot_target != nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(core.animation_value_store_set(
+        &state^.animation_values, identity, payload))
+}
+
+//   Copy one canonical opaque value into Julia-owned destination storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Existing key and exact bound 128-bit schema identity.
+//   - destination: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive destination size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; destination changes only on success.
+@(export)
+get_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    destination: rawptr,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if destination == nil || byte_count <= 0 ||
+        byte_count > i32(core.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    destination_bytes := cast([^]u8)destination
+    payload := destination_bytes[:int(byte_count)]
+    if state^.animation_query_snapshot_target != nil {
+        if state^.scene_command_batch_target == nil ||
+            !state^.animation_query_snapshot_target^.animation_values_valid {
+            return BRIDGE_STATUS_ILLEGAL_STATE
+        }
+        status := core.animation_value_pending_copy(
+            &state^.scene_command_batch_target^.animation_value_writes,
+            identity,
+            payload)
+        if status != .Not_Found {
+            return animation_value_bridge_status(status)
+        }
+        return animation_value_bridge_status(core.animation_value_snapshot_copy(
+            &state^.animation_query_snapshot_target^.animation_values,
+            identity,
+            payload))
+    }
+    if state^.scene_command_batch_target != nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(core.animation_value_store_copy(
+        &state^.animation_values, identity, payload))
+}
+
 //   Register Julia callbacks that define the null/default animation behavior.
 //
 // Parameters:

@@ -16,6 +16,7 @@ import "core:time"
 SESSION_RUN_ID_CAPACITY :: 64
 SESSION_OUTPUT_PATH_CAPACITY :: 1024
 SESSION_EVENT_CAPACITY :: trace.TRACE_RING_CAPACITY * 8
+SESSION_OPTIONAL_EVENT_CAPACITY :: SESSION_EVENT_CAPACITY / 2
 
 // Final evidence destination selected independently from event recording.
 Output_Mode :: enum u8 {
@@ -275,15 +276,15 @@ session_merge_ring_completeness :: proc(session: ^Session, rings: []^trace.Ring)
 //   - ring: Producer ring stable for owner handoff and destructive draining.
 //
 // Returns:
-//   - Number of events appended to the session snapshot.
+//   - Number of events drained from the producer ring.
 //
 // Side effects:
-//   - Removes the appended prefix from the ring and advances session event_count.
-//   - Makes completeness sticky-false for required producer loss or truncation.
+//   - Drains the producer ring and admits events under bounded session policy.
+//   - Makes completeness sticky-false for required producer loss or overflow.
 //
 // Notes:
-//   - Events remain in producer-local order; this procedure does not globally merge.
-//   - Events that exceed remaining session capacity stay in the producer ring.
+//   - Retained events remain in producer-local order; this does not globally merge.
+//   - Optional events beyond their budget are intentionally omitted.
 session_accept_ring :: proc(session: ^Session, ring: ^trace.Ring) -> int {
     if session == nil || ring == nil || !session.enabled {
         return 0
@@ -291,12 +292,10 @@ session_accept_ring :: proc(session: ^Session, ring: ^trace.Ring) -> int {
     if !trace.ring_evidence_complete(ring) {
         session.required_evidence_complete = false
     }
-    available := len(session.events) - session.event_count
-    drained := trace.ring_drain(
-        ring, session.events[session.event_count:session.event_count + available])
-    session.event_count += drained
-    if ring.count > 0 {
-        session.required_evidence_complete = false
+    pending: [trace.TRACE_RING_CAPACITY]trace.Event
+    drained := trace.ring_drain(ring, pending[:])
+    for event in pending[:drained] {
+        _ = session_accept_event(session, event)
     }
     return drained
 }
@@ -308,15 +307,21 @@ session_accept_ring :: proc(session: ^Session, ring: ^trace.Ring) -> int {
 //   - event: Complete event already admitted by its producer policy.
 //
 // Returns:
-//   - True when appended or recording is disabled; false at session capacity.
+//   - True when appended, intentionally omitted, or recording is disabled.
+//   - False when required evidence exceeds total session capacity.
 //
 // Side effects:
-//   - Appends to the cumulative snapshot or marks completeness sticky-false.
+//   - Appends under required-reserve policy or marks required overflow sticky.
 //
 // Notes:
 //   - Lane filtering is not repeated at this synchronized handoff boundary.
+//   - Optional records cannot consume the capacity reserved for required evidence.
 session_accept_event :: proc(session: ^Session, event: trace.Event) -> bool {
     if session == nil || !session.enabled {
+        return true
+    }
+    required := .Required in event.flags
+    if !required && session.event_count >= SESSION_OPTIONAL_EVENT_CAPACITY {
         return true
     }
     if session.event_count == len(session.events) {

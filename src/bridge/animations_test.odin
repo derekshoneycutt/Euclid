@@ -50,3 +50,21 @@ programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
     testing.expect(t, selected.is_selected)
     testing.expect(t, !state^.ui_runtime.tree_reveal_pending)
 }
+
+//   Verify an explicit reload request schedules owner-thread lifecycle work.
+@(test)
+explicit_reload_requests_animation_lifecycle_update :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State)
+    defer free(state)
+    service := new(core.Julia_Runtime_Service)
+    defer free(service)
+    ji := &state^.julia_interface_slots[0]
+    animation := &ji^.null_animation
+    state^.julia_interface = ji
+    state^.julia_runtime_service = service
+    ji^.selected_animation = animation
+    ji^.current_animation = animation
+    service^.reload_requested = true
+
+    testing.expect(t, animation_lifecycle_update_needed(state))
+}

@@ -78,3 +78,26 @@ session_test_required_loss_is_sticky :: proc(t: ^testing.T) {
     session_finish(&session, true)
     testing.expect(t, session_should_fail_process(&session))
 }
+
+// Verify optional pressure leaves bounded capacity for later required evidence.
+@(test)
+session_test_optional_pressure_preserves_required_reserve :: proc(t: ^testing.T) {
+    session: Session
+    testing.expect(t, session_init(&session, Config{
+        enabled = true,
+        output_mode = .Sink,
+        lanes = ALL_LANES,
+    }))
+    for _ in 0..<SESSION_EVENT_CAPACITY {
+        testing.expect(t, session_accept_event(&session, trace.Event{}))
+    }
+    testing.expect_value(t, session.event_count, SESSION_OPTIONAL_EVENT_CAPACITY)
+
+    required := trace.Event{flags = {.Required}}
+    for _ in 0..<SESSION_EVENT_CAPACITY - SESSION_OPTIONAL_EVENT_CAPACITY {
+        testing.expect(t, session_accept_event(&session, required))
+    }
+    testing.expect(t, session.required_evidence_complete)
+    testing.expect(t, !session_accept_event(&session, required))
+    testing.expect(t, !session.required_evidence_complete)
+}

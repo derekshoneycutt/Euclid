@@ -154,6 +154,10 @@ animation_lifecycle_update_needed :: proc(state: ^core.Euclid_General_State) -> 
     if ji^.pending_animation_reset && ji^.animation_reset_cooldown_remaining <= 0 {
         return true
     }
+    if state^.julia_runtime_service != nil &&
+        state^.julia_runtime_service^.reload_requested {
+        return true
+    }
     archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
     if !ok {
         return false
@@ -335,13 +339,16 @@ change_current_animation_loop :: proc(
         return false
     }
 
-    reset_animation_switch_state(state)
+    if !reset_animation_switch_state(state) {
+        return false
+    }
 
     state_value := julialib.jl_box_voidpointer(state)
     if animation^.initiate != nil {
         julialib.jl_call1(animation^.initiate, state_value)
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Initiating new animation loop")
+            clean_failed_animation_initiation(state, animation)
             return false
         }
     }
@@ -349,7 +356,7 @@ change_current_animation_loop :: proc(
     state^.julia_interface^.current_animation = animation
     animation_generation: u64 = 0
     if state^.julia_runtime_service != nil {
-        animation_generation = state^.julia_runtime_service^.animation_generation
+        animation_generation = state^.julia_runtime_service^.animation_generation + 1
     }
     record_julia_evidence(state, {
         lane = .Domain,
@@ -377,8 +384,13 @@ clean_current_animation :: proc(state: ^core.Euclid_General_State) -> bool {
     return true
 }
 
-//   Clear animation-owned shapes, tools, and metadata ahead of an animation switch.
-reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) {
+//   Clear animation-owned native state into the generation about to initiate.
+reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool {
+    target_generation := current_animation_generation(state) + 1
+    if core.animation_value_store_begin_generation(
+        &state^.animation_values, target_generation) != .Ok {
+        return false
+    }
     shapes.clear_animation_data(
         state^.point_system, state^.particle_system, state^.iso_scale)
     hide_pen(state)
@@ -387,6 +399,22 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) {
         state^.anim_metadata[i] = 0.0
     }
     state^.animation_drawing_sound_enabled = true
+    return true
+}
+
+//   Retire partial native state after a target initiate callback fails.
+clean_failed_animation_initiation :: proc(
+    state: ^core.Euclid_General_State,
+    animation: ^core.Euclid_Julia_Animation_Interface) {
+    if animation^.clean != nil {
+        julialib.jl_call1(animation^.clean, julialib.jl_box_voidpointer(state))
+        if julialib.jl_exception_occurred() != nil {
+            print_julia_exception("Cleaning failed animation initiation")
+        }
+    }
+    _ = reset_animation_switch_state(state)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
 }
 
 //   Restart the currently selected animation by running clean then initiate callbacks.
@@ -403,18 +431,15 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
         return false
     }
 
-    shapes.clear_animation_data(
-        state^.point_system, state^.particle_system, state^.iso_scale)
-    hide_pen(state)
-    hide_compass(state)
-    for i in 0..<len(state^.anim_metadata) {
-        state^.anim_metadata[i] = 0.0
+    if !reset_animation_switch_state(state) {
+        return false
     }
-    state^.animation_drawing_sound_enabled = true
 
     julialib.jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
+        clean_failed_animation_initiation(
+            state, state^.julia_interface^.current_animation)
         return false
     }
     return true
@@ -632,12 +657,16 @@ record_runtime_reload_event :: proc(
         kind = .Runtime_Reload_Rolled_Back
         flags += {.Failure}
     }
+    target_generation := service != nil ? service^.runtime_generation : 0
+    if event_name != "runtime.reload_committed" {
+        target_generation += 1
+    }
     record_julia_evidence(state, {
         lane = .Lifecycle,
         kind = kind,
-        correlation_kind = .Animation_Tick,
-        correlation = service != nil ? service^.animation_tick_sequence : 0,
-        generation = service != nil ? service^.runtime_generation : 0,
+        correlation_kind = .Runtime_Request,
+        correlation = target_generation,
+        generation = target_generation,
         flags = flags,
     })
 }

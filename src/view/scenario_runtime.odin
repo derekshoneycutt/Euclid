@@ -247,9 +247,11 @@ scenario_issue_julia_action :: proc(
         if state.julia_runtime_service == nil {
             return true, false
         }
-        state.julia_runtime_service.reload_requested = true
+        service := state.julia_runtime_service
+        service.reload_requested = true
         identity.kind = .Runtime_Request
-        identity.generation = state.julia_runtime_service.runtime_generation
+        identity.id = service.runtime_generation + 1
+        identity.generation = identity.id
         return true, true
     case:
         return false, false
@@ -281,7 +283,7 @@ scenario_issue_display_action :: proc(
         identity.kind = .Capture
         return true, true
     case .Checkpoint:
-        record_evidence_checkpoint(state)
+        record_evidence_checkpoint(state, true)
         identity.kind = .Checkpoint
         identity.id = state.fixed_step
         return true, true

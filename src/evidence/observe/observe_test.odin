@@ -20,6 +20,7 @@ observe_test_display_scalars :: proc(t: ^testing.T) {
     state^.fixed_step = 17
     state^.simulation_time = 2.5
     state^.ui_runtime.simulation_paused = true
+    state^.ui_runtime.scratchpad_forced_bottom_request_id = 19
     state^.evidence_session.required_evidence_complete = true
     state^.point_system^.next_point_index = 4
     state^.point_system^.next_constraint_index = 3
@@ -33,6 +34,7 @@ observe_test_display_scalars :: proc(t: ^testing.T) {
     testing.expect_value(t, result.fixed_step, u64(17))
     testing.expect_value(t, result.simulation_time, f32(2.5))
     testing.expect(t, result.simulation_paused)
+    testing.expect(t, !result.scratchpad_idle)
     testing.expect_value(t, result.point_count, 4)
     testing.expect_value(t, result.constraint_count, 3)
     testing.expect_value(t, result.particle_count, 12)

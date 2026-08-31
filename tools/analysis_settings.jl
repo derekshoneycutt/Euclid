@@ -316,8 +316,119 @@ AnalysisSettings(
     default_architecture_settings(),
     AllocationSettings(
         BaseSettings.allocations.known_procedures,
-        BaseSettings.allocations.source_patterns,
+        [
+            BaseSettings.allocations.source_patterns...;
+            AllocatorSourcePattern("builder.allocator", :custom);
+            AllocatorSourcePattern("store.arena_owner.allocator", :custom)
+        ],
         ReviewedAllocationPolicy[
+            # Shared arena ownership reserves virtual storage with explicit lifecycle.
+            ReviewedAllocationPolicy(
+                "core-arena-owner-growing-reservation",
+                "src/core/arena_owner.odin",
+                "arena_owner_growing_init",
+                :arena,
+                "Owner-scoped growing storage is reset in bulk and explicitly destroyed.";
+                operation="arena_init_growing",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-core-arena-owner-partial-init",
+                "src/core/arena_owner_test.odin",
+                "arena_owner_test_init_failure",
+                :arena,
+                "Test reservation is deliberately followed by failure to verify cleanup.";
+                operation="arena_init_growing",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-core-arena-owner-growth-buffer",
+                "src/core/arena_owner_test.odin",
+                "core_test_arena_owner_reset_releases_growth_blocks",
+                :custom,
+                "Arena-backed test payload is invalidated by reset and released by destroy.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-core-arena-owner-destroy-buffer",
+                "src/core/arena_owner_test.odin",
+                "core_test_arena_owner_destroy_preserves_diagnostics",
+                :custom,
+                "Arena-backed test payload is released by the owner destruction under test.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            # Shared bounded builders grow within an explicit bulk-lifetime owner.
+            ReviewedAllocationPolicy(
+                "core-bounded-byte-builder-growth",
+                "src/core/bounded_builder.odin",
+                "bounded_byte_builder_reserve",
+                :custom,
+                "Hard-limit-checked geometric byte storage is reclaimed by the allocator owner at reset or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="builder.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "core-bounded-element-builder-growth",
+                "src/core/bounded_builder.odin",
+                "bounded_element_builder_reserve",
+                :custom,
+                "Hard-limit-checked geometric plain-element storage is reclaimed by the allocator owner at reset or destruction.";
+                operation="make",
+                target="[]Element",
+                allocator_source="builder.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "core-animation-value-store-payload",
+                "src/core/animation_value_store.odin",
+                "animation_value_store_insert",
+                :custom,
+                "Quota-checked opaque payload is retired by animation-generation reset or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.arena_owner.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-bridge-animation-value-state",
+                "src/bridge/animation_values_test.odin",
+                "animation_value_test_state_create",
+                :implicit,
+                "One test host state owns the canonical animation store and is destroyed by the paired test helper.";
+                operation="new",
+                target="core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "bridge-interface-registry-growing-arena",
+                "src/bridge/bootstrap.odin",
+                "ensure_julia_interface_registry_arena",
+                :arena,
+                "One interface-generation arena is bulk-reset on reuse or rollback and destroyed at service teardown.";
+                operation="arena_init_growing",
+                target="iface^.animation_registry_arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "files-gif-session-growing-arena",
+                "src/files/gif_encode.odin",
+                "gif_encode_ensure_arena",
+                :arena,
+                "One capture-session arena is bulk-reset between recordings and destroyed with encoder state.";
+                operation="arena_init_growing",
+                target="state.arena",
+                certainty=:definite,
+                response=Ignore),
             # Bridge Animations Allocations ; these use a dedicated arena
             ReviewedAllocationPolicy(
                 "bridge-animation-lookup-arena",
@@ -732,6 +843,16 @@ AnalysisSettings(
                 "Large test fixture is destroyed by defer free in the test body.";
                 operation="new",
                 target="core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-bridge-animation-value-stale-tick-service",
+                "src/bridge/animation_values_test.odin",
+                "animation_value_stale_tick_does_not_commit_typed_write",
+                :implicit,
+                "Large runtime publication fixture is destroyed by defer in the test body.";
+                operation="new",
+                target="Julia_Runtime_Service",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(

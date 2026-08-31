@@ -227,6 +227,7 @@ Scene_Command_Batch :: struct {
     animation: ^Euclid_Julia_Animation_Interface,
     command_count: int,
     overflowed: bool,
+    animation_value_writes: Animation_Value_Pending_Writes,
     commands: [SCENE_COMMAND_BATCH_CAPACITY]Scene_Command,
 }
 
@@ -235,6 +236,8 @@ Animation_Query_Snapshot :: struct {
     metadata: [MAX_METAVALUES]f32,
     pen: Shapes_Pen,
     compass: Shapes_Compass,
+    animation_values_valid: bool,
+    animation_values: Animation_Value_Snapshot,
 }
 
 Julia_Request_Kind :: enum {
@@ -1727,6 +1730,7 @@ Euclid_General_State :: struct {
     current_delta_time : f32,
     accumulator : f32,
 
+    animation_values : Animation_Value_Store,
     anim_metadata : [MAX_METAVALUES]f32,
 }
 

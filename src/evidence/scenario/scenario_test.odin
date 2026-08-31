@@ -69,6 +69,14 @@ scenario_test_runner_event_and_deadline :: proc(t: ^testing.T) {
         Run_Status.Failed)
 }
 
+// Verify Scratchpad idle uses the display-owned completion observation.
+@(test)
+scenario_test_scratchpad_idle_state :: proc(t: ^testing.T) {
+    testing.expect(t, state_matches(
+        "scratchpad_idle", observe.Display{scratchpad_idle = true}))
+    testing.expect(t, !state_matches("scratchpad_idle", observe.Display{}))
+}
+
 // Verify required evidence loss makes the run inconclusive before actions execute.
 @(test)
 scenario_test_required_trace_loss_is_inconclusive :: proc(t: ^testing.T) {

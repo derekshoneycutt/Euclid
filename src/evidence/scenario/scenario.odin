@@ -671,6 +671,7 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "runtime_ready": return display.runtime_lifecycle == .Ready
     case "runtime_idle": return display.active_runtime_request_id == 0
     case "animation_idle": return !display.animation_tick_pending
+    case "scratchpad_idle": return display.scratchpad_idle
     case "simulation_paused": return display.simulation_paused
     case "simulation_running": return !display.simulation_paused
     case "dynview_enabled": return display.dynview_enabled

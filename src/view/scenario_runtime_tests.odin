@@ -160,6 +160,27 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.kind, evidence_trace.Correlation_Kind.Animation)
 }
 
+// Verify deferred reload actions identify the runtime generation they will publish.
+@(test)
+scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State)
+    defer free(state)
+    service := new(core.Julia_Runtime_Service)
+    defer free(service)
+    state^.julia_runtime_service = service
+    service^.runtime_generation = 7
+    command := scenario.Command{kind = .Reload_Runtime}
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+
+    handled, accepted := scenario_issue_julia_action(&runtime, &command, &identity)
+
+    testing.expect(t, handled && accepted && service^.reload_requested)
+    testing.expect_value(t, identity.kind, evidence_trace.Correlation_Kind.Runtime_Request)
+    testing.expect_value(t, identity.id, u64(8))
+    testing.expect_value(t, identity.generation, u64(8))
+}
+
 // Verify rejected scenario Scratchpad work does not mutate display scroll state.
 @(test)
 scenario_rejected_scratchpad_submission_preserves_scroll_state :: proc(t: ^testing.T) {

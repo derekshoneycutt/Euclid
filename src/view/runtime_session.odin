@@ -298,6 +298,11 @@ initiate_animations_state :: proc(
     state^.particle_system = particle_system
     state^.compass = point_system_parts.compass
     state^.pen = point_system_parts.pen
+    if !core.animation_value_store_init(&state^.animation_values) {
+        fmt.eprintln("Failed to initialize the animation value store.")
+        free_animations_state(state)
+        return nil
+    }
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
     init_runtime_fields(state, settings)
     state^.simulation_executor = create_simulation_executor(state)

@@ -15,6 +15,7 @@ import capture "../evidence/capture"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import "../files"
 
 import "base:runtime"
@@ -334,6 +335,7 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     }
     view_core.gif_capture_destroy_session(&state^.gif_capture)
     evidence_allocation.domain_destroy(&state^.evidence_allocations)
+    core.animation_value_store_destroy(&state^.animation_values)
     julia.destroy_julia_interface_resources(state)
     free(state^.particle_system)
     free(state^.point_system)
@@ -537,7 +539,7 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
     state^.fixed_step += 1
     state^.simulation_time += dt
     record_constraint_trace_summary(state)
-    record_evidence_checkpoint(state)
+    record_evidence_checkpoint(state, false)
     return true
 }
 
@@ -584,16 +586,25 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
 }
 
 //   Capture and record one bounded canonical checkpoint after worker join.
-record_evidence_checkpoint :: proc(state: ^Euclid_General_State) {
+//
+// Parameters:
+//   - state: Display-owned state observed after synchronized simulation work.
+//   - required: Whether later checkpoint eviction makes evidence incomplete.
+record_evidence_checkpoint :: proc(
+    state: ^Euclid_General_State, required: bool) {
     if state == nil || state^.point_system == nil || state^.julia_runtime_service == nil {
         return
     }
 
     typed := capture_evidence_checkpoint(state)
     handle := evidence_checkpoint.store_put(
-        &state^.evidence_checkpoints, typed, true)
+        &state^.evidence_checkpoints, typed, required)
     if state^.evidence_checkpoints.required_evidence_lost {
         evidence_session.session_mark_incomplete(&state^.evidence_session)
+    }
+    flags: evidence_trace.Flags
+    if required {
+        flags += {.Required}
     }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
@@ -603,7 +614,7 @@ record_evidence_checkpoint :: proc(state: ^Euclid_General_State) {
             correlation = state^.fixed_step,
             generation = u64(handle.generation),
             tick = state^.fixed_step,
-            flags = {.Required},
+            flags = flags,
             payload = {handle = {
                 slot = handle.slot,
                 generation = handle.generation,
