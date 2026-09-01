@@ -1,17 +1,6 @@
-"""
-C-compatible bundle of animation callback function objects passed to the native
-bridge when registering animation interfaces. Field order must match the Odin
-`Animation_Callbacks` struct; each `Any` field is laid out as a `jl_value_t*`,
-so the struct is ABI-identical to three opaque object pointers. The struct is
-mutable because functions are immutable Julia objects that cannot be passed
-through `pointer_from_objref`; the mutable wrapper owns the object references
-and is passed to C as a data pointer instead.
-"""
-mutable struct AnimationCallbacksABI
-    init::Any
-    loop::Any
-    clean::Any
-end
+const ANIMATION_OPERATION_ENTER = Int32(1)
+const ANIMATION_OPERATION_TICK = Int32(2)
+const ANIMATION_OPERATION_EXIT = Int32(3)
 
 """Typed non-owning identity for one animation value stored by the native host."""
 struct AnimationKey{T}
@@ -154,11 +143,6 @@ function get_animation_value(
     end
 end
 
-"""Pack the three lifecycle callbacks into a C-compatible ABI struct."""
-function _animation_callbacks_abi(init, loop, clean)
-    AnimationCallbacksABI(init, loop, clean)
-end
-
 """
 Set the null animation for the application
 
@@ -167,15 +151,15 @@ Set the null animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `init` : A function that should be called when the animation is being initialized
-- `loop` : A function that should be called when the animation is processing a frame of the loop
-- `clean` : A function that should be called when the animation is being cleaned and ended
+- `entry` : The module-owned `(state_ptr, operation, dt) -> Bool` lifecycle entry
 """
 function set_null_animations(
-    state_ptr::Ptr{Cvoid}, init, loop, clean)
+    state_ptr::Ptr{Cvoid}, entry)
 
+    GC.@preserve entry begin
     @ccall set_null_animations(state_ptr::Ptr{Cvoid},
-        init::Any, loop::Any, clean::Any)::Cvoid
+        entry::Any)::Cvoid
+    end
 end
 
 """
@@ -186,22 +170,19 @@ Add a new root animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `init` : A function that should be called when the animation is being initialized
-- `loop` : A function that should be called when the animation is processing a frame of the loop
-- `clean` : A function that should be called when the animation is being cleaned and ended
+- `entry` : The module-owned `(state_ptr, operation, dt) -> Bool` lifecycle entry
 - `name` : The name of the animation to show in the tree
 - `stable_id` : Canonical UUID string used as stable animation identity
 
 Returns 1 on success and -1 on failure
 """
 function add_root_animation_interface(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String,
+    state_ptr::Ptr{Cvoid}, entry, name::String,
     stable_id::String)
 
-    callbacks = _animation_callbacks_abi(init, loop, clean)
-    GC.@preserve callbacks init loop clean begin
+    GC.@preserve entry begin
         @ccall add_root_animation_interface(
-            state_ptr::Ptr{Cvoid}, callbacks::Ref{AnimationCallbacksABI},
+            state_ptr::Ptr{Cvoid}, entry::Any,
             name::Cstring, stable_id::Cstring)::Int64
     end
 end
@@ -214,9 +195,7 @@ Add a new child animation for the application
 Parameters:
 
 - `state_ptr` : The state of the Euclid application to pass to the API
-- `init` : A function that should be called when the animation is being initialized
-- `loop` : A function that should be called when the animation is processing a frame of the loop
-- `clean` : A function that should be called when the animation is being cleaned and ended
+- `entry` : The module-owned `(state_ptr, operation, dt) -> Bool` lifecycle entry
 - `name` : The name of the animation to show in the tree
 - `stable_id` : Canonical UUID string used as stable animation identity
 - `parent_stable_id` : Canonical UUID string of the parent animation node
@@ -224,13 +203,12 @@ Parameters:
 Returns 1 on success and -1 on failure
 """
 function add_child_animation_interface(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::String,
+    state_ptr::Ptr{Cvoid}, entry, name::String,
     stable_id::String, parent_stable_id::String)
 
-    callbacks = _animation_callbacks_abi(init, loop, clean)
-    GC.@preserve callbacks init loop clean begin
+    GC.@preserve entry begin
         @ccall add_child_animation_interface(
-            state_ptr::Ptr{Cvoid}, callbacks::Ref{AnimationCallbacksABI},
+            state_ptr::Ptr{Cvoid}, entry::Any,
             name::Cstring, stable_id::Cstring, parent_stable_id::Cstring)::Int64
     end
 end

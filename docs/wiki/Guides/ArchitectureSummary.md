@@ -81,7 +81,8 @@ If you are new, read in this order:
 Content-module contract:
 
 - Root modules register tree/category nodes.
-- Leaf files provide `get_view_text`, `initialize`, `loop`, `clean`.
+- Animation files provide `get_view_text`, `initialize`, `loop`, `clean`, and a direct
+  `animation_entry` implementation that dispatches bridge-stable lifecycle operations.
 - Bridge calls mutate host state while Julia controls pedagogical flow.
 
 Operational diagnostics are optional human-readable records written through the
@@ -605,9 +606,10 @@ Choose the owning module first, then touch that module's highlighted files.
 
 1. Add Julia animation module/file in `src/julia/...`.
 1. Implement `get_view_text`, `initialize`, `loop`, `clean`.
+1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
 1. Publish the named `get_view_text` producer from `initialize`, or from `loop`
   only when semantic view content changes, using `publish_view_update`.
-1. Register it via `add_child_animation_interface` in the relevant group init script.
+1. Register `animation_entry` via `add_child_animation_interface` in the relevant group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 
 Review [AnimationsStyle.md](AnimationsStyle.md) for considerations on how to

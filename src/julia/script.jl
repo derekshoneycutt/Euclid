@@ -34,8 +34,7 @@ end
 function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     registration_started = time_ns()
     OdinJuliaBridge.set_null_animations(
-        state_ptr, NullAnimation.initialize,
-        NullAnimation.loop, NullAnimation.clean)
+        state_ptr, NullAnimation.animation_entry)
 
     Scratchpad.init_euclid_scripts_scratchpad(state_ptr)
 

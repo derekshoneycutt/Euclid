@@ -56,6 +56,22 @@ function initialize_view_root_groups(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_root_groups)
 end
 
+"""Dispatch lifecycle operations for the Groups category animation."""
+function animation_entry_root_groups(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_root_groups(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
 """Derive a stable child animation id from a parent id and child name."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
@@ -64,13 +80,12 @@ end
 
 """Register a child animation interface under a parent stable id, returning its id."""
 function register_child_animation(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::AbstractString,
+    state_ptr::Ptr{Cvoid}, entry, name::AbstractString,
     parent_stable_id::AbstractString)
 
     child_stable_id = stable_child_id(parent_stable_id, name)
-
     OdinJuliaBridge.add_child_animation_interface(
-        state_ptr, init, loop, clean, String(name),
+        state_ptr, entry, String(name),
         child_stable_id, String(parent_stable_id))
 
     return child_stable_id
@@ -79,57 +94,42 @@ end
 """Register the group-theory animation interfaces under the root id."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     groups_id = register_child_animation(
-        state_ptr, initialize_view_root_groups,
-        NullAnimation.loop, NullAnimation.clean,
+        state_ptr, animation_entry_root_groups,
         "Groups", root_id)
 
         z2_id = register_child_animation(
             state_ptr,
-            EuclidAlgebraGroupsZ2.initialize,
-            EuclidAlgebraGroupsZ2.loop,
-            EuclidAlgebraGroupsZ2.clean,
+            EuclidAlgebraGroupsZ2.animation_entry,
             "ℤ₂",
             groups_id)
             register_child_animation(
                 state_ptr,
-                EuclidAlgebraGroupsZ2Closure.initialize,
-                EuclidAlgebraGroupsZ2Closure.loop,
-                EuclidAlgebraGroupsZ2Closure.clean,
+                EuclidAlgebraGroupsZ2Closure.animation_entry,
                 "Closure",
                 z2_id)
             register_child_animation(
                 state_ptr,
-                EuclidAlgebraGroupsZ2Identity.initialize,
-                EuclidAlgebraGroupsZ2Identity.loop,
-                EuclidAlgebraGroupsZ2Identity.clean,
+                EuclidAlgebraGroupsZ2Identity.animation_entry,
                 "Identity",
                 z2_id)
             register_child_animation(
                 state_ptr,
-                EuclidAlgebraGroupsZ2Inverse.initialize,
-                EuclidAlgebraGroupsZ2Inverse.loop,
-                EuclidAlgebraGroupsZ2Inverse.clean,
+                EuclidAlgebraGroupsZ2Inverse.animation_entry,
                 "Inverse",
                 z2_id)
         cn_id = register_child_animation(
             state_ptr,
-            EuclidAlgebraGroupsCn.initialize,
-            EuclidAlgebraGroupsCn.loop,
-            EuclidAlgebraGroupsCn.clean,
+            EuclidAlgebraGroupsCn.animation_entry,
             "Cₙ",
             groups_id)
             register_child_animation(
                 state_ptr,
-                EuclidAlgebraGroupsCnAssociative.initialize,
-                EuclidAlgebraGroupsCnAssociative.loop,
-                EuclidAlgebraGroupsCnAssociative.clean,
+                EuclidAlgebraGroupsCnAssociative.animation_entry,
                 "Associative",
                 cn_id)
             register_child_animation(
                 state_ptr,
-                EuclidAlgebraGroupsCnAbelian.initialize,
-                EuclidAlgebraGroupsCnAbelian.loop,
-                EuclidAlgebraGroupsCnAbelian.clean,
+                EuclidAlgebraGroupsCnAbelian.animation_entry,
                 "Abelian",
                 cn_id)
 

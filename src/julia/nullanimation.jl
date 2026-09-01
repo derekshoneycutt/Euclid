@@ -5,7 +5,7 @@ using ..EuclidAnimations
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop
+export get_view_text, initialize, clean, loop, animation_entry
 
 const StartRotation = π / 4f0
 const CircleRadius = 0.25f0
@@ -245,6 +245,22 @@ end
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     draw_line(state_ptr, dt)
     draw_circle(state_ptr, dt)
+end
+
+"""Dispatch one bridge-stable lifecycle operation for the null animation."""
+function animation_entry(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        clean(state_ptr)
+    else
+        return false
+    end
+    return true
 end
 
 end

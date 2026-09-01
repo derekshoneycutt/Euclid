@@ -436,9 +436,7 @@ Julia_Runtime_Service :: struct {
 }
 
 Euclid_Julia_Animation_Interface :: struct {
-    initiate : ^julialib.jl_value_t, // initiate the animation type
-    loop : ^julialib.jl_value_t, // ran each dt in the main window loop
-    clean : ^julialib.jl_value_t, // stop and clear animations
+    entry: ^julialib.jl_value_t,
 
     name : string,
     stable_id : uuid.Identifier,
@@ -452,6 +450,12 @@ Euclid_Julia_Animation_Interface :: struct {
     prev_sibling : ^Euclid_Julia_Animation_Interface,
     next_in_registry : ^Euclid_Julia_Animation_Interface,
     prev_in_registry : ^Euclid_Julia_Animation_Interface,
+}
+
+Animation_Operation :: enum i32 {
+    Enter = 1,
+    Tick = 2,
+    Exit = 3,
 }
 
 Euclid_Julia_Animation_Lookup_Entry :: struct {

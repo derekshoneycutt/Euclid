@@ -179,7 +179,7 @@ const HELPER_DOC_ALIASES = Dict(
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr, initialize, loop, clean, ScratchpadName,
+    state_ptr, animation_entry, ScratchpadName,
         OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 

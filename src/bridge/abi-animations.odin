@@ -144,28 +144,24 @@ get_animation_value :: proc "c" (
         &state^.animation_values, identity, payload))
 }
 
-//   Register Julia callbacks that define the null/default animation behavior.
+//   Register the Julia entry that defines null/default animation behavior.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - init: Julia function pointer used to bind animation callback behavior.
-//   - loop: Julia function pointer used to bind animation callback behavior.
-//   - clean: Julia function pointer used to bind animation callback behavior.
+//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
-    init, loop, clean: ^julialib.jl_value_t) {
+    entry: ^julialib.jl_value_t) {
     
-    state^.julia_interface^.null_animation.initiate = init
-    state^.julia_interface^.null_animation.loop = loop
-    state^.julia_interface^.null_animation.clean = clean
+    state^.julia_interface^.null_animation.entry = entry
 }
 
 //   Register a top-level animation interface entry in the Julia animation registry.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
+//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
 //   - name: Null-terminated animation label string from Julia.
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //
@@ -175,12 +171,12 @@ set_null_animations :: proc "c" (
 @(export)
 add_root_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    callbacks : ^Animation_Callbacks,
+    entry: ^julialib.jl_value_t,
     name, stable_id : cstring) -> int {
 
     context = state^.saved_context
 
-    if callbacks == nil {
+    if entry == nil {
         return -1
     }
 
@@ -194,7 +190,7 @@ add_root_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        callbacks^,
+        entry,
         name,
         parsed_stable_id,
         nil)
@@ -209,7 +205,7 @@ add_root_animation_interface :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
+//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
 //   - name: Null-terminated animation label string from Julia.
 //   - stable_id: Null-terminated UUID identity string for restore/persistence.
 //   - parent_stable_id: Parent animation UUID string that receives the new child entry.
@@ -220,13 +216,13 @@ add_root_animation_interface :: proc "c" (
 @(export)
 add_child_animation_interface :: proc "c" (
     state : ^core.Euclid_General_State,
-    callbacks : ^Animation_Callbacks,
+    entry: ^julialib.jl_value_t,
     name, stable_id : cstring,
     parent_stable_id: cstring) -> int {
 
     context = state^.saved_context
 
-    if callbacks == nil {
+    if entry == nil {
         return -1
     }
 
@@ -246,7 +242,7 @@ add_child_animation_interface :: proc "c" (
 
     _, inserted := add_animation_to_registry(
         state,
-        callbacks^,
+        entry,
         name,
         parsed_stable_id,
         parent)

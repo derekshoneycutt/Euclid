@@ -243,3 +243,19 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
     end
 end
 
+"""Dispatch one bridge-stable lifecycle operation for the scratchpad animation."""
+function animation_entry(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+

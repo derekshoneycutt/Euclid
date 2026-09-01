@@ -7,7 +7,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop
+export get_view_text, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.20f0, 0.64f0, 0f0]
 const LineAEnd = [0.84f0, 0.40f0, 0f0]
@@ -346,6 +346,23 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, phase, timer))
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+end
+
+
+"""Dispatch one bridge-stable lifecycle operation for this animation."""
+function animation_entry(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        clean(state_ptr)
+    else
+        return false
+    end
+    return true
 end
 
 end

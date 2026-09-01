@@ -28,13 +28,28 @@ function initialize_view_root_hilbert(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_root_hilbert)
 end
 
+"""Dispatch lifecycle operations for the Hilbert category animation."""
+function animation_entry_root_hilbert(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_root_hilbert(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
 """Register the Hilbert Foundations root animation interface and chapter content."""
 function init_euclid_scripts_hilbert(state_ptr::Ptr{Cvoid})
     root_stable_id = OdinJuliaBridge.animation_stable_id_from_key(
         "root:Hilbert's Foundations of Geometry")
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr, initialize_view_root_hilbert,
-        NullAnimation.loop, NullAnimation.clean,
+        state_ptr, animation_entry_root_hilbert,
         "Hilbert's Foundations of Geometry",
         root_stable_id)
 

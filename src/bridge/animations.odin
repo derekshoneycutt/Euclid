@@ -27,12 +27,6 @@ Harness_Scenario_Task_Data :: struct {
     step_count: int,
 }
 
-Animation_Callbacks :: struct {
-    initiate:      ^julialib.jl_value_t,
-    loop:          ^julialib.jl_value_t,
-    clean:         ^julialib.jl_value_t,
-}
-
 //   Invoke one Julia callback through the stack-preserving diagnostic boundary.
 call_julia_callback1 :: proc(
     state: ^core.Euclid_General_State, callback, argument: ^julialib.jl_value_t) {
@@ -52,6 +46,25 @@ call_julia_callback2 :: proc(
         callback, first, second)
 }
 
+//   Invoke one animation operation and report Julia exceptions at their live stack.
+invoke_animation_operation :: proc(
+    state: ^core.Euclid_General_State, entry: ^julialib.jl_value_t,
+    operation: core.Animation_Operation, dt: f32,
+    exception_context: string) -> bool {
+
+    result := julialib.jl_call4(
+        state^.julia_interface^.invoke_with_exception_diagnostics,
+        entry,
+        julialib.jl_box_voidpointer(state),
+        julialib.jl_box_int32(i32(operation)),
+        julialib.jl_box_float32(dt))
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception(exception_context)
+        return false
+    }
+    return result != nil && julialib.jl_unbox_bool(result) != 0
+}
+
 //   Invoke Julia-side script initialization and optional null-animation init hook.
 //
 // Parameters:
@@ -69,11 +82,10 @@ init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
         return false
     }
 
-    if state^.julia_interface^.null_animation.initiate != nil {
-        call_julia_callback1(
-            state, state^.julia_interface^.null_animation.initiate, state_value)
-        if julialib.jl_exception_occurred() != nil {
-            print_julia_exception("init_euclid_scripts")
+    if state^.julia_interface^.null_animation.entry != nil {
+        if !invoke_animation_operation(
+            state, state^.julia_interface^.null_animation.entry,
+            .Enter, 0, "init_euclid_scripts") {
             return false
         }
     }
@@ -326,21 +338,12 @@ call_current_animation_loop :: proc(state: ^core.Euclid_General_State, dt: f32) 
         return true
     }
 
-    if state^.julia_interface^.current_animation.loop == nil {
+    if state^.julia_interface^.current_animation.entry == nil {
         return true
     }
-
-    state_value := julialib.jl_box_voidpointer(state)
-    dt_value := julialib.jl_box_float32(dt)
-
-    call_julia_callback2(state,
-        state^.julia_interface^.current_animation^.loop, state_value, dt_value)
-
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Current animation loop")
-        return false
-    }
-    return true
+    return invoke_animation_operation(state,
+        state^.julia_interface^.current_animation^.entry,
+        .Tick, dt, "Current animation loop")
 }
 
 //   Switch to a selected animation, cleaning previous state and initializing the new loop.
@@ -364,11 +367,10 @@ change_current_animation_loop :: proc(
         return false
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-    if animation^.initiate != nil {
-        call_julia_callback1(state, animation^.initiate, state_value)
-        if julialib.jl_exception_occurred() != nil {
-            print_julia_exception("Initiating new animation loop")
+    if animation^.entry != nil {
+        if !invoke_animation_operation(
+            state, animation^.entry, .Enter, 0,
+            "Initiating new animation loop") {
             clean_failed_animation_initiation(state, animation)
             return false
         }
@@ -393,17 +395,11 @@ change_current_animation_loop :: proc(
 //   Run the clean callback on the current animation, reporting any Julia exception.
 clean_current_animation :: proc(state: ^core.Euclid_General_State) -> bool {
     current := state^.julia_interface^.current_animation
-    if current == nil || current^.loop == nil {
+    if current == nil || current^.entry == nil {
         return true
     }
-
-    call_julia_callback1(
-        state, current^.clean, julialib.jl_box_voidpointer(state))
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Cleaning previous animation loop")
-        return false
-    }
-    return true
+    return invoke_animation_operation(
+        state, current^.entry, .Exit, 0, "Cleaning previous animation loop")
 }
 
 //   Clear animation-owned native state into the generation about to initiate.
@@ -425,12 +421,9 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
 clean_failed_animation_initiation :: proc(
     state: ^core.Euclid_General_State,
     animation: ^core.Euclid_Julia_Animation_Interface) {
-    if animation^.clean != nil {
-        call_julia_callback1(
-            state, animation^.clean, julialib.jl_box_voidpointer(state))
-        if julialib.jl_exception_occurred() != nil {
-            print_julia_exception("Cleaning failed animation initiation")
-        }
+    if animation^.entry != nil {
+        _ = invoke_animation_operation(state, animation^.entry, .Exit, 0,
+            "Cleaning failed animation initiation")
     }
     _ = reset_animation_switch_state(state)
     state^.julia_interface^.current_animation =
@@ -439,16 +432,13 @@ clean_failed_animation_initiation :: proc(
 
 //   Restart the currently selected animation by running clean then initiate callbacks.
 reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state^.julia_interface^.current_animation^.loop == nil {
+    entry := state^.julia_interface^.current_animation^.entry
+    if entry == nil {
         return true
     }
 
-    state_value := julialib.jl_box_voidpointer(state)
-
-    call_julia_callback1(
-        state, state^.julia_interface^.current_animation^.clean, state_value)
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Cleaning previous animation loop")
+    if !invoke_animation_operation(
+        state, entry, .Exit, 0, "Cleaning previous animation loop") {
         return false
     }
 
@@ -456,10 +446,8 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
         return false
     }
 
-    call_julia_callback1(
-        state, state^.julia_interface^.current_animation^.initiate, state_value)
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Initiating new animation loop")
+    if !invoke_animation_operation(
+        state, entry, .Enter, 0, "Initiating new animation loop") {
         clean_failed_animation_initiation(
             state, state^.julia_interface^.current_animation)
         return false
@@ -1236,7 +1224,7 @@ animation_lookup_find :: proc(
 //   Construct and register one animation node using arena storage and UUID lookup.
 add_animation_to_registry :: proc(
     state: ^core.Euclid_General_State,
-    callbacks: Animation_Callbacks,
+    entry: ^julialib.jl_value_t,
     name: cstring,
     stable_id: uuid.Identifier,
     parent: ^core.Euclid_Julia_Animation_Interface) -> (
@@ -1256,9 +1244,7 @@ add_animation_to_registry :: proc(
         return nil, false
     }
 
-    node^.initiate = callbacks.initiate
-    node^.loop = callbacks.loop
-    node^.clean = callbacks.clean
+    node^.entry = entry
     node^.name = strings.clone(string(name), ji^.animation_registry_allocator)
     node^.stable_id = stable_id
 

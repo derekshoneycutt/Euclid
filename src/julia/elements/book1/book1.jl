@@ -62,6 +62,22 @@ function initialize_view_book_1(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1)
 end
 
+"""Dispatch lifecycle operations for the Book I category animation."""
+function animation_entry_book_1(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_book_1(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
 """Emit the Book I Definitions section view text."""
 function get_view_text_book_1_defs(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I - Definitions}"
@@ -73,6 +89,22 @@ end
 function initialize_view_book_1_defs(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_defs)
+end
+
+"""Dispatch lifecycle operations for the Book I Definitions category."""
+function animation_entry_book_1_defs(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_book_1_defs(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
 end
 
 """Emit the Book I Postulates section view text."""
@@ -88,6 +120,22 @@ function initialize_view_book_1_posts(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_posts)
 end
 
+"""Dispatch lifecycle operations for the Book I Postulates category."""
+function animation_entry_book_1_posts(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_book_1_posts(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
 """Emit the Book I Propositions section view text."""
 function get_view_text_book_1_props(state_ptr::Ptr{Cvoid})
     latex = raw"\textbf{Euclid Elements - Book I - Propositions}"
@@ -101,6 +149,22 @@ function initialize_view_book_1_props(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_props)
 end
 
+"""Dispatch lifecycle operations for the Book I Propositions category."""
+function animation_entry_book_1_props(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        initialize_view_book_1_props(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        NullAnimation.loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        NullAnimation.clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
 """Return the stable animation id for a named child of a parent animation."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
@@ -109,13 +173,12 @@ end
 
 """Register a named child animation under a parent and return its stable id."""
 function register_child_animation(
-    state_ptr::Ptr{Cvoid}, init, loop, clean, name::AbstractString,
+    state_ptr::Ptr{Cvoid}, entry, name::AbstractString,
     parent_stable_id::AbstractString)
 
     child_stable_id = stable_child_id(parent_stable_id, name)
-
     OdinJuliaBridge.add_child_animation_interface(
-        state_ptr, init, loop, clean, String(name),
+        state_ptr, entry, String(name),
         child_stable_id, String(parent_stable_id))
 
     return child_stable_id
@@ -124,212 +187,136 @@ end
 """Register the Book I animation tree under the Euclid's Elements root."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     book1_id = register_child_animation(
-        state_ptr, initialize_view_book_1,
-        NullAnimation.loop, NullAnimation.clean,
+        state_ptr, animation_entry_book_1,
         "Book I", root_id)
         book1_defs_id = register_child_animation(
-            state_ptr, initialize_view_book_1_defs,
-            NullAnimation.loop, NullAnimation.clean,
+            state_ptr, animation_entry_book_1_defs,
             "Definitions", book1_id)
             book1_defs1_point_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionPoint.initialize,
-                ElementsOneDefinitionPoint.loop, ElementsOneDefinitionPoint.clean,
+                state_ptr, ElementsOneDefinitionPoint.animation_entry,
                 "Point", book1_defs_id)
             book1_defs2_line_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionLine.initialize,
-                ElementsOneDefinitionLine.loop, ElementsOneDefinitionLine.clean,
+                state_ptr, ElementsOneDefinitionLine.animation_entry,
                 "Line", book1_defs_id)
             book1_defs3_line_ex_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionLineExtremities.initialize,
-                ElementsOneDefinitionLineExtremities.loop,
-                ElementsOneDefinitionLineExtremities.clean,
+                state_ptr, ElementsOneDefinitionLineExtremities.animation_entry,
                 "Line Extremities", book1_defs_id)
             book1_defs4_straight_line_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionStraightLine.initialize,
-                ElementsOneDefinitionStraightLine.loop,
-                ElementsOneDefinitionStraightLine.clean,
+                state_ptr, ElementsOneDefinitionStraightLine.animation_entry,
                 "Straight Line", book1_defs_id)
             book1_defs5_surface_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionSurface.initialize,
-                ElementsOneDefinitionSurface.loop,
-                ElementsOneDefinitionSurface.clean,
+                state_ptr, ElementsOneDefinitionSurface.animation_entry,
                 "Surface", book1_defs_id)
             book1_defs6_surf_extrem_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionSurfaceExtremity.initialize,
-                ElementsOneDefinitionSurfaceExtremity.loop,
-                ElementsOneDefinitionSurfaceExtremity.clean,
+                state_ptr, ElementsOneDefinitionSurfaceExtremity.animation_entry,
                 "Surface Extremities", book1_defs_id)
             book1_defs7_plane_surface_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionPlaneSurface.initialize,
-                ElementsOneDefinitionPlaneSurface.loop,
-                ElementsOneDefinitionPlaneSurface.clean,
+                state_ptr, ElementsOneDefinitionPlaneSurface.animation_entry,
                 "Plane Surface", book1_defs_id)
             book1_defs8_plane_angle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionPlaneAngle.initialize,
-                ElementsOneDefinitionPlaneAngle.loop,
-                ElementsOneDefinitionPlaneAngle.clean,
+                state_ptr, ElementsOneDefinitionPlaneAngle.animation_entry,
                 "Plane Angle", book1_defs_id)
             book1_defs10_perpendicular_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionPerpendicular.initialize,
-                ElementsOneDefinitionPerpendicular.loop,
-                ElementsOneDefinitionPerpendicular.clean,
+                state_ptr, ElementsOneDefinitionPerpendicular.animation_entry,
                 "Right Angles and Perpendicular", book1_defs_id)
             book1_defs11_obtuse_angle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionObtuseAngle.initialize,
-                ElementsOneDefinitionObtuseAngle.loop,
-                ElementsOneDefinitionObtuseAngle.clean,
+                state_ptr, ElementsOneDefinitionObtuseAngle.animation_entry,
                 "Obtuse Angle", book1_defs_id)
             book1_defs12_acute_angle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionAcuteAngle.initialize,
-                ElementsOneDefinitionAcuteAngle.loop,
-                ElementsOneDefinitionAcuteAngle.clean,
+                state_ptr, ElementsOneDefinitionAcuteAngle.animation_entry,
                 "Acute Angle", book1_defs_id)
             book1_defs13_boundary_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionBoundary.initialize,
-                ElementsOneDefinitionBoundary.loop,
-                ElementsOneDefinitionBoundary.clean,
+                state_ptr, ElementsOneDefinitionBoundary.animation_entry,
                 "Boundary", book1_defs_id)
             book1_defs14_figure_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionFigure.initialize,
-                ElementsOneDefinitionFigure.loop,
-                ElementsOneDefinitionFigure.clean,
+                state_ptr, ElementsOneDefinitionFigure.animation_entry,
                 "Figure", book1_defs_id)
             book1_defs15_circle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionCircle.initialize,
-                ElementsOneDefinitionCircle.loop,
-                ElementsOneDefinitionCircle.clean,
+                state_ptr, ElementsOneDefinitionCircle.animation_entry,
                 "Circle", book1_defs_id)
             book1_defs17_diameter_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionDiameter.initialize,
-                ElementsOneDefinitionDiameter.loop,
-                ElementsOneDefinitionDiameter.clean,
+                state_ptr, ElementsOneDefinitionDiameter.animation_entry,
                 "Diameter", book1_defs_id)
             book1_defs18_semicircle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionSemicircle.initialize,
-                ElementsOneDefinitionSemicircle.loop,
-                ElementsOneDefinitionSemicircle.clean,
+                state_ptr, ElementsOneDefinitionSemicircle.animation_entry,
                 "Semicircle", book1_defs_id)
             book1_defs19_trilateral_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionTrilateral.initialize,
-                ElementsOneDefinitionTrilateral.loop,
-                ElementsOneDefinitionTrilateral.clean,
+                state_ptr, ElementsOneDefinitionTrilateral.animation_entry,
                 "Trilateral Rectilineal Figures", book1_defs_id)
             book1_defs19_quadrilateral_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionQuadrilateral.initialize,
-                ElementsOneDefinitionQuadrilateral.loop,
-                ElementsOneDefinitionQuadrilateral.clean,
+                state_ptr, ElementsOneDefinitionQuadrilateral.animation_entry,
                 "Quadrilateral Rectilineal Figures", book1_defs_id)
             book1_defs19_multilateral_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionMultilateral.initialize,
-                ElementsOneDefinitionMultilateral.loop,
-                ElementsOneDefinitionMultilateral.clean,
+                state_ptr, ElementsOneDefinitionMultilateral.animation_entry,
                 "Multilateral Rectilineal Figures", book1_defs_id)
             book1_defs20_equilateral_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionEquilateral.initialize,
-                ElementsOneDefinitionEquilateral.loop,
-                ElementsOneDefinitionEquilateral.clean,
+                state_ptr, ElementsOneDefinitionEquilateral.animation_entry,
                 "Equaliteral Triangle", book1_defs_id)
             book1_defs20_isosceles_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionIsosceles.initialize,
-                ElementsOneDefinitionIsosceles.loop,
-                ElementsOneDefinitionIsosceles.clean,
+                state_ptr, ElementsOneDefinitionIsosceles.animation_entry,
                 "Isosceles Triangle", book1_defs_id)
             book1_defs20_scalene_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionScalene.initialize,
-                ElementsOneDefinitionScalene.loop,
-                ElementsOneDefinitionScalene.clean,
+                state_ptr, ElementsOneDefinitionScalene.animation_entry,
                 "Scalene Triangle", book1_defs_id)
             book1_defs21_right_triangle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionRightTriangle.initialize,
-                ElementsOneDefinitionRightTriangle.loop,
-                ElementsOneDefinitionRightTriangle.clean,
+                state_ptr, ElementsOneDefinitionRightTriangle.animation_entry,
                 "Right-Angled Triangle", book1_defs_id)
             book1_defs21_obtuse_triangle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionObtuseTriangle.initialize,
-                ElementsOneDefinitionObtuseTriangle.loop,
-                ElementsOneDefinitionObtuseTriangle.clean,
+                state_ptr, ElementsOneDefinitionObtuseTriangle.animation_entry,
                 "Obtuse-Angled Triangle", book1_defs_id)
             book1_defs21_acute_triangle_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionAcuteTriangle.initialize,
-                ElementsOneDefinitionAcuteTriangle.loop,
-                ElementsOneDefinitionAcuteTriangle.clean,
+                state_ptr, ElementsOneDefinitionAcuteTriangle.animation_entry,
                 "Acute-Angled Triangle", book1_defs_id)
             book1_defs22_square_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionSquare.initialize,
-                ElementsOneDefinitionSquare.loop,
-                ElementsOneDefinitionSquare.clean,
+                state_ptr, ElementsOneDefinitionSquare.animation_entry,
                 "Square", book1_defs_id)
             book1_defs22_oblong_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionOblong.initialize,
-                ElementsOneDefinitionOblong.loop,
-                ElementsOneDefinitionOblong.clean,
+                state_ptr, ElementsOneDefinitionOblong.animation_entry,
                 "Oblong", book1_defs_id)
             book1_defs22_rhombus_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionRhombus.initialize,
-                ElementsOneDefinitionRhombus.loop,
-                ElementsOneDefinitionRhombus.clean,
+                state_ptr, ElementsOneDefinitionRhombus.animation_entry,
                 "Rhombus", book1_defs_id)
             book1_defs22_rhomboid_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionRhomboid.initialize,
-                ElementsOneDefinitionRhomboid.loop,
-                ElementsOneDefinitionRhomboid.clean,
+                state_ptr, ElementsOneDefinitionRhomboid.animation_entry,
                 "Rhomboid", book1_defs_id)
             book1_defs22_trapezia_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionTrapezia.initialize,
-                ElementsOneDefinitionTrapezia.loop,
-                ElementsOneDefinitionTrapezia.clean,
+                state_ptr, ElementsOneDefinitionTrapezia.animation_entry,
                 "Trapezia", book1_defs_id)
             book1_defs23_parallel_id = register_child_animation(
-                state_ptr, ElementsOneDefinitionParallel.initialize,
-                ElementsOneDefinitionParallel.loop,
-                ElementsOneDefinitionParallel.clean,
+                state_ptr, ElementsOneDefinitionParallel.animation_entry,
                 "Parallel Straight Lines", book1_defs_id)
                 
         book1_posts_id = register_child_animation(
-            state_ptr, initialize_view_book_1_posts,
-            NullAnimation.loop, NullAnimation.clean,
+            state_ptr, animation_entry_book_1_posts,
             "Postulates", book1_id)
             book1_posts1_draw_line_id = register_child_animation(
-                state_ptr, ElementsOnePostulatesDrawLine.initialize,
-                ElementsOnePostulatesDrawLine.loop, ElementsOnePostulatesDrawLine.clean,
+                state_ptr, ElementsOnePostulatesDrawLine.animation_entry,
                 "Draw a Line", book1_posts_id)
             book1_posts2_finite_line_id = register_child_animation(
-                state_ptr, ElementsOnePostulatesFiniteLine.initialize,
-                ElementsOnePostulatesFiniteLine.loop,
-                ElementsOnePostulatesFiniteLine.clean,
+                state_ptr, ElementsOnePostulatesFiniteLine.animation_entry,
                 "Produce a Finite Line", book1_posts_id)
             book1_posts3_draw_circle_id = register_child_animation(
-                state_ptr, ElementsOnePostulatesDrawCircle.initialize,
-                ElementsOnePostulatesDrawCircle.loop,
-                ElementsOnePostulatesDrawCircle.clean,
+                state_ptr, ElementsOnePostulatesDrawCircle.animation_entry,
                 "Draw a Circle", book1_posts_id)
             book1_posts4_equal_right_angles_id = register_child_animation(
-                state_ptr, ElementsOnePostulatesEqualRightAngles.initialize,
-                ElementsOnePostulatesEqualRightAngles.loop,
-                ElementsOnePostulatesEqualRightAngles.clean,
+                state_ptr, ElementsOnePostulatesEqualRightAngles.animation_entry,
                 "Equal Right Angles", book1_posts_id)
             book1_posts5_non_parallel_lines_id = register_child_animation(
-                state_ptr, ElementsOnePostulatesNonParallelLines.initialize,
-                ElementsOnePostulatesNonParallelLines.loop,
-                ElementsOnePostulatesNonParallelLines.clean,
+                state_ptr, ElementsOnePostulatesNonParallelLines.animation_entry,
                 "Non-Parallel Lines", book1_posts_id)
             
         book1_comm_nots_id = register_child_animation(
-            state_ptr, ElementsOneCommonNotions.initialize,
-            ElementsOneCommonNotions.loop, ElementsOneCommonNotions.clean,
+            state_ptr, ElementsOneCommonNotions.animation_entry,
             "Common Notions", book1_id)
 
         book1_props_id = register_child_animation(
-            state_ptr, initialize_view_book_1_props,
-            NullAnimation.loop, NullAnimation.clean,
+            state_ptr, animation_entry_book_1_props,
             "Propositions", book1_id)
             book1_prop01_id = register_child_animation(
-                state_ptr, ElementsOneProposition01.initialize,
-                ElementsOneProposition01.loop, ElementsOneProposition01.clean,
+                state_ptr, ElementsOneProposition01.animation_entry,
                 "Proposition I", book1_props_id)
             book1_prop02_id = register_child_animation(
-                state_ptr, ElementsOneProposition02.initialize,
-                ElementsOneProposition02.loop, ElementsOneProposition02.clean,
+                state_ptr, ElementsOneProposition02.animation_entry,
                 "Proposition II", book1_props_id)
             book1_prop03_id = 0
             book1_prop04_id = 0
