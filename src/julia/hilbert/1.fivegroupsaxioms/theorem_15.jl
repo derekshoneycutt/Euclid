@@ -255,16 +255,17 @@ const PhaseFinalHold = 66f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.base_line_host_id, state.base_line_joint1_id, state.base_line_joint2_id, state.right_ray_host_id,
-        state.right_ray_joint1_id, state.right_ray_joint2_id,
+        state.base_line_host_id, state.base_line_joint1_id, state.base_line_joint2_id,
+        state.right_ray_host_id, state.right_ray_joint1_id, state.right_ray_joint2_id,
         state.base_line_prime_host_id, state.base_line_prime_joint1_id,
         state.base_line_prime_joint2_id, state.right_ray_prime_host_id,
         state.right_ray_prime_joint1_id, state.right_ray_prime_joint2_id,
         state.right_ray_double_host_id, state.right_ray_double_joint1_id,
         state.right_ray_double_joint2_id, state.right_ray_triple_host_id,
-        state.right_ray_triple_joint1_id, state.right_ray_triple_joint2_id, state.label_bid, state.label_aid,
-        state.label_cid, state.label_did, state.label_bprime_id, state.label_aprime_id,
-        state.label_cprime_id, state.label_dprime_id, state.label_ddouble_id, state.label_dtriple_id,
+        state.right_ray_triple_joint1_id, state.right_ray_triple_joint2_id,
+        state.label_bid, state.label_aid, state.label_cid, state.label_did,
+        state.label_bprime_id, state.label_aprime_id, state.label_cprime_id,
+        state.label_dprime_id, state.label_ddouble_id, state.label_dtriple_id,
         phase, timer)
 end
 
@@ -434,12 +435,14 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     state = AnimationState(
         base_line.host_id, base_line.joint1_id, base_line.joint2_id, right_ray.host_id,
-        right_ray.joint1_id, right_ray.joint2_id, base_line_prime.host_id, base_line_prime.joint1_id,
-        base_line_prime.joint2_id, right_ray_prime.host_id, right_ray_prime.joint1_id, right_ray_prime.joint2_id,
-        right_ray_double.host_id, right_ray_double.joint1_id, right_ray_double.joint2_id, right_ray_triple.host_id,
-        right_ray_triple.joint1_id, right_ray_triple.joint2_id, label_b.index, label_a.index,
-        label_c.index, label_d.index, label_b_prime.index, label_a_prime.index,
-        label_c_prime.index, label_d_prime.index, label_d_double.index, label_d_triple.index,
+        right_ray.joint1_id, right_ray.joint2_id, base_line_prime.host_id,
+        base_line_prime.joint1_id, base_line_prime.joint2_id, right_ray_prime.host_id,
+        right_ray_prime.joint1_id, right_ray_prime.joint2_id, right_ray_double.host_id,
+        right_ray_double.joint1_id, right_ray_double.joint2_id, right_ray_triple.host_id,
+        right_ray_triple.joint1_id, right_ray_triple.joint2_id, label_b.index,
+        label_a.index, label_c.index, label_d.index, label_b_prime.index,
+        label_a_prime.index, label_c_prime.index, label_d_prime.index,
+        label_d_double.index, label_d_triple.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

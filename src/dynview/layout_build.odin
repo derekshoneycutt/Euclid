@@ -1426,6 +1426,24 @@ layout_builders_seal :: proc(cache: ^core.Dynview_Compile_Cache) -> i32 {
     return DYNVIEW_STATUS_OK
 }
 
+//   Consume validated commands into one mutable layout transaction.
+layout_consume_commands :: proc(
+    ctx: ^Dynview_Layout_Build_Context,
+    commands: []core.Dynview_Command) -> i32 {
+    for cmd in commands {
+        marker_status := layout_handle_block_markers(ctx, cmd)
+        if marker_status != DYNVIEW_STATUS_OK {
+            return marker_status
+        }
+        style := style_by_id(cmd.style_id)
+        status := layout_consume_visible_command(ctx, cmd, style)
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+    }
+    return layout_finalize_metrics(ctx)
+}
+
 //   Build deterministic line/item layout cache from current validated command stream.
 rebuild_layout_cache :: proc(
     runtime: ^core.Dynview_System,
@@ -1454,21 +1472,7 @@ rebuild_layout_cache :: proc(
     state := Dynview_Layout_State{}
     acc := Dynview_Layout_Line_Accumulator{}
     ctx := layout_build_context(cache, buffer, &state, &acc)
-
-    for cmd in commands {
-        marker_status := layout_handle_block_markers(&ctx, cmd)
-        if marker_status != DYNVIEW_STATUS_OK {
-            return marker_status
-        }
-
-        style := style_by_id(cmd.style_id)
-        status := layout_consume_visible_command(&ctx, cmd, style)
-        if status != DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    metrics_status := layout_finalize_metrics(&ctx)
+    metrics_status := layout_consume_commands(&ctx, commands)
     if metrics_status != DYNVIEW_STATUS_OK {
         return metrics_status
     }

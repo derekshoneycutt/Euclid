@@ -55,6 +55,31 @@ shaped_builder_init_with_allocator :: proc(
 }
 
 //   Append one complete shaped run without publishing a partial span.
+shaped_run_from_append :: proc(
+    builder: ^Dynview_Shaped_Builder,
+    append: Dynview_Shaped_Append,
+    glyph_start: int) -> core.Dynview_Shaped_Run {
+    return {
+        math_command_index = append.math_command_index,
+        site = append.site,
+        text_offset = append.text_offset,
+        text_len = append.text_len,
+        glyph_start = glyph_start,
+        glyph_count = len(append.glyphs),
+        font_generation = builder^.font_generation,
+        base_pixel_size = append.metrics.base_pixel_size,
+        raster_ascent = append.metrics.raster_ascent,
+        advance = append.metrics.advance,
+        ink_left = append.metrics.ink_left,
+        ink_right = append.metrics.ink_right,
+        ascent = append.metrics.ascent,
+        descent = append.metrics.descent,
+        italic_correction = append.metrics.italic_correction,
+        top_accent_attachment = append.metrics.top_accent_attachment,
+    }
+}
+
+//   Append one complete shaped run without publishing a partial span.
 shaped_builder_append :: proc(
     builder: ^Dynview_Shaped_Builder,
     append: Dynview_Shaped_Append) -> core.Bounded_Builder_Status {
@@ -75,24 +100,7 @@ shaped_builder_append :: proc(
     glyph_start := builder^.glyphs.count
     copy(builder^.glyphs.storage[glyph_start:], append.glyphs)
     builder^.glyphs.count += len(append.glyphs)
-    run := core.Dynview_Shaped_Run{
-        math_command_index = append.math_command_index,
-        site = append.site,
-        text_offset = append.text_offset,
-        text_len = append.text_len,
-        glyph_start = glyph_start,
-        glyph_count = len(append.glyphs),
-        font_generation = builder^.font_generation,
-        base_pixel_size = append.metrics.base_pixel_size,
-        raster_ascent = append.metrics.raster_ascent,
-        advance = append.metrics.advance,
-        ink_left = append.metrics.ink_left,
-        ink_right = append.metrics.ink_right,
-        ascent = append.metrics.ascent,
-        descent = append.metrics.descent,
-        italic_correction = append.metrics.italic_correction,
-        top_accent_attachment = append.metrics.top_accent_attachment,
-    }
+    run := shaped_run_from_append(builder, append, glyph_start)
     builder^.runs.storage[builder^.runs.count] = run
     builder^.runs.count += 1
     return .Ok

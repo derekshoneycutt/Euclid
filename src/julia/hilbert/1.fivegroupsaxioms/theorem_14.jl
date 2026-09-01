@@ -173,12 +173,14 @@ const PhaseFinalHold = 32f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.ray_hhost_id, state.ray_hjoint1_id, state.ray_hjoint2_id, state.ray_khost_id,
-        state.ray_kjoint1_id, state.ray_kjoint2_id, state.ray_lhost_id, state.ray_ljoint1_id,
-        state.ray_ljoint2_id, state.ray_hprime_host_id, state.ray_hprime_joint1_id, state.ray_hprime_joint2_id,
-        state.ray_kprime_host_id, state.ray_kprime_joint1_id, state.ray_kprime_joint2_id, state.ray_lprime_host_id,
-        state.ray_lprime_joint1_id, state.ray_lprime_joint2_id, state.label_hid, state.label_kid,
-        state.label_lid, state.label_hprime_id, state.label_kprime_id, state.label_lprime_id,
+        state.ray_hhost_id, state.ray_hjoint1_id, state.ray_hjoint2_id,
+        state.ray_khost_id, state.ray_kjoint1_id, state.ray_kjoint2_id,
+        state.ray_lhost_id, state.ray_ljoint1_id, state.ray_ljoint2_id,
+        state.ray_hprime_host_id, state.ray_hprime_joint1_id, state.ray_hprime_joint2_id,
+        state.ray_kprime_host_id, state.ray_kprime_joint1_id, state.ray_kprime_joint2_id,
+        state.ray_lprime_host_id, state.ray_lprime_joint1_id, state.ray_lprime_joint2_id,
+        state.label_hid, state.label_kid, state.label_lid, state.label_hprime_id,
+        state.label_kprime_id, state.label_lprime_id,
         phase, timer)
 end
 
@@ -309,10 +311,11 @@ function initialize(state_ptr::Ptr{Cvoid})
     state = AnimationState(
         ray_h.host_id, ray_h.joint1_id, ray_h.joint2_id, ray_k.host_id,
         ray_k.joint1_id, ray_k.joint2_id, ray_l.host_id, ray_l.joint1_id,
-        ray_l.joint2_id, ray_h_prime.host_id, ray_h_prime.joint1_id, ray_h_prime.joint2_id,
-        ray_k_prime.host_id, ray_k_prime.joint1_id, ray_k_prime.joint2_id, ray_l_prime.host_id,
-        ray_l_prime.joint1_id, ray_l_prime.joint2_id, label_h.index, label_k.index,
-        label_l.index, label_h_prime.index, label_k_prime.index, label_l_prime.index,
+        ray_l.joint2_id, ray_h_prime.host_id, ray_h_prime.joint1_id,
+        ray_h_prime.joint2_id, ray_k_prime.host_id, ray_k_prime.joint1_id,
+        ray_k_prime.joint2_id, ray_l_prime.host_id, ray_l_prime.joint1_id,
+        ray_l_prime.joint2_id, label_h.index, label_k.index, label_l.index,
+        label_h_prime.index, label_k_prime.index, label_l_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

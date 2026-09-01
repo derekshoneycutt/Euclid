@@ -645,6 +645,31 @@ compiled_builders_init :: proc(
     return DYNVIEW_STATUS_OK
 }
 
+//   Seal and publish all compiled text and copy-block payloads atomically.
+compiled_builders_seal :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    state: ^Dynview_Compile_State) -> i32 {
+    plain_text, plain_status := core.bounded_byte_builder_seal(
+        &state^.plain_text_builder)
+    if plain_status != .Ok {
+        return compiled_builder_status(plain_status)
+    }
+    copy_payload, copy_status := core.bounded_byte_builder_seal(
+        &state^.copy_payload_builder)
+    if copy_status != .Ok {
+        return compiled_builder_status(copy_status)
+    }
+    copy_blocks, block_status := core.bounded_element_builder_seal(
+        &state^.copy_block_builder)
+    if block_status != .Ok {
+        return compiled_builder_status(block_status)
+    }
+    cache^.compiled_plain_text = plain_text
+    cache^.compiled_copy_payload = copy_payload
+    cache^.copy_blocks = copy_blocks
+    return DYNVIEW_STATUS_OK
+}
+
 //   Validate ordering contract and materialize stream text for host rendering.
 rebuild_compiled_plain_text :: proc(
     runtime: ^core.Dynview_System,
@@ -676,25 +701,7 @@ rebuild_compiled_plain_text :: proc(
     if compile_state.open_block {
         return DYNVIEW_STATUS_ILLEGAL_STATE
     }
-    plain_text, plain_seal_status := core.bounded_byte_builder_seal(
-        &compile_state.plain_text_builder)
-    if plain_seal_status != .Ok {
-        return compiled_builder_status(plain_seal_status)
-    }
-    copy_payload, copy_seal_status := core.bounded_byte_builder_seal(
-        &compile_state.copy_payload_builder)
-    if copy_seal_status != .Ok {
-        return compiled_builder_status(copy_seal_status)
-    }
-    copy_blocks, block_seal_status := core.bounded_element_builder_seal(
-        &compile_state.copy_block_builder)
-    if block_seal_status != .Ok {
-        return compiled_builder_status(block_seal_status)
-    }
-    cache^.compiled_plain_text = plain_text
-    cache^.compiled_copy_payload = copy_payload
-    cache^.copy_blocks = copy_blocks
-    return DYNVIEW_STATUS_OK
+    return compiled_builders_seal(cache, &compile_state)
 }
 
 //   Rebuild scratchpad copy icon hit targets from compiled copy blocks.
@@ -863,6 +870,23 @@ prepare_math_working_records :: proc(runtime: ^core.Dynview_System) {
     copy(cache^.math_nodes[:cache^.math_node_count], content^.math_nodes)
 }
 
+//   Rebuild compiled text, shaped math, and layout views in dependency order.
+compile_derived_views :: proc(
+    runtime: ^core.Dynview_System,
+    cache_arena: ^core.Arena_Owner,
+    shaping_service: Math_Shaping_Service) -> i32 {
+    status := rebuild_compiled_plain_text(runtime, cache_arena)
+    if status != DYNVIEW_STATUS_OK {
+        return status
+    }
+    shaping_status := rebuild_shaped_math_cache(
+        runtime, cache_arena, shaping_service)
+    if shaping_status != .Ok {
+        return shaped_builder_error_status(shaping_status)
+    }
+    return rebuild_layout_cache(runtime, cache_arena)
+}
+
 //   Compile invalidated command and layout caches through worker-owned arena lifetime.
 //
 // Side effects:
@@ -893,7 +917,7 @@ compile_if_needed :: proc(
     }
     buffer := &runtime^.command_buffer
     cache^.last_error_code = DYNVIEW_STATUS_OK
-    status := rebuild_compiled_plain_text(runtime, cache_arena)
+    status := compile_derived_views(runtime, cache_arena, shaping_service)
     cache^.compiled_revision = buffer^.revision
     cache^.compiled_command_count = len(command_buffer_commands(buffer))
     cache^.compiled_text_bytes_len = len(command_buffer_text(buffer))
@@ -902,19 +926,6 @@ compile_if_needed :: proc(
 
     if status != DYNVIEW_STATUS_OK {
         fail_compile_rebuild(runtime, status)
-        return
-    }
-
-    shaping_status := rebuild_shaped_math_cache(
-        runtime, cache_arena, shaping_service)
-    if shaping_status != .Ok {
-        fail_compile_rebuild(runtime, shaped_builder_error_status(shaping_status))
-        return
-    }
-
-    layout_status := rebuild_layout_cache(runtime, cache_arena)
-    if layout_status != DYNVIEW_STATUS_OK {
-        fail_compile_rebuild(runtime, layout_status)
         return
     }
 

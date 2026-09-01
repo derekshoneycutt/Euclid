@@ -252,14 +252,16 @@ const PhaseFinalHold = 46f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.edge_abhost_id, state.edge_abjoint1_id, state.edge_abjoint2_id, state.edge_bchost_id,
-        state.edge_bcjoint1_id, state.edge_bcjoint2_id, state.edge_cahost_id, state.edge_cajoint1_id,
+        state.edge_abhost_id, state.edge_abjoint1_id, state.edge_abjoint2_id,
+        state.edge_bchost_id, state.edge_bcjoint1_id, state.edge_bcjoint2_id,
+        state.edge_cahost_id, state.edge_cajoint1_id,
         state.edge_cajoint2_id, state.edge_aprime_bprime_host_id,
         state.edge_aprime_bprime_joint1_id, state.edge_aprime_bprime_joint2_id,
         state.edge_bprime_cprime_host_id, state.edge_bprime_cprime_joint1_id,
         state.edge_bprime_cprime_joint2_id, state.edge_cprime_aprime_host_id,
-        state.edge_cprime_aprime_joint1_id, state.edge_cprime_aprime_joint2_id, state.label_aid, state.label_bid,
-        state.label_cid, state.label_aprime_id, state.label_bprime_id, state.label_cprime_id,
+        state.edge_cprime_aprime_joint1_id, state.edge_cprime_aprime_joint2_id,
+        state.label_aid, state.label_bid, state.label_cid, state.label_aprime_id,
+        state.label_bprime_id, state.label_cprime_id,
         phase, timer)
 end
 
@@ -388,8 +390,9 @@ function initialize(state_ptr::Ptr{Cvoid})
         edge_a_prime_b_prime.joint1_id, edge_a_prime_b_prime.joint2_id,
         edge_b_prime_c_prime.host_id, edge_b_prime_c_prime.joint1_id,
         edge_b_prime_c_prime.joint2_id, edge_c_prime_a_prime.host_id,
-        edge_c_prime_a_prime.joint1_id, edge_c_prime_a_prime.joint2_id, label_a.index, label_b.index,
-        label_c.index, label_a_prime.index, label_b_prime.index, label_c_prime.index,
+        edge_c_prime_a_prime.joint1_id, edge_c_prime_a_prime.joint2_id, label_a.index,
+        label_b.index, label_c.index, label_a_prime.index, label_b_prime.index,
+        label_c_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

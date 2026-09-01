@@ -148,8 +148,9 @@ const PhaseFinalHold = 20f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.lower_host_id, state.lower_joint1_id, state.lower_joint2_id, state.upper_host_id,
-        state.upper_joint1_id, state.upper_joint2_id, state.transversal_host_id, state.transversal_joint1_id,
+        state.lower_host_id, state.lower_joint1_id, state.lower_joint2_id,
+        state.upper_host_id, state.upper_joint1_id, state.upper_joint2_id,
+        state.transversal_host_id, state.transversal_joint1_id,
         state.transversal_joint2_id,
         phase, timer)
 end
@@ -224,9 +225,9 @@ function initialize(state_ptr::Ptr{Cvoid})
 
 
     state = AnimationState(
-        lower_line.host_id, lower_line.joint1_id, lower_line.joint2_id, upper_line.host_id,
-        upper_line.joint1_id, upper_line.joint2_id, transversal.host_id, transversal.joint1_id,
-        transversal.joint2_id,
+        lower_line.host_id, lower_line.joint1_id, lower_line.joint2_id,
+        upper_line.host_id, upper_line.joint1_id, upper_line.joint2_id,
+        transversal.host_id, transversal.joint1_id, transversal.joint2_id,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

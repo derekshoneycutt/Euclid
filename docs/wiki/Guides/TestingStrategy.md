@@ -46,7 +46,7 @@ runtime path it exercises.
 
 ## Runtime Scenario Corpora
 
-Source-controlled JSONL scenarios live in `tools/scenarios/`. Phase 25 includes focused
+Source-controlled JSONL scenarios live in `tools/scenarios/`. This includes focused
 typed-state and recursive math-font corpora plus a combined bounded flow covering typed
 selection and updates, Scratchpad failure fallback, runtime reload, post-reload math
 publication, captures, shutdown, and allocation restoration.

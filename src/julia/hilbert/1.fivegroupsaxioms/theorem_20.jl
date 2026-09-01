@@ -212,13 +212,14 @@ const PhaseFinalHold = 33f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.edge_cbhost_id, state.edge_cbjoint1_id, state.edge_cbjoint2_id, state.edge_bahost_id,
-        state.edge_bajoint1_id, state.edge_bajoint2_id, state.edge_achost_id, state.edge_acjoint1_id,
-        state.edge_acjoint2_id, state.edge_cdhost_id, state.edge_cdjoint1_id, state.edge_cdjoint2_id,
-        state.edge_cehost_id, state.edge_cejoint1_id, state.edge_cejoint2_id, state.point_bid,
-        state.point_cid, state.point_aid, state.point_did, state.point_eid,
-        state.label_bid, state.label_cid, state.label_aid, state.label_did,
-        state.label_eid,
+        state.edge_cbhost_id, state.edge_cbjoint1_id, state.edge_cbjoint2_id,
+        state.edge_bahost_id, state.edge_bajoint1_id, state.edge_bajoint2_id,
+        state.edge_achost_id, state.edge_acjoint1_id, state.edge_acjoint2_id,
+        state.edge_cdhost_id, state.edge_cdjoint1_id, state.edge_cdjoint2_id,
+        state.edge_cehost_id, state.edge_cejoint1_id, state.edge_cejoint2_id,
+        state.point_bid, state.point_cid, state.point_aid, state.point_did,
+        state.point_eid, state.label_bid, state.label_cid, state.label_aid,
+        state.label_did, state.label_eid,
         phase, timer)
 end
 

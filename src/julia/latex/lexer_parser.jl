@@ -137,7 +137,7 @@ function read_text_token(source::AbstractString, start_i::Int)
     return LatexToken(:text, source[start_i:prevind(source, j)]), j
 end
 
-"""Parse latex into semantic text/math runs for phase-1 emission."""
+"""Parse latex into semantic text/math runs for emission."""
 function parse_latex(source::AbstractString)
     tokens = tokenize_latex(String(source))
     idx = Ref(1)
@@ -379,7 +379,7 @@ function normalize_array_preamble_text(text::AbstractString)
     return String(take!(io))
 end
 
-"""Validate normalized array preamble symbols for phase-1 `l/c/r` support."""
+"""Validate normalized array preamble symbols for `l/c/r` support."""
 function array_preamble_is_valid(text::AbstractString)
     if isempty(text)
         return false
@@ -1027,7 +1027,7 @@ function parse_sqrt_run(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     return latex_sqrt_run(radical_children, index_text)
 end
 
-"""Parse optional `[n]` index text and accept only one rune in this phase."""
+"""Parse optional `[n]` index text and accept only one rune."""
 function parse_optional_single_rune_index(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     if idx[] > length(tokens) || tokens[idx[]].kind != :lbracket
@@ -1167,7 +1167,7 @@ function consume_single_script_text_token!(
     return first_char
 end
 
-"""Format script suffix text without Unicode conversion for phase-1 behavior."""
+"""Format script suffix text without Unicode conversion."""
 function format_script_token(
     marker::Symbol, script_text::AbstractString, was_grouped::Bool)
     prefix = marker == :sup ? "^" : "_"

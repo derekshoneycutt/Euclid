@@ -87,6 +87,19 @@ animation_value_abi_preserves_destination_on_rejection :: proc(t: ^testing.T) {
 }
 
 //   Verify tick reads fall back to their snapshot and newest staged write.
+animation_value_test_stage_pending_writes :: proc(
+    t: ^testing.T,
+    state: ^core.Euclid_General_State,
+    identity: Animation_Value_Abi_Identity) {
+    pending_values := [2]u8{2, 3}
+    for &value in pending_values {
+        testing.expect_value(t, set_animation_value(
+            state, identity, rawptr(&value), size_of(value)),
+            i32(BRIDGE_STATUS_OK))
+    }
+}
+
+//   Verify tick reads fall back to their snapshot and newest staged write.
 @(test)
 animation_value_abi_reads_snapshot_and_newest_pending_write :: proc(t: ^testing.T) {
     state := animation_value_test_state_create()
@@ -110,12 +123,7 @@ animation_value_abi_reads_snapshot_and_newest_pending_write :: proc(t: ^testing.
         state, identity, raw_data(destination[:]), len(destination)),
         i32(BRIDGE_STATUS_OK))
     testing.expect_value(t, destination[0], u8(1))
-    pending_values := [2]u8{2, 3}
-    for &value in pending_values {
-        testing.expect_value(t, set_animation_value(
-            state, identity, rawptr(&value), size_of(value)),
-            i32(BRIDGE_STATUS_OK))
-    }
+    animation_value_test_stage_pending_writes(t, state, identity)
     testing.expect_value(t, get_animation_value(
         state, identity, raw_data(destination[:]), len(destination)),
         i32(BRIDGE_STATUS_OK))

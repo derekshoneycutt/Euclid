@@ -461,14 +461,11 @@ math_projection_italic_scalar :: proc(value: rune) -> rune {
     } else if scalar >= 0x03b1 && scalar <= 0x03c9 {
         return rune(0x1d6fc + scalar - 0x03b1)
     }
-    switch value {
-    case '∂': return rune(0x1d715)
-    case 'ϵ': return rune(0x1d716)
-    case 'ϑ': return rune(0x1d717)
-    case 'ϰ': return rune(0x1d718)
-    case 'ϕ': return rune(0x1d719)
-    case 'ϱ': return rune(0x1d71a)
-    case 'ϖ': return rune(0x1d71b)
+    special_sources := [?]rune{'∂', 'ϵ', 'ϑ', 'ϰ', 'ϕ', 'ϱ', 'ϖ'}
+    for source, index in special_sources {
+        if value == source {
+            return rune(0x1d715 + index)
+        }
     }
     return value
 }

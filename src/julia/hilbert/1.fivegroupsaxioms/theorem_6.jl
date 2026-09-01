@@ -129,16 +129,19 @@ const PhaseFinalHold = 24f0
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
-        state.poly1_host_id, state.poly1_joint1_id, state.poly1_joint2_id, state.poly2_host_id,
-        state.poly2_joint1_id, state.poly2_joint2_id, state.poly3_host_id, state.poly3_joint1_id,
-        state.poly3_joint2_id, state.poly4_host_id, state.poly4_joint1_id, state.poly4_joint2_id,
-        state.poly5_host_id, state.poly5_joint1_id, state.poly5_joint2_id, state.poly6_host_id,
-        state.poly6_joint1_id, state.poly6_joint2_id, state.point_aid, state.point_bid,
-        state.point_aprime_id, state.point_bprime_id, state.segment_abhost_id, state.segment_abjoint1_id,
-        state.segment_abjoint2_id, state.inside1_host_id, state.inside1_joint1_id, state.inside1_joint2_id,
-        state.inside2_host_id, state.inside2_joint1_id, state.inside2_joint2_id, state.outside1_host_id,
-        state.outside1_joint1_id, state.outside1_joint2_id, state.outside2_host_id, state.outside2_joint1_id,
-        state.outside2_joint2_id, state.outside3_host_id, state.outside3_joint1_id, state.outside3_joint2_id,
+        state.poly1_host_id, state.poly1_joint1_id, state.poly1_joint2_id,
+        state.poly2_host_id, state.poly2_joint1_id, state.poly2_joint2_id,
+        state.poly3_host_id, state.poly3_joint1_id, state.poly3_joint2_id,
+        state.poly4_host_id, state.poly4_joint1_id, state.poly4_joint2_id,
+        state.poly5_host_id, state.poly5_joint1_id, state.poly5_joint2_id,
+        state.poly6_host_id, state.poly6_joint1_id, state.poly6_joint2_id,
+        state.point_aid, state.point_bid, state.point_aprime_id, state.point_bprime_id,
+        state.segment_abhost_id, state.segment_abjoint1_id, state.segment_abjoint2_id,
+        state.inside1_host_id, state.inside1_joint1_id, state.inside1_joint2_id,
+        state.inside2_host_id, state.inside2_joint1_id, state.inside2_joint2_id,
+        state.outside1_host_id, state.outside1_joint1_id, state.outside1_joint2_id,
+        state.outside2_host_id, state.outside2_joint1_id, state.outside2_joint2_id,
+        state.outside3_host_id, state.outside3_joint1_id, state.outside3_joint2_id,
         state.label_aid, state.label_bid, state.label_aprime_id, state.label_bprime_id,
         phase, timer)
 end
@@ -297,12 +300,13 @@ function initialize(state_ptr::Ptr{Cvoid})
         poly3.joint2_id, poly4.host_id, poly4.joint1_id, poly4.joint2_id,
         poly5.host_id, poly5.joint1_id, poly5.joint2_id, poly6.host_id,
         poly6.joint1_id, poly6.joint2_id, point_a.index, point_b.index,
-        point_a_prime.index, point_b_prime.index, segment_a_b.host_id, segment_a_b.joint1_id,
-        segment_a_b.joint2_id, inside1.host_id, inside1.joint1_id, inside1.joint2_id,
-        inside2.host_id, inside2.joint1_id, inside2.joint2_id, outside1.host_id,
-        outside1.joint1_id, outside1.joint2_id, outside2.host_id, outside2.joint1_id,
-        outside2.joint2_id, outside3.host_id, outside3.joint1_id, outside3.joint2_id,
-        label_a.index, label_b.index, label_a_prime.index, label_b_prime.index,
+        point_a_prime.index, point_b_prime.index, segment_a_b.host_id,
+        segment_a_b.joint1_id, segment_a_b.joint2_id, inside1.host_id, inside1.joint1_id,
+        inside1.joint2_id, inside2.host_id, inside2.joint1_id, inside2.joint2_id,
+        outside1.host_id, outside1.joint1_id, outside1.joint2_id, outside2.host_id,
+        outside2.joint1_id, outside2.joint2_id, outside3.host_id, outside3.joint1_id,
+        outside3.joint2_id, label_a.index, label_b.index, label_a_prime.index,
+        label_b_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

@@ -60,6 +60,15 @@ Math_Measure_Context :: struct {
     font_size: f32,
 }
 
+Math_Program_Metrics :: struct {
+    width, ascent, descent, top_pad, bottom_pad: f32,
+    italic_correction, top_accent_attachment: f32,
+}
+
+Large_Op_Glyph_Metrics :: struct {
+    width, ascent, descent: f32,
+}
+
 Stretch_Delimiter_Content :: struct {
     width, ascent, descent, top_pad, bottom_pad: f32,
 }
@@ -253,6 +262,22 @@ script_attach_item :: #force_inline proc(
     }
 }
 
+//   Extend a measured child width by any visible attached scripts.
+script_attach_draw_width :: proc(
+    child: ^core.Dynview_Math_Program,
+    cmd: core.Dynview_Command,
+    font_size: f32,
+    sup: Script_Metrics,
+    sub: Script_Metrics) -> f32 {
+    if max(sup.cols, sub.cols) <= 0 {
+        return child^.draw_width
+    }
+    script_width := max(sup.draw_width, sub.draw_width)
+    italic_correction := child^.italic_correction if sup.cols > 0 else 0
+    return child^.draw_width + max(1.0, cmd.script_gap * font_size) +
+        italic_correction + script_width
+}
+
 //   Calculate script placement dimensions around an already measured child program.
 script_attach_metrics :: proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -278,14 +303,7 @@ script_attach_metrics :: proc(
     if sub.cols > 0 {
         descent = max(descent, sub.descent + offsets.sub_drop_px + sub.bottom_pad)
     }
-    cols := max(sup.cols, sub.cols)
-    draw_width := child^.draw_width
-    if cols > 0 {
-        script_width := max(sup.draw_width, sub.draw_width)
-        italic_correction := child^.italic_correction if sup.cols > 0 else 0
-        draw_width += max(1.0, cmd.script_gap * font_size) +
-            italic_correction + script_width
-    }
+    draw_width := script_attach_draw_width(child, cmd, font_size, sup, sub)
     return {
         scale = script_scale, draw_width = draw_width, ascent = ascent,
         descent = descent,
@@ -329,6 +347,27 @@ large_op_item :: #force_inline proc(
     }
 }
 
+//   Resolve synthetic or shaped glyph dimensions for one large operator.
+large_op_glyph_metrics :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    cmd: core.Dynview_Command,
+    style: Dynview_Text_Style,
+    font_size: f32) -> Large_Op_Glyph_Metrics {
+    glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
+    ascent, descent := style_ascent_descent(
+        style, max(1.0, font_size * glyph_scale))
+    text := text_for_command(buffer, cmd)
+    cols := max(1, text_codepoint_count_span(text, 0, len(text)))
+    width := f32(cols) * effective_advance(style, cache^.last_cell_width) * glyph_scale
+    run, shaped := shaped_run_for_command(cache, cmd, .Primary)
+    metrics, measured := shaped_run_layout_metrics(run, font_size * glyph_scale)
+    if shaped && measured {
+        return {metrics.draw_width, metrics.ascent, metrics.descent}
+    }
+    return {width, ascent, descent}
+}
+
 //   Calculate glyph and stacked-limit dimensions for one large operator.
 large_op_metrics :: proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -344,29 +383,15 @@ large_op_metrics :: proc(
     sub := script_metrics({cache, cmd, .Subscript, text_span_from_buffer(
         buffer, cmd.script_sub_text_offset, cmd.script_sub_text_len),
         cmd.script_style_id, limit_scale, font_size})
-    glyph_scale := large_op_glyph_scale(cmd.large_op_kind)
-    glyph_ascent, glyph_descent := style_ascent_descent(
-        style, max(1.0, font_size * glyph_scale))
-    glyph_cols := max(1, text_codepoint_count_span(
-        text_for_command(buffer, cmd), 0, len(text_for_command(buffer, cmd))))
-    glyph_width := f32(glyph_cols) *
-        effective_advance(style, cache^.last_cell_width) * glyph_scale
-    glyph_run, glyph_shaped := shaped_run_for_command(cache, cmd, .Primary)
-    glyph_metrics, glyph_measured := shaped_run_layout_metrics(
-        glyph_run, font_size * glyph_scale)
-    if glyph_shaped && glyph_measured {
-        glyph_width = glyph_metrics.draw_width
-        glyph_ascent = glyph_metrics.ascent
-        glyph_descent = glyph_metrics.descent
-    }
+    glyph := large_op_glyph_metrics(cache, buffer, cmd, style, font_size)
     gap := large_op_limit_gap_for_kind(cmd.large_op_kind, font_size, cmd.script_gap)
-    ascent := glyph_ascent if sup.cols == 0 else
-        glyph_ascent + sup.ascent + sup.descent + gap
-    descent := glyph_descent if sub.cols == 0 else
-        glyph_descent + sub.ascent + sub.descent + gap
+    ascent := glyph.ascent if sup.cols == 0 else
+        glyph.ascent + sup.ascent + sup.descent + gap
+    descent := glyph.descent if sub.cols == 0 else
+        glyph.descent + sub.ascent + sub.descent + gap
     return {
         scale = limit_scale,
-        draw_width = max(glyph_width, max(sup.draw_width, sub.draw_width)),
+        draw_width = max(glyph.width, max(sup.draw_width, sub.draw_width)),
         ascent = ascent, descent = descent,
         top_pad = sup.top_pad, bottom_pad = sub.bottom_pad,
     }
@@ -845,6 +870,32 @@ math_program_is_measurable :: #force_inline proc(
         program^.command_start + program^.command_count <= cache^.math_command_count
 }
 
+//   Accumulate one child item's outer metrics in command order.
+math_program_metrics_include :: proc(
+    metrics: ^Math_Program_Metrics,
+    item: core.Dynview_Layout_Item) {
+    metrics^.width += item.draw_width
+    metrics^.ascent = max(metrics^.ascent, item.ascent)
+    metrics^.descent = max(metrics^.descent, item.descent)
+    metrics^.top_pad = max(metrics^.top_pad, item.visual_padding_top)
+    metrics^.bottom_pad = max(metrics^.bottom_pad, item.visual_padding_bottom)
+    metrics^.italic_correction = item.italic_correction
+    metrics^.top_accent_attachment = item.top_accent_attachment
+}
+
+//   Publish one complete aggregate measurement to its math program.
+math_program_metrics_apply :: proc(
+    program: ^core.Dynview_Math_Program,
+    metrics: Math_Program_Metrics) {
+    program^.draw_width = metrics.width
+    program^.ascent = max(1.0, metrics.ascent)
+    program^.descent = max(1.0, metrics.descent)
+    program^.visual_padding_top = metrics.top_pad
+    program^.visual_padding_bottom = metrics.bottom_pad
+    program^.italic_correction = metrics.italic_correction
+    program^.top_accent_attachment = metrics.top_accent_attachment
+}
+
 //   Measure one flat child-command math program and cache its deterministic outer metrics.
 measure_math_program :: proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -856,13 +907,7 @@ measure_math_program :: proc(
         return false
     }
 
-    total_width: f32 = 0
-    max_ascent: f32 = 0
-    max_descent: f32 = 0
-    max_top_pad: f32 = 0
-    max_bottom_pad: f32 = 0
-    trailing_italic_correction: f32 = 0
-    trailing_top_accent_attachment: f32 = 0
+    metrics: Math_Program_Metrics
     command_end := program^.command_start + program^.command_count
     for command_index in program^.command_start..<command_end {
         cmd := cache^.math_commands[command_index]
@@ -872,22 +917,9 @@ measure_math_program :: proc(
             return false
         }
 
-        total_width += item.draw_width
-        max_ascent = max(max_ascent, item.ascent)
-        max_descent = max(max_descent, item.descent)
-        max_top_pad = max(max_top_pad, item.visual_padding_top)
-        max_bottom_pad = max(max_bottom_pad, item.visual_padding_bottom)
-        trailing_italic_correction = item.italic_correction
-        trailing_top_accent_attachment = item.top_accent_attachment
+        math_program_metrics_include(&metrics, item)
     }
-
-    program^.draw_width = total_width
-    program^.ascent = max(1.0, max_ascent)
-    program^.descent = max(1.0, max_descent)
-    program^.visual_padding_top = max_top_pad
-    program^.visual_padding_bottom = max_bottom_pad
-    program^.italic_correction = trailing_italic_correction
-    program^.top_accent_attachment = trailing_top_accent_attachment
+    math_program_metrics_apply(program, metrics)
     return true
 }
 

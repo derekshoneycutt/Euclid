@@ -516,6 +516,34 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     cache^ = {}
 }
 
+//   Build and atomically install one resident math-font shaping candidate.
+math_shaping_replace :: proc(
+    cache: ^Font_Cache,
+    entry: ^Font_Cache_Entry,
+    capability: ^Font_Math_Shaping_Capability) -> bool {
+    path := cache_source_path(cache, .Math_Regular)
+    source, read_error := os.read_entire_file(path, context.allocator)
+    if read_error != nil {
+        capability.failed_generation = entry.generation
+        return false
+    }
+    defer delete(source)
+    candidate := Font_Math_Shaping_Capability{
+        generation = entry.generation,
+        raster_ascent = entry.raster_ascent,
+    }
+    if !harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, &candidate.resource) ||
+        !harfbuzz_face_has_math_table(&candidate.resource) {
+        math_shaping_destroy(&candidate)
+        capability.failed_generation = entry.generation
+        return false
+    }
+    previous := capability^
+    capability^ = candidate
+    math_shaping_destroy(&previous)
+    return true
+}
+
 //   Synchronize a separate Dynview math shaper to the resident NewCM generation.
 //
 // Returns:
@@ -542,28 +570,7 @@ math_shaping_sync :: proc(
     if capability.failed_generation == entry.generation {
         return false
     }
-    path := cache_source_path(cache, .Math_Regular)
-    source, read_error := os.read_entire_file(path, context.allocator)
-    if read_error != nil {
-        capability.failed_generation = entry.generation
-        return false
-    }
-    defer delete(source)
-    candidate := Font_Math_Shaping_Capability{
-        generation = entry.generation,
-        raster_ascent = entry.raster_ascent,
-    }
-    if !harfbuzz_shaper_init(
-        source, JULIA_MONO_FONT_SIZE, &candidate.resource) ||
-        !harfbuzz_face_has_math_table(&candidate.resource) {
-        math_shaping_destroy(&candidate)
-        capability.failed_generation = entry.generation
-        return false
-    }
-    previous := capability^
-    capability^ = candidate
-    math_shaping_destroy(&previous)
-    return true
+    return math_shaping_replace(cache, entry, capability)
 }
 
 //   Borrow a resident font or Regular without recording new demand.

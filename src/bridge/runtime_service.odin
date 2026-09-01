@@ -348,6 +348,32 @@ try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
 //   Publish the latest complete semantic snapshot into display-owned dynview.
 // Publication copies validated semantic spans, then recycles the previous published slot.
 // Invalid or stale generations clear selection-incompatible display content.
+publish_view_snapshot_slot :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service,
+    slot_index: int) {
+    slot := &service^.view_snapshots[slot_index]
+    install_view_snapshot_content(slot, &state^.dynview)
+    if service^.published_view_snapshot_index >= 0 {
+        previous := &service^.view_snapshots[service^.published_view_snapshot_index]
+        previous^.state = .Free
+    }
+    slot^.state = .Published
+    service^.published_view_snapshot_index = slot_index
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Dynview_Published,
+            correlation_kind = .Animation,
+            correlation = slot^.animation_generation,
+            generation = slot^.animation_generation,
+            revision = u64(slot^.generation),
+            flags = {.Required},
+        })
+    record_scratchpad_completed(state, slot)
+}
+
+//   Publish the newest valid complete snapshot and recycle superseded storage.
 publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_runtime_service == nil {
         return false
@@ -374,24 +400,7 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
         clear_stale_published_view(state, service)
         return false
     }
-    install_view_snapshot_content(slot, &state^.dynview)
-    if service^.published_view_snapshot_index >= 0 {
-        previous := &service^.view_snapshots[service^.published_view_snapshot_index]
-        previous^.state = .Free
-    }
-    slot^.state = .Published
-    service^.published_view_snapshot_index = slot_index
-    _ = evidence_session.session_record(
-        &state^.evidence_session, &state^.evidence_ring, {
-            lane = .Presentation,
-            kind = .Dynview_Published,
-            correlation_kind = .Animation,
-            correlation = slot^.animation_generation,
-            generation = slot^.animation_generation,
-            revision = u64(slot^.generation),
-            flags = {.Required},
-        })
-    record_scratchpad_completed(state, slot)
+    publish_view_snapshot_slot(state, service, slot_index)
     return true
 }
 
@@ -802,6 +811,27 @@ view_snapshot_slots_destroy :: proc(service: ^Julia_Runtime_Service) {
 //   Generate fallback and semantic dynview data into worker staging.
 // Runs only on the Julia owner thread. The completed slot contains self-owned copies of all
 // populated spans and can be published without consulting Julia.
+build_generated_view_snapshot_payloads :: proc(
+    slot: ^View_Snapshot,
+    staging: ^core.Dynview_System,
+    fallback: string) -> bool {
+    if !build_view_snapshot_text_payloads(slot, fallback,
+        staging^.command_buffer.text_bytes[:staging^.command_buffer.text_bytes_len]) {
+        return false
+    }
+    slot^.command_revision = staging^.command_buffer.revision
+    slot^.stream_has_error = staging^.command_buffer.has_stream_error
+    slot^.stream_open_block = staging^.command_buffer.stream_open_block
+    slot^.stream_open_block_id = staging^.command_buffer.stream_open_block_id
+    cache := &staging^.compile_cache
+    return build_view_snapshot_record_payloads(slot,
+        staging^.command_buffer.commands[:staging^.command_buffer.command_count],
+        cache^.math_programs[:cache^.math_program_count],
+        cache^.math_commands[:cache^.math_command_count],
+        cache^.math_nodes[:cache^.math_node_count])
+}
+
+//   Generate fallback and semantic dynview data into worker staging.
 generate_view_snapshot_task :: proc(data: rawptr) -> bool {
     slot := cast(^View_Snapshot)data
     state := slot^.host_state
@@ -819,21 +849,7 @@ generate_view_snapshot_task :: proc(data: rawptr) -> bool {
         service^.worker_scratchpad_completed_request_id
     slot^.scratchpad_runtime_generation =
         service^.worker_scratchpad_completed_runtime_generation
-    if !build_view_snapshot_text_payloads(slot, fallback,
-        staging^.command_buffer.text_bytes[:staging^.command_buffer.text_bytes_len]) {
-        slot^.state = .Free
-        return false
-    }
-    slot^.command_revision = staging^.command_buffer.revision
-    slot^.stream_has_error = staging^.command_buffer.has_stream_error
-    slot^.stream_open_block = staging^.command_buffer.stream_open_block
-    slot^.stream_open_block_id = staging^.command_buffer.stream_open_block_id
-    cache := &staging^.compile_cache
-    if !build_view_snapshot_record_payloads(slot,
-        staging^.command_buffer.commands[:staging^.command_buffer.command_count],
-        cache^.math_programs[:cache^.math_program_count],
-        cache^.math_commands[:cache^.math_command_count],
-        cache^.math_nodes[:cache^.math_node_count]) {
+    if !build_generated_view_snapshot_payloads(slot, staging, fallback) {
         slot^.state = .Free
         return false
     }
@@ -1002,6 +1018,23 @@ init_julia_runtime_channels :: proc(
     return .None
 }
 
+//   Initialize display-independent state before starting the Julia owner worker.
+initialize_julia_runtime_state :: proc(
+    service: ^Julia_Runtime_Service,
+    staging: ^core.Dynview_System,
+    profile_path: string) {
+    service^.next_request_id = 1
+    service^.lifecycle = .Not_Started
+    service^.dynview_staging = staging
+    service^.dynview_staging^.enabled = true
+    service^.published_view_snapshot_index = -1
+    if len(profile_path) > 0 &&
+        !evidence_profile.init_spall(&service^.profile, profile_path) {
+        fmt.eprintln("Failed to initialize Julia worker profile output.")
+        log.warn("julia_worker_profile_init_failed")
+    }
+}
+
 //   Create the bounded channels, staging storage, and persistent Julia owner worker.
 // On partial failure, resources are released in reverse construction order. The caller owns
 // the returned service and must stop Julia before destroy_julia_runtime_service.
@@ -1021,16 +1054,8 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
         return nil, .Out_Of_Memory
     }
 
-    service^.next_request_id = 1
-    service^.lifecycle = .Not_Started
-    service^.dynview_staging = new(core.Dynview_System)
-    service^.dynview_staging^.enabled = true
-    service^.published_view_snapshot_index = -1
-    if len(profile_path) > 0 &&
-        !evidence_profile.init_spall(&service^.profile, profile_path) {
-        fmt.eprintln("Failed to initialize Julia worker profile output.")
-        log.warn("julia_worker_profile_init_failed")
-    }
+    initialize_julia_runtime_state(service,
+         new(core.Dynview_System, context.allocator), profile_path)
     service^.worker =
         thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
     if service^.worker == nil {

@@ -139,6 +139,23 @@ Radical_Layout :: struct {
     lead_width : f32,
 }
 
+//   Measured position and font size for one optional radical index.
+Radical_Index_Layout :: struct {
+    position : rl.Vector2,
+    font_size : f32,
+}
+
+//   Shared placement and style state for attached script limits.
+Script_Limits_Draw :: struct {
+    ctx : Layout_Draw_Context,
+    item : core.Dynview_Layout_Item,
+    script : Script_Attach_Style,
+    offsets : dynview.Script_Draw_Offsets,
+    font : view_core.Ui_Text_Font,
+    script_x : f32,
+    baseline_y : f32,
+}
+
 //   Grouped inputs for one structured math item draw variant.
 Math_Item_Draw :: struct {
     ctx : Layout_Draw_Context,
@@ -434,6 +451,33 @@ draw_radical_hook :: proc(g: Radical_Bar_Geometry, color: rl.Color) {
         rl.Vector2{g.bar_start_x, g.bar_y}, g.hook_stroke, color)
 }
 
+//   Measure and position one optional radical index against the hook.
+radical_index_layout :: proc(
+    layout: Radical_Layout,
+    index_text: string,
+    script_style: Dynview_Text_Style) -> Radical_Index_Layout {
+    ctx := layout.ctx
+    index_scale := max(0.75, layout.item.script_scale)
+    font_size := max(3.0, ctx.font_size * index_scale)
+    ascent, _ := dynview.style_ascent_descent(script_style, font_size)
+    cols := max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
+    advance := dynview.effective_advance(
+        script_style, ctx.runtime^.compile_cache.last_cell_width) * index_scale
+    width := f32(cols) * advance
+    metrics, measured := cached_math_site_metrics(
+        ctx, layout.item, .Radical_Index, font_size)
+    if measured {
+        ascent = metrics.ascent
+        width = metrics.draw_width
+    }
+    right := layout.draw_x + layout.front_padding + layout.lead_width * 0.36
+    return {{
+        right - width,
+        layout.baseline_y - layout.child_program^.ascent * 0.62 -
+            ascent * 0.50 - ctx.font_size * 0.25,
+    }, font_size}
+}
+
 //   Draw the optional radical index text left of the hook.
 draw_radical_index_text :: proc(
     layout: Radical_Layout,
@@ -445,31 +489,13 @@ draw_radical_index_text :: proc(
         return
     }
     ctx := layout.ctx
-    index_scale := max(0.75, layout.item.script_scale)
-    index_font_size := max(3.0, ctx.font_size * index_scale)
-    index_ascent, _ := dynview.style_ascent_descent(script_style, index_font_size)
-    index_cols :=
-        max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
-    index_advance := dynview.effective_advance(script_style,
-        ctx.runtime^.compile_cache.last_cell_width) * index_scale
-    index_width := f32(index_cols) * index_advance
-    metrics, measured := cached_math_site_metrics(
-        ctx, layout.item, .Radical_Index, index_font_size)
-    if measured {
-        index_ascent = metrics.ascent
-        index_width = metrics.draw_width
-    }
-    index_right_limit :=
-        layout.draw_x + layout.front_padding + layout.lead_width * 0.36
-    index_x := index_right_limit - index_width
-    index_y := layout.baseline_y - layout.child_program^.ascent * 0.62 -
-        index_ascent * 0.50 - ctx.font_size * 0.25
+    index := radical_index_layout(layout, index_text, script_style)
     if draw_cached_math_site({
         ctx = ctx,
         item = layout.item,
         site = .Radical_Index,
-        position = {index_x, index_y},
-        font_size = index_font_size,
+        position = index.position,
+        font_size = index.font_size,
         color = script_style.color,
     }) {
         return
@@ -478,8 +504,8 @@ draw_radical_index_text :: proc(
         state = ctx.state,
         style = script_style,
         text = index_text,
-        position = {index_x, index_y},
-        font = {script_font, index_font_size},
+        position = index.position,
+        font = {script_font, index.font_size},
     })
 }
 
@@ -602,6 +628,32 @@ script_attach_style :: proc(
     return out
 }
 
+//   Draw one cached or fallback script site for a script-attach item.
+draw_script_limit :: proc(
+    draw: Script_Limits_Draw,
+    site: core.Dynview_Shaped_Site) {
+    superscript := site == .Superscript
+    text := dynview.text_span_from_buffer(&draw.ctx.runtime^.command_buffer,
+        superscript ? draw.item.script_sup_text_offset : draw.item.script_sub_text_offset,
+        superscript ? draw.item.script_sup_text_len : draw.item.script_sub_text_len)
+    ascent := draw.script.ascent
+    metrics, measured := cached_math_site_metrics(
+        draw.ctx, draw.item, site, draw.script.font_size)
+    if measured {
+        ascent = metrics.ascent
+    }
+    top := draw.baseline_y - ascent +
+        (superscript ? -draw.offsets.sup_raise_px : draw.offsets.sub_drop_px)
+    if len(text) > 0 && !draw_cached_math_site({
+        ctx = draw.ctx, item = draw.item, site = site,
+        position = {draw.script_x, top}, font_size = draw.script.font_size,
+        color = draw.script.style.color}) {
+        draw_optional_math_text({
+            state = draw.ctx.state, style = draw.script.style, text = text,
+            position = {draw.script_x, top}, font = draw.font})
+    }
+}
+
 //   Draw the superscript and subscript text for one script-attach item.
 draw_script_attach_scripts :: proc(
     ctx: Layout_Draw_Context,
@@ -610,48 +662,14 @@ draw_script_attach_scripts :: proc(
     child_width: f32,
     position: Program_Draw_Position) {
 
-    baseline_y := position.baseline_y
     offsets := dynview.script_draw_offsets(ctx.font_size, max(0.2, item.script_scale),
         item.script_sup_raise, item.script_sub_drop)
     script_x := position.draw_x + child_width +
         max(1.0, item.script_gap * ctx.font_size)
-    font := view_core.Ui_Text_Font{script.font, script.font_size}
-
-    sup_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
-        item.script_sup_text_offset, item.script_sup_text_len)
-    sup_ascent := script.ascent
-    sup_metrics, sup_measured := cached_math_site_metrics(
-        ctx, item, .Superscript, script.font_size)
-    if sup_measured {
-        sup_ascent = sup_metrics.ascent
-    }
-    sup_top := baseline_y - offsets.sup_raise_px - sup_ascent
-    if len(sup_text) > 0 && !draw_cached_math_site({
-        ctx = ctx, item = item, site = .Superscript,
-        position = {script_x, sup_top}, font_size = script.font_size,
-        color = script.style.color}) {
-        draw_optional_math_text({
-            state = ctx.state, style = script.style, text = sup_text,
-            position = {script_x, sup_top}, font = font})
-    }
-
-    sub_text := dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
-        item.script_sub_text_offset, item.script_sub_text_len)
-    sub_ascent := script.ascent
-    sub_metrics, sub_measured := cached_math_site_metrics(
-        ctx, item, .Subscript, script.font_size)
-    if sub_measured {
-        sub_ascent = sub_metrics.ascent
-    }
-    sub_top := baseline_y + offsets.sub_drop_px - sub_ascent
-    if len(sub_text) > 0 && !draw_cached_math_site({
-        ctx = ctx, item = item, site = .Subscript,
-        position = {script_x, sub_top}, font_size = script.font_size,
-        color = script.style.color}) {
-        draw_optional_math_text({
-            state = ctx.state, style = script.style, text = sub_text,
-            position = {script_x, sub_top}, font = font})
-    }
+    draw := Script_Limits_Draw{ctx, item, script, offsets,
+        {script.font, script.font_size}, script_x, position.baseline_y}
+    draw_script_limit(draw, .Superscript)
+    draw_script_limit(draw, .Subscript)
 }
 
 //   Draw one recursive ScriptAttach wrapper by drawing a child program and script text.
@@ -1384,6 +1402,32 @@ large_op_apply_cached_metrics :: proc(
     }
 }
 
+//   Populate synthetic script and limit metrics for one large operator.
+large_op_measure_limits :: proc(d: Math_Item_Draw, m: ^Large_Op_Metrics) {
+    ctx := d.ctx
+    item := d.item
+    m^.script_style = dynview.style_by_id(item.script_style_id)
+    m^.script_font = resolve_font_for_style(ctx.state, m^.script_style, d.resolved_font)
+    limit_scale := dynview.large_op_limit_scale(max(0.2, item.script_scale))
+    m^.limit_font_size = max(1.0, ctx.font_size * limit_scale)
+    limit_ascent, limit_descent :=
+        dynview.style_ascent_descent(m^.script_style, m^.limit_font_size)
+    m^.sup_height = limit_ascent + limit_descent
+    m^.sub_height = m^.sup_height
+    m^.limit_advance = dynview.effective_advance(m^.script_style,
+        ctx.runtime^.compile_cache.last_cell_width) * limit_scale
+    m^.limit_gap = dynview.large_op_limit_gap_for_kind(
+        item.large_op_kind, ctx.font_size, item.script_gap)
+    m^.sup_text = dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sup_text_offset, item.script_sup_text_len)
+    m^.sub_text = dynview.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sub_text_offset, item.script_sub_text_len)
+    m^.sup_cols = dynview.text_codepoint_count_span(m^.sup_text, 0, len(m^.sup_text))
+    m^.sub_cols = dynview.text_codepoint_count_span(m^.sub_text, 0, len(m^.sub_text))
+    m^.sup_width = f32(m^.sup_cols) * m^.limit_advance
+    m^.sub_width = f32(m^.sub_cols) * m^.limit_advance
+}
+
 //   Compute glyph and limit metrics for one large operator item.
 large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
     ctx := d.ctx
@@ -1401,31 +1445,7 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
         ctx.runtime^.compile_cache.last_cell_width) * glyph_scale
     m.glyph_width = f32(glyph_cols) * glyph_advance
 
-    m.script_style = dynview.style_by_id(item.script_style_id)
-    m.script_font = resolve_font_for_style(ctx.state, m.script_style, d.resolved_font)
-    limit_scale := dynview.large_op_limit_scale(max(0.2, item.script_scale))
-    m.limit_font_size = max(1.0, ctx.font_size * limit_scale)
-    limit_ascent, limit_descent :=
-        dynview.style_ascent_descent(m.script_style, m.limit_font_size)
-    m.sup_height = limit_ascent + limit_descent
-    m.sub_height = m.sup_height
-    m.limit_advance = dynview.effective_advance(m.script_style,
-        ctx.runtime^.compile_cache.last_cell_width) * limit_scale
-    m.limit_gap = dynview.large_op_limit_gap_for_kind(
-        item.large_op_kind, ctx.font_size, item.script_gap)
-
-    m.sup_text = dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sup_text_offset,
-        item.script_sup_text_len)
-    m.sub_text = dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sub_text_offset,
-        item.script_sub_text_len)
-    m.sup_cols = dynview.text_codepoint_count_span(m.sup_text, 0, len(m.sup_text))
-    m.sub_cols = dynview.text_codepoint_count_span(m.sub_text, 0, len(m.sub_text))
-    m.sup_width = f32(m.sup_cols) * m.limit_advance
-    m.sub_width = f32(m.sub_cols) * m.limit_advance
+    large_op_measure_limits(d, &m)
     large_op_apply_cached_metrics(d, &m)
     return m
 }

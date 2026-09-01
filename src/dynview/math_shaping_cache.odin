@@ -176,6 +176,39 @@ math_shaping_service_ready :: #force_inline proc(service: Math_Shaping_Service) 
         len(service.projection_workspace) > 0 && len(service.glyph_workspace) > 0
 }
 
+//   Shape, measure, and append one already validated semantic text site.
+shape_valid_math_command_site :: proc(
+    ctx: Shape_Command_Site_Context,
+    site: core.Dynview_Shaped_Site,
+    command_site: Math_Command_Site,
+    text: string) -> core.Bounded_Builder_Status {
+    service := ctx.service
+    result := service.shape(service.user_data, {
+        generation = service.generation,
+        text = text,
+        italic = style_by_id(command_site.style_id).italic,
+        projection_workspace = service.projection_workspace,
+        glyph_output = service.glyph_workspace,
+    })
+    if !result.ok || result.glyph_count <= 0 ||
+        result.glyph_count > len(service.glyph_workspace) {
+        return .Ok
+    }
+    glyphs := service.glyph_workspace[:result.glyph_count]
+    metrics, measured := measure_shaped_glyphs(service, glyphs)
+    if !measured {
+        return .Ok
+    }
+    return shaped_builder_append(ctx.builder, {
+        math_command_index = ctx.command_index,
+        site = site,
+        text_offset = command_site.offset,
+        text_len = command_site.count,
+        glyphs = glyphs,
+        metrics = metrics,
+    })
+}
+
 //   Shape one eligible command site, retaining baseline fallback on native rejection.
 shape_math_command_site :: proc(
     ctx: Shape_Command_Site_Context,
@@ -192,32 +225,7 @@ shape_math_command_site :: proc(
     }
     text := string(text_bytes[
         command_site.offset:command_site.offset+command_site.count])
-    italic := style_by_id(command_site.style_id).italic
-    service := ctx.service
-    shape_result := service.shape(service.user_data, {
-        generation = service.generation,
-        text = text,
-        italic = italic,
-        projection_workspace = service.projection_workspace,
-        glyph_output = service.glyph_workspace,
-    })
-    if !shape_result.ok || shape_result.glyph_count <= 0 ||
-        shape_result.glyph_count > len(service.glyph_workspace) {
-        return .Ok
-    }
-    glyphs := service.glyph_workspace[:shape_result.glyph_count]
-    metrics, measured := measure_shaped_glyphs(service, glyphs)
-    if !measured {
-        return .Ok
-    }
-    return shaped_builder_append(ctx.builder, {
-        math_command_index = ctx.command_index,
-        site = site,
-        text_offset = command_site.offset,
-        text_len = command_site.count,
-        glyphs = glyphs,
-        metrics = metrics,
-    })
+    return shape_valid_math_command_site(ctx, site, command_site, text)
 }
 
 //   Select one semantic text span and style from a recursive math command.

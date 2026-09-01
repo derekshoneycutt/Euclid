@@ -4,6 +4,13 @@ import "../core"
 
 import "core:testing"
 
+View_Snapshot_Record_Test_Payloads :: struct {
+    commands: []core.Dynview_Command,
+    programs: []core.Dynview_Math_Program,
+    math_commands: []core.Dynview_Command,
+    nodes: []core.Dynview_Math_Node,
+}
+
 //   Allocate a service with initialized snapshot arenas but no worker or channels.
 view_snapshot_arena_test_service :: proc(t: ^testing.T) -> ^Julia_Runtime_Service {
     service := new(Julia_Runtime_Service)
@@ -96,6 +103,30 @@ view_snapshot_text_transfer_enforces_capacity_and_sealing :: proc(t: ^testing.T)
 }
 
 //   Verify all record families admit their exact limits, preserve order, and seal.
+view_snapshot_expect_record_limits :: proc(
+    t: ^testing.T,
+    slot: ^View_Snapshot,
+    payloads: View_Snapshot_Record_Test_Payloads) {
+    testing.expect_value(t, len(slot^.commands), len(payloads.commands))
+    testing.expect_value(t, len(slot^.math_programs), len(payloads.programs))
+    testing.expect_value(t, len(slot^.math_commands), len(payloads.math_commands))
+    testing.expect_value(t, len(slot^.math_nodes), len(payloads.nodes))
+    testing.expect_value(t, slot^.commands[0].block_id, i32(11))
+    testing.expect_value(t, slot^.commands[len(payloads.commands) - 1].block_id, i32(12))
+    testing.expect_value(t, slot^.math_programs[0].root_node_index, 21)
+    testing.expect_value(t,
+        slot^.math_programs[len(payloads.programs) - 1].root_node_index, 22)
+    testing.expect_value(t, slot^.math_commands[0].block_id, i32(31))
+    testing.expect_value(t,
+        slot^.math_commands[len(payloads.math_commands) - 1].block_id, i32(32))
+    testing.expect_value(t, slot^.math_nodes[0].style_id, i32(41))
+    testing.expect_value(t, slot^.math_nodes[len(payloads.nodes) - 1].style_id, i32(42))
+    testing.expect(t, slot^.command_builder.sealed &&
+        slot^.math_program_builder.sealed && slot^.math_command_builder.sealed &&
+        slot^.math_node_builder.sealed)
+}
+
+//   Verify all record families admit their exact limits, preserve order, and seal.
 @(test)
 view_snapshot_record_transfer_accepts_exact_limits :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
@@ -121,30 +152,8 @@ view_snapshot_record_transfer_accepts_exact_limits :: proc(t: ^testing.T) {
 
     testing.expect(t, build_view_snapshot_record_payloads(
         slot, commands, programs, math_commands, nodes))
-
-    testing.expect_value(t, len(slot^.commands), len(commands))
-    testing.expect_value(t, len(slot^.math_programs), len(programs))
-    testing.expect_value(t, len(slot^.math_commands), len(math_commands))
-    testing.expect_value(t, len(slot^.math_nodes), len(nodes))
-    testing.expect_value(t, slot^.commands[0].block_id, i32(11))
-    testing.expect_value(t, slot^.commands[len(commands) - 1].block_id, i32(12))
-    testing.expect_value(t, slot^.math_programs[0].root_node_index, 21)
-    testing.expect_value(t, slot^.math_programs[len(programs) - 1].root_node_index, 22)
-    testing.expect_value(t, slot^.math_commands[0].block_id, i32(31))
-    testing.expect_value(t, slot^.math_commands[len(math_commands) - 1].block_id,
-        i32(32))
-    testing.expect_value(t, slot^.math_nodes[0].style_id, i32(41))
-    testing.expect_value(t, slot^.math_nodes[len(nodes) - 1].style_id, i32(42))
-    testing.expect(t, slot^.command_builder.sealed &&
-        slot^.math_program_builder.sealed && slot^.math_command_builder.sealed &&
-        slot^.math_node_builder.sealed)
-}
-
-View_Snapshot_Record_Test_Payloads :: struct {
-    commands: []core.Dynview_Command,
-    programs: []core.Dynview_Math_Program,
-    math_commands: []core.Dynview_Command,
-    nodes: []core.Dynview_Math_Node,
+    view_snapshot_expect_record_limits(t, slot, {
+        commands, programs, math_commands, nodes})
 }
 
 //   Require an overflowing record transaction to publish no slice or seal.
@@ -224,6 +233,32 @@ view_snapshot_record_validation_rejects_forged_aliases :: proc(t: ^testing.T) {
 }
 
 //   Verify program and node corruption cannot reach display-owned storage.
+view_snapshot_expect_malformed_math_rejected :: proc(
+    t: ^testing.T,
+    slot: ^View_Snapshot) {
+    slot^.math_programs[0].command_count = 2
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_programs[0].command_count = 1
+    slot^.math_programs[0].node_start = 1
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_programs[0].node_start = 0
+    slot^.math_programs[0].root_node_index = 2
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_programs[0].root_node_index = 0
+    slot^.math_programs[0].copy_text_offset = 1
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_programs[0].copy_text_offset = 0
+    slot^.math_nodes[1].text_offset = 1
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_nodes[1].text_offset = 0
+    slot^.math_nodes[0].first_child = 2
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.math_nodes[0] = {
+        kind = .Fraction, numerator_child = 0, denominator_child = 2}
+    testing.expect(t, !view_snapshot_is_valid(slot))
+}
+
+//   Verify program and node corruption cannot reach display-owned storage.
 @(test)
 view_snapshot_math_record_validation_rejects_malformed_structure :: proc(
     t: ^testing.T) {
@@ -245,27 +280,7 @@ view_snapshot_math_record_validation_rejects_malformed_structure :: proc(
     testing.expect(t, build_view_snapshot_record_payloads(
         slot, nil, programs, []core.Dynview_Command{{}}, nodes))
     testing.expect(t, view_snapshot_is_valid(slot))
-
-    slot^.math_programs[0].command_count = 2
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_programs[0].command_count = 1
-    slot^.math_programs[0].node_start = 1
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_programs[0].node_start = 0
-    slot^.math_programs[0].root_node_index = 2
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_programs[0].root_node_index = 0
-    slot^.math_programs[0].copy_text_offset = 1
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_programs[0].copy_text_offset = 0
-    slot^.math_nodes[1].text_offset = 1
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_nodes[1].text_offset = 0
-    slot^.math_nodes[0].first_child = 2
-    testing.expect(t, !view_snapshot_is_valid(slot))
-    slot^.math_nodes[0] = {
-        kind = .Fraction, numerator_child = 0, denominator_child = 2}
-    testing.expect(t, !view_snapshot_is_valid(slot))
+    view_snapshot_expect_malformed_math_rejected(t, slot)
 }
 
 //   Verify pending, complete, and published slots cannot reset arena storage.

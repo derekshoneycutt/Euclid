@@ -47,24 +47,28 @@ const RuleResponses = Dict(
     "JULIA-DECLARATION-ORDER" => Warn,
     "JULIA-RETURN-TUPLE" => Fail,
     "JULIA-PARAMETERS-FAIL" => Fail,
-    "JULIA-FUNCTION-LINES-WARN" => Warn,
+    "JULIA-FUNCTION-LINES-REPORT" => Warn,
+    "JULIA-FUNCTION-LINES-WARN" => Fail,
     "JULIA-FUNCTION-LINES-FAIL" => Fail,
-    "JULIA-CYCLOMATIC-WARN" => Warn,
+    "JULIA-CYCLOMATIC-REPORT" => Warn,
+    "JULIA-CYCLOMATIC-WARN" => Fail,
     "JULIA-CYCLOMATIC-FAIL" => Fail,
     "ODIN-SYNTAX" => Fail,
     "ODIN-BUILD-FAILED" => Fail,
     "ODIN-CLOSING-PAREN-PLACEMENT" => Fail,
     "ODIN-NAMING" => Warn,
     "ODIN-NONCONST-GLOBAL" => Warn,
-    "ODIN-DECLARATION-ORDER" => Warn,
+    "ODIN-DECLARATION-ORDER" => Fail,
     "ODIN-RETURN-TUPLE" => Fail,
     "ODIN-PARAMETERS-WARN" => Warn,
     "ODIN-PARAMETERS-FAIL" => Fail,
-    "ODIN-FUNCTION-LINES-WARN" => Warn,
+    "ODIN-FUNCTION-LINES-REPORT" => Warn,
+    "ODIN-FUNCTION-LINES-WARN" => Fail,
     "ODIN-FUNCTION-LINES-FAIL" => Fail,
-    "ODIN-CYCLOMATIC-WARN" => Warn,
+    "ODIN-CYCLOMATIC-REPORT" => Warn,
+    "ODIN-CYCLOMATIC-WARN" => Fail,
     "ODIN-CYCLOMATIC-FAIL" => Fail,
-    "ODIN-ALLOCATION-IMPLICIT" => Warn,
+    "ODIN-ALLOCATION-IMPLICIT" => Fail,
     "ODIN-ALLOCATION-UNKNOWN" => Fail,
     "ODIN-ALLOCATION-CONTEXT" => Warn,
     "ODIN-ALLOCATION-HEAP" => Warn,
@@ -76,6 +80,79 @@ const RuleResponses = Dict(
 
 const AnimationLoopReason =
     "Animation state-machine loops enumerate every construction step in play order."
+
+const ArenaTestFixtureReason =
+    "Arena-backed test fixture storage is released when its explicit owner is destroyed."
+
+# Columns: id, path, procedure, operation, target, minimum, maximum, reason.
+const CustomTestAllocationReviews = [
+    ("test-core-arena-owner-growth-buffer", "src/core/arena_owner_test.odin",
+        "core_test_arena_owner_reset_releases_growth_blocks", "make", "[]u8", 1, 1,
+        "Arena-backed test payload is invalidated by reset and released by destroy."),
+    ("test-core-arena-owner-destroy-buffer", "src/core/arena_owner_test.odin",
+        "core_test_arena_owner_destroy_preserves_diagnostics", "make", "[]u8", 1, 1,
+        "Arena-backed test payload is released by the owner destruction under test."),
+    ("test-evidence-allocation-baseline-buffer",
+        "src/evidence/allocation/allocation_test.odin",
+        "allocation_test_baseline_restoration", "make", "[]byte", 1, 1,
+        "Bounded test allocation is deleted before the tracked domain is destroyed."),
+    ("test-view-font-preparation-arena-pages", "src/view/font/font_test.odin",
+        "view_test_preparation_arena_reuses_committed_pages", "make", "[]u8", 2, 2,
+        "Bounded buffers verify preparation-arena reuse before explicit destruction."),
+    ("test-compiled-bytes-publish-payloads", "src/dynview/compiled_bytes_test.odin",
+        "compiled_bytes_publish_sealed_plain_and_copy_payloads", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-compiled-bytes-reject-incomplete", "src/dynview/compiled_bytes_test.odin",
+        "compiled_bytes_reject_incomplete_stream_without_publication", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-compiled-bytes-consume-published", "src/dynview/compiled_bytes_test.odin",
+        "compiled_bytes_consume_published_content_views", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-compiled-bytes-plain-overflow", "src/dynview/compiled_bytes_test.odin",
+        "compiled_bytes_reject_plain_text_overflow_without_publication", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-compiled-copy-block-order", "src/dynview/compiled_bytes_test.odin",
+        "compiled_copy_blocks_publish_ordered_payload_spans", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-compiled-copy-block-overflow", "src/dynview/compiled_bytes_test.odin",
+        "compiled_copy_blocks_reject_exact_limit_overflow", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-copy-hit-target-capacity-reuse", "src/dynview/compiled_bytes_test.odin",
+        "copy_hit_targets_reuse_capacity_across_frames", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-copy-hit-target-overflow", "src/dynview/compiled_bytes_test.odin",
+        "copy_hit_targets_reject_exact_limit_overflow", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-layout-storage-publish", "src/dynview/layout_storage_test.odin",
+        "layout_storage_publishes_ordered_records", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-layout-storage-overflow", "src/dynview/layout_storage_test.odin",
+        "layout_storage_rejects_exact_limit_overflow", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-layout-storage-reset", "src/dynview/layout_storage_test.odin",
+        "layout_storage_reset_clears_partial_aliases", "new",
+        "core.Dynview_Compile_Cache", 1, 1, ArenaTestFixtureReason),
+    ("test-copy-interaction-target", "src/view/core/copy_interaction_test.odin",
+        "copy_interaction_tracks_hovered_and_pressed_target", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason),
+    ("test-copy-interaction-payload", "src/view/core/copy_interaction_test.odin",
+        "copy_interaction_resolves_target_payload_span", "new",
+        "core.Dynview_System", 1, 1, ArenaTestFixtureReason)]
+
+"""Build reviewed records for custom-allocator test fixtures."""
+function custom_test_allocation_reviews()
+    return [ReviewedAllocationPolicy(
+        id, path, procedure, :custom, reason;
+        operation=operation,
+        target=target,
+        allocator_source="allocator",
+        certainty=:definite,
+        response=Ignore,
+        minimum_matches=minimum,
+        maximum_matches=maximum)
+        for (id, path, procedure, operation, target, minimum, maximum, reason) in
+            CustomTestAllocationReviews]
+end
 
 # Modules whose exported `loop` drives one animation as a flat step sequence.
 const AnimationLoopFiles = [
@@ -255,42 +332,29 @@ function add_builder_test_allocation_procs!(reviews)
         response=Ignore))
 end
 
+"""Add reviewed metric policies for one animation state-machine module."""
+function add_animation_loop_reviews!(reviews, path)
+    functions = (
+        ("loop", "animation-loop"),
+        ("get_view_text", "animation-get-view-text"),
+        ("initialize", "animation-initialize"),
+        ("reset_cycle_state", "animation-reset-cycle-state"))
+    for (function_name, policy_name) in functions
+        push!(reviews, ReviewedComplexity(
+            "$policy_name-lines:$path", path, :julia, function_name,
+            :executable_lines, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "$policy_name-branching:$path", path, :julia, function_name,
+            :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+    end
+end
+
 """Return reviewed function metric policies for animation state-machine loops."""
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
-    for path in AnimationLoopFiles
-        push!(reviews, ReviewedComplexity(
-            "animation-loop-lines:$path", path, :julia, "loop", :executable_lines,
-            AnimationLoopReason; response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-loop-branching:$path", path, :julia, "loop",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-get-view-text-lines:$path", path, :julia, "get_view_text",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-get-view-text-branching:$path", path, :julia, "get_view_text",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-initialize-lines:$path", path, :julia, "initialize",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-initialize-branching:$path", path, :julia, "initialize",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-reset-cycle-state-lines:$path", path, :julia, "reset_cycle_state",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-reset-cycle-state-branching:$path", path, :julia,
-            "reset_cycle_state", :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-    end
+    foreach(path -> add_animation_loop_reviews!(reviews, path), AnimationLoopFiles)
     add_parent_reviews!(reviews)
     add_builder_test_allocation_procs!(reviews)
 end
@@ -364,28 +428,7 @@ AnalysisSettings(
                 target="arena",
                 certainty=:definite,
                 response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-core-arena-owner-growth-buffer",
-                "src/core/arena_owner_test.odin",
-                "core_test_arena_owner_reset_releases_growth_blocks",
-                :custom,
-                "Arena-backed test payload is invalidated by reset and released by destroy.";
-                operation="make",
-                target="[]u8",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-core-arena-owner-destroy-buffer",
-                "src/core/arena_owner_test.odin",
-                "core_test_arena_owner_destroy_preserves_diagnostics",
-                :custom,
-                "Arena-backed test payload is released by the owner destruction under test.";
-                operation="make",
-                target="[]u8",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore),
+            custom_test_allocation_reviews()...,
             # Shared bounded builders grow within an explicit bulk-lifetime owner.
             ReviewedAllocationPolicy(
                 "core-bounded-byte-builder-growth",
@@ -421,6 +464,17 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "core-animation-value-pending-payload",
+                "src/core/animation_value_store.odin",
+                "animation_value_pending_allocate_storage",
+                :custom,
+                "Validated pending payload storage is retired by animation-generation reset or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.arena_owner.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
                 "test-bridge-animation-value-state",
                 "src/bridge/animation_values_test.odin",
                 "animation_value_test_state_create",
@@ -428,6 +482,73 @@ AnalysisSettings(
                 "One test host state owns the canonical animation store and is destroyed by the paired test helper.";
                 operation="new",
                 target="core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-arena-service",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_arena_test_service",
+                :implicit,
+                "Each test destroys the service and all slot arenas through the paired helper.";
+                operation="new",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-builder-saturation-bytes",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_builder_saturation_preserves_payload",
+                :implicit,
+                "The exact-capacity test buffer is released by its deferred delete.";
+                operation="make",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-record-limit-payloads",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_record_transfer_accepts_exact_limits",
+                :implicit,
+                "Four exact-limit record buffers are released by deferred deletes.";
+                operation="make",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=4,
+                maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-record-overflow-payloads",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_record_transfer_rejects_each_overflow",
+                :implicit,
+                "Four overflow record buffers are released by deferred deletes.";
+                operation="make",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=4,
+                maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-reload-state",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_reload_stale_completion_defers_arena_reset",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-stale-publication-state",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_stale_publication_defers_arena_reset",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-view-snapshot-shutdown-state",
+                "src/bridge/view_snapshot_arena_test.odin",
+                "view_snapshot_shutdown_release_clears_published_views",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
@@ -486,10 +607,11 @@ AnalysisSettings(
                 "bridge-runtime-create-dynview",
                 "src/bridge/runtime_service.odin",
                 "create_julia_runtime_service",
-                :implicit,
+                :context,
                 "Single one-time creation of the julia runtime service structure.";
                 operation="new",
                 target="core.Dynview_System",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             # GIF Encoding Allocations ; There is a dedicated arena and some minor heap allocation
@@ -742,17 +864,6 @@ AnalysisSettings(
                 response=Ignore),
             # Test Allocations -- every site is a test fixture destroyed by defer free
             ReviewedAllocationPolicy(
-                "test-evidence-allocation-baseline-buffer",
-                "src/evidence/allocation/allocation_test.odin",
-                "allocation_test_baseline_restoration",
-                :custom,
-                "Bounded test allocation explicitly deleted before the tracked domain is destroyed.";
-                operation="make",
-                target="[]byte",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
                 "test-evidence-allocation-foreign-buffer",
                 "src/evidence/allocation/allocation_test.odin",
                 "allocation_test_bad_free_is_evidence",
@@ -813,19 +924,6 @@ AnalysisSettings(
                 target="app_core.Julia_Runtime_Service",
                 certainty=:definite,
                 response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-view-font-preparation-arena-pages",
-                "src/view/font/font_test.odin",
-                "view_test_preparation_arena_reuses_committed_pages",
-                :custom,
-                "Two bounded test buffers verify reuse of the dedicated preparation arena before its explicit destruction.";
-                operation="make",
-                target="[]u8",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
             ReviewedAllocationPolicy(
                 "test-view-scenario-actions-state",
                 "src/view/scenario_runtime_tests.odin",
@@ -1517,6 +1615,76 @@ AnalysisSettings(
                 "Large test fixture is destroyed by defer free in the test body.";
                 operation="new",
                 target="app_core.Euclid_Julia_Animation_Interface",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-invalid-publication-state",
+                "src/view/dynview_tests.odin",
+                "scratchpad_completion_waits_for_valid_view_publication",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
+                target="app_core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-invalid-publication-service",
+                "src/view/dynview_tests.odin",
+                "scratchpad_completion_waits_for_valid_view_publication",
+                :implicit,
+                "The test service is released by its deferred free.";
+                operation="new",
+                target="app_bridge.Julia_Runtime_Service",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-evidence-pressure-state",
+                "src/view/dynview_tests.odin",
+                "scratchpad_completion_requires_current_complete_evidence",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
+                target="app_core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-watermark-service",
+                "src/view/dynview_tests.odin",
+                "scratchpad_completion_watermark_clears_at_lifecycle_boundary",
+                :implicit,
+                "The test service is released by its deferred free.";
+                operation="new",
+                target="app_bridge.Julia_Runtime_Service",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-malformed-span-snapshot",
+                "src/view/dynview_tests.odin",
+                "view_snapshot_validation_rejects_all_malformed_text_spans",
+                :implicit,
+                "The test snapshot and its arena are released by deferred cleanup.";
+                operation="new",
+                target="app_bridge.View_Snapshot",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-fallback-lifetime-state",
+                "src/view/dynview_tests.odin",
+                "view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication",
+                :implicit,
+                "The test host state is released by its deferred free.";
+                operation="new",
+                target="app_core.Euclid_General_State",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-fallback-lifetime-service",
+                "src/view/dynview_tests.odin",
+                "view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication",
+                :implicit,
+                "The test service is released by its deferred free.";
+                operation="new",
+                target="app_bridge.Julia_Runtime_Service",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(

@@ -126,6 +126,24 @@ finish_window_frame :: proc(
     free_all(context.temp_allocator)
 }
 
+//   Synchronize Dynview shaping when the resident math-font generation changes.
+sync_window_math_shaping :: proc(state: ^Euclid_General_State) {
+    entry := &state^.font_cache.entries[int(font.Font_Key.Math_Regular)]
+    generation_changed :=
+        state^.dynview.math_shaping.generation != entry.generation &&
+        state^.dynview.math_shaping.failed_generation != entry.generation
+    if !generation_changed {
+        return
+    }
+    if font.math_shaping_sync(&state^.font_cache, &state^.dynview.math_shaping) {
+        log.infof("dynview_math_shaper_ready generation=%d",
+            state^.dynview.math_shaping.generation)
+    } else {
+        log.errorf("dynview_math_shaper_failed generation=%d", entry.generation)
+    }
+    dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
+}
+
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(
     state: ^Euclid_General_State,
@@ -135,21 +153,7 @@ run_window_frame :: proc(
     evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
-    math_entry := &state^.font_cache.entries[int(font.Font_Key.Math_Regular)]
-    math_generation_changed :=
-        state^.dynview.math_shaping.generation != math_entry.generation &&
-        state^.dynview.math_shaping.failed_generation != math_entry.generation
-    if math_generation_changed {
-        if font.math_shaping_sync(
-            &state^.font_cache, &state^.dynview.math_shaping) {
-            log.infof("dynview_math_shaper_ready generation=%d",
-                state^.dynview.math_shaping.generation)
-        } else {
-            log.errorf("dynview_math_shaper_failed generation=%d",
-                math_entry.generation)
-        }
-        dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
-    }
+    sync_window_math_shaping(state)
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
     julia.publish_available_view_snapshot(state)
     alpha := accumulate_and_update_systems(state)
@@ -378,6 +382,18 @@ open_window :: proc(settings: ^Euclid_Run_Settings) {
     rl.SetTargetFPS(LIMIT_FPS)
 }
 
+//   Load the packaged application icon when the asset is available.
+initialize_window_icon :: proc() {
+    icon_file := strings.clone_to_cstring(
+        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
+        context.temp_allocator)
+    if rl.FileExists(icon_file) {
+        icon_image := rl.LoadImage(icon_file)
+        rl.SetWindowIcon(icon_image)
+        rl.UnloadImage(icon_image)
+    }
+}
+
 //   Initialize audio, icon, shader, and font resources after application state exists.
 initialize_window_resources :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
@@ -400,14 +416,7 @@ initialize_window_resources :: proc(
         rl.SetTargetFPS(0)
     }
 
-    icon_file := strings.clone_to_cstring(
-        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
-            context.temp_allocator)
-    if rl.FileExists(icon_file) {
-        icon_image := rl.LoadImage(icon_file)
-        rl.SetWindowIcon(icon_image)
-        rl.UnloadImage(icon_image)
-    }
+    initialize_window_icon()
 
     init_tool_brush_shader(state)
 

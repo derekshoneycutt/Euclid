@@ -21,6 +21,18 @@ View_Snapshot_Published_Expected :: struct {
     block_id: i32,
 }
 
+View_Snapshot_Publication_Fixture :: struct {
+    state: ^app_core.Euclid_General_State,
+    service: ^app_bridge.Julia_Runtime_Service,
+    animation: ^app_core.Euclid_Julia_Animation_Interface,
+}
+
+Copy_Hit_Target_Fixture :: struct {
+    items: [2]app_core.Dynview_Layout_Item,
+    lines: [6]app_core.Dynview_Layout_Line,
+    layout: app_dynview.Copy_Hit_Target_Layout,
+}
+
 //   Initialize caller-owned bounded layout storage for direct layout unit tests.
 dynview_test_layout_builders_init :: proc(
     t: ^testing.T,
@@ -635,6 +647,27 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
     testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
 }
 
+//   Verify installed recursive math records and cache invalidation state.
+view_snapshot_expect_recursive_math_content :: proc(
+    t: ^testing.T,
+    runtime: ^app_core.Dynview_System) {
+    testing.expect_value(t, runtime^.command_buffer.command_count, 1)
+    testing.expect_value(t, runtime^.command_buffer.text_bytes_len, len("semantic"))
+    testing.expect(t, string(runtime^.command_buffer.text_view) == "semantic")
+    testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
+    testing.expect(t, runtime^.content.math_programs[0].valid)
+    testing.expect_value(t, runtime^.content.math_nodes[0].kind,
+        app_core.Dynview_Math_Node_Kind.Glyph_Run)
+    testing.expect_value(t, runtime^.content.math_commands[0].kind,
+        app_core.Dynview_Command_Kind.Math_Glyph_Run)
+    testing.expect_value(t, runtime^.command_buffer.commands[0].kind,
+        app_core.Dynview_Command_Kind.Begin_Block)
+    testing.expect_value(t, runtime^.compile_cache.math_programs[0].valid, false)
+    view_snapshot_expect_math_working_isolation(t, runtime)
+    testing.expect(t, !runtime^.compile_cache.is_valid)
+    testing.expect(t, !runtime^.compile_cache.layout_is_valid)
+}
+
 //   Verify a view snapshot copy preserves recursive math spans.
 @(test)
 view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
@@ -662,37 +695,52 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     app_bridge.install_view_snapshot_content(snapshot, runtime)
 
     view_snapshot_expect_content_aliases(t, snapshot, runtime)
-    testing.expect_value(t, runtime^.command_buffer.command_count, 1)
-    testing.expect_value(t, runtime^.command_buffer.text_bytes_len, len("semantic"))
-    testing.expect(t, string(runtime^.command_buffer.text_view) ==
-        "semantic")
-    testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
-    testing.expect(t, runtime^.content.math_programs[0].valid)
-    testing.expect_value(t, runtime^.content.math_nodes[0].kind,
-        app_core.Dynview_Math_Node_Kind.Glyph_Run)
-    testing.expect_value(t, runtime^.content.math_commands[0].kind,
-        app_core.Dynview_Command_Kind.Math_Glyph_Run)
-    testing.expect_value(t, runtime^.command_buffer.commands[0].kind,
-        app_core.Dynview_Command_Kind.Begin_Block)
-    testing.expect_value(t, runtime^.compile_cache.math_programs[0].valid, false)
-    view_snapshot_expect_math_working_isolation(t, runtime)
-    testing.expect(t, !runtime^.compile_cache.is_valid)
-    testing.expect(t, !runtime^.compile_cache.layout_is_valid)
+    view_snapshot_expect_recursive_math_content(t, runtime)
+}
+
+//   Connect one publication fixture with isolated evidence storage.
+view_snapshot_publication_fixture_init :: proc(
+    fixture: ^View_Snapshot_Publication_Fixture) {
+    fixture.state^.julia_interface = &fixture.state^.julia_interface_slots[0]
+    fixture.state^.julia_interface^.current_animation = fixture.animation
+    fixture.state^.julia_runtime_service = fixture.service
+    init_test_evidence(fixture.state)
+}
+
+//   Verify the publication and Scratchpad evidence identities for one snapshot.
+view_snapshot_expect_publication_evidence :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State) {
+    testing.expect_value(t, state^.evidence_ring.count, 2)
+    event := state^.evidence_ring.events[0]
+    testing.expect_value(t, event.kind, app_evidence_trace.Kind.Dynview_Published)
+    testing.expect_value(t, event.correlation_kind,
+        app_evidence_trace.Correlation_Kind.Animation)
+    testing.expect_value(t, event.correlation, u64(7))
+    testing.expect_value(t, event.generation, u64(7))
+    testing.expect_value(t, event.revision, u64(11))
+    completed := state^.evidence_ring.events[1]
+    testing.expect_value(t, completed.kind,
+        app_evidence_trace.Kind.Scratchpad_Completed)
+    testing.expect_value(t, completed.correlation_kind,
+        app_evidence_trace.Correlation_Kind.Runtime_Request)
+    testing.expect_value(t, completed.correlation, u64(41))
+    testing.expect_value(t, completed.generation, u64(3))
+    testing.expect_value(t, completed.revision, u64(11))
 }
 
 //   Verify valid snapshot publication records the immutable animation identity.
 @(test)
 view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
-    defer free(state)
-    service := new(app_bridge.Julia_Runtime_Service)
-    defer free(service)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
-    defer free(animation)
-    state^.julia_interface = &state^.julia_interface_slots[0]
-    state^.julia_interface^.current_animation = animation
-    state^.julia_runtime_service = service
-    init_test_evidence(state)
+    fixture := View_Snapshot_Publication_Fixture{
+        new(app_core.Euclid_General_State),
+        new(app_bridge.Julia_Runtime_Service),
+        new(app_core.Euclid_Julia_Animation_Interface)}
+    defer free(fixture.animation)
+    defer free(fixture.service)
+    defer free(fixture.state)
+    view_snapshot_publication_fixture_init(&fixture)
+    state, service, animation := fixture.state, fixture.service, fixture.animation
     service^.runtime_generation = 3
     service^.animation_generation = 7
     service^.view_snapshots[0] = {
@@ -711,22 +759,7 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&service^.view_snapshots[0].arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
-    testing.expect_value(t, state^.evidence_ring.count, 2)
-    event := state^.evidence_ring.events[0]
-    testing.expect_value(t, event.kind, app_evidence_trace.Kind.Dynview_Published)
-    testing.expect_value(t, event.correlation_kind,
-        app_evidence_trace.Correlation_Kind.Animation)
-    testing.expect_value(t, event.correlation, u64(7))
-    testing.expect_value(t, event.generation, u64(7))
-    testing.expect_value(t, event.revision, u64(11))
-    completed := state^.evidence_ring.events[1]
-    testing.expect_value(t, completed.kind,
-        app_evidence_trace.Kind.Scratchpad_Completed)
-    testing.expect_value(t, completed.correlation_kind,
-        app_evidence_trace.Correlation_Kind.Runtime_Request)
-    testing.expect_value(t, completed.correlation, u64(41))
-    testing.expect_value(t, completed.generation, u64(3))
-    testing.expect_value(t, completed.revision, u64(11))
+    view_snapshot_expect_publication_evidence(t, state)
 }
 
 //   Verify invalid current content cannot claim Scratchpad display completion.
@@ -848,6 +881,40 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
 }
 
+//   Build and reject one stale candidate without disturbing published content.
+view_snapshot_expect_stale_candidate_rejected :: proc(
+    t: ^testing.T,
+    fixture: View_Snapshot_Publication_Fixture,
+    expected: View_Snapshot_Published_Expected) {
+    second := &fixture.service^.view_snapshots[1]
+    view_snapshot_test_complete(second, fixture.animation, 2, 1, 3)
+    second^.scratchpad_request_id = 41
+    second^.scratchpad_runtime_generation = 1
+    view_snapshot_test_payloads_init(t, second, "stale", 0)
+    testing.expect(t, !app_bridge.publish_available_view_snapshot(fixture.state))
+    testing.expect_value(t, fixture.state^.evidence_ring.count, 1)
+    view_snapshot_expect_published_generation(t, fixture.state, expected)
+}
+
+//   Reuse the stale slot for a valid replacement and verify both arena lifetimes.
+view_snapshot_expect_replacement_published :: proc(
+    t: ^testing.T,
+    fixture: View_Snapshot_Publication_Fixture,
+    first: ^app_bridge.View_Snapshot) {
+    second := &fixture.service^.view_snapshots[1]
+    testing.expect(t, app_bridge.prepare_view_snapshot_slot(second))
+    view_snapshot_test_payloads_build(t, second, "second", 2)
+    view_snapshot_test_complete(second, fixture.animation, 3, 2, 3)
+    testing.expect(t, app_bridge.publish_available_view_snapshot(fixture.state))
+    view_snapshot_expect_released_without_reset(t, first)
+    expected := View_Snapshot_Published_Expected{
+        "second", raw_data(second^.fallback_text), raw_data(second^.commands), 2}
+    view_snapshot_expect_published_generation(t, fixture.state, expected)
+    testing.expect(t, app_bridge.prepare_view_snapshot_slot(first))
+    testing.expect_value(t, first^.arena.reset_count, u64(1))
+    view_snapshot_expect_published_generation(t, fixture.state, expected)
+}
+
 //   Verify stale candidates preserve published fallback until valid replacement and reuse.
 @(test)
 view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
@@ -877,28 +944,11 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
         "first", first_storage, first_records, 1}
     view_snapshot_expect_published_generation(t, state, first_expected)
 
+    fixture := View_Snapshot_Publication_Fixture{state, service, animation}
     second := &service^.view_snapshots[1]
-    view_snapshot_test_complete(second, animation, 2, 1, 3)
-    second^.scratchpad_request_id = 41
-    second^.scratchpad_runtime_generation = 1
-    view_snapshot_test_payloads_init(t, second, "stale", 0)
+    view_snapshot_expect_stale_candidate_rejected(t, fixture, first_expected)
     defer app_core.arena_owner_destroy(&second^.arena)
-    testing.expect(t, !app_bridge.publish_available_view_snapshot(state))
-    testing.expect_value(t, state^.evidence_ring.count, 1)
-    view_snapshot_expect_published_generation(t, state, first_expected)
-
-    testing.expect(t, app_bridge.prepare_view_snapshot_slot(second))
-    view_snapshot_test_payloads_build(t, second, "second", 2)
-    view_snapshot_test_complete(second, animation, 3, 2, 3)
-    testing.expect(t, app_bridge.publish_available_view_snapshot(state))
-    view_snapshot_expect_released_without_reset(t, first)
-    second_records := raw_data(second^.commands)
-    second_expected := View_Snapshot_Published_Expected{
-        "second", raw_data(second^.fallback_text), second_records, 2}
-    view_snapshot_expect_published_generation(t, state, second_expected)
-    testing.expect(t, app_bridge.prepare_view_snapshot_slot(first))
-    testing.expect_value(t, first^.arena.reset_count, u64(1))
-    view_snapshot_expect_published_generation(t, state, second_expected)
+    view_snapshot_expect_replacement_published(t, fixture, first)
 }
 
 //   Verify a completed view snapshot is found without needing its event index.
@@ -1226,6 +1276,33 @@ dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
     testing.expect_value(t, scroll_step, f32(44))
 }
 
+//   Build canonical row spans and copy-hit geometry for one block fixture.
+copy_hit_target_fixture :: proc() -> Copy_Hit_Target_Fixture {
+    fixture := Copy_Hit_Target_Fixture{}
+    fixture.items = {
+        {block_id = 9, line_index = 2},
+        {block_id = 9, line_index = 5},
+    }
+    fixture.lines[2] = {row_start = 2, row_span = 3}
+    fixture.lines[5] = {row_start = 7, row_span = 2}
+    fixture.layout = {
+        panel = {x = 10, y = 100, width = 120, height = 250},
+        scroll_y = 22, text_padding = 4, icon_size = 12, icon_x_pad = 2,
+    }
+    return fixture
+}
+
+//   Bind fixture-backed row records to one compile cache.
+copy_hit_target_fixture_bind :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    fixture: ^Copy_Hit_Target_Fixture) {
+    cache^.last_cell_height = 22
+    cache^.layout_items = fixture^.items[:]
+    cache^.layout_lines = fixture^.lines[:]
+    cache^.layout_line_count = len(fixture^.lines)
+    cache^.layout_item_count = len(fixture^.items)
+}
+
 //   Verify copy hit geometry spans canonical rows after applying panel scroll.
 @(test)
 dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
@@ -1237,28 +1314,11 @@ dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
     testing.expect_value(t, app_core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
         app_core.Bounded_Builder_Status.Ok)
-    cache^.last_cell_height = 22
-    items := [2]app_core.Dynview_Layout_Item{
-        {block_id = 9, line_index = 2},
-        {block_id = 9, line_index = 5},
-    }
-    lines := [6]app_core.Dynview_Layout_Line{}
-    lines[2] = {row_start = 2, row_span = 3}
-    lines[5] = {row_start = 7, row_span = 2}
-    cache^.layout_items = items[:]
-    cache^.layout_lines = lines[:]
-    cache^.layout_line_count = 6
-    cache^.layout_item_count = 2
-    layout := app_dynview.Copy_Hit_Target_Layout{
-        panel = {x = 10, y = 100, width = 120, height = 250},
-        scroll_y = 22,
-        text_padding = 4,
-        icon_size = 12,
-        icon_x_pad = 2,
-    }
+    fixture := copy_hit_target_fixture()
+    copy_hit_target_fixture_bind(cache, &fixture)
 
     hover_bottom, status := app_dynview.rebuild_one_copy_hit_target(
-        cache, {block_id = 9}, layout, layout.panel.y)
+        cache, {block_id = 9}, fixture.layout, fixture.layout.panel.y)
 
     targets, view_status := app_core.bounded_element_builder_view(
         &cache^.copy_hit_target_builder)

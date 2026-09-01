@@ -280,10 +280,7 @@ animation_value_pending_append :: proc(
         pending.invalid = true
         return .Out_Of_Capacity
     }
-    prior := animation_value_packed_find_newest(
-        pending.entries[:pending.write_count], identity.key)
-    if prior != nil && !animation_value_packed_schema_matches(
-        prior, identity.schema_low, identity.schema_high, len(payload)) {
+    if !animation_value_pending_schema_matches(pending, identity, len(payload)) {
         pending.invalid = true
         return .Schema_Mismatch
     }
@@ -299,6 +296,17 @@ animation_value_pending_append :: proc(
     pending.payload_size = payload_end
     pending.write_count += 1
     return .Ok
+}
+
+//   Report whether a pending write agrees with the newest matching schema.
+animation_value_pending_schema_matches :: proc(
+    pending: ^Animation_Value_Pending_Writes,
+    identity: Animation_Value_Identity,
+    payload_size: int) -> bool {
+    prior := animation_value_packed_find_newest(
+        pending.entries[:pending.write_count], identity.key)
+    return prior == nil || animation_value_packed_schema_matches(
+        prior, identity.schema_low, identity.schema_high, payload_size)
 }
 
 //   Copy the newest matching pending write into caller-owned storage.
@@ -346,6 +354,13 @@ animation_value_store_validate_pending :: proc(
     if store == nil || !store.initialized || store.generation != generation {
         return .Illegal_State
     }
+    return animation_value_store_validate_projected_capacity(store, pending)
+}
+
+//   Validate descriptors and canonical quotas for a nonempty pending batch.
+animation_value_store_validate_projected_capacity :: proc(
+    store: ^Animation_Value_Store,
+    pending: ^Animation_Value_Pending_Writes) -> Animation_Value_Status {
     projected_entries := store.entry_count
     projected_bytes := store.payload_bytes
     for index in 0..<pending.write_count {
@@ -375,26 +390,28 @@ animation_value_store_validate_pending :: proc(
     return .Ok
 }
 
-//   Apply a fully validated pending batch without exposing partial allocation failure.
-animation_value_store_apply_pending :: proc(
+//   Allocate canonical payload storage for one fully validated pending batch.
+animation_value_pending_allocate_storage :: proc(
     store: ^Animation_Value_Store,
-    generation: u64,
-    pending: ^Animation_Value_Pending_Writes) -> Animation_Value_Status {
-    status := animation_value_store_validate_pending(store, generation, pending)
-    if status != .Ok || pending.write_count == 0 {
-        return status
-    }
+    pending: ^Animation_Value_Pending_Writes) -> ([]u8, Animation_Value_Status) {
     new_payload_bytes := animation_value_pending_new_payload_bytes(store, pending)
-    new_storage: []u8
-    if new_payload_bytes > 0 {
-        allocation_error: mem.Allocator_Error
-        new_storage, allocation_error = make(
-            []u8, new_payload_bytes, store.arena_owner.allocator)
-        if allocation_error != nil {
-            store.allocation_failures += 1
-            return .Allocation_Failed
-        }
+    if new_payload_bytes == 0 {
+        return nil, .Ok
     }
+    storage, allocation_error := make(
+        []u8, new_payload_bytes, store.arena_owner.allocator)
+    if allocation_error != nil {
+        store.allocation_failures += 1
+        return nil, .Allocation_Failed
+    }
+    return storage, .Ok
+}
+
+//   Commit validated writes into canonical entries using preallocated storage.
+animation_value_store_commit_pending :: proc(
+    store: ^Animation_Value_Store,
+    pending: ^Animation_Value_Pending_Writes,
+    new_storage: []u8) {
     storage_offset := 0
     for index in 0..<pending.write_count {
         packed := &pending.entries[index]
@@ -416,6 +433,23 @@ animation_value_store_apply_pending :: proc(
         source := animation_value_packed_payload(packed, pending.payload[:])
         copy(entry.payload, source)
     }
+}
+
+//   Apply a fully validated pending batch without exposing partial allocation failure.
+animation_value_store_apply_pending :: proc(
+    store: ^Animation_Value_Store,
+    generation: u64,
+    pending: ^Animation_Value_Pending_Writes) -> Animation_Value_Status {
+    status := animation_value_store_validate_pending(store, generation, pending)
+    if status != .Ok || pending.write_count == 0 {
+        return status
+    }
+    new_storage, allocation_status := animation_value_pending_allocate_storage(
+        store, pending)
+    if allocation_status != .Ok {
+        return allocation_status
+    }
+    animation_value_store_commit_pending(store, pending, new_storage)
     store.peak_entry_count = max(store.peak_entry_count, store.entry_count)
     store.peak_payload_bytes = max(store.peak_payload_bytes, store.payload_bytes)
     return .Ok

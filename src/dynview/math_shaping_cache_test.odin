@@ -88,6 +88,24 @@ math_shaping_test_populate_recursive_fixture :: proc(runtime: ^core.Dynview_Syst
 }
 
 //   Verify cached NewCM metrics replace synthetic math-glyph measurements.
+math_shaping_expect_cached_run :: proc(
+    t: ^testing.T,
+    runtime: ^core.Dynview_System) {
+    cache := &runtime^.compile_cache
+    command := cache^.math_commands[0]
+    run, run_ok := shaped_run_for_command(cache, command, .Primary)
+    cached_glyphs, glyphs_ok := shaped_glyphs_for_run(cache, run)
+    item, item_ok := math_program_item(
+        cache, &runtime^.command_buffer, command, 32, 0)
+    testing.expect(t, run_ok && glyphs_ok && item_ok)
+    testing.expect_value(t, item.math_command_index, i32(0))
+    testing.expect_value(t, len(cached_glyphs), 1)
+    testing.expect_value(t, cached_glyphs[0].glyph_id, u32('x'))
+    testing.expect_value(t, run^.advance, f32(10))
+    testing.expect_value(t, run^.raster_ascent, f32(24))
+}
+
+//   Verify cached NewCM metrics replace synthetic math-glyph measurements.
 @(test)
 dynview_math_shaping_measures_cached_intrinsic_metrics :: proc(t: ^testing.T) {
     runtime := new(core.Dynview_System)
@@ -120,17 +138,7 @@ dynview_math_shaping_measures_cached_intrinsic_metrics :: proc(t: ^testing.T) {
     testing.expect_value(t, cache^.math_programs[0].italic_correction, f32(2))
     testing.expect_value(t, cache^.math_programs[0].top_accent_attachment, f32(5))
 
-    command := cache^.math_commands[0]
-    run, run_ok := shaped_run_for_command(cache, command, .Primary)
-    cached_glyphs, glyphs_ok := shaped_glyphs_for_run(cache, run)
-    item, item_ok := math_program_item(
-        cache, &runtime^.command_buffer, command, 32, 0)
-    testing.expect(t, run_ok && glyphs_ok && item_ok)
-    testing.expect_value(t, item.math_command_index, i32(0))
-    testing.expect_value(t, len(cached_glyphs), 1)
-    testing.expect_value(t, cached_glyphs[0].glyph_id, u32('x'))
-    testing.expect_value(t, run^.advance, f32(10))
-    testing.expect_value(t, run^.raster_ascent, f32(24))
+    math_shaping_expect_cached_run(t, runtime)
 }
 
 //   Verify scripts, fractions, radicals, nesting, and grid width use shaped metrics.

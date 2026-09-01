@@ -271,6 +271,29 @@ init_evidence_session :: proc(
     return true
 }
 
+//   Initialize allocation domains and bind the state-owned runtime resources.
+init_animations_state_resources :: proc(
+    state: ^Euclid_General_State,
+    julia_service: ^julia.Julia_Runtime_Service,
+    settings: ^Euclid_Run_Settings,
+    particle_system: ^Particle_System,
+    points: Session_Point_System) -> bool {
+    if !evidence_allocation.domain_init(
+        &state^.evidence_allocations, context.allocator, context.allocator) {
+        return false
+    }
+    state^.saved_context = context
+    state^.julia_runtime_service = julia_service
+    state^.iso_scale = make_iso_scale()
+    state^.draw_surface = make_drawing_surface()
+    state^.point_system = points.point_system
+    state^.particle_system = particle_system
+    state^.compass = points.compass
+    state^.pen = points.pen
+    init_runtime_fields(state, settings)
+    return true
+}
+
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
 initiate_animations_state :: proc(
     julia_service: ^julia.Julia_Runtime_Service,
@@ -283,28 +306,19 @@ initiate_animations_state :: proc(
     make_point_system(&point_system_parts)
 
     state := new(Euclid_General_State)
-    if !evidence_allocation.domain_init(
-        &state^.evidence_allocations, context.allocator, context.allocator) {
+    if !init_animations_state_resources(
+        state, julia_service, settings, particle_system, point_system_parts) {
         free(state)
         free(particle_system)
         free(point_system_parts.point_system)
         return nil
     }
-    state^.saved_context = context
-    state^.julia_runtime_service = julia_service
-    state^.iso_scale = make_iso_scale()
-    state^.draw_surface = make_drawing_surface()
-    state^.point_system = point_system_parts.point_system
-    state^.particle_system = particle_system
-    state^.compass = point_system_parts.compass
-    state^.pen = point_system_parts.pen
     if !core.animation_value_store_init(&state^.animation_values) {
         fmt.eprintln("Failed to initialize the animation value store.")
         free_animations_state(state)
         return nil
     }
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
-    init_runtime_fields(state, settings)
     state^.simulation_executor = create_simulation_executor(state)
     if state^.simulation_executor == nil {
         fmt.eprintln("Failed to initialize the simulation task pool.")

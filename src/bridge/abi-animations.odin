@@ -95,6 +95,28 @@ set_animation_value :: proc "c" (
 //
 // Returns:
 //   - Stable `BRIDGE_STATUS_*`; destination changes only on success.
+get_animation_query_value :: proc(
+    state: ^core.Euclid_General_State,
+    identity: core.Animation_Value_Identity,
+    payload: []u8) -> i32 {
+    if state^.scene_command_batch_target == nil ||
+        !state^.animation_query_snapshot_target^.animation_values_valid {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    status := core.animation_value_pending_copy(
+        &state^.scene_command_batch_target^.animation_value_writes,
+        identity,
+        payload)
+    if status != .Not_Found {
+        return animation_value_bridge_status(status)
+    }
+    return animation_value_bridge_status(core.animation_value_snapshot_copy(
+        &state^.animation_query_snapshot_target^.animation_values,
+        identity,
+        payload))
+}
+
+//   Copy one opaque value from the active query snapshot and staged writes.
 @(export)
 get_animation_value :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -113,21 +135,7 @@ get_animation_value :: proc "c" (
     destination_bytes := cast([^]u8)destination
     payload := destination_bytes[:int(byte_count)]
     if state^.animation_query_snapshot_target != nil {
-        if state^.scene_command_batch_target == nil ||
-            !state^.animation_query_snapshot_target^.animation_values_valid {
-            return BRIDGE_STATUS_ILLEGAL_STATE
-        }
-        status := core.animation_value_pending_copy(
-            &state^.scene_command_batch_target^.animation_value_writes,
-            identity,
-            payload)
-        if status != .Not_Found {
-            return animation_value_bridge_status(status)
-        }
-        return animation_value_bridge_status(core.animation_value_snapshot_copy(
-            &state^.animation_query_snapshot_target^.animation_values,
-            identity,
-            payload))
+        return get_animation_query_value(state, identity, payload)
     }
     if state^.scene_command_batch_target != nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
