@@ -136,6 +136,10 @@ script_metrics :: #force_inline proc(
 
 // Reset a cache structure for the dynview layout engine
 layout_reset_cache :: proc(cache: ^core.Dynview_Compile_Cache) {
+    cache^.layout_lines = nil
+    cache^.layout_items = nil
+    cache^.layout_line_builder = {}
+    cache^.layout_item_builder = {}
     cache^.layout_line_count = 0
     cache^.layout_item_count = 0
     cache^.layout_total_height = 0

@@ -145,9 +145,11 @@ Snapshot and display flow:
 1. The Julia worker produces fallback text and dynview commands in a bounded
   worker-owned staging runtime.
 1. The worker publishes a complete animation-tagged semantic snapshot.
-1. Odin validates and imports populated spans at a frame boundary.
+1. Odin validates and installs immutable populated views at a frame boundary.
 1. Odin emits required `Dynview_Published` evidence after animation identity
   validation and display publication succeed.
+1. A snapshot stamped by a completed Scratchpad evaluation additionally emits
+  required `Scratchpad_Completed` evidence correlated to the original runtime request.
 1. Odin compiles command buffers to cached plain/copy/layout state.
 1. If compile/layout is valid, Odin renders dynview output.
 1. If any stream stage fails, Odin falls back to plain text with no host crash.
@@ -357,16 +359,29 @@ After all fixed steps complete, the display thread opens a second pool window:
 Shape preparation reads settled point state and exclusively writes
 `Shapes_Point_System.draw_cache`. Dynview preparation exclusively writes the
 Dynview compile and layout caches. Dynview owns one growing display-cache arena with a
-1 MiB initial reservation; existing fixed arrays remain in place. An invalidated
-Dynview task enters worker-mutable ownership, resets the arena, and builds derived
-views. Failure clears partial derived views and retains plain fallback. Task completion
-returns display-readable ownership, and the fence joins before panel drawing or copy
-access. Bounded shaped-run and glyph builders retain the existing logical maxima and
-publish populated arena slices only after generation, source, glyph, and command-site
-spans all validate. Rejection publishes no shaped records and leaves all command-site
-indices on their unshaped fallback sentinel. The tasks may run concurrently because
-their ownership does not overlap. Shutdown clears arena-backed aliases and destroys
-the arena only after the pool is quiescent.
+1 MiB initial reservation. An invalidated Dynview task enters worker-mutable ownership,
+resets the arena, and builds derived views. Failure clears partial derived views and
+retains plain fallback. Task completion returns display-readable ownership, and the
+fence joins before panel drawing or copy access.
+
+Bounded builders publish compiled plain-text and copy-payload slices only after both
+complete streams seal within the existing text limit. These display-readable aliases
+remain valid until the next cache-arena reset; rejection clears them before fallback.
+Copy blocks seal in the same compile transaction, preserving source order and payload
+spans under the command-count limit. After the worker fence, the display thread rebuilds
+panel- and scroll-dependent hit targets in a reusable bounded builder. Repeated frames
+reuse its arena capacity; each successful refresh publishes only the populated prefix,
+and rejection publishes no targets. Bounded line and item builders retain the existing
+scalar counts and indexes while remaining worker-mutable during grid placement and
+aggregate metric calculation, then both seal before `layout_is_valid` publishes
+populated slices. Empty content publishes one canonical line; overflow or invalid
+layout publishes neither family. Bounded shaped-run
+and glyph builders retain their logical maxima and publish populated arena slices only
+after generation, source, glyph, and command-site spans all validate. Rejection
+publishes no shaped records and leaves all command-site indices on their unshaped
+fallback sentinel. The tasks may run concurrently because their ownership does not
+overlap. Shutdown clears arena-backed aliases and destroys the arena only after the pool
+is quiescent.
 
 ### Font Cache
 
@@ -502,12 +517,31 @@ This policy is strict by design.
 
 ### Current Arena Notes
 
+- Scenario allocation evidence samples three stable owner domains at display-thread
+  synchronization points: `animation` observes the canonical animation-value arena,
+  `snapshot_slots` aggregates both Julia runtime view-snapshot arenas, and
+  `display_cache` observes the Dynview cache arena. Checkpoints retain current usage,
+  reservation and commit state, lifetime high waters, reset counts, and initialized
+  owner counts without allocating in the sampled domain.
+- A matching assertion requires identical current usage, reservation/commit pressure,
+  lifetime high waters, and initialized-owner count; reset counts may only increase.
+  The terminal `allocations.json` records both checkpoint and assertion-time samples,
+  the match result for each domain, and aggregate bad-free evidence. Artifact writing
+  does not resample arenas after teardown has begun.
 - GIF encoder internals are arena-backed for session-local working memory.
 - Each of the two Julia interface slots retains one growing registry arena.
   Animation nodes, copied names, and UUID lookup tables share that arena.
 - Reload clears the inactive arena before staging. Rollback clears that same
   arena; publication clears the retired arena. Both arenas are destroyed only
   after the Julia owner thread has stopped during application teardown.
+- Each Julia runtime view-snapshot slot owns one growing arena and bounded builders.
+  Fallback text, semantic command text, commands, math programs, math commands, and math
+  nodes are sealed arena-backed slices. A slot reset is permitted only after it is
+  `Free`, so every payload remains valid through `Pending`, `Complete`, and `Published`.
+  Display publication installs immutable views of all six payloads before releasing the
+  previous slot. Compilation copies math records only into its private mutable working
+  cache for derived metrics and shaping indexes. Display aliases are cleared before
+  free-slot reuse or service teardown.
 - Font preparation uses one 96 MiB virtual scratch arena for seed and glyph-page
   work. Each completed page uploads its pixels and copies scalar metrics into
   generation-owned storage before the arena is reset.

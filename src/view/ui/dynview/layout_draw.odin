@@ -1518,11 +1518,12 @@ cached_item_resolve_text :: proc(
     if item.text_offset < 0 || item.text_len < 0 {
         return out, false
     }
-    if text_end > runtime^.command_buffer.text_bytes_len {
+    text_bytes := dynview.command_buffer_text(&runtime^.command_buffer)
+    if text_end > len(text_bytes) {
         return out, false
     }
 
-    out.text = string(runtime^.command_buffer.text_bytes[item.text_offset:text_end])
+    out.text = string(text_bytes[item.text_offset:text_end])
     out.resolved_font = resolve_font_for_style(ctx.state, style, ctx.font)
     out.draw_x = text_item_draw_x(ctx.panel, style, item, item_x)
     return out, true

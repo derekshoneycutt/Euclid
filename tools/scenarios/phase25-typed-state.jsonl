@@ -1,0 +1,24 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Theorem 18","as":"theorem18"}
+{"wait_event":"animation_selected","correlation":"theorem18","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"theorem18","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/phase25-typed-state.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -41,7 +41,12 @@ end
 struct ScratchpadInputEntry
     text::String
     mode::Int32
+    request_id::UInt64
 end
+
+"""Create an uncorrelated input entry for history and internal callers."""
+ScratchpadInputEntry(text::String, mode::Int32) =
+    ScratchpadInputEntry(text, mode, UInt64(0))
 
 """Construct an output entry without optional inline segments."""
 function ScratchpadOutputEntry(
@@ -316,14 +321,15 @@ end
 
 """Push one mode-tagged entry into the execution queue and track cap behavior."""
 function queue_line!(
-    session::ScratchpadSession, text::String, input_mode::Int32=InputModeJulia)
+    session::ScratchpadSession, text::String, input_mode::Int32=InputModeJulia,
+    request_id::UInt64=UInt64(0))
 
     if length(session.queue) >= MaxQueueLines
         session.metrics.queue_dropped += 1
         _ = popfirst!(session.queue)
     end
 
-    push!(session.queue, ScratchpadInputEntry(text, input_mode))
+    push!(session.queue, ScratchpadInputEntry(text, input_mode, request_id))
     session.metrics.queue_enqueued += 1
     session.metrics.queue_high_water =
         max(session.metrics.queue_high_water, length(session.queue))

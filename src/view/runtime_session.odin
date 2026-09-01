@@ -350,6 +350,7 @@ write_scenario_artifact :: proc(
         state = observe.display(session.state),
         julia_host = observe.julia_host(session.julia_service),
         allocations = observe.allocation(&session.state.evidence_allocations),
+        arena_baselines = session.state.evidence_arena_baselines,
     })
 }
 
@@ -381,6 +382,7 @@ shutdown_runtime_session :: proc(
         &session.state^.evidence_session, export_succeeded)
     evidence_exit_failed := evidence_session.session_should_fail_process(
         &session.state^.evidence_session)
+    julia.release_published_view_snapshot(session.state, session.julia_service)
     julia.destroy_julia_runtime_service(session.julia_service)
     session.state^.julia_runtime_service = nil
     free_animations_state(session.state)

@@ -15,7 +15,7 @@ import "core:time"
 // Fixed capacities for copied configuration and cumulative event storage.
 SESSION_RUN_ID_CAPACITY :: 64
 SESSION_OUTPUT_PATH_CAPACITY :: 1024
-SESSION_EVENT_CAPACITY :: trace.TRACE_RING_CAPACITY * 8
+SESSION_EVENT_CAPACITY :: trace.TRACE_RING_CAPACITY * 16
 SESSION_OPTIONAL_EVENT_CAPACITY :: SESSION_EVENT_CAPACITY / 2
 
 // Final evidence destination selected independently from event recording.

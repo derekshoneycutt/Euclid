@@ -321,6 +321,8 @@ Each `View_Snapshot` owns:
 
 - request ID and monotonically increasing snapshot generation
 - producing-animation identity
+- one growing arena and bounded builders for fallback text, command text, commands,
+  math programs, math commands, and math nodes
 - up to 32 KiB of fallback text
 - up to 1,024 Dynview commands and 32 KiB of command text
 - up to 256 math programs
@@ -330,6 +332,12 @@ Each `View_Snapshot` owns:
 Only one view request may be pending. Additional frame requests are suppressed
 until its completion event clears `view_snapshot_pending`.
 
+Slots retain the `Free`, `Pending`, `Complete`, and `Published` lifecycle. A slot arena
+is reset and its builders are reinitialized only after the display has returned that
+slot to `Free` and reservation selects it for another generation. Saturated slots,
+stale completions, superseded completions, and published aliases therefore cannot lose
+storage before release. All six payload families use sealed arena-backed slices.
+
 ### Owner-Thread Generation
 
 The owner resets `dynview_staging`, redirects `dynview_emit_target` to that
@@ -337,24 +345,35 @@ worker-only runtime, and calls the selected animation's view callback. Fallback
 text and every populated semantic span are copied into the reserved snapshot
 before completion.
 
-No returned string may depend on the worker temporary allocator after task
-completion. Fallback bytes are copied into slot-owned storage because the
-worker clears temporary allocations after each request.
+No returned string may depend on the worker temporary allocator after task completion.
+The worker appends fallback and semantic command bytes into the reserved slot's bounded
+byte builders, then appends commands, math programs, math commands, and math nodes into
+typed bounded builders. Each transfer seals all of its populated prefixes and publishes
+no aliases unless every family succeeds. Fallback retains its prior 32 KiB truncation
+policy; semantic byte or record overflow rejects the candidate.
 
 ### Display Publication
 
 The display selects the newest completed snapshot by generation without
-depending on event order. It verifies every count and requires a closed,
-error-free Dynview stream before import.
+depending on event order. It requires a closed, error-free Dynview stream before import.
+
+Validation requires all six slices to alias their sealed builder prefixes. It checks
+primary, copy, script-base, superscript, subscript, and radical-index spans in every base
+and math command, plus math-program ranges, roots, node text, child ranges, and child
+indexes. The display installs immutable views of semantic bytes and records before
+releasing the previous published slot. Fallback text and semantic views continue to
+alias that slot until replacement or invalidation.
 
 Publication also requires the producing animation to remain current. A stale
 snapshot is released, and old published content is cleared rather than shown
 beneath a new selection.
 
-A valid snapshot is copied into display-owned Dynview semantic storage. The
-previous published slot is recycled only after replacement. Current fallback
-text aliases the published slot, so that slot remains reserved after semantic
-data has been copied.
+A valid snapshot becomes the display's immutable Dynview content view. Compilation reads
+commands and text directly from that view. Math measurement and shaping seed a separate
+display-owned mutable working cache because derived metrics and shaped-run indexes are
+not semantic snapshot state. Replacement installs all new aliases before recycling the
+previous slot; invalidation and shutdown clear every alias before slot reuse or arena
+destruction.
 
 ### Compile And Layout
 
@@ -368,21 +387,45 @@ The per-frame CPU-pool window runs:
 - Dynview compilation and layout only when invalidated
 
 `Dynview_System` owns one growing display-cache arena initialized before executor
-publication. Existing fixed compile and layout arrays remain authoritative during this
-phase. The submitted Dynview task alone enters worker-mutable ownership, resets the
-arena for an invalidated rebuild, and returns display-readable ownership before fence
-completion. Fence waiting may execute queued work on the display thread, so ownership
-is defined by task role and guarded execution identity rather than by requiring a
-distinct operating-system thread. Failed builds clear partial derived views, record a
-stable error, and retain source fallback. Unchanged frames do not reset the arena;
-shutdown destroys it after the task pool has joined and stopped. Shaped-run and glyph
-builders use this arena while enforcing the existing math-command and shaped-glyph
-limits. They publish complete populated slices only after validating the current font
-generation and every source, glyph, and command-site span. Failure clears all shaped
-aliases and restores every command-site fallback sentinel. Recursive math measurement
-consumes these records after the shaping pass. Recursive draw items retain their source
-math-command index so the display thread can consume the exact same command/site record
-without reshaping or reconstructing advances.
+publication. The submitted Dynview task alone enters worker-mutable ownership, resets
+the arena for an invalidated rebuild, and returns display-readable ownership before
+fence completion. Fence waiting may execute queued work on the display thread, so
+ownership is defined by task role and guarded execution identity rather than by
+requiring a distinct operating-system thread. Failed builds clear partial derived
+views, record a stable error, and retain source fallback. Unchanged frames do not reset
+the arena; shutdown destroys it after the task pool has joined and stopped.
+
+Bounded builders compile plain text and copy payload bytes into this arena while
+preserving the existing logical text limit. Both builders seal before either populated
+slice is published. Those slices are display-readable aliases whose lifetime ends at
+the next invalidated cache-arena reset; failure clears both aliases before returning to
+source fallback. A bounded copy-block builder participates in the same transaction and
+seals before any compiled bytes or blocks publish, preserving source order and payload
+spans under the command-count limit.
+
+Copy hit targets are panel- and scroll-dependent display geometry. After the worker
+fence returns display ownership, the display thread clears and repopulates one reusable
+bounded target builder from the sealed copy blocks and fixed layout records. Repeated
+frames retain its allocated arena capacity rather than abandoning storage. Each
+successful refresh publishes only its populated prefix; failure publishes no targets.
+All copy-record aliases and reusable builder state are cleared before an invalidated
+arena reset.
+
+Bounded line and item builders construct the layout while the invalidated Dynview task
+owns worker-mutable cache state. Item indexes, line indexes, grid placement, clipping,
+and scalar counts update against populated builder prefixes during measurement. After
+all commands and aggregate scroll metrics validate, both builders seal before
+`layout_is_valid` publishes their display-readable slices. Empty content still seals
+one canonical line. Overflow or invalid layout clears both aliases and preserves source
+fallback. Their lifetime ends at the next invalidated cache-arena reset.
+
+Shaped-run and glyph builders use the same arena while enforcing the existing
+math-command and shaped-glyph limits. They publish complete populated slices only after
+validating the current font generation and every source, glyph, and command-site span.
+Failure clears all shaped aliases and restores every command-site fallback sentinel.
+Recursive math measurement consumes these records after the shaping pass. Recursive
+draw items retain their source math-command index so the display thread can consume the
+exact same command/site record without reshaping or reconstructing advances.
 
 Dynview owns a separate generation-tagged NewCM HarfBuzz capability. The display
 thread builds a complete candidate from the resident `Math_Regular` source after font
@@ -421,6 +464,13 @@ Submission copies text, caret position, and input generation into a free slot.
 The owner invokes Julia and copies result text into the same slot. Completion
 events enqueue slot indices in a bounded FIFO, preserving worker completion
 order.
+
+Complete submissions also copy their runtime request ID into Julia's bounded
+input queue. Evaluation reports that ID to worker-owned host state only after the
+queued entry finishes. The next successfully generated view snapshot carries the
+ID and runtime generation; display publication emits `Scratchpad_Completed` only
+after the snapshot passes lifecycle and structural validation and becomes visible.
+Reload publication and shutdown discard any uncommitted worker watermark.
 
 UI application uses request identity and input generations to prevent stale
 completion, history, or submission replies from overwriting newer edits. The
@@ -546,6 +596,11 @@ Scratchpad requests.
 - Scratchpad slots, view snapshots, animation tick slots, query snapshots, and
   scene-command batches are inline in `Julia_Runtime_Service`. Request traffic
   does not allocate these payloads.
+- Each view snapshot additionally owns one growing arena. The service initializes these
+  arenas in place, resets one only when reusing a `Free` slot, and destroys all of them
+  after the Julia worker has stopped. Initialized arena owners are never copied. Sealed
+  text and semantic record slices remain valid for the complete slot generation, and
+  display aliases are detached before their owning slot can be reset or destroyed.
 
 ### Registry Arena Ownership
 
@@ -591,7 +646,7 @@ Normal shutdown is cooperative and owner-thread-affine:
 1. Call `jl_atexit_hook` through `end_julia` on the owner thread.
 1. Send `Shutdown_Complete` and exit the owner loop.
 1. Join/destroy the stopped worker.
-1. Destroy staging storage and both channels.
+1. Destroy snapshot-slot arenas, staging storage, and both channels.
 1. Destroy both interface registry arenas and free canonical host state.
 
 Shutdown request saturation or missing completion after five seconds is
@@ -626,7 +681,8 @@ rejection, deferred mutation, tool dependency validation, immutable animation
 queries, generation and sequence rejection, bounded tick coalescing, failure
 attribution, reload failure tracking, Dynview snapshot validation, newest
 completion selection, stale-view clearing, stale Scratchpad reply rejection,
-and repeated host worker-pool joins.
+display-committed Scratchpad correlation and evidence loss, and repeated host
+worker-pool joins.
 
 Julia tests cover Scratchpad, bridge helpers, geometry, LaTeX, and
 runtime-facing content behavior. The required repository gate is the standard

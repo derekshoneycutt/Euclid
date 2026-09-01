@@ -44,6 +44,24 @@ optional deterministic runtime scenario, not part of `make test`. It produces
 a semantic trace artifact for that scenario and is useful when changing the
 runtime path it exercises.
 
+## Runtime Scenario Corpora
+
+Source-controlled JSONL scenarios live in `tools/scenarios/`. Phase 25 includes focused
+typed-state and recursive math-font corpora plus a combined bounded flow covering typed
+selection and updates, Scratchpad failure fallback, runtime reload, post-reload math
+publication, captures, shutdown, and allocation restoration.
+
+Allocation commands accept only the stable domain names `animation`, `snapshot_slots`,
+and `display_cache`. Each `allocation_checkpoint` must precede the corresponding
+`assert_allocation_baseline`; `assert_no_bad_frees` remains aggregate. Successful and
+failed baseline comparisons emit typed semantic events, and terminal bundles retain
+the checkpoint and final assertion samples in `allocations.json`.
+
+The session retains at most 4,096 semantic events. Required evidence loss makes a
+scenario inconclusive, so combined corpora must remain below that fixed bound rather
+than treating a partial trace as success. Run scenarios into fresh artifact directories
+and require both `result: "passed"` and `trace_complete: true`.
+
 ## Current Limits
 
 The automated suite does not establish visual correctness. Rendering, layout,

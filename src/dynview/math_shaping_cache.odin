@@ -163,7 +163,8 @@ rebuild_shaped_math_cache :: proc(
             }
         }
     }
-    return shaped_builder_seal(&builder, cache, runtime^.command_buffer.text_bytes_len,
+    return shaped_builder_seal(&builder, cache,
+        len(command_buffer_text(&runtime^.command_buffer)),
         cache^.math_command_count, service.generation)
 }
 
@@ -184,12 +185,12 @@ shape_math_command_site :: proc(
     if !command_site.eligible || command_site.count <= 0 {
         return .Ok
     }
+    text_bytes := command_buffer_text(&ctx.runtime^.command_buffer)
     if command_site.offset < 0 ||
-        command_site.count >
-            ctx.runtime^.command_buffer.text_bytes_len-command_site.offset {
+        command_site.count > len(text_bytes)-command_site.offset {
         return .Invalid_Argument
     }
-    text := string(ctx.runtime^.command_buffer.text_bytes[
+    text := string(text_bytes[
         command_site.offset:command_site.offset+command_site.count])
     italic := style_by_id(command_site.style_id).italic
     service := ctx.service

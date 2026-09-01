@@ -9,7 +9,7 @@ import "core:os"
 import json "core:encoding/json"
 import allocation_evidence "../allocation"
 
-ARTIFACT_MAX_EVENTS :: trace.TRACE_RING_CAPACITY * 8
+ARTIFACT_MAX_EVENTS :: trace.TRACE_RING_CAPACITY * 16
 
 ARTIFACT_SCHEMA_VERSION :: 1
 
@@ -69,6 +69,54 @@ Bundle :: struct {
     state : observe.Display,
     julia_host : observe.Julia_Host,
     allocations : allocation_evidence.Snapshot,
+    arena_baselines : allocation_evidence.Arena_Baselines,
+}
+
+//   Serialize one retained arena checkpoint and its final assertion sample.
+artifact_arena_baseline_json :: proc(
+    baselines: allocation_evidence.Arena_Baselines,
+    kind: allocation_evidence.Arena_Domain_Kind) -> string {
+
+    checkpoint := baselines.snapshots[kind]
+    observed := baselines.observed[kind]
+    return fmt.tprintf(
+        "{{\"checkpoint_present\":%v,\"assertion_present\":%v," +
+        "\"matched\":%v,\"checkpoint\":{{\"current_used\":%d," +
+        "\"current_reserved\":%d,\"current_committed\":%d," +
+        "\"peak_used\":%d,\"peak_reserved\":%d,\"peak_committed\":%d," +
+        "\"reset_count\":%d,\"initialized_count\":%d}}," +
+        "\"observed\":{{\"current_used\":%d,\"current_reserved\":%d," +
+        "\"current_committed\":%d,\"peak_used\":%d," +
+        "\"peak_reserved\":%d,\"peak_committed\":%d," +
+        "\"reset_count\":%d,\"initialized_count\":%d}}}}",
+        baselines.present[kind], baselines.observed_present[kind],
+        baselines.matched[kind], checkpoint.current_used,
+        checkpoint.current_reserved, checkpoint.current_committed,
+        checkpoint.peak_used, checkpoint.peak_reserved,
+        checkpoint.peak_committed, checkpoint.reset_count,
+        checkpoint.initialized_count, observed.current_used,
+        observed.current_reserved, observed.current_committed,
+        observed.peak_used, observed.peak_reserved, observed.peak_committed,
+        observed.reset_count, observed.initialized_count)
+}
+
+//   Serialize aggregate tracking counters and all retained arena assertions.
+artifact_allocations_json :: proc(bundle: Bundle) -> string {
+    animation_json := artifact_arena_baseline_json(
+        bundle.arena_baselines, .Animation)
+    snapshot_slots_json := artifact_arena_baseline_json(
+        bundle.arena_baselines, .Snapshot_Slots)
+    display_cache_json := artifact_arena_baseline_json(
+        bundle.arena_baselines, .Display_Cache)
+    return fmt.tprintf(
+        "{{\"live_allocations\":%d,\"current_bytes\":%d," +
+        "\"peak_bytes\":%d,\"total_allocations\":%d,\"bad_frees\":%d," +
+        "\"arenas\":{{\"animation\":%s,\"snapshot_slots\":%s," +
+        "\"display_cache\":%s}}}}\n",
+        bundle.allocations.live_allocations, bundle.allocations.current_bytes,
+        bundle.allocations.peak_bytes, bundle.allocations.total_allocations,
+        bundle.allocations.bad_frees, animation_json, snapshot_slots_json,
+        display_cache_json)
 }
 
 //   Serialize canonical scenario outcome metadata.
@@ -229,12 +277,7 @@ write_bundle :: proc(
         !json.is_valid(transmute([]byte)state_json) {
         return false
     }
-    allocations_json := fmt.tprintf(
-        "{{\"live_allocations\":%d,\"current_bytes\":%d," +
-        "\"peak_bytes\":%d,\"total_allocations\":%d,\"bad_frees\":%d}}\n",
-        bundle.allocations.live_allocations, bundle.allocations.current_bytes,
-        bundle.allocations.peak_bytes, bundle.allocations.total_allocations,
-        bundle.allocations.bad_frees)
+    allocations_json := artifact_allocations_json(bundle)
     trace_bytes, trace_ok := artifact_trace_bytes(bundle.events)
     if !trace_ok {
         return false

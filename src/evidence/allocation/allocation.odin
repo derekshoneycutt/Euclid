@@ -7,6 +7,35 @@ import "core:sync"
 
 ALLOCATION_BASELINE_CAPACITY :: 16
 ALLOCATION_BASELINE_NAME_CAPACITY :: 32
+ARENA_DOMAIN_COUNT :: 3
+
+// Stable allocation ownership domains accepted by scenario checkpoints.
+Arena_Domain_Kind :: enum u8 {
+    Animation,
+    Snapshot_Slots,
+    Display_Cache,
+}
+
+// Scalar arena usage sampled at an owner-controlled synchronization point.
+Arena_Snapshot :: struct {
+    current_used: uint,
+    current_reserved: uint,
+    current_committed: uint,
+    peak_used: uint,
+    peak_reserved: uint,
+    peak_committed: uint,
+    reset_count: u64,
+    initialized_count: int,
+}
+
+// Fixed baseline state for every scenario-visible arena ownership domain.
+Arena_Baselines :: struct {
+    snapshots: [ARENA_DOMAIN_COUNT]Arena_Snapshot,
+    observed: [ARENA_DOMAIN_COUNT]Arena_Snapshot,
+    present: [ARENA_DOMAIN_COUNT]bool,
+    observed_present: [ARENA_DOMAIN_COUNT]bool,
+    matched: [ARENA_DOMAIN_COUNT]bool,
+}
 
 // Point-in-time allocation counters copied from one tracked domain.
 //
@@ -223,4 +252,50 @@ domain_has_no_bad_frees :: proc(domain: ^Domain) -> bool {
 //   - The result remains valid only while the baseline storage remains alive and stable.
 baseline_name :: proc(baseline: ^Baseline) -> string {
     return string(baseline.name[:baseline.name_count])
+}
+
+//   Resolve one stable scenario allocation-domain name.
+arena_domain_kind :: proc(name: string) -> (Arena_Domain_Kind, bool) {
+    switch name {
+    case "animation": return .Animation, true
+    case "snapshot_slots": return .Snapshot_Slots, true
+    case "display_cache": return .Display_Cache, true
+    }
+    return {}, false
+}
+
+//   Store one owner-sampled arena baseline without allocating.
+arena_checkpoint :: proc(
+    baselines: ^Arena_Baselines, kind: Arena_Domain_Kind,
+    snapshot: Arena_Snapshot) -> bool {
+
+    if baselines == nil || snapshot.initialized_count <= 0 {
+        return false
+    }
+    baselines^.snapshots[kind] = snapshot
+    baselines^.present[kind] = true
+    return true
+}
+
+//   Compare stable usage and lifetime pressure while permitting expected resets.
+arena_matches_baseline :: proc(
+    baselines: ^Arena_Baselines, kind: Arena_Domain_Kind,
+    snapshot: Arena_Snapshot) -> bool {
+
+    if baselines == nil || !baselines^.present[kind] {
+        return false
+    }
+    baselines^.observed[kind] = snapshot
+    baselines^.observed_present[kind] = true
+    baseline := baselines^.snapshots[kind]
+    baselines^.matched[kind] =
+        snapshot.initialized_count == baseline.initialized_count &&
+        snapshot.current_used == baseline.current_used &&
+        snapshot.current_reserved == baseline.current_reserved &&
+        snapshot.current_committed == baseline.current_committed &&
+        snapshot.peak_used == baseline.peak_used &&
+        snapshot.peak_reserved == baseline.peak_reserved &&
+        snapshot.peak_committed == baseline.peak_committed &&
+        snapshot.reset_count >= baseline.reset_count
+    return baselines^.matched[kind]
 }

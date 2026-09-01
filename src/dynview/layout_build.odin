@@ -207,17 +207,19 @@ layout_push_item :: proc(
     acc: ^Dynview_Layout_Line_Accumulator,
     item: core.Dynview_Layout_Item) -> i32 {
 
-    if cache^.layout_item_count >= len(cache^.layout_items) {
-        return DYNVIEW_STATUS_OUT_OF_CAPACITY
+    status := core.bounded_element_builder_append(
+        &cache^.layout_item_builder, []core.Dynview_Layout_Item{item})
+    if status != .Ok {
+        return compiled_builder_status(status)
     }
-
-    item_slot := &cache^.layout_items[cache^.layout_item_count]
-    item_slot^ = item
+    cache^.layout_items = cache^.layout_item_builder.storage[
+        :cache^.layout_item_builder.count]
+    item_slot := &cache^.layout_items[cache^.layout_item_builder.count - 1]
     item_slot^.block_id = state^.active_block_id
     item_slot^.line_index = state^.line_index
     item_slot^.col_start = state^.col
 
-    cache^.layout_item_count += 1
+    cache^.layout_item_count = cache^.layout_item_builder.count
     state^.col += max(1, item.col_span)
     acc^.item_count += 1
     acc^.max_ascent = max(acc^.max_ascent, item.ascent)
@@ -351,10 +353,6 @@ layout_finalize_line :: proc(
     acc: ^Dynview_Layout_Line_Accumulator,
     base_ascent, base_descent: f32) -> i32 {
 
-    if state^.line_index >= len(cache^.layout_lines) {
-        return DYNVIEW_STATUS_OUT_OF_CAPACITY
-    }
-
     cells := layout_cell_metrics(cache, base_ascent, base_descent)
     extents, ok := layout_measure_item_rows(
         cache, acc^.item_start, acc^.item_count, cells)
@@ -362,14 +360,23 @@ layout_finalize_line :: proc(
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
     row_span, baseline_row := layout_resolve_line_rows(extents)
-    line := &cache^.layout_lines[state^.line_index]
-    line^.item_start = acc^.item_start
-    line^.item_count = acc^.item_count
-    line^.row_start = state^.row
-    line^.row_span = row_span
-    line^.baseline_row = baseline_row
-    line^.max_ascent = acc^.max_ascent
-    line^.max_descent = acc^.max_descent
+    line_record := core.Dynview_Layout_Line{
+        item_start = acc^.item_start,
+        item_count = acc^.item_count,
+        row_start = state^.row,
+        row_span = row_span,
+        baseline_row = baseline_row,
+        max_ascent = acc^.max_ascent,
+        max_descent = acc^.max_descent,
+    }
+    status := core.bounded_element_builder_append(
+        &cache^.layout_line_builder, []core.Dynview_Layout_Line{line_record})
+    if status != .Ok {
+        return compiled_builder_status(status)
+    }
+    cache^.layout_lines = cache^.layout_line_builder.storage[
+        :cache^.layout_line_builder.count]
+    line := &cache^.layout_lines[cache^.layout_line_builder.count - 1]
 
     layout_apply_item_grid_offsets(cache, line, cells)
     layout_advance_after_line(cache, state, acc, row_span, {
@@ -1161,19 +1168,25 @@ layout_consume_inline_pentagon :: proc(
 }
 
 //   Fill a one-line layout cache for an empty command stream.
-layout_set_empty_default :: proc(cache: ^core.Dynview_Compile_Cache) {
+layout_set_empty_default :: proc(cache: ^core.Dynview_Compile_Cache) -> i32 {
     base_ascent := max(1.0, cache^.last_font_size * 0.8)
     base_descent := max(1.0, cache^.last_font_size * 0.2)
     cells := layout_cell_metrics(cache, base_ascent, base_descent)
-    cache^.layout_is_valid = true
-    cache^.layout_line_count = 1
-    cache^.layout_lines[0] = core.Dynview_Layout_Line{
+    line := core.Dynview_Layout_Line{
         row_span = 1,
         max_ascent = base_ascent,
         max_descent = base_descent,
     }
+    status := core.bounded_element_builder_append(
+        &cache^.layout_line_builder, []core.Dynview_Layout_Line{line})
+    if status != .Ok {
+        return compiled_builder_status(status)
+    }
+    cache^.layout_lines = cache^.layout_line_builder.storage[:1]
+    cache^.layout_line_count = 1
     cache^.layout_total_height = cells.cell_height
     cache^.layout_average_line_height = cells.cell_height
+    return DYNVIEW_STATUS_OK
 }
 
 //   Seed layout context from cached panel/font metrics.
@@ -1378,31 +1391,71 @@ layout_finalize_metrics :: proc(ctx: ^Dynview_Layout_Build_Context) -> i32 {
     ctx^.cache^.layout_average_line_height =
         f32(total_line_rows) * ctx^.grid_metrics.cell_height /
         f32(ctx^.cache^.layout_line_count)
-    ctx^.cache^.layout_is_valid = true
+    return DYNVIEW_STATUS_OK
+}
+
+//   Initialize bounded line and item storage for one layout rebuild.
+layout_builders_init :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    cache_arena: ^core.Arena_Owner) -> i32 {
+    line_status := core.bounded_element_builder_init(
+        &cache^.layout_line_builder, core.DYNVIEW_MAX_LAYOUT_LINES, cache_arena)
+    if line_status != .Ok {
+        return compiled_builder_status(line_status)
+    }
+    item_status := core.bounded_element_builder_init(
+        &cache^.layout_item_builder, core.DYNVIEW_MAX_LAYOUT_ITEMS, cache_arena)
+    return compiled_builder_status(item_status)
+}
+
+//   Seal and publish one complete line/item layout transaction.
+layout_builders_seal :: proc(cache: ^core.Dynview_Compile_Cache) -> i32 {
+    lines, line_status := core.bounded_element_builder_seal(
+        &cache^.layout_line_builder)
+    if line_status != .Ok {
+        return compiled_builder_status(line_status)
+    }
+    items, item_status := core.bounded_element_builder_seal(
+        &cache^.layout_item_builder)
+    if item_status != .Ok {
+        return compiled_builder_status(item_status)
+    }
+    cache^.layout_lines = lines
+    cache^.layout_items = items
+    cache^.layout_is_valid = true
     return DYNVIEW_STATUS_OK
 }
 
 //   Build deterministic line/item layout cache from current validated command stream.
-rebuild_layout_cache :: proc(runtime: ^core.Dynview_System) -> i32 {
+rebuild_layout_cache :: proc(
+    runtime: ^core.Dynview_System,
+    cache_arena: ^core.Arena_Owner) -> i32 {
     if runtime == nil {
         return DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
     cache := &runtime^.compile_cache
     buffer := &runtime^.command_buffer
+    commands := command_buffer_commands(buffer)
     layout_reset_cache(cache)
+    init_status := layout_builders_init(cache, cache_arena)
+    if init_status != DYNVIEW_STATUS_OK {
+        return init_status
+    }
 
-    if buffer^.command_count <= 0 {
-        layout_set_empty_default(cache)
-        return DYNVIEW_STATUS_OK
+    if len(commands) <= 0 {
+        status := layout_set_empty_default(cache)
+        if status != DYNVIEW_STATUS_OK {
+            return status
+        }
+        return layout_builders_seal(cache)
     }
 
     state := Dynview_Layout_State{}
     acc := Dynview_Layout_Line_Accumulator{}
     ctx := layout_build_context(cache, buffer, &state, &acc)
 
-    for i in 0..<buffer^.command_count {
-        cmd := buffer^.commands[i]
+    for cmd in commands {
         marker_status := layout_handle_block_markers(&ctx, cmd)
         if marker_status != DYNVIEW_STATUS_OK {
             return marker_status
@@ -1415,7 +1468,11 @@ rebuild_layout_cache :: proc(runtime: ^core.Dynview_System) -> i32 {
         }
     }
 
-    return layout_finalize_metrics(&ctx)
+    metrics_status := layout_finalize_metrics(&ctx)
+    if metrics_status != DYNVIEW_STATUS_OK {
+        return metrics_status
+    }
+    return layout_builders_seal(cache)
 }
 
 //   Return the first/last layout line indices that contain visible items for block_id.
@@ -1454,10 +1511,11 @@ text_span_from_buffer :: #force_inline proc(
     if text_offset < 0 || text_len < 0 {
         return ""
     }
-    if text_offset + text_len > buffer^.text_bytes_len {
+    text_bytes := command_buffer_text(buffer)
+    if text_offset + text_len > len(text_bytes) {
         return ""
     }
-    return string(buffer^.text_bytes[text_offset:text_offset + text_len])
+    return string(text_bytes[text_offset:text_offset + text_len])
 }
 
 //   Build display-style large-operator plain-text fallback using canonical command name.
@@ -1486,10 +1544,11 @@ text_for_command :: #force_inline proc(
     if cmd.text_offset < 0 || cmd.text_len < 0 {
         return ""
     }
-    if cmd.text_offset + cmd.text_len > buffer^.text_bytes_len {
+    text_bytes := command_buffer_text(buffer)
+    if cmd.text_offset + cmd.text_len > len(text_bytes) {
         return ""
     }
-    return string(buffer^.text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
+    return string(text_bytes[cmd.text_offset:cmd.text_offset + cmd.text_len])
 }
 
 //   Return max wrapped chars for a style using style-aware wrap scale.

@@ -69,8 +69,11 @@ function scratchpad_complete_input(
 end
 
 """Queue one scratchpad input entry for execution."""
-function scratchpad_queue_input(state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode)
-    Scratchpad.queue_input(state_ptr, String(text), Int32(input_mode))
+function scratchpad_queue_input(
+    state_ptr::Ptr{Cvoid}, text::AbstractString, input_mode, request_id)
+
+    Scratchpad.queue_input(
+        state_ptr, String(text), Int32(input_mode), UInt64(request_id))
 end
 
 """Save the scratchpad input history to a file."""

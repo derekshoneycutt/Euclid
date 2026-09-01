@@ -77,6 +77,14 @@ scenario_test_scratchpad_idle_state :: proc(t: ^testing.T) {
     testing.expect(t, !state_matches("scratchpad_idle", observe.Display{}))
 }
 
+// Verify the scenario vocabulary exposes display-committed Scratchpad completion.
+@(test)
+scenario_test_scratchpad_completed_event :: proc(t: ^testing.T) {
+    kind, valid := event_kind("scratchpad_completed")
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, trace.Kind.Scratchpad_Completed)
+}
+
 // Verify required evidence loss makes the run inconclusive before actions execute.
 @(test)
 scenario_test_required_trace_loss_is_inconclusive :: proc(t: ^testing.T) {

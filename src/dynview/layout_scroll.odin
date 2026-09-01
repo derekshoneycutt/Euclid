@@ -32,7 +32,7 @@ scratchpad_content_height_or_fallback :: proc(
     if !runtime^.enabled ||
         !runtime^.compile_cache.layout_is_valid ||
         runtime^.command_buffer.has_stream_error ||
-        runtime^.command_buffer.command_count <= 0 {
+        len(command_buffer_commands(&runtime^.command_buffer)) <= 0 {
         return fallback_height
     }
 
@@ -47,7 +47,7 @@ scratchpad_scroll_step_or_fallback :: proc(
     if !runtime^.enabled ||
         !runtime^.compile_cache.layout_is_valid ||
         runtime^.command_buffer.has_stream_error ||
-        runtime^.command_buffer.command_count <= 0 {
+        len(command_buffer_commands(&runtime^.command_buffer)) <= 0 {
         return fallback_row_height
     }
 

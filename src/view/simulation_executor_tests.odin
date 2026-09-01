@@ -326,6 +326,10 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
         dynview.DYNVIEW_STATUS_ILLEGAL_STATE)
     testing.expect(t, buffer^.has_stream_error)
     testing.expect_value(t, cache^.compiled_plain_text_len, 0)
+    testing.expect_value(t, len(cache^.copy_blocks), 0)
+    testing.expect_value(t, len(cache^.copy_hit_targets), 0)
+    testing.expect_value(t, len(cache^.layout_lines), 0)
+    testing.expect_value(t, len(cache^.layout_items), 0)
     testing.expect_value(t, cache^.copy_hit_target_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
     testing.expect_value(t, state^.dynview.cache_access_state,

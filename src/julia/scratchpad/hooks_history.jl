@@ -215,7 +215,8 @@ Queue one complete scratchpad input entry for one-per-frame execution.
 Returns `true` if queued, `false` when parse state is not complete.
 """
 function queue_input(
-    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia)
+    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia,
+    request_id::UInt64=UInt64(0))
 
     session = ensure_session!(state_ptr)
 
@@ -229,7 +230,7 @@ function queue_input(
 
     append_history_line!(session, text, input_mode)
     session.history_cursor = length(session.history) + 1
-    queue_line!(session, text, input_mode)
+    queue_line!(session, text, input_mode, request_id)
     return true
 end
 

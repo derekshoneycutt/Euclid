@@ -2,6 +2,7 @@
 package artifact
 
 import "../observe"
+import allocation "../allocation"
 import trace "../trace"
 import "core:fmt"
 import "core:os"
@@ -28,6 +29,20 @@ artifact_test_expect_failure_trace :: proc(t: ^testing.T, directory: string) {
     testing.expect_value(t, string(trace_data[:4]), "EUCL")
 }
 
+// Verify all named arena domains and the retained assertion result are serialized.
+artifact_test_expect_arena_allocations :: proc(t: ^testing.T, directory: string) {
+    data, read_error := os.read_entire_file(
+        fmt.tprintf("%s/allocations.json", directory), context.allocator)
+    defer delete(data)
+    text := string(data)
+    testing.expect(t, read_error == nil)
+    testing.expect(t, strings.contains(text, "\"animation\""))
+    testing.expect(t, strings.contains(text, "\"snapshot_slots\""))
+    testing.expect(t, strings.contains(text, "\"display_cache\""))
+    testing.expect(t, strings.contains(text, "\"assertion_present\":true"))
+    testing.expect(t, strings.contains(text, "\"matched\":true"))
+}
+
 // Verify a forced failure writes its canonical result and fixed binary trace.
 @(test)
 artifact_test_failure_bundle :: proc(t: ^testing.T) {
@@ -38,6 +53,10 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
         {sequence = 1, kind = .Runtime_Starting},
         {sequence = 2, kind = .Runtime_Reload_Rolled_Back},
     }
+    arenas: allocation.Arena_Baselines
+    arenas.present[allocation.Arena_Domain_Kind.Animation] = true
+    arenas.observed_present[allocation.Arena_Domain_Kind.Animation] = true
+    arenas.matched[allocation.Arena_Domain_Kind.Animation] = true
     written := write_bundle(directory, {
         manifest = {
             result = .Failed,
@@ -49,6 +68,7 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
         events = events[:],
         state = observe.Display{fixed_step = 9},
         julia_host = observe.Julia_Host{runtime_generation = 2},
+        arena_baselines = arenas,
     })
     testing.expect(t, written)
     if !written {
@@ -57,5 +77,6 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
 
     artifact_test_expect_failure_manifest(t, directory)
     artifact_test_expect_failure_trace(t, directory)
+    artifact_test_expect_arena_allocations(t, directory)
     testing.expect(t, !write_bundle("../outside", {}))
 }

@@ -821,6 +821,7 @@ publish_julia_interface_reload :: proc(
     state^.ui_runtime.scratchpad_input_mode = .Julia
     state^.ui_runtime.scratchpad_bottom_pinned = true
     if service != nil {
+        clear_scratchpad_completion_watermark(service)
         service^.runtime_generation += 1
         service^.reload_failed_mtime_unix_nano = 0
         service^.reload_state = .Idle

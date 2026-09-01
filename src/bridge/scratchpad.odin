@@ -53,6 +53,8 @@ try_submit_scratchpad_async :: proc(
     slot^ = Scratchpad_Async_Slot{
         state = .Pending,
         kind = kind,
+        request_id = service^.next_request_id,
+        runtime_generation = service^.runtime_generation,
         input_generation = config.input_generation,
         input_mode = config.input_mode,
         host_state = state,
@@ -67,7 +69,7 @@ try_submit_scratchpad_async :: proc(
         slot^.state = .Free
         return 0, false
     }
-    slot^.request_id = request_id
+    assert(slot^.request_id == request_id)
     return request_id, true
 }
 
@@ -163,7 +165,7 @@ execute_scratchpad_submit :: proc(slot: ^Scratchpad_Async_Slot, input: string) {
         return
     }
     slot^.succeeded = scratchpad_queue_input_direct(
-        slot^.host_state, input, slot^.input_mode)
+        slot^.host_state, input, slot^.input_mode, slot^.request_id)
     if slot^.succeeded {
         _ = scratchpad_history_reset_cursor_direct(slot^.host_state)
     }
@@ -251,7 +253,8 @@ scratchpad_complete_input_direct :: proc(
 scratchpad_queue_input_direct :: proc(
     state: ^core.Euclid_General_State,
     text: string,
-    input_mode: Scratchpad_Input_Mode) -> bool {
+    input_mode: Scratchpad_Input_Mode,
+    request_id: u64) -> bool {
 
     if state == nil || state^.julia_interface == nil {
         return false
@@ -264,8 +267,9 @@ scratchpad_queue_input_direct :: proc(
     text_c := strings.clone_to_cstring(text, context.temp_allocator)
     text_value := julialib.jl_cstr_to_string(text_c)
     mode_value := julialib.jl_box_int32(i32(input_mode))
-    result := julialib.jl_call3(state^.julia_interface^.scratchpad_queue_input,
-        state_value, text_value, mode_value)
+    request_value := julialib.jl_box_uint64(request_id)
+    result := julialib.jl_call4(state^.julia_interface^.scratchpad_queue_input,
+        state_value, text_value, mode_value, request_value)
 
     if julialib.jl_exception_occurred() != nil || result == nil {
         print_julia_exception("scratchpad_queue_input")
@@ -273,6 +277,20 @@ scratchpad_queue_input_direct :: proc(
     }
 
     return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Retain one evaluated Scratchpad identity on the Julia owner until snapshotting.
+@(export)
+scratchpad_evaluation_completed :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64) {
+
+    if state == nil || state^.julia_runtime_service == nil || request_id == 0 {
+        return
+    }
+    service := state^.julia_runtime_service
+    service^.worker_scratchpad_completed_request_id = request_id
+    service^.worker_scratchpad_completed_runtime_generation =
+        service^.runtime_generation
 }
 
 //   Save scratchpad history entries to a file path through Julia runtime.

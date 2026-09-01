@@ -93,6 +93,33 @@ core_test_bounded_element_builder_bounds_geometric_waste :: proc(t: ^testing.T) 
         &builder, []u32{11}), Bounded_Builder_Status.Sealed)
 }
 
+//   Verify reusable element builders clear content without abandoning capacity.
+@(test)
+core_test_bounded_element_builder_clear_reuses_capacity :: proc(t: ^testing.T) {
+    owner: Arena_Owner
+    testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
+    defer arena_owner_destroy(&owner)
+    builder: Bounded_Element_Builder(u32)
+    testing.expect_value(t, bounded_element_builder_init(
+        &builder, 4, &owner), Bounded_Builder_Status.Ok)
+    testing.expect_value(t, bounded_element_builder_append(
+        &builder, []u32{1, 2}), Bounded_Builder_Status.Ok)
+    storage := raw_data(builder.storage)
+    capacity := builder.allocated_capacity
+
+    testing.expect_value(t, bounded_element_builder_clear(
+        &builder), Bounded_Builder_Status.Ok)
+    testing.expect_value(t, bounded_element_builder_append(
+        &builder, []u32{3, 4}), Bounded_Builder_Status.Ok)
+    populated, status := bounded_element_builder_view(&builder)
+
+    testing.expect_value(t, status, Bounded_Builder_Status.Ok)
+    testing.expect_value(t, raw_data(builder.storage), storage)
+    testing.expect_value(t, builder.allocated_capacity, capacity)
+    testing.expect_value(t, populated[0], u32(3))
+    testing.expect_value(t, populated[1], u32(4))
+}
+
 //   Create an allocator using a test-owned allocation-request counter.
 bounded_builder_test_allocator :: proc(
     remaining_allocations: ^int) -> mem.Allocator {

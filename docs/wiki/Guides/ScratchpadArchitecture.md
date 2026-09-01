@@ -208,7 +208,7 @@ request/event service.
 The runtime service owns 16 `Scratchpad_Async_Slot` values. Each slot contains:
 
 - lifecycle state: `Free`, `Pending`, or `Complete`;
-- operation kind and request ID;
+- operation kind, request ID, and runtime generation;
 - input generation and input mode;
 - host-state pointer and caret byte offset;
 - inline 4 KiB input and 4 KiB result buffers;
@@ -255,6 +255,10 @@ sequenceDiagram
     U->>S: poll and validate request/generation
     U->>U: apply current reply or ignore stale mutation
     U->>S: release slot to Free
+    J->>O: evaluate queued input with original request ID
+    O->>S: stamp next complete view snapshot
+    U->>U: publish validated snapshot
+    U-->>U: record Scratchpad_Completed for request ID
 ```
 
 The owner thread executes requests serially, and completion slot indices enter
@@ -511,6 +515,14 @@ Julia output -> view snapshot -> Odin Dynview/fallback transcript
 A successful submit reply can therefore clear the editor before its echoed
 input or result appears; transcript visibility waits for evaluation and a
 subsequent view snapshot.
+
+`Scratchpad_Completed` is deliberately later than the async slot reply. Julia
+retains the original runtime request ID in the bounded queue and reports it only
+after evaluation finishes. Odin carries that watermark through the next complete
+view snapshot and records the required presentation event only after valid display
+publication. Stale runtime generations, rejected snapshots, reload, and shutdown
+cannot produce completion evidence. Scenario waits may correlate this event to the
+alias returned by the originating `scratchpad` action.
 
 ## Safety, Failure, And Backpressure
 

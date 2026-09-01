@@ -30,6 +30,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
     {"dynview_published", .Dynview_Published},
+    {"scratchpad_completed", .Scratchpad_Completed},
     {"frame_presented", .Frame_Presented},
     {"capture_completed", .Capture_Completed},
     {"gif_completed", .Gif_Completed},

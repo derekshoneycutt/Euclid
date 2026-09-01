@@ -391,7 +391,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         edge_p_prime_c_prime.joint1_id, edge_p_prime_c_prime.joint2_id,
         point_p.index, point_p_prime.index, label_a.index, label_b.index,
         label_c.index, label_d.index, label_p.index, label_a_prime.index,
-        label_b_prime.index, label_c_prime.index, label_d_prime.index, label_p_prime.index,
+        label_b_prime.index, label_c_prime.index, label_d_prime.index,
+        label_p_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
 end

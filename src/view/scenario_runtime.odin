@@ -27,6 +27,12 @@ Scenario_Runtime :: struct {
     terminal_reason: artifact.Reason,
 }
 
+// Resolved owner-domain identity and its synchronized arena diagnostics.
+Scenario_Arena_Sample :: struct {
+    kind: evidence_allocation.Arena_Domain_Kind,
+    snapshot: evidence_allocation.Arena_Snapshot,
+}
+
 //   Load and validate one bounded JSONL scenario before runtime execution.
 scenario_runtime_load_file :: proc(
     runtime: ^Scenario_Runtime, state: ^Euclid_General_State,
@@ -296,22 +302,108 @@ scenario_issue_display_action :: proc(
 }
 
 //   Evaluate one allocation-domain scenario command.
+scenario_arena_snapshot :: proc(
+    state: ^Euclid_General_State,
+    kind: evidence_allocation.Arena_Domain_Kind) -> evidence_allocation.Arena_Snapshot {
+
+    snapshot: evidence_allocation.Arena_Snapshot
+    #partial switch kind {
+    case .Animation:
+        scenario_add_arena_diagnostics(&snapshot,
+            core.arena_owner_diagnostics(&state^.animation_values.arena_owner))
+    case .Snapshot_Slots:
+        for &slot in state^.julia_runtime_service^.view_snapshots {
+            scenario_add_arena_diagnostics(
+                &snapshot, core.arena_owner_diagnostics(&slot.arena))
+        }
+    case .Display_Cache:
+        scenario_add_arena_diagnostics(&snapshot,
+            core.arena_owner_diagnostics(&state^.dynview.cache_arena))
+    }
+    return snapshot
+}
+
+//   Aggregate one owner diagnostic into a fixed scenario arena sample.
+scenario_add_arena_diagnostics :: proc(
+    snapshot: ^evidence_allocation.Arena_Snapshot,
+    diagnostics: core.Arena_Owner_Diagnostics) {
+
+    if diagnostics.initialized {
+        snapshot^.initialized_count += 1
+    }
+    snapshot^.current_used += diagnostics.current_used
+    snapshot^.current_reserved += diagnostics.current_reserved
+    snapshot^.current_committed += diagnostics.current_committed
+    snapshot^.peak_used += diagnostics.peak_used
+    snapshot^.peak_reserved += diagnostics.peak_reserved
+    snapshot^.peak_committed += diagnostics.peak_committed
+    snapshot^.reset_count += diagnostics.reset_count
+}
+
+//   Resolve and sample one named arena domain at the display synchronization point.
+scenario_arena_domain_sample :: proc(
+    state: ^Euclid_General_State,
+    name: string) -> (Scenario_Arena_Sample, bool) {
+
+    kind, valid := evidence_allocation.arena_domain_kind(name)
+    if !valid || state == nil || state^.julia_runtime_service == nil {
+        return {}, false
+    }
+    return {kind = kind, snapshot = scenario_arena_snapshot(state, kind)}, true
+}
+
+//   Evaluate one allocation-domain scenario command.
 scenario_issue_allocation_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command) -> (bool, bool) {
     state := runtime.state
+    sample, valid := scenario_arena_domain_sample(
+        state, scenario.text_string(&command.text))
+    if command.kind != .Assert_No_Bad_Frees && !valid {
+        return true, false
+    }
     #partial switch command.kind {
     case .Allocation_Checkpoint:
-        return true, evidence_allocation.domain_checkpoint(
-            &state.evidence_allocations, scenario.text_string(&command.text))
+        accepted := evidence_allocation.arena_checkpoint(
+            &state.evidence_arena_baselines, sample.kind, sample.snapshot)
+        if accepted {
+            scenario_record_allocation_evidence(
+                runtime, .Allocation_Checkpoint, sample.kind)
+        }
+        return true, accepted
     case .Assert_Allocation_Baseline:
-        return true, evidence_allocation.domain_matches_baseline(
-            &state.evidence_allocations, scenario.text_string(&command.text))
+        accepted := evidence_allocation.arena_matches_baseline(
+            &state.evidence_arena_baselines, sample.kind, sample.snapshot)
+        scenario_record_allocation_evidence(runtime,
+            accepted ? .Allocation_Baseline_Matched :
+                .Allocation_Baseline_Mismatched, sample.kind)
+        return true, accepted
     case .Assert_No_Bad_Frees:
         return true, evidence_allocation.domain_has_no_bad_frees(
             &state.evidence_allocations)
     case:
         return false, false
     }
+}
+
+//   Record the outcome of one named arena checkpoint operation.
+scenario_record_allocation_evidence :: proc(
+    runtime: ^Scenario_Runtime, event_kind: evidence_trace.Kind,
+    domain_kind: evidence_allocation.Arena_Domain_Kind) {
+
+    flags: evidence_trace.Flags = {.Required}
+    if event_kind == .Allocation_Baseline_Mismatched {
+        flags += {.Failure}
+    }
+    _ = evidence_session.session_record(
+        &runtime.state^.evidence_session, &runtime.state^.evidence_ring, {
+            lane = .Domain,
+            kind = event_kind,
+            correlation_kind = .Scenario_Action,
+            correlation = runtime.next_action_id - 1,
+            generation = 1,
+            flags = flags,
+            payload = {counts = {first = u32(domain_kind)}},
+        })
 }
 
 //   Route one generic scenario command through ordinary Euclid request state and APIs.

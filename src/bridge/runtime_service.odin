@@ -322,16 +322,17 @@ try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
     if slot_index < 0 {
         return false
     }
-    service^.view_snapshot_generation += 1
     slot := &service^.view_snapshots[slot_index]
-    slot^ = View_Snapshot{
-        state = .Pending,
-        request_id = service^.next_request_id,
-        generation = service^.view_snapshot_generation,
-        runtime_generation = service^.runtime_generation,
-        animation_generation = service^.animation_generation,
-        host_state = state,
+    if !prepare_view_snapshot_slot(slot) {
+        return false
     }
+    service^.view_snapshot_generation += 1
+    slot^.state = .Pending
+    slot^.request_id = service^.next_request_id
+    slot^.generation = service^.view_snapshot_generation
+    slot^.runtime_generation = service^.runtime_generation
+    slot^.animation_generation = service^.animation_generation
+    slot^.host_state = state
     request_id, sent := try_submit_julia_request(
         service, .View_Snapshot, generate_view_snapshot_task,
         rawptr(slot), i32(slot_index))
@@ -373,7 +374,7 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
         clear_stale_published_view(state, service)
         return false
     }
-    copy_view_snapshot_to_runtime(slot, &state^.dynview)
+    install_view_snapshot_content(slot, &state^.dynview)
     if service^.published_view_snapshot_index >= 0 {
         previous := &service^.view_snapshots[service^.published_view_snapshot_index]
         previous^.state = .Free
@@ -390,7 +391,29 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
             revision = u64(slot^.generation),
             flags = {.Required},
         })
+    record_scratchpad_completed(state, slot)
     return true
+}
+
+//   Record an accepted Scratchpad request only after its semantic view is visible.
+record_scratchpad_completed :: proc(
+    state: ^core.Euclid_General_State,
+    slot: ^View_Snapshot) {
+
+    if slot^.scratchpad_request_id == 0 ||
+        slot^.scratchpad_runtime_generation != slot^.runtime_generation {
+        return
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Scratchpad_Completed,
+            correlation_kind = .Runtime_Request,
+            correlation = slot^.scratchpad_request_id,
+            generation = slot^.scratchpad_runtime_generation,
+            revision = u64(slot^.generation),
+            flags = {.Required},
+        })
 }
 
 //   Find the newest completed slot without relying on event ordering or retention.
@@ -422,6 +445,15 @@ release_superseded_completed_view_snapshots :: proc(
     }
 }
 
+//   Clear worker-only Scratchpad completion state at a lifecycle boundary.
+clear_scratchpad_completion_watermark :: proc(service: ^Julia_Runtime_Service) {
+    if service == nil {
+        return
+    }
+    service^.worker_scratchpad_completed_request_id = 0
+    service^.worker_scratchpad_completed_runtime_generation = 0
+}
+
 //   Keep previous semantic commands from appearing under a new selection.
 // The old slot and display staging are released together so fallback and semantic content
 // cannot refer to different animations.
@@ -436,9 +468,22 @@ clear_stale_published_view :: proc(
     if view_snapshot_matches_current(state, service, published) {
         return
     }
-    published^.state = .Free
-    service^.published_view_snapshot_index = -1
+    release_published_view_snapshot(state, service)
+}
+
+//   Clear display aliases before releasing the slot that owns their storage.
+release_published_view_snapshot :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service) {
+
+    if state == nil || service == nil {
+        return
+    }
+    published_index := service^.published_view_snapshot_index
     reset_view_snapshot_staging(&state^.dynview)
+    service^.published_view_snapshot_index = -1
+    if published_index >= 0 {
+        service^.view_snapshots[published_index].state = .Free
+    }
 }
 
 //   Match one view snapshot against the active interface generation and animation.
@@ -456,26 +501,178 @@ view_snapshot_matches_current :: proc(
 }
 
 //   Validate all semantic bounds and require a closed, error-free command stream.
-// Counts are checked before any slice construction or copy into display-owned storage.
+// Sealed aliases are checked before any copy into display-owned storage.
 view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
-    bounds := [5][2]int{
-        {slot^.fallback_text_len, len(slot^.fallback_text)},
-        {slot^.command_buffer.command_count, core.DYNVIEW_MAX_COMMANDS},
-        {slot^.command_buffer.text_bytes_len, core.DYNVIEW_MAX_TEXT_BYTES},
-        {slot^.math_program_count, core.DYNVIEW_MAX_MATH_PROGRAMS},
-        {slot^.math_command_count, core.DYNVIEW_MAX_MATH_COMMANDS},
+    if slot == nil || !view_snapshot_text_payload_is_valid(
+        &slot^.fallback_text_builder, slot^.fallback_text,
+        VIEW_SNAPSHOT_TEXT_CAPACITY) || !view_snapshot_text_payload_is_valid(
+        &slot^.command_text_builder, slot^.command_text,
+        core.DYNVIEW_MAX_TEXT_BYTES) {
+        return false
     }
-    for bound in bounds {
-        if bound[0] < 0 || bound[0] > bound[1] {
+    if !view_snapshot_record_payloads_are_valid(slot) {
+        return false
+    }
+    if slot^.stream_has_error || slot^.stream_open_block {
+        return false
+    }
+    for command in slot^.commands {
+        if !view_snapshot_command_text_spans_valid(command, len(slot^.command_text)) {
             return false
         }
     }
-    if slot^.math_node_count < 0 ||
-        slot^.math_node_count > core.DYNVIEW_MAX_MATH_NODES {
+    for command in slot^.math_commands {
+        if !view_snapshot_command_text_spans_valid(command, len(slot^.command_text)) {
+            return false
+        }
+    }
+    return view_snapshot_math_records_are_valid(slot)
+}
+
+//   Require every record slice to be the populated prefix of its sealed builder.
+view_snapshot_record_payloads_are_valid :: proc(slot: ^View_Snapshot) -> bool {
+    return view_snapshot_record_payload_is_valid(
+        &slot^.command_builder, slot^.commands, core.DYNVIEW_MAX_COMMANDS) &&
+        view_snapshot_record_payload_is_valid(&slot^.math_program_builder,
+            slot^.math_programs, core.DYNVIEW_MAX_MATH_PROGRAMS) &&
+        view_snapshot_record_payload_is_valid(&slot^.math_command_builder,
+            slot^.math_commands, core.DYNVIEW_MAX_MATH_COMMANDS) &&
+        view_snapshot_record_payload_is_valid(&slot^.math_node_builder,
+            slot^.math_nodes, core.DYNVIEW_MAX_MATH_NODES)
+}
+
+//   Require one record slice to alias its sealed builder's populated prefix.
+view_snapshot_record_payload_is_valid :: proc(
+    builder: ^$Builder/core.Bounded_Element_Builder($Element),
+    payload: []Element, max_count: int) -> bool {
+
+    if builder == nil || !builder.sealed || builder.count != len(payload) ||
+        len(payload) > max_count {
         return false
     }
-    return !slot^.command_buffer.has_stream_error &&
-        !slot^.command_buffer.stream_open_block
+    return len(payload) == 0 || raw_data(payload) == raw_data(builder.storage)
+}
+
+//   Require one published byte slice to be the populated prefix of its sealed builder.
+view_snapshot_text_payload_is_valid :: proc(
+    builder: ^core.Bounded_Byte_Builder, payload: []u8, max_count: int) -> bool {
+
+    if builder == nil || !builder.sealed || builder.count != len(payload) ||
+        len(payload) > max_count {
+        return false
+    }
+    return len(payload) == 0 || raw_data(payload) == raw_data(builder.storage)
+}
+
+//   Validate every text-bearing span in one semantic command against the sealed blob.
+view_snapshot_command_text_spans_valid :: proc(
+    command: core.Dynview_Command, text_count: int) -> bool {
+
+    spans := [6][2]int{
+        {command.text_offset, command.text_len},
+        {command.copy_text_offset, command.copy_text_len},
+        {command.script_base_text_offset, command.script_base_text_len},
+        {command.script_sup_text_offset, command.script_sup_text_len},
+        {command.script_sub_text_offset, command.script_sub_text_len},
+        {command.radical_index_text_offset, command.radical_index_text_len},
+    }
+    for span in spans {
+        if span[0] < 0 || span[1] < 0 || span[1] > text_count ||
+            span[0] > text_count - span[1] {
+            return false
+        }
+    }
+    return true
+}
+
+//   Validate math program ranges and node-local text and child spans.
+view_snapshot_math_records_are_valid :: proc(slot: ^View_Snapshot) -> bool {
+    for node in slot^.math_nodes {
+        if !view_snapshot_span_is_valid(
+            node.text_offset, node.text_len, len(slot^.command_text)) {
+            return false
+        }
+    }
+    for program in slot^.math_programs {
+        if !view_snapshot_math_program_is_valid(slot, program) {
+            return false
+        }
+        for node in slot^.math_nodes[
+            program.node_start:program.node_start + program.node_count] {
+            if !view_snapshot_math_node_is_valid(node, program) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+//   Validate one math program and its root against populated snapshot records.
+view_snapshot_math_program_is_valid :: proc(
+    slot: ^View_Snapshot, program: core.Dynview_Math_Program) -> bool {
+
+    if !program.valid || !view_snapshot_range_is_valid(
+        program.command_start, program.command_count, len(slot^.math_commands)) ||
+        !view_snapshot_range_is_valid(
+            program.node_start, program.node_count, len(slot^.math_nodes)) ||
+        !view_snapshot_span_is_valid(
+            program.copy_text_offset, program.copy_text_len,
+            len(slot^.command_text)) {
+        return false
+    }
+    return program.node_count == 0 || view_snapshot_node_index_is_valid(
+        program.root_node_index, program, false)
+}
+
+//   Validate one node's contiguous and kind-specific child references.
+view_snapshot_math_node_is_valid :: proc(
+    node: core.Dynview_Math_Node, program: core.Dynview_Math_Program) -> bool {
+
+    if node.child_count < 0 || (node.child_count > 0 &&
+        (!view_snapshot_node_index_is_valid(node.first_child, program, false) ||
+        node.child_count > program.node_start + program.node_count -
+            node.first_child)) {
+        return false
+    }
+    switch node.kind {
+    case .None, .Sequence, .Glyph_Run:
+        return true
+    case .Script:
+        return view_snapshot_node_index_is_valid(node.base_child, program, false) &&
+            view_snapshot_node_index_is_valid(
+                node.superscript_child, program, true) &&
+            view_snapshot_node_index_is_valid(node.subscript_child, program, true)
+    case .Radical:
+        return view_snapshot_node_index_is_valid(node.radicand_child, program, false) &&
+            view_snapshot_node_index_is_valid(node.index_child, program, true)
+    case .Fraction:
+        return view_snapshot_node_index_is_valid(node.numerator_child, program, false) &&
+            view_snapshot_node_index_is_valid(node.denominator_child, program, false)
+    case .Stretch_Delimiter:
+        return view_snapshot_node_index_is_valid(node.base_child, program, false)
+    }
+    return false
+}
+
+//   Validate a required or optional node index within one program-owned range.
+view_snapshot_node_index_is_valid :: proc(
+    index: int, program: core.Dynview_Math_Program, optional: bool) -> bool {
+
+    if optional && index == -1 {
+        return true
+    }
+    return index >= program.node_start &&
+        index < program.node_start + program.node_count
+}
+
+//   Validate one nonnegative offset/count pair without overflowing its upper bound.
+view_snapshot_span_is_valid :: proc(offset, count, total: int) -> bool {
+    return offset >= 0 && count >= 0 && count <= total && offset <= total - count
+}
+
+//   Validate one record range; empty ranges permit the canonical zero start.
+view_snapshot_range_is_valid :: proc(start, count, total: int) -> bool {
+    return view_snapshot_span_is_valid(start, count, total)
 }
 
 //   Return fallback text only when it belongs to the active animation.
@@ -494,7 +691,7 @@ current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string 
     if !view_snapshot_matches_current(state, service, slot) {
         return ""
     }
-    return string(slot^.fallback_text[:slot^.fallback_text_len])
+    return string(slot^.fallback_text)
 }
 
 //   Return a free snapshot slot that is neither pending nor displayed.
@@ -507,6 +704,99 @@ reserve_view_snapshot :: proc(service: ^Julia_Runtime_Service) -> int {
         }
     }
     return -1
+}
+
+//   Clear generation payload metadata without copying the slot-owned arena owner.
+reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
+    slot^.request_id = 0
+    slot^.generation = 0
+    slot^.runtime_generation = 0
+    slot^.animation_generation = 0
+    slot^.scratchpad_request_id = 0
+    slot^.scratchpad_runtime_generation = 0
+    slot^.host_state = nil
+    slot^.animation = nil
+    slot^.fallback_text = nil
+    slot^.command_text = nil
+    slot^.command_revision = 0
+    slot^.stream_has_error = false
+    slot^.stream_open_block = false
+    slot^.stream_open_block_id = 0
+    slot^.commands = nil
+    slot^.math_programs = nil
+    slot^.math_commands = nil
+    slot^.math_nodes = nil
+}
+
+//   Initialize every future arena-backed payload builder for one free slot generation.
+prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
+    statuses := [6]core.Bounded_Builder_Status{
+        core.bounded_byte_builder_init(
+            &slot^.fallback_text_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
+        core.bounded_byte_builder_init(
+            &slot^.command_text_builder, core.DYNVIEW_MAX_TEXT_BYTES, &slot^.arena),
+        core.bounded_element_builder_init(
+            &slot^.command_builder, core.DYNVIEW_MAX_COMMANDS, &slot^.arena),
+        core.bounded_element_builder_init(
+            &slot^.math_program_builder, core.DYNVIEW_MAX_MATH_PROGRAMS, &slot^.arena),
+        core.bounded_element_builder_init(
+            &slot^.math_command_builder, core.DYNVIEW_MAX_MATH_COMMANDS, &slot^.arena),
+        core.bounded_element_builder_init(
+            &slot^.math_node_builder, core.DYNVIEW_MAX_MATH_NODES, &slot^.arena),
+    }
+    for status in statuses {
+        if status != .Ok {
+            return false
+        }
+    }
+    return true
+}
+
+//   Reset and prepare arena storage only after the slot has returned to Free.
+prepare_view_snapshot_slot :: proc(slot: ^View_Snapshot) -> bool {
+    if slot == nil || slot^.state != .Free || !slot^.arena.initialized {
+        return false
+    }
+    core.arena_owner_reset(&slot^.arena)
+    reset_view_snapshot_slot_payload(slot)
+    if prepare_view_snapshot_builders(slot) {
+        return true
+    }
+    core.arena_owner_reset(&slot^.arena)
+    slot^.fallback_text_builder = {}
+    slot^.command_text_builder = {}
+    slot^.command_builder = {}
+    slot^.math_program_builder = {}
+    slot^.math_command_builder = {}
+    slot^.math_node_builder = {}
+    return false
+}
+
+//   Initialize all fixed snapshot-slot arena owners in place.
+view_snapshot_slots_init :: proc(service: ^Julia_Runtime_Service) -> bool {
+    if service == nil {
+        return false
+    }
+    for &slot, slot_index in service^.view_snapshots {
+        if core.arena_owner_init(&slot.arena) {
+            continue
+        }
+        for initialized_index in 0..<slot_index {
+            core.arena_owner_destroy(&service^.view_snapshots[initialized_index].arena)
+        }
+        return false
+    }
+    return true
+}
+
+//   Destroy every snapshot-slot arena after Julia worker ownership has ended.
+view_snapshot_slots_destroy :: proc(service: ^Julia_Runtime_Service) {
+    if service == nil {
+        return
+    }
+    for &slot in service^.view_snapshots {
+        core.arena_owner_destroy(&slot.arena)
+    }
 }
 
 //   Generate fallback and semantic dynview data into worker staging.
@@ -525,29 +815,108 @@ generate_view_snapshot_task :: proc(data: rawptr) -> bool {
     state^.dynview_emit_target = nil
 
     slot^.animation = state^.julia_interface^.current_animation
-    slot^.fallback_text_len = min(len(fallback), len(slot^.fallback_text))
-    copy(slot^.fallback_text[:slot^.fallback_text_len],
-        transmute([]u8)fallback[:slot^.fallback_text_len])
-    slot^.command_buffer = staging^.command_buffer
+    slot^.scratchpad_request_id =
+        service^.worker_scratchpad_completed_request_id
+    slot^.scratchpad_runtime_generation =
+        service^.worker_scratchpad_completed_runtime_generation
+    if !build_view_snapshot_text_payloads(slot, fallback,
+        staging^.command_buffer.text_bytes[:staging^.command_buffer.text_bytes_len]) {
+        slot^.state = .Free
+        return false
+    }
+    slot^.command_revision = staging^.command_buffer.revision
+    slot^.stream_has_error = staging^.command_buffer.has_stream_error
+    slot^.stream_open_block = staging^.command_buffer.stream_open_block
+    slot^.stream_open_block_id = staging^.command_buffer.stream_open_block_id
     cache := &staging^.compile_cache
-    slot^.math_program_count = cache^.math_program_count
-    slot^.math_command_count = cache^.math_command_count
-    slot^.math_node_count = cache^.math_node_count
-    copy(slot^.math_programs[:slot^.math_program_count],
-        cache^.math_programs[:slot^.math_program_count])
-    copy(slot^.math_commands[:slot^.math_command_count],
-        cache^.math_commands[:slot^.math_command_count])
-    copy(slot^.math_nodes[:slot^.math_node_count],
-        cache^.math_nodes[:slot^.math_node_count])
+    if !build_view_snapshot_record_payloads(slot,
+        staging^.command_buffer.commands[:staging^.command_buffer.command_count],
+        cache^.math_programs[:cache^.math_program_count],
+        cache^.math_commands[:cache^.math_command_count],
+        cache^.math_nodes[:cache^.math_node_count]) {
+        slot^.state = .Free
+        return false
+    }
+    if slot^.scratchpad_request_id != 0 {
+        service^.worker_scratchpad_completed_request_id = 0
+        service^.worker_scratchpad_completed_runtime_generation = 0
+    }
     slot^.state = .Complete
+    return true
+}
+
+//   Copy and seal both text families as one complete snapshot candidate.
+build_view_snapshot_text_payloads :: proc(
+    slot: ^View_Snapshot, fallback: string, command_text: []u8) -> bool {
+
+    fallback_count := min(len(fallback), VIEW_SNAPSHOT_TEXT_CAPACITY)
+    fallback_status := core.bounded_byte_builder_append(
+        &slot^.fallback_text_builder, transmute([]u8)fallback[:fallback_count])
+    command_status := core.bounded_byte_builder_append(
+        &slot^.command_text_builder, command_text)
+    if fallback_status != .Ok || command_status != .Ok {
+        return false
+    }
+    fallback_payload, fallback_seal_status :=
+        core.bounded_byte_builder_seal(&slot^.fallback_text_builder)
+    command_payload, command_seal_status :=
+        core.bounded_byte_builder_seal(&slot^.command_text_builder)
+    if fallback_seal_status != .Ok || command_seal_status != .Ok {
+        return false
+    }
+    slot^.fallback_text = fallback_payload
+    slot^.command_text = command_payload
+    return true
+}
+
+//   Copy and seal all semantic record families as one complete snapshot candidate.
+build_view_snapshot_record_payloads :: proc(
+    slot: ^View_Snapshot,
+    commands: []core.Dynview_Command,
+    math_programs: []core.Dynview_Math_Program,
+    math_commands: []core.Dynview_Command,
+    math_nodes: []core.Dynview_Math_Node) -> bool {
+
+    statuses := [4]core.Bounded_Builder_Status{
+        core.bounded_element_builder_append(&slot^.command_builder, commands),
+        core.bounded_element_builder_append(
+            &slot^.math_program_builder, math_programs),
+        core.bounded_element_builder_append(
+            &slot^.math_command_builder, math_commands),
+        core.bounded_element_builder_append(&slot^.math_node_builder, math_nodes),
+    }
+    for status in statuses {
+        if status != .Ok {
+            return false
+        }
+    }
+    command_payload, command_status :=
+        core.bounded_element_builder_seal(&slot^.command_builder)
+    program_payload, program_status :=
+        core.bounded_element_builder_seal(&slot^.math_program_builder)
+    math_command_payload, math_command_status :=
+        core.bounded_element_builder_seal(&slot^.math_command_builder)
+    node_payload, node_status :=
+        core.bounded_element_builder_seal(&slot^.math_node_builder)
+    if command_status != .Ok || program_status != .Ok ||
+        math_command_status != .Ok || node_status != .Ok {
+        return false
+    }
+    slot^.commands = command_payload
+    slot^.math_programs = program_payload
+    slot^.math_commands = math_command_payload
+    slot^.math_nodes = node_payload
     return true
 }
 
 //   Reset worker-only semantic emission storage for one generation.
 // Capacity remains allocated; only populated lengths, errors, and cache validity are reset.
 reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
+    staging^.content = {}
     staging^.command_buffer.command_count = 0
     staging^.command_buffer.text_bytes_len = 0
+    staging^.command_buffer.command_view = nil
+    staging^.command_buffer.text_view = nil
     staging^.command_buffer.has_stream_error = false
     staging^.command_buffer.stream_open_block = false
     staging^.command_buffer.stream_open_block_id = -1
@@ -559,22 +928,35 @@ reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
     staging^.compile_cache.is_valid = false
 }
 
-//   Install populated semantic spans and invalidate display compilation caches.
-// The display thread recompiles and lays out the imported revision before drawing it.
-copy_view_snapshot_to_runtime :: proc(
+//   Install immutable snapshot aliases before invalidating display compilation caches.
+// The display thread retains the published slot until replacement or invalidation.
+install_view_snapshot_content :: proc(
     slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
 
-    runtime^.command_buffer = slot^.command_buffer
+    runtime^.content = {
+        revision = slot^.command_revision,
+        has_stream_error = slot^.stream_has_error,
+        stream_open_block = slot^.stream_open_block,
+        stream_open_block_id = slot^.stream_open_block_id,
+        commands = slot^.commands,
+        text_bytes = slot^.command_text,
+        math_programs = slot^.math_programs,
+        math_commands = slot^.math_commands,
+        math_nodes = slot^.math_nodes,
+    }
+    buffer := &runtime^.command_buffer
+    buffer^.revision = slot^.command_revision
+    buffer^.command_count = len(slot^.commands)
+    buffer^.text_bytes_len = len(slot^.command_text)
+    buffer^.has_stream_error = slot^.stream_has_error
+    buffer^.stream_open_block = slot^.stream_open_block
+    buffer^.stream_open_block_id = slot^.stream_open_block_id
+    buffer^.command_view = slot^.commands
+    buffer^.text_view = slot^.command_text
     cache := &runtime^.compile_cache
-    cache^.math_program_count = slot^.math_program_count
-    cache^.math_command_count = slot^.math_command_count
-    cache^.math_node_count = slot^.math_node_count
-    copy(cache^.math_programs[:slot^.math_program_count],
-        slot^.math_programs[:slot^.math_program_count])
-    copy(cache^.math_commands[:slot^.math_command_count],
-        slot^.math_commands[:slot^.math_command_count])
-    copy(cache^.math_nodes[:slot^.math_node_count],
-        slot^.math_nodes[:slot^.math_node_count])
+    cache^.math_program_count = len(slot^.math_programs)
+    cache^.math_command_count = len(slot^.math_commands)
+    cache^.math_node_count = len(slot^.math_nodes)
     cache^.is_valid = false
     cache^.layout_is_valid = false
     cache^.copy_hit_target_count = 0
@@ -632,6 +1014,12 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
         free(service)
         return nil, channel_error
     }
+    if !view_snapshot_slots_init(service) {
+        _ = chan.destroy(service^.events)
+        _ = chan.destroy(service^.requests)
+        free(service)
+        return nil, .Out_Of_Memory
+    }
 
     service^.next_request_id = 1
     service^.lifecycle = .Not_Started
@@ -648,6 +1036,7 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
     if service^.worker == nil {
         evidence_profile.destroy(&service^.profile)
         free(service^.dynview_staging)
+        view_snapshot_slots_destroy(service)
         _ = chan.destroy(service^.events)
         _ = chan.destroy(service^.requests)
         free(service)
@@ -857,6 +1246,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     }
     evidence_profile.destroy(&service^.profile)
     free(service^.dynview_staging)
+    view_snapshot_slots_destroy(service)
     _ = chan.destroy(service^.events)
     _ = chan.destroy(service^.requests)
     free(service)
@@ -997,6 +1387,7 @@ dispatch_julia_request :: proc(
         event^.succeeded = run_julia_request_task(request)
     case .Shutdown:
         assert(os.get_current_thread_id() == service^.owner_thread_id)
+        clear_scratchpad_completion_watermark(service)
         end_julia()
         event^.kind = .Shutdown_Complete
         _ = chan.send(service^.events, event^)

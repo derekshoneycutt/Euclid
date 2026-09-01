@@ -217,7 +217,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
             entry = popfirst!(session.queue)
             session.metrics.queue_dequeued += 1
             eval_started_at = time_ns()
-            evaluate_queued_input!(session, state_ptr, entry.text, entry.mode)
+            try
+                evaluate_queued_input!(session, state_ptr, entry.text, entry.mode)
+            finally
+                if entry.request_id != 0
+                    OdinJuliaBridge.scratchpad_evaluation_completed(
+                        state_ptr, entry.request_id)
+                end
+            end
             maybe_warn_slow_eval!(session, time_ns() - eval_started_at)
         end
 

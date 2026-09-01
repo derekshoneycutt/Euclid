@@ -2,22 +2,21 @@
 {"select_animation":"Scratchpad","as":"scratchpad"}
 {"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
 {"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
-{"scratchpad":"L\"\\frac{x^2}{\\sqrt{y}} \\left(\\sum_{i=1}^{n} a_i\\right) \\begin{bmatrix}a & b \\\\ c & d\\end{bmatrix}\""}
-{"wait_state":"scratchpad_idle","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
+{"scratchpad":"L\"\\frac{x^2}{\\sqrt{y}} \\left(\\sum_{i=1}^{n} a_i\\right) \\begin{bmatrix}a & b \\\\ c & d\\end{bmatrix}\"","as":"math-submit"}
+{"wait_event":"scratchpad_completed","correlation":"math-submit","timeout_ms":10000}
 {"wait_event":"frame_presented","timeout_ms":10000}
 {"screenshot":".build/phase14-scratchpad-math.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
-{"scratchpad":"error(\"phase14 failure\")"}
-{"wait_state":"scratchpad_idle","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
-{"wait_event":"dynview_published","timeout_ms":10000}
+{"scratchpad":"error(\"phase14 failure\")","as":"error-submit"}
+{"wait_event":"scratchpad_completed","correlation":"error-submit","timeout_ms":10000}
 {"wait_event":"frame_presented","timeout_ms":10000}
 {"screenshot":".build/phase14-scratchpad-failure.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_committed","correlation":"reload","timeout_ms":30000}
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"scratchpad":"2 + 2","as":"post-reload-submit"}
+{"wait_event":"scratchpad_completed","correlation":"post-reload-submit","timeout_ms":10000}
 {"assert_state":"dynview_enabled"}
 {"assert_no_bad_frees":true}
 {"shutdown":true}

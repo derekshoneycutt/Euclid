@@ -14,6 +14,149 @@ import app_dynview "../dynview"
 import app_evidence_trace "../evidence/trace"
 import app_grid "../grid"
 
+View_Snapshot_Published_Expected :: struct {
+    text: string,
+    fallback_storage: [^]u8,
+    record_storage: [^]app_core.Dynview_Command,
+    block_id: i32,
+}
+
+//   Initialize caller-owned bounded layout storage for direct layout unit tests.
+dynview_test_layout_builders_init :: proc(
+    t: ^testing.T,
+    cache: ^app_core.Dynview_Compile_Cache,
+    arena: ^app_core.Arena_Owner) {
+    testing.expect(t, app_core.arena_owner_init(arena))
+    testing.expect_value(t, app_dynview.layout_builders_init(cache, arena),
+        app_dynview.DYNVIEW_STATUS_OK)
+}
+
+//   Initialize and seal both slot-owned text builders for direct snapshot tests.
+view_snapshot_test_text_builders_init :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
+    fallback_text, command_text: string) {
+
+    testing.expect(t, app_core.arena_owner_init(&snapshot^.arena))
+    testing.expect_value(t, app_core.bounded_byte_builder_init(
+        &snapshot^.fallback_text_builder, app_core.VIEW_SNAPSHOT_TEXT_CAPACITY,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_byte_builder_init(
+        &snapshot^.command_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.command_builder, app_core.DYNVIEW_MAX_COMMANDS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_program_builder, app_core.DYNVIEW_MAX_MATH_PROGRAMS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_command_builder, app_core.DYNVIEW_MAX_MATH_COMMANDS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_node_builder, app_core.DYNVIEW_MAX_MATH_NODES,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_byte_builder_append(
+        &snapshot^.fallback_text_builder, transmute([]u8)fallback_text),
+        app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_byte_builder_append(
+        &snapshot^.command_text_builder, transmute([]u8)command_text),
+        app_core.Bounded_Builder_Status.Ok)
+    fallback, fallback_status := app_core.bounded_byte_builder_seal(
+        &snapshot^.fallback_text_builder)
+    commands, command_status := app_core.bounded_byte_builder_seal(
+        &snapshot^.command_text_builder)
+    testing.expect_value(t, fallback_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, command_status, app_core.Bounded_Builder_Status.Ok)
+    snapshot^.fallback_text = fallback
+    snapshot^.command_text = commands
+}
+
+//   Initialize one direct snapshot fixture with text and a single command record.
+view_snapshot_test_payloads_init :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
+    fallback_text: string, block_id: i32) {
+
+    view_snapshot_test_text_builders_init(t, snapshot, fallback_text, "")
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
+        []app_core.Dynview_Command{{block_id = block_id}}, nil, nil, nil))
+}
+
+//   Rebuild text and one command payload after a prepared slot reset.
+view_snapshot_test_payloads_build :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
+    fallback_text: string, block_id: i32) {
+
+    testing.expect(t, app_bridge.build_view_snapshot_text_payloads(
+        snapshot, fallback_text, nil))
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
+        []app_core.Dynview_Command{{block_id = block_id}}, nil, nil, nil))
+}
+
+//   Require a retired slot to be free without resetting its arena early.
+view_snapshot_expect_released_without_reset :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot) {
+
+    testing.expect_value(t, snapshot^.state,
+        app_bridge.View_Snapshot_Slot_State.Free)
+    testing.expect_value(t, snapshot^.arena.reset_count, u64(0))
+}
+
+//   Set one complete snapshot's publication identity for direct display tests.
+view_snapshot_test_complete :: proc(
+    snapshot: ^app_bridge.View_Snapshot,
+    animation: ^app_core.Euclid_Julia_Animation_Interface,
+    generation, runtime_generation, animation_generation: u64) {
+
+    snapshot^.state = .Complete
+    snapshot^.generation = generation
+    snapshot^.runtime_generation = runtime_generation
+    snapshot^.animation_generation = animation_generation
+    snapshot^.animation = animation
+}
+
+//   Require every display content slice to alias its published snapshot payload.
+view_snapshot_expect_content_aliases :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
+    runtime: ^app_core.Dynview_System) {
+
+    testing.expect_value(t, raw_data(runtime^.content.commands),
+        raw_data(snapshot^.commands))
+    testing.expect_value(t, raw_data(runtime^.content.text_bytes),
+        raw_data(snapshot^.command_text))
+    testing.expect_value(t, raw_data(runtime^.content.math_programs),
+        raw_data(snapshot^.math_programs))
+    testing.expect_value(t, raw_data(runtime^.content.math_commands),
+        raw_data(snapshot^.math_commands))
+    testing.expect_value(t, raw_data(runtime^.content.math_nodes),
+        raw_data(snapshot^.math_nodes))
+}
+
+//   Require derived math mutations to remain isolated from immutable content.
+view_snapshot_expect_math_working_isolation :: proc(
+    t: ^testing.T, runtime: ^app_core.Dynview_System) {
+
+    app_dynview.prepare_math_working_records(runtime)
+    runtime^.compile_cache.math_programs[0].draw_width = 42
+    runtime^.compile_cache.math_commands[0].block_id = 42
+    testing.expect_value(t, runtime^.content.math_programs[0].draw_width, f32(0))
+    testing.expect_value(t, runtime^.content.math_commands[0].block_id, i32(0))
+}
+
+//   Require one published generation's fallback and command aliases to remain active.
+view_snapshot_expect_published_generation :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    expected: View_Snapshot_Published_Expected) {
+
+    service := state^.julia_runtime_service
+    slot := &service^.view_snapshots[service^.published_view_snapshot_index]
+    testing.expect(t, app_bridge.current_view_snapshot_text(state) == expected.text)
+    testing.expect_value(t, raw_data(slot.fallback_text), expected.fallback_storage)
+    testing.expect_value(t, raw_data(state^.dynview.content.commands),
+        expected.record_storage)
+    testing.expect_value(t, state^.dynview.content.commands[0].block_id,
+        expected.block_id)
+}
+
 //   Verify cell height participates in Dynview font invalidation identity.
 @(test)
 dynview_track_font_retains_canonical_cell_metrics :: proc(t: ^testing.T) {
@@ -497,33 +640,42 @@ font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
 view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     snapshot := new(app_bridge.View_Snapshot)
     defer free(snapshot)
+    view_snapshot_test_text_builders_init(t, snapshot, "fallback", "semantic")
+    defer app_core.arena_owner_destroy(&snapshot^.arena)
     runtime := new(app_core.Dynview_System)
     defer free(runtime)
 
-    snapshot^.command_buffer.command_count = 1
-    snapshot^.command_buffer.commands[0].kind = .Math_Block
-    snapshot^.math_program_count = 1
-    snapshot^.math_programs[0] = app_core.Dynview_Math_Program{
+    commands := []app_core.Dynview_Command{{kind = .Math_Block}}
+    programs := []app_core.Dynview_Math_Program{{
         valid = true,
         root_node_index = 0,
         node_count = 1,
-    }
-    snapshot^.math_node_count = 1
-    snapshot^.math_nodes[0].kind = .Glyph_Run
-    snapshot^.math_command_count = 1
-    snapshot^.math_commands[0].kind = .Math_Glyph_Run
+        command_count = 1,
+    }}
+    math_commands := []app_core.Dynview_Command{{kind = .Math_Glyph_Run}}
+    nodes := []app_core.Dynview_Math_Node{{kind = .Glyph_Run}}
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
+        snapshot, commands, programs, math_commands, nodes))
     runtime^.compile_cache.is_valid = true
     runtime^.compile_cache.layout_is_valid = true
 
-    app_bridge.copy_view_snapshot_to_runtime(snapshot, runtime)
+    app_bridge.install_view_snapshot_content(snapshot, runtime)
 
+    view_snapshot_expect_content_aliases(t, snapshot, runtime)
     testing.expect_value(t, runtime^.command_buffer.command_count, 1)
+    testing.expect_value(t, runtime^.command_buffer.text_bytes_len, len("semantic"))
+    testing.expect(t, string(runtime^.command_buffer.text_view) ==
+        "semantic")
     testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
-    testing.expect(t, runtime^.compile_cache.math_programs[0].valid)
-    testing.expect_value(t, runtime^.compile_cache.math_nodes[0].kind,
+    testing.expect(t, runtime^.content.math_programs[0].valid)
+    testing.expect_value(t, runtime^.content.math_nodes[0].kind,
         app_core.Dynview_Math_Node_Kind.Glyph_Run)
-    testing.expect_value(t, runtime^.compile_cache.math_commands[0].kind,
+    testing.expect_value(t, runtime^.content.math_commands[0].kind,
         app_core.Dynview_Command_Kind.Math_Glyph_Run)
+    testing.expect_value(t, runtime^.command_buffer.commands[0].kind,
+        app_core.Dynview_Command_Kind.Begin_Block)
+    testing.expect_value(t, runtime^.compile_cache.math_programs[0].valid, false)
+    view_snapshot_expect_math_working_isolation(t, runtime)
     testing.expect(t, !runtime^.compile_cache.is_valid)
     testing.expect(t, !runtime^.compile_cache.layout_is_valid)
 }
@@ -548,11 +700,18 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
         runtime_generation = 3,
         animation_generation = 7,
         generation = 11,
+        scratchpad_request_id = 41,
+        scratchpad_runtime_generation = 3,
         animation = animation,
     }
+    view_snapshot_test_text_builders_init(
+        t, &service^.view_snapshots[0], "fallback", "")
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
+        &service^.view_snapshots[0], nil, nil, nil, nil))
+    defer app_core.arena_owner_destroy(&service^.view_snapshots[0].arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
-    testing.expect_value(t, state^.evidence_ring.count, 1)
+    testing.expect_value(t, state^.evidence_ring.count, 2)
     event := state^.evidence_ring.events[0]
     testing.expect_value(t, event.kind, app_evidence_trace.Kind.Dynview_Published)
     testing.expect_value(t, event.correlation_kind,
@@ -560,6 +719,81 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, event.correlation, u64(7))
     testing.expect_value(t, event.generation, u64(7))
     testing.expect_value(t, event.revision, u64(11))
+    completed := state^.evidence_ring.events[1]
+    testing.expect_value(t, completed.kind,
+        app_evidence_trace.Kind.Scratchpad_Completed)
+    testing.expect_value(t, completed.correlation_kind,
+        app_evidence_trace.Correlation_Kind.Runtime_Request)
+    testing.expect_value(t, completed.correlation, u64(41))
+    testing.expect_value(t, completed.generation, u64(3))
+    testing.expect_value(t, completed.revision, u64(11))
+}
+
+//   Verify invalid current content cannot claim Scratchpad display completion.
+@(test)
+scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    animation := &state^.julia_interface^.null_animation
+    state^.julia_interface^.current_animation = animation
+    state^.julia_runtime_service = service
+    init_test_evidence(state)
+    service^.runtime_generation = 3
+    service^.animation_generation = 7
+    snapshot := &service^.view_snapshots[0]
+    view_snapshot_test_complete(snapshot, animation, 11, 3, 7)
+    snapshot^.scratchpad_request_id = 41
+    snapshot^.scratchpad_runtime_generation = 3
+    view_snapshot_test_text_builders_init(t, snapshot, "fallback", "")
+    defer app_core.arena_owner_destroy(&snapshot^.arena)
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
+        snapshot, nil, nil, nil, nil))
+    snapshot^.stream_open_block = true
+
+    testing.expect(t, !app_bridge.publish_available_view_snapshot(state))
+    testing.expect_value(t, state^.evidence_ring.count, 0)
+}
+
+//   Verify stale runtime identity and evidence pressure cannot produce false proof.
+@(test)
+scratchpad_completion_requires_current_complete_evidence :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    init_test_evidence(state)
+    snapshot := app_bridge.View_Snapshot{
+        runtime_generation = 3,
+        scratchpad_request_id = 41,
+        scratchpad_runtime_generation = 2,
+    }
+    app_bridge.record_scratchpad_completed(state, &snapshot)
+    testing.expect_value(t, state^.evidence_ring.count, 0)
+
+    snapshot.scratchpad_runtime_generation = 3
+    for _ in 0..<app_evidence_trace.TRACE_RING_CAPACITY {
+        testing.expect(t, app_evidence_trace.ring_record(
+            &state^.evidence_ring, {kind = .Frame_Presented}))
+    }
+    app_bridge.record_scratchpad_completed(state, &snapshot)
+    testing.expect(t, state^.evidence_ring.required_evidence_lost)
+    testing.expect(t, !app_evidence_trace.ring_evidence_complete(
+        &state^.evidence_ring))
+}
+
+//   Verify reload and shutdown lifecycle boundaries discard uncommitted identities.
+@(test)
+scratchpad_completion_watermark_clears_at_lifecycle_boundary :: proc(t: ^testing.T) {
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    service^.worker_scratchpad_completed_request_id = 41
+    service^.worker_scratchpad_completed_runtime_generation = 3
+    app_bridge.clear_scratchpad_completion_watermark(service)
+    testing.expect_value(t,
+        service^.worker_scratchpad_completed_request_id, u64(0))
+    testing.expect_value(t,
+        service^.worker_scratchpad_completed_runtime_generation, u64(0))
 }
 
 //   Verify view snapshot validation rejects incomplete command streams.
@@ -567,13 +801,104 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
 view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
     snapshot := new(app_bridge.View_Snapshot)
     defer free(snapshot)
+    view_snapshot_test_text_builders_init(t, snapshot, "", "")
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
+        snapshot, nil, nil, nil, nil))
+    defer app_core.arena_owner_destroy(&snapshot^.arena)
 
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
-    snapshot^.command_buffer.stream_open_block = true
+    snapshot^.stream_open_block = true
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
-    snapshot^.command_buffer.stream_open_block = false
-    snapshot^.command_buffer.has_stream_error = true
+    snapshot^.stream_open_block = false
+    snapshot^.stream_has_error = true
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+}
+
+//   Verify every semantic command text span and sealed-builder alias is validated.
+@(test)
+view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T) {
+    snapshot := new(app_bridge.View_Snapshot)
+    defer free(snapshot)
+    view_snapshot_test_text_builders_init(t, snapshot, "same", "text")
+    defer app_core.arena_owner_destroy(&snapshot^.arena)
+    malformed := [6]app_core.Dynview_Command{
+        {text_offset = 4, text_len = 1},
+        {copy_text_offset = 4, copy_text_len = 1},
+        {script_base_text_offset = 4, script_base_text_len = 1},
+        {script_sup_text_offset = 4, script_sup_text_len = 1},
+        {script_sub_text_offset = 4, script_sub_text_len = 1},
+        {radical_index_text_offset = 4, radical_index_text_len = 1},
+    }
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
+        snapshot, []app_core.Dynview_Command{{}}, nil, nil, nil))
+    for command in malformed {
+        snapshot^.commands[0] = command
+        testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+    }
+
+    snapshot^.commands[0] = {text_offset = 0, text_len = 4}
+    testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
+    snapshot^.math_commands = snapshot^.commands
+    testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+    snapshot^.math_commands = nil
+    command_text := snapshot^.command_text
+    snapshot^.command_text = snapshot^.fallback_text
+    testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
+    snapshot^.command_text = command_text
+    testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
+}
+
+//   Verify stale candidates preserve published fallback until valid replacement and reuse.
+@(test)
+view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
+    t: ^testing.T) {
+
+    state := new(app_core.Euclid_General_State)
+    defer free(state)
+    service := new(app_bridge.Julia_Runtime_Service)
+    defer free(service)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    animation := &state^.julia_interface^.null_animation
+    state^.julia_interface^.current_animation = animation
+    state^.julia_runtime_service = service
+    init_test_evidence(state)
+    service^.published_view_snapshot_index = -1
+    service^.runtime_generation = 2
+    service^.animation_generation = 3
+    first := &service^.view_snapshots[0]
+    view_snapshot_test_complete(first, animation, 1, 2, 3)
+    view_snapshot_test_payloads_init(t, first, "first", 1)
+    defer app_core.arena_owner_destroy(&first^.arena)
+
+    testing.expect(t, app_bridge.publish_available_view_snapshot(state))
+    first_storage := raw_data(first^.fallback_text)
+    first_records := raw_data(first^.commands)
+    first_expected := View_Snapshot_Published_Expected{
+        "first", first_storage, first_records, 1}
+    view_snapshot_expect_published_generation(t, state, first_expected)
+
+    second := &service^.view_snapshots[1]
+    view_snapshot_test_complete(second, animation, 2, 1, 3)
+    second^.scratchpad_request_id = 41
+    second^.scratchpad_runtime_generation = 1
+    view_snapshot_test_payloads_init(t, second, "stale", 0)
+    defer app_core.arena_owner_destroy(&second^.arena)
+    testing.expect(t, !app_bridge.publish_available_view_snapshot(state))
+    testing.expect_value(t, state^.evidence_ring.count, 1)
+    view_snapshot_expect_published_generation(t, state, first_expected)
+
+    testing.expect(t, app_bridge.prepare_view_snapshot_slot(second))
+    view_snapshot_test_payloads_build(t, second, "second", 2)
+    view_snapshot_test_complete(second, animation, 3, 2, 3)
+    testing.expect(t, app_bridge.publish_available_view_snapshot(state))
+    view_snapshot_expect_released_without_reset(t, first)
+    second_records := raw_data(second^.commands)
+    second_expected := View_Snapshot_Published_Expected{
+        "second", raw_data(second^.fallback_text), second_records, 2}
+    view_snapshot_expect_published_generation(t, state, second_expected)
+    testing.expect(t, app_bridge.prepare_view_snapshot_slot(first))
+    testing.expect_value(t, first^.arena.reset_count, u64(1))
+    view_snapshot_expect_published_generation(t, state, second_expected)
 }
 
 //   Verify a completed view snapshot is found without needing its event index.
@@ -683,8 +1008,16 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
     // Verifies style placement can force a line break and apply configured indentation at the next line start.
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
+    testing.expect_value(t, app_core.bounded_element_builder_append(
+        &cache^.layout_item_builder, []app_core.Dynview_Layout_Item{{}}),
+        app_core.Bounded_Builder_Status.Ok)
+    cache^.layout_items = cache^.layout_item_builder.storage[:1]
+    cache^.layout_item_count = 1
     state := app_dynview.Dynview_Layout_State{col = 2, line_index = 0}
     acc := app_dynview.Dynview_Layout_Line_Accumulator{item_start = 0, item_count = 1}
     style := app_dynview.Dynview_Text_Style{force_line_start = true, indent_cols = 3}
@@ -707,6 +1040,9 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
     // Confirms pushed layout items capture block metadata and advance line-column bookkeeping correctly.
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     state := app_dynview.Dynview_Layout_State{
         active_block_id = 7, line_index = 2, col = 1}
@@ -761,6 +1097,9 @@ dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
 dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_panel_width = 80
     cache^.last_cell_width = 8
     state := app_dynview.Dynview_Layout_State{col = 3}
@@ -783,6 +1122,9 @@ dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
 dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynview.Dynview_Layout_State{row = 3}
@@ -835,6 +1177,9 @@ dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
 dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
@@ -884,15 +1229,26 @@ dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
 //   Verify copy hit geometry spans canonical rows after applying panel scroll.
 @(test)
 dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
+    arena: app_core.Arena_Owner
+    testing.expect(t, app_core.arena_owner_init(&arena))
+    defer app_core.arena_owner_destroy(&arena)
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
+        app_core.Bounded_Builder_Status.Ok)
     cache^.last_cell_height = 22
+    items := [2]app_core.Dynview_Layout_Item{
+        {block_id = 9, line_index = 2},
+        {block_id = 9, line_index = 5},
+    }
+    lines := [6]app_core.Dynview_Layout_Line{}
+    lines[2] = {row_start = 2, row_span = 3}
+    lines[5] = {row_start = 7, row_span = 2}
+    cache^.layout_items = items[:]
+    cache^.layout_lines = lines[:]
     cache^.layout_line_count = 6
     cache^.layout_item_count = 2
-    cache^.layout_items[0] = {block_id = 9, line_index = 2}
-    cache^.layout_items[1] = {block_id = 9, line_index = 5}
-    cache^.layout_lines[2] = {row_start = 2, row_span = 3}
-    cache^.layout_lines[5] = {row_start = 7, row_span = 2}
     layout := app_dynview.Copy_Hit_Target_Layout{
         panel = {x = 10, y = 100, width = 120, height = 250},
         scroll_y = 22,
@@ -901,11 +1257,15 @@ dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
         icon_x_pad = 2,
     }
 
-    hover_bottom := app_dynview.rebuild_one_copy_hit_target(
+    hover_bottom, status := app_dynview.rebuild_one_copy_hit_target(
         cache, {block_id = 9}, layout, layout.panel.y)
 
-    testing.expect_value(t, cache^.copy_hit_target_count, 1)
-    target := cache^.copy_hit_targets[0]
+    targets, view_status := app_core.bounded_element_builder_view(
+        &cache^.copy_hit_target_builder)
+    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, view_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, len(targets), 1)
+    target := targets[0]
     testing.expect_value(t, target.hover_rect.y, f32(126))
     testing.expect_value(t, target.hover_rect.height, f32(154))
     testing.expect_value(t, hover_bottom, f32(280))
@@ -998,6 +1358,9 @@ dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
 dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynview.Dynview_Layout_State{}
@@ -1240,6 +1603,9 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     // Checks wrapped text-run consumption emits layout items and lines with a valid reported last line index.
     cache := new(app_core.Dynview_Compile_Cache)
     defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
     cache^.last_panel_width = 48
     cache.last_cell_width = 8
     cache.last_cell_height = 22

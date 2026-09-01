@@ -126,6 +126,7 @@ Kind :: enum u16 {
     Gif_Failed = 367,
     Shape_Cache_Prepared = 368,
     Dynview_Compiled = 369,
+    Scratchpad_Completed = 370,
 
     // Rich checkpoint storage (420-459).
     Checkpoint_Requested = 420,

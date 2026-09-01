@@ -56,7 +56,8 @@ const EVENT_NAMES = Dict{UInt16,String}(
     362 => "capture_requested", 363 => "capture_completed",
     364 => "capture_failed", 365 => "gif_started", 366 => "gif_completed",
     367 => "gif_failed", 368 => "shape_cache_prepared",
-    369 => "dynview_compiled", 420 => "checkpoint_requested",
+    369 => "dynview_compiled", 370 => "scratchpad_completed",
+    420 => "checkpoint_requested",
     421 => "checkpoint_stored", 422 => "checkpoint_unavailable",
     423 => "checkpoint_evicted", 460 => "scenario_started",
     461 => "scenario_action_issued", 462 => "scenario_wait_satisfied",
@@ -80,7 +81,8 @@ const SCENARIO_ACTIONS = [
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
     "animation_selected", "animation_cycle_boundary", "scene_batch_committed",
-    "constraint_solve_completed", "dynview_published", "frame_presented",
+    "constraint_solve_completed", "dynview_published", "scratchpad_completed",
+    "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",
     "runtime_shutdown_complete"]
 

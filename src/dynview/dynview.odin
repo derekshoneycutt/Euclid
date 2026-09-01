@@ -68,6 +68,9 @@ Dynview_Text_Alignment :: core.Dynview_Text_Alignment
 Dynview_Text_Style :: core.Dynview_Text_Style
 
 Dynview_Compile_State :: struct {
+    plain_text_builder: core.Bounded_Byte_Builder,
+    copy_payload_builder: core.Bounded_Byte_Builder,
+    copy_block_builder: core.Bounded_Element_Builder(core.Dynview_Copy_Block),
     open_block: bool,
     block_id: i32,
     block_kind: i32,

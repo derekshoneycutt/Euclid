@@ -172,6 +172,36 @@ bounded_element_builder_append :: proc(
     return .Ok
 }
 
+//   Clear populated elements while retaining reusable allocator-owned capacity.
+//
+// Returns:
+//   - `Ok` for an initialized unsealed builder, or an explicit lifecycle rejection.
+bounded_element_builder_clear :: proc(
+    builder: ^$Builder/Bounded_Element_Builder($Element)) ->
+    Bounded_Builder_Status {
+    if builder == nil || builder.max_count <= 0 {
+        return .Invalid_Argument
+    }
+    if builder.sealed {
+        return .Sealed
+    }
+    builder.count = 0
+    return .Ok
+}
+
+//   Return the populated prefix of an initialized reusable element builder.
+bounded_element_builder_view :: proc(
+    builder: ^$Builder/Bounded_Element_Builder($Element)) ->
+    ([]Element, Bounded_Builder_Status) {
+    if builder == nil || builder.max_count <= 0 {
+        return nil, .Invalid_Argument
+    }
+    if builder.sealed {
+        return nil, .Sealed
+    }
+    return builder.storage[:builder.count], .Ok
+}
+
 //   Seal a typed builder and return its populated storage.
 //
 // Parameters:
