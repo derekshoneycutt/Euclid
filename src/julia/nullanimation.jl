@@ -172,7 +172,7 @@ function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, line1_point2, 0.9f0, 0.1f0, 0f0)
         if draw_line_flag > 0
             OdinJuliaBridge.set_point_position(
-                state_ptr, line2_point1, 0.9f0, 0.9f0, 0f0)
+                state_ptr, line2_point1, 0.9f0, 0.1f0, 0f0)
             OdinJuliaBridge.set_point_position(
                 state_ptr, line2_point2, penx1, peny1, 0f0)
             OdinJuliaBridge.set_point_brush(state_ptr, line2_host, 5f0)

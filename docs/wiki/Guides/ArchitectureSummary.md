@@ -609,7 +609,8 @@ Choose the owning module first, then touch that module's highlighted files.
 1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
 1. Publish the named `get_view_text` producer from `initialize`, or from `loop`
   only when semantic view content changes, using `publish_view_update`.
-1. Register `animation_entry` via `add_child_animation_interface` in the relevant group init script.
+1. Register `animation_entry` via `add_child_animation_interface` in the relevant
+  group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 
 Review [AnimationsStyle.md](AnimationsStyle.md) for considerations on how to

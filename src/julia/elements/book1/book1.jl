@@ -6,6 +6,11 @@ using ..EuclidGeometry
 using ..EuclidLatex
 using ..NullAnimation
 
+include("./book_1_overview.jl")
+include("./book_1_definitions.jl")
+include("./book_1_postulates.jl")
+include("./book_1_propositions.jl")
+
 include("./def_001_point.jl")
 include("./def_002_line.jl")
 include("./def_003_linextrem.jl")
@@ -49,122 +54,6 @@ include("./commonnotions.jl")
 include("./prop_01.jl")
 include("./prop_02.jl")
 
-"""Emit the Book I root view text."""
-function get_view_text_book_1(state_ptr::Ptr{Cvoid})
-    latex = raw"\textbf{Euclid Elements - Book I}"
-    fallback = "Euclid Elements - Book I"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
-end
-
-"""Publish this category view when its animation node is selected."""
-function initialize_view_book_1(state_ptr::Ptr{Cvoid})
-    NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1)
-end
-
-"""Dispatch lifecycle operations for the Book I category animation."""
-function animation_entry_book_1(
-    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
-
-    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
-        initialize_view_book_1(state_ptr)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
-        NullAnimation.loop(state_ptr, dt)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        NullAnimation.clean(state_ptr)
-    else
-        return false
-    end
-    return true
-end
-
-"""Emit the Book I Definitions section view text."""
-function get_view_text_book_1_defs(state_ptr::Ptr{Cvoid})
-    latex = raw"\textbf{Euclid Elements - Book I - Definitions}"
-    fallback = "Euclid Elements - Book I - Definitions"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
-end
-
-"""Publish this category view when its animation node is selected."""
-function initialize_view_book_1_defs(state_ptr::Ptr{Cvoid})
-    NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_defs)
-end
-
-"""Dispatch lifecycle operations for the Book I Definitions category."""
-function animation_entry_book_1_defs(
-    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
-
-    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
-        initialize_view_book_1_defs(state_ptr)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
-        NullAnimation.loop(state_ptr, dt)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        NullAnimation.clean(state_ptr)
-    else
-        return false
-    end
-    return true
-end
-
-"""Emit the Book I Postulates section view text."""
-function get_view_text_book_1_posts(state_ptr::Ptr{Cvoid})
-    latex = raw"\textbf{Euclid Elements - Book I - Postulates}"
-    fallback = "Euclid Elements - Book I - Postulates"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
-end
-
-"""Publish this category view when its animation node is selected."""
-function initialize_view_book_1_posts(state_ptr::Ptr{Cvoid})
-    NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_posts)
-end
-
-"""Dispatch lifecycle operations for the Book I Postulates category."""
-function animation_entry_book_1_posts(
-    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
-
-    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
-        initialize_view_book_1_posts(state_ptr)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
-        NullAnimation.loop(state_ptr, dt)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        NullAnimation.clean(state_ptr)
-    else
-        return false
-    end
-    return true
-end
-
-"""Emit the Book I Propositions section view text."""
-function get_view_text_book_1_props(state_ptr::Ptr{Cvoid})
-    latex = raw"\textbf{Euclid Elements - Book I - Propositions}"
-    fallback = "Euclid Elements - Book I - Propositions"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
-end
-
-"""Publish this category view when its animation node is selected."""
-function initialize_view_book_1_props(state_ptr::Ptr{Cvoid})
-    NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_book_1_props)
-end
-
-"""Dispatch lifecycle operations for the Book I Propositions category."""
-function animation_entry_book_1_props(
-    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
-
-    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
-        initialize_view_book_1_props(state_ptr)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
-        NullAnimation.loop(state_ptr, dt)
-    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        NullAnimation.clean(state_ptr)
-    else
-        return false
-    end
-    return true
-end
-
 """Return the stable animation id for a named child of a parent animation."""
 function stable_child_id(parent_stable_id::AbstractString, name::AbstractString)
     OdinJuliaBridge.animation_stable_id_from_key(
@@ -187,10 +76,10 @@ end
 """Register the Book I animation tree under the Euclid's Elements root."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
     book1_id = register_child_animation(
-        state_ptr, animation_entry_book_1,
+        state_ptr, ElementsOneBookOneOverview.animation_entry,
         "Book I", root_id)
         book1_defs_id = register_child_animation(
-            state_ptr, animation_entry_book_1_defs,
+            state_ptr, ElementsOneBookOneDefinitions.animation_entry,
             "Definitions", book1_id)
             book1_defs1_point_id = register_child_animation(
                 state_ptr, ElementsOneDefinitionPoint.animation_entry,
@@ -287,7 +176,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
                 "Parallel Straight Lines", book1_defs_id)
                 
         book1_posts_id = register_child_animation(
-            state_ptr, animation_entry_book_1_posts,
+            state_ptr, ElementsOneBookOnePostulates.animation_entry,
             "Postulates", book1_id)
             book1_posts1_draw_line_id = register_child_animation(
                 state_ptr, ElementsOnePostulatesDrawLine.animation_entry,
@@ -310,7 +199,7 @@ function init_euclid_scripts(state_ptr::Ptr{Cvoid}, root_id)
             "Common Notions", book1_id)
 
         book1_props_id = register_child_animation(
-            state_ptr, animation_entry_book_1_props,
+            state_ptr, ElementsOneBookOnePropositions.animation_entry,
             "Propositions", book1_id)
             book1_prop01_id = register_child_animation(
                 state_ptr, ElementsOneProposition01.animation_entry,
