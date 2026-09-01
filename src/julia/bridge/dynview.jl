@@ -1,3 +1,39 @@
+"""Begin building the request-owned view candidate and return its bridge status."""
+function begin_view_update(state_ptr::Ptr{Cvoid})
+    @ccall begin_view_update(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Copy fallback text into the active request-owned view candidate."""
+function set_view_text(state_ptr::Ptr{Cvoid}, text::AbstractString)
+    @ccall set_view_text(state_ptr::Ptr{Cvoid}, text::Cstring)::Int32
+end
+
+"""Seal the active view candidate for its owning host transaction."""
+function commit_view_update(state_ptr::Ptr{Cvoid})
+    @ccall commit_view_update(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Seal an explicit empty view candidate for the current host transaction."""
+function clear_view(state_ptr::Ptr{Cvoid})
+    @ccall clear_view(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Build one request-owned view candidate from an existing named producer."""
+function publish_view_update(state_ptr::Ptr{Cvoid}, get_view_text::Function)
+    status = begin_view_update(state_ptr)
+    status == BRIDGE_STATUS_OK ||
+        error("begin_view_update failed with bridge status $status")
+
+    fallback = get_view_text(state_ptr)
+    status = set_view_text(state_ptr, string(fallback))
+    status == BRIDGE_STATUS_OK ||
+        error("set_view_text failed with bridge status $status")
+    status = commit_view_update(state_ptr)
+    status == BRIDGE_STATUS_OK ||
+        error("commit_view_update failed with bridge status $status")
+    return status
+end
+
 """
 Reset the host dynview stream for the current state/frame.
 

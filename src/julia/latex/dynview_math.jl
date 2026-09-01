@@ -523,9 +523,10 @@ function replay_emit_math_block!(
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
         OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
 
-    entry = resolve_cache_entry(source; style_profile=style_profile)
+    _ = style_profile
+    normalized_ast, _ = compile_latex_runs(source)
     payload = bridge_math_block_payload(
-        entry.normalized_ast;
+        normalized_ast;
         text_style=text_style,
         math_style=math_style,
         mathbb_style=mathbb_style)

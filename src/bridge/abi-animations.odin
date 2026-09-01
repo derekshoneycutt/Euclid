@@ -148,16 +148,14 @@ get_animation_value :: proc "c" (
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - get_view_text: Julia function pointer used to bind animation callback behavior.
 //   - init: Julia function pointer used to bind animation callback behavior.
 //   - loop: Julia function pointer used to bind animation callback behavior.
 //   - clean: Julia function pointer used to bind animation callback behavior.
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
-    get_view_text, init, loop, clean: ^julialib.jl_value_t) {
+    init, loop, clean: ^julialib.jl_value_t) {
     
-    state^.julia_interface^.null_animation.get_view_text = get_view_text
     state^.julia_interface^.null_animation.initiate = init
     state^.julia_interface^.null_animation.loop = loop
     state^.julia_interface^.null_animation.clean = clean

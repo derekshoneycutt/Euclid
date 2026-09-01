@@ -103,6 +103,8 @@ prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) 
 resolve_julia_interface_callbacks :: proc(
     iface: ^core.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
 
+    iface^.invoke_with_exception_diagnostics = julialib.jl_get_function(
+        main_module, "invoke_with_exception_diagnostics")
     iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
     iface^.scratchpad_classify_input = julialib.jl_get_function(
@@ -144,6 +146,7 @@ julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bo
     }
 
     handles := [?]rawptr{
+        iface^.invoke_with_exception_diagnostics,
         iface^.init_scripts,
         iface^.global_loop,
         iface^.scratchpad_classify_input,
@@ -350,10 +353,11 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     return call_include_packaged_script(include_fn, script_path, exit_on_failure)
 }
 
-//   Print Julia exception type/message details for a named bridge context.
+//   Print Julia exception type, message, and backtrace for a named bridge context.
 //
 // Notes:
-//   - Falls back to type-only output when Base sprint/showerror cannot be resolved.
+//   - Suspends Julia GC while retaining the original exception across formatter calls.
+//   - Falls back to context and type when Base formatting fails.
 print_julia_exception :: proc(context_of_error: string) {
     ex_raw := julialib.jl_exception_occurred()
     if ex_raw == nil {
@@ -361,12 +365,14 @@ print_julia_exception :: proc(context_of_error: string) {
     }
 
     ex := (^julialib.jl_value_t)(ex_raw)
-
     ex_type := cstring(julialib.jl_typeof_str(ex_raw))
+    gc_was_enabled := julialib.jl_gc_enable(0)
+    defer julialib.jl_gc_enable(gc_was_enabled)
 
     base_module := resolve_base_module()
     if base_module == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
+        julialib.jl_exception_clear()
+        print_julia_exception_static(context_of_error, ex_type, ex)
         return
     }
 
@@ -375,29 +381,37 @@ print_julia_exception :: proc(context_of_error: string) {
     catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
 
     if sprint_fn == nil || showerror_fn == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-        fmt.println("Julia exception formatter unavailable (Base.sprint/Base.showerror).")
+        julialib.jl_exception_clear()
+        print_julia_exception_static(context_of_error, ex_type, ex)
         return
     }
 
     bt_val: ^julialib.jl_value_t = nil
     if catch_backtrace_fn != nil {
         bt_val = julialib.jl_call0(catch_backtrace_fn)
-        if julialib.jl_exception_occurred() != nil {
-            bt_val = nil
-        }
     }
+    julialib.jl_exception_clear()
 
     msg_val := format_julia_exception_message(sprint_fn, showerror_fn, ex, bt_val)
     if julialib.jl_exception_occurred() != nil || msg_val == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-        fmt.println("Failed to format exception text via Base.sprint(showerror, ...).")
+        julialib.jl_exception_clear()
+        print_julia_exception_static(context_of_error, ex_type, ex)
         return
     }
 
     msg := julialib.jl_string_ptr(msg_val)
-    fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-    fmt.println(msg)
+    fmt.eprintln("Julia exception context: ", context_of_error)
+    fmt.eprintln("Julia exception type: ", ex_type)
+    fmt.eprintln(msg)
+}
+
+//   Print the original Julia exception identity when Julia formatting is unavailable.
+print_julia_exception_static :: proc(
+    context_of_error: string, ex_type: cstring, ex: ^julialib.jl_value_t) {
+
+    fmt.eprintln("Julia exception context: ", context_of_error)
+    fmt.eprintln("Julia exception type: ", ex_type)
+    fmt.eprintln("Julia exception object: ", rawptr(ex))
 }
 
 //   Format a Julia exception through Base.sprint(showerror, ...), with optional backtrace.

@@ -230,6 +230,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         transversal.host_id, transversal.joint1_id, transversal.joint2_id,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

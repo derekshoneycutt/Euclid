@@ -208,6 +208,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         CircleIds(marker2.host_id, marker2.start_id, marker2.end_id))
     reset_cycle_state(
         state_ptr, AnimationState(lines, markers, point.index, PhaseDescend, 0f0))
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

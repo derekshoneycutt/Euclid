@@ -66,6 +66,7 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr, AnimationState(PhaseDescend, 0f0))
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

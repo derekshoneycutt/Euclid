@@ -161,6 +161,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         SquareIds(square.host_id, square.joint1_id, square.joint2_id,
             square.joint3_id, square.joint4_id), PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -190,6 +190,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line_b.host_id, line_b.joint1_id, line_b.joint2_id),
         intersection_point.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

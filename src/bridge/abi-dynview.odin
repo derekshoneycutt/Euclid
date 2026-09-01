@@ -2,6 +2,7 @@ package bridge
 
 import "../core"
 
+import "core:log"
 import rl "vendor:raylib"
 
 Dynview_Math_Text_Payloads :: struct {
@@ -23,6 +24,103 @@ Dynview_Math_Block_Input :: struct {
     op_count:          i32,
     top_level_op_count: i32,
     style_id:          i32,
+}
+
+//   Lazily prepare the request-owned view candidate for structured emission.
+@(export)
+begin_view_update :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    if state^.julia_runtime_service == nil || state^.view_update_candidate == nil {
+        log.warnf("begin_view_update_without_candidate service=%v candidate=%v",
+            state^.julia_runtime_service != nil, state^.view_update_candidate != nil)
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    slot := state^.view_update_candidate
+    if slot^.state != .Reserved {
+        log.warnf("begin_view_update_invalid_candidate state=%d", slot^.state)
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    service := state^.julia_runtime_service
+    service^.view_snapshot_generation += 1
+    slot^.state = .Pending
+    slot^.generation = service^.view_snapshot_generation
+    slot^.runtime_generation = service^.runtime_generation
+    slot^.scratchpad_request_id =
+        service^.worker_scratchpad_completed_request_id
+    slot^.scratchpad_runtime_generation =
+        service^.worker_scratchpad_completed_runtime_generation
+    slot^.host_state = state
+    reset_view_snapshot_staging(service^.dynview_staging)
+    state^.dynview_emit_target = service^.dynview_staging
+    return BRIDGE_STATUS_OK
+}
+
+//   Copy fallback text into the active request-owned candidate.
+@(export)
+set_view_text :: proc "c" (
+    state: ^core.Euclid_General_State, text: cstring) -> i32 {
+
+    if state == nil || text == nil || state^.view_update_candidate == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    slot := state^.view_update_candidate
+    if slot^.state != .Pending {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    payload := string(text)
+    payload_count := min(len(payload), VIEW_SNAPSHOT_TEXT_CAPACITY)
+    status := core.bounded_byte_builder_append(
+        &slot^.fallback_text_builder, transmute([]u8)payload[:payload_count])
+    return status == .Ok ? BRIDGE_STATUS_OK : BRIDGE_STATUS_OUT_OF_CAPACITY
+}
+
+//   Seal structured and fallback payloads without publishing them independently.
+@(export)
+commit_view_update :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.view_update_candidate == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    slot := state^.view_update_candidate
+    if slot^.state != .Pending || slot^.candidate_committed {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    staging := state^.julia_runtime_service^.dynview_staging
+    if !build_generated_view_snapshot_payloads(slot, staging, "") {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    if !view_snapshot_is_valid(slot) {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    slot^.candidate_committed = true
+    service := state^.julia_runtime_service
+    if slot^.scratchpad_request_id != 0 &&
+        slot^.scratchpad_request_id ==
+            service^.worker_scratchpad_completed_request_id {
+        service^.worker_scratchpad_completed_request_id = 0
+        service^.worker_scratchpad_completed_runtime_generation = 0
+    }
+    state^.dynview_emit_target = nil
+    return BRIDGE_STATUS_OK
+}
+
+//   Publish an explicit empty candidate through the current request transaction.
+@(export)
+clear_view :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    status := begin_view_update(state)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    status = set_view_text(state, "")
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    return commit_view_update(state)
 }
 
 //   Reset the dynview command stream for the current frame.

@@ -607,6 +607,9 @@ independently from related APIs.
 ### View Text Rule
 
 - `get_view_text` output should be plain Unicode text with renderer wrapping.
+- Keep `get_view_text` as a named producer and invoke it through
+  `publish_view_update` from lifecycle or semantic-change points. Do not register
+  it as a native callback or poll it per frame.
 - Do not manually pre-wrap ordinary view text unless fixed-width or semantic
   layout demands it.
 

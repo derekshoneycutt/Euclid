@@ -20,12 +20,21 @@ include("./proclus/proclus.jl")
 include("./hilbert/hilbert.jl")
 include("./algebra/algebra.jl")
 
+"""Print a callback exception with its live Julia stack, then rethrow it."""
+function invoke_with_exception_diagnostics(callback, arguments...)
+    try
+        return callback(arguments...)
+    catch exception
+        Base.display_error(stderr, current_exceptions())
+        rethrow(exception)
+    end
+end
 
 """Register all Euclid content animations and prime LaTeX and scratchpad."""
 function init_euclid_scripts(state_ptr::Ptr{Cvoid})
     registration_started = time_ns()
     OdinJuliaBridge.set_null_animations(
-        state_ptr, NullAnimation.get_view_text, NullAnimation.initialize,
+        state_ptr, NullAnimation.initialize,
         NullAnimation.loop, NullAnimation.clean)
 
     Scratchpad.init_euclid_scripts_scratchpad(state_ptr)

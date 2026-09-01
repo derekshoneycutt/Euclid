@@ -3,39 +3,19 @@ function compile_emit_program(runs::Vector{LatexRun})
     return math_payload_ops_for_runs(runs)
 end
 
-"""Compile and cache one latex string for the given grammar/style key."""
-function resolve_cache_entry(
-    source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
-    key = (String(source), PARSER_GRAMMAR_VERSION, Int32(style_profile))
-    existing = get(PARSE_CACHE, key, nothing)
-    if existing !== nothing
-        cache_order_touch_key!(key)
-        return existing
-    end
-
-    tokens, ast = parse_latex(source)
+"""Parse and normalize one LaTeX source without retaining mutable module state."""
+function compile_latex_runs(source::AbstractString)
+    _, ast = parse_latex(source)
     normalized_ast = normalize_runs(ast)
-    program = compile_emit_program(normalized_ast)
-
-    entry = ParseCacheEntry(
-        key[1],
-        key[2],
-        key[3],
-        tokens,
-        ast,
-        normalized_ast,
-        program)
-    PARSE_CACHE[key] = entry
-    cache_order_touch_key!(key)
-    _ = prune_cache!(PARSE_CACHE_MAX_ENTRIES)
-    return entry
+    return normalized_ast, compile_emit_program(normalized_ast)
 end
 
 """Return compiled emit program for one latex input string."""
 function compiled_program_for(
     source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
-    entry = resolve_cache_entry(source; style_profile=style_profile)
-    return entry.program
+    _ = style_profile
+    _, program = compile_latex_runs(source)
+    return program
 end
 
 """Render one recursive payload op to canonical LaTeX-ish source."""
@@ -115,6 +95,6 @@ end
 """Resolve latex input to plain Unicode/text fallback."""
 function latex_to_plain_text(
     source::AbstractString; style_profile::Integer=DEFAULT_STYLE_PROFILE)
-    entry = resolve_cache_entry(source; style_profile=style_profile)
-    return plain_text_for_program(entry.program)
+    return plain_text_for_program(
+        compiled_program_for(source; style_profile=style_profile))
 end

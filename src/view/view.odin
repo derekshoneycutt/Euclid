@@ -158,7 +158,6 @@ run_window_frame :: proc(
     julia.publish_available_view_snapshot(state)
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation(state, alpha)
-    julia.try_request_view_snapshot(state)
     audio.update_chalk_runtime(&state^.chalk_audio)
     if scenario_runtime != nil {
         _ = scenario_runtime_update(

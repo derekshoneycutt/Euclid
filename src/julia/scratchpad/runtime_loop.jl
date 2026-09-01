@@ -8,6 +8,7 @@ function handle_local_command!(state_ptr::Ptr{Cvoid}, text::AbstractString)
         return true
     end
     if text == ":clear"
+        isempty(session.output) || (session.output_revision += 1)
         empty!(session.output)
         empty!(session.output_entries)
         return true
@@ -177,7 +178,7 @@ end
 """Prime Scratchpad parsing, completion, evaluation, formatting, and dynview emission."""
 function prime_repl!(state_ptr::Ptr{Cvoid})
     warm_session = create_session(state_ptr, -1)
-    SessionRef[] = warm_session
+    ScratchpadRuntime.current_session = warm_session
     try
         queue_input(state_ptr, "sum(1:3)") || return false
         complete_backslash(state_ptr, "\\alpha") == "α" || return false
@@ -187,21 +188,23 @@ function prime_repl!(state_ptr::Ptr{Cvoid})
         status = OdinJuliaBridge.dynview_reset_stream(state_ptr)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     finally
-        SessionRef[] = create_session(state_ptr, NextSessionIdRef[])
+        ScratchpadRuntime.current_session = create_session(
+            state_ptr, ScratchpadRuntime.next_session_id)
     end
 end
 
 """Initialize scratchpad session lifecycle and seed the Julia runtime banner."""
 function initialize(state_ptr::Ptr{Cvoid})
-    InitializeCountRef[] += 1
+    ScratchpadRuntime.initialize_count += 1
     session = ensure_session!(state_ptr)
     append_startup_banner!(session)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean scratchpad lifecycle state and animation data when the animation unloads."""
 function clean(state_ptr::Ptr{Cvoid})
-    CleanCountRef[] += 1
-    SessionRef[] = nothing
+    ScratchpadRuntime.clean_count += 1
+    ScratchpadRuntime.current_session = nothing
 
     if isdefined(Main, :EuclidRepl) &&
         isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
@@ -212,6 +215,7 @@ end
 """Per-frame scratchpad driver: dequeue/evaluate input and run frame hooks."""
 function loop(state_ptr::Ptr{Cvoid}, dt)
     session = ensure_session!(state_ptr)
+    starting_revision = session.output_revision
     try
         if !isempty(session.queue)
             entry = popfirst!(session.queue)
@@ -232,6 +236,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
     catch e
         append_native_error_block!(
             session, format_current_exception_text(session.runtime, e; color=true))
+    end
+    current_session = ensure_session!(state_ptr)
+    if current_session !== session || current_session.output_revision != starting_revision
+        OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
     end
 end
 

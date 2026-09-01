@@ -68,9 +68,23 @@ mutable struct ScratchpadSession
     history::Vector{ScratchpadInputEntry}
     hooks::Vector{ScratchpadFrameHook}
     metrics::ScratchpadMetrics
+    output_revision::UInt64
     history_cursor::Int
     history_origin_mode::Int32
     next_hook_id::Int
+end
+
+"""Base type for optional services owned by the Scratchpad runtime."""
+abstract type ScratchpadExtensionState end
+
+"""Own persistent Scratchpad state and lifecycle counters explicitly."""
+mutable struct ScratchpadRuntimeState
+    current_session::Union{Nothing,ScratchpadSession}
+    next_session_id::Int
+    initialize_count::Int
+    clean_count::Int
+    reset_count::Int
+    extension_state::Union{Nothing,ScratchpadExtensionState}
 end
 
 mutable struct NativeErrorStyle
@@ -110,11 +124,7 @@ const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
 
-const SessionRef = Ref{Union{Nothing, ScratchpadSession}}(nothing)
-const NextSessionIdRef = Ref(1)
-const InitializeCountRef = Ref(0)
-const CleanCountRef = Ref(0)
-const ResetCountRef = Ref(0)
+ScratchpadRuntime = ScratchpadRuntimeState(nothing, 1, 0, 0, 0, nothing)
 
 const HELPER_DOC_ALIASES = Dict(
     "register_frame_hook" => (:Scratchpad, :register_frame_hook,
@@ -169,8 +179,8 @@ const HELPER_DOC_ALIASES = Dict(
 """Register scratchpad animation callbacks with the host animation tree."""
 function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr, get_view_text, initialize, loop, clean, ScratchpadName,
-    OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
+        state_ptr, initialize, loop, clean, ScratchpadName,
+        OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 
 """Create an isolated runtime module used as the scratchpad eval scope."""
@@ -300,6 +310,7 @@ function create_session(state_ptr::Ptr{Cvoid}, session_id::Int)
         String[],
         ScratchpadFrameHook[],
         ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        UInt64(0),
         1,
         InputModeJulia,
         1)
@@ -397,7 +408,8 @@ function metrics_summary_lines(state_ptr::Ptr{Cvoid})
         "errors eval=$(m.eval_errors) hooks=$(m.hook_errors) blocked=$(m.blocked_commands)",
         "slow eval warnings=$(m.slow_eval_warnings) last_eval_ns=$(m.last_eval_ns)",
         "slow hook warnings=$(m.slow_hook_warnings) last_hook_ns=$(m.last_hook_ns)",
-        "transitions initialize=$(InitializeCountRef[]) clean=$(CleanCountRef[]) reset=$(ResetCountRef[])",
+        "transitions initialize=$(ScratchpadRuntime.initialize_count) " *
+        "clean=$(ScratchpadRuntime.clean_count) reset=$(ScratchpadRuntime.reset_count)",
     ]
 end
 
@@ -408,18 +420,18 @@ function reset_session!(state_ptr::Ptr{Cvoid})
         Main.EuclidRepl.reset_scratchpad_session!()
     end
 
-    session_id = NextSessionIdRef[]
-    NextSessionIdRef[] = session_id + 1
-    ResetCountRef[] += 1
+    session_id = ScratchpadRuntime.next_session_id
+    ScratchpadRuntime.next_session_id = session_id + 1
+    ScratchpadRuntime.reset_count += 1
 
     session = create_session(state_ptr, session_id)
-    SessionRef[] = session
+    ScratchpadRuntime.current_session = session
     return session
 end
 
 """Return the current session or create one when missing, refreshing state_ptr binding."""
 function ensure_session!(state_ptr::Ptr{Cvoid})
-    session = SessionRef[]
+    session = ScratchpadRuntime.current_session
     if session === nothing
         return reset_session!(state_ptr)
     end
@@ -432,6 +444,7 @@ end
 function append_output_entry!(session::ScratchpadSession, entry::ScratchpadOutputEntry)
     push!(session.output, entry.line)
     push!(session.output_entries, entry)
+    session.output_revision += 1
     extra = length(session.output) - MaxOutputLines
     if extra > 0
         session.metrics.output_trimmed += extra

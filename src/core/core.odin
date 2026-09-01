@@ -242,7 +242,6 @@ Julia_Request_Kind :: enum {
     Initialize,
     Invoke,
     Scratchpad,
-    View_Snapshot,
     Animation_Tick,
     Shutdown,
 }
@@ -251,7 +250,6 @@ Julia_Event_Kind :: enum {
     Initialized,
     Invoke_Complete,
     Scratchpad_Complete,
-    View_Snapshot_Complete,
     Animation_Tick_Complete,
     Shutdown_Complete,
 }
@@ -271,12 +269,14 @@ Animation_Tick_Slot :: struct {
     animation: ^Euclid_Julia_Animation_Interface,
     dt: f32,
     submitted_at: time.Tick,
+    view_snapshot_index: int,
     query_snapshot: Animation_Query_Snapshot,
     scene_batch: Scene_Command_Batch,
 }
 
 View_Snapshot_Slot_State :: enum u8 {
     Free,
+    Reserved,
     Pending,
     Complete,
     Published,
@@ -284,6 +284,7 @@ View_Snapshot_Slot_State :: enum u8 {
 
 View_Snapshot :: struct {
     state: View_Snapshot_Slot_State,
+    candidate_committed: bool,
     request_id: u64,
     generation: u64,
     runtime_generation: u64,
@@ -417,7 +418,6 @@ Julia_Runtime_Service :: struct {
     dynview_staging: ^Dynview_System,
     view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
     view_snapshot_generation: u64,
-    view_snapshot_pending: bool,
     published_view_snapshot_index: int,
     animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
     animation_generation: u64,
@@ -436,7 +436,6 @@ Julia_Runtime_Service :: struct {
 }
 
 Euclid_Julia_Animation_Interface :: struct {
-    get_view_text : ^julialib.jl_value_t,
     initiate : ^julialib.jl_value_t, // initiate the animation type
     loop : ^julialib.jl_value_t, // ran each dt in the main window loop
     clean : ^julialib.jl_value_t, // stop and clear animations
@@ -466,6 +465,7 @@ Euclid_Julia_Animation_Iterator :: struct {
 }
 
 Euclid_Julia_Interface :: struct {
+    invoke_with_exception_diagnostics: ^julialib.jl_value_t,
     init_scripts : ^julialib.jl_value_t,
     global_loop : ^julialib.jl_value_t,
     scratchpad_classify_input : ^julialib.jl_value_t,
@@ -1804,6 +1804,7 @@ Euclid_General_State :: struct {
 
     dynview: Dynview_System,
     dynview_emit_target: ^Dynview_System,
+    view_update_candidate: ^View_Snapshot,
 
     chalk_audio: Chalk_Audio_Runtime,
     user_drawing_sound_enabled: bool,

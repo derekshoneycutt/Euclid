@@ -135,7 +135,7 @@ mutable struct ReplDrawJob
     payload::ReplDrawPayload
 end
 
-mutable struct ReplDrawSession
+mutable struct ReplDrawSession <: Scratchpad.ScratchpadExtensionState
     active_job::Union{Nothing, ReplDrawJob}
     managed_host_ids::Vector{Int}
 end
@@ -149,17 +149,15 @@ struct ReplStatus
     managed_shape_count::Int
 end
 
-const SESSION_REF = Ref{Union{Nothing, ReplDrawSession}}(nothing)
-
 """Return the singleton EuclidRepl session, creating it when missing."""
 function ensure_session!()
-    session = SESSION_REF[]
+    session = Scratchpad.ScratchpadRuntime.extension_state
     if session === nothing
         session = ReplDrawSession(nothing, Int[])
-        SESSION_REF[] = session
+        Scratchpad.ScratchpadRuntime.extension_state = session
     end
 
-    return session
+    return session::ReplDrawSession
 end
 
 """Return `value` as `Float32` and fail when duration is non-positive or non-finite."""
@@ -674,7 +672,7 @@ end
 
 """Reset EuclidRepl session state for scratchpad lifecycle transitions."""
 function reset_scratchpad_session!()
-    SESSION_REF[] = nothing
+    Scratchpad.ScratchpadRuntime.extension_state = nothing
     return nothing
 end
 

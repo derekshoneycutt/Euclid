@@ -135,15 +135,17 @@ Odin/Julia ownership, communication, evaluation, rendering, and lifecycle model.
 
 ## Dynview Text Engine (Hybrid-Immediate Rendering)
 
-Dynview now has 2 parallel surfaces every frame:
+Dynview snapshots contain two parallel surfaces:
 
 - Plain fallback text (`get_view_text`) for guaranteed readability.
 - Structured command stream for styled text, inline atoms, and recursive math blocks.
 
 Snapshot and display flow:
 
-1. The Julia worker produces fallback text and dynview commands in a bounded
-  worker-owned staging runtime.
+1. A named Julia producer emits fallback text and dynview commands only inside
+  its owning lifecycle or animation-tick transaction.
+1. Julia explicitly calls `publish_view_update`; Odin never polls
+  `get_view_text` or stores it as a callback.
 1. The worker publishes a complete animation-tagged semantic snapshot.
 1. Odin validates and installs immutable populated views at a frame boundary.
 1. Odin emits required `Dynview_Published` evidence after animation identity
@@ -248,14 +250,11 @@ sequenceDiagram
     W->>J: run global + selected animation loops
     J->>B: read immutable query snapshot
     J->>B: capture mutations in scene-command batch
+    J->>B: optionally publish view candidate
     W-->>D: complete tick event
-    D->>D: commit batch at fixed-step boundary
+    D->>D: validate and jointly commit batch + view
     D->>D: solve constraints before next snapshot
-    D->>W: nonblocking view snapshot request
-    W->>J: get_view_text(state_ptr)
-    J->>B: emit into worker dynview staging
-    W-->>D: complete view snapshot event
-    D->>D: validate, import, compile, layout, draw
+    D->>D: publish, compile, layout, draw
   end
 
   alt Asset package changed
@@ -606,6 +605,8 @@ Choose the owning module first, then touch that module's highlighted files.
 
 1. Add Julia animation module/file in `src/julia/...`.
 1. Implement `get_view_text`, `initialize`, `loop`, `clean`.
+1. Publish the named `get_view_text` producer from `initialize`, or from `loop`
+  only when semantic view content changes, using `publish_view_update`.
 1. Register it via `add_child_animation_interface` in the relevant group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 

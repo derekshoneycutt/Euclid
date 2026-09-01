@@ -22,12 +22,18 @@ The following investigation is a new attempt to choose for geometry a simple and
     EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
+"""Publish this category view when its animation node is selected."""
+function initialize_view_root_hilbert(state_ptr::Ptr{Cvoid})
+    NullAnimation.initialize(state_ptr)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text_root_hilbert)
+end
+
 """Register the Hilbert Foundations root animation interface and chapter content."""
 function init_euclid_scripts_hilbert(state_ptr::Ptr{Cvoid})
     root_stable_id = OdinJuliaBridge.animation_stable_id_from_key(
         "root:Hilbert's Foundations of Geometry")
     OdinJuliaBridge.add_root_animation_interface(
-        state_ptr, get_view_text_root_hilbert, NullAnimation.initialize,
+        state_ptr, initialize_view_root_hilbert,
         NullAnimation.loop, NullAnimation.clean,
         "Hilbert's Foundations of Geometry",
         root_stable_id)

@@ -18,6 +18,7 @@ ANIMATION_LOOKUP_LOAD_FACTOR_DENOMINATOR :: 10
 
 Animation_Lifecycle_Task_Data :: struct {
     state: ^core.Euclid_General_State,
+    view_snapshot_index: int,
 }
 
 Harness_Scenario_Task_Data :: struct {
@@ -27,10 +28,28 @@ Harness_Scenario_Task_Data :: struct {
 }
 
 Animation_Callbacks :: struct {
-    get_view_text: ^julialib.jl_value_t,
     initiate:      ^julialib.jl_value_t,
     loop:          ^julialib.jl_value_t,
     clean:         ^julialib.jl_value_t,
+}
+
+//   Invoke one Julia callback through the stack-preserving diagnostic boundary.
+call_julia_callback1 :: proc(
+    state: ^core.Euclid_General_State, callback, argument: ^julialib.jl_value_t) {
+
+    julialib.jl_call2(
+        state^.julia_interface^.invoke_with_exception_diagnostics,
+        callback, argument)
+}
+
+//   Invoke one two-argument Julia callback through the diagnostic boundary.
+call_julia_callback2 :: proc(
+    state: ^core.Euclid_General_State, callback, first,
+    second: ^julialib.jl_value_t) {
+
+    julialib.jl_call3(
+        state^.julia_interface^.invoke_with_exception_diagnostics,
+        callback, first, second)
 }
 
 //   Invoke Julia-side script initialization and optional null-animation init hook.
@@ -43,14 +62,16 @@ Animation_Callbacks :: struct {
 init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
     state_value := julialib.jl_box_voidpointer(state)
 
-    julialib.jl_call1(state^.julia_interface^.init_scripts, state_value)
+    call_julia_callback1(
+        state, state^.julia_interface^.init_scripts, state_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
         return false
     }
 
     if state^.julia_interface^.null_animation.initiate != nil {
-        julialib.jl_call1(state^.julia_interface^.null_animation.initiate, state_value)
+        call_julia_callback1(
+            state, state^.julia_interface^.null_animation.initiate, state_value)
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("init_euclid_scripts")
             return false
@@ -93,9 +114,18 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
         return false
     }
     service^.reload_state = .Quiescing
-    task_data := Animation_Lifecycle_Task_Data{state = state}
+    view_snapshot_index := reserve_view_candidate(service)
+    if view_snapshot_index < 0 {
+        service^.reload_state = .Idle
+        return false
+    }
+    task_data := Animation_Lifecycle_Task_Data{
+        state = state,
+        view_snapshot_index = view_snapshot_index,
+    }
     if !invoke_julia_compatibility_task(
         state, update_animation_lifecycle_task, rawptr(&task_data)) {
+        release_reserved_view_candidate(service, view_snapshot_index)
         if service^.reload_state == .Quiescing {
             service^.reload_state = .Idle
         }
@@ -115,7 +145,18 @@ update_animation_lifecycle_task :: proc(data: rawptr) -> bool {
     task_data := cast(^Animation_Lifecycle_Task_Data)data
     assert_julia_runtime_owner(task_data^.state)
     context = task_data^.state^.saved_context
-    return update_running_animations(task_data^.state)
+    service := task_data^.state^.julia_runtime_service
+    animation := task_data^.state^.julia_interface^.selected_animation
+    if animation == nil {
+        animation = &task_data^.state^.julia_interface^.null_animation
+    }
+    begin_request_view_candidate(
+        task_data^.state, task_data^.view_snapshot_index, 0,
+        service^.animation_generation + 1, animation)
+    succeeded := update_running_animations(task_data^.state)
+    finish_lifecycle_view_candidate(
+        task_data^.state, task_data^.view_snapshot_index, succeeded)
+    return succeeded
 }
 
 //   Produce one immutable scene batch without touching canonical query state.
@@ -124,12 +165,16 @@ generate_animation_tick_task :: proc(data: rawptr) -> bool {
     state := slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
+    begin_request_view_candidate(
+        state, slot^.view_snapshot_index, slot^.request_id,
+        slot^.generation, slot^.animation)
     state^.animation_query_snapshot_target = &slot^.query_snapshot
     begin_scene_command_batch(state, &slot^.scene_batch)
     call_global_euclid_loop(state, slot^.dt)
     callback_succeeded := call_current_animation_loop(state, slot^.dt)
     end_scene_command_batch(state)
     state^.animation_query_snapshot_target = nil
+    end_request_view_candidate(state, slot^.view_snapshot_index, callback_succeeded)
     if !callback_succeeded {
         slot^.scene_batch.overflowed = true
     }
@@ -166,31 +211,6 @@ animation_lifecycle_update_needed :: proc(state: ^core.Euclid_General_State) -> 
     return ji^.asset_archive_mod_time_unix_nano == 0 ||
         archive_mtime != ji^.asset_archive_mod_time_unix_nano &&
         (service == nil || archive_mtime != service^.reload_failed_mtime_unix_nano)
-}
-
-//   Call the active Julia view-text function from the Julia owner thread.
-call_current_animation_get_view_text_direct :: proc(
-    state: ^core.Euclid_General_State) -> string {
-
-    if state^.julia_interface^.current_animation == nil ||
-        state^.julia_interface^.current_animation^.get_view_text == nil {
-        return ""
-    }
-
-    state_value := julialib.jl_box_voidpointer(state)
-
-    result := julialib.jl_call1(
-        state^.julia_interface^.current_animation^.get_view_text, state_value)
-
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("Current animation get view text")
-        return ""
-    }
-    if result == nil {
-        return ""
-    }
-
-    return strings.clone(string(julialib.jl_string_ptr(result)), context.temp_allocator)
 }
 
 //   Update animation lifecycle state, hot-reload assets if changed, and process animation switches/resets.
@@ -284,7 +304,8 @@ call_global_euclid_loop :: proc(state: ^core.Euclid_General_State, dt: f32) {
     state_value := julialib.jl_box_voidpointer(state)
     dt_value := julialib.jl_box_float32(dt)
 
-    julialib.jl_call2(state^.julia_interface^.global_loop, state_value, dt_value)
+    call_julia_callback2(
+        state, state^.julia_interface^.global_loop, state_value, dt_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("global_euclid_loop")
         return
@@ -312,8 +333,8 @@ call_current_animation_loop :: proc(state: ^core.Euclid_General_State, dt: f32) 
     state_value := julialib.jl_box_voidpointer(state)
     dt_value := julialib.jl_box_float32(dt)
 
-    julialib.jl_call2(state^.julia_interface^.current_animation^.loop,
-        state_value, dt_value)
+    call_julia_callback2(state,
+        state^.julia_interface^.current_animation^.loop, state_value, dt_value)
 
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Current animation loop")
@@ -345,7 +366,7 @@ change_current_animation_loop :: proc(
 
     state_value := julialib.jl_box_voidpointer(state)
     if animation^.initiate != nil {
-        julialib.jl_call1(animation^.initiate, state_value)
+        call_julia_callback1(state, animation^.initiate, state_value)
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Initiating new animation loop")
             clean_failed_animation_initiation(state, animation)
@@ -376,7 +397,8 @@ clean_current_animation :: proc(state: ^core.Euclid_General_State) -> bool {
         return true
     }
 
-    julialib.jl_call1(current^.clean, julialib.jl_box_voidpointer(state))
+    call_julia_callback1(
+        state, current^.clean, julialib.jl_box_voidpointer(state))
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Cleaning previous animation loop")
         return false
@@ -404,7 +426,8 @@ clean_failed_animation_initiation :: proc(
     state: ^core.Euclid_General_State,
     animation: ^core.Euclid_Julia_Animation_Interface) {
     if animation^.clean != nil {
-        julialib.jl_call1(animation^.clean, julialib.jl_box_voidpointer(state))
+        call_julia_callback1(
+            state, animation^.clean, julialib.jl_box_voidpointer(state))
         if julialib.jl_exception_occurred() != nil {
             print_julia_exception("Cleaning failed animation initiation")
         }
@@ -422,7 +445,8 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
 
     state_value := julialib.jl_box_voidpointer(state)
 
-    julialib.jl_call1(state^.julia_interface^.current_animation^.clean, state_value)
+    call_julia_callback1(
+        state, state^.julia_interface^.current_animation^.clean, state_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Cleaning previous animation loop")
         return false
@@ -432,7 +456,8 @@ reset_current_animation_loop :: proc(state: ^core.Euclid_General_State) -> bool 
         return false
     }
 
-    julialib.jl_call1(state^.julia_interface^.current_animation^.initiate, state_value)
+    call_julia_callback1(
+        state, state^.julia_interface^.current_animation^.initiate, state_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("Initiating new animation loop")
         clean_failed_animation_initiation(
@@ -1231,7 +1256,6 @@ add_animation_to_registry :: proc(
         return nil, false
     }
 
-    node^.get_view_text = callbacks.get_view_text
     node^.initiate = callbacks.initiate
     node^.loop = callbacks.loop
     node^.clean = callbacks.clean

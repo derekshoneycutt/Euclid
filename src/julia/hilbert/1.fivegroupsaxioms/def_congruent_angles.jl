@@ -260,6 +260,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_o.index, label_h.index, label_k.index, label_o_prime.index,
         label_h_prime.index, label_k_prime.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
 end
 
 """Clean any extra animation data at the end of performance"""

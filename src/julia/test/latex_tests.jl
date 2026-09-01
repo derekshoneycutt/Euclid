@@ -118,8 +118,6 @@ end
 end
 
 @testset "unicode and text operators" begin
-    EuclidLatex.clear_cache!()
-
     plain = EuclidLatex.latex_to_plain_text("\\alpha + \\beta + \\sin(x)")
     @test plain == "α + β + sin(x)"
 
@@ -585,48 +583,5 @@ end
     malformed_array_mismatch = EuclidLatex.latex_to_plain_text(
         "\\begin{array}{c}a&b\\end{array}")
     @test malformed_array_mismatch == "\\begin"
-end
-
-@testset "cache behavior" begin
-    EuclidLatex.clear_cache!()
-    @test EuclidLatex.cache_size() == 0
-
-    first_entry = EuclidLatex.resolve_cache_entry("\\gamma + \\delta")
-    second_entry = EuclidLatex.resolve_cache_entry("\\gamma + \\delta")
-
-    @test EuclidLatex.cache_size() == 1
-    @test first_entry === second_entry
-
-    _ = EuclidLatex.resolve_cache_entry("\\gamma + \\delta"; style_profile=1)
-    @test EuclidLatex.cache_size() == 2
-
-    dropped_source = EuclidLatex.invalidate_cache_for_source!("\\gamma + \\delta")
-    @test dropped_source == 2
-    @test EuclidLatex.cache_size() == 0
-
-    _ = EuclidLatex.resolve_cache_entry("x+y"; style_profile=2)
-    _ = EuclidLatex.resolve_cache_entry("x+y"; style_profile=3)
-    _ = EuclidLatex.resolve_cache_entry("z+w"; style_profile=2)
-    @test EuclidLatex.cache_size() == 3
-
-    dropped_style = EuclidLatex.invalidate_cache_for_style!(2)
-    @test dropped_style == 2
-    @test EuclidLatex.cache_size() == 1
-
-    dropped_grammar = EuclidLatex.invalidate_cache_for_grammar!(
-        EuclidLatex.PARSER_GRAMMAR_VERSION)
-    @test dropped_grammar == 1
-    @test EuclidLatex.cache_size() == 0
-
-    _ = EuclidLatex.resolve_cache_entry("a")
-    _ = EuclidLatex.resolve_cache_entry("b")
-    _ = EuclidLatex.resolve_cache_entry("c")
-    _ = EuclidLatex.resolve_cache_entry("d")
-    @test EuclidLatex.prune_cache!(2) == 2
-    @test EuclidLatex.cache_size() == 2
-    @test EuclidLatex.latex_to_plain_text("a") == "a"
-
-    EuclidLatex.clear_cache!()
-    @test EuclidLatex.cache_size() == 0
 end
 

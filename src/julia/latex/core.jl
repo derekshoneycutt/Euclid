@@ -8,7 +8,6 @@ const ACCENT_BAR_THICKNESS = Float32(0.08)
 const ACCENT_BAR_OFFSET = Float32(0.10)
 const RADICAL_BAR_THICKNESS = Float32(0.08)
 const RADICAL_BAR_OFFSET = Float32(0.10)
-const PARSE_CACHE_MAX_ENTRIES = 256
 const MATH_OP_TEXT_RUN = Int32(1)
 const MATH_OP_MATH_GLYPH_RUN = Int32(2)
 const MATH_OP_ACCENT_BAR_RECURSIVE = Int32(3)
@@ -401,16 +400,6 @@ struct MathPayloadOp
     secondary_children::Vector{MathPayloadOp}
 end
 
-struct ParseCacheEntry
-    source::String
-    grammar_version::Int32
-    style_profile::Int32
-    tokens::Vector{LatexToken}
-    ast::Vector{LatexRun}
-    normalized_ast::Vector{LatexRun}
-    program::Vector{MathPayloadOp}
-end
-
 struct LatexDocumentShape
     kind::Symbol
     color::Union{Nothing,OdinJuliaBridge.BridgeColor}
@@ -452,9 +441,6 @@ mutable struct LatexDocumentParser
     source::String
     index::Int
 end
-
-const PARSE_CACHE = Dict{Tuple{String, Int32, Int32}, ParseCacheEntry}()
-const PARSE_CACHE_ORDER = Tuple{String, Int32, Int32}[]
 
 const EMPTY_CHILD_RUNS = LatexRun[]
 

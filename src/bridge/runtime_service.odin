@@ -34,7 +34,6 @@ JULIA_EVENT_HANDLERS ::
     .Initialized = nil,
     .Invoke_Complete = nil,
     .Scratchpad_Complete = julia_event_on_scratchpad,
-    .View_Snapshot_Complete = julia_event_on_view_snapshot,
     .Animation_Tick_Complete = julia_event_on_animation_tick,
     .Shutdown_Complete = julia_event_on_shutdown,
 }
@@ -100,12 +99,18 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         service^.animation_ticks_dropped += 1
         return false
     }
+    view_snapshot_index := reserve_view_candidate(service)
+    if view_snapshot_index < 0 {
+        service^.animation_ticks_dropped += 1
+        return false
+    }
 
     total_dt := min(dt + service^.animation_accumulated_dt, MAX_ACCUMULATED_ANIMATION_DT)
     service^.animation_accumulated_dt = 0
     service^.animation_tick_sequence += 1
     fill_animation_tick_slot(
-        service, &service^.animation_tick_slots[slot_index], state, total_dt)
+        service, &service^.animation_tick_slots[slot_index], state, total_dt,
+        view_snapshot_index)
     slot := &service^.animation_tick_slots[slot_index]
 
     request_id, sent := try_submit_julia_request(
@@ -125,7 +130,8 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
 //   Populate one animation tick slot and snapshot its query state for the request.
 fill_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
-    state: ^core.Euclid_General_State, total_dt: f32) {
+    state: ^core.Euclid_General_State, total_dt: f32,
+    view_snapshot_index: int) {
 
     slot^ = Animation_Tick_Slot{
         state = .Pending,
@@ -136,6 +142,7 @@ fill_animation_tick_slot :: proc(
         animation = state^.julia_interface^.current_animation,
         dt = total_dt,
         submitted_at = time.tick_now(),
+        view_snapshot_index = view_snapshot_index,
     }
     capture_animation_query_snapshot(state, &slot^.query_snapshot)
 }
@@ -144,6 +151,7 @@ fill_animation_tick_slot :: proc(
 rollback_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot, total_dt: f32) {
 
+    release_reserved_view_candidate(service, slot^.view_snapshot_index)
     slot^.state = .Free
     service^.animation_accumulated_dt = total_dt
     service^.animation_ticks_dropped += 1
@@ -174,12 +182,18 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     reject_reason := ""
     if !matches_current {
         reject_reason = animation_tick_reject_reason(state, service, slot)
+    } else if !animation_tick_view_candidate_is_valid(state, service, slot) {
+        reject_reason = "invalid_view_candidate"
     } else if !commit_scene_command_batch(state, &slot^.scene_batch) {
         reject_reason = "invalid_command_batch"
     } else {
+        commit_animation_tick_view_candidate(service, slot)
         committed = true
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
+    if !committed {
+        release_animation_tick_view_candidate(service, slot)
+    }
     release_completed_animation_ticks(service)
     return committed
 }
@@ -306,45 +320,6 @@ release_completed_animation_ticks :: proc(service: ^Julia_Runtime_Service) {
     }
 }
 
-//   Submit one replaceable view generation request without blocking display.
-// A published slot remains reserved until a newer valid generation replaces it, while a
-// pending request suppresses duplicate work.
-try_request_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state == nil || state^.julia_runtime_service == nil {
-        return false
-    }
-    service := state^.julia_runtime_service
-    if service^.view_snapshot_pending {
-        return false
-    }
-
-    slot_index := reserve_view_snapshot(service)
-    if slot_index < 0 {
-        return false
-    }
-    slot := &service^.view_snapshots[slot_index]
-    if !prepare_view_snapshot_slot(slot) {
-        return false
-    }
-    service^.view_snapshot_generation += 1
-    slot^.state = .Pending
-    slot^.request_id = service^.next_request_id
-    slot^.generation = service^.view_snapshot_generation
-    slot^.runtime_generation = service^.runtime_generation
-    slot^.animation_generation = service^.animation_generation
-    slot^.host_state = state
-    request_id, sent := try_submit_julia_request(
-        service, .View_Snapshot, generate_view_snapshot_task,
-        rawptr(slot), i32(slot_index))
-    if !sent {
-        slot^.state = .Free
-        return false
-    }
-    assert(slot^.request_id == request_id)
-    service^.view_snapshot_pending = true
-    return true
-}
-
 //   Publish the latest complete semantic snapshot into display-owned dynview.
 // Publication copies validated semantic spans, then recycles the previous published slot.
 // Invalid or stale generations clear selection-incompatible display content.
@@ -398,6 +373,11 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
         !view_snapshot_is_valid(slot) {
         slot^.state = .Free
         clear_stale_published_view(state, service)
+        return false
+    }
+    if published_view_snapshot_equals(service, slot) {
+        record_scratchpad_completed(state, slot)
+        slot^.state = .Free
         return false
     }
     publish_view_snapshot_slot(state, service, slot_index)
@@ -715,8 +695,178 @@ reserve_view_snapshot :: proc(service: ^Julia_Runtime_Service) -> int {
     return -1
 }
 
+//   Reserve one snapshot slot for lazy preparation by request-owned Julia work.
+reserve_view_candidate :: proc(service: ^Julia_Runtime_Service) -> int {
+    slot_index := reserve_view_snapshot(service)
+    if slot_index < 0 {
+        return -1
+    }
+    slot := &service^.view_snapshots[slot_index]
+    if !prepare_view_snapshot_slot(slot) {
+        return -1
+    }
+    slot^.state = .Reserved
+    return slot_index
+}
+
+//   Expose one request reservation to transactional dynview ABI calls.
+begin_request_view_candidate :: proc(
+    state: ^core.Euclid_General_State, slot_index: int, request_id: u64,
+    animation_generation: u64,
+    animation: ^core.Euclid_Julia_Animation_Interface) {
+
+    if state == nil || state^.julia_runtime_service == nil || slot_index < 0 {
+        return
+    }
+    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
+    slot^.request_id = request_id
+    slot^.animation_generation = animation_generation
+    slot^.animation = animation
+    state^.view_update_candidate = slot
+}
+
+//   Stop exposing one request candidate and discard failed callback output.
+end_request_view_candidate :: proc(
+    state: ^core.Euclid_General_State, slot_index: int, succeeded: bool) {
+
+    if state == nil || state^.julia_runtime_service == nil || slot_index < 0 {
+        return
+    }
+    state^.dynview_emit_target = nil
+    state^.view_update_candidate = nil
+    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
+    if !succeeded && slot^.state != .Published {
+        slot^.state = .Free
+    }
+}
+
+//   Publish a successful synchronous lifecycle candidate or release silence.
+finish_lifecycle_view_candidate :: proc(
+    state: ^core.Euclid_General_State, slot_index: int, succeeded: bool) {
+
+    end_request_view_candidate(state, slot_index, succeeded)
+    if !succeeded || state == nil || state^.julia_runtime_service == nil {
+        return
+    }
+    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
+    if slot^.state == .Pending && slot^.candidate_committed {
+        slot^.state = .Complete
+    } else if slot^.state == .Reserved {
+        if !prepare_empty_view_candidate(state, slot) {
+            slot^.state = .Free
+            return
+        }
+        slot^.state = .Complete
+    }
+}
+
+//   Build the implicit empty view attached to a successful silent lifecycle.
+prepare_empty_view_candidate :: proc(
+    state: ^core.Euclid_General_State, slot: ^View_Snapshot) -> bool {
+
+    animation_generation := slot^.animation_generation
+    animation := slot^.animation
+    request_id := slot^.request_id
+    service := state^.julia_runtime_service
+    service^.view_snapshot_generation += 1
+    slot^.request_id = request_id
+    slot^.generation = service^.view_snapshot_generation
+    slot^.runtime_generation = service^.runtime_generation
+    slot^.animation_generation = animation_generation
+    slot^.host_state = state
+    slot^.animation = animation
+    reset_view_snapshot_staging(service^.dynview_staging)
+    if !build_generated_view_snapshot_payloads(
+        slot, service^.dynview_staging, "") {
+        return false
+    }
+    slot^.candidate_committed = true
+    return true
+}
+
+//   Compare complete semantic payloads without relying on hashes or generations.
+published_view_snapshot_equals :: proc(
+    service: ^Julia_Runtime_Service, candidate: ^View_Snapshot) -> bool {
+
+    published_index := service^.published_view_snapshot_index
+    if published_index < 0 {
+        return false
+    }
+    published := &service^.view_snapshots[published_index]
+    if published == candidate || published^.state != .Published {
+        return false
+    }
+    return view_snapshot_slice_equal(
+        published^.fallback_text, candidate^.fallback_text) &&
+        view_snapshot_slice_equal(published^.command_text, candidate^.command_text) &&
+        view_snapshot_slice_equal(published^.commands, candidate^.commands) &&
+        view_snapshot_slice_equal(published^.math_programs, candidate^.math_programs) &&
+        view_snapshot_slice_equal(published^.math_commands, candidate^.math_commands) &&
+        view_snapshot_slice_equal(published^.math_nodes, candidate^.math_nodes)
+}
+
+//   Return true when two payload slices have identical values in identical order.
+view_snapshot_slice_equal :: proc(left, right: []$Element) -> bool {
+    if len(left) != len(right) {
+        return false
+    }
+    for value, index in left {
+        if value != right[index] {
+            return false
+        }
+    }
+    return true
+}
+
+//   Validate an optional candidate without treating a silent request as an error.
+animation_tick_view_candidate_is_valid :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    tick: ^Animation_Tick_Slot) -> bool {
+
+    slot := &service^.view_snapshots[tick^.view_snapshot_index]
+    if slot^.state == .Reserved {
+        return true
+    }
+    return slot^.state == .Pending && slot^.candidate_committed &&
+        view_snapshot_matches_current(state, service, slot) &&
+        view_snapshot_is_valid(slot)
+}
+
+//   Make an accepted tick candidate visible to normal snapshot publication.
+commit_animation_tick_view_candidate :: proc(
+    service: ^Julia_Runtime_Service, tick: ^Animation_Tick_Slot) {
+
+    slot := &service^.view_snapshots[tick^.view_snapshot_index]
+    if slot^.state == .Pending {
+        slot^.state = .Complete
+    } else if slot^.state == .Reserved {
+        slot^.state = .Free
+    }
+}
+
+//   Release candidate storage when the owning animation tick is rejected.
+release_animation_tick_view_candidate :: proc(
+    service: ^Julia_Runtime_Service, tick: ^Animation_Tick_Slot) {
+
+    slot := &service^.view_snapshots[tick^.view_snapshot_index]
+    if slot^.state != .Published {
+        slot^.state = .Free
+    }
+}
+
+//   Release a candidate only when Julia never began building its payload.
+release_reserved_view_candidate :: proc(
+    service: ^Julia_Runtime_Service, slot_index: int) {
+
+    if service != nil && slot_index >= 0 &&
+        service^.view_snapshots[slot_index].state == .Reserved {
+        service^.view_snapshots[slot_index].state = .Free
+    }
+}
+
 //   Clear generation payload metadata without copying the slot-owned arena owner.
 reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
+    slot^.candidate_committed = false
     slot^.request_id = 0
     slot^.generation = 0
     slot^.runtime_generation = 0
@@ -829,36 +979,6 @@ build_generated_view_snapshot_payloads :: proc(
         cache^.math_programs[:cache^.math_program_count],
         cache^.math_commands[:cache^.math_command_count],
         cache^.math_nodes[:cache^.math_node_count])
-}
-
-//   Generate fallback and semantic dynview data into worker staging.
-generate_view_snapshot_task :: proc(data: rawptr) -> bool {
-    slot := cast(^View_Snapshot)data
-    state := slot^.host_state
-    assert_julia_runtime_owner(state)
-    service := state^.julia_runtime_service
-    staging := service^.dynview_staging
-    reset_view_snapshot_staging(staging)
-
-    state^.dynview_emit_target = staging
-    fallback := call_current_animation_get_view_text_direct(state)
-    state^.dynview_emit_target = nil
-
-    slot^.animation = state^.julia_interface^.current_animation
-    slot^.scratchpad_request_id =
-        service^.worker_scratchpad_completed_request_id
-    slot^.scratchpad_runtime_generation =
-        service^.worker_scratchpad_completed_runtime_generation
-    if !build_generated_view_snapshot_payloads(slot, staging, fallback) {
-        slot^.state = .Free
-        return false
-    }
-    if slot^.scratchpad_request_id != 0 {
-        service^.worker_scratchpad_completed_request_id = 0
-        service^.worker_scratchpad_completed_runtime_generation = 0
-    }
-    slot^.state = .Complete
-    return true
 }
 
 //   Copy and seal both text families as one complete snapshot candidate.
@@ -1130,7 +1250,7 @@ try_submit_julia_request :: proc(
         service^.lifecycle = .Starting
     case .Shutdown:
         service^.lifecycle = .Shutdown_Requested
-    case .Invoke, .Scratchpad, .View_Snapshot, .Animation_Tick:
+    case .Invoke, .Scratchpad, .Animation_Tick:
     }
     return request_id, true
 }
@@ -1173,12 +1293,6 @@ julia_event_on_shutdown :: proc(
 julia_event_on_scratchpad :: proc(
     service: ^Julia_Runtime_Service, event: Julia_Event) {
     record_completed_scratchpad_slot(service, event.slot_index)
-}
-
-//   Clear the view-snapshot pending flag.
-julia_event_on_view_snapshot :: proc(
-    service: ^Julia_Runtime_Service, event: Julia_Event) {
-    service^.view_snapshot_pending = false
 }
 
 //   Clear the animation-tick pending flag.
@@ -1372,7 +1486,7 @@ attach_julia_request_evidence :: proc(
         }
     case .Invoke:
         record_completion = false
-    case .Initialize, .Scratchpad, .View_Snapshot:
+    case .Initialize, .Scratchpad:
         return
     }
     if !record_completion || evidence_session.session_record(
@@ -1403,9 +1517,6 @@ dispatch_julia_request :: proc(
         event^.succeeded = run_julia_request_task(request)
     case .Scratchpad:
         event^.kind = .Scratchpad_Complete
-        event^.succeeded = run_julia_request_task(request)
-    case .View_Snapshot:
-        event^.kind = .View_Snapshot_Complete
         event^.succeeded = run_julia_request_task(request)
     case .Animation_Tick:
         event^.kind = .Animation_Tick_Complete
