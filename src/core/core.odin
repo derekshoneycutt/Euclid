@@ -957,12 +957,39 @@ Dynview_Command_Kind :: enum {
     Inline_Pentagon,
 }
 
+Dynview_Math_Atom_Class :: enum i32 {
+    None = 0,
+    Ord,
+    Op,
+    Bin,
+    Rel,
+    Open,
+    Close,
+    Punct,
+    Inner,
+}
+
+Dynview_Math_Glue_Kind :: enum i32 {
+    None = 0,
+    Thick,
+    Space,
+    Negative_Thin,
+    Quad,
+    Thin,
+}
+
 Dynview_Command :: struct {
     kind: Dynview_Command_Kind,
+    math_atom_class: Dynview_Math_Atom_Class,
+    math_glue_kind: Dynview_Math_Glue_Kind,
     block_id: i32,
     style_id: i32,
     math_program_id: i32,
     secondary_math_program_id: i32,
+    tertiary_math_program_id: i32,
+    math_style_level: u8,
+    math_style_cramped: bool,
+    math_font_size: f32,
     shaped_run_indices: [4]i32,
     text_offset: int,
     text_len: int,
@@ -980,6 +1007,8 @@ Dynview_Command :: struct {
     accent_mode: i32,
     radical_mode: i32,
     large_op_kind: i32,
+    operator_growth: i32,
+    operator_limits: i32,
     radical_index_text_offset: int,
     radical_index_text_len: int,
     accent_style_id: i32,
@@ -1052,6 +1081,10 @@ Dynview_Layout_Item :: struct {
     math_command_index: i32,
     math_program_id: i32,
     secondary_math_program_id: i32,
+    tertiary_math_program_id: i32,
+    math_style_level: u8,
+    math_style_cramped: bool,
+    math_font_size: f32,
     line_index: int,
     col_start: int,
     col_span: int,
@@ -1069,9 +1102,68 @@ Dynview_Layout_Item :: struct {
     script_sup_raise: f32,
     script_sub_drop: f32,
     script_gap: f32,
+    script_sup_x: f32,
+    script_sup_baseline: f32,
+    script_sub_x: f32,
+    script_sub_baseline: f32,
+    script_space_after: f32,
+    script_geometry_valid: bool,
+    math_first_glyph_id: u32,
+    math_last_glyph_id: u32,
+    math_has_edge_glyphs: bool,
+    script_base_glyph_id: u32,
+    script_sup_glyph_id: u32,
+    script_sub_glyph_id: u32,
+    fraction_numerator_x: f32,
+    fraction_numerator_baseline: f32,
+    fraction_denominator_x: f32,
+    fraction_denominator_baseline: f32,
+    fraction_rule_left: f32,
+    fraction_rule_right: f32,
+    fraction_rule_center: f32,
+    fraction_rule_thickness: f32,
+    fraction_geometry_valid: bool,
+    accent_child_baseline: f32,
+    accent_rule_left: f32,
+    accent_rule_right: f32,
+    accent_rule_center: f32,
+    accent_rule_thickness: f32,
+    accent_geometry_valid: bool,
+    accent_child_x: f32,
+    accent_glyph_x: f32,
+    accent_glyph_line_top: f32,
+    accent_glyph_scale: f32,
+    accent_glyph_raster_ascent: f32,
+    accent_glyph_font_generation: u64,
+    accent_glyph_construction: Font_Math_Stretch_Construction,
     accent_mode: i32,
     radical_mode: i32,
     large_op_kind: i32,
+    operator_growth: i32,
+    operator_limits: i32,
+    operator_glyph_id: u32,
+    operator_font_generation: u64,
+    operator_glyph_x: f32,
+    operator_glyph_line_top: f32,
+    operator_glyph_font_size: f32,
+    operator_geometry_valid: bool,
+    math_stretch_constructions: [2]Font_Math_Stretch_Construction,
+    math_stretch_font_generation: u64,
+    math_stretch_raster_ascent: f32,
+    math_stretch_scale: f32,
+    math_stretch_left_x: f32,
+    math_stretch_right_x: f32,
+    math_stretch_bottom: f32,
+    math_stretch_vertical_origins: [2]f32,
+    math_stretch_content_x: f32,
+    math_stretch_geometry_valid: bool,
+    radical_rule_left: f32,
+    radical_rule_right: f32,
+    radical_rule_center: f32,
+    radical_rule_thickness: f32,
+    radical_degree_x: f32,
+    radical_degree_baseline: f32,
+    radical_geometry_valid: bool,
     radical_index_text_offset: int,
     radical_index_text_len: int,
     accent_style_id: i32,
@@ -1098,6 +1190,7 @@ Dynview_Layout_Item :: struct {
     content_offset_y: f32,
     overflows_horizontally: bool,
     draw_width: f32,
+    math_advance: f32,
     draw_height: f32,
     pie_center_offset_x: f32,
     pie_center_offset_y: f32,
@@ -1150,12 +1243,16 @@ Dynview_Math_Program :: struct {
     copy_text_offset: int,
     copy_text_len: int,
     draw_width: f32,
+    advance: f32,
     ascent: f32,
     descent: f32,
     visual_padding_top: f32,
     visual_padding_bottom: f32,
     italic_correction: f32,
     top_accent_attachment: f32,
+    first_glyph_id: u32,
+    last_glyph_id: u32,
+    has_edge_glyphs: bool,
 }
 
 Dynview_Shaped_Site :: enum u8 {
@@ -1241,7 +1338,12 @@ Dynview_Compile_Cache :: struct {
 
     shaped_runs: []Dynview_Shaped_Run,
     shaped_glyphs: []Shaped_Glyph,
+    math_kern_tables: []Font_Math_Kern_Table,
+    math_accent_sources: [][2]Font_Math_Stretch_Source,
     shaped_font_generation: u64,
+    math_constants: Font_Math_Constants,
+    math_operator_variants: [DYNVIEW_MAX_MATH_COMMANDS]Font_Math_Glyph_Variants,
+    math_stretch_sources: [DYNVIEW_MAX_MATH_COMMANDS][2]Font_Math_Stretch_Source,
 
     compiled_plain_text: []u8,
     compiled_copy_payload: []u8,
@@ -1459,8 +1561,105 @@ Font_Shaping_Resource :: struct {
     buffer: rawptr,
 }
 
+FONT_MATH_CONSTANT_COUNT :: 56
+FONT_MATH_GLYPH_VARIANT_CAPACITY :: 16
+FONT_MATH_GLYPH_PART_CAPACITY :: 16
+FONT_MATH_KERN_ENTRY_CAPACITY :: 16
+
+// Font_Math_Constants is one immutable generation's complete OpenType MATH table.
+Font_Math_Constants :: struct {
+    valid: bool,
+    generation: u64,
+    base_pixel_size: f32,
+    values: [FONT_MATH_CONSTANT_COUNT]i32,
+}
+
+// Font_Math_Glyph_Variant is one font-owned glyph and vertical advance in 26.6 units.
+Font_Math_Glyph_Variant :: struct {
+    glyph_id: u32,
+    advance: i32,
+    extents: Font_Glyph_Extents,
+    italic_correction: i32,
+    top_accent_attachment: i32,
+}
+
+// Font_Math_Glyph_Variants is one bounded generation-specific vertical variant set.
+Font_Math_Glyph_Variants :: struct {
+    valid: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    extended_shape: bool,
+    count: int,
+    values: [FONT_MATH_GLYPH_VARIANT_CAPACITY]Font_Math_Glyph_Variant,
+}
+
+// Font_Math_Glyph_Part is one assembly part with connector geometry in 26.6 units.
+Font_Math_Glyph_Part :: struct {
+    glyph_id: u32,
+    start_connector_length: i32,
+    end_connector_length: i32,
+    full_advance: i32,
+    extender: bool,
+    extents: Font_Glyph_Extents,
+}
+
+// Font_Math_Glyph_Assembly is one bounded generation-specific construction recipe.
+Font_Math_Glyph_Assembly :: struct {
+    valid: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    min_connector_overlap: i32,
+    italic_correction: i32,
+    count: int,
+    values: [FONT_MATH_GLYPH_PART_CAPACITY]Font_Math_Glyph_Part,
+}
+
+// Font_Math_Kern_Entry is one height ceiling and kern value in 26.6 units.
+Font_Math_Kern_Entry :: struct {
+    max_correction_height: i32,
+    kern_value: i32,
+}
+
+// Font_Math_Kern_Table is one bounded generation-specific glyph corner table.
+Font_Math_Kern_Table :: struct {
+    valid: bool,
+    generation: u64,
+    glyph_id: u32,
+    corner: u8,
+    count: int,
+    entries: [FONT_MATH_KERN_ENTRY_CAPACITY]Font_Math_Kern_Entry,
+}
+
+// Font_Math_Stretch_Part is one selected glyph at a bottom-up advance offset.
+Font_Math_Stretch_Part :: struct {
+    glyph_id: u32,
+    advance_offset: f32,
+    extents: Font_Glyph_Extents,
+}
+
+// Font_Math_Stretch_Construction is one bounded ready-made or assembled shape.
+Font_Math_Stretch_Construction :: struct {
+    valid: bool,
+    assembled: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    advance: f32,
+    italic_correction: f32,
+    top_accent_attachment: f32,
+    count: int,
+    parts: [FONT_MATH_GLYPH_PART_CAPACITY]Font_Math_Stretch_Part,
+}
+
+// Font_Math_Stretch_Source groups ready variants and an optional assembly recipe.
+Font_Math_Stretch_Source :: struct {
+    raster_ascent: f32,
+    variants: Font_Math_Glyph_Variants,
+    assembly: Font_Math_Glyph_Assembly,
+}
+
 Font_Math_Shaping_Capability :: struct {
     resource: Font_Shaping_Resource,
+    constants: Font_Math_Constants,
     generation: u64,
     failed_generation: u64,
     raster_ascent: f32,

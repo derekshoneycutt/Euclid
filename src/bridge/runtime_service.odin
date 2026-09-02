@@ -531,11 +531,30 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
         }
     }
     for command in slot^.math_commands {
-        if !view_snapshot_command_text_spans_valid(command, len(slot^.command_text)) {
+        if !view_snapshot_command_text_spans_valid(command, len(slot^.command_text)) ||
+            !view_snapshot_math_command_semantics_are_valid(command) {
             return false
         }
     }
     return view_snapshot_math_records_are_valid(slot)
+}
+
+//   Validate atom and explicit-glue metadata before snapshot publication.
+view_snapshot_math_command_semantics_are_valid :: proc(
+    command: core.Dynview_Command) -> bool {
+
+    atom := i32(command.math_atom_class)
+    glue := i32(command.math_glue_kind)
+    if atom < i32(core.Dynview_Math_Atom_Class.None) ||
+        atom > i32(core.Dynview_Math_Atom_Class.Inner) ||
+        glue < i32(core.Dynview_Math_Glue_Kind.None) ||
+        glue > i32(core.Dynview_Math_Glue_Kind.Thin) {
+        return false
+    }
+    if command.math_glue_kind != .None {
+        return command.math_atom_class == .None
+    }
+    return command.math_atom_class != .None
 }
 
 //   Require every record slice to be the populated prefix of its sealed builder.

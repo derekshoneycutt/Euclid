@@ -82,7 +82,7 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
 
     settings := make_headless_trace_settings()
     settings.profile_path = profile_path
-    session, ok := create_runtime_session(&settings)
+    session, ok := create_runtime_session(&settings, &asset_root_config)
     testing.expect(t, ok)
     if !ok {
         return

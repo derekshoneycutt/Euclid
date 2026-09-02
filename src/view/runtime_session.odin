@@ -159,12 +159,16 @@ session_load_content :: proc(
 
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
 create_runtime_session :: proc(
-    settings: ^Euclid_Run_Settings) -> (Euclid_Runtime_Session, bool) {
+    settings: ^Euclid_Run_Settings,
+    asset_config: ^files.Asset_Root_Config = nil) -> (Euclid_Runtime_Session, bool) {
     if settings == nil {
         return {}, false
     }
 
-    files.ensure_packaged_assets_unpacked_root()
+    if !files.packaged_asset_archive_exists_root(asset_config) ||
+        !files.ensure_packaged_assets_unpacked_root(asset_config) {
+        return {}, false
+    }
     started: Session_Julia_Service
     if !session_start_julia_service(
         &started, julia_worker_profile_path(settings^.profile_path)) {

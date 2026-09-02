@@ -46,6 +46,8 @@ Scratchpad_Draw_Params :: struct {
 Program_Draw_Position :: struct {
     draw_x : f32,
     baseline_y : f32,
+    font_size: f32,
+    math_style: dynview.Math_Style,
 }
 
 
@@ -107,6 +109,10 @@ draw_math_program_at :: proc(
     position: Program_Draw_Position) {
 
     runtime := ctx.runtime
+    child_ctx := ctx
+    if position.font_size > 0 {
+        child_ctx.font_size = position.font_size
+    }
     child_x := position.draw_x
     command_end := program.command_start + program.command_count
     for command_index in program.command_start..<command_end {
@@ -115,15 +121,18 @@ draw_math_program_at :: proc(
             &runtime^.compile_cache,
             &runtime^.command_buffer,
             cmd,
-            ctx.font_size,
-            command_index)
+            child_ctx.font_size,
+            command_index,
+            position.math_style)
         if !ok {
             continue
         }
 
+        child_x += dynview.math_program_command_leading_space(
+            &runtime^.compile_cache, program, command_index, child_ctx.font_size)
         child_y := position.baseline_y - child_item.ascent
         child_style := dynview.style_by_id(child_item.style_id)
-        draw_cached_text_item(ctx, child_style, child_item, child_x, child_y)
+        draw_cached_text_item(child_ctx, child_style, child_item, child_x, child_y)
         child_x += child_item.draw_width
     }
 }

@@ -1,0 +1,19 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":"L\"\\hat{x_1} \\quad \\widehat{AB} \\quad \\widetilde{x+y} \\quad \\vec{v} \\quad \\dot{x}+\\ddot{y}+\\bar{z} \\quad \\hat{H} \\quad \\omega^f+V_A\"","as":"phase7-math"}
+{"wait_event":"scratchpad_completed","correlation":"phase7-math","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"screenshot":".build/phase7-math-kern-accents.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

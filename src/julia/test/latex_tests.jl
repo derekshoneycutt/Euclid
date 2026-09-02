@@ -8,6 +8,27 @@ end
 using .EuclidLatex
 using Test
 
+const TEX_COMPLIANCE_BASELINE = [
+    (category=:atom_spacing, source="a+b=c,\\;-a+b"),
+    (category=:scripts, source="x_i^2+V_A"),
+    (category=:fractions, source="\\frac{a+b}{c}"),
+    (category=:operators, source="\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx"),
+    (category=:radicals, source="\\sqrt[n]{x+1}"),
+    (category=:delimiters, source="\\left(\\frac{a}{b}\\right)"),
+    (category=:matrices, source="\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}"),
+    (category=:bars, source="\\overline{AB}+\\underline{CD}"),
+    (category=:nesting, source="\\frac{1}{1+\\frac{1}{x^2}}"),
+    (category=:fallback, source="\\unsupported{readable}"),
+]
+
+@testset "TeX compliance baseline corpus" begin
+    for fixture in TEX_COMPLIANCE_BASELINE
+        program = EuclidLatex.compiled_program_for(fixture.source)
+        @test !isempty(program)
+        @test !isempty(EuclidLatex.latex_to_plain_text(fixture.source))
+    end
+end
+
 @testset "latex mode classification" begin
     @test EuclidLatex.classify_latex_mode("\\frac{1}{2}") == :math
     @test EuclidLatex.classify_latex_mode("\$\\alpha + 1\$") == :math
@@ -119,45 +140,45 @@ end
 
 @testset "unicode and text operators" begin
     plain = EuclidLatex.latex_to_plain_text("\\alpha + \\beta + \\sin(x)")
-    @test plain == "α + β + sin(x)"
+    @test plain == "α+β+sin(x)"
 
     circ_plain = EuclidLatex.latex_to_plain_text("f \\circ g")
-    @test circ_plain == "f ∘ g"
+    @test circ_plain == "f∘g"
 
     alias_plain = EuclidLatex.latex_to_plain_text("a \\ne b, x \\ge y")
-    @test alias_plain == "a ≠ b, x ≥ y"
+    @test alias_plain == "a≠b,x≥y"
 
     symbol_plain = EuclidLatex.latex_to_plain_text(
         "1,2,\\dots,n; x \\mapsto y; A \\rtimes B")
-    @test symbol_plain == "1,2,…,n; x ↦ y; A ⋊ B"
+    @test symbol_plain == "1,2,…,n;x↦y;A⋊B"
 
     spacing_plain = EuclidLatex.latex_to_plain_text("a\\;b")
     @test spacing_plain == "a b"
 
     greek_plain = EuclidLatex.latex_to_plain_text("\\varpi \\digamma")
-    @test greek_plain == "ϖ ϝ"
+    @test greek_plain == "ϖϝ"
 
     operator_plain = EuclidLatex.latex_to_plain_text(
         "\\mp \\ast \\star \\bullet \\oplus \\otimes \\setminus \\sqcap \\amalg")
-    @test operator_plain == "∓ ∗ ⋆ ∙ ⊕ ⊗ ∖ ⊓ ⨿"
+    @test operator_plain == "∓∗⋆∙⊕⊗∖⊓⨿"
 
     relation_plain = EuclidLatex.latex_to_plain_text(
         "\\ll \\prec \\preceq \\sim \\simeq \\cong \\parallel \\perp \\models \\sqsubseteq \\ni")
-    @test relation_plain == "≪ ≺ ≼ ∼ ≃ ≅ ∥ ⊥ ⊨ ⊑ ∋"
+    @test relation_plain == "≪≺≼∼≃≅∥⊥⊨⊑∋"
 
     logic_plain = EuclidLatex.latex_to_plain_text(
         "\\emptyset \\complement \\therefore \\because \\top \\bot")
-    @test logic_plain == "∅ ∁ ∴ ∵ ⊤ ⊥"
+    @test logic_plain == "∅∁∴∵⊤⊥"
 
     arrow_plain = EuclidLatex.latex_to_plain_text(
         "\\rightarrow \\leftrightarrow \\uparrow \\Uparrow \\longrightarrow " *
         "\\hookrightarrow \\leftharpoonup \\rightleftharpoons \\leadsto")
-    @test arrow_plain == "→ ↔ ↑ ⇑ ⟶ ↪ ↼ ⇌ ⇝"
+    @test arrow_plain == "→↔↑⇑⟶↪↼⇌⇝"
 
     notation_plain = EuclidLatex.latex_to_plain_text(
         "\\prime \\hbar \\ell \\Re \\Im \\wp \\angle \\triangle \\Box " *
         "\\Diamond \\clubsuit \\flat \\checkmark \\oint \\iint")
-    @test notation_plain == "′ ℏ ℓ ℜ ℑ ℘ ∠ △ □ ◇ ♣ ♭ ✓ ∮ ∬"
+    @test notation_plain == "′ℏℓℜℑ℘∠△□◇♣♭✓∮∬"
 
     command_space_plain = EuclidLatex.latex_to_plain_text("\\angle ABC")
     @test command_space_plain == "∠ABC"
@@ -169,7 +190,7 @@ end
     @test command_nonbreaking_space_plain == "∠\u00a0ABC"
 
     program = EuclidLatex.compiled_program_for("\\sin(x)+x")
-    @test length(program) == 5
+    @test length(program) == 6
     @test program[1].kind == EuclidLatex.MATH_OP_TEXT_RUN
     @test program[1].text == "sin"
     @test program[2].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
@@ -177,21 +198,49 @@ end
     @test program[2].style_role == :math_upright
     @test program[3].text == "x"
     @test program[3].style_role == :math_italic
-    @test program[4].text == ")+"
+    @test program[4].text == ")"
     @test program[4].style_role == :math_upright
-    @test program[5].text == "x"
-    @test program[5].style_role == :math_italic
+    @test program[5].text == "+"
+    @test program[6].text == "x"
+    @test program[6].style_role == :math_italic
 end
 
 @testset "normal math semantic roles" begin
     program = EuclidLatex.compiled_program_for("Ax+Γα=2")
-    @test [(op.text, op.style_role) for op in program] == [
-        ("Ax", :math_italic),
-        ("+Γ", :math_upright),
-        ("α", :math_italic),
-        ("=2", :math_upright),
+    @test [(op.text, op.style_role, op.atom_class) for op in program] == [
+        ("Ax", :math_italic, EuclidLatex.MATH_ATOM_ORD),
+        ("+", :math_upright, EuclidLatex.MATH_ATOM_BIN),
+        ("Γ", :math_upright, EuclidLatex.MATH_ATOM_ORD),
+        ("α", :math_italic, EuclidLatex.MATH_ATOM_ORD),
+        ("=", :math_upright, EuclidLatex.MATH_ATOM_REL),
+        ("2", :math_upright, EuclidLatex.MATH_ATOM_ORD),
     ]
     @test EuclidLatex.latex_to_plain_text("Ax+Γα=2") == "Ax+Γα=2"
+end
+
+@testset "math whitespace and explicit glue" begin
+    compact = EuclidLatex.compiled_program_for("a+b=c")
+    spaced = EuclidLatex.compiled_program_for(" a + b = c ")
+    semantic_fields = program -> [(op.kind, op.text, op.style_role,
+        op.atom_class, op.glue_kind) for op in program]
+    @test semantic_fields(compact) == semantic_fields(spaced)
+
+    explicit = EuclidLatex.compiled_program_for("a\\;b\\ c~d\\!e\\quad f\\,g")
+    @test [op.glue_kind for op in explicit] == [
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_THICK,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_SPACE,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_SPACE,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_NEGATIVE_THIN,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_QUAD,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_THIN,
+        EuclidLatex.MATH_GLUE_NONE,
+    ]
 end
 
 @testset "text command and scripts" begin
@@ -199,10 +248,10 @@ end
     @test plain == "Area {A}^{2}_{1}"
 
     roman_plain = EuclidLatex.latex_to_plain_text("i+j \\mathrm{mod} n")
-    @test roman_plain == "i+j mod n"
+    @test roman_plain == "i+jmodn"
 
     continued = EuclidLatex.latex_to_plain_text("A_1^2 + \\mathbb{R}")
-    @test continued == "{A}^{2}_{1} + ℝ"
+    @test continued == "{A}^{2}_{1}+ℝ"
 
     fallback = EuclidLatex.latex_to_plain_text("x_{ij}")
     @test fallback == "{x}_{ij}"
@@ -243,6 +292,8 @@ end
     @test program[1].sup_text == "2"
     @test program[1].sub_text == "1"
     @test program[1].style_role == :math_italic
+    @test program[1].secondary_children[1].text == "2"
+    @test program[1].tertiary_children[1].text == "1"
 
     mathbb_program = EuclidLatex.compiled_program_for("\\mathbb{R}_0")
     @test length(mathbb_program) == 1
@@ -260,20 +311,30 @@ end
     @test length(recursive_parent_program[1].children) == 1
     @test recursive_parent_program[1].children[1].kind ==
         EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+
+    io = IOBuffer()
+    _, bridge_ops = EuclidLatex.bridge_math_payload_preorder(
+        program, io, Int32(1), Int32(2), Int32(3))
+    @test bridge_ops[1].child_program_id == 1
+    @test bridge_ops[1].secondary_child_program_id == 1
+    @test bridge_ops[1].tertiary_child_program_id == 1
+    @test bridge_ops[2].text_len == 1
+    @test bridge_ops[3].text_len == 1
+    @test bridge_ops[4].text_len == 1
 end
 
 @testset "large operators" begin
     plain_sum = EuclidLatex.latex_to_plain_text("\\sum_{i=1}^n i")
-    @test plain_sum == "∑_{i=1}^{n} i"
+    @test plain_sum == "∑_{i=1}^{n}i"
 
     plain_prod = EuclidLatex.latex_to_plain_text("\\prod_{k=0}^{m} x_k")
-    @test plain_prod == "∏_{k=0}^{m}{ x}_{k}"
+    @test plain_prod == "∏_{k=0}^{m}{x}_{k}"
 
     plain_int = EuclidLatex.latex_to_plain_text("\\int_0^1 f(x)")
-    @test plain_int == "∫_{0}^{1} f(x)"
+    @test plain_int == "∫_{0}^{1}f(x)"
 
     plain_lim = EuclidLatex.latex_to_plain_text("\\lim_{x \\to 0} f(x)")
-    @test plain_lim == "lim_{x → 0} f(x)"
+    @test plain_lim == "lim_{x→0}f(x)"
 
     sum_program = EuclidLatex.compiled_program_for("\\sum_{i=1}^n i")
     @test length(sum_program) == 2
@@ -282,14 +343,26 @@ end
     @test sum_program[1].sup_text == "n"
     @test sum_program[1].sub_text == "i=1"
     @test sum_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_SUM
+    @test sum_program[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_DISPLAY
+    @test sum_program[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    @test sum_program[1].secondary_children[1].text == "n"
+    @test EuclidLatex.plain_text_for_program(
+        sum_program[1].tertiary_children) == "i=1"
 
     lim_program = EuclidLatex.compiled_program_for("\\lim_{x \\to 0} f(x)")
     @test length(lim_program) == 5
     @test lim_program[1].kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
     @test lim_program[1].text == "lim"
     @test lim_program[1].sup_text == ""
-    @test lim_program[1].sub_text == "x → 0"
+    @test lim_program[1].sub_text == "x→0"
     @test lim_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_LIM
+    @test lim_program[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_NONE
+    @test lim_program[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+
+    int_program = EuclidLatex.compiled_program_for("\\int_0^1 f(x)")
+    @test int_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_INT
+    @test int_program[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_DISPLAY
+    @test int_program[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
 end
 
 @testset "accent bars" begin
@@ -304,17 +377,29 @@ end
 
     accent_program = EuclidLatex.compiled_program_for(
         "f(\\overline{AB}) + \\underline{CD}")
-    @test length(accent_program) == 5
+    @test length(accent_program) == 6
     @test accent_program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
     @test accent_program[1].style_role == :math_italic
     @test accent_program[3].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
     @test accent_program[3].accent_mode == :overline
     @test length(accent_program[3].children) == 1
     @test accent_program[3].children[1].text == "AB"
-    @test accent_program[5].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
-    @test accent_program[5].accent_mode == :underline
-    @test length(accent_program[5].children) == 1
-    @test accent_program[5].children[1].text == "CD"
+    @test accent_program[6].kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE
+    @test accent_program[6].accent_mode == :underline
+
+    glyph_accents = EuclidLatex.compiled_program_for(
+        "\\hat{x}+\\widehat{AB}+\\tilde{y}+\\vec{v}+\\dot{x}+\\ddot{x}+\\bar{z}")
+    accent_modes = [op.accent_mode for op in glyph_accents if
+        op.kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE]
+    @test accent_modes == [:hat, :hat, :tilde, :vec, :dot, :ddot, :bar]
+    hat_payload = EuclidLatex.bridge_math_block_payload(
+        EuclidLatex.compiled_program_for("\\hat{x}");
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    hat_op = only(filter(op ->
+        op.kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE, hat_payload.ops))
+    @test hat_op.accent_mode == OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_HAT
+    @test length(accent_program[6].children) == 1
+    @test accent_program[6].children[1].text == "CD"
 
     embedded_scripts = EuclidLatex.compiled_program_for(
         "\\overline{AB^2} + \\underline{CD_4}")
@@ -353,8 +438,18 @@ end
     scripted = EuclidLatex.latex_to_plain_text("\\sqrt{A_1^2}")
     @test scripted == "\\sqrt{{A}^{2}_{1}}"
 
-    out_of_scope_index = EuclidLatex.latex_to_plain_text("\\sqrt[2n]{x}")
-    @test out_of_scope_index == "\\sqrt{x}"
+    recursive_degree = EuclidLatex.latex_to_plain_text("\\sqrt[2n^3]{x}")
+    @test recursive_degree == "\\sqrt[2n^3]{x}"
+    degree_program = EuclidLatex.compiled_program_for("\\sqrt[2n^3]{x}")
+    @test length(degree_program[1].secondary_children) == 2
+    @test degree_program[1].secondary_children[2].kind ==
+        EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    degree_io = IOBuffer()
+    _, degree_ops = EuclidLatex.bridge_math_payload_preorder(
+        degree_program, degree_io, Int32(1), Int32(2), Int32(3))
+    @test degree_ops[1].child_program_id == 1
+    @test degree_ops[1].secondary_child_program_id == 2
+    @test degree_ops[1].tertiary_child_program_id == 0
 
     radical_program = EuclidLatex.compiled_program_for("\\sqrt{AB} + \\sqrt{x^2}")
     @test length(radical_program) == 3
@@ -428,10 +523,10 @@ end
 
 @testset "stretch delimiters" begin
     plain_basic = EuclidLatex.latex_to_plain_text("\\left( x + y \\right)")
-    @test plain_basic == "\\left( x + y \\right)"
+    @test plain_basic == "\\left(x+y\\right)"
 
     plain_mixed = EuclidLatex.latex_to_plain_text("\\left[ a + b \\right)")
-    @test plain_mixed == "\\left[ a + b \\right)"
+    @test plain_mixed == "\\left[a+b\\right)"
 
     mixed_program = EuclidLatex.compiled_program_for("\\left[ a + b \\right)")
     @test length(mixed_program) == 1
@@ -440,18 +535,18 @@ end
     @test mixed_program[1].sup_text == ")"
 
     plain_left_omit = EuclidLatex.latex_to_plain_text("\\left. x \\right)")
-    @test plain_left_omit == "\\left. x \\right)"
+    @test plain_left_omit == "\\left.x\\right)"
 
     plain_right_omit = EuclidLatex.latex_to_plain_text("\\left( x \\right.")
-    @test plain_right_omit == "\\left( x \\right."
+    @test plain_right_omit == "\\left(x\\right."
 
     plain_nested = EuclidLatex.latex_to_plain_text(
         "\\left[ a + \\left( b \\right) \\right]")
-    @test plain_nested == "\\left[ a + \\left( b \\right) \\right]"
+    @test plain_nested == "\\left[a+\\left(b\\right)\\right]"
 
     plain_embedded = EuclidLatex.latex_to_plain_text(
         "\\left\\{ \\frac{a}{b} + \\sqrt{x} \\right\\}")
-    @test plain_embedded == "\\left\\{ {a}/{b} + \\sqrt{x} \\right\\}"
+    @test plain_embedded == "\\left\\{{a}/{b}+\\sqrt{x}\\right\\}"
 
     structure_program = EuclidLatex.compiled_program_for("\\left( \\frac{a}{b} \\right)")
     @test length(structure_program) == 1
@@ -462,10 +557,10 @@ end
         structure_program[1].children)
 
     unmatched_left = EuclidLatex.latex_to_plain_text("\\left( x")
-    @test unmatched_left == "\\left( x\\right."
+    @test unmatched_left == "\\left(x\\right."
 
     unmatched_right = EuclidLatex.latex_to_plain_text("x \\right)")
-    @test unmatched_right == "x \\right)"
+    @test unmatched_right == "x\\right)"
 end
 
 @testset "matrix blocks" begin

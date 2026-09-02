@@ -133,6 +133,9 @@ app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
 debug_app_binary_path() = joinpath(
     SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
 
+"""Return the assets package path adjacent to the debug application."""
+debug_assets_archive_path() = joinpath(dirname(debug_app_binary_path()), "assets.pkg")
+
 """Return the default synchronized diagnostics path for debug runs."""
 debug_diagnostics_path() = joinpath(SCRIPT_DIR, ".build", "debug", "euclid.log")
 
@@ -838,6 +841,12 @@ function build_assets(do_build::Bool, debug::Bool=false)
     prepare_julia_packages()
     stage_assets_content()
     finalize_assets_archive()
+    if debug
+        debug_archive = debug_assets_archive_path()
+        mkpath(dirname(debug_archive))
+        cp(ASSETS_ARCHIVE_PATH, debug_archive; force=true)
+        println("Wrote $debug_archive")
+    end
 
     if do_build
         runtime_sbom_path = joinpath(BIN_DIR, "runtime-closure.generated.cdx.json")

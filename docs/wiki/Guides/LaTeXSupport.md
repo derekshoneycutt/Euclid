@@ -11,6 +11,7 @@ breaks, and Euclid inline shapes.
 1. [Modes And Classification](#modes-and-classification)
 1. [Document Mode](#document-mode)
 1. [Math Mode](#math-mode)
+1. [Display-Math Layout Contract](#display-math-layout-contract)
 1. [Character Support](#character-support)
 1. [Matrix Support](#matrix-support)
 1. [Delimiter Support](#delimiter-support)
@@ -184,7 +185,9 @@ Math mode supports these major groups:
 - Scripts: `^` and `_` including grouped forms.
 - Fractions: `\frac{...}{...}`.
 - Radicals: `\sqrt{...}` and `\sqrt[n]{...}`.
-- Accent bars: `\overline{...}` and `\underline{...}`.
+- Accent rules: `\overline{...}` and `\underline{...}`.
+- Glyph accents: `\hat`, `\widehat`, `\tilde`, `\widetilde`, `\vec`, `\dot`,
+  `\ddot`, and `\bar` use MATH attachment points and horizontal constructions.
 - Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
 - Large operators with limits: `\sum`, `\prod`, `\int`, `\lim`.
 - Matrix blocks: `\begin{matrix} ... \end{matrix}` and
@@ -194,6 +197,39 @@ Math mode supports these major groups:
     `pmatrix`, and `vmatrix`.
 - Spacing markers: `\;` for one normal space, `\ ` for one escaped literal
     space, and `~` for a nonbreaking space.
+
+## Display-Math Layout Contract
+
+Julia parses supported LaTeX into semantic atoms, explicit glue, and recursive child
+programs. Odin validates that preorder bridge stream and owns all font-sensitive
+measurement against the active Math_Regular generation. The display root uses display
+style; fractions, scripts, limits, and radical degrees derive text, script,
+script-script, and cramped child styles as required.
+
+Successful native layout uses NewCM's OpenType MATH data for:
+
+- style scaling, axis placement, script constraints, fraction and bar geometry;
+- operator variants and limit placement;
+- radical and delimiter variants or bounded assemblies;
+- height-dependent corner kern after final script placement;
+- glyph-accent attachment, horizontal variants, and flattened-accent shaping.
+
+Measurement seals child positions and baselines, rule geometry, selected glyph IDs,
+assembly offsets, and the exact font generation into immutable layout records. Drawing
+uses that geometry directly and never selects a different variant or recomputes a
+typographic placement.
+
+Synthetic script, fraction, bar, radical, delimiter, operator, and accent geometry is
+retained only as a bounded fallback. A missing or stale capability, rejected native
+record, over-capacity construction, or pending glyph page rejects the complete native
+path rather than mixing generations or partially drawing a construction. Per-item
+native-geometry validity and generation fields expose which path was sealed; font-page
+demand and fallback resolution are also retained in generation-local telemetry.
+
+The bridge record is mirrored field-for-field in Julia and Odin. Atom, glue, style,
+operator-policy, span, and child-count validation occurs before import. Scripts,
+fraction branches, and radical degrees retain recursive child identities across the
+boundary; fallback text is never reparsed to recover structure on the Odin side.
 
 ## Character Support
 

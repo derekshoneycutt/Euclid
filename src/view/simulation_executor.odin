@@ -154,11 +154,30 @@ math_shaping_service :: proc(
         generation = capability^.generation,
         base_pixel_size = f32(font.JULIA_MONO_FONT_SIZE),
         raster_ascent = capability^.raster_ascent,
+        constants = capability^.constants,
         shape = math_shape_run,
         glyph_metrics = math_shape_glyph_metrics,
+        glyph_variants = math_shape_glyph_variants,
+        glyph_assembly = math_shape_glyph_assembly,
+        horizontal_glyph_variants = math_shape_horizontal_glyph_variants,
+        horizontal_glyph_assembly = math_shape_horizontal_glyph_assembly,
+        glyph_kern_table = math_shape_glyph_kern_table,
         projection_workspace = workspace^.projection[:],
         glyph_workspace = workspace^.glyphs[:],
     }
+}
+
+//   Query one bounded corner table through the generation-checked capability.
+math_shape_glyph_kern_table :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Kern_Table_Request) ->
+        dynview.Math_Glyph_Kern_Table_Result {
+
+    result := font.math_shaping_glyph_kern_table(
+        cast(^core.Font_Math_Shaping_Capability)user_data,
+        request.generation, request.glyph_id,
+        font.Harfbuzz_Math_Kern(request.corner), request.output)
+    return {result.count, result.ok}
 }
 
 //   Shape one math site through the generation-checked NewCM capability.
@@ -173,9 +192,64 @@ math_shape_run :: proc(
     glyph_count, ok := font.math_shaping_shape(
         cast(^core.Font_Math_Shaping_Capability)user_data,
         request.generation,
-        {text = request.text, role = role, workspace = request.projection_workspace},
+        {text = request.text, role = role,
+            standalone_accent = request.standalone_accent,
+            flattened_accent = request.flattened_accent,
+            workspace = request.projection_workspace},
         request.glyph_output)
     return {glyph_count, ok}
+}
+
+//   Query and enrich bounded horizontal variants through the math capability.
+math_shape_horizontal_glyph_variants :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Variants_Request) ->
+        dynview.Math_Glyph_Variants_Result {
+
+    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    result := font.math_shaping_horizontal_variants(
+        capability, request.generation, request.glyph_id, request.output)
+    if !result.ok {
+        return {}
+    }
+    for index in 0..<result.count {
+        variant := &request.output[index]
+        extents, ok := font.math_shaping_glyph_extents(
+            capability, request.generation, variant^.glyph_id)
+        accent, accent_ok := font.math_shaping_top_accent_attachment(
+            capability, request.generation, variant^.glyph_id)
+        if !ok || !accent_ok {
+            return {}
+        }
+        variant^.extents = extents
+        variant^.top_accent_attachment = accent
+    }
+    return {result.count, result.extended_shape, true}
+}
+
+//   Query and enrich one bounded horizontal assembly through the math capability.
+math_shape_horizontal_glyph_assembly :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Assembly_Request) ->
+        dynview.Math_Glyph_Assembly_Result {
+
+    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    result := font.math_shaping_horizontal_assembly(
+        capability, request.generation, request.glyph_id, request.output)
+    if !result.ok {
+        return {}
+    }
+    for index in 0..<result.count {
+        part := &request.output[index]
+        extents, ok := font.math_shaping_glyph_extents(
+            capability, request.generation, part^.glyph_id)
+        if !ok {
+            return {}
+        }
+        part^.extents = extents
+    }
+    return {result.count, result.min_connector_overlap,
+        result.italic_correction, true}
 }
 
 //   Query complete extents and approved MATH values for one shaped glyph.
@@ -191,6 +265,60 @@ math_shape_glyph_metrics :: proc(
     accent, accent_ok := font.math_shaping_top_accent_attachment(
         capability, request.generation, request.glyph_id)
     return {extents, italic, accent, extents_ok && italic_ok && accent_ok}
+}
+
+//   Query bounded vertical variants through the generation-checked capability.
+math_shape_glyph_variants :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Variants_Request) -> dynview.Math_Glyph_Variants_Result {
+
+    result := font.math_shaping_vertical_variants(
+        cast(^core.Font_Math_Shaping_Capability)user_data,
+        request.generation, request.glyph_id, request.output)
+    if !result.ok {
+        return {}
+    }
+    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    for index in 0..<result.count {
+        variant := &request.output[index]
+        extents, extents_ok := font.math_shaping_glyph_extents(
+            capability, request.generation, variant^.glyph_id)
+        italic, italic_ok := font.math_shaping_italic_correction(
+            capability, request.generation, variant^.glyph_id)
+        accent, accent_ok := font.math_shaping_top_accent_attachment(
+            capability, request.generation, variant^.glyph_id)
+        if !extents_ok || !italic_ok || !accent_ok {
+            return {}
+        }
+        variant^.extents = extents
+        variant^.italic_correction = italic
+        variant^.top_accent_attachment = accent
+    }
+    return {result.count, result.extended_shape, result.ok}
+}
+
+//   Query and enrich one bounded vertical assembly through the math capability.
+math_shape_glyph_assembly :: proc(
+    user_data: rawptr,
+    request: dynview.Math_Glyph_Assembly_Request) -> dynview.Math_Glyph_Assembly_Result {
+
+    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    result := font.math_shaping_vertical_assembly(
+        capability, request.generation, request.glyph_id, request.output)
+    if !result.ok {
+        return {}
+    }
+    for index in 0..<result.count {
+        part := &request.output[index]
+        extents, ok := font.math_shaping_glyph_extents(
+            capability, request.generation, part^.glyph_id)
+        if !ok {
+            return {}
+        }
+        part^.extents = extents
+    }
+    return {result.count, result.min_connector_overlap,
+        result.italic_correction, true}
 }
 
 //   Submit one task into a deterministic batch and require bounded admission.

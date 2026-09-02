@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(17)
+const PARSER_GRAMMAR_VERSION = Int32(18)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -17,6 +17,30 @@ const MATH_OP_LARGE_OP_RECURSIVE = Int32(6)
 const MATH_OP_FRACTION_RECURSIVE = Int32(7)
 const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(8)
 const MATH_OP_MATRIX_RECURSIVE = Int32(9)
+
+const OPERATOR_GROWTH_NONE = Int32(0)
+const OPERATOR_GROWTH_DISPLAY = Int32(1)
+const OPERATOR_LIMITS_NONE = Int32(0)
+const OPERATOR_LIMITS_SIDE = Int32(1)
+const OPERATOR_LIMITS_STACKED = Int32(2)
+
+const MATH_ATOM_NONE = Int32(0)
+const MATH_ATOM_ORD = Int32(1)
+const MATH_ATOM_OP = Int32(2)
+const MATH_ATOM_BIN = Int32(3)
+const MATH_ATOM_REL = Int32(4)
+const MATH_ATOM_OPEN = Int32(5)
+const MATH_ATOM_CLOSE = Int32(6)
+const MATH_ATOM_PUNCT = Int32(7)
+const MATH_ATOM_INNER = Int32(8)
+
+const MATH_GLUE_NONE = Int32(0)
+const MATH_GLUE_THICK = Int32(1)
+const MATH_GLUE_SPACE = Int32(2)
+const MATH_GLUE_NEGATIVE_THIN = Int32(3)
+const MATH_GLUE_QUAD = Int32(4)
+const MATH_GLUE_THIN = Int32(5)
+const MATH_GLUE_SOURCE = Int32(6)
 
 const LATEX_MODE_MATH = :math
 const LATEX_MODE_DOCUMENT = :document
@@ -382,8 +406,16 @@ struct LatexRun
     text::String
     role::Symbol
     segment::Symbol
+    atom_class::Int32
+    glue_kind::Int32
     children::Vector{LatexRun}
     secondary_children::Vector{LatexRun}
+end
+
+struct ParsedScript
+    text::String
+    was_grouped::Bool
+    runs::Vector{LatexRun}
 end
 
 struct MathPayloadOp
@@ -395,9 +427,23 @@ struct MathPayloadOp
     accent_mode::Symbol
     radical_mode::Symbol
     large_op_kind::Int32
+    operator_growth::Int32
+    operator_limits::Int32
     style_role::Symbol
+    atom_class::Int32
+    glue_kind::Int32
     children::Vector{MathPayloadOp}
     secondary_children::Vector{MathPayloadOp}
+    tertiary_children::Vector{MathPayloadOp}
+end
+
+"""Construct one nonoperator payload with neutral growth and limit policies."""
+function MathPayloadOp(parts...)
+    length(parts) == 14 || throw(ArgumentError("expected 14 payload fields"))
+    return MathPayloadOp(parts[1], parts[2], parts[3], parts[4], parts[5],
+        parts[6], parts[7], parts[8], OPERATOR_GROWTH_NONE,
+        OPERATOR_LIMITS_NONE, parts[9], parts[10], parts[11], parts[12],
+        parts[13], parts[14])
 end
 
 struct LatexDocumentShape
@@ -444,9 +490,15 @@ end
 
 const EMPTY_CHILD_RUNS = LatexRun[]
 
-"""Return one normal atom run payload."""
-latex_atom_run(text::AbstractString, role::Symbol) =
-    LatexRun(text, role, :atom, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+"""Return one atom run payload with explicit mathematical class."""
+latex_atom_run(text::AbstractString, role::Symbol, atom_class::Int32=MATH_ATOM_ORD) =
+    LatexRun(text, role, :atom, atom_class, MATH_GLUE_NONE,
+        EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+
+"""Return one explicit math-glue run with readable fallback text."""
+latex_glue_run(text::AbstractString, glue_kind::Int32) =
+    LatexRun(text, :math_upright, :glue, MATH_ATOM_NONE, glue_kind,
+        EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Classify one normal-math scalar as an italic variable or upright math."""
 function normal_math_role(character::Char)
@@ -461,74 +513,121 @@ function normal_math_role(character::Char)
     return :math_upright
 end
 
-"""Split normal-math text whenever its italic-variable semantic role changes."""
+const BINARY_ATOM_CHARACTERS = Set("+-*/±∓×÷·∗⋆∙⋄⊕⊖⊗⊘⊙∖⊓⊔⊎∪∩")
+const RELATION_ATOM_CHARACTERS = Set("=<>≤≥≠≪≫≺≻≼≽∼≃≅≈≡∝∈∉∋∌⊂⊆⊊⊈⊃⊇⊋⊉⊏⊑⊐⊒∥⊥⊨")
+const OPEN_ATOM_CHARACTERS = Set("([{⌈⌊⟨")
+const CLOSE_ATOM_CHARACTERS = Set(")]}⌉⌋⟩")
+const PUNCT_ATOM_CHARACTERS = Set(",;")
+
+"""Classify one scalar into its initial TeX atom class."""
+function normal_math_atom_class(character::Char)
+    character in BINARY_ATOM_CHARACTERS && return MATH_ATOM_BIN
+    character in RELATION_ATOM_CHARACTERS && return MATH_ATOM_REL
+    character in OPEN_ATOM_CHARACTERS && return MATH_ATOM_OPEN
+    character in CLOSE_ATOM_CHARACTERS && return MATH_ATOM_CLOSE
+    character in PUNCT_ATOM_CHARACTERS && return MATH_ATOM_PUNCT
+    return MATH_ATOM_ORD
+end
+
+"""Append and clear one buffered normal-math atom run."""
+function flush_normal_math_run!(runs::Vector{LatexRun}, current::IOBuffer,
+    role::Symbol, atom_class::Int32)
+    current.size == 0 && return nothing
+    push!(runs, latex_atom_run(String(take!(current)), role, atom_class))
+    return nothing
+end
+
+"""Split normal math by font role and atom class while discarding source whitespace."""
 function normal_math_atom_runs(text::AbstractString)
     runs = LatexRun[]
-    characters = collect(String(text))
     current_role = :none
+    current_class = MATH_ATOM_NONE
     current = IOBuffer()
-    for (index, character) in pairs(characters)
-        role = if isspace(character)
-            next_index = findnext(candidate -> !isspace(candidate), characters, index + 1)
-            isnothing(next_index) ?
-                (current_role == :none ? :math_upright : current_role) :
-                normal_math_role(characters[next_index])
-        else
-            normal_math_role(character)
+    for character in String(text)
+        if character == only(NONBREAKING_SPACE)
+            flush_normal_math_run!(runs, current, current_role, current_class)
+            push!(runs, latex_glue_run(NONBREAKING_SPACE, MATH_GLUE_SPACE))
+            current_role = :none
+            current_class = MATH_ATOM_NONE
+            continue
         end
-        if current_role != :none && role != current_role
-            push!(runs, latex_atom_run(String(take!(current)), current_role))
+        if isspace(character)
+            flush_normal_math_run!(runs, current, current_role, current_class)
+            push!(runs, latex_glue_run(string(character), MATH_GLUE_SOURCE))
+            current_role = :none
+            current_class = MATH_ATOM_NONE
+            continue
+        end
+        role = normal_math_role(character)
+        atom_class = normal_math_atom_class(character)
+        if current_role != :none &&
+                (role != current_role || atom_class != current_class)
+            flush_normal_math_run!(runs, current, current_role, current_class)
         end
         current_role = role
+        current_class = atom_class
         write(current, character)
     end
-    if current_role != :none
-        push!(runs, latex_atom_run(String(take!(current)), current_role))
-    end
+    flush_normal_math_run!(runs, current, current_role, current_class)
     return runs
 end
 
-"""Return one superscript script-segment run payload."""
-latex_sup_run(text::AbstractString) =
-    LatexRun(text, :math, :script_sup, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+"""Return one superscript script run with recursive semantic children."""
+latex_sup_run(text::AbstractString, children::Vector{LatexRun}) =
+    LatexRun(text, :math, :script_sup, MATH_ATOM_NONE, MATH_GLUE_NONE,
+    children, EMPTY_CHILD_RUNS)
 
-"""Return one subscript script-segment run payload."""
-latex_sub_run(text::AbstractString) =
-    LatexRun(text, :math, :script_sub, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+"""Return one subscript script run with recursive semantic children."""
+latex_sub_run(text::AbstractString, children::Vector{LatexRun}) =
+    LatexRun(text, :math, :script_sub, MATH_ATOM_NONE, MATH_GLUE_NONE,
+    children, EMPTY_CHILD_RUNS)
 
 """Return one overline accent run payload."""
 latex_overline_run(children::Vector{LatexRun}) =
-    LatexRun("", :math, :accent_over, children, EMPTY_CHILD_RUNS)
+    LatexRun("", :math, :accent_over, MATH_ATOM_ORD, MATH_GLUE_NONE,
+        children, EMPTY_CHILD_RUNS)
 
 """Return one underline accent run payload."""
 latex_underline_run(children::Vector{LatexRun}) =
-    LatexRun("", :math, :accent_under, children, EMPTY_CHILD_RUNS)
+    LatexRun("", :math, :accent_under, MATH_ATOM_ORD, MATH_GLUE_NONE,
+        children, EMPTY_CHILD_RUNS)
 
-"""Return one square-root radical run payload."""
-latex_sqrt_run(children::Vector{LatexRun}, index_text::AbstractString="") =
-    LatexRun(String(index_text), :math, :radical_sqrt, children, EMPTY_CHILD_RUNS)
+"""Return one recursive semantic glyph-accent run."""
+latex_glyph_accent_run(accent::Symbol, children::Vector{LatexRun}) =
+    LatexRun("", :math, accent, MATH_ATOM_ORD, MATH_GLUE_NONE,
+        children, EMPTY_CHILD_RUNS)
+
+"""Return one square-root run with recursive radicand and degree children."""
+latex_sqrt_run(
+    children::Vector{LatexRun}, degree_children::Vector{LatexRun}=LatexRun[]) =
+    LatexRun(join(latex_run_serialized_text.(degree_children)), :math,
+        :radical_sqrt, MATH_ATOM_ORD, MATH_GLUE_NONE, children, degree_children)
 
 """Return one fraction run payload with numerator and denominator child runs."""
 latex_fraction_run(
     numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
-    LatexRun("", :math, :fraction, numerator_children, denominator_children)
+    LatexRun("", :math, :fraction, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        numerator_children, denominator_children)
 
 """Return one stretch-delimiter run payload with left/right delimiters and inner runs."""
 latex_stretch_delimiter_run(left::String, right::String, children::Vector{LatexRun}) =
-    LatexRun(left, :math, :stretch_delimiter, children, [latex_atom_run(right, :math)])
+    LatexRun(left, :math, :stretch_delimiter, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        children, [latex_atom_run(right, :math)])
 
 """Return compact matrix dimension text for one matrix run."""
 matrix_dims_text(rows::Int, cols::Int) = string(rows) * "," * string(cols)
 
 """Return one matrix-cell run payload wrapping child runs for a single cell."""
 latex_matrix_cell_run(children::Vector{LatexRun}) =
-    LatexRun("", :math, :matrix_cell, children, EMPTY_CHILD_RUNS)
+    LatexRun("", :math, :matrix_cell, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        children, EMPTY_CHILD_RUNS)
 
 """Return one matrix run payload with row/column metadata and row-major cell runs."""
 latex_matrix_run(rows::Int, cols::Int, cells::Vector{LatexRun}) =
-    LatexRun(matrix_dims_text(rows, cols), :math, :matrix, cells, EMPTY_CHILD_RUNS)
+    LatexRun(matrix_dims_text(rows, cols), :math, :matrix, MATH_ATOM_INNER,
+        MATH_GLUE_NONE, cells, EMPTY_CHILD_RUNS)
 
 """Return one array run payload with row/column metadata and normalized alignment preamble."""
 latex_array_run(rows::Int, cols::Int, cells::Vector{LatexRun}, preamble::String) =
-    LatexRun(matrix_dims_text(rows, cols), :math, :array, cells,
-        [latex_atom_run(preamble, :math)])
+    LatexRun(matrix_dims_text(rows, cols), :math, :array, MATH_ATOM_INNER,
+        MATH_GLUE_NONE, cells, [latex_atom_run(preamble, :math)])

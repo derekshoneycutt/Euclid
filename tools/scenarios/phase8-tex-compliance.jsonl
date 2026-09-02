@@ -1,0 +1,37 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":"L\"a+b=c,\\;-a+b\\;x_i^2+V_A+\\omega^f\\;\\frac{1}{1+\\frac{1}{x^2}}\\;\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx\\;\\overline{AB}+\\underline{CD}\\;\\hat{x_1}+\\widehat{AB}+\\widetilde{x+y}+\\vec{v}+\\dot{x}+\\ddot{y}+\\bar{z}\"","as":"math-warm-a"}
+{"wait_event":"scratchpad_completed","correlation":"math-warm-a","timeout_ms":10000}
+{"scratchpad":":reset","as":"reset-warm-b"}
+{"wait_event":"scratchpad_completed","correlation":"reset-warm-b","timeout_ms":10000}
+{"scratchpad":"L\"\\sum \\left\\{\\begin{matrix}1&2&3&4\\\\5&6&7&8\\end{matrix}\\right\\}\\; C_n=\\{e,\\rho,\\rho^2,\\dots,\\rho^{n-1}\\}\\; \\sqrt[3]{\\left(\\int_0^1\\begin{bmatrix}1&2&3&4\\\\5&6&7&8\\end{bmatrix}\\right)}\"","as":"math-warm-b"}
+{"wait_event":"scratchpad_completed","correlation":"math-warm-b","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"scratchpad":":reset","as":"reset-measured-a"}
+{"wait_event":"scratchpad_completed","correlation":"reset-measured-a","timeout_ms":10000}
+{"scratchpad":"L\"a+b=c,\\;-a+b\\;x_i^2+V_A+\\omega^f\\;\\frac{1}{1+\\frac{1}{x^2}}\\;\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx\\;\\overline{AB}+\\underline{CD}\\;\\hat{x_1}+\\widehat{AB}+\\widetilde{x+y}+\\vec{v}+\\dot{x}+\\ddot{y}+\\bar{z}\"","as":"math-measured-a"}
+{"wait_event":"scratchpad_completed","correlation":"math-measured-a","timeout_ms":10000}
+{"scratchpad":":reset","as":"reset-measured-b"}
+{"wait_event":"scratchpad_completed","correlation":"reset-measured-b","timeout_ms":10000}
+{"scratchpad":"L\"\\sum \\left\\{\\begin{matrix}1&2&3&4\\\\5&6&7&8\\end{matrix}\\right\\}\\; C_n=\\{e,\\rho,\\rho^2,\\dots,\\rho^{n-1}\\}\\; \\sqrt[3]{\\left(\\int_0^1\\begin{bmatrix}1&2&3&4\\\\5&6&7&8\\end{bmatrix}\\right)}\"","as":"math-measured-b"}
+{"wait_event":"scratchpad_completed","correlation":"math-measured-b","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/phase8-tex-compliance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

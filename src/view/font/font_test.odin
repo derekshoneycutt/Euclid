@@ -201,6 +201,139 @@ view_test_math_generation_teardown :: proc(t: ^testing.T) {
     testing.expect_value(t, len(entry.glyphs), 0)
 }
 
+// Verify NewCM vertical variants are bounded, ordered, stable, and generation-safe.
+view_expect_math_vertical_variants :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
+
+    sum_glyph, sum_ok := harfbuzz_nominal_glyph(&capability^.resource, '∑')
+    variants: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
+    repeated: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
+    result := math_shaping_vertical_variants(capability, 7, sum_glyph, variants[:])
+    repeated_result := math_shaping_vertical_variants(
+        capability, 7, sum_glyph, repeated[:])
+    stale_result := math_shaping_vertical_variants(
+        capability, 6, sum_glyph, repeated[:])
+    testing.expect(t, sum_ok && result.ok && repeated_result.ok)
+    testing.expect(t, result.count > 0 && result.extended_shape)
+    testing.expect_value(t, repeated_result.count, result.count)
+    testing.expect(t, !stale_result.ok)
+    for index in 0..<result.count {
+        testing.expect(t, variants[index].glyph_id > 0 && variants[index].advance > 0)
+        testing.expect_value(t, repeated[index], variants[index])
+        if index > 0 {
+            testing.expect(t, variants[index].advance >= variants[index-1].advance)
+        }
+    }
+}
+
+// Verify NewCM's surd assembly is bounded, connected, and generation-safe.
+view_expect_math_vertical_assembly :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
+
+    surd_glyph, surd_ok := harfbuzz_nominal_glyph(&capability^.resource, '√')
+    parts: [app_core.FONT_MATH_GLYPH_PART_CAPACITY]app_core.Font_Math_Glyph_Part
+    result := math_shaping_vertical_assembly(capability, 7, surd_glyph, parts[:])
+    stale := math_shaping_vertical_assembly(capability, 6, surd_glyph, parts[:])
+    testing.expect(t, surd_ok && result.ok && !stale.ok)
+    testing.expect(t, result.count > 0 && result.min_connector_overlap >= 0)
+    has_extender := false
+    for part in parts[:result.count] {
+        testing.expect(t, part.glyph_id > 0 && part.full_advance > 0)
+        testing.expect(t, part.start_connector_length <= part.full_advance)
+        testing.expect(t, part.end_connector_length <= part.full_advance)
+        has_extender = has_extender || part.extender
+    }
+    testing.expect(t, has_extender)
+}
+
+// Verify NewCM exposes a bounded horizontal construction for a math circumflex.
+view_expect_math_horizontal_accent :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
+
+    glyph, glyph_ok := harfbuzz_nominal_glyph(
+        &capability^.resource, rune(0x0302))
+    variants: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
+    variant_result := math_shaping_horizontal_variants(
+        capability, 7, glyph, variants[:])
+    parts: [app_core.FONT_MATH_GLYPH_PART_CAPACITY]app_core.Font_Math_Glyph_Part
+    assembly_result := math_shaping_horizontal_assembly(
+        capability, 7, glyph, parts[:])
+    testing.expect(t, glyph_ok)
+    testing.expect(t, variant_result.ok && variant_result.count > 0)
+    testing.expect(t, assembly_result.ok && assembly_result.count > 0)
+}
+
+// Verify standalone normal and flattened accents suppress dotted-circle insertion.
+view_expect_math_standalone_accent_shape :: proc(
+    t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
+
+    workspace: [16]u8
+    normal: [2]Shaped_Glyph
+    normal_count, normal_ok := math_shaping_shape(capability, 7, {
+        text = "̂", standalone_accent = true, workspace = workspace[:]}, normal[:])
+    flattened: [2]Shaped_Glyph
+    flattened_count, flattened_ok := math_shaping_shape(capability, 7, {
+        text = "̂", standalone_accent = true, flattened_accent = true,
+        workspace = workspace[:]}, flattened[:])
+    testing.expect(t, normal_ok && flattened_ok)
+    testing.expect_value(t, normal_count, 1)
+    testing.expect_value(t, flattened_count, 1)
+    testing.expect(t, normal[0].glyph_id > 0 && flattened[0].glyph_id > 0)
+}
+
+// Verify every MATH kern corner accepts signed heights and rejects stale generations.
+view_expect_math_glyph_kerning :: proc(
+    t: ^testing.T,
+    capability: ^Font_Math_Shaping_Capability,
+    glyph_id: u32) {
+
+    corners := [4]Harfbuzz_Math_Kern{
+        .Top_Right, .Top_Left, .Bottom_Right, .Bottom_Left}
+    heights := [3]i32{-64, 0, 64}
+    for corner in corners {
+        for height in heights {
+            value, ok := math_shaping_glyph_kerning(
+                capability, 7, glyph_id, corner, height)
+            repeated, repeated_ok := math_shaping_glyph_kerning(
+                capability, 7, glyph_id, corner, height)
+            testing.expect(t, ok && repeated_ok)
+            testing.expect_value(t, repeated, value)
+        }
+    }
+    _, stale_ok := math_shaping_glyph_kerning(
+        capability, 6, glyph_id, .Top_Right, 0)
+    testing.expect(t, !stale_ok)
+}
+
+// Verify bounded bulk tables reproduce direct queries at every native boundary.
+view_expect_math_glyph_kern_tables :: proc(
+    t: ^testing.T,
+    capability: ^Font_Math_Shaping_Capability,
+    glyph_id: u32) {
+
+    corners := [4]Harfbuzz_Math_Kern{
+        .Top_Right, .Top_Left, .Bottom_Right, .Bottom_Left}
+    for corner in corners {
+        entries: [app_core.FONT_MATH_KERN_ENTRY_CAPACITY]app_core.Font_Math_Kern_Entry
+        result := math_shaping_glyph_kern_table(
+            capability, 7, glyph_id, corner, entries[:])
+        testing.expect(t, result.ok)
+        for entry, index in entries[:result.count] {
+            direct, direct_ok := math_shaping_glyph_kerning(
+                capability, 7, glyph_id, corner, entry.max_correction_height)
+            testing.expect(t, direct_ok)
+            testing.expect_value(t, direct, entry.kern_value)
+            if index+1 < result.count {
+                next, next_ok := math_shaping_glyph_kerning(
+                    capability, 7, glyph_id, corner,
+                    entry.max_correction_height+1)
+                testing.expect(t, next_ok)
+                testing.expect_value(t, next, entries[index+1].kern_value)
+            }
+        }
+    }
+}
+
 // Verify worker math shaping is isolated, explicit, bounded, and query-capable.
 @(test)
 view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
@@ -220,6 +353,14 @@ view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
     testing.expect(t, math_shaping_sync(&cache, &capability))
     testing.expect_value(t, capability.generation, u64(7))
     testing.expect(t, capability.resource.buffer != entry.shaping.buffer)
+    testing.expect(t, capability.constants.valid)
+    testing.expect_value(t, capability.constants.generation, u64(7))
+    testing.expect_value(t, capability.constants.base_pixel_size,
+        f32(JULIA_MONO_FONT_SIZE))
+    testing.expect(t, capability.constants.values[int(
+        Harfbuzz_Math_Constant.Script_Percent_Scale_Down)] > 0)
+    testing.expect(t, capability.constants.values[int(
+        Harfbuzz_Math_Constant.Script_Script_Percent_Scale_Down)] > 0)
 
     task := view_run_math_shaping_task(t, &capability, 7)
     testing.expect(t, task.shaped && task.glyph_count == 3)
@@ -230,6 +371,12 @@ view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
     testing.expect(t, task.properties_ready)
     view_expect_math_glyph_queries(
         t, &capability, 7, task.glyphs[0].glyph_id)
+    view_expect_math_glyph_kerning(t, &capability, task.glyphs[0].glyph_id)
+    view_expect_math_glyph_kern_tables(t, &capability, task.glyphs[0].glyph_id)
+    view_expect_math_vertical_variants(t, &capability)
+    view_expect_math_vertical_assembly(t, &capability)
+    view_expect_math_horizontal_accent(t, &capability)
+    view_expect_math_standalone_accent_shape(t, &capability)
 
     math_shaping_destroy(&capability)
     font_shaping_destroy(&entry.shaping)

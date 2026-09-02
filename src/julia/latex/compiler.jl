@@ -55,7 +55,11 @@ function plain_text_for_recursive_payload(op::MathPayloadOp)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
-        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
+        commands = Dict(
+            :overline => "\\overline", :underline => "\\underline",
+            :hat => "\\hat", :tilde => "\\tilde", :vec => "\\vec",
+            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar")
+        command = get(commands, op.accent_mode, "\\overline") * "{"
         return command * plain_text_for_program(op.children) * "}"
     end
 

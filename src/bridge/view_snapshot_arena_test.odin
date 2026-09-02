@@ -209,7 +209,7 @@ view_snapshot_record_validation_rejects_forged_aliases :: proc(t: ^testing.T) {
     commands := []core.Dynview_Command{{}}
     programs := []core.Dynview_Math_Program{{
         valid = true, root_node_index = 0, node_count = 1, command_count = 1}}
-    math_commands := []core.Dynview_Command{{}}
+    math_commands := []core.Dynview_Command{{math_atom_class = .Ord}}
     nodes := []core.Dynview_Math_Node{{kind = .Glyph_Run}}
     testing.expect(t, build_view_snapshot_record_payloads(
         slot, commands, programs, math_commands, nodes))
@@ -278,9 +278,37 @@ view_snapshot_math_record_validation_rejects_malformed_structure :: proc(
         {kind = .Glyph_Run, text_len = 4},
     }
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, nil, programs, []core.Dynview_Command{{}}, nodes))
+        slot, nil, programs,
+        []core.Dynview_Command{{math_atom_class = .Ord}}, nodes))
     testing.expect(t, view_snapshot_is_valid(slot))
     view_snapshot_expect_malformed_math_rejected(t, slot)
+}
+
+//   Verify snapshot math semantics accept every class and reject malformed metadata.
+@(test)
+view_snapshot_math_semantics_validate_atom_and_glue_enums :: proc(t: ^testing.T) {
+    for atom in core.Dynview_Math_Atom_Class.Ord..=core.Dynview_Math_Atom_Class.Inner {
+        testing.expect(t, view_snapshot_math_command_semantics_are_valid({
+            math_atom_class = atom,
+        }))
+    }
+    for glue in core.Dynview_Math_Glue_Kind.Thick..=core.Dynview_Math_Glue_Kind.Thin {
+        testing.expect(t, view_snapshot_math_command_semantics_are_valid({
+            math_glue_kind = glue,
+        }))
+    }
+
+    testing.expect(t, !view_snapshot_math_command_semantics_are_valid({}))
+    testing.expect(t, !view_snapshot_math_command_semantics_are_valid({
+        math_atom_class = .Ord,
+        math_glue_kind = .Thick,
+    }))
+    testing.expect(t, !view_snapshot_math_command_semantics_are_valid({
+        math_atom_class = core.Dynview_Math_Atom_Class(99),
+    }))
+    testing.expect(t, !view_snapshot_math_command_semantics_are_valid({
+        math_glue_kind = core.Dynview_Math_Glue_Kind(99),
+    }))
 }
 
 //   Verify pending, complete, and published slots cannot reset arena storage.

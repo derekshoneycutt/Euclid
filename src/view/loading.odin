@@ -27,6 +27,11 @@ Loading_Julia_Service :: struct {
     initialize_id: u64,
 }
 
+Packaged_Assets_Worker_Result :: struct {
+    ok: bool,
+}
+
+
 //   Draw one dependency-free startup frame with spinner and progress bar.
 draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
     center := rl.Vector2{WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 24}
@@ -58,9 +63,12 @@ draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
     rl.EndDrawing()
 }
 
-//   Prepare packaged assets on the startup worker's independent temp allocator.
-prepare_assets_worker :: proc() {
-    files.ensure_packaged_assets_unpacked_root()
+
+//   Prepare packaged assets and publish readiness to the joining display thread.
+prepare_assets_worker :: proc(thread_handle: ^thread.Thread) {
+    result := cast(^Packaged_Assets_Worker_Result)thread_handle.data
+    result^.ok = files.packaged_asset_archive_exists_root() &&
+        files.ensure_packaged_assets_unpacked_root()
 }
 
 //   Keep drawing and pumping window events until one startup worker is ready.
@@ -109,13 +117,17 @@ finish_julia_startup_request :: proc(
 }
 
 //   Prepare packaged assets while keeping the startup window responsive.
-prepare_assets_with_loading :: proc(progress: f32) {
-    worker := thread.create_and_start(prepare_assets_worker)
+prepare_assets_with_loading :: proc(progress: f32) -> bool {
+    result: Packaged_Assets_Worker_Result
+    worker := thread.create(prepare_assets_worker)
     if worker == nil {
-        files.ensure_packaged_assets_unpacked_root()
-        return
+        return files.ensure_packaged_assets_unpacked_root()
     }
+    worker.data = &result
+    worker.init_context = context
+    thread.start(worker)
     finish_startup_worker(worker, progress)
+    return result.ok
 }
 
 //   Display and begin timing one blocking startup phase.
@@ -216,12 +228,16 @@ loading_load_content :: proc(
 }
 
 //   Prepare packaged assets as one measured startup phase.
-loading_prepare_assets_phase :: proc(profile: ^evidence_profile.State) {
+loading_prepare_assets_phase :: proc(profile: ^evidence_profile.State) -> bool {
     evidence_profile.zone_begin(profile, "prepare assets")
     started_at := begin_startup_phase("Preparing assets", 0.15)
-    prepare_assets_with_loading(0.15)
+    assets_ok := prepare_assets_with_loading(0.15)
     end_startup_phase("Preparing assets", started_at)
     evidence_profile.zone_end(profile)
+    if !assets_ok {
+        fmt.eprintln("Packaged asset preparation failed; aborting startup.")
+    }
+    return assets_ok
 }
 
 //   Initialize presentation resources as one measured startup phase.
@@ -252,7 +268,9 @@ initialize_window_runtime_with_loading :: proc(
     timing_profile: ^evidence_profile.State) -> (Euclid_Runtime_Session, bool) {
 
     startup_started_at := rl.GetTime()
-    loading_prepare_assets_phase(timing_profile)
+    if !loading_prepare_assets_phase(timing_profile) {
+        return {}, false
+    }
 
     evidence_profile.zone_begin(timing_profile, "start Julia")
     started_at := begin_startup_phase("Starting Julia", 0.35)

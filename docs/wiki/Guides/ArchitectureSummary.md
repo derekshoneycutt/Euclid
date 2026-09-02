@@ -233,12 +233,25 @@ flowchart LR
 - Julia side:
   - `replay_emit_math_block!` and `emit_latex_dynview!` emit recursive math
     blocks through `dynview_math_block_from_ops`.
+  - Script attachments serialize base, superscript, and subscript programs as
+    distinct preorder branches. Radical degree programs use the secondary
+    branch; canonical text fields remain deterministic fallback content.
   - Parse cache key is `(source, PARSER_GRAMMAR_VERSION, style_profile)`.
 - Odin side:
   - `dynview_math_block_from_ops` validates spans/capacity and recursively imports
     child programs into `math_programs` and `math_commands`.
   - `layout_math_programs.odin` measures script/large-op/fraction/radical/matrix
-    structures before draw.
+    structures before draw. It owns display, text, script, and script-script
+    transitions, including cramped child state.
+  - The resident font capability captures all OpenType MATH constants as one
+    immutable font-generation snapshot. Worker shaping and derived layout cache
+    publication reject stale generations and publish constants transactionally
+    with shaped records.
+  - Worker-only HarfBuzz queries publish bounded vertical variants and glyph
+    assemblies after shaped-cache sealing. Layout selects and seals exact radical
+    and delimiter constructions; display drawing resolves every selected part
+    through bounded glyph-page demand and uses synthetic geometry only when font
+    construction data is rejected or not yet resident.
 
 Practical effect: math layout is now data-driven from Julia but rendered with
 host-side deterministic metrics and fallback safety.
@@ -460,6 +473,30 @@ scaler. Stale generations, invalid spans, and pending glyphs reject the complete
 before the existing whole-run fallback draws; copy bytes and non-math paths are
 unchanged.
 
+Julia owns mathematical intent: atom and glue classes, recursive structure, delimiter
+and accent kinds, and independent operator growth and limit policies. The mirrored
+`BridgeDynviewMathOp` and `Bridge_Dynview_Math_Op` records use exact-width fields in
+the same order. Odin validates every enum, text span, direct-child count, and bounded
+preorder subtree before importing commands; invalid input publishes no partial math
+program. Recursive scripts, fraction branches, and radical degrees cross as child
+program identities rather than reparsed fallback text.
+
+Odin alone owns font-sensitive decisions. A worker-borrowed Math_Regular capability
+provides one immutable generation-stamped constants snapshot plus bounded glyph
+metrics, corner-kern tables, vertical and horizontal variants, and assemblies. Cache
+rebuild accepts those records only when the shaping service and every result match the
+active generation. Layout selects variants, solves assemblies, applies final-height
+math kern, and seals child baselines, x positions, rules, and construction part
+offsets into layout items. Drawing consumes those records without querying HarfBuzz or
+independently repeating a typographic decision.
+
+Native-geometry validity and font-generation fields on each sealed item make fallback
+use explicit. Missing, stale, malformed, over-capacity, or pending native data leaves
+the corresponding validity field unset and routes the complete structure through its
+bounded synthetic fallback. Julia-emitted ratios remain only as compatibility inputs
+to those fallback paths; successful MATH layout does not consume them. Font-page
+resolution separately records fallback demand in generation-local cache telemetry.
+
 Source changes are polled at a bounded cadence and debounced before replacement.
 Shutdown rejects new font requests, joins accepted preparation before destroying
 the taskpool, unloads seed and page textures while the graphics context is live,
@@ -580,13 +617,17 @@ This policy is strict by design.
 - `tools/configure.sh` (POSIX sh) verifies the toolchain and installs Julia
   dependencies; `make.jl` is the build/test/vet driver that both wrap.
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
+  Debug builds also publish the package beside `.build/debug/euclid` so the
+  isolated executable has a matching runtime closure.
 - Packaged assets include:
   - `src/julia/**` scripts
   - `src/view/shaders/**`
   - `assets/**`
   - `manifest.txt`
-- At startup, app unpacks `assets.pkg` to a writable cache directory and
-  resolves runtime paths from there.
+- At startup, app requires `assets.pkg` beside the selected executable, then
+  unpacks it to a writable cache directory and resolves runtime paths from
+  there. A missing package aborts startup with a nonzero process result before
+  Julia initialization, even when an older unpack cache exists.
 
 ---
 

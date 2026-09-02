@@ -178,8 +178,13 @@ clear_shaped_records :: proc(cache: ^core.Dynview_Compile_Cache) {
     }
     for command_index in 0..<cache^.math_command_count {
         cache^.math_commands[command_index].shaped_run_indices = {-1, -1, -1, -1}
+        cache^.math_operator_variants[command_index] = {}
+        cache^.math_stretch_sources[command_index] = {}
     }
     cache^.shaped_runs = nil
     cache^.shaped_glyphs = nil
+    cache^.math_kern_tables = nil
+    cache^.math_accent_sources = nil
     cache^.shaped_font_generation = 0
+    cache^.math_constants = {}
 }

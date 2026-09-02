@@ -1,0 +1,12 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":"L\"\\frac{a+b}{c}\\;\\frac{x^2}{y_1}\\;\\frac{1}{1+\\frac{1}{x}}\\;\\frac{\\sqrt{x}}{\\overline{y}}\\;\\underline{p+q}\"","as":"phase4"}
+{"wait_event":"scratchpad_completed","correlation":"phase4","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"screenshot":".build/tex-compliance-phase4.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -438,14 +438,18 @@ prepare_layout :: proc(
     glyphs: []Prepared_Glyph, pixel_size: i32,
     rectangles: []Prepared_Rectangle) -> (i32, i32) {
 
-    total_width := i32(0)
+    total_area := f32(0)
+    minimum_width := i32(1)
     for glyph in glyphs {
-        total_width += glyph.bitmap_width + 2*FONT_GLYPH_PADDING
+        padded_width := glyph.bitmap_width + 2*FONT_GLYPH_PADDING
+        padded_height := max(glyph.bitmap_height, pixel_size) +
+            2*FONT_GLYPH_PADDING
+        total_area += f32(padded_width*padded_height)
+        minimum_width = max(minimum_width, padded_width)
     }
-    padded_size := pixel_size + 2*FONT_GLYPH_PADDING
-    total_area := f32(total_width*padded_size)*1.2
     atlas_width := i32(1)
-    for f32(atlas_width*atlas_width) < total_area {
+    for atlas_width < minimum_width ||
+        f32(atlas_width*atlas_width) < total_area*1.2 {
         atlas_width *= 2
     }
     atlas_height := atlas_width
@@ -455,13 +459,16 @@ prepare_layout :: proc(
 
     offset_x := FONT_GLYPH_PADDING
     offset_y := FONT_GLYPH_PADDING
+    row_height := i32(0)
     for glyph, index in glyphs {
-        if offset_x >= atlas_width - glyph.bitmap_width - 2*FONT_GLYPH_PADDING {
+        if offset_x > FONT_GLYPH_PADDING &&
+            offset_x+glyph.bitmap_width+FONT_GLYPH_PADDING > atlas_width {
             offset_x = FONT_GLYPH_PADDING
-            offset_y += padded_size
-            if offset_y > atlas_height - pixel_size - FONT_GLYPH_PADDING {
-                atlas_height *= 2
-            }
+            offset_y += row_height + 2*FONT_GLYPH_PADDING
+            row_height = 0
+        }
+        for offset_y+glyph.bitmap_height+FONT_GLYPH_PADDING > atlas_height {
+            atlas_height *= 2
         }
         rectangles[index] = {
             x = offset_x,
@@ -469,6 +476,7 @@ prepare_layout :: proc(
             width = glyph.bitmap_width,
             height = glyph.bitmap_height,
         }
+        row_height = max(row_height, glyph.bitmap_height)
         offset_x += glyph.bitmap_width + 2*FONT_GLYPH_PADDING
     }
     return atlas_width, atlas_height

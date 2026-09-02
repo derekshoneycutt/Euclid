@@ -123,17 +123,36 @@ resolve_writable_pictures_dir :: proc(
 //   - none.
 //
 // Returns:
-//   - none.
+//   - ok: true when packaged assets are available for path resolution.
 //
 // Notes:
-//   - Safe for startup use; failures are handled internally.
-ensure_packaged_assets_unpacked_root :: proc(config: ^Asset_Root_Config = nil) {
+//   - Lower-level path resolution may reuse a previously validated unpack tree.
+ensure_packaged_assets_unpacked_root :: proc(
+    config: ^Asset_Root_Config = nil) -> bool {
+
     exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
     if !exe_ok {
-        return
+        return false
     }
 
-    _ = ensure_packaged_assets_unpacked_with_force(exe_dir, false)
+    return ensure_packaged_assets_unpacked_with_force(exe_dir, false)
+}
+
+//   Return whether assets.pkg exists beside the selected application executable.
+packaged_asset_archive_exists_root :: proc(
+    config: ^Asset_Root_Config = nil) -> bool {
+
+    exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
+    if !exe_ok {
+        fmt.eprintln("asset startup failed: could not resolve executable directory")
+        return false
+    }
+    archive_path, archive_ok := join_archive_path(exe_dir, context.temp_allocator)
+    if !archive_ok || !os.exists(archive_path) {
+        fmt.eprintln("asset startup failed: archive not found at ", archive_path)
+        return false
+    }
+    return true
 }
 
 //   Force a fresh unpack of assets.pkg from the executable directory.

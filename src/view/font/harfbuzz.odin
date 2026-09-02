@@ -27,6 +27,14 @@ Harfbuzz_Direction :: enum c.int {
     Bottom_To_Top = 7,
 }
 
+// OpenType MATH glyph-kern table corners in HarfBuzz ABI order.
+Harfbuzz_Math_Kern :: enum c.int {
+    Top_Right = 0,
+    Top_Left = 1,
+    Bottom_Right = 2,
+    Bottom_Left = 3,
+}
+
 // HarfBuzz policy controlling whether a blob copies or borrows source bytes.
 Harfbuzz_Memory_Mode :: enum c.int {
     Duplicate = 0,
@@ -69,10 +77,113 @@ Harfbuzz_Glyph_Extents :: struct {
     height: i32,
 }
 
+// ABI-compatible OpenType MATH glyph variant and vertical advance record.
+Harfbuzz_Math_Glyph_Variant :: struct {
+    glyph: u32,
+    advance: i32,
+}
+
+// ABI-compatible OpenType MATH glyph assembly part.
+Harfbuzz_Math_Glyph_Part :: struct {
+    glyph: u32,
+    start_connector_length: i32,
+    end_connector_length: i32,
+    full_advance: i32,
+    flags: u32,
+}
+
+// ABI-compatible height boundary and value from one MATH kern table.
+Harfbuzz_Math_Kern_Entry :: struct {
+    max_correction_height: i32,
+    kern_value: i32,
+}
+
+// Math_Variant_Query_Result reports one bounded native variant query outcome.
+Math_Variant_Query_Result :: struct {
+    count: int,
+    extended_shape: bool,
+    ok: bool,
+}
+
+// Math_Assembly_Query_Result reports one bounded native assembly query outcome.
+Math_Assembly_Query_Result :: struct {
+    count: int,
+    min_connector_overlap: i32,
+    italic_correction: i32,
+    ok: bool,
+}
+
+// Math_Kern_Query_Result reports one bounded native corner-table query outcome.
+Math_Kern_Query_Result :: struct {
+    count: int,
+    ok: bool,
+}
+
 Shaped_Glyph :: core.Shaped_Glyph
 Font_Shaping_Resource :: core.Font_Shaping_Resource
 Font_Math_Shaping_Capability :: core.Font_Math_Shaping_Capability
+Font_Math_Constants :: core.Font_Math_Constants
 Font_Glyph_Extents :: core.Font_Glyph_Extents
+
+// Harfbuzz_Math_Constant mirrors hb_ot_math_constant_t values 0 through 55.
+Harfbuzz_Math_Constant :: enum c.int {
+    Script_Percent_Scale_Down = 0,
+    Script_Script_Percent_Scale_Down,
+    Delimited_Sub_Formula_Min_Height,
+    Display_Operator_Min_Height,
+    Math_Leading,
+    Axis_Height,
+    Accent_Base_Height,
+    Flattened_Accent_Base_Height,
+    Subscript_Shift_Down,
+    Subscript_Top_Max,
+    Subscript_Baseline_Drop_Min,
+    Superscript_Shift_Up,
+    Superscript_Shift_Up_Cramped,
+    Superscript_Bottom_Min,
+    Superscript_Baseline_Drop_Max,
+    Sub_Superscript_Gap_Min,
+    Superscript_Bottom_Max_With_Subscript,
+    Space_After_Script,
+    Upper_Limit_Gap_Min,
+    Upper_Limit_Baseline_Rise_Min,
+    Lower_Limit_Gap_Min,
+    Lower_Limit_Baseline_Drop_Min,
+    Stack_Top_Shift_Up,
+    Stack_Top_Display_Style_Shift_Up,
+    Stack_Bottom_Shift_Down,
+    Stack_Bottom_Display_Style_Shift_Down,
+    Stack_Gap_Min,
+    Stack_Display_Style_Gap_Min,
+    Stretch_Stack_Top_Shift_Up,
+    Stretch_Stack_Bottom_Shift_Down,
+    Stretch_Stack_Gap_Above_Min,
+    Stretch_Stack_Gap_Below_Min,
+    Fraction_Numerator_Shift_Up,
+    Fraction_Numerator_Display_Style_Shift_Up,
+    Fraction_Denominator_Shift_Down,
+    Fraction_Denominator_Display_Style_Shift_Down,
+    Fraction_Numerator_Gap_Min,
+    Fraction_Num_Display_Style_Gap_Min,
+    Fraction_Rule_Thickness,
+    Fraction_Denominator_Gap_Min,
+    Fraction_Denom_Display_Style_Gap_Min,
+    Skewed_Fraction_Horizontal_Gap,
+    Skewed_Fraction_Vertical_Gap,
+    Overbar_Vertical_Gap,
+    Overbar_Rule_Thickness,
+    Overbar_Extra_Ascender,
+    Underbar_Vertical_Gap,
+    Underbar_Rule_Thickness,
+    Underbar_Extra_Descender,
+    Radical_Vertical_Gap,
+    Radical_Display_Style_Vertical_Gap,
+    Radical_Rule_Thickness,
+    Radical_Extra_Ascender,
+    Radical_Kern_Before_Degree,
+    Radical_Kern_After_Degree,
+    Radical_Degree_Bottom_Raise_Percent,
+}
 
 Math_Shaping_Role :: enum {
     Upright,
@@ -88,6 +199,8 @@ Math_Projection_Decode_Result :: struct {
 Math_Shaping_Input :: struct {
     text: string,
     role: Math_Shaping_Role,
+    standalone_accent: bool,
+    flattened_accent: bool,
     workspace: []u8,
 }
 
@@ -117,6 +230,7 @@ foreign harfbuzz {
     hb_buffer_clear_contents :: proc(buffer: ^Harfbuzz_Buffer) ---
     hb_buffer_set_direction :: proc(
         buffer: ^Harfbuzz_Buffer, direction: Harfbuzz_Direction) ---
+    hb_buffer_set_flags :: proc(buffer: ^Harfbuzz_Buffer, flags: u32) ---
     hb_buffer_get_direction :: proc(
         buffer: ^Harfbuzz_Buffer) -> Harfbuzz_Direction ---
     hb_buffer_set_script :: proc(buffer: ^Harfbuzz_Buffer, script: u32) ---
@@ -138,6 +252,51 @@ foreign harfbuzz {
         font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
     hb_ot_math_get_glyph_top_accent_attachment :: proc(
         font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
+    hb_ot_math_get_glyph_kerning :: proc(
+        font: ^Harfbuzz_Font, glyph: u32,
+        corner: Harfbuzz_Math_Kern, correction_height: i32) -> i32 ---
+    hb_ot_math_get_glyph_kernings :: proc(
+        font: ^Harfbuzz_Font, glyph: u32, corner: Harfbuzz_Math_Kern,
+        start_offset: u32, entries_count: ^u32,
+        entries: [^]Harfbuzz_Math_Kern_Entry) -> u32 ---
+    hb_ot_math_get_constant :: proc(
+        font: ^Harfbuzz_Font, constant: Harfbuzz_Math_Constant) -> i32 ---
+    hb_ot_math_get_glyph_variants :: proc(
+        font: ^Harfbuzz_Font, glyph: u32, direction: Harfbuzz_Direction,
+        start_offset: u32, variants_count: ^u32,
+        variants: [^]Harfbuzz_Math_Glyph_Variant) -> u32 ---
+    hb_ot_math_get_min_connector_overlap :: proc(
+        font: ^Harfbuzz_Font, direction: Harfbuzz_Direction) -> i32 ---
+    hb_ot_math_get_glyph_assembly :: proc(
+        font: ^Harfbuzz_Font, glyph: u32, direction: Harfbuzz_Direction,
+        start_offset: u32, parts_count: ^u32, parts: [^]Harfbuzz_Math_Glyph_Part,
+        italic_correction: ^i32) -> u32 ---
+    hb_ot_math_is_glyph_extended_shape :: proc(
+        face: ^Harfbuzz_Face, glyph: u32) -> c.int ---
+}
+
+//   Capture all OpenType MATH constants for one initialized capability generation.
+harfbuzz_math_constants_capture :: proc(
+    shaper: ^Font_Shaping_Resource,
+    generation: u64,
+    base_pixel_size: f32,
+    output: ^Font_Math_Constants) -> bool {
+
+    if shaper == nil || shaper.font == nil || generation == 0 ||
+        base_pixel_size <= 0 || output == nil {
+        return false
+    }
+    candidate := Font_Math_Constants{
+        generation = generation,
+        base_pixel_size = base_pixel_size,
+    }
+    for constant in Harfbuzz_Math_Constant {
+        candidate.values[int(constant)] = hb_ot_math_get_constant(
+            cast(^Harfbuzz_Font)shaper.font, constant)
+    }
+    candidate.valid = true
+    output^ = candidate
+    return true
 }
 
 //   Pack four ASCII bytes into HarfBuzz's canonical OpenType tag order.
@@ -354,6 +513,193 @@ math_shaping_top_accent_attachment :: proc(
     return value, true
 }
 
+//   Query one glyph's MATH kern at a validated corner and correction height.
+math_shaping_glyph_kerning :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    corner: Harfbuzz_Math_Kern,
+    correction_height: i32) -> (i32, bool) {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) ||
+        corner < .Top_Right || corner > .Bottom_Left {
+        return 0, false
+    }
+    value := hb_ot_math_get_glyph_kerning(
+        cast(^Harfbuzz_Font)capability.resource.font,
+        glyph_id, corner, correction_height)
+    return value, true
+}
+
+//   Copy one glyph corner's complete MATH kern table into bounded caller storage.
+math_shaping_glyph_kern_table :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    corner: Harfbuzz_Math_Kern,
+    output: []core.Font_Math_Kern_Entry) -> Math_Kern_Query_Result {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) ||
+        corner < .Top_Right || corner > .Bottom_Left || len(output) <= 0 ||
+        len(output) > core.FONT_MATH_KERN_ENTRY_CAPACITY {
+        return {}
+    }
+    native: [core.FONT_MATH_KERN_ENTRY_CAPACITY]Harfbuzz_Math_Kern_Entry
+    count := u32(len(output))
+    available := hb_ot_math_get_glyph_kernings(
+        cast(^Harfbuzz_Font)capability.resource.font,
+        glyph_id, corner, 0, &count, &native[0])
+    if available > u32(len(output)) || count != available {
+        return {}
+    }
+    previous_height: i32
+    for index in 0..<int(count) {
+        entry := native[index]
+        if index > 0 && entry.max_correction_height <= previous_height {
+            return {}
+        }
+        direct := hb_ot_math_get_glyph_kerning(
+            cast(^Harfbuzz_Font)capability.resource.font,
+            glyph_id, corner, entry.max_correction_height)
+        if direct != entry.kern_value {
+            return {}
+        }
+        output[index] = {entry.max_correction_height, entry.kern_value}
+        previous_height = entry.max_correction_height
+    }
+    for index in 0..<int(count)-1 {
+        next_height := native[index].max_correction_height + 1
+        next_direct := hb_ot_math_get_glyph_kerning(
+            cast(^Harfbuzz_Font)capability.resource.font,
+            glyph_id, corner, next_height)
+        if next_direct != native[index+1].kern_value {
+            return {}
+        }
+    }
+    return {int(count), true}
+}
+
+//   Copy one glyph's directional MATH variants into caller-owned bounded storage.
+math_shaping_directional_variants :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    direction: Harfbuzz_Direction,
+    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) || len(output) <= 0 ||
+        len(output) > core.FONT_MATH_GLYPH_VARIANT_CAPACITY {
+        return {}
+    }
+    native: [core.FONT_MATH_GLYPH_VARIANT_CAPACITY]Harfbuzz_Math_Glyph_Variant
+    count := u32(len(output))
+    available := hb_ot_math_get_glyph_variants(
+        cast(^Harfbuzz_Font)capability.resource.font, glyph_id, direction,
+        0, &count, &native[0])
+    if count == 0 || int(count) > len(output) || available < count {
+        return {}
+    }
+    for index in 0..<int(count) {
+        output[index] = {
+            glyph_id = native[index].glyph,
+            advance = native[index].advance,
+        }
+    }
+    extended := hb_ot_math_is_glyph_extended_shape(
+        cast(^Harfbuzz_Face)capability.resource.face, glyph_id) != 0
+    return {int(count), extended, true}
+}
+
+//   Copy one glyph's vertical MATH variants into caller-owned bounded storage.
+math_shaping_vertical_variants :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+
+    return math_shaping_directional_variants(
+        capability, generation, glyph_id, .Top_To_Bottom, output)
+}
+
+//   Copy one glyph's horizontal MATH variants into caller-owned bounded storage.
+math_shaping_horizontal_variants :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+
+    return math_shaping_directional_variants(
+        capability, generation, glyph_id, .Left_To_Right, output)
+}
+
+//   Copy one glyph's directional MATH assembly into caller-owned bounded storage.
+math_shaping_directional_assembly :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    direction: Harfbuzz_Direction,
+    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+
+    if !math_shaping_generation_matches(capability, generation) ||
+        !math_shaping_has_glyph(capability, glyph_id) || len(output) <= 0 ||
+        len(output) > core.FONT_MATH_GLYPH_PART_CAPACITY {
+        return {}
+    }
+    native: [core.FONT_MATH_GLYPH_PART_CAPACITY]Harfbuzz_Math_Glyph_Part
+    count := u32(len(output))
+    italic_correction: i32
+    font := cast(^Harfbuzz_Font)capability^.resource.font
+    available := hb_ot_math_get_glyph_assembly(
+        font, glyph_id, direction, 0, &count, &native[0], &italic_correction)
+    if count == 0 || available != count || int(count) > len(output) {
+        return {}
+    }
+    min_overlap := hb_ot_math_get_min_connector_overlap(font, direction)
+    if min_overlap < 0 {
+        return {}
+    }
+    for index in 0..<int(count) {
+        part := native[index]
+        if part.glyph == 0 || part.full_advance <= 0 ||
+            part.start_connector_length < 0 || part.end_connector_length < 0 {
+            return {}
+        }
+        output[index] = {
+            glyph_id = part.glyph,
+            start_connector_length = part.start_connector_length,
+            end_connector_length = part.end_connector_length,
+            full_advance = part.full_advance,
+            extender = part.flags & 1 != 0,
+        }
+    }
+    return {int(count), min_overlap, italic_correction, true}
+}
+
+//   Copy one glyph's vertical MATH assembly into caller-owned bounded storage.
+math_shaping_vertical_assembly :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+
+    return math_shaping_directional_assembly(
+        capability, generation, glyph_id, .Top_To_Bottom, output)
+}
+
+//   Copy one glyph's horizontal MATH assembly into caller-owned bounded storage.
+math_shaping_horizontal_assembly :: proc(
+    capability: ^Font_Math_Shaping_Capability,
+    generation: u64,
+    glyph_id: u32,
+    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+
+    return math_shaping_directional_assembly(
+        capability, generation, glyph_id, .Left_To_Right, output)
+}
+
 //   Copy one completed native shape result into caller-owned bounded storage.
 //
 // Parameters:
@@ -526,11 +872,17 @@ math_shaping_shape :: proc(
     }
     buffer := cast(^Harfbuzz_Buffer)capability.resource.buffer
     hb_buffer_clear_contents(buffer)
+    hb_buffer_set_flags(buffer, 0x10 if input.standalone_accent else 0)
     hb_buffer_set_direction(buffer, .Left_To_Right)
     hb_buffer_set_script(buffer, harfbuzz_tag('m', 'a', 't', 'h'))
     hb_buffer_add_utf8(
         buffer, cstring(raw_data(shaping_text)), c.int(len(shaping_text)), 0, -1)
-    hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, nil, 0)
+    feature := Harfbuzz_Feature{
+        tag = harfbuzz_tag('f', 'l', 'a', 'c'),
+        value = 1 if input.flattened_accent else 0,
+        end = max(u32),
+    }
+    hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, &feature, 1)
     glyph_count := hb_buffer_get_length(buffer)
     info_count := glyph_count
     infos := hb_buffer_get_glyph_infos(buffer, &info_count)

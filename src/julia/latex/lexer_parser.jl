@@ -88,7 +88,7 @@ is_text_token_stop_char(c::Char) =
 """Return true when one char is ASCII horizontal/vertical whitespace."""
 is_ascii_space_char(c::Char) = c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
-"""Normalize plain-text token spacing markers to Unicode output text."""
+"""Normalize explicit nonbreaking math-space markers to semantic input text."""
 normalize_text_whitespace(text::AbstractString) =
     replace(String(text), "~" => NONBREAKING_SPACE)
 
@@ -200,6 +200,11 @@ function parse_command_atom(
         return text_runs
     end
 
+    glue_runs = parse_explicit_glue_command(command)
+    if !isnothing(glue_runs)
+        return glue_runs
+    end
+
     unicode_runs = parse_unicode_command(command)
     if !isnothing(unicode_runs)
         return unicode_runs
@@ -228,6 +233,16 @@ function parse_command_atom(
     return normal_math_atom_runs(command)
 end
 
+"""Parse supported explicit math-space commands into semantic glue runs."""
+function parse_explicit_glue_command(command::AbstractString)
+    command == "\\;" && return [latex_glue_run(" ", MATH_GLUE_THICK)]
+    command == "\\ " && return [latex_glue_run(" ", MATH_GLUE_SPACE)]
+    command == "\\!" && return [latex_glue_run("", MATH_GLUE_NEGATIVE_THIN)]
+    command == "\\quad" && return [latex_glue_run(" ", MATH_GLUE_QUAD)]
+    command == "\\," && return [latex_glue_run(" ", MATH_GLUE_THIN)]
+    return nothing
+end
+
 """Parse display-style large operators that accept stacked upper/lower limits."""
 function parse_large_operator_atom(command::AbstractString)
     value = get(LARGE_OPERATOR_COMMAND_MAP, command, nothing)
@@ -239,7 +254,7 @@ function parse_large_operator_atom(command::AbstractString)
     role = large_op_kind == LARGE_OP_KIND_SUM ? :largeop_sum :
         (large_op_kind == LARGE_OP_KIND_PROD ? :largeop_prod :
             (large_op_kind == LARGE_OP_KIND_INT ? :largeop_int : :largeop_lim))
-    return [latex_atom_run(glyph, role)]
+    return [latex_atom_run(glyph, role, MATH_ATOM_OP)]
 end
 
 """Parse special command forms that produce plain text runs."""
@@ -249,7 +264,8 @@ function parse_special_text_command(
     idx::Base.RefValue{Int})
 
     if command == "\\text" || command == "\\mathrm"
-        return [latex_atom_run(parse_required_group_as_text(tokens, idx), :text)]
+        return [latex_atom_run(
+            parse_required_group_as_text(tokens, idx), :text, MATH_ATOM_ORD)]
     end
 
     return nothing
@@ -285,7 +301,7 @@ end
 """Parse upright text-operator commands."""
 function parse_text_operator_atom(command::AbstractString)
     if command in TEXT_OPERATOR_COMMANDS
-        return [latex_atom_run(command_to_text_operator(command), :text)]
+        return [latex_atom_run(command_to_text_operator(command), :text, MATH_ATOM_OP)]
     end
 
     return nothing
@@ -303,6 +319,16 @@ function parse_structured_math_command(
 
     if command == "\\underline"
         return [latex_underline_run(parse_required_group_runs(tokens, idx))]
+    end
+
+    glyph_accents = Dict(
+        "\\hat" => :accent_hat, "\\widehat" => :accent_hat,
+        "\\tilde" => :accent_tilde, "\\widetilde" => :accent_tilde,
+        "\\vec" => :accent_vec, "\\dot" => :accent_dot,
+        "\\ddot" => :accent_ddot, "\\bar" => :accent_bar)
+    if haskey(glyph_accents, command)
+        return [latex_glyph_accent_run(
+            glyph_accents[command], parse_required_group_runs(tokens, idx))]
     end
 
     if command == "\\sqrt"
@@ -1003,6 +1029,9 @@ end
 
 """Serialize one semantic run back into deterministic plain-text LaTeX form."""
 function latex_run_serialized_text(run::LatexRun)
+    if run.glue_kind == MATH_GLUE_SOURCE
+        return ""
+    end
     child_text = ""
     if !isempty(run.children)
         child_text = join(
@@ -1020,44 +1049,30 @@ function latex_run_serialized_text(run::LatexRun)
     return latex_run_non_matrix_text(run, child_text, secondary_child_text)
 end
 
-"""Parse one sqrt run with optional single-rune bracket index."""
+"""Parse one sqrt run with an optional recursive degree program."""
 function parse_sqrt_run(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
-    index_text = parse_optional_single_rune_index(tokens, idx)
+    degree_children = parse_optional_radical_degree(tokens, idx)
     radical_children = parse_required_group_runs(tokens, idx)
-    return latex_sqrt_run(radical_children, index_text)
+    return latex_sqrt_run(radical_children, degree_children)
 end
 
-"""Parse optional `[n]` index text and accept only one rune."""
-function parse_optional_single_rune_index(
+"""Parse optional bracketed radical-degree content as semantic runs."""
+function parse_optional_radical_degree(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     if idx[] > length(tokens) || tokens[idx[]].kind != :lbracket
-        return ""
+        return LatexRun[]
     end
 
     idx[] += 1
-    parts = String[]
-    while idx[] <= length(tokens)
-        token = tokens[idx[]]
-        if token.kind == :rbracket
-            idx[] += 1
-            break
-        end
-
-        if token.kind == :command
-            if haskey(UNICODE_COMMAND_MAP, token.text)
-                push!(parts, UNICODE_COMMAND_MAP[token.text])
-            else
-                push!(parts, token.text)
-            end
-        else
-            push!(parts, token.text)
-        end
-
+    runs = LatexRun[]
+    while idx[] <= length(tokens) && tokens[idx[]].kind != :rbracket
+        append!(runs, parse_atom(tokens, idx))
+        consume_scripts!(runs, tokens, idx)
+    end
+    if idx[] <= length(tokens) && tokens[idx[]].kind == :rbracket
         idx[] += 1
     end
-
-    candidate = String(strip(join(parts, "")))
-    return length(candidate) == 1 ? candidate : ""
+    return normalize_runs(runs)
 end
 
 """Parse one required `{...}` group and return semantic child runs."""
@@ -1075,7 +1090,8 @@ function parse_required_group_as_text(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
 
     runs = parse_required_group_runs(tokens, idx)
-    return join((latex_run_serialized_text(run) for run in runs), "")
+    return join((run.glue_kind == MATH_GLUE_SOURCE ? run.text :
+        latex_run_serialized_text(run) for run in runs), "")
 end
 
 """Parse `\\mathbb{...}` content and map A-Z to Unicode double-struck glyphs."""
@@ -1110,39 +1126,42 @@ function consume_scripts!(
         end
 
         idx[] += 1
-        script_text, was_grouped = parse_script_text(tokens, idx)
-        if isempty(script_text)
+        script = parse_script_text(tokens, idx)
+        if isempty(script.text)
             continue
         end
 
-        script_token = format_script_token(marker, script_text, was_grouped)
+        script_token = format_script_token(marker, script.text, script.was_grouped)
         if marker == :sup
-            push!(runs, latex_sup_run(script_token))
+            push!(runs, latex_sup_run(script_token, script.runs))
             continue
         end
 
-        push!(runs, latex_sub_run(script_token))
+        push!(runs, latex_sub_run(script_token, script.runs))
     end
 end
 
 """Parse one script payload, either grouped (`{...}`) or single-atom."""
 function parse_script_text(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     if idx[] > length(tokens)
-        return "", false
+        return ParsedScript("", false, LatexRun[])
     end
 
     if tokens[idx[]].kind == :lbrace
         idx[] += 1
         runs = parse_sequence(tokens, idx, true)
-        return join((run.text for run in runs), ""), true
+        text = join((latex_run_serialized_text(run) for run in runs), "")
+        return ParsedScript(text, true, runs)
     end
 
     if tokens[idx[]].kind == :text
-        return consume_single_script_text_token!(tokens, idx), false
+        text = consume_single_script_text_token!(tokens, idx)
+        return ParsedScript(text, false, normal_math_atom_runs(text))
     end
 
     runs = parse_atom(tokens, idx)
-    return join((run.text for run in runs), ""), false
+    text = join((latex_run_serialized_text(run) for run in runs), "")
+    return ParsedScript(text, false, runs)
 end
 
 """Consume exactly one character from a plain-text token for unbraced scripts."""
@@ -1180,11 +1199,14 @@ end
 
 """Merge adjacent runs with identical semantic role."""
 run_has_no_content(run::LatexRun) =
-    isempty(run.text) && isempty(run.children) && isempty(run.secondary_children)
+    run.glue_kind == MATH_GLUE_NONE && isempty(run.text) &&
+    isempty(run.children) && isempty(run.secondary_children)
 
 """Return true when two atom runs can be merged into one normalized atom run."""
 function can_merge_adjacent_atom_runs(prev::LatexRun, run::LatexRun)
     return prev.role == run.role &&
+           prev.atom_class == run.atom_class &&
+           prev.glue_kind == run.glue_kind &&
            prev.segment == :atom &&
            run.segment == :atom &&
            isempty(prev.children) &&
@@ -1197,14 +1219,14 @@ end
 function normalize_runs(runs::Vector{LatexRun})
     normalized = LatexRun[]
     for run in runs
-        if run_has_no_content(run)
+        if run_has_no_content(run) || run.glue_kind == MATH_GLUE_SOURCE
             continue
         end
 
         if !isempty(normalized) && can_merge_adjacent_atom_runs(normalized[end], run)
             prev = normalized[end]
             normalized[end] = LatexRun(prev.text * run.text, prev.role, :atom,
-                EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+                prev.atom_class, prev.glue_kind, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
             continue
         end
 
@@ -1369,7 +1391,11 @@ function latex_source_for_recursive_payload(op::MathPayloadOp)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
-        command = op.accent_mode == :overline ? "\\overline{" : "\\underline{" 
+        commands = Dict(
+            :overline => "\\overline", :underline => "\\underline",
+            :hat => "\\hat", :tilde => "\\tilde", :vec => "\\vec",
+            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar")
+        command = get(commands, op.accent_mode, "\\overline") * "{"
         return command * latex_source_for_program(op.children) * "}"
     end
 

@@ -56,6 +56,8 @@ const TestRunner = Verification.EuclidTestRunner
         @test isempty(build.arguments)
         command = odin_build_command("-ljulia", true, true)
         @test "-out:$(debug_app_binary_path())" in command
+        @test debug_assets_archive_path() ==
+            joinpath(dirname(debug_app_binary_path()), "assets.pkg")
         @test "-debug" in command
         @test "-o:none" in command
         @test "-vet" in command

@@ -412,6 +412,7 @@ cache_publish_required_seed :: proc(
         font_shaping_destroy(shaping)
         return false
     }
+    raster_ascent := prepared^.raster_ascent
     candidate: rl.Font
     if !finalize(prepared, &candidate) {
         font_shaping_destroy(shaping)
@@ -420,7 +421,7 @@ cache_publish_required_seed :: proc(
     }
     entry.font = candidate
     entry.shaping = shaping^
-    entry.raster_ascent = prepared^.raster_ascent
+    entry.raster_ascent = raster_ascent
     return true
 }
 
@@ -533,7 +534,9 @@ math_shaping_replace :: proc(
         raster_ascent = entry.raster_ascent,
     }
     if !harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, &candidate.resource) ||
-        !harfbuzz_face_has_math_table(&candidate.resource) {
+        !harfbuzz_face_has_math_table(&candidate.resource) ||
+        !harfbuzz_math_constants_capture(&candidate.resource, candidate.generation,
+            f32(JULIA_MONO_FONT_SIZE), &candidate.constants) {
         math_shaping_destroy(&candidate)
         capability.failed_generation = entry.generation
         return false

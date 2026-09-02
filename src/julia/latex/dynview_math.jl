@@ -3,6 +3,8 @@ struct MathBlockModeCodes
     accent_mode::Int32
     radical_mode::Int32
     large_op_kind::Int32
+    operator_growth::Int32
+    operator_limits::Int32
 end
 
 struct BridgeMathBlockPayload
@@ -63,18 +65,22 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
 end
 
 """Lift one payload op into a script-attach payload and set one script field."""
-function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token::String)
+function payload_op_with_script(op::MathPayloadOp, run::LatexRun)
     sup_text = op.sup_text
     sub_text = op.sub_text
-    if segment == :script_sup
-        sup_text = script_payload_text(script_token)
-    elseif segment == :script_sub
-        sub_text = script_payload_text(script_token)
+    superscript = op.secondary_children
+    subscript = op.tertiary_children
+    if run.segment == :script_sup
+        sup_text = script_payload_text(run.text)
+        superscript = math_payload_ops_for_runs(run.children)
+    elseif run.segment == :script_sub
+        sub_text = script_payload_text(run.text)
+        subscript = math_payload_ops_for_runs(run.children)
     end
 
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
             op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        return payload_op_rescripted(op, sup_text, sub_text)
+        return payload_op_rescripted(op, sup_text, sub_text, superscript, subscript)
     end
 
     parent_text = plain_text_for_payload(op)
@@ -88,12 +94,16 @@ function payload_op_with_script(op::MathPayloadOp, segment::Symbol, script_token
         :none,
         LARGE_OP_KIND_NONE,
         op.style_role,
+        op.atom_class,
+        op.glue_kind,
         [op],
-        MathPayloadOp[])
+        superscript,
+        subscript)
 end
 
-"""Rebuild one payload op with updated script texts, preserving its kind and children."""
-function payload_op_rescripted(op::MathPayloadOp, sup_text::String, sub_text::String)
+"""Rebuild one payload op with updated recursive script branches."""
+function payload_op_rescripted(op::MathPayloadOp, sup_text::String, sub_text::String,
+    superscript::Vector{MathPayloadOp}, subscript::Vector{MathPayloadOp})
     return MathPayloadOp(
         op.kind,
         op.text,
@@ -103,9 +113,14 @@ function payload_op_rescripted(op::MathPayloadOp, sup_text::String, sub_text::St
         op.accent_mode,
         op.radical_mode,
         op.large_op_kind,
+        op.operator_growth,
+        op.operator_limits,
         op.style_role,
+        op.atom_class,
+        op.glue_kind,
         op.children,
-        op.secondary_children)
+        superscript,
+        subscript)
 end
 
 """Return one plain-text fallback string for a run vector."""
@@ -121,18 +136,7 @@ function atom_payload_op(run::LatexRun)
             (run.role == :largeop_int ? LARGE_OP_KIND_INT :
                 (run.role == :largeop_lim ? LARGE_OP_KIND_LIM : LARGE_OP_KIND_NONE)))
     if large_op_kind != LARGE_OP_KIND_NONE
-        return MathPayloadOp(
-            MATH_OP_LARGE_OP_RECURSIVE,
-            run.text,
-            "",
-            "",
-            "",
-            :none,
-            :none,
-            large_op_kind,
-            :math,
-            MathPayloadOp[],
-            MathPayloadOp[])
+        return large_operator_payload_op(run.text, large_op_kind)
     end
 
     kind = run.role == :text ? MATH_OP_TEXT_RUN : MATH_OP_MATH_GLYPH_RUN
@@ -146,17 +150,43 @@ function atom_payload_op(run::LatexRun)
         :none,
         LARGE_OP_KIND_NONE,
         run.role,
+        run.atom_class,
+        run.glue_kind,
+        MathPayloadOp[],
         MathPayloadOp[],
         MathPayloadOp[])
+end
+
+"""Return semantic display-growth and limit policies for one operator body."""
+function large_operator_policies(large_op_kind::Int32)
+    if large_op_kind == LARGE_OP_KIND_INT
+        return OPERATOR_GROWTH_DISPLAY, OPERATOR_LIMITS_SIDE
+    end
+    if large_op_kind == LARGE_OP_KIND_LIM
+        return OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_STACKED
+    end
+    return OPERATOR_GROWTH_DISPLAY, OPERATOR_LIMITS_STACKED
+end
+
+"""Return one recursive large-operator payload with independent semantic policies."""
+function large_operator_payload_op(text::String, large_op_kind::Int32)
+    growth, limits = large_operator_policies(large_op_kind)
+    return MathPayloadOp(MATH_OP_LARGE_OP_RECURSIVE, text, "", "", "", :none,
+        :none, large_op_kind, growth, limits, :math, MATH_ATOM_OP, MATH_GLUE_NONE,
+        MathPayloadOp[], MathPayloadOp[], MathPayloadOp[])
 end
 
 """Return one recursive accent payload op from one structured run."""
 function accent_payload_op(run::LatexRun)
     child_payloads = math_payload_ops_for_runs(run.children)
-    accent_mode = run.segment == :accent_over ? :overline : :underline
+    accent_modes = Dict(
+        :accent_over => :overline, :accent_under => :underline,
+        :accent_hat => :hat, :accent_tilde => :tilde, :accent_vec => :vec,
+        :accent_dot => :dot, :accent_ddot => :ddot, :accent_bar => :bar)
+    accent_mode = get(accent_modes, run.segment, :overline)
     return MathPayloadOp(
         MATH_OP_ACCENT_BAR_RECURSIVE,
-        plain_text_for_runs(run.children),
+        String(plain_text_for_runs(run.children)),
         "",
         "",
         "",
@@ -164,17 +194,35 @@ function accent_payload_op(run::LatexRun)
         :none,
         LARGE_OP_KIND_NONE,
         :math,
+        MATH_ATOM_ORD,
+        MATH_GLUE_NONE,
         child_payloads,
+        MathPayloadOp[],
         MathPayloadOp[])
+end
+
+"""Return the bridge code for one semantic accent mode."""
+function bridge_accent_mode(mode::Symbol)
+    modes = Dict(
+        :overline => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE,
+        :underline => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE,
+        :hat => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_HAT,
+        :tilde => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_TILDE,
+        :vec => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_VEC,
+        :dot => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_DOT,
+        :ddot => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_DDOT,
+        :bar => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_BAR)
+    return get(modes, mode, Int32(0))
 end
 
 """Return one recursive radical payload op from one structured run."""
 function radical_payload_op(run::LatexRun)
     child_payloads = math_payload_ops_for_runs(run.children)
+    degree_payloads = math_payload_ops_for_runs(run.secondary_children)
     radical_mode = isempty(run.text) ? :sqrt : :nthroot
     return MathPayloadOp(
         MATH_OP_RADICAL_BAR_RECURSIVE,
-        plain_text_for_runs(run.children),
+        String(plain_text_for_runs(run.children)),
         run.text,
         "",
         "",
@@ -182,7 +230,10 @@ function radical_payload_op(run::LatexRun)
         radical_mode,
         LARGE_OP_KIND_NONE,
         :math,
+        MATH_ATOM_ORD,
+        MATH_GLUE_NONE,
         child_payloads,
+        degree_payloads,
         MathPayloadOp[])
 end
 
@@ -191,23 +242,26 @@ function fraction_payload_op(run::LatexRun)
     numerator_payloads = math_payload_ops_for_runs(run.children)
     denominator_payloads = math_payload_ops_for_runs(run.secondary_children)
     return MathPayloadOp(MATH_OP_FRACTION_RECURSIVE,
-        fraction_text(plain_text_for_runs(run.children),
-            plain_text_for_runs(run.secondary_children)),
+        String(fraction_text(plain_text_for_runs(run.children),
+            plain_text_for_runs(run.secondary_children))),
         "", "", "", :none, :none, LARGE_OP_KIND_NONE, :math,
-        numerator_payloads, denominator_payloads)
+        MATH_ATOM_INNER, MATH_GLUE_NONE,
+        numerator_payloads, denominator_payloads, MathPayloadOp[])
 end
 
-    """Return one recursive stretch-delimiter payload op from one structured run."""
-    function stretch_delimiter_payload_op(run::LatexRun)
-        child_payloads = math_payload_ops_for_runs(run.children)
-        left = run.text
-        right = stretch_right_delimiter(run)
-        return MathPayloadOp(
+"""Return one recursive stretch-delimiter payload op from one structured run."""
+function stretch_delimiter_payload_op(run::LatexRun)
+    child_payloads = math_payload_ops_for_runs(run.children)
+    left = run.text
+    right = stretch_right_delimiter(run)
+    return MathPayloadOp(
         MATH_OP_STRETCH_DELIMITER_RECURSIVE,
-        stretch_delimiter_text(left, plain_text_for_runs(run.children), right),
+        String(stretch_delimiter_text(
+            left, plain_text_for_runs(run.children), right)),
         left, right, "", :none, :none, LARGE_OP_KIND_NONE, :math,
-        child_payloads, MathPayloadOp[])
-    end
+        MATH_ATOM_INNER, MATH_GLUE_NONE,
+        child_payloads, MathPayloadOp[], MathPayloadOp[])
+end
 
 """Return one matrix-cell payload op with cell children wrapped into one root payload."""
 function matrix_cell_payload_op(cell_run::LatexRun)
@@ -215,7 +269,8 @@ function matrix_cell_payload_op(cell_run::LatexRun)
     if isempty(cell_payloads)
         return MathPayloadOp(MATH_OP_MATH_GLYPH_RUN,
             " ", "", "", "", :none, :none, LARGE_OP_KIND_NONE, :math,
-            MathPayloadOp[], MathPayloadOp[])
+            MATH_ATOM_ORD, MATH_GLUE_NONE,
+            MathPayloadOp[], MathPayloadOp[], MathPayloadOp[])
     end
 
     if length(cell_payloads) == 1
@@ -223,8 +278,9 @@ function matrix_cell_payload_op(cell_run::LatexRun)
     end
 
     return MathPayloadOp(MATH_OP_SCRIPT_ATTACH_RECURSIVE,
-        plain_text_for_program(cell_payloads), "", "", "", :none, :none,
-        LARGE_OP_KIND_NONE, :math, cell_payloads, MathPayloadOp[])
+        String(plain_text_for_program(cell_payloads)), "", "", "", :none, :none,
+        LARGE_OP_KIND_NONE, :math, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        cell_payloads, MathPayloadOp[], MathPayloadOp[])
 end
 
 """Return one recursive matrix payload op from one structured run."""
@@ -249,7 +305,7 @@ function matrix_payload_op(run::LatexRun)
 
     return MathPayloadOp(
         MATH_OP_MATRIX_RECURSIVE,
-        latex_run_serialized_text(run),
+        String(latex_run_serialized_text(run)),
         string(rows),
         string(cols),
         array_alignment,
@@ -257,7 +313,10 @@ function matrix_payload_op(run::LatexRun)
         :none,
         LARGE_OP_KIND_NONE,
         :math,
+        MATH_ATOM_INNER,
+        MATH_GLUE_NONE,
         cells,
+        MathPayloadOp[],
         MathPayloadOp[])
 end
 
@@ -273,6 +332,9 @@ function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::Lat
         :none,
         LARGE_OP_KIND_NONE,
         :math,
+        MATH_ATOM_ORD,
+        MATH_GLUE_NONE,
+        MathPayloadOp[],
         MathPayloadOp[],
         MathPayloadOp[]))
     return nothing
@@ -280,10 +342,12 @@ end
 
 """Return recursive payload op for a non-script structured run, or nothing if none applies."""
 function payload_for_non_script_segment(run::LatexRun)
-    if run.segment == :atom
+    if run.segment == :atom || run.segment == :glue
         return atom_payload_op(run)
     end
-    if run.segment == :accent_over || run.segment == :accent_under
+    if run.segment in (
+        :accent_over, :accent_under, :accent_hat, :accent_tilde,
+        :accent_vec, :accent_dot, :accent_ddot, :accent_bar)
         return accent_payload_op(run)
     end
     if run.segment == :radical_sqrt
@@ -307,7 +371,7 @@ is_script_segment(segment::Symbol) = segment == :script_sup || segment == :scrip
 """Append one script run to prior payload when possible, otherwise append fallback payload."""
 function consume_script_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
     if !isempty(payloads) && payload_op_accepts_scripts(payloads[end])
-        payloads[end] = payload_op_with_script(payloads[end], run.segment, run.text)
+        payloads[end] = payload_op_with_script(payloads[end], run)
     else
         push_script_fallback_payload!(payloads, run)
     end
@@ -337,6 +401,7 @@ function bridge_math_payload_op(
     op::MathPayloadOp,
     child_direct_count::Int32,
     secondary_child_direct_count::Int32,
+    tertiary_child_direct_count::Int32,
     text_style::Integer,
     math_style::Integer,
     mathbb_style::Integer)
@@ -351,14 +416,19 @@ function bridge_math_payload_op(
 
     return OdinJuliaBridge.BridgeDynviewMathOp(
         op.kind,
+        op.atom_class,
+        op.glue_kind,
         base_style,
         child_direct_count,
         secondary_child_direct_count,
+        tertiary_child_direct_count,
         Int32(math_style),
         base_style,
         mode_codes.accent_mode,
         mode_codes.radical_mode,
         mode_codes.large_op_kind,
+        mode_codes.operator_growth,
+        mode_codes.operator_limits,
         text_offset,
         text_len,
         index_offset,
@@ -391,17 +461,18 @@ function bridge_math_payload_preorder(
             text_style,
             math_style,
             mathbb_style)
-        secondary_child_direct_count = 0
-        secondary_child_ops = OdinJuliaBridge.BridgeDynviewMathOp[]
-        if payload.kind == MATH_OP_FRACTION_RECURSIVE
-            secondary_child_direct_count, secondary_child_ops =
-                bridge_math_payload_preorder(payload.secondary_children, io, text_style,
-                    math_style, mathbb_style)
-        end
+        secondary_child_direct_count, secondary_child_ops =
+            bridge_math_payload_preorder(payload.secondary_children, io, text_style,
+                math_style, mathbb_style)
+        tertiary_child_direct_count, tertiary_child_ops =
+            bridge_math_payload_preorder(payload.tertiary_children, io, text_style,
+                math_style, mathbb_style)
         push!(ops, bridge_math_payload_op(io, payload, Int32(child_direct_count),
-            Int32(secondary_child_direct_count), text_style, math_style, mathbb_style))
+            Int32(secondary_child_direct_count), Int32(tertiary_child_direct_count),
+            text_style, math_style, mathbb_style))
         append!(ops, child_ops)
         append!(ops, secondary_child_ops)
+        append!(ops, tertiary_child_ops)
     end
     return length(payloads), ops
 end
@@ -420,13 +491,10 @@ function math_block_mode_codes(op::MathPayloadOp)
         return MathBlockModeCodes(
             bridge_delimiter_kind(op.radical_index_text),
             bridge_delimiter_kind(op.sup_text),
-            Int32(0))
+            Int32(0), OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_NONE)
     end
 
-    accent_mode = op.accent_mode == :overline ? 
-        OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE :
-        (op.accent_mode == :underline ?
-            OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE : Int32(0))
+    accent_mode = bridge_accent_mode(op.accent_mode)
     radical_mode = op.radical_mode == :nthroot ?
         OdinJuliaBridge.BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT :
         (op.radical_mode == :sqrt ?
@@ -443,7 +511,8 @@ function math_block_mode_codes(op::MathPayloadOp)
                         OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :
                         Int32(0))))
     return MathBlockModeCodes(
-        Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind))
+        Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind),
+        op.operator_growth, op.operator_limits)
 end
 
 """Encode one recursive payload program as recursive bridge ops plus shared text blob."""
