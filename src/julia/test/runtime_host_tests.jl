@@ -29,11 +29,13 @@ const RuntimeHostPointId = UUID("03bf688d-40d0-56a2-a6be-ca2656c9b10d")
     scratchpad = host.scratchpad
     session = Scratchpad.create_session(scratchpad, state_ptr, 41)
     scratchpad.current_session = session
+    callback_ref = WeakRef(host.scratchpad.animation_callback)
     GC.gc(true)
     @test host.state_ptr == state_ptr
     @test host.active_generation === first_generation
     @test host.scratchpad === scratchpad
     @test host.scratchpad.current_session === session
+    @test callback_ref.value === host.scratchpad.animation_callback
     @test getfield(host.active_generation.content,
         :ElementsOneDefinitionPoint) === first_module
 

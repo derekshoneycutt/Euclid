@@ -85,11 +85,22 @@ mutable struct ScratchpadRuntimeState
     clean_count::Int
     reset_count::Int
     extension_state::Union{Nothing,ScratchpadExtensionState}
+    animation_callback::Union{Nothing,Function}
 end
 
 """Create empty Scratchpad state for one owning runtime host."""
 function create_runtime_state()::ScratchpadRuntimeState
-    return ScratchpadRuntimeState(nothing, 1, 0, 0, 0, nothing)
+    return ScratchpadRuntimeState(nothing, 1, 0, 0, 0, nothing, nothing)
+end
+
+"""Create and retain the stable lifecycle callback borrowed by the native host."""
+function create_animation_callback!(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})::Function
+
+    callback = (callback_state_ptr, operation, dt) ->
+        animation_entry(host_runtime, state_ptr, callback_state_ptr, operation, dt)
+    host_runtime.animation_callback = callback
+    return callback
 end
 
 mutable struct NativeErrorStyle
@@ -180,14 +191,15 @@ const HELPER_DOC_ALIASES = Dict(
 # history_previous/history_next/history_reset_cursor, and save_history_to_file.
 
 """Register host-bound scratchpad animation callbacks with the animation tree."""
-function init_euclid_scripts_scratchpad(
+function init_euclid_scripts_scratchpad!(
     host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
 
-    entry = (callback_state_ptr, operation, dt) ->
-        animation_entry(host_runtime, state_ptr, callback_state_ptr, operation, dt)
-    OdinJuliaBridge.add_root_animation_interface(
+    entry = create_animation_callback!(host_runtime, state_ptr)
+    status = OdinJuliaBridge.add_root_animation_interface(
         state_ptr, entry, ScratchpadName,
         OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
+    status == 1 || (host_runtime.animation_callback = nothing)
+    return status
 end
 
 """Create an isolated runtime module used as the scratchpad eval scope."""

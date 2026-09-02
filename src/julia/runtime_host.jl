@@ -16,8 +16,9 @@ end
 """Create the Julia runtime host whose lifetime is owned by the native worker."""
 function create_euclid_runtime_host(state_ptr::Ptr{Cvoid})::EuclidRuntimeHost
     state_ptr == C_NULL && throw(ArgumentError("state_ptr must not be null"))
-    return EuclidRuntimeHost(
-        state_ptr, create_euclid_runtime_generation(), Scratchpad.create_runtime_state())
+    scratchpad = Scratchpad.create_runtime_state()
+    Scratchpad.create_animation_callback!(scratchpad, state_ptr)
+    return EuclidRuntimeHost(state_ptr, create_euclid_runtime_generation(), scratchpad)
 end
 
 """Return whether a native-owned host reference has the expected runtime type."""

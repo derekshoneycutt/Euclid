@@ -43,8 +43,8 @@ function register_euclid_generation(
 
     register_catalog = Base.invokelatest(
         getfield, generation.animation_catalog, :register_animation_catalog)
-    scratchpad_entry = (callback_state_ptr, operation, dt) -> Scratchpad.animation_entry(
-        host.scratchpad, host.state_ptr, callback_state_ptr, operation, dt)
+    scratchpad_entry = host.scratchpad.animation_callback
+    scratchpad_entry === nothing && error("Scratchpad callback is not initialized")
     Base.invokelatest(register_catalog, state_ptr, scratchpad_entry)
     println("Julia startup: content registration completed in ",
         round((time_ns() - registration_started) / 1_000_000; digits=2), " ms")

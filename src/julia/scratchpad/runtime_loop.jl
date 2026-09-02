@@ -216,7 +216,7 @@ function initialize(
 end
 
 """Clean scratchpad lifecycle state and animation data when the animation unloads."""
-function clean(host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+function clean!(host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
     host_runtime.clean_count += 1
     host_runtime.current_session = nothing
 
@@ -276,7 +276,7 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(host_runtime, state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        clean(host_runtime, state_ptr)
+        clean!(host_runtime, state_ptr)
     else
         return false
     end
