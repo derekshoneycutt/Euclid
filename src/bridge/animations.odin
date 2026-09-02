@@ -134,8 +134,12 @@ init_euclid_generation :: proc(
     if callback == nil {
         return false
     }
-    call_julia_callback2(
-        state, callback, generation, julialib.jl_box_voidpointer(state))
+    args: [3]^julialib.jl_value_t = {
+        state^.julia_runtime_service^.runtime_host,
+        generation,
+        julialib.jl_box_voidpointer(state),
+    }
+    _ = julialib.jl_call(callback, &args[0], 3)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("register_euclid_generation")
         return false

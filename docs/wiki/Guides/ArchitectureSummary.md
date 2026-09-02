@@ -89,9 +89,12 @@ Content-module contract:
 - Bridge calls mutate host state while Julia controls pedagogical flow.
 
 The Julia owner worker roots one stable `EuclidRuntimeHost` for its initialized
-lifetime. The host roots only its committed `EuclidRuntimeGeneration`; each generation
-owns a fresh anonymous content module, catalog, load cache, and implementation roots.
-Odin-held Julia pointers are borrowed and never establish GC ownership.
+lifetime. The host retains the borrowed, lifetime-stable Odin state pointer, owns
+persistent Scratchpad session and extension state, and roots its committed
+`EuclidRuntimeGeneration`. Each generation owns a fresh anonymous content module,
+catalog, load cache, and implementation roots. Generation commits preserve the host's
+Scratchpad state. Odin-held Julia pointers are borrowed and never establish GC
+ownership; Julia never frees the native state pointer.
 
 Reload constructs and roots a candidate generation locally, registers it against the
 inactive Odin interface, restores the active UUID, validates Enter, commits the host's

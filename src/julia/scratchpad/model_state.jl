@@ -87,6 +87,11 @@ mutable struct ScratchpadRuntimeState
     extension_state::Union{Nothing,ScratchpadExtensionState}
 end
 
+"""Create empty Scratchpad state for one owning runtime host."""
+function create_runtime_state()::ScratchpadRuntimeState
+    return ScratchpadRuntimeState(nothing, 1, 0, 0, 0, nothing)
+end
+
 mutable struct NativeErrorStyle
     bold::Bool
     italic::Bool
@@ -123,8 +128,6 @@ const HelpPromptColor = OdinJuliaBridge.BridgeColor(0xd9, 0xb4, 0x4a, 0xff)
 const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
 const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
 const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
-
-ScratchpadRuntime = ScratchpadRuntimeState(nothing, 1, 0, 0, 0, nothing)
 
 const HELPER_DOC_ALIASES = Dict(
     "register_frame_hook" => (:Scratchpad, :register_frame_hook,
@@ -176,20 +179,27 @@ const HELPER_DOC_ALIASES = Dict(
 # register_frame_hook/remove_frame_hook/clear_frame_hooks/list_frame_hooks,
 # history_previous/history_next/history_reset_cursor, and save_history_to_file.
 
-"""Register scratchpad animation callbacks with the host animation tree."""
-function init_euclid_scripts_scratchpad(state_ptr::Ptr{Cvoid})
+"""Register host-bound scratchpad animation callbacks with the animation tree."""
+function init_euclid_scripts_scratchpad(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    entry = (callback_state_ptr, operation, dt) ->
+        animation_entry(host_runtime, state_ptr, callback_state_ptr, operation, dt)
     OdinJuliaBridge.add_root_animation_interface(
-    state_ptr, animation_entry, ScratchpadName,
+        state_ptr, entry, ScratchpadName,
         OdinJuliaBridge.animation_stable_id_from_key("root:" * ScratchpadName))
 end
 
 """Create an isolated runtime module used as the scratchpad eval scope."""
-function create_runtime_module(session_id::Int)
+function create_runtime_module(
+    host_runtime::ScratchpadRuntimeState, session_id::Int)
+
     mod_name = Symbol("EuclidScratchpadSession_", session_id)
     runtime = Module(mod_name)
 
     import_scratchpad_modules!(runtime)
     install_session_helpers!(runtime)
+    Core.eval(runtime, :(scratchpad_runtime = $host_runtime))
     return runtime
 end
 
@@ -217,47 +227,63 @@ end
 """Install the session-scope hook and draw helper wrappers into a runtime module."""
 function install_session_helpers!(runtime::Module)
     install_hook_helpers!(runtime)
+    install_basic_draw_helpers!(runtime)
     install_draw_helpers!(runtime)
+    install_reflection_helpers!(runtime)
 end
 
-"""Install the session-scope hook, history, and basic draw helpers into a runtime module."""
+"""Install the session-scope hook and lifecycle helpers into a runtime module."""
 function install_hook_helpers!(runtime::Module)
     # Expose helpers directly in session scope so users can register/remove hooks from input.
     Core.eval(runtime, quote
         """Register a per-frame scratchpad hook with an optional label."""
         register_frame_hook(fn; label="") =
-            Scratchpad.register_frame_hook(state_ptr, fn; label=label)
+            Scratchpad.register_frame_hook(scratchpad_runtime, state_ptr, fn; label=label)
         """Remove a previously registered per-frame scratchpad hook."""
-        remove_frame_hook(hook_id) = Scratchpad.remove_frame_hook(state_ptr, hook_id)
+        remove_frame_hook(hook_id) =
+            Scratchpad.remove_frame_hook(scratchpad_runtime, state_ptr, hook_id)
         """Remove all registered per-frame scratchpad hooks."""
-        clear_frame_hooks() = Scratchpad.clear_frame_hooks(state_ptr)
+        clear_frame_hooks() = Scratchpad.clear_frame_hooks(scratchpad_runtime, state_ptr)
         """List the registered per-frame scratchpad hooks."""
-        list_frame_hooks() = Scratchpad.list_frame_hooks(state_ptr)
+        list_frame_hooks() = Scratchpad.list_frame_hooks(scratchpad_runtime, state_ptr)
         """Save the scratchpad input history to a file."""
-        save_history(path) = Scratchpad.save_history_to_file(state_ptr, path)
-
-        """Hide a REPL-managed geometry target."""
-        hide!(args...; kwargs...) = EuclidRepl.hide!(state_ptr, args...; kwargs...)
-        """List the named Euclid colors available for drawing."""
-        euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
-        """Draw a point through the EuclidRepl API."""
-        point!(args...; kwargs...) = EuclidRepl.point!(state_ptr, args...; kwargs...)
-        """Draw a line through the EuclidRepl API."""
-        line!(args...; kwargs...) = EuclidRepl.line!(state_ptr, args...; kwargs...)
-        """Draw a circle through the EuclidRepl API."""
-        circle!(args...; kwargs...) = EuclidRepl.circle!(state_ptr, args...; kwargs...)
-        """Highlight a pen stroke through the EuclidRepl API."""
-        highlight_pen!(args...; kwargs...) =
-            EuclidRepl.highlight_pen!(state_ptr, args...; kwargs...)
-        """Highlight a compass arc through the EuclidRepl API."""
-        highlight_compass!(args...; kwargs...) =
-            EuclidRepl.highlight_compass!(state_ptr, args...; kwargs...)
+        save_history(path) =
+            Scratchpad.save_history_to_file(scratchpad_runtime, state_ptr, path)
 
         # Intercept interactive exit/quit and reset only scratchpad session state.
         """Exit the scratchpad session, resetting only session state."""
-        exit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
+        exit(args...) =
+            Scratchpad.intercept_exit_or_quit(scratchpad_runtime, state_ptr)
         """Quit the scratchpad session, resetting only session state."""
-        quit(args...) = Scratchpad.intercept_exit_or_quit(state_ptr)
+        quit(args...) =
+            Scratchpad.intercept_exit_or_quit(scratchpad_runtime, state_ptr)
+    end)
+end
+
+"""Install basic geometry and highlighting helpers into a runtime module."""
+function install_basic_draw_helpers!(runtime::Module)
+    Core.eval(runtime, quote
+        """Hide a REPL-managed geometry target."""
+        hide!(args...; kwargs...) =
+            EuclidRepl.hide!(scratchpad_runtime, state_ptr, args...; kwargs...)
+        """List the named Euclid colors available for drawing."""
+        euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
+        """Draw a point through the EuclidRepl API."""
+        point!(args...; kwargs...) =
+            EuclidRepl.point!(scratchpad_runtime, state_ptr, args...; kwargs...)
+        """Draw a line through the EuclidRepl API."""
+        line!(args...; kwargs...) =
+            EuclidRepl.line!(scratchpad_runtime, state_ptr, args...; kwargs...)
+        """Draw a circle through the EuclidRepl API."""
+        circle!(args...; kwargs...) =
+            EuclidRepl.circle!(scratchpad_runtime, state_ptr, args...; kwargs...)
+        """Highlight a pen stroke through the EuclidRepl API."""
+        highlight_pen!(args...; kwargs...) =
+            EuclidRepl.highlight_pen!(scratchpad_runtime, state_ptr, args...; kwargs...)
+        """Highlight a compass arc through the EuclidRepl API."""
+        highlight_compass!(args...; kwargs...) =
+            EuclidRepl.highlight_compass!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
     end)
 end
 
@@ -267,40 +293,59 @@ function install_draw_helpers!(runtime::Module)
     Core.eval(runtime, quote
         """Translate points through the EuclidRepl API."""
         translate_points!(args...; kwargs...) =
-            EuclidRepl.translate_points!(state_ptr, args...; kwargs...)
+            EuclidRepl.translate_points!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Rotate points about an axis through the EuclidRepl API."""
         rotate_points!(args...; kwargs...) =
-            EuclidRepl.rotate_points!(state_ptr, args...; kwargs...)
+            EuclidRepl.rotate_points!(scratchpad_runtime, state_ptr, args...; kwargs...)
         """Rotate points about the x axis through the EuclidRepl API."""
         rotate_points_x!(args...; kwargs...) =
-            EuclidRepl.rotate_points_x!(state_ptr, args...; kwargs...)
+            EuclidRepl.rotate_points_x!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Rotate points about the y axis through the EuclidRepl API."""
         rotate_points_y!(args...; kwargs...) =
-            EuclidRepl.rotate_points_y!(state_ptr, args...; kwargs...)
+            EuclidRepl.rotate_points_y!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Rotate points about the z axis through the EuclidRepl API."""
         rotate_points_z!(args...; kwargs...) =
-            EuclidRepl.rotate_points_z!(state_ptr, args...; kwargs...)
+            EuclidRepl.rotate_points_z!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
+    end)
+end
+
+"""Install session-scope EuclidRepl reflection helpers into a runtime module."""
+function install_reflection_helpers!(runtime::Module)
+    Core.eval(runtime, quote
         """Reflect points across a line through the EuclidRepl API."""
         reflect2d_points!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points!(state_ptr, args...; kwargs...)
+            EuclidRepl.reflect2d_points!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Reflect points across the x axis through the EuclidRepl API."""
         reflect2d_points_x_axis!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_x_axis!(state_ptr, args...; kwargs...)
+            EuclidRepl.reflect2d_points_x_axis!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Reflect points across the y axis through the EuclidRepl API."""
         reflect2d_points_y_axis!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_y_axis!(state_ptr, args...; kwargs...)
+            EuclidRepl.reflect2d_points_y_axis!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Reflect points across the positive diagonal through the EuclidRepl API."""
         reflect2d_points_diag_pos!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_diag_pos!(state_ptr, args...; kwargs...)
+            EuclidRepl.reflect2d_points_diag_pos!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
         """Reflect points across the negative diagonal through the EuclidRepl API."""
         reflect2d_points_diag_neg!(args...; kwargs...) =
-            EuclidRepl.reflect2d_points_diag_neg!(state_ptr, args...; kwargs...)
+            EuclidRepl.reflect2d_points_diag_neg!(
+                scratchpad_runtime, state_ptr, args...; kwargs...)
     end)
 end
 
 """Create an empty scratchpad session bound to the supplied host state."""
-function create_session(state_ptr::Ptr{Cvoid}, session_id::Int)
-    runtime = create_runtime_module(session_id)
+function create_session(
+    host_runtime::ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    session_id::Int)
+
+    runtime = create_runtime_module(host_runtime, session_id)
     session = ScratchpadSession(
         session_id,
         runtime,
@@ -398,8 +443,10 @@ function maybe_warn_slow_hook!(
 end
 
 """Build a formatted summary of current scratchpad runtime metrics."""
-function metrics_summary_lines(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function metrics_summary_lines(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     m = session.metrics
     return [
         "Scratchpad Metrics",
@@ -408,32 +455,36 @@ function metrics_summary_lines(state_ptr::Ptr{Cvoid})
         "errors eval=$(m.eval_errors) hooks=$(m.hook_errors) blocked=$(m.blocked_commands)",
         "slow eval warnings=$(m.slow_eval_warnings) last_eval_ns=$(m.last_eval_ns)",
         "slow hook warnings=$(m.slow_hook_warnings) last_hook_ns=$(m.last_hook_ns)",
-        "transitions initialize=$(ScratchpadRuntime.initialize_count) " *
-        "clean=$(ScratchpadRuntime.clean_count) reset=$(ScratchpadRuntime.reset_count)",
+        "transitions initialize=$(host_runtime.initialize_count) " *
+        "clean=$(host_runtime.clean_count) reset=$(host_runtime.reset_count)",
     ]
 end
 
 """Create and install a fresh scratchpad session, runtime module, and counters."""
-function reset_session!(state_ptr::Ptr{Cvoid})
+function reset_session!(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
     if isdefined(Main, :EuclidRepl) &&
         isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
-        Main.EuclidRepl.reset_scratchpad_session!()
+        Main.EuclidRepl.reset_scratchpad_session!(host_runtime)
     end
 
-    session_id = ScratchpadRuntime.next_session_id
-    ScratchpadRuntime.next_session_id = session_id + 1
-    ScratchpadRuntime.reset_count += 1
+    session_id = host_runtime.next_session_id
+    host_runtime.next_session_id = session_id + 1
+    host_runtime.reset_count += 1
 
-    session = create_session(state_ptr, session_id)
-    ScratchpadRuntime.current_session = session
+    session = create_session(host_runtime, state_ptr, session_id)
+    host_runtime.current_session = session
     return session
 end
 
 """Return the current session or create one when missing, refreshing state_ptr binding."""
-function ensure_session!(state_ptr::Ptr{Cvoid})
-    session = ScratchpadRuntime.current_session
+function ensure_session!(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = host_runtime.current_session
     if session === nothing
-        return reset_session!(state_ptr)
+        return reset_session!(host_runtime, state_ptr)
     end
 
     Core.eval(session.runtime, :(state_ptr = $state_ptr))

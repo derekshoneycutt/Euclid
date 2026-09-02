@@ -1,6 +1,10 @@
 """Handle scratchpad local commands prefixed with ':' and return handled status."""
-function handle_local_command!(state_ptr::Ptr{Cvoid}, text::AbstractString)
-    session = ensure_session!(state_ptr)
+function handle_local_command!(
+    host_runtime::ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    text::AbstractString)
+
+    session = ensure_session!(host_runtime, state_ptr)
     session.metrics.local_commands += 1
 
     if text == ":help"
@@ -14,17 +18,17 @@ function handle_local_command!(state_ptr::Ptr{Cvoid}, text::AbstractString)
         return true
     end
     if text == ":hooks"
-        append_output_line!(session, list_frame_hooks(state_ptr))
+        append_output_line!(session, list_frame_hooks(host_runtime, state_ptr))
         return true
     end
     if text == ":stats"
-        for line in metrics_summary_lines(state_ptr)
+        for line in metrics_summary_lines(host_runtime, state_ptr)
             append_output_line!(session, line)
         end
         return true
     end
     if text == ":reset"
-        new_session = reset_session!(state_ptr)
+        new_session = reset_session!(host_runtime, state_ptr)
         append_output_line!(new_session, "Session reset by :reset")
         return true
     end
@@ -57,6 +61,7 @@ end
 
 """Evaluate one queued input line, including local commands, help mode, and safe eval."""
 function evaluate_queued_input!(
+    host_runtime::ScratchpadRuntimeState,
     session::ScratchpadSession,
     state_ptr::Ptr{Cvoid},
     text::String,
@@ -66,7 +71,8 @@ function evaluate_queued_input!(
     dispatched = stripped == "?" ? ":help" : stripped
     append_input_echo!(session, text, input_mode)
 
-    if dispatch_non_eval_input!(session, state_ptr, stripped, dispatched, input_mode)
+    if dispatch_non_eval_input!(
+        host_runtime, session, state_ptr, stripped, dispatched, input_mode)
         return
     end
 
@@ -80,6 +86,7 @@ end
 
 """Handle help, local, exit, and blocked inputs, returning true when one was handled."""
 function dispatch_non_eval_input!(
+    host_runtime::ScratchpadRuntimeState,
     session::ScratchpadSession, state_ptr::Ptr{Cvoid},
     stripped::AbstractString, dispatched::AbstractString, input_mode::Int32)
 
@@ -88,9 +95,9 @@ function dispatch_non_eval_input!(
         return true
     end
     handle_help_query!(session, dispatched) && return true
-    handle_local_command!(state_ptr, dispatched) && return true
+    handle_local_command!(host_runtime, state_ptr, dispatched) && return true
     if is_exit_command(stripped)
-        intercept_exit_or_quit(state_ptr)
+        intercept_exit_or_quit(host_runtime, state_ptr)
         return true
     end
     reason = blocked_input_reason(stripped)
@@ -165,8 +172,10 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
 end
 
 """Return current scratchpad output as newline-delimited text for the UI panel."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function get_view_text(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     _ = emit_dynview_output_stream!(state_ptr, session)
     if isempty(session.output)
         return ""
@@ -176,45 +185,52 @@ function get_view_text(state_ptr::Ptr{Cvoid})
 end
 
 """Prime Scratchpad parsing, completion, evaluation, formatting, and dynview emission."""
-function prime_repl!(state_ptr::Ptr{Cvoid})
-    warm_session = create_session(state_ptr, -1)
-    ScratchpadRuntime.current_session = warm_session
+function prime_repl!(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    warm_session = create_session(host_runtime, state_ptr, -1)
+    host_runtime.current_session = warm_session
     try
-        queue_input(state_ptr, "sum(1:3)") || return false
-        complete_backslash(state_ptr, "\\alpha") == "α" || return false
-        isempty(complete_input(state_ptr, "EuclidRep", 9)) && return false
-        loop(state_ptr, 0f0)
-        isempty(get_view_text(state_ptr)) && return false
+        queue_input(host_runtime, state_ptr, "sum(1:3)") || return false
+        complete_backslash(host_runtime, state_ptr, "\\alpha") == "α" || return false
+        isempty(complete_input(host_runtime, state_ptr, "EuclidRep", 9)) && return false
+        loop(host_runtime, state_ptr, 0f0)
+        isempty(get_view_text(host_runtime, state_ptr)) && return false
         status = OdinJuliaBridge.dynview_reset_stream(state_ptr)
         return status == OdinJuliaBridge.BRIDGE_STATUS_OK
     finally
-        ScratchpadRuntime.current_session = create_session(
-            state_ptr, ScratchpadRuntime.next_session_id)
+        host_runtime.current_session = create_session(
+            host_runtime, state_ptr, host_runtime.next_session_id)
     end
 end
 
 """Initialize scratchpad session lifecycle and seed the Julia runtime banner."""
-function initialize(state_ptr::Ptr{Cvoid})
-    ScratchpadRuntime.initialize_count += 1
-    session = ensure_session!(state_ptr)
+function initialize(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    host_runtime.initialize_count += 1
+    session = ensure_session!(host_runtime, state_ptr)
     append_startup_banner!(session)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    callback = ptr -> get_view_text(host_runtime, ptr)
+    OdinJuliaBridge.publish_view_update(state_ptr, callback)
 end
 
 """Clean scratchpad lifecycle state and animation data when the animation unloads."""
-function clean(state_ptr::Ptr{Cvoid})
-    ScratchpadRuntime.clean_count += 1
-    ScratchpadRuntime.current_session = nothing
+function clean(host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+    host_runtime.clean_count += 1
+    host_runtime.current_session = nothing
 
     if isdefined(Main, :EuclidRepl) &&
         isdefined(Main.EuclidRepl, :reset_scratchpad_session!)
-        Main.EuclidRepl.reset_scratchpad_session!()
+        Main.EuclidRepl.reset_scratchpad_session!(host_runtime)
     end
 end
 
 """Per-frame scratchpad driver: dequeue/evaluate input and run frame hooks."""
-function loop(state_ptr::Ptr{Cvoid}, dt)
-    session = ensure_session!(state_ptr)
+function loop(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, dt)
+
+    session = ensure_session!(host_runtime, state_ptr)
     starting_revision = session.output_revision
     try
         if !isempty(session.queue)
@@ -222,7 +238,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
             session.metrics.queue_dequeued += 1
             eval_started_at = time_ns()
             try
-                evaluate_queued_input!(session, state_ptr, entry.text, entry.mode)
+                evaluate_queued_input!(
+                    host_runtime, session, state_ptr, entry.text, entry.mode)
             finally
                 if entry.request_id != 0
                     OdinJuliaBridge.scratchpad_evaluation_completed(
@@ -237,22 +254,29 @@ function loop(state_ptr::Ptr{Cvoid}, dt)
         append_native_error_block!(
             session, format_current_exception_text(session.runtime, e; color=true))
     end
-    current_session = ensure_session!(state_ptr)
+    current_session = ensure_session!(host_runtime, state_ptr)
     if current_session !== session || current_session.output_revision != starting_revision
-        OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+        callback = ptr -> get_view_text(host_runtime, ptr)
+        OdinJuliaBridge.publish_view_update(state_ptr, callback)
     end
 end
 
 """Dispatch one bridge-stable lifecycle operation for the scratchpad animation."""
 function animation_entry(
-    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+    host_runtime::ScratchpadRuntimeState,
+    expected_state_ptr::Ptr{Cvoid},
+    state_ptr::Ptr{Cvoid},
+    operation::Int32,
+    dt::Float32)::Bool
+
+    state_ptr == expected_state_ptr || return false
 
     if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
-        initialize(state_ptr)
+        initialize(host_runtime, state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
-        loop(state_ptr, dt)
+        loop(host_runtime, state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-        clean(state_ptr)
+        clean(host_runtime, state_ptr)
     else
         return false
     end

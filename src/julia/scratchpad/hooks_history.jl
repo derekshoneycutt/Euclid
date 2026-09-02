@@ -12,8 +12,10 @@ Register a callback that runs every frame during scratchpad loop execution.
 
 Returns a numeric hook id that can be used with `remove_frame_hook`.
 """
-function register_frame_hook(state_ptr::Ptr{Cvoid}, fn; label="")
-    session = ensure_session!(state_ptr)
+function register_frame_hook(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, fn; label="")
+
+    session = ensure_session!(host_runtime, state_ptr)
 
     hook_id = session.next_hook_id
     session.next_hook_id += 1
@@ -24,8 +26,10 @@ function register_frame_hook(state_ptr::Ptr{Cvoid}, fn; label="")
 end
 
 """Register a frame hook without appending user-facing output lines."""
-function register_frame_hook_silent(state_ptr::Ptr{Cvoid}, fn; label="")
-    session = ensure_session!(state_ptr)
+function register_frame_hook_silent(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, fn; label="")
+
+    session = ensure_session!(host_runtime, state_ptr)
 
     hook_id = session.next_hook_id
     session.next_hook_id += 1
@@ -39,8 +43,10 @@ Remove a previously registered frame hook by id.
 
 Returns `true` when the hook was removed, `false` otherwise.
 """
-function remove_frame_hook(state_ptr::Ptr{Cvoid}, hook_id)
-    session = ensure_session!(state_ptr)
+function remove_frame_hook(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, hook_id)
+
+    session = ensure_session!(host_runtime, state_ptr)
     id = try
         Int(hook_id)
     catch e
@@ -63,8 +69,10 @@ function remove_frame_hook(state_ptr::Ptr{Cvoid}, hook_id)
 end
 
 """Remove a frame hook by id without appending user-facing output lines."""
-function remove_frame_hook_silent(state_ptr::Ptr{Cvoid}, hook_id)
-    session = ensure_session!(state_ptr)
+function remove_frame_hook_silent(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, hook_id)
+
+    session = ensure_session!(host_runtime, state_ptr)
     id = try
         Int(hook_id)
     catch e
@@ -88,8 +96,10 @@ Remove all registered frame hooks.
 
 Returns the number of hooks removed.
 """
-function clear_frame_hooks(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function clear_frame_hooks(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     removed = length(session.hooks)
     empty!(session.hooks)
     append_output_line!(session, "Cleared $(removed) frame hook(s)")
@@ -99,8 +109,10 @@ end
 """
 List currently registered frame hooks as a human-readable multiline string.
 """
-function list_frame_hooks(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function list_frame_hooks(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     if isempty(session.hooks)
         return "(no frame hooks registered)"
     end
@@ -116,8 +128,10 @@ end
 """
 Reset scratchpad history navigation cursor to the latest (empty input) position.
 """
-function history_reset_cursor(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function history_reset_cursor(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     session.history_cursor = length(session.history) + 1
     return true
 end
@@ -126,9 +140,10 @@ end
 Return the previous entry from scratchpad history.
 """
 function history_previous(
-    state_ptr::Ptr{Cvoid}, input_mode::Int32=InputModeJulia)
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid},
+    input_mode::Int32=InputModeJulia)
 
-    session = ensure_session!(state_ptr)
+    session = ensure_session!(host_runtime, state_ptr)
     if isempty(session.history)
         return ""
     end
@@ -148,8 +163,10 @@ Return the next entry from scratchpad history.
 
 Returns `""` when navigation reaches the newest empty slot.
 """
-function history_next(state_ptr::Ptr{Cvoid})
-    session = ensure_session!(state_ptr)
+function history_next(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime, state_ptr)
     if isempty(session.history)
         return ""
     end
@@ -171,8 +188,10 @@ Save scratchpad input history to a newline-delimited file.
 
 Returns `true` on success, otherwise `false` and appends an error line to output.
 """
-function save_history_to_file(state_ptr::Ptr{Cvoid}, path)
-    session = ensure_session!(state_ptr)
+function save_history_to_file(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, path)
+
+    session = ensure_session!(host_runtime, state_ptr)
 
     file_path = try
         String(path)
@@ -203,8 +222,10 @@ function save_history_to_file(state_ptr::Ptr{Cvoid}, path)
 end
 
 """Intercept an interactive exit/quit by resetting only the scratchpad session."""
-function intercept_exit_or_quit(state_ptr::Ptr{Cvoid})
-    session = reset_session!(state_ptr)
+function intercept_exit_or_quit(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = reset_session!(host_runtime, state_ptr)
     append_output_line!(session, "exit()/quit() intercepted; scratchpad session reset")
     return nothing
 end
@@ -215,10 +236,11 @@ Queue one complete scratchpad input entry for one-per-frame execution.
 Returns `true` if queued, `false` when parse state is not complete.
 """
 function queue_input(
-    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia,
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid},
+    text::String, input_mode::Int32=InputModeJulia,
     request_id::UInt64=UInt64(0))
 
-    session = ensure_session!(state_ptr)
+    session = ensure_session!(host_runtime, state_ptr)
 
     stripped = strip(text)
     if input_mode == InputModeJulia && (isempty(stripped) || first(stripped) != '?')

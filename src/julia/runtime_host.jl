@@ -8,12 +8,16 @@ end
 
 """Julia runtime state owned and rooted by the native Julia worker."""
 mutable struct EuclidRuntimeHost
+    state_ptr::Ptr{Cvoid}
     active_generation::Union{Nothing,EuclidRuntimeGeneration}
+    scratchpad::Scratchpad.ScratchpadRuntimeState
 end
 
 """Create the Julia runtime host whose lifetime is owned by the native worker."""
-function create_euclid_runtime_host()::EuclidRuntimeHost
-    return EuclidRuntimeHost(create_euclid_runtime_generation())
+function create_euclid_runtime_host(state_ptr::Ptr{Cvoid})::EuclidRuntimeHost
+    state_ptr == C_NULL && throw(ArgumentError("state_ptr must not be null"))
+    return EuclidRuntimeHost(
+        state_ptr, create_euclid_runtime_generation(), Scratchpad.create_runtime_state())
 end
 
 """Return whether a native-owned host reference has the expected runtime type."""

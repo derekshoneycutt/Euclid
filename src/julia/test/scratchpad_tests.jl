@@ -20,6 +20,9 @@ end
 using .Scratchpad
 using Test
 
+const TEST_SCRATCHPAD_RUNTIME = Scratchpad.create_runtime_state()
+const TEST_SCRATCHPAD_STATE_PTR = Ptr{Cvoid}(0)
+
 struct ScratchpadLatexResultMock
 end
 
@@ -33,7 +36,8 @@ end
 
 """Create a fresh scratchpad session bound to the shared test state."""
 function new_session(; id::Int=1)
-    return Scratchpad.create_session(Ptr{Cvoid}(0), id)
+    return Scratchpad.create_session(
+        TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, id)
 end
 
 """Render a LaTeX result mock as plain text or LaTeX."""
@@ -47,13 +51,13 @@ Base.show(io::IO, ::MIME"text/plain", m::ScratchpadPlainResultMock) =
 
 """Run a function with a fresh scratchpad session installed, restoring the old one after."""
 function with_test_session(f::Function)
-    old_session = Scratchpad.ScratchpadRuntime.current_session
+    old_session = TEST_SCRATCHPAD_RUNTIME.current_session
     try
         session = new_session()
-        Scratchpad.ScratchpadRuntime.current_session = session
+        TEST_SCRATCHPAD_RUNTIME.current_session = session
         return f(session)
     finally
-        Scratchpad.ScratchpadRuntime.current_session = old_session
+        TEST_SCRATCHPAD_RUNTIME.current_session = old_session
     end
 end
 
@@ -70,12 +74,14 @@ end
 end
 
 @testset "create_session" begin
-    session = Scratchpad.create_session(Ptr{Cvoid}(0), 10_001)
+    session = Scratchpad.create_session(
+        TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, 10_001)
     @test session.id == 10_001
     @test isempty(session.queue)
     @test isempty(session.output)
     @test isempty(session.history)
-    @test Core.eval(session.runtime, :state_ptr) == Ptr{Cvoid}(0)
+    @test Core.eval(session.runtime, :state_ptr) == TEST_SCRATCHPAD_STATE_PTR
+    @test Core.eval(session.runtime, :scratchpad_runtime) === TEST_SCRATCHPAD_RUNTIME
 end
 
 @testset "slow execution warnings are console only" begin
@@ -145,7 +151,8 @@ end
 end
 
 @testset "terminal prompt echo" begin
-    session = Scratchpad.create_session(Ptr{Cvoid}(0), 10_002)
+    session = Scratchpad.create_session(
+        TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, 10_002)
 
     Scratchpad.append_input_echo!(session, "begin\n    x = 1\nend")
 
@@ -188,17 +195,20 @@ end
 
 @testset "classify_input" begin
     with_test_session() do session
-        @test Scratchpad.classify_input(Ptr{Cvoid}(0), "x = 2") ==
+        @test Scratchpad.classify_input(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, "x = 2") ==
             Scratchpad.ParseComplete
         @test isempty(session.output)
 
-        @test Scratchpad.classify_input(Ptr{Cvoid}(0), "x = )") ==
+        @test Scratchpad.classify_input(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, "x = )") ==
             Scratchpad.ParseError
         @test length(session.output) == 1
         @test startswith(session.output[1], "Parse error")
 
         @test Scratchpad.classify_input(
-            Ptr{Cvoid}(0), "?OdinJuliaBridge.bridge_color") == Scratchpad.ParseComplete
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR,
+            "?OdinJuliaBridge.bridge_color") == Scratchpad.ParseComplete
         @test length(session.output) == 1
     end
 end
@@ -206,7 +216,8 @@ end
 @testset "lone question mark aliases help" begin
     for input in ("?", "?  \t\n")
         with_test_session() do session
-            Scratchpad.evaluate_queued_input!(session, Ptr{Cvoid}(0), input)
+            Scratchpad.evaluate_queued_input!(
+                TEST_SCRATCHPAD_RUNTIME, session, TEST_SCRATCHPAD_STATE_PTR, input)
 
             @test startswith(session.output[1], "julia> ?")
             @test "Julia REPL Scratchpad" in session.output
@@ -220,11 +231,13 @@ end
 @testset "native persistent help mode" begin
     with_test_session() do session
         @test Scratchpad.classify_input(
-            Ptr{Cvoid}(0), "not valid Julia )", Scratchpad.InputModeHelp) ==
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR,
+            "not valid Julia )", Scratchpad.InputModeHelp) ==
             Scratchpad.ParseComplete
 
         Scratchpad.evaluate_queued_input!(
-            session, Ptr{Cvoid}(0), "string", Scratchpad.InputModeHelp)
+            TEST_SCRATCHPAD_RUNTIME, session, TEST_SCRATCHPAD_STATE_PTR,
+            "string", Scratchpad.InputModeHelp)
         output = join(session.output, "\n")
         @test startswith(session.output[1], "help?> string")
         @test occursin("search: string", output)
@@ -240,7 +253,8 @@ end
 
         with_test_session() do session
             Scratchpad.evaluate_queued_input!(
-                session, Ptr{Cvoid}(0), query, Scratchpad.InputModeHelp)
+                TEST_SCRATCHPAD_RUNTIME, session, TEST_SCRATCHPAD_STATE_PTR,
+                query, Scratchpad.InputModeHelp)
             @test occursin(expected, join(session.output, "\n"))
         end
     end
@@ -248,15 +262,20 @@ end
 
 @testset "complete_backslash" begin
     with_test_session() do _
-        @test Scratchpad.complete_backslash(Ptr{Cvoid}(0), "\\alpha") == "α"
-        @test Scratchpad.complete_backslash(Ptr{Cvoid}(0), "\\al") == ""
-        @test Scratchpad.complete_backslash(Ptr{Cvoid}(0), "alpha") == ""
+        @test Scratchpad.complete_backslash(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, "\\alpha") == "α"
+        @test Scratchpad.complete_backslash(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, "\\al") == ""
+        @test Scratchpad.complete_backslash(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR, "alpha") == ""
     end
 end
 
 @testset "complete_input" begin
     with_test_session() do session
-        @test Scratchpad.complete_input(Ptr{Cvoid}(0), "\\alpha", 6) == "0\n6\nα"
+        @test Scratchpad.complete_input(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR,
+            "\\alpha", 6) == "0\n6\nα"
         @test Scratchpad.completion_replacement_text(
             "test_val", 1:8, ["test_value"]) == "test_value"
         @test Scratchpad.completion_replacement_text(
@@ -331,9 +350,11 @@ end
 @testset "evaluate newly defined function mismatch" begin
     with_test_session() do session
         session.metrics.queue_dequeued = 1
-        Scratchpad.evaluate_queued_input!(session, Ptr{Cvoid}(0), "f(x, y) = x + y")
+        Scratchpad.evaluate_queued_input!(TEST_SCRATCHPAD_RUNTIME,
+            session, TEST_SCRATCHPAD_STATE_PTR, "f(x, y) = x + y")
         session.metrics.queue_dequeued = 2
-        Scratchpad.evaluate_queued_input!(session, Ptr{Cvoid}(0), "f(2)")
+        Scratchpad.evaluate_queued_input!(
+            TEST_SCRATCHPAD_RUNTIME, session, TEST_SCRATCHPAD_STATE_PTR, "f(2)")
 
         output = join(session.output, "\n")
         @test session.metrics.eval_errors == 1
@@ -386,7 +407,7 @@ end
         ScratchpadLatexResultMock(), Main)
     @test latex_source == "\\frac{1}{2}"
 
-    runtime = Scratchpad.create_runtime_module(4_001)
+    runtime = Scratchpad.create_runtime_module(TEST_SCRATCHPAD_RUNTIME, 4_001)
     malformed_latex = Main.LaTeXStrings.LaTeXString("\$\$\\alpha\$")
     @test Scratchpad.format_result_latex_source(malformed_latex, runtime) == "\\alpha"
 
@@ -413,8 +434,10 @@ end
 
 @testset "history navigation" begin
     with_test_session() do session
-        @test Scratchpad.history_previous(Ptr{Cvoid}(0)) == ""
-        @test Scratchpad.history_next(Ptr{Cvoid}(0)) == ""
+        @test Scratchpad.history_previous(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == ""
+        @test Scratchpad.history_next(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == ""
 
         append!(session.history, [
             Scratchpad.ScratchpadInputEntry("alpha", Scratchpad.InputModeJulia),
@@ -424,17 +447,26 @@ end
         session.history_cursor = length(session.history) + 1
 
         @test Scratchpad.history_previous(
-            Ptr{Cvoid}(0), Scratchpad.InputModeHelp) == "0\ngamma"
-        @test Scratchpad.history_previous(Ptr{Cvoid}(0)) == "1\nbeta"
-        @test Scratchpad.history_previous(Ptr{Cvoid}(0)) == "0\nalpha"
-        @test Scratchpad.history_previous(Ptr{Cvoid}(0)) == "0\nalpha"
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR,
+            Scratchpad.InputModeHelp) == "0\ngamma"
+        @test Scratchpad.history_previous(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "1\nbeta"
+        @test Scratchpad.history_previous(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "0\nalpha"
+        @test Scratchpad.history_previous(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "0\nalpha"
 
-        @test Scratchpad.history_next(Ptr{Cvoid}(0)) == "1\nbeta"
-        @test Scratchpad.history_next(Ptr{Cvoid}(0)) == "0\ngamma"
-        @test Scratchpad.history_next(Ptr{Cvoid}(0)) == "1\n"
-        @test Scratchpad.history_next(Ptr{Cvoid}(0)) == "1\n"
+        @test Scratchpad.history_next(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "1\nbeta"
+        @test Scratchpad.history_next(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "0\ngamma"
+        @test Scratchpad.history_next(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "1\n"
+        @test Scratchpad.history_next(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR) == "1\n"
 
-        @test Scratchpad.history_reset_cursor(Ptr{Cvoid}(0))
+        @test Scratchpad.history_reset_cursor(
+            TEST_SCRATCHPAD_RUNTIME, TEST_SCRATCHPAD_STATE_PTR)
         @test session.history_cursor == length(session.history) + 1
     end
 end
@@ -475,7 +507,7 @@ end
     @test haskey(Scratchpad.HELPER_DOC_ALIASES, "hide!")
     @test haskey(Scratchpad.HELPER_DOC_ALIASES, "euclidcolors")
 
-    runtime = Scratchpad.create_runtime_module(5_001)
+    runtime = Scratchpad.create_runtime_module(TEST_SCRATCHPAD_RUNTIME, 5_001)
     @test isdefined(runtime, Symbol("highlight_pen!"))
     @test isdefined(runtime, Symbol("highlight_compass!"))
     @test isdefined(runtime, Symbol("hide!"))

@@ -21,9 +21,10 @@ end
 
 """Classify user input parse state and append parse errors to output when present."""
 function classify_input(
-    state_ptr::Ptr{Cvoid}, text::String, input_mode::Int32=InputModeJulia)
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid},
+    text::String, input_mode::Int32=InputModeJulia)
 
-    session = ensure_session!(state_ptr)
+    session = ensure_session!(host_runtime, state_ptr)
 
     if input_mode == InputModeHelp
         return ParseComplete
@@ -44,8 +45,10 @@ function classify_input(
 end
 
 """Resolve a single unambiguous backslash completion, or return `""` when none applies."""
-function complete_backslash(state_ptr::Ptr{Cvoid}, token::String)
-    session = ensure_session!(state_ptr)
+function complete_backslash(
+    host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid}, token::String)
+
+    session = ensure_session!(host_runtime, state_ptr)
 
     if isempty(token) || first(token) != '\\'
         return ""
@@ -154,12 +157,13 @@ end
 
 """Resolve a generic scratchpad completion request from full input text and caret byte offset."""
 function complete_input(
+    host_runtime::ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     text::String,
     caret_byte::Int,
     input_mode::Int32=InputModeJulia)
 
-    session = ensure_session!(state_ptr)
+    session = ensure_session!(host_runtime, state_ptr)
     if isempty(text) || caret_byte <= 0
         return ""
     end

@@ -113,7 +113,12 @@ flowchart LR
 The service's `runtime_host` pointer is borrowed. Its GC ownership comes from the
 worker-stack `Julia_Runtime_Gc_Frame`, installed before host construction and retained
 until immediately before Julia teardown. The rooted `EuclidRuntimeHost` owns one active
-generation; Odin never roots Julia values by retaining their addresses in service state.
+generation, the persistent Scratchpad runtime state, and a borrowed pointer to the
+lifetime-stable Odin application state. Scratchpad callbacks bind the host and reject an
+ABI-provided state pointer that does not match that stored pointer. Replacing the active
+content generation does not replace Scratchpad session or extension ownership. Odin
+never roots Julia values by retaining their addresses in service state, and Julia never
+frees the borrowed native pointer.
 
 Both channels have capacity 16. Requests and events are small control records.
 Large payloads do not travel through channels; channel records carry a slot

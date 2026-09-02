@@ -1433,13 +1433,19 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
 //
 // Returns:
 //   - The unrooted host value, which the caller must root before another Julia allocation.
-create_julia_runtime_host :: proc() -> ^julialib.jl_value_t {
+create_julia_runtime_host :: proc(
+    state: ^core.Euclid_General_State) -> ^julialib.jl_value_t {
+
+    if state == nil {
+        return nil
+    }
     constructor := julialib.jl_get_function(
         julialib.jl_main_module, "create_euclid_runtime_host")
     if constructor == nil {
         return nil
     }
-    host := julialib.jl_call0(constructor)
+    host := julialib.jl_call1(
+        constructor, julialib.jl_box_voidpointer(state))
     if host == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("create_euclid_runtime_host")
         return nil
@@ -1447,7 +1453,7 @@ create_julia_runtime_host :: proc() -> ^julialib.jl_value_t {
     return host
 }
 
-//   Initialize Julia and install the worker-lifetime root for its runtime host.
+//   Initialize Julia and install an empty worker-lifetime runtime-host root.
 initialize_julia_worker_host :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     frame: ^Julia_Runtime_Gc_Frame) -> bool {
@@ -1465,9 +1471,20 @@ initialize_julia_worker_host :: proc(
         root = rawptr(&host^.runtime),
     }
     gc_stack^ = (^julialib.jl_gcframe_t)(frame)
-    host^.runtime = create_julia_runtime_host()
+    return true
+}
+
+//   Construct and validate the rooted runtime host after native state exists.
+initialize_julia_runtime_host :: proc(
+    service: ^Julia_Runtime_Service,
+    host: ^Julia_Runtime_Host,
+    state: ^core.Euclid_General_State) -> bool {
+
+    if service == nil || host == nil || state == nil || host^.runtime != nil {
+        return false
+    }
+    host^.runtime = create_julia_runtime_host(state)
     if host^.runtime == nil {
-        gc_stack^ = frame^.previous
         return false
     }
     julialib.jl_gc_collect(.JL_GC_FULL)
@@ -1479,7 +1496,6 @@ initialize_julia_worker_host :: proc(
     if !valid_host {
         print_julia_exception("is_euclid_runtime_host")
         host^.runtime = nil
-        gc_stack^ = frame^.previous
         return false
     }
     service^.runtime_host = host^.runtime
@@ -1491,16 +1507,44 @@ finalize_julia_worker_host :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     frame: ^Julia_Runtime_Gc_Frame) {
 
-    if service^.runtime_host == nil {
-        host^.runtime = nil
-        return
-    }
     service^.runtime_host = nil
     gc_stack := julialib.jl_get_pgcstack()
     if gc_stack != nil {
         gc_stack^ = frame^.previous
     }
     host^.runtime = nil
+}
+
+//   Ensure a non-initialize request has a constructed runtime host when eligible.
+prepare_julia_request_host :: proc(
+    service: ^Julia_Runtime_Service,
+    host: ^Julia_Runtime_Host,
+    request: Julia_Request) -> bool {
+
+    if host^.runtime != nil {
+        return true
+    }
+    if request.kind != .Invoke {
+        return false
+    }
+    return initialize_julia_runtime_host(
+        service, host, cast(^core.Euclid_General_State)request.data)
+}
+
+//   Select the completion kind for a request rejected before host construction.
+reject_julia_request_without_host :: proc(
+    request: Julia_Request, event: ^Julia_Event) {
+
+    event^.succeeded = false
+    switch request.kind {
+    case .Invoke:
+        event^.kind = .Invoke_Complete
+    case .Scratchpad:
+        event^.kind = .Scratchpad_Complete
+    case .Animation_Tick:
+        event^.kind = .Animation_Tick_Complete
+    case .Initialize, .Shutdown:
+    }
 }
 
 //   Execute one serialized worker request while borrowing the persistent host root.
@@ -1522,7 +1566,12 @@ execute_julia_worker_request :: proc(
             initialize_julia_worker_host(service, host, frame)
         initialized^ = event.succeeded
     } else {
-        shutting_down = dispatch_julia_request(service, request, &event)
+        host_ready := prepare_julia_request_host(service, host, request)
+        if host_ready || request.kind == .Shutdown {
+            shutting_down = dispatch_julia_request(service, request, &event)
+        } else {
+            reject_julia_request_without_host(request, &event)
+        }
     }
     evidence_profile.zone_end(&service^.profile)
     return event, shutting_down

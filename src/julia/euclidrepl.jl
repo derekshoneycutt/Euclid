@@ -149,12 +149,12 @@ struct ReplStatus
     managed_shape_count::Int
 end
 
-"""Return the singleton EuclidRepl session, creating it when missing."""
-function ensure_session!()
-    session = Scratchpad.ScratchpadRuntime.extension_state
+"""Return the host-owned EuclidRepl session, creating it when missing."""
+function ensure_session!(host_runtime::Scratchpad.ScratchpadRuntimeState)
+    session = host_runtime.extension_state
     if session === nothing
         session = ReplDrawSession(nothing, Int[])
-        Scratchpad.ScratchpadRuntime.extension_state = session
+        host_runtime.extension_state = session
     end
 
     return session::ReplDrawSession
@@ -600,14 +600,18 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
 end
 
 """Remove active hook and clear active job state for the current session."""
-function clear_active_job!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession)
+function clear_active_job!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    session::ReplDrawSession)
+
     job = session.active_job
     if job === nothing
         return
     end
 
     if job.hook_id !== nothing
-        Scratchpad.remove_frame_hook_silent(state_ptr, job.hook_id)
+        Scratchpad.remove_frame_hook_silent(host_runtime, state_ptr, job.hook_id)
         job.hook_id = nothing
     end
 
@@ -633,8 +637,12 @@ function clear_managed_geometry!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession
 end
 
 """Advance the current active EuclidRepl draw job by one frame."""
-function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Real)
-    session = ensure_session!()
+function run_active_job_frame!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    dt::Real)
+
+    session = ensure_session!(host_runtime)
     job = session.active_job
     if job === nothing
         return
@@ -646,33 +654,39 @@ function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Real)
 
     if job.elapsed >= job.duration
         finalize_job!(state_ptr, job)
-        clear_active_job!(state_ptr, session)
+        clear_active_job!(host_runtime, state_ptr, session)
     end
 end
 
 """Preempt active draw (if any), then register and start a replacement draw job."""
-function start_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
-    session = ensure_session!()
+function start_job!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    job::ReplDrawJob)
+
+    session = ensure_session!(host_runtime)
 
     if session.active_job !== nothing
         finalize_job!(state_ptr, session.active_job)
-        clear_active_job!(state_ptr, session)
+        clear_active_job!(host_runtime, state_ptr, session)
     end
 
     hook_id = Scratchpad.register_frame_hook_silent(
+        host_runtime,
         state_ptr,
-        (hook_state_ptr, dt) -> run_active_job_frame!(hook_state_ptr, dt),
+        (hook_state_ptr, dt) ->
+            run_active_job_frame!(host_runtime, hook_state_ptr, dt),
         label="EuclidRepl active draw")
 
     job.hook_id = hook_id
     # Scratchpad may initialize lazily during hook registration; re-read session
     # reference to avoid writing active state into a stale session object.
-    ensure_session!().active_job = job
+    ensure_session!(host_runtime).active_job = job
 end
 
 """Reset EuclidRepl session state for scratchpad lifecycle transitions."""
-function reset_scratchpad_session!()
-    Scratchpad.ScratchpadRuntime.extension_state = nothing
+function reset_scratchpad_session!(host_runtime::Scratchpad.ScratchpadRuntimeState)
+    host_runtime.extension_state = nothing
     return nothing
 end
 
@@ -681,15 +695,17 @@ Stop the active draw animation hook without deleting geometry.
 
 Returns `true` when an active draw was stopped, otherwise `false`.
 """
-function stop!(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
+function stop!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime)
     job = session.active_job
     if job === nothing
         return false
     end
 
     finalize_job!(state_ptr, job)
-    clear_active_job!(state_ptr, session)
+    clear_active_job!(host_runtime, state_ptr, session)
     return true
 end
 
@@ -698,9 +714,11 @@ Clear EuclidRepl-managed geometry and reset active draw state.
 
 Returns `true` when clear completes.
 """
-function clear!(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
-    clear_active_job!(state_ptr, session)
+function clear!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime)
+    clear_active_job!(host_runtime, state_ptr, session)
     clear_managed_geometry!(state_ptr, session)
     return true
 end
@@ -720,38 +738,66 @@ function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
 end
 
 """Hide a REPL-managed geometry target by integer index or bridge shape/view handle."""
-function hide!(state_ptr::Ptr{Cvoid}, index::Integer)
+function hide!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    index::Integer)
+
+    _ = host_runtime
     _hide_bridge_point(state_ptr, Int(index))
     return nothing
 end
 
 """Hide a point-view handle by taking its index."""
-function hide!(state_ptr::Ptr{Cvoid}, view::OdinJuliaBridge.BridgePointView)
+function hide!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    view::OdinJuliaBridge.BridgePointView)
+
+    _ = host_runtime
     _hide_bridge_point(state_ptr, Int(view.index))
     return nothing
 end
 
 """Hide a line-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeLine)
+function hide!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeLine)
+
+    _ = host_runtime
     _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a circle-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeCircle)
+function hide!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeCircle)
+
+    _ = host_runtime
     _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Hide a filled-circle-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeFilledCircle)
+function hide!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeFilledCircle)
+
+    _ = host_runtime
     _hide_bridge_point(state_ptr, Int(shape.host_id))
     return nothing
 end
 
 """Return compact EuclidRepl runtime status for REPL inspection."""
-function status(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
+function status(
+    host_runtime::Scratchpad.ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
+
+    _ = state_ptr
+    session = ensure_session!(host_runtime)
     job = session.active_job
 
     if job === nothing
@@ -781,7 +827,10 @@ Keywords:
 - `brush=5f0`
 - `duration=DEFAULT_POINT_DURATION` (draw animation duration only)
 """
-function point!(state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real};
+function point!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid},
+    pos::AbstractVector{<:Real};
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_POINT_DURATION)
     pos3 = vec3("pos", pos)
@@ -792,8 +841,8 @@ function point!(state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real};
     payload = PointPayload(Int(point.index), pos3, color, brush_value)
     job = ReplDrawJob(:point, draw_duration, Float32(0f0), nothing, payload)
 
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(point.index))
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), Int(point.index))
     return point
 end
 
@@ -806,6 +855,7 @@ Keywords:
 - `duration=DEFAULT_LINE_DURATION` (draw animation duration only)
 """
 function line!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     start_pos::AbstractVector{<:Real}, end_pos::AbstractVector{<:Real};
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
@@ -831,8 +881,8 @@ function line!(
         brush_value)
 
     job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(line_shape.host_id))
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), Int(line_shape.host_id))
     return line_shape
 end
 
@@ -851,7 +901,9 @@ Circle rules:
 - full circle when `end_theta - start_theta >= 2pi` or `end_theta` is infinite,
 - full circles still start at `start_theta` and sweep one full turn.
 """
-function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
+function circle!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
+    state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
     start_theta::Real=0f0, end_theta::Real=Inf32, filled::Bool=false,
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_CIRCLE_DURATION)
@@ -881,8 +933,8 @@ function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::
         color, brush_value)
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(shape.host_id))
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), Int(shape.host_id))
     return shape
 end
 
@@ -900,6 +952,7 @@ Keywords:
 - `duration=DEFAULT_HIGHLIGHT_DURATION`
 """
 function highlight_pen!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     start_pos::AbstractVector{<:Real},
     end_pos::AbstractVector{<:Real};
@@ -912,7 +965,7 @@ function highlight_pen!(
 
     payload = PenHighlightPayload(start_pos3, end_pos3, color)
     job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    start_job!(host_runtime, state_ptr, job)
     return nothing
 end
 
@@ -931,6 +984,7 @@ Keywords:
 - `duration=DEFAULT_HIGHLIGHT_DURATION`
 """
 function highlight_compass!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     start_pos::AbstractVector{<:Real},
@@ -959,7 +1013,7 @@ function highlight_compass!(
         color,
         filled)
     job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    start_job!(host_runtime, state_ptr, job)
     return nothing
 end
 
@@ -970,6 +1024,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function translate_points!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -984,7 +1039,7 @@ function translate_points!(
 
     payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
@@ -995,6 +1050,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function rotate_points!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1015,12 +1071,13 @@ function rotate_points!(
         starts,
         RotateSpec(axis_a, axis_b, Float32(theta)))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
 """Rotate points around world X axis through origin."""
 function rotate_points_x!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1028,6 +1085,7 @@ function rotate_points_x!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1039,6 +1097,7 @@ end
 
 """Rotate points around world Y axis through origin."""
 function rotate_points_y!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1046,6 +1105,7 @@ function rotate_points_y!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1057,6 +1117,7 @@ end
 
 """Rotate points around world Z axis through origin."""
 function rotate_points_z!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1064,6 +1125,7 @@ function rotate_points_z!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1080,6 +1142,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function reflect2d_points!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1096,18 +1159,20 @@ function reflect2d_points!(
 
     payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
 """Reflect points across world X axis (`y=0`) on XY plane."""
 function reflect2d_points_x_axis!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1118,12 +1183,14 @@ end
 
 """Reflect points across world Y axis (`x=0`) on XY plane."""
 function reflect2d_points_y_axis!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1134,12 +1201,14 @@ end
 
 """Reflect points across diagonal `y=x` on XY plane."""
 function reflect2d_points_diag_pos!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1150,12 +1219,14 @@ end
 
 """Reflect points across diagonal `y=-x` on XY plane."""
 function reflect2d_points_diag_neg!(
+    host_runtime::Scratchpad.ScratchpadRuntimeState,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,

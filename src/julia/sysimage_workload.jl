@@ -17,11 +17,12 @@ Scratchpad.classify_parse("sum(1:3)")
 Scratchpad.classify_parse("begin\n    value = 1")
 Scratchpad.longest_completion_prefix(["EuclidGeometry", "EuclidAnimations"])
 
-let session = Scratchpad.create_session(Ptr{Cvoid}(0), -1)
-    Scratchpad.ScratchpadRuntime.current_session = session
-    Scratchpad.queue_input(Ptr{Cvoid}(0), "sum(1:3)")
-    Scratchpad.complete_backslash(Ptr{Cvoid}(0), "\\alpha")
-    Scratchpad.complete_input(Ptr{Cvoid}(0), "EuclidRep", 9)
-    Scratchpad.loop(Ptr{Cvoid}(0), 0f0)
-    Scratchpad.ScratchpadRuntime.current_session = nothing
+let host_runtime = Scratchpad.create_runtime_state(), state_ptr = Ptr{Cvoid}(0)
+    session = Scratchpad.create_session(host_runtime, state_ptr, -1)
+    host_runtime.current_session = session
+    Scratchpad.queue_input(host_runtime, state_ptr, "sum(1:3)")
+    Scratchpad.complete_backslash(host_runtime, state_ptr, "\\alpha")
+    Scratchpad.complete_input(host_runtime, state_ptr, "EuclidRep", 9)
+    Scratchpad.loop(host_runtime, state_ptr, 0f0)
+    host_runtime.current_session = nothing
 end
