@@ -1,5 +1,10 @@
 module ElementsOneDefinitionLineExtremities
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("af1e6606-e27e-5dce-b21b-0e7d70a7b599")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -227,3 +232,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionLineExtremities.AnimationId,
+    ElementsOneDefinitionLineExtremities.animation_entry)

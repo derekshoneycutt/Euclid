@@ -1,5 +1,10 @@
 module ElementsOneDefinitionStraightLine
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("af5bd852-c740-5588-9d62-a32231cbb7cc")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -252,3 +257,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionStraightLine.AnimationId,
+    ElementsOneDefinitionStraightLine.animation_entry)

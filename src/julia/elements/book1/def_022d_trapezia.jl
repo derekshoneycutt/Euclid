@@ -1,5 +1,10 @@
 module ElementsOneDefinitionTrapezia
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4b1c5b61-6f42-55f6-ab98-00a9d84ab36c")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -195,3 +200,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionTrapezia.AnimationId,
+    ElementsOneDefinitionTrapezia.animation_entry)

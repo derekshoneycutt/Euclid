@@ -225,6 +225,39 @@ scenario_submit_scratchpad :: proc(
     return true
 }
 
+//   Arm one validated scenario-only failure for the next runtime reload.
+scenario_arm_reload_failure :: proc(
+    state: ^Euclid_General_State, command: ^scenario.Command) -> bool {
+    if state.julia_runtime_service == nil {
+        return false
+    }
+    injection := scenario.text_string(&command.text)
+    switch injection {
+    case "candidate_load":
+        state.julia_runtime_service.reload_failure_injection = .Candidate_Load
+    case "animation_enter":
+        state.julia_runtime_service.reload_failure_injection = .Animation_Enter
+    case:
+        return false
+    }
+    return true
+}
+
+//   Select one named animation and retain its next generation identity.
+scenario_select_animation :: proc(
+    state: ^Euclid_General_State, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> bool {
+    selected := scenario_find_animation(
+        state.julia_interface, scenario.text_string(&command.text))
+    if selected == nil || !julia.select_animation_programmatically(state, selected) {
+        return false
+    }
+    identity.kind = .Animation
+    identity.id = state.julia_runtime_service.animation_generation + 1
+    identity.generation = identity.id
+    return true
+}
+
 //   Route one animation or Julia-service command through its ordinary owner API.
 scenario_issue_julia_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -235,18 +268,7 @@ scenario_issue_julia_action :: proc(
         state.julia_interface.pending_animation_reset = true
         return true, true
     case .Select_Animation:
-        selected := scenario_find_animation(
-            state.julia_interface, scenario.text_string(&command.text))
-        if selected == nil {
-            return true, false
-        }
-        if !julia.select_animation_programmatically(state, selected) {
-            return true, false
-        }
-        identity.kind = .Animation
-        identity.id = state.julia_runtime_service.animation_generation + 1
-        identity.generation = identity.id
-        return true, true
+        return true, scenario_select_animation(state, command, identity)
     case .Submit_Scratchpad:
         return true, scenario_submit_scratchpad(state, command, identity)
     case .Reload_Runtime:
@@ -259,6 +281,8 @@ scenario_issue_julia_action :: proc(
         identity.id = service.runtime_generation + 1
         identity.generation = identity.id
         return true, true
+    case .Inject_Reload_Failure:
+        return true, scenario_arm_reload_failure(state, command)
     case:
         return false, false
     }

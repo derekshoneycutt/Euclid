@@ -85,6 +85,26 @@ scenario_test_scratchpad_completed_event :: proc(t: ^testing.T) {
     testing.expect_value(t, kind, trace.Kind.Scratchpad_Completed)
 }
 
+// Verify the scenario vocabulary exposes generation-owned animation loading.
+@(test)
+scenario_test_animation_loaded_event :: proc(t: ^testing.T) {
+    kind, valid := event_kind("animation_loaded")
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, trace.Kind.Animation_Loaded)
+}
+
+// Verify deterministic reload failure injection is parsed as an ordinary action.
+@(test)
+scenario_test_reload_failure_injection :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"inject_reload_failure\":\"candidate_load\"}\n",
+        &program), Parse_Error.None)
+    testing.expect_value(t, program.count, 1)
+    testing.expect_value(t,
+        program.commands[0].kind, Command_Kind.Inject_Reload_Failure)
+}
+
 // Verify required evidence loss makes the run inconclusive before actions execute.
 @(test)
 scenario_test_required_trace_loss_is_inconclusive :: proc(t: ^testing.T) {

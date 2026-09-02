@@ -1,5 +1,10 @@
 module HilbertChapterOneAxiomCompleteness
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("b47188c2-2829-5320-82c1-caf2666314b2")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -317,3 +322,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneAxiomCompleteness.AnimationId,
+    HilbertChapterOneAxiomCompleteness.animation_entry)

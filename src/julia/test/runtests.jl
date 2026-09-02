@@ -21,6 +21,14 @@ using Test
         include("bridge_helpers_tests.jl")
     end
 
+    @testset "Animation Catalog" begin
+        include("animation_catalog_tests.jl")
+    end
+
+    @testset "Runtime Host" begin
+        include("runtime_host_tests.jl")
+    end
+
     @testset "Code Wiki Odin" begin
         include("code_wiki_tests.jl")
     end

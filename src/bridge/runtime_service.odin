@@ -2,6 +2,7 @@ package bridge
 
 import "base:runtime"
 import "../core"
+import "../julialib"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -26,6 +27,18 @@ VIEW_SNAPSHOT_SLOT_COUNT :: core.VIEW_SNAPSHOT_SLOT_COUNT
 VIEW_SNAPSHOT_TEXT_CAPACITY :: core.VIEW_SNAPSHOT_TEXT_CAPACITY
 ANIMATION_TICK_SLOT_COUNT :: core.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
+
+// Stack-local Julia host handle retained by the worker's persistent GC frame.
+Julia_Runtime_Host :: struct {
+    runtime: ^julialib.jl_value_t,
+}
+
+// One-root Julia GC frame installed for the complete initialized worker lifetime.
+Julia_Runtime_Gc_Frame :: struct {
+    encoded_root_count: uintptr,
+    previous: ^julialib.jl_gcframe_t,
+    root: rawptr,
+}
 
 //   Dispatch table mapping each Julia event kind to its completion handler.
 //   Initialized and Invoke_Complete need no handler and map to nil.
@@ -81,6 +94,25 @@ coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
     service^.animation_ticks_coalesced += 1
 }
 
+//   Submit one fully prepared animation tick slot and finalize request bookkeeping.
+submit_animation_tick_slot :: proc(
+    service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
+    slot_index: int, total_dt: f32) -> bool {
+    request_id, sent := try_submit_julia_request(
+        service, .Animation_Tick, generate_animation_tick_task,
+        rawptr(slot), i32(slot_index))
+    if !sent {
+        rollback_animation_tick_slot(service, slot, total_dt)
+        return false
+    }
+    assert(slot^.request_id == request_id)
+    service^.animation_tick_pending = true
+    service^.animation_ticks_submitted += 1
+    service^.animation_queue_high_water = max(
+        service^.animation_queue_high_water, u64(1))
+    return true
+}
+
 //   Submit one bounded animation tick without blocking the display thread.
 // The display thread snapshots query state before submission. On saturation, the slot is
 // recycled and elapsed time is retained for the next request instead of partially lost.
@@ -112,19 +144,7 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         service, &service^.animation_tick_slots[slot_index], state, total_dt,
         view_snapshot_index)
     slot := &service^.animation_tick_slots[slot_index]
-
-    request_id, sent := try_submit_julia_request(
-        service, .Animation_Tick, generate_animation_tick_task,
-        rawptr(slot), i32(slot_index))
-    if !sent {
-        rollback_animation_tick_slot(service, slot, total_dt)
-        return false
-    }
-    assert(slot^.request_id == request_id)
-    service^.animation_tick_pending = true
-    service^.animation_ticks_submitted += 1
-    service^.animation_queue_high_water = max(service^.animation_queue_high_water, u64(1))
-    return true
+    return submit_animation_tick_slot(service, slot, slot_index, total_dt)
 }
 
 //   Populate one animation tick slot and snapshot its query state for the request.
@@ -1409,41 +1429,148 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
     return true
 }
 
-//   Own Julia lifecycle and serialized task execution until shutdown.
-// Every request produces one correlated event. After each non-shutdown request, the worker
-// restores its saved Odin context and clears temporary allocations before receiving more work.
-julia_runtime_worker :: proc(data: rawptr) {
-    service := cast(^Julia_Runtime_Service)data
+//   Construct the Julia-defined runtime host after the stable script is loaded.
+//
+// Returns:
+//   - The unrooted host value, which the caller must root before another Julia allocation.
+create_julia_runtime_host :: proc() -> ^julialib.jl_value_t {
+    constructor := julialib.jl_get_function(
+        julialib.jl_main_module, "create_euclid_runtime_host")
+    if constructor == nil {
+        return nil
+    }
+    host := julialib.jl_call0(constructor)
+    if host == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("create_euclid_runtime_host")
+        return nil
+    }
+    return host
+}
+
+//   Initialize Julia and install the worker-lifetime root for its runtime host.
+initialize_julia_worker_host :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    frame: ^Julia_Runtime_Gc_Frame) -> bool {
+
+    if !initiate_julia() {
+        return false
+    }
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        return false
+    }
+    frame^ = Julia_Runtime_Gc_Frame{
+        encoded_root_count = (1 << 2) | 1,
+        previous = gc_stack^,
+        root = rawptr(&host^.runtime),
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(frame)
+    host^.runtime = create_julia_runtime_host()
+    if host^.runtime == nil {
+        gc_stack^ = frame^.previous
+        return false
+    }
+    julialib.jl_gc_collect(.JL_GC_FULL)
+    validator := julialib.jl_get_function(
+        julialib.jl_main_module, "is_euclid_runtime_host")
+    valid_host := validator != nil &&
+        julialib.jl_unbox_bool(julialib.jl_call1(validator, host^.runtime)) != 0 &&
+        julialib.jl_exception_occurred() == nil
+    if !valid_host {
+        print_julia_exception("is_euclid_runtime_host")
+        host^.runtime = nil
+        gc_stack^ = frame^.previous
+        return false
+    }
+    service^.runtime_host = host^.runtime
+    return true
+}
+
+//   Remove the worker host root before shutting down Julia.
+finalize_julia_worker_host :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    frame: ^Julia_Runtime_Gc_Frame) {
+
+    if service^.runtime_host == nil {
+        host^.runtime = nil
+        return
+    }
+    service^.runtime_host = nil
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack != nil {
+        gc_stack^ = frame^.previous
+    }
+    host^.runtime = nil
+}
+
+//   Execute one serialized worker request while borrowing the persistent host root.
+execute_julia_worker_request :: proc(
+    service: ^Julia_Runtime_Service, request: Julia_Request,
+    host: ^Julia_Runtime_Host, frame: ^Julia_Runtime_Gc_Frame,
+    initialized: ^bool) -> (Julia_Event, bool) {
+    event := Julia_Event{
+        request_kind = request.kind,
+        request_id = request.request_id,
+        slot_index = request.slot_index,
+        succeeded = true,
+    }
+    evidence_profile.zone_begin(&service^.profile, "julia_request")
+    shutting_down := false
+    if request.kind == .Initialize {
+        event.kind = .Initialized
+        event.succeeded = !initialized^ &&
+            initialize_julia_worker_host(service, host, frame)
+        initialized^ = event.succeeded
+    } else {
+        shutting_down = dispatch_julia_request(service, request, &event)
+    }
+    evidence_profile.zone_end(&service^.profile)
+    return event, shutting_down
+}
+
+//   Own the rooted Julia host stack frame and serialized requests until shutdown.
+// The returned shutdown event is published only after this stack frame is gone.
+julia_runtime_worker_run_host :: proc(
+    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+
     worker_context := context
-    service^.owner_thread_id = os.get_current_thread_id()
-    evidence_profile.thread_name(&service^.profile, "julia-worker")
-    log.info("julia_worker_started")
+    host: Julia_Runtime_Host
+    host_frame: Julia_Runtime_Gc_Frame
+    initialized := false
     for {
         request, ok := chan.recv(service^.requests)
         if !ok {
-            return
+            return {}, false
         }
 
-        event := Julia_Event{
-            request_kind = request.kind,
-            request_id = request.request_id,
-            slot_index = request.slot_index,
-            succeeded = true,
-        }
-        evidence_profile.zone_begin(&service^.profile, "julia_request")
-        shutting_down := dispatch_julia_request(service, request, &event)
-        evidence_profile.zone_end(&service^.profile)
+        event, shutting_down := execute_julia_worker_request(
+            service, request, &host, &host_frame, &initialized)
         if shutting_down {
             attach_julia_request_evidence(service, request, &event)
-            _ = chan.send(service^.events, event)
-            log.info("julia_worker_stopped")
-            return
+            finalize_julia_worker_host(service, &host, &host_frame)
+            end_julia()
+            return event, true
         }
         attach_julia_request_evidence(service, request, &event)
         _ = chan.send(service^.events, event)
         context = worker_context
         free_all(context.temp_allocator)
     }
+}
+
+//   Own Julia lifecycle and publish termination only after the rooted host frame is gone.
+julia_runtime_worker :: proc(data: rawptr) {
+    service := cast(^Julia_Runtime_Service)data
+    service^.owner_thread_id = os.get_current_thread_id()
+    evidence_profile.thread_name(&service^.profile, "julia-worker")
+    log.info("julia_worker_started")
+    shutdown_event, shutting_down := julia_runtime_worker_run_host(service)
+    if !shutting_down {
+        log.error("julia_worker_requests_closed_before_shutdown")
+        return
+    }
+    _ = chan.send(service^.events, shutdown_event)
+    log.info("julia_worker_stopped")
 }
 
 //   Build one animation-tick completion event for the Julia channel handoff.
@@ -1509,8 +1636,6 @@ dispatch_julia_request :: proc(
 
     switch request.kind {
     case .Initialize:
-        assert(os.get_current_thread_id() == service^.owner_thread_id)
-        event^.succeeded = initiate_julia()
         event^.kind = .Initialized
     case .Invoke:
         event^.kind = .Invoke_Complete
@@ -1524,9 +1649,7 @@ dispatch_julia_request :: proc(
     case .Shutdown:
         assert(os.get_current_thread_id() == service^.owner_thread_id)
         clear_scratchpad_completion_watermark(service)
-        end_julia()
         event^.kind = .Shutdown_Complete
-        _ = chan.send(service^.events, event^)
         return true
     }
     return false

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionPlaneAngle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("18a9886f-a127-549d-8863-6deb86858661")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -303,3 +308,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionPlaneAngle.AnimationId,
+    ElementsOneDefinitionPlaneAngle.animation_entry)

@@ -1,5 +1,10 @@
 module ElementsOnePostulatesDrawCircle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4d9de8df-9439-523a-957e-99439f5ad927")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -240,3 +245,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOnePostulatesDrawCircle.AnimationId,
+    ElementsOnePostulatesDrawCircle.animation_entry)

@@ -1,5 +1,10 @@
 module HilbertChapterOneDefSupplementaryAngles
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("b3709506-caed-5801-8ebf-29ff50c1f6ef")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -296,3 +301,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefSupplementaryAngles.AnimationId,
+    HilbertChapterOneDefSupplementaryAngles.animation_entry)

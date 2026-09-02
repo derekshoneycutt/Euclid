@@ -43,7 +43,8 @@ const EVENT_NAMES = Dict{UInt16,String}(
     60 => "animation_reset_requested", 61 => "animation_reset_committed",
     62 => "animation_selected", 63 => "animation_tick_accepted",
     64 => "animation_tick_committed", 65 => "animation_tick_rejected",
-    66 => "animation_cycle_boundary", 120 => "scene_batch_published",
+    66 => "animation_cycle_boundary", 67 => "animation_loaded",
+    120 => "scene_batch_published",
     121 => "scene_batch_committed", 122 => "scene_batch_rejected",
     123 => "scene_command_rejected", 180 => "point_position_committed",
     181 => "point_style_committed", 182 => "point_visibility_committed",
@@ -80,7 +81,8 @@ const SCENARIO_ACTIONS = [
 
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
-    "animation_selected", "animation_cycle_boundary", "scene_batch_committed",
+    "animation_selected", "animation_tick_committed",
+    "animation_cycle_boundary", "animation_loaded", "scene_batch_committed",
     "constraint_solve_completed", "dynview_published", "scratchpad_completed",
     "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",

@@ -38,6 +38,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Animation_Tick_Committed = "animation.tick_committed",
     .Animation_Tick_Rejected = "animation.tick_rejected",
     .Animation_Cycle_Boundary = "animation.cycle_boundary",
+    .Animation_Loaded = "animation.loaded",
     .Scene_Batch_Published = "scene.batch_published",
     .Scene_Batch_Committed = "scene.batch_committed",
     .Scene_Batch_Rejected = "scene.batch_rejected",

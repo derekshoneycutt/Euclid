@@ -1,5 +1,10 @@
 module ElementsOneDefinitionParallel
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("51608ec9-487a-53f9-ba14-72c1f1750756")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -221,3 +226,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionParallel.AnimationId,
+    ElementsOneDefinitionParallel.animation_entry)

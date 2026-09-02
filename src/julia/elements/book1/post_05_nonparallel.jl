@@ -1,5 +1,10 @@
 module ElementsOnePostulatesNonParallelLines
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4d98d3cf-e73a-5e6e-9e1d-6fa1141934e6")
+
 using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidAnimations
@@ -480,3 +485,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOnePostulatesNonParallelLines.AnimationId,
+    ElementsOnePostulatesNonParallelLines.animation_entry)

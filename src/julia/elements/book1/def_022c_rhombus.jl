@@ -1,5 +1,10 @@
 module ElementsOneDefinitionRhombus
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("eb166e05-2da3-5598-8674-f4a4ee41253f")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -331,3 +336,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionRhombus.AnimationId,
+    ElementsOneDefinitionRhombus.animation_entry)

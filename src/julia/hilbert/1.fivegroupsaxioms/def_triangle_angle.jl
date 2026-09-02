@@ -1,5 +1,10 @@
 module HilbertChapterOneDefTriangleAngle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("93310d74-5fee-5cae-b308-1e8da917a619")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -394,3 +399,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefTriangleAngle.AnimationId,
+    HilbertChapterOneDefTriangleAngle.animation_entry)

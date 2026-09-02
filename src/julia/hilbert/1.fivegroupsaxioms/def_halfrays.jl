@@ -1,5 +1,10 @@
 module HilbertChapterOneDefHalfRays
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("40c5fc2c-8686-56b7-9840-838f6f4c8147")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -379,3 +384,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefHalfRays.AnimationId,
+    HilbertChapterOneDefHalfRays.animation_entry)

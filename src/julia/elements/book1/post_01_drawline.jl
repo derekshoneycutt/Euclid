@@ -1,5 +1,10 @@
 module ElementsOnePostulatesDrawLine
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("8166f691-aeae-5bfa-9828-487c7b38a4cd")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -236,3 +241,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOnePostulatesDrawLine.AnimationId,
+    ElementsOnePostulatesDrawLine.animation_entry)

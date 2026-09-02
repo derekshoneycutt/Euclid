@@ -80,10 +80,24 @@ If you are new, read in this order:
 
 Content-module contract:
 
-- Root modules register tree/category nodes.
-- Animation files provide `get_view_text`, `initialize`, `loop`, `clean`, and a direct
-  `animation_entry` implementation that dispatches bridge-stable lifecycle operations.
+- Startup registers the complete metadata catalog without evaluating path-backed programs.
+- Every catalog item has a permanent UUID and a generation-local implementation path.
+- Animation files provide named `get_view_text`, `initialize`, `loop`, `clean`, and a
+  direct `animation_entry` that dispatches bridge-stable lifecycle operations.
+- First activation loads and validates the selected UUID, then Odin caches its entry on
+  that generation's registry node. Normal ticks call the cached entry directly.
 - Bridge calls mutate host state while Julia controls pedagogical flow.
+
+The Julia owner worker roots one stable `EuclidRuntimeHost` for its initialized
+lifetime. The host roots only its committed `EuclidRuntimeGeneration`; each generation
+owns a fresh anonymous content module, catalog, load cache, and implementation roots.
+Odin-held Julia pointers are borrowed and never establish GC ownership.
+
+Reload constructs and roots a candidate generation locally, registers it against the
+inactive Odin interface, restores the active UUID, validates Enter, commits the host's
+generation with one assignment, and only then publishes the interface. Failure restores
+the old interface, forces full Julia GC, and restarts the old animation before reporting
+rollback. Candidate state and pointers never enter the committed generation on failure.
 
 Operational diagnostics are optional human-readable records written through the
 synchronized logger configured by `--diagnostics=PATH`. They describe process and

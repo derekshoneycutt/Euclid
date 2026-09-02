@@ -1,5 +1,10 @@
 module EuclidElementsOverview
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4a3a9e1f-6448-554a-8e37-52f579b7476b")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -46,3 +51,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    EuclidElementsOverview.AnimationId, EuclidElementsOverview.animation_entry)

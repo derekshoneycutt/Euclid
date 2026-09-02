@@ -1,5 +1,10 @@
 module HilbertChapterOneDefCongruentTriangles
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("f22779f8-3c27-592f-b9d8-6f6768bdc8f5")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -1025,3 +1030,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefCongruentTriangles.AnimationId,
+    HilbertChapterOneDefCongruentTriangles.animation_entry)

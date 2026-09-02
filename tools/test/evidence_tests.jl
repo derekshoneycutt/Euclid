@@ -49,6 +49,8 @@ end
 @testset "evidence capabilities and schema" begin
     @test "select_animation" in EuclidEvidence.capabilities().actions
     @test "animation_cycle_boundary" in EuclidEvidence.scenario_schema().events
+    @test "animation_tick_committed" in EuclidEvidence.scenario_schema().events
+    @test "animation_loaded" in EuclidEvidence.scenario_schema().events
     @test "dynview_published" in EuclidEvidence.scenario_schema().events
     @test EuclidEvidence.capabilities().trace_event_bytes == 64
 end

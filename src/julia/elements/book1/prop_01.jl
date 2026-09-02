@@ -1,5 +1,10 @@
 module ElementsOneProposition01
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("76fdebfe-2600-551e-be64-03f1942f4f49")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -463,3 +468,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneProposition01.AnimationId, ElementsOneProposition01.animation_entry)

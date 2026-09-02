@@ -1,5 +1,10 @@
 module ElementsOneDefinitionScalene
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("d270543c-19ce-5ad5-aa46-ca7570e56d4e")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -225,3 +230,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionScalene.AnimationId,
+    ElementsOneDefinitionScalene.animation_entry)

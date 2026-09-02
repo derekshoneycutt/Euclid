@@ -1,5 +1,10 @@
 module ElementsOneDefinitionSemicircle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("bbe7a537-0e0c-5bd4-8855-c57883720fc9")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -301,3 +306,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionSemicircle.AnimationId,
+    ElementsOneDefinitionSemicircle.animation_entry)

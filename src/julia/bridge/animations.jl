@@ -14,6 +14,12 @@ struct AnimationValueIdentityABI
     schema_high::UInt64
 end
 
+"""C-compatible animation catalog ordering and node classification."""
+struct AnimationDescriptorABIMetadata
+    node_kind::Int32
+    sibling_order::Int32
+end
+
 const ANIMATION_VALUE_MAX_PAYLOAD_BYTES = 16 * 1024
 const ANIMATION_SCHEMA_FNV_OFFSET = UInt128(0x6c62272e07bb014262b821756295c58d)
 const ANIMATION_SCHEMA_FNV_PRIME = UInt128(0x0000000001000000000000000000013b)
@@ -210,6 +216,27 @@ function add_child_animation_interface(
         @ccall add_child_animation_interface(
             state_ptr::Ptr{Cvoid}, entry::Any,
             name::Cstring, stable_id::Cstring, parent_stable_id::Cstring)::Int64
+    end
+end
+
+"""Register one validated catalog descriptor without an implementation entry."""
+function add_animation_descriptor(
+    state_ptr::Ptr{Cvoid}, name::String, stable_id::String,
+    parent_stable_id::String, node_kind::Int32, sibling_order::Int32)
+
+    metadata = AnimationDescriptorABIMetadata(node_kind, sibling_order)
+    @ccall add_animation_descriptor(
+        state_ptr::Ptr{Cvoid}, name::Cstring, stable_id::Cstring,
+        parent_stable_id::Cstring, metadata::AnimationDescriptorABIMetadata)::Int64
+end
+
+"""Bind one loader-rooted animation entry to an exact host UUID node."""
+function bind_animation_entry(
+    state_ptr::Ptr{Cvoid}, entry, stable_id::String)
+
+    GC.@preserve entry begin
+        @ccall bind_animation_entry(
+            state_ptr::Ptr{Cvoid}, entry::Any, stable_id::Cstring)::Int64
     end
 end
 

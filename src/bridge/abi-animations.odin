@@ -10,6 +10,12 @@ Animation_Value_Abi_Identity :: struct {
     schema_high : u64,
 }
 
+// Carry animation catalog ordering and node classification across the C ABI.
+Animation_Descriptor_Abi_Metadata :: struct {
+    node_kind: i32,
+    sibling_order: i32,
+}
+
 //   Convert a canonical animation-value result to its stable bridge status.
 animation_value_bridge_status :: proc "contextless" (
     status: core.Animation_Value_Status) -> i32 {
@@ -155,6 +161,70 @@ set_null_animations :: proc "c" (
     entry: ^julialib.jl_value_t) {
     
     state^.julia_interface^.null_animation.entry = entry
+}
+
+//   Register one validated catalog descriptor without loading its implementation.
+@(export)
+add_animation_descriptor :: proc "c" (
+    state: ^core.Euclid_General_State,
+    name, stable_id, parent_stable_id: cstring,
+    metadata: Animation_Descriptor_Abi_Metadata) -> int {
+
+    if state == nil || state^.julia_interface == nil || name == nil ||
+        metadata.node_kind < i32(core.Animation_Node_Kind.Category) ||
+        metadata.node_kind > i32(core.Animation_Node_Kind.Scratchpad) ||
+        metadata.sibling_order < 0 {
+        return -1
+    }
+    context = state^.saved_context
+    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
+    if !parsed_ok || reject_duplicate_stable_id(
+        state, name, stable_id, parsed_stable_id, parent_stable_id) {
+        return -1
+    }
+    parent: ^core.Euclid_Julia_Animation_Interface
+    if parent_stable_id != nil && len(string(parent_stable_id)) > 0 {
+        parent_ok: bool
+        parent, parent_ok = resolve_parent_animation_by_stable_id(
+            state, parent_stable_id)
+        if !parent_ok {
+            return -1
+        }
+    }
+    node, inserted := add_animation_to_registry(
+        state, nil, name, parsed_stable_id, parent)
+    if !inserted {
+        return -1
+    }
+    node^.node_kind = core.Animation_Node_Kind(metadata.node_kind)
+    node^.sibling_order = metadata.sibling_order
+    return 1
+}
+
+//   Bind one loader-rooted Julia entry to an existing UUID catalog node.
+@(export)
+bind_animation_entry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    entry: ^julialib.jl_value_t,
+    stable_id: cstring) -> int {
+
+    if state == nil || state^.julia_interface == nil || entry == nil {
+        return -1
+    }
+    context = state^.saved_context
+    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, stable_id)
+    if !parsed_ok {
+        return -1
+    }
+    node := find_registered_animation_by_stable_id(state, parsed_stable_id)
+    if node == nil {
+        return -1
+    }
+    if node^.entry != nil && node^.entry != entry {
+        return -1
+    }
+    node^.entry = entry
+    return 1
 }
 
 //   Register a top-level animation interface entry in the Julia animation registry.

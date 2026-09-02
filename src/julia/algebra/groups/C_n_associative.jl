@@ -1,5 +1,10 @@
 module EuclidAlgebraGroupsCnAssociative
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("179367e3-1b5d-5ffe-923b-d9daf783d9d4")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -697,3 +702,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    EuclidAlgebraGroupsCnAssociative.AnimationId,
+    EuclidAlgebraGroupsCnAssociative.animation_entry)

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionObtuseAngle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("142a4b16-0a1f-58f5-8599-823b8d3d2821")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -300,3 +305,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionObtuseAngle.AnimationId,
+    ElementsOneDefinitionObtuseAngle.animation_entry)

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionIsosceles
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("a2a8bc49-a232-52db-baa2-cdc0fa377ae8")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -229,3 +234,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionIsosceles.AnimationId,
+    ElementsOneDefinitionIsosceles.animation_entry)

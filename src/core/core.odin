@@ -369,6 +369,13 @@ Julia_Reload_State :: enum {
     Failed,
 }
 
+// One scenario-armed failure consumed only by the next candidate reload transaction.
+Julia_Reload_Failure_Injection :: enum u8 {
+    None,
+    Candidate_Load,
+    Animation_Enter,
+}
+
 Julia_Task_Proc :: #type proc(data: rawptr) -> bool
 
 Julia_Request :: struct {
@@ -393,6 +400,8 @@ Julia_Runtime_Service :: struct {
     evidence_ring: evidence_trace.Ring,
     evidence_session: ^evidence_session.Session,
     profile: evidence_profile.State,
+    // Borrowed from the Julia worker's GC frame; valid only while that worker is running.
+    runtime_host: ^julialib.jl_value_t,
     worker: ^thread.Thread,
     requests: chan.Chan(Julia_Request),
     events: chan.Chan(Julia_Event),
@@ -407,6 +416,8 @@ Julia_Runtime_Service :: struct {
     request_saturation_count: u64,
     reload_state: Julia_Reload_State,
     reload_requested: bool,
+    // Scenario-only one-shot selector; normal runtime operation leaves this None.
+    reload_failure_injection: Julia_Reload_Failure_Injection,
     runtime_generation: u64,
     reload_failed_mtime_unix_nano: i64,
     scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
@@ -440,6 +451,8 @@ Euclid_Julia_Animation_Interface :: struct {
 
     name : string,
     stable_id : uuid.Identifier,
+    node_kind: Animation_Node_Kind,
+    sibling_order: i32,
     is_expanded : bool,
     is_selected : bool,
 
@@ -450,6 +463,12 @@ Euclid_Julia_Animation_Interface :: struct {
     prev_sibling : ^Euclid_Julia_Animation_Interface,
     next_in_registry : ^Euclid_Julia_Animation_Interface,
     prev_in_registry : ^Euclid_Julia_Animation_Interface,
+}
+
+Animation_Node_Kind :: enum i32 {
+    Category = 1,
+    Leaf = 2,
+    Scratchpad = 3,
 }
 
 Animation_Operation :: enum i32 {
@@ -471,6 +490,7 @@ Euclid_Julia_Animation_Iterator :: struct {
 Euclid_Julia_Interface :: struct {
     invoke_with_exception_diagnostics: ^julialib.jl_value_t,
     init_scripts : ^julialib.jl_value_t,
+    ensure_animation_loaded: ^julialib.jl_value_t,
     global_loop : ^julialib.jl_value_t,
     scratchpad_classify_input : ^julialib.jl_value_t,
     scratchpad_complete_backslash : ^julialib.jl_value_t,

@@ -1,5 +1,10 @@
 module ElementsOneProclusScalene
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("fc8d5e5e-3135-53aa-8e4e-4021f78443d4")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -440,3 +445,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneProclusScalene.AnimationId, ElementsOneProclusScalene.animation_entry)

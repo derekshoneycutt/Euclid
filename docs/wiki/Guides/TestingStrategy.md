@@ -62,6 +62,16 @@ scenario inconclusive, so combined corpora must remain below that fixed bound ra
 than treating a partial trace as success. Run scenarios into fresh artifact directories
 and require both `result: "passed"` and `trace_complete: true`.
 
+Runtime-generation rollback coverage lives in
+`phase-runtime-generation-load-rollback.jsonl` and
+`phase-runtime-generation-enter-rollback.jsonl`. Each scenario selects and lazily loads
+an animation, arms one Odin-owned failure with `inject_reload_failure`, then issues the
+ordinary `reload_runtime` action. Passing evidence requires correlated rollback, a
+committed old-generation animation tick after rollback's forced GC, retained dynview,
+zero bad frees, complete trace retention, and orderly shutdown. The Enter case proves
+candidate binding reached lifecycle validation; neither hook mutates packaged assets or
+introduces Julia global state.
+
 ## Current Limits
 
 The automated suite does not establish visual correctness. Rendering, layout,

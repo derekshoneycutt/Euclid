@@ -19,6 +19,14 @@ when ODIN_OS == .Windows {
     JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.so"
 }
 
+Julia_Exception_Format :: struct {
+    exception_type: cstring,
+    exception: ^julialib.jl_value_t,
+    sprint: ^julialib.jl_value_t,
+    showerror: ^julialib.jl_value_t,
+    backtrace: ^julialib.jl_value_t,
+}
+
 //   Resolve the optional custom Julia sysimage beside the Euclid executable.
 resolve_julia_sysimage_path :: proc() -> (string, bool) {
     exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
@@ -106,6 +114,8 @@ resolve_julia_interface_callbacks :: proc(
     iface^.invoke_with_exception_diagnostics = julialib.jl_get_function(
         main_module, "invoke_with_exception_diagnostics")
     iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
+    iface^.ensure_animation_loaded = julialib.jl_get_function(
+        main_module, "ensure_animation_loaded")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
     iface^.scratchpad_classify_input = julialib.jl_get_function(
         main_module, "scratchpad_classify_input")
@@ -148,6 +158,7 @@ julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bo
     handles := [?]rawptr{
         iface^.invoke_with_exception_diagnostics,
         iface^.init_scripts,
+        iface^.ensure_animation_loaded,
         iface^.global_loop,
         iface^.scratchpad_classify_input,
         iface^.scratchpad_complete_backslash,
@@ -353,6 +364,51 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     return call_include_packaged_script(include_fn, script_path, exit_on_failure)
 }
 
+//   Format and print one retained Julia exception, reporting formatter success.
+print_formatted_julia_exception :: proc(
+    context_of_error: string, format: Julia_Exception_Format) -> bool {
+    msg_val := format_julia_exception_message(
+        format.sprint, format.showerror, format.exception, format.backtrace)
+    if julialib.jl_exception_occurred() != nil || msg_val == nil {
+        julialib.jl_exception_clear()
+        return false
+    }
+    fmt.eprintln("Julia exception context: ", context_of_error)
+    fmt.eprintln("Julia exception type: ", format.exception_type)
+    fmt.eprintln(julialib.jl_string_ptr(msg_val))
+    return true
+}
+
+//   Resolve Base formatters and capture the pending exception backtrace.
+prepare_julia_exception_format :: proc(
+    exception_type: cstring,
+    exception: ^julialib.jl_value_t) -> (Julia_Exception_Format, bool) {
+    base_module := resolve_base_module()
+    if base_module == nil {
+        julialib.jl_exception_clear()
+        return {}, false
+    }
+    sprint_fn := julialib.jl_get_function(base_module, "sprint")
+    showerror_fn := julialib.jl_get_function(base_module, "showerror")
+    catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
+    if sprint_fn == nil || showerror_fn == nil {
+        julialib.jl_exception_clear()
+        return {}, false
+    }
+    backtrace: ^julialib.jl_value_t
+    if catch_backtrace_fn != nil {
+        backtrace = julialib.jl_call0(catch_backtrace_fn)
+    }
+    julialib.jl_exception_clear()
+    return {
+        exception_type = exception_type,
+        exception = exception,
+        sprint = sprint_fn,
+        showerror = showerror_fn,
+        backtrace = backtrace,
+    }, true
+}
+
 //   Print Julia exception type, message, and backtrace for a named bridge context.
 //
 // Notes:
@@ -369,40 +425,14 @@ print_julia_exception :: proc(context_of_error: string) {
     gc_was_enabled := julialib.jl_gc_enable(0)
     defer julialib.jl_gc_enable(gc_was_enabled)
 
-    base_module := resolve_base_module()
-    if base_module == nil {
-        julialib.jl_exception_clear()
+    exception_format, available := prepare_julia_exception_format(ex_type, ex)
+    if !available {
         print_julia_exception_static(context_of_error, ex_type, ex)
         return
     }
-
-    sprint_fn := julialib.jl_get_function(base_module, "sprint")
-    showerror_fn := julialib.jl_get_function(base_module, "showerror")
-    catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
-
-    if sprint_fn == nil || showerror_fn == nil {
-        julialib.jl_exception_clear()
+    if !print_formatted_julia_exception(context_of_error, exception_format) {
         print_julia_exception_static(context_of_error, ex_type, ex)
-        return
     }
-
-    bt_val: ^julialib.jl_value_t = nil
-    if catch_backtrace_fn != nil {
-        bt_val = julialib.jl_call0(catch_backtrace_fn)
-    }
-    julialib.jl_exception_clear()
-
-    msg_val := format_julia_exception_message(sprint_fn, showerror_fn, ex, bt_val)
-    if julialib.jl_exception_occurred() != nil || msg_val == nil {
-        julialib.jl_exception_clear()
-        print_julia_exception_static(context_of_error, ex_type, ex)
-        return
-    }
-
-    msg := julialib.jl_string_ptr(msg_val)
-    fmt.eprintln("Julia exception context: ", context_of_error)
-    fmt.eprintln("Julia exception type: ", ex_type)
-    fmt.eprintln(msg)
 }
 
 //   Print the original Julia exception identity when Julia formatting is unavailable.

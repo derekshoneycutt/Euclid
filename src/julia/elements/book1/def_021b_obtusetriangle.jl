@@ -1,5 +1,10 @@
 module ElementsOneDefinitionObtuseTriangle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("86a96b17-4fe9-5b6c-bda9-5cb81f480d06")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -317,3 +322,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionObtuseTriangle.AnimationId,
+    ElementsOneDefinitionObtuseTriangle.animation_entry)

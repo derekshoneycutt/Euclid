@@ -26,7 +26,9 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"runtime_reload_committed", .Runtime_Reload_Committed},
     {"runtime_reload_rolled_back", .Runtime_Reload_Rolled_Back},
     {"animation_selected", .Animation_Selected},
+    {"animation_tick_committed", .Animation_Tick_Committed},
     {"animation_cycle_boundary", .Animation_Cycle_Boundary},
+    {"animation_loaded", .Animation_Loaded},
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
     {"dynview_published", .Dynview_Published},
@@ -43,6 +45,7 @@ Command_Kind :: enum u8 {
     Reset_Animation,
     Select_Animation,
     Reload_Runtime,
+    Inject_Reload_Failure,
     Submit_Scratchpad,
     Pause_Simulation,
     Resume_Simulation,
@@ -187,6 +190,7 @@ Raw_Command :: struct {
 
     // Text-bearing runtime and capture actions.
     select_animation : string,
+    inject_reload_failure : string,
     scratchpad : string,
     screenshot : string,
     start_gif : string,
@@ -360,6 +364,7 @@ runner_update_command :: proc(
     case .Assert_Allocation_Baseline, .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
+         .Inject_Reload_Failure,
          .Submit_Scratchpad, .Pause_Simulation, .Resume_Simulation,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
@@ -443,6 +448,8 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_action_command_select(raw.action, command)
     selected += raw_text_command_select(
         raw.select_animation, .Select_Animation, command)
+    selected += raw_text_command_select(
+        raw.inject_reload_failure, .Inject_Reload_Failure, command)
     selected += raw_text_command_select(raw.scratchpad, .Submit_Scratchpad, command)
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
@@ -511,6 +518,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     case .Assert_No_Bad_Frees, .Shutdown:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
+         .Inject_Reload_Failure,
          .Submit_Scratchpad, .Pause_Simulation, .Resume_Simulation,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Assert_State, .Checkpoint, .Allocation_Checkpoint,

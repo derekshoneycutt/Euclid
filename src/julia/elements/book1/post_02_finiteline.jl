@@ -1,5 +1,10 @@
 module ElementsOnePostulatesFiniteLine
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4adc0a75-2177-5962-8a22-f3b7dfacc1de")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -285,3 +290,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOnePostulatesFiniteLine.AnimationId,
+    ElementsOnePostulatesFiniteLine.animation_entry)

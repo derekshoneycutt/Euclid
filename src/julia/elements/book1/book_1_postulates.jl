@@ -1,5 +1,10 @@
 module ElementsOneBookOnePostulates
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("3ca25560-30d0-5108-af69-fe99b12a2de2")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -46,3 +51,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneBookOnePostulates.AnimationId,
+    ElementsOneBookOnePostulates.animation_entry)

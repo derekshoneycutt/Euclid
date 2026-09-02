@@ -1,5 +1,10 @@
 module EuclidAlgebraGroupsZ2Identity
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("a61d43d4-4aee-5c07-8122-276807bc7dfa")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -402,3 +407,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    EuclidAlgebraGroupsZ2Identity.AnimationId,
+    EuclidAlgebraGroupsZ2Identity.animation_entry)

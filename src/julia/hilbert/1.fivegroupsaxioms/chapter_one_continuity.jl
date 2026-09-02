@@ -1,5 +1,10 @@
 module HilbertChapterOneContinuity
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("2e0a8725-94ef-5c51-93df-f35356806483")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -62,3 +67,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneContinuity.AnimationId, HilbertChapterOneContinuity.animation_entry)

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionAcuteTriangle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("fc2794f8-dbac-52a1-89e6-865e76d23cf4")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -442,3 +447,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionAcuteTriangle.AnimationId,
+    ElementsOneDefinitionAcuteTriangle.animation_entry)

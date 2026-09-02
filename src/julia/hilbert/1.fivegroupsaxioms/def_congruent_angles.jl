@@ -1,5 +1,10 @@
 module HilbertChapterOneDefCongruentAngles
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("5a6f6d8c-cce6-59ef-ad49-b9ad19177f23")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -621,3 +626,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefCongruentAngles.AnimationId,
+    HilbertChapterOneDefCongruentAngles.animation_entry)

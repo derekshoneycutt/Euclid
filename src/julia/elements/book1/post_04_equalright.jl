@@ -1,5 +1,10 @@
 module ElementsOnePostulatesEqualRightAngles
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("7f6f36f4-a711-59c8-b22d-76f7157b29df")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -682,3 +687,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOnePostulatesEqualRightAngles.AnimationId,
+    ElementsOnePostulatesEqualRightAngles.animation_entry)

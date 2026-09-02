@@ -1,5 +1,10 @@
 module ElementsOneDefinitionPlaneSurface
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("85e57539-b729-51e2-a114-441ff1c52858")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -150,3 +155,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionPlaneSurface.AnimationId,
+    ElementsOneDefinitionPlaneSurface.animation_entry)

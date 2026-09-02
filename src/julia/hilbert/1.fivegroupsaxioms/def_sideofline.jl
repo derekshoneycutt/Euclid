@@ -1,5 +1,10 @@
 module HilbertChapterOneDefinitionSideOfLine
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("fdc6cded-a63f-5b19-ad63-8876317366ce")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -401,3 +406,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefinitionSideOfLine.AnimationId,
+    HilbertChapterOneDefinitionSideOfLine.animation_entry)

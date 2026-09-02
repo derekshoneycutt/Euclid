@@ -1,5 +1,10 @@
 module HilbertChapterOneAxiomIV2
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("bda3b319-b9c8-5a9f-bd21-c778c2f66b1e")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -646,3 +651,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneAxiomIV2.AnimationId, HilbertChapterOneAxiomIV2.animation_entry)

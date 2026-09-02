@@ -1,5 +1,10 @@
 module ElementsOneDefinitionCircle
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("0411aaf3-82be-5227-a146-1de5c928107d")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -236,3 +241,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionCircle.AnimationId, ElementsOneDefinitionCircle.animation_entry)

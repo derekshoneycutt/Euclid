@@ -1,5 +1,10 @@
 module ElementsOneDefinitionPerpendicular
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("144e86ef-79d1-53b5-90bd-920dc9764972")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -299,3 +304,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionPerpendicular.AnimationId,
+    ElementsOneDefinitionPerpendicular.animation_entry)

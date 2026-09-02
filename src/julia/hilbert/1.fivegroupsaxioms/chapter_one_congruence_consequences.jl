@@ -1,5 +1,10 @@
 module HilbertChapterOneCongruenceConsequences
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("c80d3bfc-88be-5b70-af19-c7edcc240c23")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -58,3 +63,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneCongruenceConsequences.AnimationId,
+    HilbertChapterOneCongruenceConsequences.animation_entry)

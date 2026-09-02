@@ -1,5 +1,10 @@
 module ElementsOneDefinitionSurface
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("cb5384f1-0df8-5d46-8e0a-e34e1764da8c")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -150,3 +155,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionSurface.AnimationId,
+    ElementsOneDefinitionSurface.animation_entry)

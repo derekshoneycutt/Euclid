@@ -283,23 +283,8 @@ function euclid_naming_settings()
     return NamingSettings(conventions)
 end
 
-"""Add the parent animation reviews that are good to ignore to the reviews list"""
-function add_parent_reviews!(reviews)
-    path = "src/julia/algebra/groups/groups.jl"
-    push!(reviews, ReviewedComplexity(
-        "groups-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
-    path = "src/julia/elements/book1/book1.jl"
-    push!(reviews, ReviewedComplexity(
-        "euclidbook1-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
-    path = "src/julia/hilbert/1.fivegroupsaxioms/fivegroupsaxioms.jl"
-    push!(reviews, ReviewedComplexity(
-        "hilbert1-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
+"""Add reviewed animation complexity exceptions to the reviews list."""
+function add_animation_reviews!(reviews)
     path = "src/julia/nullanimation.jl"
     push!(reviews, ReviewedComplexity(
         "nullanimation-initialize-lines:$path", path, :julia,
@@ -355,7 +340,7 @@ end
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
     foreach(path -> add_animation_loop_reviews!(reviews, path), AnimationLoopFiles)
-    add_parent_reviews!(reviews)
+    add_animation_reviews!(reviews)
     add_builder_test_allocation_procs!(reviews)
 end
 
@@ -1877,8 +1862,24 @@ AnalysisSettings(
     default_documentation_settings(),
     CallRootSettings([
         CallRootEntryPoint(
+            "odin-bridge:invoke_with_exception_diagnostics", :julia,
+            "invoke_with_exception_diagnostics",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
             "odin-bridge:init_euclid_scripts", :julia, "init_euclid_scripts",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:ensure_generation_animation_loaded", :julia,
+            "ensure_generation_animation_loaded",
+            "src/bridge/animations.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:invoke_generation_harness_scenario", :julia,
+            "invoke_generation_harness_scenario",
+            "src/bridge/animations.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:is_euclid_runtime_host", :julia,
+            "is_euclid_runtime_host",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:global_euclid_loop", :julia, "global_euclid_loop",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),

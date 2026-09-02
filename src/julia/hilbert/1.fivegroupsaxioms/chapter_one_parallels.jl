@@ -1,5 +1,10 @@
 module HilbertChapterOneParallels
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("4403bc1b-8656-5b06-a536-ba2e58afab84")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -58,3 +63,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneParallels.AnimationId, HilbertChapterOneParallels.animation_entry)

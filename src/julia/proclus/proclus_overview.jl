@@ -1,5 +1,10 @@
 module ProclusOverview
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("1c6b94cb-0ecb-5f34-8ea5-30833bcc77fb")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -50,3 +55,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ProclusOverview.AnimationId, ProclusOverview.animation_entry)

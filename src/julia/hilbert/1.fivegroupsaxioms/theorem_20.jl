@@ -1,5 +1,10 @@
 module HilbertChapterOneTheorem20
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("f093e4fb-8651-5385-8837-60c25cccebc3")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -759,3 +764,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneTheorem20.AnimationId, HilbertChapterOneTheorem20.animation_entry)

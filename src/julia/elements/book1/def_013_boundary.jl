@@ -1,5 +1,10 @@
 module ElementsOneDefinitionBoundary
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("367d7638-0caa-5df0-a433-bbd4d9a7101e")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -224,3 +229,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionBoundary.AnimationId,
+    ElementsOneDefinitionBoundary.animation_entry)

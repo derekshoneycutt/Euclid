@@ -1,0 +1,12 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_loaded","timeout_ms":10000}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"point","timeout_ms":10000}
+{"inject_reload_failure":"candidate_load"}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_rolled_back","correlation":"reload","timeout_ms":20000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

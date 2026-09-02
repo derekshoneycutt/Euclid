@@ -1,5 +1,10 @@
 module ElementsOneDefinitionMultilateral
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("157804cd-7a32-525d-90bd-88d2f76d4f03")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -354,3 +359,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionMultilateral.AnimationId,
+    ElementsOneDefinitionMultilateral.animation_entry)

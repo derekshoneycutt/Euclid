@@ -9,11 +9,15 @@ const ExpectedPoint = Float32[0.5f0, 0.5f0, 0f0]
 """
 Check that the animated point matches the expected position after eight steps.
 """
-function scenario_point_after_eight_steps(state_ptr::Ptr{Cvoid}, step_count::Integer)
+function scenario_point_after_eight_steps(
+    generation, state_ptr::Ptr{Cvoid}, step_count::Integer)
+
     step_count == 8 || return false
 
+    point_module = getfield(
+        generation.content, :ElementsOneDefinitionPoint)
     point_state, status = OdinJuliaBridge.get_animation_value(
-        state_ptr, Main.ElementsOne.ElementsOneDefinitionPoint.StateKey)
+        state_ptr, point_module.StateKey)
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
     point_id = point_state.point_id
     point_id >= 0 || return false

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionEquilateral
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("b34606f5-75ed-5a20-b2f4-12d577276597")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -229,3 +234,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionEquilateral.AnimationId,
+    ElementsOneDefinitionEquilateral.animation_entry)

@@ -1,5 +1,10 @@
 module ElementsOneDefinitionDiameter
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("b2472007-9bab-592b-a891-8b9c97d86539")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -302,3 +307,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionDiameter.AnimationId,
+    ElementsOneDefinitionDiameter.animation_entry)

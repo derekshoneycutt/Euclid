@@ -1,5 +1,10 @@
 module ElementsOneDefinitionQuadrilateral
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("61764dd7-578b-530f-ab27-052d3cc85689")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -307,3 +312,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionQuadrilateral.AnimationId,
+    ElementsOneDefinitionQuadrilateral.animation_entry)

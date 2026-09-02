@@ -566,6 +566,13 @@ not guarantee eventual evaluation under sustained overload.
 
 Several operations called “reset” affect different ownership domains.
 
+Scratchpad remains a stable bootstrapped service and is intentionally outside the
+anonymous content-generation migration. Runtime generations own the metadata catalog
+and path-backed animation implementations; they do not own Scratchpad's module, session,
+history, completion, or evaluation state. Reload still registers the eager Scratchpad
+entry into the candidate Odin interface and applies the lifecycle reset below. Moving
+Scratchpad itself under generation ownership is a separate design task.
+
 | Trigger | Odin editor | Julia Scratchpad session | EuclidRepl state | Julia process |
 | --- | --- | --- | --- | --- |
 | Select tree node | Clear input; Julia mode; reset scroll | Lifecycle decides | Lifecycle decides | Preserved |

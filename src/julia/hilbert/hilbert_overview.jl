@@ -1,5 +1,10 @@
 module HilbertOverview
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("65a8489e-e0bd-535f-bf47-3c5e9c9d70e6")
+
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
@@ -58,3 +63,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertOverview.AnimationId, HilbertOverview.animation_entry)

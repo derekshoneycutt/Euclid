@@ -1,10 +1,14 @@
 module EuclidAlgebraOverview
 
+using UUIDs
 using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
+using ..AnimationCatalog
 
 export get_view_text, initialize, clean, loop, animation_entry
+
+const AnimationId = UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903")
 
 """Emit the welcome view text for Algebra."""
 function get_view_text(state_ptr::Ptr{Cvoid})
@@ -50,3 +54,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    EuclidAlgebraOverview.AnimationId, EuclidAlgebraOverview.animation_entry)

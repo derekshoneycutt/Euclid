@@ -110,6 +110,11 @@ flowchart LR
 - worker-only Dynview staging storage
 - animation pacing and latency counters
 
+The service's `runtime_host` pointer is borrowed. Its GC ownership comes from the
+worker-stack `Julia_Runtime_Gc_Frame`, installed before host construction and retained
+until immediately before Julia teardown. The rooted `EuclidRuntimeHost` owns one active
+generation; Odin never roots Julia values by retaining their addresses in service state.
+
 Both channels have capacity 16. Requests and events are small control records.
 Large payloads do not travel through channels; channel records carry a slot
 index whose storage remains owned by the service.
@@ -517,14 +522,14 @@ Quiescing -> Including -> Registering -> Publishing -> Idle
 
 Reload does not retire the active interface before a replacement is usable:
 
-1. Re-extract changed packaged assets.
-1. Include the replacement Julia script.
-1. Preserve the active animation's stable UUID when one exists.
+1. Re-extract changed packaged assets and preserve the active animation UUID.
+1. Construct a fresh anonymous `EuclidRuntimeGeneration` under a local GC root.
+1. Give that generation fresh catalog, load-cache, module, and implementation roots.
 1. Clear and resolve the inactive state-owned interface slot.
-1. Register content into that candidate.
-1. Restore the active animation by stable UUID.
-1. Publish the candidate, switch the active-slot index, and clear the retired
-  slot after success.
+1. Register candidate metadata and restore the active UUID against that slot.
+1. Validate the candidate animation's direct Enter operation.
+1. Commit the host's active generation with one assignment.
+1. Publish the candidate interface and clear the retired slot.
 
 `Euclid_General_State` owns exactly two inline `Euclid_Julia_Interface` slots.
 Their addresses remain stable for the complete host-state lifetime. Reload
@@ -532,10 +537,15 @@ does not allocate or free interface structs. Each slot retains its own growing
 registry arena so a candidate can coexist with the active generation while
 registration and stable-ID restoration are validated.
 
-If registration or restoration fails, the candidate registry arena is cleared,
-the previous slot is restored, and the previous animation is reset. The failed
+If construction, registration, loading, or Enter fails, the candidate registry arena is
+cleared, the previous slot is restored, full Julia GC is forced while the stable host
+still roots the old generation, and the previous animation is reset. The failed
 package modification time is retained so the same broken revision is not
 retried every frame. A newer revision may trigger another attempt.
+
+Scenario-only one-shot failure selectors exercise candidate-load and candidate-Enter
+rollback through this production transaction. They are Odin-owned, consumed once, and
+cleared on either publication or rollback; Julia has no mutable fault-injection global.
 
 Successful publication increments `runtime_generation`, clears the failed
 revision marker, and resets the display-owned Scratchpad editor state to match

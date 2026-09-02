@@ -1,5 +1,10 @@
 module ElementsOneDefinitionSquare
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("9005a1bc-86a7-59b4-9dae-2f7f0f626934")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -333,3 +338,6 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionSquare.AnimationId, ElementsOneDefinitionSquare.animation_entry)

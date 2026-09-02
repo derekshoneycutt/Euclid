@@ -27,6 +27,11 @@ Harness_Scenario_Task_Data :: struct {
     step_count: int,
 }
 
+Animation_Load_Target :: struct {
+    callback: ^julialib.jl_value_t,
+    owner: ^julialib.jl_value_t,
+}
+
 //   Invoke one Julia callback through the stack-preserving diagnostic boundary.
 call_julia_callback1 :: proc(
     state: ^core.Euclid_General_State, callback, argument: ^julialib.jl_value_t) {
@@ -52,6 +57,13 @@ invoke_animation_operation :: proc(
     operation: core.Animation_Operation, dt: f32,
     exception_context: string) -> bool {
 
+    service := state^.julia_runtime_service
+    if service != nil && service^.reload_state == .Registering &&
+        operation == .Enter &&
+        service^.reload_failure_injection == .Animation_Enter {
+        service^.reload_failure_injection = .None
+        return false
+    }
     result := julialib.jl_call4(
         state^.julia_interface^.invoke_with_exception_diagnostics,
         entry,
@@ -73,14 +85,26 @@ invoke_animation_operation :: proc(
 // Notes:
 //   - Julia exceptions are reported and the call returns early without panicking.
 init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
+    service := state^.julia_runtime_service
+    if service == nil || service^.runtime_host == nil {
+        return false
+    }
     state_value := julialib.jl_box_voidpointer(state)
 
-    call_julia_callback1(
-        state, state^.julia_interface^.init_scripts, state_value)
+    call_julia_callback2(
+        state, state^.julia_interface^.init_scripts,
+        service^.runtime_host, state_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("init_euclid_scripts")
         return false
     }
+
+    return finish_registered_euclid_generation(state)
+}
+
+//   Complete native initialization after one generation registers its callbacks.
+finish_registered_euclid_generation :: proc(
+    state: ^core.Euclid_General_State) -> bool {
 
     if state^.julia_interface^.null_animation.entry != nil {
         if !invoke_animation_operation(
@@ -94,6 +118,29 @@ init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
         select_default_animation(state)
     }
     return true
+}
+
+//   Register one explicitly rooted candidate without re-priming stable services.
+init_euclid_generation :: proc(
+    state: ^core.Euclid_General_State,
+    generation: ^julialib.jl_value_t) -> bool {
+
+    main_module := resolve_main_module()
+    if main_module == nil || generation == nil {
+        return false
+    }
+    callback := julialib.jl_get_function(
+        main_module, "register_euclid_generation")
+    if callback == nil {
+        return false
+    }
+    call_julia_callback2(
+        state, callback, generation, julialib.jl_box_voidpointer(state))
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception("register_euclid_generation")
+        return false
+    }
+    return finish_registered_euclid_generation(state)
 }
 
 //  Perform a single animation frame update for the julia system, including
@@ -346,6 +393,25 @@ call_current_animation_loop :: proc(state: ^core.Euclid_General_State, dt: f32) 
         .Tick, dt, "Current animation loop")
 }
 
+//   Publish the selected animation pointer and its next host-owned generation.
+commit_animation_selection :: proc(
+    state: ^core.Euclid_General_State,
+    animation: ^core.Euclid_Julia_Animation_Interface) {
+    state^.julia_interface^.current_animation = animation
+    animation_generation: u64 = 0
+    if state^.julia_runtime_service != nil {
+        animation_generation = state^.julia_runtime_service^.animation_generation + 1
+    }
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = .Animation_Selected,
+        correlation_kind = .Animation,
+        correlation = animation_generation,
+        generation = animation_generation,
+        flags = {.Required},
+    })
+}
+
 //   Switch to a selected animation, cleaning previous state and initializing the new loop.
 //
 // Notes:
@@ -357,6 +423,10 @@ change_current_animation_loop :: proc(
     animation := new_animation
     if animation == nil {
         animation = &state^.julia_interface^.null_animation
+    }
+
+    if !ensure_animation_entry_loaded(state, animation) {
+        return false
     }
 
     if !clean_current_animation(state) {
@@ -376,19 +446,95 @@ change_current_animation_loop :: proc(
         }
     }
 
-    state^.julia_interface^.current_animation = animation
-    animation_generation: u64 = 0
-    if state^.julia_runtime_service != nil {
-        animation_generation = state^.julia_runtime_service^.animation_generation + 1
+    commit_animation_selection(state, animation)
+    return true
+}
+
+//   Load and bind a nil-entry catalog node before mutating the active animation.
+ensure_animation_entry_loaded :: proc(
+    state: ^core.Euclid_General_State,
+    animation: ^core.Euclid_Julia_Animation_Interface) -> bool {
+
+    return ensure_animation_entry_loaded_for_generation(state, animation, nil)
+}
+
+//   Resolve the stable active-host or explicit candidate-generation load adapter.
+resolve_animation_load_target :: proc(
+    state: ^core.Euclid_General_State,
+    generation: ^julialib.jl_value_t) -> Animation_Load_Target {
+
+    target := Animation_Load_Target{
+        callback = state^.julia_interface^.ensure_animation_loaded,
+        owner = state^.julia_runtime_service^.runtime_host,
+    }
+    if generation != nil {
+        main_module := resolve_main_module()
+        if main_module == nil {
+            return {}
+        }
+        target.callback = julialib.jl_get_function(
+            main_module, "ensure_generation_animation_loaded")
+        target.owner = generation
+    }
+    return target
+}
+
+//   Record one successful UUID binding against its owning runtime generation.
+record_animation_loaded :: proc(
+    state: ^core.Euclid_General_State,
+    animation: ^core.Euclid_Julia_Animation_Interface,
+    generation: ^julialib.jl_value_t) {
+    runtime_generation := state^.julia_runtime_service^.runtime_generation
+    if generation != nil {
+        runtime_generation += 1
     }
     record_julia_evidence(state, {
         lane = .Domain,
-        kind = .Animation_Selected,
+        kind = .Animation_Loaded,
         correlation_kind = .Animation,
-        correlation = animation_generation,
-        generation = animation_generation,
+        correlation = animation_hash_stable_id(animation^.stable_id),
+        generation = runtime_generation,
         flags = {.Required},
     })
+}
+
+//   Load one entry from the active host or an explicitly rooted candidate generation.
+ensure_animation_entry_loaded_for_generation :: proc(
+    state: ^core.Euclid_General_State,
+    animation: ^core.Euclid_Julia_Animation_Interface,
+    generation: ^julialib.jl_value_t) -> bool {
+
+    if animation^.entry != nil {
+        return true
+    }
+    service := state^.julia_runtime_service
+    if generation != nil && service != nil &&
+        service^.reload_failure_injection == .Candidate_Load {
+        service^.reload_failure_injection = .None
+        return false
+    }
+    target := resolve_animation_load_target(state, generation)
+    if target.callback == nil || target.owner == nil {
+        return false
+    }
+    uuid_buffer: [36]u8
+    stable_id := uuid.to_string(animation^.stable_id, uuid_buffer[:])
+    stable_id_c := strings.clone_to_cstring(stable_id, context.temp_allocator)
+    result := julialib.jl_call4(
+        state^.julia_interface^.invoke_with_exception_diagnostics,
+        target.callback,
+        target.owner,
+        julialib.jl_box_voidpointer(state),
+        julialib.jl_cstr_to_string(stable_id_c))
+    if julialib.jl_exception_occurred() != nil {
+        print_julia_exception("Loading selected animation")
+        return false
+    }
+    if result == nil || julialib.jl_unbox_bool(result) == 0 ||
+        animation^.entry == nil {
+        return false
+    }
+    record_animation_loaded(state, animation, generation)
     return true
 }
 
@@ -579,20 +725,21 @@ run_harness_scenario_task :: proc(data: rawptr) -> bool {
         return false
     }
 
-    harness_module := julialib.jl_get_function(main_module, "EuclidHarnessScenarios")
-    if harness_module == nil {
-        return false
-    }
-
-    scenario := julialib.jl_get_function(
-        cast(^julialib.jl_module_t)harness_module, task_data^.scenario_name)
-    if scenario == nil {
+    callback := julialib.jl_get_function(
+        main_module, "invoke_generation_harness_scenario")
+    service := task_data^.state^.julia_runtime_service
+    if callback == nil || service == nil || service^.runtime_host == nil {
         return false
     }
 
     state_value := julialib.jl_box_voidpointer(task_data^.state)
     step_value := julialib.jl_box_int64(i64(task_data^.step_count))
-    result := julialib.jl_call2(scenario, state_value, step_value)
+    result := julialib.jl_call4(
+        callback,
+        service^.runtime_host,
+        julialib.jl_cstr_to_string(task_data^.scenario_name),
+        state_value,
+        step_value)
     if julialib.jl_exception_occurred() != nil {
         print_julia_exception("harness scenario")
         return false
@@ -630,10 +777,15 @@ find_animation_by_stable_id :: proc(
 //   Restore the current animation selection after a successful script reload.
 restore_current_animation_after_reload :: proc(
     state: ^core.Euclid_General_State,
-    animation_stable_id: uuid.Identifier) -> bool {
+    animation_stable_id: uuid.Identifier,
+    generation: ^julialib.jl_value_t) -> bool {
 
     restored_animation := find_animation_by_stable_id(state, animation_stable_id)
     if restored_animation != nil {
+        if !ensure_animation_entry_loaded_for_generation(
+            state, restored_animation, generation) {
+            return false
+        }
         if !select_animation_programmatically(state, restored_animation) {
             return false
         }
@@ -735,10 +887,10 @@ asset_archive_mtime_current :: proc(
     return archive_mtime == state^.julia_interface^.asset_archive_mod_time_unix_nano
 }
 
-//   Re-extract and re-include packaged assets, rolling back and reporting on failure.
+//   Re-extract packaged assets, rolling back and reporting on failure.
 //
 // Returns:
-//   - true when both the re-extract and the script re-include succeed.
+//   - true when the candidate source tree was refreshed successfully.
 refresh_packaged_assets :: proc(
     state: ^core.Euclid_General_State,
     service: ^Julia_Runtime_Service, archive_mtime: i64) -> bool {
@@ -749,13 +901,49 @@ refresh_packaged_assets :: proc(
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
     }
-    if !include_packaged_script(false) {
-        fmt.eprintln("Julia asset reload skipped: failed to re-include script.jl")
-        mark_julia_reload_failed(service, archive_mtime)
-        record_runtime_reload_event(state, "runtime.reload_rolled_back")
+    return true
+}
+
+//   Construct one generation into a caller-rooted Julia value slot.
+create_julia_runtime_generation :: proc() -> ^julialib.jl_value_t {
+    main_module := resolve_main_module()
+    if main_module == nil {
+        return nil
+    }
+    constructor := julialib.jl_get_function(
+        main_module, "create_euclid_runtime_generation")
+    if constructor == nil {
+        return nil
+    }
+    generation := julialib.jl_call0(constructor)
+    if generation == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("create_euclid_runtime_generation")
+        return nil
+    }
+    return generation
+}
+
+//   Commit one validated candidate as the runtime host's active generation.
+commit_julia_runtime_generation :: proc(
+    service: ^Julia_Runtime_Service,
+    generation: ^julialib.jl_value_t) -> bool {
+
+    main_module := resolve_main_module()
+    if main_module == nil || service == nil || service^.runtime_host == nil ||
+        generation == nil {
         return false
     }
-    return true
+    callback := julialib.jl_get_function(
+        main_module, "commit_euclid_runtime_generation")
+    if callback == nil {
+        return false
+    }
+    result := julialib.jl_call2(callback, service^.runtime_host, generation)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("commit_euclid_runtime_generation")
+        return false
+    }
+    return julialib.jl_unbox_bool(result) != 0
 }
 
 //   Return stable identity for the current non-null animation generation.
@@ -776,25 +964,79 @@ stage_julia_interface_reload :: proc(
     stable_id: uuid.Identifier, has_stable_id: bool) -> bool {
 
     service := state^.julia_runtime_service
-    previous_interface := state^.julia_interface
-    if service != nil {
-        service^.reload_state = .Registering
+    if service == nil || service^.runtime_host == nil {
+        return false
     }
+    service^.reload_state = .Registering
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        fmt.eprintln("Julia asset reload: owner thread has no GC stack")
+        mark_julia_reload_failed(service, archive_mtime)
+        return false
+    }
+    candidate: ^julialib.jl_value_t
+    candidate_frame := Julia_Runtime_Gc_Frame{
+        encoded_root_count = (1 << 2) | 1,
+        previous = gc_stack^,
+        root = rawptr(&candidate),
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&candidate_frame)
+    defer gc_stack^ = candidate_frame.previous
+    candidate = create_julia_runtime_generation()
+    if candidate == nil {
+        fmt.eprintln("Julia asset reload: candidate generation construction failed")
+        mark_julia_reload_failed(service, archive_mtime)
+        return false
+    }
+    return validate_julia_interface_reload(
+        state, archive_mtime, stable_id, has_stable_id, candidate)
+}
+
+//   Register one candidate and restore the prior active UUID when present.
+initialize_and_restore_julia_candidate :: proc(
+    state: ^core.Euclid_General_State, stable_id: uuid.Identifier,
+    has_stable_id: bool, candidate: ^julialib.jl_value_t) -> (bool, bool) {
+    initialized := init_euclid_generation(state, candidate)
+    restored := initialized
+    if initialized && has_stable_id {
+        restored = restore_current_animation_after_reload(
+            state, stable_id, candidate)
+    }
+    return initialized, restored
+}
+
+//   Validate one rooted candidate against the inactive interface and publish on success.
+validate_julia_interface_reload :: proc(
+    state: ^core.Euclid_General_State, archive_mtime: i64,
+    stable_id: uuid.Identifier, has_stable_id: bool,
+    candidate: ^julialib.jl_value_t) -> bool {
+
+    service := state^.julia_runtime_service
+    previous_interface := state^.julia_interface
     staged_interface, staged_slot := julia_interface_staging_slot(state)
     prepare_julia_interface_generation(staged_interface)
     if !julia_interface_handles_valid(staged_interface) {
+        fmt.eprintln("Julia asset reload: stable callback validation failed")
         clean_julia_interface_instance(staged_interface)
         mark_julia_reload_failed(service, archive_mtime)
         return false
     }
     staged_interface^.asset_archive_mod_time_unix_nano = archive_mtime
     state^.julia_interface = staged_interface
-    initialized := init_euclid_scripts(state)
-    restored := initialized
-    if initialized && has_stable_id {
-        restored = restore_current_animation_after_reload(state, stable_id)
-    }
+    initialized, restored := initialize_and_restore_julia_candidate(
+        state, stable_id, has_stable_id, candidate)
     if !initialized || !restored {
+        if !initialized {
+            fmt.eprintln("Julia asset reload: candidate registration failed")
+        } else {
+            fmt.eprintln("Julia asset reload: active animation restoration failed")
+        }
+        rollback_julia_interface_reload(
+            state, previous_interface, staged_interface, service, archive_mtime)
+        return false
+    }
+    if !commit_julia_runtime_generation(service, candidate) {
+        fmt.eprintln("Julia asset reload: candidate commit failed")
         rollback_julia_interface_reload(
             state, previous_interface, staged_interface, service, archive_mtime)
         return false
@@ -811,6 +1053,8 @@ rollback_julia_interface_reload :: proc(
 
     clean_julia_interface_instance(staged_interface)
     state^.julia_interface = previous_interface
+    service^.reload_failure_injection = .None
+    julialib.jl_gc_collect(.JL_GC_FULL)
     _ = reset_current_animation_loop(state)
     mark_julia_reload_failed(service, archive_mtime)
 }
@@ -835,6 +1079,7 @@ publish_julia_interface_reload :: proc(
     state^.ui_runtime.scratchpad_bottom_pinned = true
     if service != nil {
         clear_scratchpad_completion_watermark(service)
+        service^.reload_failure_injection = .None
         service^.runtime_generation += 1
         service^.reload_failed_mtime_unix_nano = 0
         service^.reload_state = .Idle

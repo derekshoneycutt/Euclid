@@ -1,5 +1,10 @@
 module HilbertChapterOneDefinitionPolygon
 
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("1c3ab917-1634-54b1-a83d-e91cf39dd290")
+
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
@@ -560,3 +565,7 @@ function animation_entry(
 end
 
 end
+
+AnimationCatalog.animation(
+    HilbertChapterOneDefinitionPolygon.AnimationId,
+    HilbertChapterOneDefinitionPolygon.animation_entry)

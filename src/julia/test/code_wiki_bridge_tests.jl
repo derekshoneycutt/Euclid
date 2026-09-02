@@ -54,6 +54,12 @@ end
     identity_call = bridge_test_call(parameter_type="AnimationValueIdentityABI")
     @test length(CodeWiki.pair_bridge_records(
         [identity_export], [identity_call])) == 1
+    metadata_export = bridge_test_export(
+        parameter_type="Animation_Descriptor_Abi_Metadata")
+    metadata_call = bridge_test_call(
+        parameter_type="AnimationDescriptorABIMetadata")
+    @test length(CodeWiki.pair_bridge_records(
+        [metadata_export], [metadata_call])) == 1
     @test isempty(CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[], ["ping"]))
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], BridgeJuliaCall[], ["unknown"])
@@ -71,8 +77,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 125
-    @test sum(length(pair.julia_calls) for pair in pairs) == 135
+    @test length(pairs) == 127
+    @test sum(length(pair.julia_calls) for pair in pairs) == 137
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)
