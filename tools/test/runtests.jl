@@ -14,17 +14,36 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
 
 @testset "Euclid tooling" begin
     @testset "native linker platform selection" begin
+        @test BuildConfiguration.harfbuzz_provider("jll", :Linux) == :jll
+        @test BuildConfiguration.harfbuzz_provider("SYSTEM", :Darwin) == :system
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider("", :Linux)
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
+            "invalid", :Linux)
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
+            "system", :Windows)
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Linux) ==
             ["--libs", "--static", "harfbuzz"]
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Darwin) ==
             ["--libs", "harfbuzz"]
         @test_throws ErrorException BuildConfiguration.harfbuzz_pkg_config_arguments(
             :FreeBSD)
+        library_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
+        @test isfile(library_path)
+        @test dirname(library_path) in runtime_dirs
+        @test isempty(BuildConfiguration.native_runtime_dirs(:system))
+        @test BuildConfiguration.native_runtime_environment(:system) === nothing
+        runtime_environment = BuildConfiguration.native_runtime_environment(:jll)
+        @test runtime_environment !== nothing
+        @test all(directory -> occursin(directory, runtime_environment.second),
+            BuildConfiguration.native_runtime_dirs(:jll))
         if Sys.iswindows()
-            dll_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
-            @test basename(dll_path) == "libharfbuzz-0.dll"
-            @test dirname(dll_path) in runtime_dirs
+            @test basename(library_path) == "libharfbuzz-0.dll"
             @test Sys.BINDIR in BuildConfiguration.native_runtime_dirs()
+        else
+            jll_flags = BuildConfiguration.unix_harfbuzz_jll_linker_flags()
+            @test startswith(jll_flags, library_path)
+            @test Sys.isapple() || occursin("-Wl,-rpath-link,", jll_flags)
+            @test !(Sys.BINDIR in BuildConfiguration.native_runtime_dirs())
         end
     end
 

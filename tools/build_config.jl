@@ -1,10 +1,29 @@
 module EuclidBuildConfiguration
 
-export native_linker_flags, native_runtime_dirs, resolve_msvc_tool_path
+export native_linker_flags, native_runtime_dirs, native_runtime_environment,
+    resolve_msvc_tool_path
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
+const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
+
+"""Validate one normalized HarfBuzz dependency provider."""
+function validate_harfbuzz_provider(provider::Symbol, kernel::Symbol=Sys.KERNEL)
+    provider in (:jll, :system) || error(
+        "$HARFBUZZ_PROVIDER_ENV must be either jll or system.")
+    provider == :system && kernel == :Windows && error(
+        "System HarfBuzz linkage is unsupported on Windows.")
+    return provider
+end
+
+"""Resolve and validate the configured HarfBuzz dependency provider."""
+function harfbuzz_provider(
+    value::AbstractString=get(ENV, HARFBUZZ_PROVIDER_ENV, "jll"),
+    kernel::Symbol=Sys.KERNEL)
+    provider = Symbol(lowercase(strip(value)))
+    return validate_harfbuzz_provider(provider, kernel)
+end
 
 """Run one command and return its exit code and captured streams."""
 function capture_command(command::Cmd; cwd::Union{Nothing,String}=nothing)
@@ -136,7 +155,7 @@ function new_import_library(
         strip(result.error_output))
 end
 
-"""Resolve the HarfBuzz JLL DLL and its complete runtime search path."""
+"""Resolve the HarfBuzz JLL library and its complete runtime search path."""
 function harfbuzz_jll_paths()
     snippet = "using HarfBuzz_jll; " *
         "println(HarfBuzz_jll.libharfbuzz_path); " *
@@ -152,8 +171,19 @@ function harfbuzz_jll_paths()
         "Failed to resolve HarfBuzz_jll paths: $(strip(result.error_output))")
     paths = filter(!isempty, String.(strip.(split(result.output, '\n'))))
     !isempty(paths) || error("HarfBuzz_jll returned no artifact paths.")
-    isfile(first(paths)) || error("Missing HarfBuzz DLL at $(first(paths)).")
+    isfile(first(paths)) || error("Missing HarfBuzz library at $(first(paths)).")
     return first(paths), unique(paths[2:end])
+end
+
+"""Resolve Unix linker flags for the HarfBuzz JLL product."""
+function unix_harfbuzz_jll_linker_flags()
+    harfbuzz_library, runtime_dirs = harfbuzz_jll_paths()
+    (Sys.islinux() || Sys.isapple()) || error(
+        "Unix HarfBuzz JLL linkage is unsupported on $(Sys.KERNEL).")
+    if Sys.islinux()
+        return "$harfbuzz_library -Wl,-rpath-link,$(join(runtime_dirs, ':'))"
+    end
+    return harfbuzz_library
 end
 
 """Generate the Windows import libraries required by the Odin application."""
@@ -187,17 +217,37 @@ function windows_linker_flags()
         "/DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib /DEFAULTLIB:harfbuzz.lib"
 end
 
-"""Resolve runtime library search directories for the active platform."""
-function native_runtime_dirs()
-    Sys.iswindows() || return String[]
+"""Resolve runtime library search directories for the active provider."""
+function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
+    provider = validate_harfbuzz_provider(provider)
+    provider == :system && return String[]
     _, paths = harfbuzz_jll_paths()
-    return unique([Sys.BINDIR; paths])
+    return Sys.iswindows() ? unique([Sys.BINDIR; paths]) : paths
 end
 
-"""Resolve complete mandatory native linker flags for the active platform."""
-function native_linker_flags()
+"""Build a host loader environment override from resolved runtime directories."""
+function native_runtime_environment(runtime_dirs::Vector{String})
+    isempty(runtime_dirs) && return nothing
+    variable = Sys.iswindows() ? "PATH" :
+        Sys.isapple() ? "DYLD_FALLBACK_LIBRARY_PATH" : "LD_LIBRARY_PATH"
+    separator = Sys.iswindows() ? ';' : ':'
+    current = get(ENV, variable, "")
+    entries = isempty(current) ? runtime_dirs : [runtime_dirs; current]
+    return variable => join(entries, separator)
+end
+
+"""Build the host loader environment override for one provider."""
+function native_runtime_environment(provider::Symbol=harfbuzz_provider())
+    return native_runtime_environment(native_runtime_dirs(provider))
+end
+
+"""Resolve complete mandatory native linker flags for the active provider."""
+function native_linker_flags(provider::Symbol=harfbuzz_provider())
+    provider = validate_harfbuzz_provider(provider)
     Sys.iswindows() && return windows_linker_flags()
-    return "$(system_harfbuzz_linker_flags()) $(julia_linker_flags())"
+    harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
+        system_harfbuzz_linker_flags()
+    return "$harfbuzz_flags $(julia_linker_flags())"
 end
 
 end

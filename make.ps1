@@ -54,6 +54,16 @@ function Install-JuliaProject ([string]$Project, [string]$Label) {
 function Invoke-Configure {
     Write-Host "--- Configuring Project (Windows / PowerShell) ---" -ForegroundColor Cyan
 
+    $harfbuzzProvider = if ($env:EUCLID_HARFBUZZ_PROVIDER) {
+        $env:EUCLID_HARFBUZZ_PROVIDER.ToLowerInvariant()
+    } else {
+        "jll"
+    }
+    if ($harfbuzzProvider -ne "jll") {
+        Write-Host "System HarfBuzz linkage is unsupported on Windows." -ForegroundColor Red
+        Exit 1
+    }
+
     $ready = $true
     if (-not (Test-Dependency "odin"))  { $ready = $false }
     if (-not (Test-Dependency "julia")) { $ready = $false }

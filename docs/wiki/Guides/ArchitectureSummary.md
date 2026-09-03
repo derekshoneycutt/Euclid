@@ -631,6 +631,14 @@ This policy is strict by design.
   On Windows, `make.ps1` performs the same configure steps natively in PowerShell.
 - `tools/configure.sh` (POSIX sh) verifies the toolchain and installs Julia
   dependencies; `make.jl` is the build/test/vet driver that both wrap.
+- Native HarfBuzz linkage uses `HarfBuzz_jll` by default on Windows, Linux, and
+  macOS. Unix source and distribution builds may set
+  `EUCLID_HARFBUZZ_PROVIDER=system` to use a `pkg-config`-visible system library;
+  system HarfBuzz is unsupported on Windows.
+- Repository-driven JLL development runs provide the artifact runtime search path
+  through the host loader environment. This is distinct from release packaging:
+  future distributable bundles must stage the native closure and use platform-relative
+  loader metadata rather than depending on the Julia artifact store.
 - `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
   Debug builds also publish the package beside `.build/debug/euclid` so the
   isolated executable has a matching runtime closure.

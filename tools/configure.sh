@@ -13,6 +13,15 @@ JULIA_PROJECT="$SCRIPT_DIR/src/julia"
 ANALYSIS_PROJECT="$SCRIPT_DIR/tools/analysis"
 
 success=0
+harfbuzzProvider=${EUCLID_HARFBUZZ_PROVIDER:-jll}
+
+case "$harfbuzzProvider" in
+    jll|system) ;;
+    *)
+        printf "\033[31mEUCLID_HARFBUZZ_PROVIDER must be either jll or system.\033[0m\n" >&2
+        exit 1
+        ;;
+esac
 
 test_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -26,14 +35,16 @@ test_command() {
 # Verify the core build tools are on PATH.
 test_command "odin" || success=1
 test_command "julia" || success=1
-test_command "pkg-config" || success=1
+if [ "$harfbuzzProvider" = "system" ]; then
+    test_command "pkg-config" || success=1
+fi
 
 if [ "$success" -ne 0 ]; then
     printf "\033[31mConfiguration failed! Please install the missing tools.\033[0m\n" >&2
     exit 1
 fi
 
-if ! pkg-config --exists harfbuzz; then
+if [ "$harfbuzzProvider" = "system" ] && ! pkg-config --exists harfbuzz; then
     printf "\033[31mRequired HarfBuzz development package was not found.\033[0m\n" >&2
     if [ "$(uname -s)" = "Darwin" ]; then
         printf "\033[31mInstall it with: brew install harfbuzz pkg-config\033[0m\n" >&2

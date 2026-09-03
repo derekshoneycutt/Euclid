@@ -3,7 +3,7 @@
 module EuclidTestRunner
 
 include("build_config.jl")
-using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs
+using .EuclidBuildConfiguration: native_linker_flags, native_runtime_environment
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_EXE = Base.julia_cmd().exec[1]
@@ -143,10 +143,9 @@ end
 function run_odin_suite(suite::SuiteDefinition)
     command = Cmd(Cmd(odin_test_command(native_linker_flags()));
         dir=REPOSITORY_ROOT)
-    if Sys.iswindows()
-        runtime_path = join(
-            [native_runtime_dirs(); get(ENV, "PATH", "")], ';')
-        command = addenv(command, "PATH" => runtime_path)
+    runtime_environment = native_runtime_environment()
+    if runtime_environment !== nothing
+        command = addenv(command, runtime_environment)
     end
     result = capture_command(command)
     test_count = reported_odin_count(result.output)

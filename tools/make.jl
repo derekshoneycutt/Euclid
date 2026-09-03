@@ -68,7 +68,7 @@ using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
-    resolve_msvc_tool_path
+    native_runtime_environment, resolve_msvc_tool_path
 
 struct BuildCommand
     action::Symbol
@@ -676,9 +676,9 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
         "--scenario=scenario_point_after_eight_steps",
     ]
     harness_command = Cmd([HARNESS_BINARY_PATH; harness_args...])
-    if is_windows() && !isempty(runtime_dirs)
-        runtime_path = join([runtime_dirs; get(ENV, "PATH", "")], ';')
-        harness_command = addenv(harness_command, "PATH" => runtime_path)
+    runtime_environment = native_runtime_environment(runtime_dirs)
+    if runtime_environment !== nothing
+        harness_command = addenv(harness_command, runtime_environment)
     end
     harness_result = run_command(harness_command; cwd=SCRIPT_DIR)
     harness_result.exit_code == 0 || error("Harness execution failed.")
@@ -871,9 +871,9 @@ function run_binary(
         error("Error: Built binary not found in bin/.")
     end
 
-    if is_windows() && !isempty(runtime_dirs)
-        new_path = join([runtime_dirs; get(ENV, "PATH", "")], ';')
-        withenv("PATH" => new_path) do
+    runtime_environment = native_runtime_environment(runtime_dirs)
+    if runtime_environment !== nothing
+        withenv(runtime_environment) do
             arguments = debug_application_arguments(run_args, debug)
             result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
                 if result.exit_code != 0
