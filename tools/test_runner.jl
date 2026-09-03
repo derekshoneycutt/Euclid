@@ -3,7 +3,7 @@
 module EuclidTestRunner
 
 include("build_config.jl")
-using .EuclidBuildConfiguration: native_linker_flags
+using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_EXE = Base.julia_cmd().exec[1]
@@ -45,7 +45,11 @@ function odin_test_command(linker_flags::String)
         "test",
         joinpath(REPOSITORY_ROOT, "src"),
         "-all-packages",
+        "-define:ODIN_TEST_THREADS=1",
     ]
+    if Sys.iswindows()
+        linker_flags = strip(string(linker_flags, " /STACK:8388608"))
+    end
     if !Sys.iswindows() && !Sys.isapple()
         linker_flags = strip(string(
             linker_flags,
@@ -139,6 +143,11 @@ end
 function run_odin_suite(suite::SuiteDefinition)
     command = Cmd(Cmd(odin_test_command(native_linker_flags()));
         dir=REPOSITORY_ROOT)
+    if Sys.iswindows()
+        runtime_path = join(
+            [native_runtime_dirs(); get(ENV, "PATH", "")], ';')
+        command = addenv(command, "PATH" => runtime_path)
+    end
     result = capture_command(command)
     test_count = reported_odin_count(result.output)
     status = odin_suite_status(result.exit_code, test_count)

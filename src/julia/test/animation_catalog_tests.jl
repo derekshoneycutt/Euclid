@@ -35,6 +35,7 @@ end
     @test_throws ArgumentError validate_catalog([descriptors; descriptors[1]])
     @test_throws ArgumentError validate_catalog(test_catalog(path="../outside.jl"))
     @test_throws ArgumentError validate_catalog(test_catalog(path="/tmp/outside.jl"))
+    @test_throws ArgumentError validate_catalog(test_catalog(path="test\\outside.jl"))
     missing_parent = AnimationDescriptor(CatalogLeafId, uuid4(), "Leaf", 0,
         LeafNode, "test/fixtures/lazy_animation.jl")
     @test_throws ArgumentError validate_catalog([missing_parent])

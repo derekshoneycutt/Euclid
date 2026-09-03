@@ -45,7 +45,7 @@ function _implementation_path_is_safe(path::String)
     components = split(path, '/')
     any(component -> isempty(component) || component == "." || component == "..",
         components) && return false
-    return normpath(path) == path
+    return replace(normpath(path), '\\' => '/') == path
 end
 
 """Validate and index one descriptor before hierarchy validation."""

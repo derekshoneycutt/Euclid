@@ -25,6 +25,18 @@ using Test
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
 const TEST_REPL_RUNTIME = Scratchpad.create_runtime_state()
 
+"""Provide a no-op host callback for Julia-only REPL tests."""
+function test_hide_point(
+    _state::Ptr{Cvoid},
+    _visible::Cint)::Cvoid
+    return nothing
+end
+
+if Sys.iswindows()
+    OdinJuliaBridge.HOST_SYMBOL_CACHE[:hide_point] =
+        @cfunction(test_hide_point, Cvoid, (Ptr{Cvoid}, Cint))
+end
+
 @testset "EuclidRepl validation" begin
     @test_throws ArgumentError EuclidRepl.validated_duration(0f0)
     @test_throws ArgumentError EuclidRepl.validated_duration(-1f0)

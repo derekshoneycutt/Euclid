@@ -1459,7 +1459,7 @@ create_julia_runtime_host :: proc(
         return nil
     }
     constructor := julialib.jl_get_function(
-        julialib.jl_main_module, "create_euclid_runtime_host")
+        julialib.julia_main_module(), "create_euclid_runtime_host")
     if constructor == nil {
         return nil
     }
@@ -1508,7 +1508,7 @@ initialize_julia_runtime_host :: proc(
     }
     julialib.jl_gc_collect(.JL_GC_FULL)
     validator := julialib.jl_get_function(
-        julialib.jl_main_module, "is_euclid_runtime_host")
+        julialib.julia_main_module(), "is_euclid_runtime_host")
     valid_host := validator != nil &&
         julialib.jl_unbox_bool(julialib.jl_call1(validator, host^.runtime)) != 0 &&
         julialib.jl_exception_occurred() == nil

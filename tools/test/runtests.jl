@@ -20,6 +20,12 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
             ["--libs", "harfbuzz"]
         @test_throws ErrorException BuildConfiguration.harfbuzz_pkg_config_arguments(
             :FreeBSD)
+        if Sys.iswindows()
+            dll_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
+            @test basename(dll_path) == "libharfbuzz-0.dll"
+            @test dirname(dll_path) in runtime_dirs
+            @test Sys.BINDIR in BuildConfiguration.native_runtime_dirs()
+        end
     end
 
     @testset "repository driver commands" begin
@@ -170,7 +176,7 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
         @test Verification.resolve_report_path("analysis.md") ==
             joinpath(Verification.REPOSITORY_ROOT, "analysis.md")
         @test Verification.resolve_report_path("/tmp/analysis.md") ==
-            "/tmp/analysis.md"
+            normpath("/tmp/analysis.md")
         @test Verification.resolve_report_path(nothing) === nothing
         @test Verification.resolve_settings_path("custom.jl") ==
             joinpath(Verification.REPOSITORY_ROOT, "custom.jl")

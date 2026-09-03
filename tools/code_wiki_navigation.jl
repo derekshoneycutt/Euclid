@@ -219,8 +219,9 @@ end
 function assign_package_page_paths(packages::Vector{DocumentationPackage})
     paths = Dict{String,String}()
     ordered = sort(packages; by=package -> package.stable_id)
-    base_paths = [joinpath("Code", package_language_directory(package),
-        wiki_slug(package.display_name) * ".md") for package in ordered]
+    base_paths = [normalize_repo_path(joinpath(
+        "Code", package_language_directory(package),
+        wiki_slug(package.display_name) * ".md")) for package in ordered]
     for (package, base_path) in zip(ordered, base_paths)
         duplicates = count(==(base_path), base_paths)
         suffix = duplicates == 1 ? "" : "-" * wiki_slug(package.stable_id)

@@ -67,7 +67,8 @@ using Libdl
 using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
-using .EuclidBuildConfiguration: native_linker_flags
+using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
+    resolve_msvc_tool_path
 
 struct BuildCommand
     action::Symbol
@@ -272,101 +273,6 @@ function parse_build_command(invocation::DriverInvocation)
         return BuildCommand(invocation.action, false, false, String[])
     end
     return parse_mode_build_command(invocation)
-end
-
-"""Resolve the full path to `vswhere.exe` on Windows."""
-function get_vswhere_path()
-    program_files_x86 = get(ENV, "ProgramFiles(x86)", nothing)
-    if program_files_x86 === nothing
-        error("Error: ProgramFiles(x86) environment variable is missing.")
-    end
-
-    vswhere_path = joinpath(
-        program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
-    if !isfile(vswhere_path)
-        error("Error: Could not locate vswhere.exe. Install Visual Studio Build Tools.")
-    end
-
-    return vswhere_path
-end
-
-"""Resolve an MSVC tool path using `vswhere` and a `-find` glob pattern."""
-function resolve_msvc_tool_path(find_glob::String, error_message::String)
-    vswhere_path = get_vswhere_path()
-    result = run_command(
-        Cmd([
-            vswhere_path,
-            "-latest",
-            "-products",
-            "*",
-            "-requires",
-            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-            "-find",
-            find_glob,
-        ]),
-        capture_output=true)
-
-    candidate = split(chomp(result.stdout), '\n')
-    if result.exit_code != 0 || isempty(filter(!isempty, candidate))
-        error(error_message)
-    end
-
-    path = strip(first(filter(!isempty, candidate)))
-    if !isfile(path)
-        error(error_message)
-    end
-
-    return path
-end
-
-"""
-Generate a Windows import library from a DLL.
-
-This creates a DEF file with `gendef` and then invokes `lib.exe` to produce the `.lib`.
-"""
-function new_import_library(
-    dll_path::String,
-    def_path::String,
-    out_lib_path::String,
-    dll_name::String,
-    lib_exe_path::String,
-    strip_data_markers::Bool=false)
-    needs_rebuild = !isfile(out_lib_path)
-    if !needs_rebuild && stat(dll_path).mtime > stat(out_lib_path).mtime
-        needs_rebuild = true
-    end
-
-    if !needs_rebuild
-        return
-    end
-
-    mkpath(dirname(def_path))
-
-    gendef_result = run_command(Cmd(["gendef", dll_path]); cwd=dirname(def_path))
-    if gendef_result.exit_code != 0 || !isfile(def_path)
-        error("Error: Failed to generate DEF file for $dll_name")
-    end
-
-    if strip_data_markers
-        lines = readlines(def_path)
-        normalized = replace.(lines, r" DATA$" => "")
-        open(def_path, "w") do io
-            write(io, join(normalized, "\n") * "\n")
-        end
-    end
-
-    lib_result = run_command(
-        Cmd([
-            lib_exe_path,
-            "/def:$def_path",
-            "/machine:x64",
-            "/name:$dll_name",
-            "/out:$out_lib_path",
-        ]),
-        cwd=dirname(def_path))
-    if lib_result.exit_code != 0 || !isfile(out_lib_path)
-        error("Error: Failed to generate import library for $dll_name")
-    end
 end
 
 """Parse runtime dependency tool output into a unique list of library names."""
@@ -742,7 +648,7 @@ function report_odin_build_failure(build_result::CommandResult)
 end
 
 """Build and run the deterministic headless harness target."""
-function run_harness(julia_linker_flags::String)
+function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
     println("Running headless harness...")
     mkpath(BIN_DIR)
 
@@ -769,8 +675,12 @@ function run_harness(julia_linker_flags::String)
         "--trace-output=" * HARNESS_TRACE_PATH,
         "--scenario=scenario_point_after_eight_steps",
     ]
-    harness_result = run_command(
-        Cmd([HARNESS_BINARY_PATH; harness_args...]); cwd=SCRIPT_DIR)
+    harness_command = Cmd([HARNESS_BINARY_PATH; harness_args...])
+    if is_windows() && !isempty(runtime_dirs)
+        runtime_path = join([runtime_dirs; get(ENV, "PATH", "")], ';')
+        harness_command = addenv(harness_command, "PATH" => runtime_path)
+    end
+    harness_result = run_command(harness_command; cwd=SCRIPT_DIR)
     harness_result.exit_code == 0 || error("Harness execution failed.")
     isfile(HARNESS_TRACE_PATH) || error(
         "Harness did not produce a semantic trace artifact.")
@@ -944,78 +854,30 @@ function remove_stale_julia_sysimage()
     end
 end
 
-"""Resolve Julia's runtime directory for Windows DLL loading."""
-function resolve_julia_bindir()
-    julia_bindir_result = run_command(
-        Cmd([JULIA_EXE, "-e", "print(Sys.BINDIR)"]); capture_output=true)
-    if julia_bindir_result.exit_code != 0 || isempty(strip(julia_bindir_result.stdout))
-        error("Error: Could not resolve Julia Sys.BINDIR.")
-    end
-    return strip(julia_bindir_result.stdout)
-end
-
-"""Resolve native linker flags and optional runtime bindir data."""
+"""Resolve native linker flags and runtime library directories."""
 function resolve_native_linker_flags(do_build::Bool)
     if !do_build
-        return "", nothing
+        return "", native_runtime_dirs()
     end
-    return is_windows() ?
-        windows_julia_linker_flags() : (native_linker_flags(), nothing)
-end
-
-"""Resolve Julia linker flags on Windows by generating import libraries."""
-function windows_julia_linker_flags()
-    julia_bindir = resolve_julia_bindir()
-    libjulia_dll = joinpath(julia_bindir, "libjulia.dll")
-    libopenlibm_dll = joinpath(julia_bindir, "libopenlibm.dll")
-    if !isfile(libjulia_dll)
-        error("Error: Missing Julia runtime DLL at $libjulia_dll")
-    end
-    if !isfile(libopenlibm_dll)
-        error("Error: Missing Julia runtime DLL at $libopenlibm_dll")
-    end
-
-    import_lib_dir::String = joinpath(BIN_DIR, ".julia_import_libs")
-    mkpath(import_lib_dir)
-
-    lib_exe_path = String(resolve_msvc_tool_path(
-        "VC/Tools/MSVC/**/bin/Hostx64/x64/lib.exe",
-        "Error: Could not locate MSVC lib.exe. Install the C++ Build Tools workload."))
-
-    new_import_library(
-        libjulia_dll,
-        joinpath(import_lib_dir, "libjulia.def"),
-        joinpath(import_lib_dir, "julia.lib"),
-        "libjulia.dll",
-        lib_exe_path,
-        true)
-    new_import_library(
-        libopenlibm_dll,
-        joinpath(import_lib_dir, "libopenlibm.def"),
-        joinpath(import_lib_dir, "openlibm.lib"),
-        "libopenlibm.dll",
-        lib_exe_path)
-
-    return "/LIBPATH:$import_lib_dir /DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib",
-        julia_bindir
+    return native_linker_flags(), native_runtime_dirs()
 end
 
 """Run the built Euclid binary with optional trailing run arguments."""
 function run_binary(
-    run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString},
+    run_args::Vector{String}, runtime_dirs::Vector{String},
     debug::Bool=false)
     binary = app_binary_path(debug)
     if !isfile(binary)
         error("Error: Built binary not found in bin/.")
     end
 
-    if is_windows() && julia_bindir !== nothing
-        new_path = string(julia_bindir, ';', get(ENV, "PATH", ""))
+    if is_windows() && !isempty(runtime_dirs)
+        new_path = join([runtime_dirs; get(ENV, "PATH", "")], ';')
         withenv("PATH" => new_path) do
             arguments = debug_application_arguments(run_args, debug)
             result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
-            if result.exit_code != 0
-                error("Run step failed.")
+                if result.exit_code != 0
+                    error("Run step failed with exit code $(result.exit_code).")
             end
         end
         return
@@ -1023,8 +885,8 @@ function run_binary(
 
     arguments = debug_application_arguments(run_args, debug)
     result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
-    if result.exit_code != 0
-        error("Run step failed.")
+        if result.exit_code != 0
+            error("Run step failed with exit code $(result.exit_code).")
     end
 end
 
@@ -1040,7 +902,7 @@ function clean_build_files()
         JULIA_SYSIMAGE_PATH,
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
-        joinpath(BIN_DIR, ".julia_import_libs"),
+        joinpath(BIN_DIR, ".native_import_libs"),
         WIKI_ARTIFACT_DIR,
         joinpath(SCRIPT_DIR, ".build", "analysis"),
         joinpath(SCRIPT_DIR, ".build", "debug"),
@@ -1207,25 +1069,22 @@ end
 
 """Run the harness and application run steps after a passing gate."""
 function run_plan_validation(
-    command::BuildCommand, julia_flags::String, julia_bindir)
-    command.action == :harness && run_harness(julia_flags)
+    command::BuildCommand, julia_flags::String, runtime_dirs::Vector{String})
+    command.action == :harness && run_harness(julia_flags, runtime_dirs)
     command.action in (:run, :run_only) && run_binary(
-        command.arguments, julia_bindir, command.debug)
+        command.arguments, runtime_dirs, command.debug)
     return nothing
 end
 
 """Prepare linker, sysimage, and verification dependencies for a build plan."""
 function prepare_build_plan(command::BuildCommand, plan::BuildPlanToggles)
-    julia_flags, julia_bindir = resolve_native_linker_flags(
+    julia_flags, runtime_dirs = resolve_native_linker_flags(
         plan.do_build || command.action == :harness)
-    if command.action in (:run, :run_only) && is_windows() && julia_bindir === nothing
-        julia_bindir = resolve_julia_bindir()
-    end
     if (plan.do_build || plan.do_assets) && command.action != :sysimage
         remove_stale_julia_sysimage()
     end
     plan.do_vet && load_verification_adapter()
-    return julia_flags, julia_bindir
+    return julia_flags, runtime_dirs
 end
 
 """Translate a check or stats command into analyzer command arguments."""
@@ -1295,7 +1154,7 @@ end
 
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
-    julia_flags, julia_bindir = prepare_build_plan(command, plan)
+    julia_flags, runtime_dirs = prepare_build_plan(command, plan)
     build_result, build_elapsed_ns = run_plan_build(command, plan, julia_flags)
     build_ok = build_result === nothing || build_result.exit_code == 0
     run_plan_packaging(command, plan, build_ok)
@@ -1304,7 +1163,7 @@ function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     gate_status == 0 || return gate_status
     build_ok || return 1
 
-    run_plan_validation(command, julia_flags, julia_bindir)
+    run_plan_validation(command, julia_flags, runtime_dirs)
     return 0
 end
 

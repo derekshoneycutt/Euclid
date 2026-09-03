@@ -40,6 +40,10 @@ Fedora, `libharfbuzz-dev` on Debian/Ubuntu, or run
 `brew install harfbuzz pkg-config` on macOS. Other macOS package providers work when
 their HarfBuzz installation is visible to `pkg-config`.
 
+Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++
+Build Tools. HarfBuzz and its runtime dependencies are supplied by `HarfBuzz_jll`
+from the Julia project; no separate HarfBuzz installation is required.
+
 Clone the git repository, then build. The conventional `make` entry point configures
 automatically the first time, verifying the toolchain and installing the required
 Julia packages before building through `make.jl`.
@@ -108,8 +112,8 @@ same steps natively in PowerShell; it additionally verifies the MSVC environment
 (or `cl.exe`) and `gendef`.
 
 Additionally, on Linux you might need to build the STB font vendor packages in Odin to get
-an appropriate build. This can typically be done by locating the Odin directory and running
-something like this:
+an appropriate build. This can typically be done by locating the Odin directory and
+running something like this:
 
 ```sh
 sudo /usr/lib64/odin/vendor/stb/src/build_stb.sh

@@ -53,7 +53,7 @@ initiate_julia :: proc() -> bool {
     if !project_ok {
         return false
     }
-    julialib.jl_options.project = strings.clone_to_cstring(
+    julialib.julia_options()^.project = strings.clone_to_cstring(
         project_path, context.temp_allocator)
 
     image_path, has_image := resolve_julia_sysimage_path()

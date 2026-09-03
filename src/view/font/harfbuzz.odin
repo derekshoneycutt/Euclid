@@ -4,7 +4,11 @@ import "../../core"
 
 import "core:c"
 
-foreign import harfbuzz "system:harfbuzz"
+when ODIN_OS == .Windows {
+    foreign import harfbuzz "system:harfbuzz.lib"
+} else {
+    foreign import harfbuzz "system:harfbuzz"
+}
 
 // Opaque HarfBuzz font-data storage referenced by a face.
 Harfbuzz_Blob :: struct {}
