@@ -23,10 +23,10 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: You support LaTeX?](#q-you-support-latex)
     1. [Q: Any performance hacks for users?](#q-any-performance-hacks-for-users)
     1. [Q: Why 2 languages?](#q-why-2-languages)
-    1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
+    1. [Q: Are there any more build and verification options?](#q-are-there-any-more-build-and-verification-options)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
     1. [Q: What's this about hot-reload?](#q-whats-this-about-hot-reload)
-    1. [Q: What is all this output in the make vet output?](#q-what-is-all-this-output-in-the-make-vet-output)
+    1. [Q: What is all this verification output?](#q-what-is-all-this-verification-output)
 
 <p align="center">
 <img src="./screen.gif" >
@@ -34,86 +34,87 @@ The core application is coded in Odin, with Raylib used for rendering.
 
 ## Building from Source
 
-Linux and macOS source builds require Odin and Julia, with each tool available on
-PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the Julia project
-by default, so a separate HarfBuzz installation is not required.
+Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
+available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
+Julia project by default, so a separate HarfBuzz installation is not required.
 
 Unix source and distribution builds may intentionally select system HarfBuzz with
 `EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
 HarfBuzz development package: install `harfbuzz-devel` on Fedora,
 `libharfbuzz-dev` on Debian/Ubuntu, or `harfbuzz` and `pkg-config` through Homebrew
-on macOS. Re-run `make configure` after changing providers so prerequisites are
-checked for the selected mode.
+on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mode.
 
 Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++
 Build Tools. Windows supports only the default `HarfBuzz_jll` provider.
 
-Clone the git repository, then build. The conventional `make` entry point configures
-automatically the first time, verifying the toolchain and installing the required
-Julia packages before building through `make.jl`.
+Clone the repository, configure one preset, then build it. CMake verifies the
+toolchain and bootstraps the required Julia environments before invoking the
+project-specific Julia driver.
 
-### Linux / macOS (shell + Makefile)
+### Configure and build
 
 ```bash
 git clone https://github.com/derekshoneycutt/Euclid.git
 cd Euclid
-make            # configure (first run) + build
-make run        # build and run the application
+cmake --preset default
+cmake --build --preset default
+cmake --build --preset default --target run
 ```
 
-### Windows (PowerShell + make.ps1)
+The same commands work from Unix shells and PowerShell. Presets keep CMake metadata
+isolated under `.build/cmake/` while preserving Euclid's existing outputs under
+`bin/` and `.build/debug/`.
 
-Windows does not ship a standard `make`, so the same shortcuts are provided by
-`make.ps1`:
-
-```powershell
-git clone https://github.com/derekshoneycutt/Euclid.git
-cd Euclid
-.\make.ps1            # configure (first run) + build
-.\make.ps1 run        # build and run the application
-```
-
-### Driving the driver directly
-
-Prefer to call the build driver yourself? Configure first through the entry
-point for your platform, then invoke `make.jl`:
+### Presets
 
 ```bash
-make configure    # or: .\make.ps1 configure
-julia tools/make.jl build
-# To run immediately: julia tools/make.jl run
+cmake --preset default
+cmake --preset debug
+cmake --preset strict
+cmake --preset system-harfbuzz  # Unix only
 ```
 
-### Build targets
+Build the matching configuration with `cmake --build --preset PRESET`. The debug
+preset retains synchronized diagnostics and `.build/debug/` outputs. The strict
+preset enables Odin vet, strict style, disallowed `do`, and warnings-as-errors.
 
-The `Makefile` (Linux/macOS) and `make.ps1` (Windows) are thin, conventional
-wrappers over the same commands — all real logic lives in `tools/configure.sh`,
-`make.ps1`, and `tools/make.jl`. Both entry points configure once (tracked by a
-`.configure-done` sentinel) before any build target, so the first bare build just
-works after cloning. The targets are identical across both entry points:
+### Build and test targets
 
-| Linux / macOS | Windows | What it runs |
-| --- | --- | --- |
-| `make` / `make build` | `.\make.ps1` | configure (once), then `julia tools/make.jl build` |
-| `make run` | `.\make.ps1 run` | `julia tools/make.jl run` |
-| `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl test` (the verification baseline) |
-| `make vet` | `.\make.ps1 vet` | `julia tools/make.jl vet` |
-| `make sysimage` | `.\make.ps1 sysimage` | `julia tools/make.jl sysimage` |
-| `make harness` | `.\make.ps1 harness` | `julia tools/make.jl harness` |
-| `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl wiki` |
-| `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl check-wiki` |
-| `make configure` | `.\make.ps1 configure` | re-run configure |
-| `make clean` | `.\make.ps1 clean` | `julia tools/make.jl clean` (also clears the configure sentinel) |
-| `make help` | `.\make.ps1 help` | `julia tools/make.jl help` |
+```bash
+cmake --build --preset default --target assets
+cmake --build --preset default --target unit
+cmake --build --preset default --target vet
+cmake --build --preset default --target check
+cmake --build --preset default --target harness
+cmake --build --preset default --target sysimage
+cmake --build --preset default --target wiki
+cmake --build --preset default --target check-wiki
+```
 
-### Configure
+`check` is the canonical complete verification gate. CMake reserves `test` for
+CTest's selectable suites:
 
-On Linux and macOS, the Makefile runs `tools/configure.sh`, a POSIX sh script
-that checks `odin` and `julia` are on PATH, requires the `tools/analysis`
-submodule to be initialized, and instantiates the application (`src/julia`) and
-analysis (`tools/analysis`) Julia projects. On Windows, `make.ps1` performs the
-same steps natively in PowerShell; it additionally verifies the MSVC environment
-(or `cl.exe`) and `gendef`.
+```bash
+ctest --preset unit
+ctest --preset all
+```
+
+The generator-owned `clean` target removes CMake-known outputs. The `clean-all`
+target invokes Euclid's comprehensive generated-artifact cleanup without deleting
+the active `.build/cmake/` trees.
+
+### Parameterized commands
+
+Keep using the Julia driver directly when an operation takes paths or frequently
+changing options:
+
+```bash
+julia tools/make.jl check src/dynview
+julia tools/make.jl stats src/main.odin --line=310
+julia tools/make.jl evidence capabilities
+julia tools/make.jl unit odin
+julia tools/make.jl run --debug -- --diagnostics=.build/debug/euclid.log
+```
 
 Additionally, on Linux you might need to build the STB font vendor packages in Odin to get
 an appropriate build. This can typically be done by locating the Odin directory and
@@ -339,10 +340,10 @@ project, but it is actually quite an enjoyable programming experience between th
 They are different languages, but both offer language-level tools for the kind of maths
 used in this project that just make it an enjoyable experience!
 
-### Q: Are there any more options with the make scripts?
+### Q: Are there any more build and verification options?
 
-The build driver (`tools/make.jl`, normally reached through `make` or `make.ps1`)
-provides focused commands when the simple targets above are not enough.
+The Julia build driver provides focused parameterized commands when the CMake
+targets above are not enough.
 
 ```text
 Usage: julia tools/make.jl COMMAND [ARGUMENTS]
@@ -430,7 +431,7 @@ Animation content remains dynamically loaded when using a sysimage. Changes to b
 modules such as the bridge wrappers, LaTeX compiler, geometry helpers, animation helpers,
 or Scratchpad require rebuilding the sysimage and restarting Euclid.
 
-### Q: What is all this output in the make vet output?
+### Q: What is all this verification output?
 
 Great question! A lot of this only makes any sense if you are really into the software
 engineering stuff. We perform several checks in the vet mode to try and improve code
@@ -438,15 +439,15 @@ quality and performance.
 
 **FIRST**: Analysis runs through the OdinJuliaAnalysis engine in the
 `tools/analysis` submodule, with Euclid policy in `tools/analysis_settings.jl`.
-Configure (`tools/configure.sh` via the Makefile, or `make.ps1` on Windows)
-instantiates the analyzer's own Julia project (`tools/analysis/Project.toml`), so
-nothing extra is installed into Julia's default environment (see
-[Building from Source](#building-from-source)). The submodule must be initialized
-first:
+The CMake bootstrap target instantiates the analyzer's own Julia project
+(`tools/analysis/Project.toml`), so nothing extra is installed into Julia's
+default environment (see [Building from Source](#building-from-source)). The
+submodule must be initialized first:
 
 ```bash
 git submodule update --init --recursive
-make configure
+cmake --preset default
+cmake --build --preset default --target configure
 ```
 
 The application build itself uses standard parameters. Compiler-validation flags

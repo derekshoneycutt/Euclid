@@ -696,7 +696,7 @@ function load_verification_adapter()
         joinpath(SCRIPT_DIR, "tools", "analysis"))
     isfile(joinpath(analysis_project, "Project.toml")) || error(
         "Analysis submodule is not initialized. " *
-        "Run `git submodule update --init --recursive`, then `make configure`.")
+        "Run `git submodule update --init --recursive`, then `cmake --preset default`.")
     include(verify_path)
     return Base.invokelatest(getglobal, Main, :EuclidVerification)
 end

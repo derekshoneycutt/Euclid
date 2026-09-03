@@ -625,12 +625,14 @@ This policy is strict by design.
 
 ## Build and Packaging Model
 
-- The `Makefile` is the standard entry point on systems that support `make`. It runs
-  `tools/configure.sh` once (toolchain check + Julia dependency install) and then
-  drives `make.jl`. Bare `make` builds; `make test` runs the full verification gate.
-  On Windows, `make.ps1` performs the same configure steps natively in PowerShell.
-- `tools/configure.sh` (POSIX sh) verifies the toolchain and installs Julia
-  dependencies; `make.jl` is the build/test/vet driver that both wrap.
+- CMake 3.28 presets are the cross-platform orchestration entry point. CMake validates
+  tools and options, bootstraps Julia environments through dependency-aware build-tree
+  stamps, exposes stable targets, and registers suite-level CTest tests.
+- `tools/make.jl` remains the domain-specific build, test, analysis, evidence, asset,
+  and reporting driver. Parameterized path and report operations invoke it directly;
+  CMake does not reimplement those policies.
+- The CMake `check` target runs the canonical complete verification gate. CMake's
+  reserved `test` target runs registered CTest suites instead.
 - Native HarfBuzz linkage uses `HarfBuzz_jll` by default on Windows, Linux, and
   macOS. Unix source and distribution builds may set
   `EUCLID_HARFBUZZ_PROVIDER=system` to use a `pkg-config`-visible system library;

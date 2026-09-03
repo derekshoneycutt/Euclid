@@ -35,7 +35,7 @@ Normative language and enforcement labels:
 | **MUST** | Required. A violation blocks acceptance unless this document names an exception. |
 | **SHOULD** | Strong default. Deviations require a concrete readability or correctness reason. |
 | **MAY** | Optional and context-dependent. |
-| **Automated** | Checked by `make test` (the `julia make.jl -vt` gate), compiler flags, tests, or vet analysis. |
+| **Automated** | Checked by the CMake `check` target, compiler flags, tests, or vet analysis. |
 | **Review** | Checked during code review because reliable automation is not yet available. |
 
 ### Living Automated Policy
@@ -90,8 +90,7 @@ numeric width is part of the contract.
 
 Before marking work complete, verify all items below:
 
-- Build + vet + tests run with `make test` (the standard Makefile path; equivalently
-  `julia make.jl -vt`).
+- Build + vet + tests run with the CMake `check` target.
 - No hidden per-frame allocation growth in host-side hot paths.
 - Odin and Julia bridge changes are symmetric and documented.
 - Ownership is explicit: who allocates, mutates, and frees.
@@ -107,18 +106,17 @@ Before marking work complete, verify all items below:
 
 ## Verification Gate
 
-Before work is complete, run the standard Makefile target:
+Before work is complete, run the canonical CMake target:
 
 ```sh
-make test
+cmake --build --preset default --target check
 ```
 
-`make test` is the preferred path on systems that support `make`. It runs
-`tools/configure.sh` once (verifying the toolchain and installing Julia dependencies)
-and then the full driver gate, equivalent to `julia make.jl -vt`. `make check` is an
-alias.
+The target bootstraps configured Julia dependencies and invokes the full Julia driver
+gate. CMake's reserved `test` target and `ctest` run selectable suites; they do not
+replace the canonical complete gate.
 
-`make vet` alone is insufficient because it omits tests. Running tests alone is
+The `vet` target alone is insufficient because it omits tests. Running tests alone is
 insufficient because it omits the build and repository analysis. Do not report the
 combined gate as passing when a phase was skipped.
 

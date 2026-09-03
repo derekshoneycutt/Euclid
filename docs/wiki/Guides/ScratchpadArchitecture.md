@@ -630,14 +630,14 @@ Odin tests exercise:
 - incomplete-submit newline insertion;
 - terminal geometry, UTF-8 caret behavior, scrolling, and style integration.
 
-The complete repository verification gate is the standard Makefile target:
+The complete repository verification gate is:
 
 ```sh
-make test
+cmake --preset default
+cmake --build --preset default --target check
 ```
 
-This runs the validated build, vet analysis, and all tests (equivalent to
-`julia make.jl -vt`).
+This runs the validated build, repository analysis, and all tests.
 
 ## Change Guide
 

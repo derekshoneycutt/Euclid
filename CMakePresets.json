@@ -1,0 +1,96 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Euclid default",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/.build/cmake/default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "EUCLID_HARFBUZZ_PROVIDER": "JLL",
+        "EUCLID_ODIN_DEBUG": false,
+        "EUCLID_ODIN_STRICT": false
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Euclid debug",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/.build/cmake/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "EUCLID_ODIN_DEBUG": true,
+        "EUCLID_ODIN_STRICT": false
+      }
+    },
+    {
+      "name": "strict",
+      "displayName": "Euclid strict",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/.build/cmake/strict",
+      "cacheVariables": {
+        "EUCLID_ODIN_DEBUG": false,
+        "EUCLID_ODIN_STRICT": true
+      }
+    },
+    {
+      "name": "system-harfbuzz",
+      "displayName": "Euclid with system HarfBuzz",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/.build/cmake/system-harfbuzz",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "EUCLID_HARFBUZZ_PROVIDER": "SYSTEM"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "strict",
+      "configurePreset": "strict"
+    },
+    {
+      "name": "system-harfbuzz",
+      "configurePreset": "system-harfbuzz"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "unit",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "unit"
+        }
+      }
+    },
+    {
+      "name": "all",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -9,13 +9,13 @@ repository analysis.
 Run this before delivery:
 
 ```sh
-make test
+cmake --preset default
+cmake --build --preset default --target check
 ```
 
-`make test` runs `tools/configure.sh` when needed, then invokes the combined
-build, vet, analysis, and test gate. `make check` is an alias. `make vet` runs
-only the validated build and analysis, so it is not a substitute for `make
-test`.
+The CMake `check` target invokes the combined build, analysis, and test gate.
+The `vet` target runs only the validated build and analysis, so it is not a
+substitute for `check`.
 
 The gate runs:
 
@@ -35,12 +35,13 @@ Keep tests with the code they exercise:
   `src/julia/test/runtests.jl`.
 
 Add focused tests for changed behavior. Use the smallest relevant test while
-developing, then run `make test` before considering the work complete.
+developing, then run the CMake `check` target before considering the work
+complete.
 
 ## Optional Harness
 
-`make harness` builds and runs the headless harness. It is a separate,
-optional deterministic runtime scenario, not part of `make test`. It produces
+The CMake `harness` target builds and runs the headless harness. It is a separate,
+optional deterministic runtime scenario, not part of `check`. It produces
 a semantic trace artifact for that scenario and is useful when changing the
 runtime path it exercises.
 

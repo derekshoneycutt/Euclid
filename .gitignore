@@ -7,9 +7,6 @@ AGENTS.md
 staging_*.md
 staging_*.pdf
 
-# Local configure sentinel written by the Makefile wrapper.
-/.configure-done
-
 # CI-generated Wiki publication artifact. Authored Guides remain tracked.
 /docs/wiki/Code/
 /docs/wiki/Content/Home.md
@@ -18,6 +15,7 @@ staging_*.pdf
 /docs/wiki/_Sidebar.md
 
 # User-specific files
+CMakeUserPresets.json
 *.rsuser
 *.suo
 *.user

@@ -45,10 +45,10 @@ ownership for the entire batch before its first filesystem write.
 `validate_managed_outputs` then rejects missing or stale pages inside each
 declared stale boundary.
 
-`make wiki` replaces `bin/wiki/` with a validated artifact whose repository
-source links are pinned to the generating commit. `make check-wiki` generates
-into a temporary directory and compares every path and byte with `bin/wiki/`
-without modifying the retained artifact.
+The CMake `wiki` target replaces `bin/wiki/` with a validated artifact whose
+repository source links are pinned to the generating commit. The `check-wiki`
+target generates into a temporary directory and compares every path and byte
+with `bin/wiki/` without modifying the retained artifact.
 
 Shared navigation is composed from all manifest sections regardless of which
 producer owns their content. A new section therefore participates in Home and
