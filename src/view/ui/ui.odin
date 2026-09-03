@@ -4,6 +4,8 @@ package ui
 
 import view_core "../core"
 import "../../dynview"
+import dyncompile "../../dynview/compile"
+import dyncore "../../dynview/core"
 import "../../core"
 import "core:fmt"
 
@@ -99,9 +101,9 @@ SURFACE_COLOR :: view_core.SURFACE_COLOR
 SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
 SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 
-DYNVIEW_STYLE_OUTPUT :: dynview.DYNVIEW_STYLE_OUTPUT
-DYNVIEW_STYLE_CUSTOM_FONT :: dynview.DYNVIEW_STYLE_CUSTOM_FONT
-DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dynview.DYNVIEW_STYLE_CUSTOM_FONT_MASK
+DYNVIEW_STYLE_OUTPUT :: dyncore.DYNVIEW_STYLE_OUTPUT
+DYNVIEW_STYLE_CUSTOM_FONT :: dyncore.DYNVIEW_STYLE_CUSTOM_FONT
+DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dyncore.DYNVIEW_STYLE_CUSTOM_FONT_MASK
 
 Mouse_Input_State :: view_core.Mouse_Input_State
 
@@ -130,8 +132,8 @@ prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
     dynview.track_panel(&state^.dynview, text_panel)
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
-    dynview.track_style(&state^.dynview, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
-    return dynview.compile_is_needed(&state^.dynview)
+    dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
+    return dyncompile.compile_is_needed(&state^.dynview)
 }
 
 //   Render all UI panels in baseline layout.

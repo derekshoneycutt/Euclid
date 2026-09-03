@@ -1,7 +1,8 @@
 package ui
 
 import "../../core"
-import "../../dynview"
+import dyncompile "../../dynview/compile"
+import dynlayout "../../dynview/layout"
 import julia "../../bridge"
 import view_core "../core"
 import "../font"
@@ -215,8 +216,8 @@ scratchpad_terminal_layout :: proc(
 
     transcript_height: f32 = TEXT_PADDING
     if len(fallback_text) > 0 {
-        transcript_height = dynview.scratchpad_content_height_or_fallback(&state^.dynview,
-            panel, {
+        transcript_height = dynlayout.scratchpad_content_height_or_fallback(
+            &state^.dynview, panel, {
                 text_padding = TEXT_PADDING,
                 wrap_advance = TEXT_WRAP_ADVANCE,
                 row_height = TEXT_ROW_HEIGHT,
@@ -510,7 +511,7 @@ draw_scratchpad_transcript :: proc(
     terminal_panel: rl.Rectangle,
     mouse_input: Mouse_Input_State) {
 
-    dynview.refresh_scratchpad_copy_targets(&ctx.state.dynview, {
+    dyncompile.refresh_scratchpad_copy_targets(&ctx.state.dynview, {
         panel = terminal_panel,
         scroll_y = ctx.state^.ui_runtime.view_text_scroll_y,
         text_padding = TEXT_PADDING,
@@ -711,12 +712,13 @@ draw_scratchpad_output_and_prompt :: proc(
     mouse_input: Mouse_Input_State) {
 
     output_text_legacy := julia.current_view_snapshot_text(state)
-    output_text := dynview.scratchpad_text_or_fallback(&state.dynview, output_text_legacy)
+    output_text := dyncompile.scratchpad_text_or_fallback(
+        &state.dynview, output_text_legacy)
     panel_ctx := Scratchpad_Panel_Context{state, ui_runtime, text_panel, font}
     layout := scratchpad_terminal_layout(panel_ctx, output_text_legacy,
         state^.ui_runtime.view_text_scroll_y)
     scroll_step :=
-        dynview.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
+        dynlayout.scratchpad_scroll_step_or_fallback(&state.dynview, TEXT_ROW_HEIGHT)
     scratchpad_track_output_length(state, ui_runtime, len(output_text),
         layout.max_scroll)
 

@@ -1,7 +1,8 @@
 package view
 
 import "../core"
-import "../dynview"
+import dyncompile "../dynview/compile"
+import dynmath "../dynview/math"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
@@ -55,7 +56,7 @@ destroy_simulation_executor :: proc(executor: ^Simulation_Executor) {
     if executor^.dynview_task.state != nil {
         runtime := &executor^.dynview_task.state^.dynview
         runtime^.cache_access_state = .Uninitialized
-        dynview.clear_shaped_records(&runtime^.compile_cache)
+        dynmath.clear_shaped_records(&runtime^.compile_cache)
         core.arena_owner_destroy(
             &runtime^.cache_arena)
     }
@@ -126,7 +127,7 @@ compile_dynview_task :: proc(payload: rawptr) -> taskpool.Task_Result {
     runtime := &data^.state^.dynview
     runtime^.cache_access_state = .Worker_Mutable
     runtime^.cache_worker_thread_id = os.get_current_thread_id()
-    dynview.compile_if_needed(
+    dyncompile.compile_if_needed(
         runtime, &runtime^.cache_arena, math_shaping_service(data))
     runtime^.cache_access_state = .Display_Readable
     _ = evidence_session.session_record(
@@ -142,7 +143,7 @@ compile_dynview_task :: proc(payload: rawptr) -> taskpool.Task_Result {
 
 //   Borrow the current capability and task-owned shaping workspaces for one rebuild.
 math_shaping_service :: proc(
-    data: ^Frame_Preparation_Task_Data) -> dynview.Math_Shaping_Service {
+    data: ^Frame_Preparation_Task_Data) -> dynmath.Math_Shaping_Service {
 
     capability := &data^.state^.dynview.math_shaping
     workspace := data^.math_shaping_workspace
@@ -170,8 +171,8 @@ math_shaping_service :: proc(
 //   Query one bounded corner table through the generation-checked capability.
 math_shape_glyph_kern_table :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Kern_Table_Request) ->
-        dynview.Math_Glyph_Kern_Table_Result {
+    request: dynmath.Math_Glyph_Kern_Table_Request) ->
+        dynmath.Math_Glyph_Kern_Table_Result {
 
     result := font.math_shaping_glyph_kern_table(
         cast(^core.Font_Math_Shaping_Capability)user_data,
@@ -183,7 +184,7 @@ math_shape_glyph_kern_table :: proc(
 //   Shape one math site through the generation-checked NewCM capability.
 math_shape_run :: proc(
     user_data: rawptr,
-    request: dynview.Math_Shape_Request) -> dynview.Math_Shape_Result {
+    request: dynmath.Math_Shape_Request) -> dynmath.Math_Shape_Result {
 
     role := font.Math_Shaping_Role.Upright
     if request.italic {
@@ -203,8 +204,8 @@ math_shape_run :: proc(
 //   Query and enrich bounded horizontal variants through the math capability.
 math_shape_horizontal_glyph_variants :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Variants_Request) ->
-        dynview.Math_Glyph_Variants_Result {
+    request: dynmath.Math_Glyph_Variants_Request) ->
+        dynmath.Math_Glyph_Variants_Result {
 
     capability := cast(^core.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_horizontal_variants(
@@ -230,8 +231,8 @@ math_shape_horizontal_glyph_variants :: proc(
 //   Query and enrich one bounded horizontal assembly through the math capability.
 math_shape_horizontal_glyph_assembly :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Assembly_Request) ->
-        dynview.Math_Glyph_Assembly_Result {
+    request: dynmath.Math_Glyph_Assembly_Request) ->
+        dynmath.Math_Glyph_Assembly_Result {
 
     capability := cast(^core.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_horizontal_assembly(
@@ -255,7 +256,7 @@ math_shape_horizontal_glyph_assembly :: proc(
 //   Query complete extents and approved MATH values for one shaped glyph.
 math_shape_glyph_metrics :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Metrics_Request) -> dynview.Math_Glyph_Metrics_Result {
+    request: dynmath.Math_Glyph_Metrics_Request) -> dynmath.Math_Glyph_Metrics_Result {
 
     capability := cast(^core.Font_Math_Shaping_Capability)user_data
     extents, extents_ok := font.math_shaping_glyph_extents(
@@ -270,7 +271,7 @@ math_shape_glyph_metrics :: proc(
 //   Query bounded vertical variants through the generation-checked capability.
 math_shape_glyph_variants :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Variants_Request) -> dynview.Math_Glyph_Variants_Result {
+    request: dynmath.Math_Glyph_Variants_Request) -> dynmath.Math_Glyph_Variants_Result {
 
     result := font.math_shaping_vertical_variants(
         cast(^core.Font_Math_Shaping_Capability)user_data,
@@ -300,7 +301,7 @@ math_shape_glyph_variants :: proc(
 //   Query and enrich one bounded vertical assembly through the math capability.
 math_shape_glyph_assembly :: proc(
     user_data: rawptr,
-    request: dynview.Math_Glyph_Assembly_Request) -> dynview.Math_Glyph_Assembly_Result {
+    request: dynmath.Math_Glyph_Assembly_Request) -> dynmath.Math_Glyph_Assembly_Result {
 
     capability := cast(^core.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_vertical_assembly(

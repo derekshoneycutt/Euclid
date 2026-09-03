@@ -1,7 +1,8 @@
 package ui
 
 import "../../core"
-import "../../dynview"
+import dyncompile "../../dynview/compile"
+import dynlayout "../../dynview/layout"
 import julia "../../bridge"
 import view_core "../core"
 import "../font"
@@ -36,7 +37,7 @@ view_text_scroll_begin :: proc(
     content_h: f32,
     mouse_input: Mouse_Input_State) -> Scroll_Container_Begin_Result {
 
-    scroll_step := dynview.scratchpad_scroll_step_or_fallback(&state.dynview,
+    scroll_step := dynlayout.scratchpad_scroll_step_or_fallback(&state.dynview,
         TEXT_ROW_HEIGHT)
     scroll_begin := scroll_container_begin(Scroll_Container_Begin_Params{
         id = 1001,
@@ -65,7 +66,7 @@ view_text_draw_content :: proc(
     view_text: string,
     mouse_input: Mouse_Input_State) {
 
-    dynview.refresh_scratchpad_copy_targets(&state.dynview, {
+    dyncompile.refresh_scratchpad_copy_targets(&state.dynview, {
         panel = text_panel,
         scroll_y = state^.ui_runtime.view_text_scroll_y,
         text_padding = TEXT_PADDING,
@@ -134,7 +135,7 @@ draw_view_text_panel :: proc(
     }
 
     view_text := julia.current_view_snapshot_text(state)
-    content_h := dynview.scratchpad_content_height_or_fallback(&state.dynview,
+    content_h := dynlayout.scratchpad_content_height_or_fallback(&state.dynview,
         text_panel, {
             text_padding = TEXT_PADDING,
             wrap_advance = TEXT_WRAP_ADVANCE,

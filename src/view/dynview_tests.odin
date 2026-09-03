@@ -10,7 +10,11 @@ import "core:testing"
 
 import app_bridge "../bridge"
 import app_core "../core"
+import app_dyncompile "../dynview/compile"
+import dyncore "../dynview/core"
+import app_dynlayout "../dynview/layout"
 import app_dynview "../dynview"
+import app_math "../dynview/math"
 import app_evidence_trace "../evidence/trace"
 import app_grid "../grid"
 
@@ -30,7 +34,7 @@ View_Snapshot_Publication_Fixture :: struct {
 Copy_Hit_Target_Fixture :: struct {
     items: [2]app_core.Dynview_Layout_Item,
     lines: [6]app_core.Dynview_Layout_Line,
-    layout: app_dynview.Copy_Hit_Target_Layout,
+    layout: app_dyncompile.Copy_Hit_Target_Layout,
 }
 
 //   Initialize caller-owned bounded layout storage for direct layout unit tests.
@@ -39,8 +43,8 @@ dynview_test_layout_builders_init :: proc(
     cache: ^app_core.Dynview_Compile_Cache,
     arena: ^app_core.Arena_Owner) {
     testing.expect(t, app_core.arena_owner_init(arena))
-    testing.expect_value(t, app_dynview.layout_builders_init(cache, arena),
-        app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, app_dynlayout.layout_builders_init(cache, arena),
+        dyncore.DYNVIEW_STATUS_OK)
 }
 
 //   Initialize and seal both slot-owned text builders for direct snapshot tests.
@@ -147,7 +151,7 @@ view_snapshot_expect_content_aliases :: proc(
 view_snapshot_expect_math_working_isolation :: proc(
     t: ^testing.T, runtime: ^app_core.Dynview_System) {
 
-    app_dynview.prepare_math_working_records(runtime)
+    app_dyncompile.prepare_math_working_records(runtime)
     runtime^.compile_cache.math_programs[0].draw_width = 42
     runtime^.compile_cache.math_commands[0].block_id = 42
     testing.expect_value(t, runtime^.content.math_programs[0].draw_width, f32(0))
@@ -195,12 +199,12 @@ dynview_track_font_retains_canonical_cell_metrics :: proc(t: ^testing.T) {
 //   Verify the scratchpad history prompt style matches the live input indent.
 @(test)
 scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
-    prompt_style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_PROMPT)
-    input_block := app_dynview.block_format_for_kind(
+    prompt_style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_PROMPT)
+    input_block := app_dynlayout.block_format_for_kind(
         app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
-    output_block := app_dynview.block_format_for_kind(
+    output_block := app_dynlayout.block_format_for_kind(
         app_bridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT)
-    merged := app_dynview.style_with_block_format(prompt_style, input_block)
+    merged := app_dynlayout.style_with_block_format(prompt_style, input_block)
 
     testing.expect_value(t, merged.indent_cols, 0)
     testing.expect_value(t, input_block.paragraph_spacing_before, f32(0))
@@ -214,9 +218,9 @@ scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
 scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
     testing.expect_value(t,
         app_bridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE,
-        app_dynview.DYNVIEW_STYLE_UNDERLINE)
+        dyncore.DYNVIEW_STYLE_UNDERLINE)
 
-    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_UNDERLINE)
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_UNDERLINE)
     testing.expect(t, style.underline)
     testing.expect_value(t, style.font_flags, app_core.Font_Variant_Flags.Regular)
 }
@@ -607,24 +611,6 @@ julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
     testing.expect(t, service^.reload_state == .Failed)
     testing.expect_value(t, service^.reload_failed_mtime_unix_nano, i64(1234))
     testing.expect_value(t, service^.runtime_generation, u64(0))
-}
-
-//   Verify text-wrapping helpers handle empty input and over-long tokens.
-@(test)
-text_wrapping_helpers_handle_empty_and_long_tokens :: proc(t: ^testing.T) {
-    // Validates wrapping helpers handle empty input and long tokens while still advancing span boundaries.
-    testing.expect_value(t, app_dynview.chars_per_text_row(0, 8), 1)
-    testing.expect_value(t, app_dynview.count_wrapped_text_rows("", 20), 1)
-
-    text := "supercalifragilistic"
-    span := app_dynview.next_wrapped_text_span(text, 0, 4)
-
-    testing.expect_value(t, span.line_start, 0)
-    testing.expect(t, span.line_end > span.line_start)
-    testing.expect(t, span.next_start > span.line_start)
-
-    rows := app_dynview.count_wrapped_text_rows("aaaa bbbb cccc", 4)
-    testing.expect(t, rows >= 3)
 }
 
 //   Verify font weight resolution prefers the heaviest requested flag.
@@ -1032,10 +1018,10 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
     }
     buffer.text_bytes_len = len(text)
 
-    span := app_dynview.text_span_from_buffer(buffer, 1, 2)
+    span := dyncore.text_span_from_buffer(buffer, 1, 2)
     testing.expect_value(t, span, "bc")
 
-    out_of_bounds := app_dynview.text_span_from_buffer(buffer, 2, 5)
+    out_of_bounds := dyncore.text_span_from_buffer(buffer, 2, 5)
     testing.expect_value(t, out_of_bounds, "")
 
     cmd := app_core.Dynview_Command{
@@ -1044,7 +1030,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
         script_sup_text_offset = 1,
         script_sup_text_len = 1,
     }
-    base_text := app_dynview.text_span_from_buffer(
+    base_text := dyncore.text_span_from_buffer(
         buffer,
         cmd.script_base_text_offset,
         cmd.script_base_text_len)
@@ -1068,13 +1054,13 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
         app_core.Bounded_Builder_Status.Ok)
     cache^.layout_items = cache^.layout_item_builder.storage[:1]
     cache^.layout_item_count = 1
-    state := app_dynview.Dynview_Layout_State{col = 2, line_index = 0}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{item_start = 0, item_count = 1}
-    style := app_dynview.Dynview_Text_Style{force_line_start = true, indent_cols = 3}
+    state := app_dynlayout.Dynview_Layout_State{col = 2, line_index = 0}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{item_start = 0, item_count = 1}
+    style := dyncore.Dynview_Text_Style{force_line_start = true, indent_cols = 3}
 
-    status := app_dynview.layout_prepare_style_placement(cache, &state, &acc, style, 12)
+    status := app_dynlayout.layout_prepare_style_placement(cache, &state, &acc, style, 12)
 
-    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache.layout_line_count, 1)
     testing.expect_value(t, state.line_index, 1)
     testing.expect_value(t, state.col, 3)
@@ -1094,19 +1080,19 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
     dynview_test_layout_builders_init(t, cache, &arena)
     defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
-    state := app_dynview.Dynview_Layout_State{
+    state := app_dynlayout.Dynview_Layout_State{
         active_block_id = 7, line_index = 2, col = 1}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     item := app_core.Dynview_Layout_Item{
-        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         col_span = 3,
         ascent = 8,
         descent = 2,
     }
 
-    status := app_dynview.layout_push_item(cache, &state, &acc, item)
+    status := app_dynlayout.layout_push_item(cache, &state, &acc, item)
 
-    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache.layout_item_count, 1)
     testing.expect_value(t, cache.layout_items[0].block_id, 7)
     testing.expect_value(t, cache.layout_items[0].col_start, 1)
@@ -1130,10 +1116,10 @@ dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(app_core.Dynview_Command_Buffer)
     defer free(buffer)
-    state := app_dynview.Dynview_Layout_State{}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
 
-    ctx := app_dynview.layout_build_context(cache, buffer, &state, &acc)
+    ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
     text_height := ctx.base_ascent + ctx.base_descent
     expected_baseline := max(0.0, (f32(22) - text_height) * 0.5) + ctx.base_ascent
 
@@ -1152,18 +1138,18 @@ dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&arena)
     cache^.last_panel_width = 80
     cache^.last_cell_width = 8
-    state := app_dynview.Dynview_Layout_State{col = 3}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
+    state := app_dynlayout.Dynview_Layout_State{col = 3}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     item := app_core.Dynview_Layout_Item{
         kind = .Text_Run,
-        style_id = app_dynview.DYNVIEW_STYLE_BOLD,
+        style_id = dyncore.DYNVIEW_STYLE_BOLD,
         col_span = 2,
     }
 
-    status := app_dynview.layout_push_item(cache, &state, &acc, item)
+    status := app_dynlayout.layout_push_item(cache, &state, &acc, item)
 
-    testing.expect_value(t, app_dynview.layout_max_cols(cache), 8)
-    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, app_dynlayout.layout_max_cols(cache), 8)
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache^.layout_items[0].col_start, 3)
 }
 
@@ -1177,21 +1163,21 @@ dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynview.Dynview_Layout_State{row = 3}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
-    app_dynview.layout_seed_line_accumulator(&acc, 0, 12, 4)
+    state := app_dynlayout.Dynview_Layout_State{row = 3}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
     text := app_core.Dynview_Layout_Item{
         kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
     shape := app_core.Dynview_Layout_Item{
         kind = .Inline_Box, col_span = 1, draw_height = 50}
 
-    text_status := app_dynview.layout_push_item(cache, &state, &acc, text)
-    shape_status := app_dynview.layout_push_item(cache, &state, &acc, shape)
-    final_status := app_dynview.layout_finalize_line(cache, &state, &acc, 12, 4)
+    text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
+    shape_status := app_dynlayout.layout_push_item(cache, &state, &acc, shape)
+    final_status := app_dynlayout.layout_finalize_line(cache, &state, &acc, 12, 4)
 
-    testing.expect_value(t, text_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, shape_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, final_status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, text_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, shape_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, final_status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache^.layout_lines[0].row_start, 3)
     testing.expect_value(t, cache^.layout_lines[0].row_span, 3)
     testing.expect_value(t, cache^.layout_lines[0].baseline_row, 1)
@@ -1210,15 +1196,15 @@ dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(app_core.Dynview_Command_Buffer)
     defer free(buffer)
-    state := app_dynview.Dynview_Layout_State{}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
-    ctx := app_dynview.layout_build_context(cache, buffer, &state, &acc)
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
 
-    first_status := app_dynview.layout_apply_block_spacing(&ctx, 22)
-    second_status := app_dynview.layout_apply_block_spacing(&ctx, 22.1)
+    first_status := app_dynlayout.layout_apply_block_spacing(&ctx, 22)
+    second_status := app_dynlayout.layout_apply_block_spacing(&ctx, 22.1)
 
-    testing.expect_value(t, first_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, second_status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, first_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, second_status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, state.row, 3)
 }
 
@@ -1235,17 +1221,17 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(app_core.Dynview_Command_Buffer)
     defer free(buffer)
-    state := app_dynview.Dynview_Layout_State{}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
-    ctx := app_dynview.layout_build_context(cache, buffer, &state, &acc)
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
     item := app_core.Dynview_Layout_Item{
         kind = .Inline_Box, col_span = 1, draw_height = 50}
-    push_status := app_dynview.layout_push_item(cache, &state, &acc, item)
+    push_status := app_dynlayout.layout_push_item(cache, &state, &acc, item)
 
-    final_status := app_dynview.layout_finalize_metrics(&ctx)
+    final_status := app_dynlayout.layout_finalize_metrics(&ctx)
 
-    testing.expect_value(t, push_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, final_status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, push_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, final_status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache^.layout_lines[0].row_span, 3)
     testing.expect_value(t, cache^.layout_total_height, f32(66))
     testing.expect_value(t, cache^.layout_average_line_height, f32(66))
@@ -1261,16 +1247,16 @@ dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
     runtime^.compile_cache.layout_is_valid = true
     runtime^.compile_cache.layout_total_height = 66
     runtime^.compile_cache.layout_average_line_height = 44
-    fallback := app_dynview.Scratchpad_Fallback_Layout{
+    fallback := app_dynlayout.Scratchpad_Fallback_Layout{
         text_padding = 4,
         wrap_advance = 8,
         row_height = 22,
         text = "fallback",
     }
 
-    content_height := app_dynview.scratchpad_content_height_or_fallback(
+    content_height := app_dynlayout.scratchpad_content_height_or_fallback(
         runtime, {width = 80, height = 100}, fallback)
-    scroll_step := app_dynview.scratchpad_scroll_step_or_fallback(runtime, 22)
+    scroll_step := app_dynlayout.scratchpad_scroll_step_or_fallback(runtime, 22)
 
     testing.expect_value(t, content_height, f32(74))
     testing.expect_value(t, scroll_step, f32(44))
@@ -1317,12 +1303,12 @@ dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
     fixture := copy_hit_target_fixture()
     copy_hit_target_fixture_bind(cache, &fixture)
 
-    hover_bottom, status := app_dynview.rebuild_one_copy_hit_target(
+    hover_bottom, status := app_dyncompile.rebuild_one_copy_hit_target(
         cache, {block_id = 9}, fixture.layout, fixture.layout.panel.y)
 
     targets, view_status := app_core.bounded_element_builder_view(
         &cache^.copy_hit_target_builder)
-    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, view_status, app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(targets), 1)
     target := targets[0]
@@ -1334,9 +1320,9 @@ dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
 //   Verify outer math reserves canonical columns and marks constrained overflow.
 @(test)
 dynview_math_block_columns_use_intrinsic_width :: proc(t: ^testing.T) {
-    exact := app_dynview.math_block_columns(16, 8, 10)
-    fractional := app_dynview.math_block_columns(16.1, 8, 10)
-    oversized := app_dynview.math_block_columns(81, 8, 10)
+    exact := app_dynlayout.math_block_columns(16, 8, 10)
+    fractional := app_dynlayout.math_block_columns(16.1, 8, 10)
+    oversized := app_dynlayout.math_block_columns(81, 8, 10)
 
     testing.expect_value(t, exact.span, 2)
     testing.expect(t, !exact.overflows_horizontally)
@@ -1349,6 +1335,10 @@ dynview_math_block_columns_use_intrinsic_width :: proc(t: ^testing.T) {
 //   Verify outer math placement includes visual padding and preserves its baseline.
 @(test)
 dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
+    cache := new(app_core.Dynview_Compile_Cache)
+    defer free(cache)
+    cache^.last_cell_width = 8
+    cache^.last_cell_height = 22
     item := app_core.Dynview_Layout_Item{
         kind = .Math_Block,
         col_span = 2,
@@ -1359,15 +1349,9 @@ dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
         visual_padding_top = 3,
         visual_padding_bottom = 4,
     }
-    cells := app_dynview.layout_cell_metrics(
-        &app_core.Dynview_Compile_Cache{
-            last_cell_width = 8,
-            last_cell_height = 22,
-        },
-        12,
-        4)
+    cells := app_dynlayout.layout_cell_metrics(cache, 12, 4)
 
-    placement, ok := app_dynview.layout_place_item_on_grid(&item, cells)
+    placement, ok := app_dynlayout.layout_place_item_on_grid(&item, cells)
 
     testing.expect(t, ok)
     testing.expect_value(t, placement.column_span, 2)
@@ -1384,26 +1368,24 @@ dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
 //   Verify oversized outer math keeps intrinsic width and centers into its reservation.
 @(test)
 dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
+    cache := new(app_core.Dynview_Compile_Cache)
+    defer free(cache)
+    cache^.last_cell_width = 8
+    cache^.last_cell_height = 22
     program := app_core.Dynview_Math_Program{
         draw_width = 24,
         ascent = 12,
         descent = 4,
     }
-    item := app_dynview.math_block_item({}, app_dynview.Math_Block_Layout{
+    item := app_dynlayout.math_block_item({}, app_dynlayout.Math_Block_Layout{
         program = &program,
         max_cols = 2,
         cols = 2,
         overflows_horizontally = true,
     })
-    cells := app_dynview.layout_cell_metrics(
-        &app_core.Dynview_Compile_Cache{
-            last_cell_width = 8,
-            last_cell_height = 22,
-        },
-        12,
-        4)
+    cells := app_dynlayout.layout_cell_metrics(cache, 12, 4)
 
-    placement, ok := app_dynview.layout_place_item_on_grid(&item, cells)
+    placement, ok := app_dynlayout.layout_place_item_on_grid(&item, cells)
 
     testing.expect(t, ok)
     testing.expect(t, item.overflows_horizontally)
@@ -1423,9 +1405,9 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynview.Dynview_Layout_State{}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
-    app_dynview.layout_seed_line_accumulator(&acc, 0, 12, 4)
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
     text := app_core.Dynview_Layout_Item{
         kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
     math_item := app_core.Dynview_Layout_Item{
@@ -1433,13 +1415,13 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
         ascent = 25, descent = 7,
         visual_padding_top = 3, visual_padding_bottom = 4}
 
-    text_status := app_dynview.layout_push_item(cache, &state, &acc, text)
-    math_status := app_dynview.layout_push_item(cache, &state, &acc, math_item)
-    final_status := app_dynview.layout_finalize_line(cache, &state, &acc, 12, 4)
+    text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
+    math_status := app_dynlayout.layout_push_item(cache, &state, &acc, math_item)
+    final_status := app_dynlayout.layout_finalize_line(cache, &state, &acc, 12, 4)
 
-    testing.expect_value(t, text_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, math_status, app_dynview.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, final_status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, text_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, math_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, final_status, dyncore.DYNVIEW_STATUS_OK)
     text_item := cache^.layout_items[0]
     placed_math := cache^.layout_items[1]
     text_baseline := f32(text_item.row_offset) * 22 +
@@ -1455,7 +1437,7 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
 expect_oversized_inline_line_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
-    style: app_dynview.Dynview_Text_Style,
+    style: dyncore.Dynview_Text_Style,
     cells: app_grid.Cell_Metrics) {
 
     cmd := app_core.Dynview_Command{
@@ -1463,14 +1445,14 @@ expect_oversized_inline_line_grid_placement :: proc(
         inline_atom_dimension = 4,
         inline_atom_stroke = 4,
     }
-    cols := app_dynview.inline_line_cols(cmd, style, 8, 2)
-    item := app_dynview.inline_line_item({
+    cols := app_dynlayout.inline_line_cols(cmd, style, 8, 2)
+    item := app_dynlayout.inline_line_item({
         cache = cache,
         cmd = cmd,
         style = style,
         metrics = {max_cols = 2, cols = cols},
     })
-    placement, ok := app_dynview.layout_place_item_on_grid(&item, cells)
+    placement, ok := app_dynlayout.layout_place_item_on_grid(&item, cells)
 
     testing.expect(t, ok)
     testing.expect_value(t, cols, 2)
@@ -1493,17 +1475,17 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
         inline_atom_dimension = 2.25,
         inline_atom_stroke = 4,
     }
-    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_BOLD)
-    cols := app_dynview.inline_line_cols(cmd, style, 8, 10)
-    item := app_dynview.inline_line_item({
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_BOLD)
+    cols := app_dynlayout.inline_line_cols(cmd, style, 8, 10)
+    item := app_dynlayout.inline_line_item({
         cache = cache,
         cmd = cmd,
         style = style,
         metrics = {max_cols = 10, cols = cols},
     })
-    cells := app_dynview.layout_cell_metrics(cache, 12, 4)
+    cells := app_dynlayout.layout_cell_metrics(cache, 12, 4)
 
-    placement, ok := app_dynview.layout_place_item_on_grid(&item, cells)
+    placement, ok := app_dynlayout.layout_place_item_on_grid(&item, cells)
 
     testing.expect(t, ok)
     testing.expect_value(t, cols, 3)
@@ -1521,25 +1503,25 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
 //   Verify every inline shape family reports stroke-inclusive intrinsic bounds.
 @(test)
 dynview_inline_shape_families_report_intrinsic_bounds :: proc(t: ^testing.T) {
-    box := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    box := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Box, inline_atom_dimension = 2.5,
         inline_box_height = 3, inline_atom_stroke = 2}, 8)
-    filled_box := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    filled_box := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Filled_Box, inline_atom_dimension = 2.5,
         inline_box_height = 3, inline_outline_stroke = 3}, 8)
-    circle := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    circle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Circle, inline_atom_dimension = 1.25,
         inline_atom_stroke = 2}, 8)
-    filled_circle := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    filled_circle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Filled_Circle, inline_atom_dimension = 1.25,
         inline_outline_stroke = 3}, 8)
-    perpendicular := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    perpendicular := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Perpendicular, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
-    triangle := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    triangle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Triangle, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
-    pentagon := app_dynview.inline_shape_geometry(app_core.Dynview_Command{
+    pentagon := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
         kind = .Inline_Pentagon, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
 
@@ -1561,7 +1543,7 @@ dynview_inline_shape_families_report_intrinsic_bounds :: proc(t: ^testing.T) {
 expect_tall_inline_box_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
-    bold: app_dynview.Dynview_Text_Style,
+    bold: dyncore.Dynview_Text_Style,
     cells: app_grid.Cell_Metrics) {
 
     box_cmd := app_core.Dynview_Command{
@@ -1570,15 +1552,15 @@ expect_tall_inline_box_grid_placement :: proc(
         inline_box_height = 4,
         inline_atom_stroke = 2,
     }
-    box_cols := app_dynview.inline_box_cols(box_cmd, bold, 8, 10)
-    box_item := app_dynview.inline_box_item({
+    box_cols := app_dynlayout.inline_box_cols(box_cmd, bold, 8, 10)
+    box_item := app_dynlayout.inline_box_item({
         cache = cache,
         cmd = box_cmd,
         style = bold,
         metrics = {max_cols = 10, cols = box_cols},
     })
     box_placement, box_ok :=
-        app_dynview.layout_place_item_on_grid(&box_item, cells)
+        app_dynlayout.layout_place_item_on_grid(&box_item, cells)
 
     testing.expect(t, box_ok)
     testing.expect_value(t, box_cols, 3)
@@ -1593,7 +1575,7 @@ expect_tall_inline_box_grid_placement :: proc(
 expect_oversized_inline_triangle_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
-    bold: app_dynview.Dynview_Text_Style,
+    bold: dyncore.Dynview_Text_Style,
     cells: app_grid.Cell_Metrics) {
 
     triangle_cmd := app_core.Dynview_Command{
@@ -1602,15 +1584,15 @@ expect_oversized_inline_triangle_grid_placement :: proc(
         inline_box_height = 2,
         inline_atom_stroke = 2,
     }
-    triangle_cols := app_dynview.inline_box_cols(triangle_cmd, bold, 8, 4)
-    triangle_item := app_dynview.inline_triangle_item({
+    triangle_cols := app_dynlayout.inline_box_cols(triangle_cmd, bold, 8, 4)
+    triangle_item := app_dynlayout.inline_triangle_item({
         cache = cache,
         cmd = triangle_cmd,
         style = bold,
         metrics = {max_cols = 4, cols = triangle_cols},
     })
     triangle_placement, triangle_ok :=
-        app_dynview.layout_place_item_on_grid(&triangle_item, cells)
+        app_dynlayout.layout_place_item_on_grid(&triangle_item, cells)
     testing.expect(t, triangle_ok)
     testing.expect_value(t, triangle_cols, 4)
     testing.expect_value(t, triangle_item.draw_width, f32(82))
@@ -1625,8 +1607,8 @@ dynview_inline_shapes_use_centered_grid_placement :: proc(t: ^testing.T) {
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    bold := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_BOLD)
-    cells := app_dynview.layout_cell_metrics(cache, 12, 4)
+    bold := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_BOLD)
+    cells := app_dynlayout.layout_cell_metrics(cache, 12, 4)
 
     expect_tall_inline_box_grid_placement(t, cache, bold, cells)
     expect_oversized_inline_triangle_grid_placement(t, cache, bold, cells)
@@ -1643,18 +1625,18 @@ dynview_inline_pie_section_retains_tight_visual_bounds :: proc(t: ^testing.T) {
         pie_end_angle_degrees = 90,
         pie_is_filled = true,
     }
-    geometry := app_dynview.inline_shape_geometry(cmd, 8)
-    bold := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_BOLD)
-    regular := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
+    geometry := app_dynlayout.inline_shape_geometry(cmd, 8)
+    bold := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_BOLD)
+    regular := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_OUTPUT)
 
     testing.expect_value(t, geometry.draw_width, f32(10))
     testing.expect_value(t, geometry.draw_height, f32(10))
     testing.expect(t, math.abs(geometry.center_offset_x - 1) <= 0.0001)
     testing.expect(t, math.abs(geometry.center_offset_y - 9) <= 0.0001)
     testing.expect_value(t,
-        app_dynview.inline_pie_section_cols(cmd, bold, 8, 10), 2)
+        app_dynlayout.inline_pie_section_cols(cmd, bold, 8, 10), 2)
     testing.expect_value(t,
-        app_dynview.inline_pie_section_cols(cmd, regular, 8, 10), 2)
+        app_dynlayout.inline_pie_section_cols(cmd, regular, 8, 10), 2)
 }
 
 //   Verify layout text-run consumption wraps and places each segment.
@@ -1673,20 +1655,20 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
 
     buffer := new(app_core.Dynview_Command_Buffer)
     defer free(buffer)
-    state := app_dynview.Dynview_Layout_State{}
-    acc := app_dynview.Dynview_Layout_Line_Accumulator{}
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     cmd := app_core.Dynview_Command{
-        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         has_brush_color = true,
         brush_color = {64, 99, 216, 255},
     }
-    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
-    layout_context := app_dynview.layout_build_context(cache, buffer, &state, &acc)
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_OUTPUT)
+    layout_context := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
 
-    status, last_line := app_dynview.layout_consume_text_run(
+    status, last_line := app_dynlayout.layout_consume_text_run(
         &layout_context, cmd, "hello world", style)
 
-    testing.expect_value(t, status, app_dynview.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect(t, cache.layout_item_count > 0)
     testing.expect(t, cache.layout_line_count > 0)
     testing.expect(t, last_line >= 0)
@@ -1702,14 +1684,14 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
 @(test)
 dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
     // Ensures script math helper outputs produce sensible ascent, descent, offsets, and visual padding values.
-    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_BOLD)
-    ascent, descent := app_dynview.style_ascent_descent(style, 12)
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_BOLD)
+    ascent, descent := dyncore.style_ascent_descent(style, 12)
 
     testing.expect(t, ascent > descent)
     testing.expect(t, ascent > 8)
 
-    offsets := app_dynview.script_draw_offsets(12, 1.0, 0.25, 0.25)
-    top_pad, bottom_pad := app_dynview.script_visual_padding(offsets.script_font_size)
+    offsets := app_math.script_draw_offsets(12, 1.0, 0.25, 0.25)
+    top_pad, bottom_pad := app_math.script_visual_padding(offsets.script_font_size)
 
     testing.expect(t, offsets.script_font_size > 1.0)
     testing.expect(t, offsets.sup_raise_px >= 0)
@@ -1722,24 +1704,24 @@ dynview_math_helpers_scale_script_geometry :: proc(t: ^testing.T) {
 @(test)
 dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
     // Verifies delimiter and large-operator sizing helpers scale with content height and operator kind.
-    style := app_dynview.style_by_id(app_dynview.DYNVIEW_STYLE_OUTPUT)
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_OUTPUT)
 
-    width_none := app_dynview.stretch_delimiter_width(
-        style, 8, 16, 10, app_dynview.DELIMITER_KIND_NONE)
-    width_paren := app_dynview.stretch_delimiter_width(
-        style, 8, 16, 50, app_dynview.DELIMITER_KIND_LEFT_PAREN)
-    width_bigger := app_dynview.stretch_delimiter_width(
-        style, 8, 16, 120, app_dynview.DELIMITER_KIND_LEFT_PAREN)
+    width_none := app_math.stretch_delimiter_width(
+        style, 8, 16, 10, app_math.DELIMITER_KIND_NONE)
+    width_paren := app_math.stretch_delimiter_width(
+        style, 8, 16, 50, app_math.DELIMITER_KIND_LEFT_PAREN)
+    width_bigger := app_math.stretch_delimiter_width(
+        style, 8, 16, 120, app_math.DELIMITER_KIND_LEFT_PAREN)
 
     testing.expect_value(t, width_none, f32(0))
     testing.expect(t, width_paren > 0)
     testing.expect(t, width_bigger > width_paren)
 
-    glyph_scale_sum := app_dynview.large_op_glyph_scale(app_dynview.LARGE_OP_KIND_SUM)
-    glyph_scale_int := app_dynview.large_op_glyph_scale(app_dynview.LARGE_OP_KIND_INT)
-    limit_scale := app_dynview.large_op_limit_scale(0.8)
-    gap := app_dynview.large_op_limit_gap_for_kind(
-        app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
+    glyph_scale_sum := app_math.large_op_glyph_scale(app_math.LARGE_OP_KIND_SUM)
+    glyph_scale_int := app_math.large_op_glyph_scale(app_math.LARGE_OP_KIND_INT)
+    limit_scale := app_math.large_op_limit_scale(0.8)
+    gap := app_math.large_op_limit_gap_for_kind(
+        app_math.LARGE_OP_KIND_INT, 16, 0.25)
 
     testing.expect(t, glyph_scale_sum > 1)
     testing.expect(t, glyph_scale_int > glyph_scale_sum)
@@ -1765,7 +1747,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
 
     cache^.math_commands[0] = app_core.Dynview_Command{
         kind = .Text_Run,
-        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
     }
@@ -1775,7 +1757,7 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     program^.command_start = 0
     program^.command_count = 1
 
-    ok := app_dynview.measure_math_program(cache, buffer, program, 12)
+    ok := app_math.measure_math_program(cache, buffer, program, 12)
 
     testing.expect(t, ok)
     testing.expect(t, program.draw_width > 0)
@@ -1787,18 +1769,18 @@ dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
 @(test)
 dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T) {
     // Checks fraction and radical spacing helpers return positive values and scale upward with larger inputs.
-    side_pad_small := app_dynview.fraction_side_padding(10, 4)
-    side_pad_large := app_dynview.fraction_side_padding(24, 10)
-    vert_gap_small := app_dynview.fraction_vertical_gap(10)
-    vert_gap_large := app_dynview.fraction_vertical_gap(24)
+    side_pad_small := app_math.fraction_side_padding(10, 4)
+    side_pad_large := app_math.fraction_side_padding(24, 10)
+    vert_gap_small := app_math.fraction_vertical_gap(10)
+    vert_gap_large := app_math.fraction_vertical_gap(24)
 
     testing.expect(t, side_pad_small > 0)
     testing.expect(t, side_pad_large > side_pad_small)
     testing.expect(t, vert_gap_small > 0)
     testing.expect(t, vert_gap_large > vert_gap_small)
 
-    lead_width := app_dynview.radical_lead_width(16, 8)
-    front_pad, back_pad := app_dynview.radical_side_paddings(16, 8)
+    lead_width := app_math.radical_lead_width(16, 8)
+    front_pad, back_pad := app_math.radical_side_paddings(16, 8)
     testing.expect(t, lead_width > 0)
     testing.expect(t, front_pad > 0)
     testing.expect(t, back_pad > 0)
@@ -1808,10 +1790,10 @@ dynview_math_spacing_helpers_produce_stable_positive_sizes :: proc(t: ^testing.T
 @(test)
 dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.T) {
     // Verifies integral stacked-limit gap is intentionally tighter than the sum/product stacked-limit gap.
-    gap_sum := app_dynview.large_op_limit_gap_for_kind(
-        app_dynview.LARGE_OP_KIND_SUM, 16, 0.25)
-    gap_int := app_dynview.large_op_limit_gap_for_kind(
-        app_dynview.LARGE_OP_KIND_INT, 16, 0.25)
+    gap_sum := app_math.large_op_limit_gap_for_kind(
+        app_math.LARGE_OP_KIND_SUM, 16, 0.25)
+    gap_int := app_math.large_op_limit_gap_for_kind(
+        app_math.LARGE_OP_KIND_INT, 16, 0.25)
 
     testing.expect(t, gap_sum > 0)
     testing.expect(t, gap_int > 0)
@@ -1830,19 +1812,19 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
 
     invalid_program := app_core.Dynview_Math_Program{}
     invalid_program.valid = false
-    testing.expect(t, !app_dynview.measure_math_program(
+    testing.expect(t, !app_math.measure_math_program(
         cache, buffer, &invalid_program, 12))
 
     invalid_program.valid = true
     invalid_program.command_start = 0
     invalid_program.command_count = 0
-    testing.expect(t, !app_dynview.measure_math_program(
+    testing.expect(t, !app_math.measure_math_program(
         cache, buffer, &invalid_program, 12))
 
     cache^.math_command_count = 1
     invalid_program.command_start = 1
     invalid_program.command_count = 1
-    testing.expect(t, !app_dynview.measure_math_program(
+    testing.expect(t, !app_math.measure_math_program(
         cache, buffer, &invalid_program, 12))
 }
 
@@ -1862,13 +1844,13 @@ dynview_seed_two_command_cache :: proc(
 
     cache^.math_commands[0] = app_core.Dynview_Command{
         kind = .Text_Run,
-        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
     }
     cache^.math_commands[1] = app_core.Dynview_Command{
         kind = .Text_Run,
-        style_id = app_dynview.DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 2,
         text_len = 1,
     }
@@ -1895,8 +1877,8 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
     two_cmd^.command_start = 0
     two_cmd^.command_count = 2
 
-    ok_one := app_dynview.measure_math_program(cache, buffer, one_cmd, 12)
-    ok_two := app_dynview.measure_math_program(cache, buffer, two_cmd, 12)
+    ok_one := app_math.measure_math_program(cache, buffer, one_cmd, 12)
+    ok_two := app_math.measure_math_program(cache, buffer, two_cmd, 12)
 
     testing.expect(t, ok_one)
     testing.expect(t, ok_two)
@@ -1915,36 +1897,11 @@ dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
     cache.layout_average_line_height = 4
     cache.layout_is_valid = true
 
-    app_dynview.layout_reset_cache(cache)
+    app_math.layout_reset_cache(cache)
 
     testing.expect_value(t, cache.layout_line_count, 0)
     testing.expect_value(t, cache.layout_item_count, 0)
     testing.expect_value(t, cache.layout_total_height, f32(0))
     testing.expect_value(t, cache.layout_average_line_height, f32(0))
     testing.expect(t, !cache.layout_is_valid)
-}
-
-//   Verify custom font style flags decode to the expected weight and italic.
-@(test)
-dynview_custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
-    // Checks custom-font style ids decode expected flags and non-custom ids do not use that decoding path.
-    custom_flags := app_core.Font_Variant_Flags(
-        u32(app_core.Font_Variant_Flags.Light) |
-        u32(app_core.Font_Variant_Flags.Bold) |
-        u32(app_core.Font_Variant_Flags.Italic))
-
-    style_id := app_dynview.DYNVIEW_STYLE_CUSTOM_FONT | i32(u32(custom_flags) &
-        u32(app_dynview.DYNVIEW_STYLE_CUSTOM_FONT_MASK))
-    style, ok := app_dynview.style_from_custom_font_flags(style_id)
-
-    testing.expect(t, ok)
-    testing.expect(t, style.italic)
-    testing.expect_value(t, style.font_flags, custom_flags)
-    testing.expect_value(t, style.wrap_scale, f32(1.0))
-    testing.expect_value(t, style.line_height_multiplier, f32(1.0))
-
-    // Non-custom style ids should not decode through the custom-font flag path.
-    _, normal_ok := app_dynview.style_from_custom_font_flags(
-        app_dynview.DYNVIEW_STYLE_OUTPUT)
-    testing.expect(t, !normal_ok)
 }

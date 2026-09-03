@@ -2,6 +2,8 @@ package view
 
 import app_core "../core"
 import "../dynview"
+import dyncompile "../dynview/compile"
+import dyncore "../dynview/core"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -270,7 +272,7 @@ expect_failed_dynview_rebuild :: proc(
     buffer := &state^.dynview.command_buffer
     testing.expect(t, !cache^.is_valid && !cache^.layout_is_valid)
     testing.expect_value(t, cache^.last_error_code,
-        dynview.DYNVIEW_STATUS_ILLEGAL_STATE)
+        dyncore.DYNVIEW_STATUS_ILLEGAL_STATE)
     testing.expect(t, buffer^.has_stream_error)
     testing.expect_value(t, cache^.compiled_plain_text_len, 0)
     testing.expect_value(t, len(cache^.copy_blocks), 0)
@@ -282,7 +284,7 @@ expect_failed_dynview_rebuild :: proc(
     testing.expect_value(t, state^.dynview.cache_access_state,
         app_core.Dynview_Cache_Access_State.Display_Readable)
     testing.expect_value(t,
-        dynview.scratchpad_text_or_fallback(&state^.dynview, "fallback"),
+        dyncompile.scratchpad_text_or_fallback(&state^.dynview, "fallback"),
         "fallback")
 }
 
@@ -304,7 +306,7 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     state^.simulation_executor = executor
     testing.expect(t, state^.dynview.cache_arena.initialized)
 
-    dynview.compile_if_needed(
+    dyncompile.compile_if_needed(
         &state^.dynview, &state^.dynview.cache_arena)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(0))
     testing.expect(t, !state^.dynview.compile_cache.is_valid)

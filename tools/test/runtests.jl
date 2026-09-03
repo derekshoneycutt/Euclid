@@ -95,12 +95,16 @@ const TestRunner = Verification.EuclidTestRunner
             parse_driver_invocation(["test", "--debug"]))
         @test_throws ErrorException parse_build_command(
             parse_driver_invocation(["assets", "extra"]))
+        @test unit_command_runs_odin(String[])
+        @test unit_command_runs_odin(["odin"])
+        @test !unit_command_runs_odin(["julia"])
     end
 
     @testset "suite definitions" begin
         suites = TestRunner.suite_definitions()
         @test [suite.name for suite in suites] == ["julia", "odin"]
         @test [suite.language for suite in suites] == ["Julia", "Odin"]
+        @test "-define:ODIN_TEST_THREADS=1" in TestRunner.odin_test_command("")
     end
 
     @testset "test count extraction" begin
@@ -114,6 +118,9 @@ const TestRunner = Verification.EuclidTestRunner
         @test TestRunner.reported_odin_count(
             "Finished 1 test in 12.7s. The test was successful.") == 1
         @test TestRunner.reported_odin_count("No tests to run.") === nothing
+        @test TestRunner.odin_suite_status(0, 139) == "PASS"
+        @test TestRunner.odin_suite_status(0, nothing) == "FAIL"
+        @test TestRunner.odin_suite_status(1, 139) == "FAIL"
     end
 
     @testset "test runner option parsing" begin

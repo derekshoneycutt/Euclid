@@ -1263,8 +1263,21 @@ function run_evidence_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
+"""Return whether a unit invocation includes the Odin application suite."""
+unit_command_runs_odin(arguments::Vector{String}) = !("julia" in arguments)
+
+"""Prepare packaged assets required by Odin runtime integration tests."""
+function prepare_unit_assets(arguments::Vector{String})
+    unit_command_runs_odin(arguments) || return nothing
+    isfile(ASSETS_ARCHIVE_PATH) && return nothing
+    ensure_required_commands(false, true, false, false)
+    build_assets(false)
+    return nothing
+end
+
 """Run all application unit tests or one selected language suite."""
 function run_unit_command(arguments::Vector{String})
+    prepare_unit_assets(arguments)
     command = Cmd(vcat([JULIA_EXE, TEST_RUNNER_SCRIPT], arguments))
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end

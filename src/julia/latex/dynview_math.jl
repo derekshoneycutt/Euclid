@@ -395,6 +395,27 @@ function math_payload_ops_for_runs(runs::Vector{LatexRun})
     return payloads
 end
 
+struct MathPayloadBlobSpans
+    text_offset::Int32
+    text_len::Int32
+    index_offset::Int32
+    index_len::Int32
+    sup_offset::Int32
+    sup_len::Int32
+    sub_offset::Int32
+    sub_len::Int32
+end
+
+"""Append all text spans for one math payload op in bridge field order."""
+function append_math_payload_spans!(io::IOBuffer, op::MathPayloadOp)
+    text_offset, text_len = append_math_block_blob!(io, op.text)
+    index_offset, index_len = append_math_block_blob!(io, op.radical_index_text)
+    sup_offset, sup_len = append_math_block_blob!(io, op.sup_text)
+    sub_offset, sub_len = append_math_block_blob!(io, op.sub_text)
+    return MathPayloadBlobSpans(text_offset, text_len, index_offset, index_len,
+        sup_offset, sup_len, sub_offset, sub_len)
+end
+
 """Build one bridge math op payload from one recursive payload op."""
 function bridge_math_payload_op(
     io::IOBuffer,
@@ -406,10 +427,7 @@ function bridge_math_payload_op(
     math_style::Integer,
     mathbb_style::Integer)
 
-    text_offset, text_len = append_math_block_blob!(io, op.text)
-    index_offset, index_len = append_math_block_blob!(io, op.radical_index_text)
-    sup_offset, sup_len = append_math_block_blob!(io, op.sup_text)
-    sub_offset, sub_len = append_math_block_blob!(io, op.sub_text)
+    spans = append_math_payload_spans!(io, op)
     base_style = math_payload_style_id(op.kind,
         op.style_role, text_style, math_style, mathbb_style)
     mode_codes = math_block_mode_codes(op)
@@ -429,14 +447,14 @@ function bridge_math_payload_op(
         mode_codes.large_op_kind,
         mode_codes.operator_growth,
         mode_codes.operator_limits,
-        text_offset,
-        text_len,
-        index_offset,
-        index_len,
-        sup_offset,
-        sup_len,
-        sub_offset,
-        sub_len,
+        spans.text_offset,
+        spans.text_len,
+        spans.index_offset,
+        spans.index_len,
+        spans.sup_offset,
+        spans.sup_len,
+        spans.sub_offset,
+        spans.sub_len,
         SCRIPT_SCALE,
         SCRIPT_SUP_RAISE,
         SCRIPT_SUB_DROP,

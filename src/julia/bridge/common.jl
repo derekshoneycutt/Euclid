@@ -5,8 +5,6 @@ A normal Julia JIT session can resolve bare `@ccall` names from the host process
 but code restored from a PackageCompiler sysimage cannot do so reliably on Windows.
 Host exports remain at fixed addresses for the lifetime of the process.
 """
-# TODO : Literally anything but marking this fucking const again
-# Don't even think about it you useless piece of fucking shit
 HOST_SYMBOL_CACHE = Dict{Symbol, Ptr{Cvoid}}()
 
 """

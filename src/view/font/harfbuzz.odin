@@ -532,6 +532,38 @@ math_shaping_glyph_kerning :: proc(
     return value, true
 }
 
+//   Validate and copy one complete native MATH kern table.
+math_shaping_copy_kern_table :: proc(
+    font: ^Harfbuzz_Font,
+    glyph_id: u32,
+    corner: Harfbuzz_Math_Kern,
+    native: []Harfbuzz_Math_Kern_Entry,
+    output: []core.Font_Math_Kern_Entry) -> bool {
+
+    previous_height: i32
+    for entry, index in native {
+        if index > 0 && entry.max_correction_height <= previous_height {
+            return false
+        }
+        direct := hb_ot_math_get_glyph_kerning(
+            font, glyph_id, corner, entry.max_correction_height)
+        if direct != entry.kern_value {
+            return false
+        }
+        output[index] = {entry.max_correction_height, entry.kern_value}
+        previous_height = entry.max_correction_height
+    }
+    for index in 0..<len(native)-1 {
+        next_height := native[index].max_correction_height + 1
+        next_direct := hb_ot_math_get_glyph_kerning(
+            font, glyph_id, corner, next_height)
+        if next_direct != native[index+1].kern_value {
+            return false
+        }
+    }
+    return true
+}
+
 //   Copy one glyph corner's complete MATH kern table into bounded caller storage.
 math_shaping_glyph_kern_table :: proc(
     capability: ^Font_Math_Shaping_Capability,
@@ -554,29 +586,10 @@ math_shaping_glyph_kern_table :: proc(
     if available > u32(len(output)) || count != available {
         return {}
     }
-    previous_height: i32
-    for index in 0..<int(count) {
-        entry := native[index]
-        if index > 0 && entry.max_correction_height <= previous_height {
-            return {}
-        }
-        direct := hb_ot_math_get_glyph_kerning(
-            cast(^Harfbuzz_Font)capability.resource.font,
-            glyph_id, corner, entry.max_correction_height)
-        if direct != entry.kern_value {
-            return {}
-        }
-        output[index] = {entry.max_correction_height, entry.kern_value}
-        previous_height = entry.max_correction_height
-    }
-    for index in 0..<int(count)-1 {
-        next_height := native[index].max_correction_height + 1
-        next_direct := hb_ot_math_get_glyph_kerning(
-            cast(^Harfbuzz_Font)capability.resource.font,
-            glyph_id, corner, next_height)
-        if next_direct != native[index+1].kern_value {
-            return {}
-        }
+    font := cast(^Harfbuzz_Font)capability.resource.font
+    if !math_shaping_copy_kern_table(
+        font, glyph_id, corner, native[:count], output) {
+        return {}
     }
     return {int(count), true}
 }
@@ -635,6 +648,27 @@ math_shaping_horizontal_variants :: proc(
         capability, generation, glyph_id, .Left_To_Right, output)
 }
 
+//   Validate and copy native assembly parts into bounded application records.
+math_shaping_copy_assembly_parts :: proc(
+    native: []Harfbuzz_Math_Glyph_Part,
+    output: []core.Font_Math_Glyph_Part) -> bool {
+
+    for part, index in native {
+        if part.glyph == 0 || part.full_advance <= 0 ||
+            part.start_connector_length < 0 || part.end_connector_length < 0 {
+            return false
+        }
+        output[index] = {
+            glyph_id = part.glyph,
+            start_connector_length = part.start_connector_length,
+            end_connector_length = part.end_connector_length,
+            full_advance = part.full_advance,
+            extender = part.flags & 1 != 0,
+        }
+    }
+    return true
+}
+
 //   Copy one glyph's directional MATH assembly into caller-owned bounded storage.
 math_shaping_directional_assembly :: proc(
     capability: ^Font_Math_Shaping_Capability,
@@ -661,19 +695,8 @@ math_shaping_directional_assembly :: proc(
     if min_overlap < 0 {
         return {}
     }
-    for index in 0..<int(count) {
-        part := native[index]
-        if part.glyph == 0 || part.full_advance <= 0 ||
-            part.start_connector_length < 0 || part.end_connector_length < 0 {
-            return {}
-        }
-        output[index] = {
-            glyph_id = part.glyph,
-            start_connector_length = part.start_connector_length,
-            end_connector_length = part.end_connector_length,
-            full_advance = part.full_advance,
-            extender = part.flags & 1 != 0,
-        }
+    if !math_shaping_copy_assembly_parts(native[:count], output) {
+        return {}
     }
     return {int(count), min_overlap, italic_correction, true}
 }
@@ -849,6 +872,22 @@ math_shaping_project_source :: proc(
     return string(workspace[:write_offset]), true
 }
 
+//   Report whether every shaped glyph identity in one buffer is valid.
+math_shaping_buffer_has_glyphs :: proc(buffer: ^Harfbuzz_Buffer) -> bool {
+    glyph_count := hb_buffer_get_length(buffer)
+    info_count := glyph_count
+    infos := hb_buffer_get_glyph_infos(buffer, &info_count)
+    if infos == nil || info_count != glyph_count {
+        return false
+    }
+    for index in 0..<int(glyph_count) {
+        if infos[index].codepoint == 0 {
+            return false
+        }
+    }
+    return true
+}
+
 //   Shape one math run with explicit left-to-right mathematical script properties.
 //
 // Returns:
@@ -883,16 +922,8 @@ math_shaping_shape :: proc(
         end = max(u32),
     }
     hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, &feature, 1)
-    glyph_count := hb_buffer_get_length(buffer)
-    info_count := glyph_count
-    infos := hb_buffer_get_glyph_infos(buffer, &info_count)
-    if infos == nil || info_count != glyph_count {
+    if !math_shaping_buffer_has_glyphs(buffer) {
         return 0, false
-    }
-    for index in 0..<int(glyph_count) {
-        if infos[index].codepoint == 0 {
-            return 0, false
-        }
     }
     return harfbuzz_copy_result(buffer, output)
 }

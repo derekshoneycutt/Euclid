@@ -425,19 +425,10 @@ prepare_glyph_metric :: proc(
     return result
 }
 
-//   Reproduce raylib's default row packing and atlas growth policy.
-//
-// Parameters:
-//   - glyphs: Prepared metrics to place in order.
-//   - pixel_size: Positive base font height used for row spacing.
-//   - rectangles: Output parallel to glyphs.
-//
-// Returns:
-//   - Power-of-two atlas width and dynamically doubled height containing every glyph.
-prepare_layout :: proc(
-    glyphs: []Prepared_Glyph, pixel_size: i32,
-    rectangles: []Prepared_Rectangle) -> (i32, i32) {
-
+//   Estimate power-of-two atlas dimensions from prepared glyph area.
+prepare_initial_atlas_size :: proc(
+    glyphs: []Prepared_Glyph,
+    pixel_size: i32) -> (i32, i32) {
     total_area := f32(0)
     minimum_width := i32(1)
     for glyph in glyphs {
@@ -456,7 +447,23 @@ prepare_layout :: proc(
     if total_area < f32(atlas_width*atlas_width/2) {
         atlas_height /= 2
     }
+    return atlas_width, atlas_height
+}
 
+//   Reproduce raylib's default row packing and atlas growth policy.
+//
+// Parameters:
+//   - glyphs: Prepared metrics to place in order.
+//   - pixel_size: Positive base font height used for row spacing.
+//   - rectangles: Output parallel to glyphs.
+//
+// Returns:
+//   - Power-of-two atlas width and dynamically doubled height containing every glyph.
+prepare_layout :: proc(
+    glyphs: []Prepared_Glyph, pixel_size: i32,
+    rectangles: []Prepared_Rectangle) -> (i32, i32) {
+
+    atlas_width, atlas_height := prepare_initial_atlas_size(glyphs, pixel_size)
     offset_x := FONT_GLYPH_PADDING
     offset_y := FONT_GLYPH_PADDING
     row_height := i32(0)

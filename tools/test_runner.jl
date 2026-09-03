@@ -140,9 +140,10 @@ function run_odin_suite(suite::SuiteDefinition)
     command = Cmd(Cmd(odin_test_command(native_linker_flags()));
         dir=REPOSITORY_ROOT)
     result = capture_command(command)
-    status = result.exit_code == 0 ? "PASS" : "FAIL"
+    test_count = reported_odin_count(result.output)
+    status = odin_suite_status(result.exit_code, test_count)
     return SuiteResult(
-        suite.name, suite.language, reported_odin_count(result.output),
+        suite.name, suite.language, test_count,
         result.elapsed_ns, status, result.output)
 end
 
@@ -164,6 +165,11 @@ end
 function reported_odin_count(output)
     count_match = match(r"Finished (\d+) tests? in", output)
     return count_match === nothing ? nothing : parse(Int, count_match[1])
+end
+
+"""Return Odin suite status, requiring its terminal completion summary."""
+function odin_suite_status(exit_code, test_count)
+    return exit_code == 0 && test_count !== nothing ? "PASS" : "FAIL"
 end
 
 """Return whether ANSI styling is enabled for test output."""

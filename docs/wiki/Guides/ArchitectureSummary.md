@@ -45,9 +45,8 @@ If you are new, read in this order:
    `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`,
    `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`,
    `src/bridge/dynview.odin`, `src/julia/odin-julia-bridge.jl`).
-1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile.odin`,
-   `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`,
-   `src/dynview/styles.odin`).
+1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile/compile.odin`,
+   `src/dynview/core/`, `src/dynview/math/`, `src/dynview/layout/`).
 1. Julia runtime entry (`src/julia/script.jl`).
 1. Then continue by module using the maps below, touching only each module's
    highlighted files first.
@@ -62,7 +61,7 @@ If you are new, read in this order:
 | **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
-| **Odin** | Dynview Runtime | Text/math command compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/compile.odin`, `src/dynview/layout_build.odin`, `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`, `src/dynview/tracking.odin` |
+| **Odin** | Dynview Runtime | Text/math command compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/compile/compile.odin`, `src/dynview/core/`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
@@ -77,6 +76,22 @@ If you are new, read in this order:
 | **Julia** | Interactive Runtime | Scratchpad/REPL session lifecycle, queueing, and evaluation flow. | `src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl` |
 | **Julia** | LaTeX Compiler | Compiles LaTeX to dynview command instructions. | `src/julia/latex.jl`, `src/julia/latex/` |
 | **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
+
+Dynview production callers import the child package that owns each symbol. Root
+`src/dynview` owns only subsystem enablement and invalidation tracking; it does not
+forward child APIs. `dynview/core` owns shared primitives, `dynview/math` owns intrinsic
+formula measurement and shaping, `dynview/layout` places measured content into document
+and grid rows, and `dynview/compile` orchestrates derived-cache rebuilds. Display-thread
+drawing and Raylib resource ownership remain in `src/view/ui/dynview`.
+
+One invalidated derived-cache transaction runs in dependency order:
+
+1. Clear partial views, shaped records, and the worker-owned cache arena.
+1. Copy immutable semantic math records into mutable measurement storage.
+1. Compile and seal plain text, copy payloads, and copy blocks.
+1. Shape and seal intrinsic math records.
+1. Rebuild and seal document layout records.
+1. Publish revision metadata, clear invalidation, and mark the cache valid.
 
 Content-module contract:
 
@@ -240,7 +255,7 @@ flowchart LR
 - Odin side:
   - `dynview_math_block_from_ops` validates spans/capacity and recursively imports
     child programs into `math_programs` and `math_commands`.
-  - `layout_math_programs.odin` measures script/large-op/fraction/radical/matrix
+  - `src/dynview/math/programs.odin` measures script/large-op/fraction/radical/matrix
     structures before draw. It owns display, text, script, and script-script
     transitions, including cramped child state.
   - The resident font capability captures all OpenType MATH constants as one
@@ -645,8 +660,8 @@ Choose the owning module first, then touch that module's highlighted files.
   - Pen and compass shading contract: [ToolRendering.md](ToolRendering.md).
 - **Dynview text/math behavior**:
   - Dynview Runtime Module (`src/dynview/dynview.odin`,
-    `src/dynview/compile.odin`, `src/dynview/layout_build.odin`,
-    `src/dynview/layout_math_programs.odin`, `src/dynview/styles.odin`).
+    `src/dynview/compile/compile.odin`, `src/dynview/core/`, `src/dynview/math/`,
+    `src/dynview/layout/`).
 - **Geometry/constraints behavior**:
   - Geometry Kernel Module (`src/shapes/shapes.odin`,
     `src/shapes/constraints.odin`, `src/shapes/system.odin`).

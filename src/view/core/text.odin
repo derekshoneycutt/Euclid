@@ -1,6 +1,6 @@
 package view_core
 
-import "../../dynview"
+import dyncore "../../dynview/core"
 import view_font "../font"
 
 import "core:strings"
@@ -139,7 +139,7 @@ ui_text_cluster_column :: proc(text: string, cluster: u32) -> (int, bool) {
     if !ui_text_cluster_is_valid(text, cluster) {
         return 0, false
     }
-    return dynview.text_codepoint_count_span(text, 0, int(cluster)), true
+    return dyncore.text_codepoint_count_span(text, 0, int(cluster)), true
 }
 
 //   Resolve Euclid's stb-scaled monospace column width from the finalized atlas.
@@ -161,7 +161,7 @@ ui_text_shape_is_valid :: proc(
     if glyph_count <= 0 || glyph_count > len(glyphs) {
         return false
     }
-    codepoint_count := dynview.text_codepoint_count_span(text, 0, len(text))
+    codepoint_count := dyncore.text_codepoint_count_span(text, 0, len(text))
     if codepoint_count <= 0 {
         return false
     }
@@ -455,7 +455,7 @@ draw_wrapped_text_content :: proc(
     text_padding := params.text_padding
     text_row_height := params.text_row_height
 
-    max_chars := dynview.chars_per_text_row(
+    max_chars := dyncore.chars_per_text_row(
         panel.width - text_padding * 2, params.wrap_advance)
     start := 0
     row := 0
@@ -467,7 +467,7 @@ draw_wrapped_text_content :: proc(
     }
 
     for start < len(text) {
-        span := dynview.next_wrapped_text_span(text, start, max_chars)
+        span := dyncore.next_wrapped_text_span(text, start, max_chars)
         row_y := panel.y + text_padding + f32(row) * text_row_height -
             params.scroll_y
 

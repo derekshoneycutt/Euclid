@@ -1,7 +1,8 @@
 package ui_dynview
 
 import "../../../core"
-import "../../../dynview"
+import dynmath "../../../dynview/math"
+import dyncore "../../../dynview/core"
 import view_core "../../core"
 import view_font "../../font"
 
@@ -12,11 +13,6 @@ Mouse_Input_State :: view_core.Mouse_Input_State
 
 UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
 UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
-
-
-Dynview_Text_Alignment :: core.Dynview_Text_Alignment
-Dynview_Text_Style :: core.Dynview_Text_Style
-
 
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.
@@ -47,7 +43,7 @@ Program_Draw_Position :: struct {
     draw_x : f32,
     baseline_y : f32,
     font_size: f32,
-    math_style: dynview.Math_Style,
+    math_style: dynmath.Math_Style,
 }
 
 
@@ -117,21 +113,22 @@ draw_math_program_at :: proc(
     command_end := program.command_start + program.command_count
     for command_index in program.command_start..<command_end {
         cmd := runtime^.compile_cache.math_commands[command_index]
-        child_item, ok := dynview.math_program_item(
-            &runtime^.compile_cache,
-            &runtime^.command_buffer,
-            cmd,
-            child_ctx.font_size,
-            command_index,
-            position.math_style)
+        child_item, ok := dynmath.math_program_item({
+            cache = &runtime^.compile_cache,
+            buffer = &runtime^.command_buffer,
+            cmd = cmd,
+            font_size = child_ctx.font_size,
+            command_index = command_index,
+            math_style = position.math_style,
+        })
         if !ok {
             continue
         }
 
-        child_x += dynview.math_program_command_leading_space(
+        child_x += dynmath.math_program_command_leading_space(
             &runtime^.compile_cache, program, command_index, child_ctx.font_size)
         child_y := position.baseline_y - child_item.ascent
-        child_style := dynview.style_by_id(child_item.style_id)
+        child_style := dyncore.style_by_id(child_item.style_id)
         draw_cached_text_item(child_ctx, child_style, child_item, child_x, child_y)
         child_x += child_item.draw_width
     }

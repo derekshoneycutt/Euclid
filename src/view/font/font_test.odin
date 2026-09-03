@@ -246,8 +246,8 @@ view_expect_math_vertical_assembly :: proc(
     testing.expect(t, has_extender)
 }
 
-// Verify NewCM exposes a bounded horizontal construction for a math circumflex.
-view_expect_math_horizontal_accent :: proc(
+// Verify NewCM exposes circumflex variants and reports its absent assembly cleanly.
+view_expect_math_horizontal_accent_variants :: proc(
     t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
 
     glyph, glyph_ok := harfbuzz_nominal_glyph(
@@ -260,7 +260,7 @@ view_expect_math_horizontal_accent :: proc(
         capability, 7, glyph, parts[:])
     testing.expect(t, glyph_ok)
     testing.expect(t, variant_result.ok && variant_result.count > 0)
-    testing.expect(t, assembly_result.ok && assembly_result.count > 0)
+    testing.expect(t, !assembly_result.ok && assembly_result.count == 0)
 }
 
 // Verify standalone normal and flattened accents suppress dotted-circle insertion.
@@ -334,6 +334,36 @@ view_expect_math_glyph_kern_tables :: proc(
     }
 }
 
+// Verify synchronized capability metadata and all supported MATH queries.
+view_expect_math_shaping_capability :: proc(
+    t: ^testing.T,
+    capability: ^Font_Math_Shaping_Capability) {
+
+    testing.expect_value(t, capability.generation, u64(7))
+    testing.expect(t, capability.constants.valid)
+    testing.expect_value(t, capability.constants.generation, u64(7))
+    testing.expect_value(t, capability.constants.base_pixel_size,
+        f32(JULIA_MONO_FONT_SIZE))
+    testing.expect(t, capability.constants.values[int(
+        Harfbuzz_Math_Constant.Script_Percent_Scale_Down)] > 0)
+    testing.expect(t, capability.constants.values[int(
+        Harfbuzz_Math_Constant.Script_Script_Percent_Scale_Down)] > 0)
+    task := view_run_math_shaping_task(t, capability, 7)
+    testing.expect(t, task.shaped && task.glyph_count == 3)
+    italic_x, italic_x_ok := harfbuzz_nominal_glyph(
+        &capability.resource, rune(0x1d465))
+    testing.expect(t, italic_x_ok)
+    testing.expect_value(t, task.glyphs[0].glyph_id, italic_x)
+    testing.expect(t, task.properties_ready)
+    view_expect_math_glyph_queries(t, capability, 7, task.glyphs[0].glyph_id)
+    view_expect_math_glyph_kerning(t, capability, task.glyphs[0].glyph_id)
+    view_expect_math_glyph_kern_tables(t, capability, task.glyphs[0].glyph_id)
+    view_expect_math_vertical_variants(t, capability)
+    view_expect_math_vertical_assembly(t, capability)
+    view_expect_math_horizontal_accent_variants(t, capability)
+    view_expect_math_standalone_accent_shape(t, capability)
+}
+
 // Verify worker math shaping is isolated, explicit, bounded, and query-capable.
 @(test)
 view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
@@ -351,32 +381,8 @@ view_test_worker_math_shaping_capability :: proc(t: ^testing.T) {
 
     capability: Font_Math_Shaping_Capability
     testing.expect(t, math_shaping_sync(&cache, &capability))
-    testing.expect_value(t, capability.generation, u64(7))
     testing.expect(t, capability.resource.buffer != entry.shaping.buffer)
-    testing.expect(t, capability.constants.valid)
-    testing.expect_value(t, capability.constants.generation, u64(7))
-    testing.expect_value(t, capability.constants.base_pixel_size,
-        f32(JULIA_MONO_FONT_SIZE))
-    testing.expect(t, capability.constants.values[int(
-        Harfbuzz_Math_Constant.Script_Percent_Scale_Down)] > 0)
-    testing.expect(t, capability.constants.values[int(
-        Harfbuzz_Math_Constant.Script_Script_Percent_Scale_Down)] > 0)
-
-    task := view_run_math_shaping_task(t, &capability, 7)
-    testing.expect(t, task.shaped && task.glyph_count == 3)
-    italic_x, italic_x_ok := harfbuzz_nominal_glyph(
-        &capability.resource, rune(0x1d465))
-    testing.expect(t, italic_x_ok)
-    testing.expect_value(t, task.glyphs[0].glyph_id, italic_x)
-    testing.expect(t, task.properties_ready)
-    view_expect_math_glyph_queries(
-        t, &capability, 7, task.glyphs[0].glyph_id)
-    view_expect_math_glyph_kerning(t, &capability, task.glyphs[0].glyph_id)
-    view_expect_math_glyph_kern_tables(t, &capability, task.glyphs[0].glyph_id)
-    view_expect_math_vertical_variants(t, &capability)
-    view_expect_math_vertical_assembly(t, &capability)
-    view_expect_math_horizontal_accent(t, &capability)
-    view_expect_math_standalone_accent_shape(t, &capability)
+    view_expect_math_shaping_capability(t, &capability)
 
     math_shaping_destroy(&capability)
     font_shaping_destroy(&entry.shaping)

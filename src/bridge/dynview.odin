@@ -283,6 +283,18 @@ dynview_import_ordered_children :: proc(
     return Dynview_Imported_Children{ids[0], ids[1], ids[2], BRIDGE_STATUS_OK}
 }
 
+//   Import one required direct child program from an operation payload.
+dynview_import_direct_child :: proc(
+    ctx: Dynview_Import_Context,
+    child_count: int) -> Dynview_Imported_Children {
+
+    if child_count <= 0 {
+        return {0, 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+    child_id, child_status := dynview_import_child_program(ctx, child_count)
+    return {child_id, 0, 0, child_status}
+}
+
 //   Resolve the child program ids for one recursive math op.
 //
 // Notes:
@@ -303,12 +315,7 @@ dynview_import_op_children :: proc(
         }
         return dynview_import_ordered_children(ctx, op, false)
     case .Accent_Bar, .Matrix:
-        if child_direct_count <= 0 {
-            return Dynview_Imported_Children{0, 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
-        }
-        child_id, child_status := dynview_import_child_program(ctx,
-            child_direct_count)
-        return Dynview_Imported_Children{child_id, 0, 0, child_status}
+        return dynview_import_direct_child(ctx, child_direct_count)
     case .Frac:
         return dynview_import_fraction_children(ctx, op)
     case .Stretch_Delimiter:
@@ -328,6 +335,24 @@ dynview_import_op_children :: proc(
         i32(op.child_program_id), 0, 0, BRIDGE_STATUS_OK}
 }
 
+//   Publish blob-relative text spans from one imported math operation.
+dynview_math_command_apply_text_spans :: proc(
+    command: ^core.Dynview_Command,
+    op: Bridge_Dynview_Math_Op,
+    blob_offset: int) {
+
+    command^.text_offset = blob_offset + int(op.text_offset)
+    command^.text_len = int(op.text_len)
+    command^.script_base_text_offset = blob_offset + int(op.text_offset)
+    command^.script_base_text_len = int(op.text_len)
+    command^.script_sup_text_offset = blob_offset + int(op.sup_text_offset)
+    command^.script_sup_text_len = int(op.sup_text_len)
+    command^.script_sub_text_offset = blob_offset + int(op.sub_text_offset)
+    command^.script_sub_text_len = int(op.sub_text_len)
+    command^.radical_index_text_offset = blob_offset + int(op.index_text_offset)
+    command^.radical_index_text_len = int(op.index_text_len)
+}
+
 //   Build the compiled dynview command record for one imported math op.
 dynview_math_command_from_op :: proc(
     op: Bridge_Dynview_Math_Op,
@@ -336,7 +361,7 @@ dynview_math_command_from_op :: proc(
     children: Dynview_Imported_Children,
     blob_offset: int) -> core.Dynview_Command {
 
-    return core.Dynview_Command{
+    command := core.Dynview_Command{
         kind = command_kind,
         math_atom_class = core.Dynview_Math_Atom_Class(op.atom_class),
         math_glue_kind = core.Dynview_Math_Glue_Kind(op.glue_kind),
@@ -345,14 +370,6 @@ dynview_math_command_from_op :: proc(
         math_program_id = children.child_program_id,
         secondary_math_program_id = children.secondary_child_program_id,
         tertiary_math_program_id = children.tertiary_child_program_id,
-        text_offset = blob_offset + int(op.text_offset),
-        text_len = int(op.text_len),
-        script_base_text_offset = blob_offset + int(op.text_offset),
-        script_base_text_len = int(op.text_len),
-        script_sup_text_offset = blob_offset + int(op.sup_text_offset),
-        script_sup_text_len = int(op.sup_text_len),
-        script_sub_text_offset = blob_offset + int(op.sub_text_offset),
-        script_sub_text_len = int(op.sub_text_len),
         script_style_id = op.script_style_id,
         script_scale = op.script_scale,
         script_sup_raise = op.script_sup_raise,
@@ -363,12 +380,12 @@ dynview_math_command_from_op :: proc(
         large_op_kind = op.large_op_kind,
         operator_growth = op.operator_growth,
         operator_limits = op.operator_limits,
-        radical_index_text_offset = blob_offset + int(op.index_text_offset),
-        radical_index_text_len = int(op.index_text_len),
         accent_style_id = op.accent_style_id,
         accent_thickness = op.accent_thickness,
         accent_offset = op.accent_offset,
     }
+    dynview_math_command_apply_text_spans(&command, op, blob_offset)
+    return command
 }
 
 //   Read and validate the next math op from the flat stream, advancing the cursor.

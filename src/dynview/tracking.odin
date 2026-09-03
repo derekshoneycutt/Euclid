@@ -28,19 +28,6 @@ invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
     runtime^.compile_cache.is_valid = false
 }
 
-//   Mark stream invalid and preserve first error code for diagnostics/fallback.
-mark_stream_error :: proc(runtime: ^core.Dynview_System, code: i32) {
-    if runtime == nil {
-        return
-    }
-
-    runtime^.command_buffer.has_stream_error = true
-    if runtime^.compile_cache.last_error_code == DYNVIEW_STATUS_OK {
-        runtime^.compile_cache.last_error_code = code
-    }
-    runtime^.compile_cache.is_valid = false
-}
-
 //   Track panel dimensions and invalidate when layout bounds change.
 track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
     if runtime == nil {
