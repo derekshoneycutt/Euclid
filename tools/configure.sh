@@ -35,7 +35,11 @@ fi
 
 if ! pkg-config --exists harfbuzz; then
     printf "\033[31mRequired HarfBuzz development package was not found.\033[0m\n" >&2
-    printf "\033[31mInstall harfbuzz-devel (Fedora) or libharfbuzz-dev (Debian/Ubuntu).\033[0m\n" >&2
+    if [ "$(uname -s)" = "Darwin" ]; then
+        printf "\033[31mInstall it with: brew install harfbuzz pkg-config\033[0m\n" >&2
+    else
+        printf "\033[31mInstall harfbuzz-devel (Fedora) or libharfbuzz-dev (Debian/Ubuntu).\033[0m\n" >&2
+    fi
     exit 1
 fi
 

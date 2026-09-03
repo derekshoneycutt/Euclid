@@ -10,8 +10,18 @@ include(joinpath(@__DIR__, "..", "make.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
+const BuildConfiguration = Main.EuclidBuildConfiguration
 
 @testset "Euclid tooling" begin
+    @testset "native linker platform selection" begin
+        @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Linux) ==
+            ["--libs", "--static", "harfbuzz"]
+        @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Darwin) ==
+            ["--libs", "harfbuzz"]
+        @test_throws ErrorException BuildConfiguration.harfbuzz_pkg_config_arguments(
+            :FreeBSD)
+    end
+
     @testset "repository driver commands" begin
         build = parse_driver_invocation(["build", "--debug", "--strict"])
         @test build.action == :build

@@ -34,10 +34,11 @@ The core application is coded in Odin, with Raylib used for rendering.
 
 ## Building from Source
 
-Linux source builds require Odin, Julia, `pkg-config`, and the HarfBuzz development
-package, with each tool available on PATH. Install `harfbuzz-devel` on Fedora or
-`libharfbuzz-dev` on Debian/Ubuntu. HarfBuzz packaging for macOS and Windows is not
-yet supported.
+Linux and macOS source builds require Odin, Julia, `pkg-config`, and the HarfBuzz
+development package, with each tool available on PATH. Install `harfbuzz-devel` on
+Fedora, `libharfbuzz-dev` on Debian/Ubuntu, or run
+`brew install harfbuzz pkg-config` on macOS. Other macOS package providers work when
+their HarfBuzz installation is visible to `pkg-config`.
 
 Clone the git repository, then build. The conventional `make` entry point configures
 automatically the first time, verifying the toolchain and installing the required
