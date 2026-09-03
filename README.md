@@ -107,6 +107,14 @@ analysis (`tools/analysis`) Julia projects. On Windows, `make.ps1` performs the
 same steps natively in PowerShell; it additionally verifies the MSVC environment
 (or `cl.exe`) and `gendef`.
 
+Additionally, on Linux you might need to build the STB font vendor packages in Odin to get
+an appropriate build. This can typically be done by locating the Odin directory and running
+something like this:
+
+```sh
+sudo /usr/lib64/odin/vendor/stb/src/build_stb.sh
+```
+
 ### Windows requires a few more additions before this will work
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
