@@ -288,6 +288,20 @@ scenario_issue_julia_action :: proc(
     }
 }
 
+//   Store a display checkpoint and publish its retained evidence identity.
+scenario_issue_checkpoint_action :: proc(
+    state: ^Euclid_General_State,
+    identity: ^evidence_trace.Identity) -> bool {
+    handle := record_evidence_checkpoint(state, true)
+    if handle.generation == 0 {
+        return false
+    }
+    identity.kind = .Checkpoint
+    identity.id = state.fixed_step
+    identity.generation = u64(handle.generation)
+    return true
+}
+
 //   Route one display or capture command through display-owned state.
 scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -313,10 +327,7 @@ scenario_issue_display_action :: proc(
         identity.kind = .Capture
         return true, true
     case .Checkpoint:
-        record_evidence_checkpoint(state, true)
-        identity.kind = .Checkpoint
-        identity.id = state.fixed_step
-        return true, true
+        return true, scenario_issue_checkpoint_action(state, identity)
     case .Shutdown:
         runtime.shutdown_requested = true
         return true, true

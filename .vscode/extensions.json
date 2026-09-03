@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-vscode.cmake-tools",
+    "DanielGavin.ols",
+    "julialang.language-julia",
+    "vadimcn.vscode-lldb"
+  ]
+}

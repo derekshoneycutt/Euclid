@@ -29,6 +29,9 @@ Output_Mode :: enum u8 {
     // Create or replace the configured evidence file.
     File,
 
+    // Create or replace a canonical binary trace file.
+    Binary_File,
+
     // Retain evidence in memory without final output.
     Sink,
 }

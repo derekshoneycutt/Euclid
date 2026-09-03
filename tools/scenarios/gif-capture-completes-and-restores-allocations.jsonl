@@ -1,0 +1,21 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Theorem 18","as":"theorem18"}
+{"wait_event":"animation_selected","correlation":"theorem18","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"theorem18","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"start_gif":"theorem-18-cycle"}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_state":"gif_active","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_event":"gif_completed","timeout_ms":10000}
+{"wait_state":"gif_idle","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

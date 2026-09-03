@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Euclid: Debug",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/euclid",
+      "windows": {
+        "program": "${workspaceFolder}/.build/debug/euclid.exe"
+      },
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Euclid: Debug Build"
+    },
+    {
+      "name": "Euclid: Debug with Diagnostics",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/euclid",
+      "windows": {
+        "program": "${workspaceFolder}/.build/debug/euclid.exe"
+      },
+      "args": [
+        "--diagnostics=${workspaceFolder}/.build/debug/euclid.log"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Euclid: Debug Build"
+    },
+    {
+      "name": "Euclid: Debug Scenario",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/euclid",
+      "windows": {
+        "program": "${workspaceFolder}/.build/debug/euclid.exe"
+      },
+      "args": [
+        "--diagnostics=${workspaceFolder}/.build/debug/euclid.log",
+        "--scenario=${input:scenarioPath}",
+        "--scenario-artifacts=${input:scenarioArtifacts}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Euclid: Debug Build"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scenarioPath",
+      "type": "promptString",
+      "description": "Scenario path relative to the repository root",
+      "default": "tools/scenarios/scratchpad-tex-baseline-restores-allocations.jsonl"
+    },
+    {
+      "id": "scenarioArtifacts",
+      "type": "promptString",
+      "description": "Artifact directory relative to the repository root",
+      "default": ".build/scenario-vscode"
+    }
+  ]
+}

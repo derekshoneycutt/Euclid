@@ -571,7 +571,7 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
     state^.fixed_step += 1
     state^.simulation_time += dt
     record_constraint_trace_summary(state)
-    record_evidence_checkpoint(state, false)
+    _ = record_evidence_checkpoint(state, false)
     return true
 }
 
@@ -588,8 +588,41 @@ run_windowed_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> bool {
         return false
     }
 
+    previous_phase := state^.ui_runtime.gif_capture_phase
     view_core.gif_capture_update_fixed_step(state)
+    record_gif_capture_transition(
+        state, previous_phase, state^.ui_runtime.gif_capture_phase)
     return true
+}
+
+//   Record a required semantic event when GIF capture changes lifecycle phase.
+record_gif_capture_transition :: proc(
+    state: ^Euclid_General_State,
+    previous, current: core.Gif_Capture_Phase) {
+    if state == nil || previous == current {
+        return
+    }
+    kind := evidence_trace.Kind.Unknown
+    flags: evidence_trace.Flags = {.Required}
+    if previous == .Armed && current == .Recording {
+        kind = .Gif_Started
+    } else if previous == .Recording && current == .Saved {
+        kind = .Gif_Completed
+    } else if previous == .Recording && current == .Error {
+        kind = .Gif_Failed
+        flags += {.Failure}
+    } else {
+        return
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = kind,
+            correlation_kind = .Capture,
+            correlation = state^.fixed_step,
+            tick = state^.fixed_step,
+            flags = flags,
+        })
 }
 
 //   Record one post-join constraint summary for semantic trace consumers.
@@ -623,9 +656,10 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
 //   - state: Display-owned state observed after synchronized simulation work.
 //   - required: Whether later checkpoint eviction makes evidence incomplete.
 record_evidence_checkpoint :: proc(
-    state: ^Euclid_General_State, required: bool) {
+    state: ^Euclid_General_State,
+    required: bool) -> evidence_checkpoint.Handle {
     if state == nil || state^.point_system == nil || state^.julia_runtime_service == nil {
-        return
+        return {}
     }
 
     typed := capture_evidence_checkpoint(state)
@@ -652,6 +686,7 @@ record_evidence_checkpoint :: proc(
                 generation = handle.generation,
             }},
         })
+    return handle
 }
 
 //   Copy authoritative post-join Euclid state into one fixed checkpoint value.

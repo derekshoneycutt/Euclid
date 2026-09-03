@@ -230,7 +230,7 @@ artifact_encode_event :: proc(destination: []u8, event: trace.Event) {
 // The caller owns and must delete the returned bytes when successful.
 artifact_trace_bytes :: proc(events: []trace.Event) -> ([]byte, bool) {
     trace_size := size_of(Trace_Header) + len(events) * size_of(trace.Event)
-    trace_bytes, trace_error := make([]byte, trace_size, context.temp_allocator)
+    trace_bytes, trace_error := make([]byte, trace_size, context.allocator)
     if trace_error != nil {
         return nil, false
     }
@@ -243,6 +243,22 @@ artifact_trace_bytes :: proc(events: []trace.Event) -> ([]byte, bool) {
             trace_bytes[offset:offset + trace.TRACE_EVENT_SIZE_BYTES], event)
     }
     return trace_bytes, true
+}
+
+//   Write borrowed events using the canonical binary trace encoding.
+//
+// The destination must be a safe relative path whose parent already exists. Events
+// remain caller-owned and are bounded by the artifact retention capacity.
+write_trace :: proc(path: string, events: []trace.Event) -> bool {
+    if !artifact_path_safe(path) || len(events) > ARTIFACT_MAX_EVENTS {
+        return false
+    }
+    trace_bytes, trace_ok := artifact_trace_bytes(events)
+    if !trace_ok {
+        return false
+    }
+    defer delete(trace_bytes)
+    return os.write_entire_file(path, trace_bytes) == nil
 }
 
 //   Write one canonical bounded evidence bundle beneath a caller-selected directory.
@@ -278,15 +294,9 @@ write_bundle :: proc(
         return false
     }
     allocations_json := artifact_allocations_json(bundle)
-    trace_bytes, trace_ok := artifact_trace_bytes(bundle.events)
-    if !trace_ok {
-        return false
-    }
-    defer delete(trace_bytes)
     return os.write_entire_file(fmt.tprintf("%s/manifest.json", directory),
             manifest_json) == nil &&
-        os.write_entire_file(fmt.tprintf("%s/evidence.bin", directory),
-            trace_bytes) == nil &&
+        write_trace(fmt.tprintf("%s/evidence.bin", directory), bundle.events) &&
         os.write_entire_file(fmt.tprintf("%s/state.json", directory),
             state_json) == nil &&
         os.write_entire_file(fmt.tprintf("%s/allocations.json", directory),

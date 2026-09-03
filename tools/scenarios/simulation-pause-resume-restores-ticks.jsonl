@@ -1,0 +1,12 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"scratchpad_idle","timeout_ms":10000}
+{"assert_state":"simulation_running"}
+{"do":"pause_simulation"}
+{"wait_state":"simulation_paused","timeout_ms":10000}
+{"do":"resume_simulation"}
+{"wait_state":"simulation_running","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

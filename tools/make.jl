@@ -22,6 +22,10 @@ Commands:
     check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
     stats FILE [OPTS]            Show targeted source statistics.
     evidence COMMAND [ARGS]      Inspect canonical scenario evidence bundles.
+    scenario NAME [--format=text|json]
+                                 Build debug and run one named scenario.
+    scenario --all [--format=text|json]
+                                 Build debug and run the scenario corpus.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -50,8 +54,8 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage", "harness",
-    "unit", "vet", "test", "check", "stats", "evidence", "analyzer-test", "wiki",
-    "check-wiki", "clean"])
+    "unit", "vet", "test", "check", "stats", "evidence", "scenario",
+    "analyzer-test", "wiki", "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
 function parse_driver_invocation(arguments::Vector{String})
@@ -116,6 +120,7 @@ const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
 const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
 const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
+const SCENARIO_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "scenario_runner.jl")
 
 
 """Return true when running on Windows."""
@@ -123,7 +128,7 @@ is_windows() = Sys.iswindows()
 
 const HARNESS_BINARY_PATH = joinpath(
     BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
-const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.jsonl")
+const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.bin")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
 
 """Return the expected output path for the Euclid application binary."""
@@ -672,7 +677,7 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
         "--asset-root=" * BIN_DIR,
         "--animation-id=" * HARNESS_ANIMATION_ID,
         "--steps=8",
-        "--trace-output=" * HARNESS_TRACE_PATH,
+        "--trace-output=" * relpath(HARNESS_TRACE_PATH, SCRIPT_DIR),
         "--scenario=scenario_point_after_eight_steps",
     ]
     harness_command = Cmd([HARNESS_BINARY_PATH; harness_args...])
@@ -907,6 +912,7 @@ function clean_build_files()
         joinpath(SCRIPT_DIR, ".build", "analysis"),
         joinpath(SCRIPT_DIR, ".build", "debug"),
         joinpath(SCRIPT_DIR, ".build", "reports"),
+        joinpath(SCRIPT_DIR, ".build", "scenarios"),
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
 
@@ -1122,6 +1128,29 @@ function run_evidence_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
+"""Build the headed debug application and run selected scenarios through it."""
+function run_scenario_command(arguments::Vector{String})
+    isempty(arguments) && error("scenario requires one NAME or --all")
+    build = BuildCommand(:build, true, false, String[])
+    build_status = if "--format=json" in arguments
+        redirect_stdout(stderr) do
+            execute_build_plan(build, build_plan_for(:build))
+        end
+    else
+        execute_build_plan(build, build_plan_for(:build))
+    end
+    build_status == 0 || return build_status
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    command = Cmd(vcat([
+        JULIA_EXE, "--project=$analysis_project", SCENARIO_RUNNER_SCRIPT,
+        "--binary=$(debug_app_binary_path())"], arguments))
+    runtime_environment = native_runtime_environment(native_runtime_dirs())
+    command = runtime_environment === nothing ? command :
+        addenv(command, runtime_environment)
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Return whether a unit invocation includes the Odin application suite."""
 unit_command_runs_odin(arguments::Vector{String}) = !("julia" in arguments)
 
@@ -1184,6 +1213,7 @@ function execute_driver_action(invocation::DriverInvocation)
     invocation.action in (:check, :stats) && return run_analysis_command(
         invocation.action, invocation.arguments)
     invocation.action == :evidence && return run_evidence_command(invocation.arguments)
+    invocation.action == :scenario && return run_scenario_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)

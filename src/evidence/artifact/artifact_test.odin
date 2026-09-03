@@ -5,6 +5,7 @@ import "../observe"
 import allocation "../allocation"
 import trace "../trace"
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:testing"
@@ -27,6 +28,23 @@ artifact_test_expect_failure_trace :: proc(t: ^testing.T, directory: string) {
     testing.expect_value(t, len(trace_data),
         size_of(Trace_Header) + 2 * trace.TRACE_EVENT_SIZE_BYTES)
     testing.expect_value(t, string(trace_data[:4]), "EUCL")
+}
+
+// Verify standalone and bundle writers produce identical canonical trace bytes.
+artifact_test_expect_standalone_trace :: proc(
+    t: ^testing.T, directory: string, events: []trace.Event) {
+    standalone_path := fmt.tprintf("%s/standalone.bin", directory)
+    testing.expect(t, write_trace(standalone_path, events))
+    standalone, standalone_error := os.read_entire_file(
+        standalone_path, context.allocator)
+    defer delete(standalone)
+    bundled, bundled_error := os.read_entire_file(
+        fmt.tprintf("%s/evidence.bin", directory), context.allocator)
+    defer delete(bundled)
+    testing.expect(t, standalone_error == nil)
+    testing.expect(t, bundled_error == nil)
+    testing.expect_value(t, len(standalone), len(bundled))
+    testing.expect(t, mem.compare(standalone, bundled) == 0)
 }
 
 // Verify all named arena domains and the retained assertion result are serialized.
@@ -77,6 +95,8 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
 
     artifact_test_expect_failure_manifest(t, directory)
     artifact_test_expect_failure_trace(t, directory)
+    artifact_test_expect_standalone_trace(t, directory, events[:])
     artifact_test_expect_arena_allocations(t, directory)
     testing.expect(t, !write_bundle("../outside", {}))
+    testing.expect(t, !write_trace("../outside.bin", events[:]))
 }

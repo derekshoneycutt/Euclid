@@ -139,7 +139,7 @@ harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Se
         evidence = {
             enabled = true,
             strict = true,
-            output_mode = .File,
+            output_mode = .Binary_File,
             lanes = evidence_session.ALL_LANES,
             output_path = options.trace_output,
         },

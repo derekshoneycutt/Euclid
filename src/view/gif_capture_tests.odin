@@ -5,6 +5,8 @@ import "core:testing"
 
 import app_core "../core"
 import app_bridge "../bridge"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
 import app_view "./core"
 
 //   Verify clearing then setting a long GIF status note truncates with a terminator.
@@ -91,6 +93,32 @@ gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
     session := app_core.Gif_Capture_Session{}
     app_view.gif_capture_abort_session(&session)
     testing.expect(t, !session.active)
+}
+
+//   Verify GIF lifecycle transitions retain required typed display evidence.
+@(test)
+gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    testing.expect(t, evidence_session.session_init(&state^.evidence_session, {
+        enabled = true,
+        output_mode = .Sink,
+        lanes = {.Presentation},
+    }))
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+
+    record_gif_capture_transition(state, .Armed, .Recording)
+    record_gif_capture_transition(state, .Recording, .Saved)
+    record_gif_capture_transition(state, .Recording, .Error)
+
+    events: [3]evidence_trace.Event
+    count := evidence_trace.ring_drain(&state^.evidence_ring, events[:])
+    testing.expect_value(t, count, 3)
+    testing.expect_value(t, events[0].kind, evidence_trace.Kind.Gif_Started)
+    testing.expect_value(t, events[1].kind, evidence_trace.Kind.Gif_Completed)
+    testing.expect_value(t, events[2].kind, evidence_trace.Kind.Gif_Failed)
+    testing.expect(t, .Required in events[0].flags)
+    testing.expect(t, .Failure in events[2].flags)
 }
 
 //   Verify a large hide-point batch splits into multiple commands.

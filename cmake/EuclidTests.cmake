@@ -41,6 +41,48 @@ if(BUILD_TESTING)
     euclid_add_driver_test(odin-unit
         ARGS unit odin
         LABELS "unit;native")
+
+    set(EUCLID_ODIN_TEST_PACKAGES
+        .
+        bridge
+        core
+        diagnostics
+        dynview/compile
+        dynview/core
+        dynview/layout
+        dynview/math
+        evidence/allocation
+        evidence/artifact
+        evidence/capture
+        evidence/checkpoint
+        evidence/export
+        evidence/observe
+        evidence/profile
+        evidence/scenario
+        evidence/session
+        evidence/text
+        evidence/trace
+        files
+        grid
+        particles
+        shapes
+        taskpool
+        view
+        view/core
+        view/font
+        view/ui
+        view/ui/dynview
+    )
+    foreach(package_path IN LISTS EUCLID_ODIN_TEST_PACKAGES)
+        string(REPLACE "/" "-" package_name "${package_path}")
+        if(package_name STREQUAL ".")
+            set(package_name root)
+        endif()
+        euclid_add_driver_test(odin-package-${package_name}
+            ARGS unit odin "--package=${package_path}"
+            LABELS "odin-package;native")
+    endforeach()
+
     euclid_add_driver_test(analyzer-regression
         ARGS analyzer-test
         LABELS "analysis")

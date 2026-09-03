@@ -905,11 +905,11 @@ AnalysisSettings(
                 "evidence-artifact-trace-buffer",
                 "src/evidence/artifact/artifact.odin",
                 "artifact_trace_bytes",
-                :temporary,
-                "Bounded serialized trace buffer owned by bundle export and deleted after the write completes.";
+                :context,
+                "Bounded serialized trace buffer deleted by standalone and bundle writers after the write completes.";
                 operation="make",
                 target="[]byte",
-                allocator_source="context.temp_allocator",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             # Test Allocations -- every site is a test fixture destroyed by defer free

@@ -73,11 +73,11 @@ const REQUEST_EVENT_KINDS = Set(UInt16[65, 122, 123])
 const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 
 const SCENARIO_ACTIONS = [
-    "reset_animation", "select_animation", "reload_runtime", "scratchpad",
-    "pause_simulation", "resume_simulation", "screenshot", "start_gif",
-    "stop_gif", "wait_event", "wait_state", "assert_state", "checkpoint",
-    "allocation_checkpoint", "assert_allocation_baseline",
-    "assert_no_bad_frees", "shutdown"]
+    "reset_animation", "select_animation", "reload_runtime",
+    "inject_reload_failure", "scratchpad", "pause_simulation",
+    "resume_simulation", "screenshot", "start_gif", "stop_gif", "wait_event",
+    "wait_state", "assert_state", "checkpoint", "allocation_checkpoint",
+    "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
@@ -313,6 +313,16 @@ function inspect_bundle(directory::AbstractString)
     return (; manifest, state, allocations, event_count)
 end
 
+"""Resolve a validated bundle directory or bare canonical binary trace."""
+function resolve_query_trace_path(input::AbstractString)
+    if isdir(input)
+        bundle = inspect_bundle(input)
+        return joinpath(input, String(bundle.manifest.artifacts.trace))
+    end
+    isfile(input) || error("evidence query input does not exist: $input")
+    return input
+end
+
 """Return a compact operational summary of one validated evidence bundle."""
 function bundle_summary(directory::AbstractString)
     bundle = inspect_bundle(directory)
@@ -337,7 +347,8 @@ end
 function usage(io::IO=stdout)
     println(io, "Usage: julia tools/evidence.jl COMMAND [ARGUMENTS]")
     println(io, "Commands: capabilities, schema, manifest BUNDLE, summary BUNDLE")
-    println(io, "          query BUNDLE [--kind=NAME] [--producer=NAME] [--lane=NAME]")
+    println(io, "          query BUNDLE_OR_TRACE [--kind=NAME] [--producer=NAME]")
+    println(io, "                                [--lane=NAME]")
     println(io, "                       [--correlation=ID] [--generation=ID]")
     println(io, "                       [--failures] [--limit=N]")
 end
@@ -345,7 +356,7 @@ end
 """Parse one bounded trace query and print its matching event tail."""
 function run_query(arguments::Vector{String})
     isempty(arguments) && return 2
-    directory = first(arguments)
+    input = first(arguments)
     options = Dict{Symbol,Any}(:failures => false, :limit => DEFAULT_QUERY_LIMIT)
     for argument in arguments[2:end]
         if argument == "--failures"
@@ -366,8 +377,8 @@ function run_query(arguments::Vector{String})
             error("unknown query option: $argument")
         end
     end
-    inspect_bundle(directory)
-    println(JSON3.write(query_trace(joinpath(directory, "evidence.bin"); options...)))
+    trace_path = resolve_query_trace_path(input)
+    println(JSON3.write(query_trace(trace_path; options...)))
     return 0
 end
 

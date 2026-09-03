@@ -7,10 +7,14 @@ using Test
 
 include(joinpath(@__DIR__, "..", "verify.jl"))
 include(joinpath(@__DIR__, "..", "make.jl"))
+include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
+include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
 const BuildConfiguration = Main.EuclidBuildConfiguration
+const JuliaTestReporter = Main.EuclidJuliaTestReporter
+const ScenarioRunner = Main.EuclidScenarioRunner
 
 @testset "Euclid tooling" begin
     @testset "native linker platform selection" begin
@@ -65,10 +69,39 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
         @test parse_driver_invocation(["unit", "odin"]).action == :unit
         @test parse_driver_invocation(["check", "src"]).action == :check
         @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
+        @test parse_driver_invocation(["scenario", "example"]).action == :scenario
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
         @test_throws ErrorException parse_driver_invocation(["unknown"])
+    end
+
+    @testset "scenario selection and reporting" begin
+        mktempdir() do root
+            write(joinpath(root, "second.jsonl"), "{}\n")
+            write(joinpath(root, "first.jsonl"), "{}\n")
+            @test ScenarioRunner.scenario_names(root) == ["first", "second"]
+            selected = ScenarioRunner.parse_scenario_options(
+                ["second", "--format=json"]; root)
+            @test selected.names == ["second"]
+            @test selected.format == :json
+            @test ScenarioRunner.parse_scenario_options(["--all"]; root).names ==
+                ["first", "second"]
+            @test_throws ErrorException ScenarioRunner.parse_scenario_options(
+                ["missing"]; root)
+        end
+
+        first_path = ScenarioRunner.fresh_artifact_path("example")
+        second_path = ScenarioRunner.fresh_artifact_path("example")
+        @test first_path != second_path
+        @test !ispath(first_path)
+        inconclusive = (result="inconclusive", trace_complete=false, exit_code=1)
+        @test !ScenarioRunner.scenario_passed(inconclusive)
+        output = IOBuffer()
+        ScenarioRunner.write_json_report(output, [inconclusive])
+        report = ScenarioRunner.JSON3.read(String(take!(output)))
+        @test !report.passed
+        @test report.scenarios[1].result == "inconclusive"
     end
 
     @testset "check command arguments" begin
@@ -142,6 +175,40 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
         @test "-define:ODIN_TEST_THREADS=1" in TestRunner.odin_test_command("")
     end
 
+    @testset "structured test records" begin
+        source_path = joinpath(TestRunner.ODIN_SOURCE_ROOT, "core")
+        locations = TestRunner.discover_odin_locations(TestRunner.ODIN_SOURCE_ROOT)
+        name = "core.core_test_animation_value_store_overwrites_bound_key"
+        @test locations[name].file == "src/core/animation_value_store_test.odin"
+        @test locations[name].line == 8
+        package_names = TestRunner.odin_package_test_names(source_path, locations)
+        @test name in package_names
+        @test all(startswith(test_name, "core.") for test_name in package_names)
+        @test TestRunner.odin_source_path("../outside") === nothing
+        @test TestRunner.odin_source_path("missing") === nothing
+
+        repeated = [
+            (name="loop > value", status="passed"),
+            (name="loop > value", status="passed"),
+            (name="unique", status="passed"),
+        ]
+        disambiguated = JuliaTestReporter.disambiguate_records(repeated)
+        @test [record.name for record in disambiguated] ==
+            ["loop > value [case 1]", "loop > value [case 2]", "unique"]
+
+        record = TestRunner.TestResult(
+            name, "Odin", "core", locations[name].file, locations[name].line,
+            "passed", nothing, nothing)
+        suite = TestRunner.SuiteResult(
+            "odin", "Odin", 1, UInt64(10), "PASS", "", [record])
+        output = IOBuffer()
+        TestRunner.write_json_report(output, [suite])
+        report = TestRunner.JSON3.read(String(take!(output)))
+        @test report.schema_version == "2.0.0"
+        @test report.tests[1].name == name
+        @test report.tests[1].elapsed_ns === nothing
+    end
+
     @testset "test count extraction" begin
         julia_output = "Test Summary:         | Pass  Total   Time\n" *
             "EuclidApp Julia Tests |  712    712  31.5s\n"
@@ -154,17 +221,28 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
             "Finished 1 test in 12.7s. The test was successful.") == 1
         @test TestRunner.reported_odin_count("No tests to run.") === nothing
         @test TestRunner.odin_suite_status(0, 139) == "PASS"
+        @test TestRunner.odin_suite_status(0, 0) == "FAIL"
         @test TestRunner.odin_suite_status(0, nothing) == "FAIL"
         @test TestRunner.odin_suite_status(1, 139) == "FAIL"
     end
 
     @testset "test runner option parsing" begin
-        @test TestRunner.parse_options(String[]) ==
-            (selected_suite=nothing, format="text", color=:auto)
+        defaults = TestRunner.parse_options(String[])
+        @test defaults.selected_suite === nothing
+        @test defaults.format == "text"
+        @test defaults.color == :auto
+        @test defaults.selected_test === nothing
+        @test defaults.selected_package === nothing
         @test TestRunner.parse_options(["--format=json"]).format == "json"
         @test TestRunner.parse_options(["--color=never"]).color == :never
         @test TestRunner.parse_options(["julia"]).selected_suite == "julia"
+        @test TestRunner.parse_options([
+            "odin", "--test=core.example"]).selected_test == "core.example"
+        @test TestRunner.parse_options([
+            "odin", "--package=dynview/math"]).selected_package == "dynview/math"
         @test TestRunner.parse_options(["--bogus"]) isa String
+        @test TestRunner.parse_options(["--test="]) isa String
+        @test TestRunner.parse_options(["--package="]) isa String
         @test TestRunner.parse_options(["julia", "odin"]) isa String
         @test TestRunner.parse_options(["--format=xml"]) isa String
         @test TestRunner.parse_options(["--color=wrong"]) isa String

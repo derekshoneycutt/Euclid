@@ -387,7 +387,17 @@ Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-ou
 ```
 
 `julia tools/make.jl harness` builds and runs the default harness scenario and writes the
-resulting trace to `bin/semantic-trace-harness.jsonl`.
+resulting canonical binary trace to `bin/semantic-trace-harness.bin`. Query that bare
+trace or a scenario bundle through the same evidence command:
+
+```sh
+julia tools/make.jl evidence query bin/semantic-trace-harness.bin \
+  --kind=animation_tick_committed
+julia tools/make.jl evidence query .build/scenarios/SCENARIO-RUN --failures
+```
+
+Application `--semantic-trace-output=PATH` remains the explicit JSONL export for
+human-readable traces.
 
 ### Q: Where should I start if I want in the code?
 

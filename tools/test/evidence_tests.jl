@@ -48,6 +48,7 @@ end
 
 @testset "evidence capabilities and schema" begin
     @test "select_animation" in EuclidEvidence.capabilities().actions
+    @test "inject_reload_failure" in EuclidEvidence.capabilities().actions
     @test "animation_cycle_boundary" in EuclidEvidence.scenario_schema().events
     @test "animation_tick_committed" in EuclidEvidence.scenario_schema().events
     @test "animation_loaded" in EuclidEvidence.scenario_schema().events
@@ -64,6 +65,16 @@ end
 
         tail = EuclidEvidence.query_trace(joinpath(directory, "evidence.bin"); limit=2)
         @test getproperty.(tail, :sequence) == UInt64[2, 3]
+
+        trace_path = joinpath(directory, "evidence.bin")
+        filters = (correlation=UInt64(20), generation=UInt64(30),
+            kind="animation_tick_committed", producer="animation", lane="domain")
+        @test EuclidEvidence.resolve_query_trace_path(directory) == trace_path
+        @test EuclidEvidence.resolve_query_trace_path(trace_path) == trace_path
+        @test EuclidEvidence.query_trace(
+            EuclidEvidence.resolve_query_trace_path(directory); filters...) ==
+            EuclidEvidence.query_trace(
+                EuclidEvidence.resolve_query_trace_path(trace_path); filters...)
 
         failures = EuclidEvidence.query_trace(
             joinpath(directory, "evidence.bin"); failures=true)
@@ -85,6 +96,14 @@ end
             write(io, UInt8(0))
         end
         @test_throws ErrorException EuclidEvidence.inspect_bundle(directory)
+        @test_throws ErrorException EuclidEvidence.query_trace(
+            joinpath(directory, "evidence.bin"))
+    end
+
+    mktemp() do path, io
+        write(io, zeros(UInt8, EuclidEvidence.TRACE_HEADER_BYTES))
+        close(io)
+        @test_throws ErrorException EuclidEvidence.query_trace(path)
     end
 
     mktempdir() do directory

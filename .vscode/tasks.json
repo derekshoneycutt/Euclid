@@ -1,0 +1,92 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}"
+  },
+  "problemMatcher": [
+    {
+      "owner": "odin",
+      "source": "Odin",
+      "fileLocation": ["autoDetect", "${workspaceFolder}"],
+      "pattern": {
+        "regexp": "^(.*)\\((\\d+):(\\d+)\\)\\s+(Error|Warning):\\s+(.*)$",
+        "file": 1,
+        "line": 2,
+        "column": 3,
+        "severity": 4,
+        "message": 5
+      }
+    },
+    {
+      "owner": "julia",
+      "source": "Julia",
+      "fileLocation": ["autoDetect", "${workspaceFolder}"],
+      "pattern": {
+        "regexp": "^ERROR: LoadError:\\s*(.*?)\\s+@\\s+(.+):(\\d+)(?::(\\d+))?$",
+        "message": 1,
+        "file": 2,
+        "line": 3,
+        "column": 4
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Euclid: Build",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "--preset", "default"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Euclid: Debug Build",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "--preset", "debug"],
+      "group": "build"
+    },
+    {
+      "label": "Euclid: Run",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "--preset", "default", "--target", "run"]
+    },
+    {
+      "label": "Euclid: Unit Tests",
+      "type": "process",
+      "command": "julia",
+      "args": ["tools/make.jl", "unit"],
+      "group": "test"
+    },
+    {
+      "label": "Euclid: Julia Unit Tests",
+      "type": "process",
+      "command": "julia",
+      "args": ["tools/make.jl", "unit", "julia"],
+      "group": "test"
+    },
+    {
+      "label": "Euclid: Odin Unit Tests",
+      "type": "process",
+      "command": "julia",
+      "args": ["tools/make.jl", "unit", "odin"],
+      "group": "test"
+    },
+    {
+      "label": "Euclid: Check",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "--preset", "default", "--target", "check"],
+      "group": "test"
+    },
+    {
+      "label": "Euclid: Analyze Repository",
+      "type": "process",
+      "command": "julia",
+      "args": ["tools/make.jl", "check"]
+    }
+  ]
+}

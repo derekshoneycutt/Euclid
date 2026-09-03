@@ -182,7 +182,7 @@ write_session_jsonl_file :: proc(
 //
 // Notes:
 //   - Events are emitted in session retention order.
-//   - Nil, disabled, and sink sessions intentionally perform no I/O and succeed.
+//   - Nil, disabled, sink, and non-JSON sessions perform no I/O and succeed.
 //   - The caller owns recording export failure in run-level evidence policy.
 write_session_jsonl :: proc(session: ^evidence_session.Session) -> bool {
     if session == nil || !session.enabled || session.output_mode == .Sink {
@@ -197,7 +197,7 @@ write_session_jsonl :: proc(session: ^evidence_session.Session) -> bool {
         return true
     case .File:
         return write_session_jsonl_file(session, run_id)
-    case .Disabled, .Sink:
+    case .Disabled, .Binary_File, .Sink:
         return true
     }
     return false

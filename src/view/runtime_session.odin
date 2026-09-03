@@ -372,6 +372,16 @@ write_scenario_artifact :: proc(
     })
 }
 
+//   Export the completed evidence session through its selected encoding owner.
+write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
+    if session == nil || session.output_mode != .Binary_File {
+        return evidence_export.write_session_jsonl(session)
+    }
+    path := string(session.output_path[:session.output_path_count])
+    events := session.events[:session.event_count]
+    return evidence_artifact.write_trace(path, events)
+}
+
 //   Shut down one runtime session in reverse ownership order.
 shutdown_runtime_session :: proc(
     session: Euclid_Runtime_Session,
@@ -394,7 +404,7 @@ shutdown_runtime_session :: proc(
         &session.state^.evidence_session, &session.state^.evidence_ring)
     artifact_succeeded := write_scenario_artifact(
         session, scenario_runtime, artifact_output)
-    export_succeeded := evidence_export.write_session_jsonl(
+    export_succeeded := write_session_evidence(
         &session.state^.evidence_session) && artifact_succeeded
     evidence_session.session_finish(
         &session.state^.evidence_session, export_succeeded)
