@@ -158,13 +158,18 @@ function dynview_math_block_from_ops(
     style_id::Integer,
     ops::Vector{BridgeDynviewMathOp},
     top_level_op_count::Integer,
+    table_descriptors::Vector{BridgeDynviewMathTableDescriptor},
     text_blob::AbstractString)
 
     op_count = Int32(length(ops))
-    GC.@preserve ops plain_text text_blob begin
+    table_descriptor_count = Int32(length(table_descriptors))
+    GC.@preserve ops table_descriptors plain_text text_blob begin
         ops_ptr = op_count > 0 ? pointer(ops) : Ptr{BridgeDynviewMathOp}(C_NULL)
+        descriptor_ptr = table_descriptor_count > 0 ? pointer(table_descriptors) :
+            Ptr{BridgeDynviewMathTableDescriptor}(C_NULL)
         program = BridgeDynviewMathProgram(
-            ops_ptr, op_count, Int32(top_level_op_count))
+            ops_ptr, op_count, Int32(top_level_op_count),
+            descriptor_ptr, table_descriptor_count)
         @ccall dynview_math_block_from_ops(
             state_ptr::Ptr{Cvoid},
             plain_text::Cstring,

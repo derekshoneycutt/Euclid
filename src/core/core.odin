@@ -46,6 +46,7 @@ FONT_SHAPED_GLYPH_CAPACITY :: SCRATCHPAD_ASYNC_TEXT_CAPACITY
 DYNVIEW_MAX_LAYOUT_LINES :: 4096
 DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
 DYNVIEW_MAX_MATH_PROGRAMS :: 256
+DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS :: DYNVIEW_MAX_MATH_PROGRAMS
 DYNVIEW_MAX_MATH_NODES :: 4096
 DYNVIEW_MAX_MATH_COMMANDS :: 4096
 DYNVIEW_MAX_SHAPED_RUNS :: DYNVIEW_MAX_MATH_COMMANDS
@@ -299,6 +300,7 @@ View_Snapshot :: struct {
     command_text_builder: Bounded_Byte_Builder,
     command_builder: Bounded_Element_Builder(Dynview_Command),
     math_program_builder: Bounded_Element_Builder(Dynview_Math_Program),
+    math_table_descriptor_builder: Bounded_Element_Builder(Dynview_Math_Table_Descriptor),
     math_command_builder: Bounded_Element_Builder(Dynview_Command),
     math_node_builder: Bounded_Element_Builder(Dynview_Math_Node),
 
@@ -310,6 +312,7 @@ View_Snapshot :: struct {
     stream_open_block_id: i32,
     commands: []Dynview_Command,
     math_programs: []Dynview_Math_Program,
+    math_table_descriptors: []Dynview_Math_Table_Descriptor,
     math_commands: []Dynview_Command,
     math_nodes: []Dynview_Math_Node,
 }
@@ -930,6 +933,20 @@ Dynview_Matrix_Column_Alignment :: enum i32 {
     Right = 2,
 }
 
+Dynview_Math_Style_Level :: enum i32 {
+    Display = 0,
+    Text = 1,
+    Script = 2,
+    Script_Script = 3,
+}
+
+Dynview_Math_Table_Descriptor :: struct {
+    rows: int,
+    columns: int,
+    cell_style: Dynview_Math_Style_Level,
+    column_alignments: [16]Dynview_Matrix_Column_Alignment,
+}
+
 Dynview_Command_Kind :: enum {
     Begin_Block,
     End_Block,
@@ -987,6 +1004,7 @@ Dynview_Command :: struct {
     math_program_id: i32,
     secondary_math_program_id: i32,
     tertiary_math_program_id: i32,
+    table_descriptor_index: i32,
     math_style_level: u8,
     math_style_cramped: bool,
     math_font_size: f32,
@@ -1082,6 +1100,7 @@ Dynview_Layout_Item :: struct {
     math_program_id: i32,
     secondary_math_program_id: i32,
     tertiary_math_program_id: i32,
+    table_descriptor_index: i32,
     math_style_level: u8,
     math_style_cramped: bool,
     math_font_size: f32,
@@ -1316,6 +1335,7 @@ Dynview_Compile_Cache :: struct {
     layout_line_count: int,
     layout_item_count: int,
     math_program_count: int,
+    math_table_descriptor_count: int,
     math_command_count: int,
     math_node_count: int,
     layout_is_valid: bool,
@@ -1355,6 +1375,8 @@ Dynview_Compile_Cache :: struct {
     layout_line_builder: Bounded_Element_Builder(Dynview_Layout_Line),
     layout_item_builder: Bounded_Element_Builder(Dynview_Layout_Item),
     math_programs: [DYNVIEW_MAX_MATH_PROGRAMS]Dynview_Math_Program,
+    math_table_descriptors:
+        [DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS]Dynview_Math_Table_Descriptor,
     math_commands: [DYNVIEW_MAX_MATH_COMMANDS]Dynview_Command,
     math_nodes: [DYNVIEW_MAX_MATH_NODES]Dynview_Math_Node,
 }
@@ -1373,6 +1395,7 @@ Dynview_Content_View :: struct {
     commands: []Dynview_Command,
     text_bytes: []u8,
     math_programs: []Dynview_Math_Program,
+    math_table_descriptors: []Dynview_Math_Table_Descriptor,
     math_commands: []Dynview_Command,
     math_nodes: []Dynview_Math_Node,
 }

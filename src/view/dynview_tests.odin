@@ -47,6 +47,28 @@ dynview_test_layout_builders_init :: proc(
         dyncore.DYNVIEW_STATUS_OK)
 }
 
+//   Initialize all semantic record builders for one direct snapshot fixture.
+view_snapshot_test_record_builders_init :: proc(
+    t: ^testing.T, snapshot: ^app_bridge.View_Snapshot) {
+
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.command_builder, app_core.DYNVIEW_MAX_COMMANDS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_program_builder, app_core.DYNVIEW_MAX_MATH_PROGRAMS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_table_descriptor_builder,
+        app_core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_command_builder, app_core.DYNVIEW_MAX_MATH_COMMANDS,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, app_core.bounded_element_builder_init(
+        &snapshot^.math_node_builder, app_core.DYNVIEW_MAX_MATH_NODES,
+        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+}
+
 //   Initialize and seal both slot-owned text builders for direct snapshot tests.
 view_snapshot_test_text_builders_init :: proc(
     t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
@@ -59,18 +81,7 @@ view_snapshot_test_text_builders_init :: proc(
     testing.expect_value(t, app_core.bounded_byte_builder_init(
         &snapshot^.command_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES,
         &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.command_builder, app_core.DYNVIEW_MAX_COMMANDS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_program_builder, app_core.DYNVIEW_MAX_MATH_PROGRAMS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_command_builder, app_core.DYNVIEW_MAX_MATH_COMMANDS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_node_builder, app_core.DYNVIEW_MAX_MATH_NODES,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    view_snapshot_test_record_builders_init(t, snapshot)
     testing.expect_value(t, app_core.bounded_byte_builder_append(
         &snapshot^.fallback_text_builder, transmute([]u8)fallback_text),
         app_core.Bounded_Builder_Status.Ok)
@@ -94,7 +105,7 @@ view_snapshot_test_payloads_init :: proc(
 
     view_snapshot_test_text_builders_init(t, snapshot, fallback_text, "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        []app_core.Dynview_Command{{block_id = block_id}}, nil, nil, nil))
+        {commands = []app_core.Dynview_Command{{block_id = block_id}}}))
 }
 
 //   Rebuild text and one command payload after a prepared slot reset.
@@ -105,7 +116,7 @@ view_snapshot_test_payloads_build :: proc(
     testing.expect(t, app_bridge.build_view_snapshot_text_payloads(
         snapshot, fallback_text, nil))
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        []app_core.Dynview_Command{{block_id = block_id}}, nil, nil, nil))
+        {commands = []app_core.Dynview_Command{{block_id = block_id}}}))
 }
 
 //   Require a retired slot to be free without resetting its arena early.
@@ -674,7 +685,7 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     math_commands := []app_core.Dynview_Command{{kind = .Math_Glyph_Run}}
     nodes := []app_core.Dynview_Math_Node{{kind = .Glyph_Run}}
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, commands, programs, math_commands, nodes))
+        snapshot, {commands, programs, math_commands, nodes, nil}))
     runtime^.compile_cache.is_valid = true
     runtime^.compile_cache.layout_is_valid = true
 
@@ -741,7 +752,7 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     view_snapshot_test_text_builders_init(
         t, &service^.view_snapshots[0], "fallback", "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        &service^.view_snapshots[0], nil, nil, nil, nil))
+        &service^.view_snapshots[0], {}))
     defer app_core.arena_owner_destroy(&service^.view_snapshots[0].arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
@@ -769,7 +780,7 @@ scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
     view_snapshot_test_text_builders_init(t, snapshot, "fallback", "")
     defer app_core.arena_owner_destroy(&snapshot^.arena)
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, nil, nil, nil, nil))
+        snapshot, {}))
     snapshot^.stream_open_block = true
 
     testing.expect(t, !app_bridge.publish_available_view_snapshot(state))
@@ -822,7 +833,7 @@ view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "", "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, nil, nil, nil, nil))
+        snapshot, {}))
     defer app_core.arena_owner_destroy(&snapshot^.arena)
 
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
@@ -849,7 +860,7 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
         {radical_index_text_offset = 4, radical_index_text_len = 1},
     }
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, []app_core.Dynview_Command{{}}, nil, nil, nil))
+        snapshot, {commands = []app_core.Dynview_Command{{}}}))
     for command in malformed {
         snapshot^.commands[0] = command
         testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
@@ -1719,12 +1730,14 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
 
     glyph_scale_sum := app_math.large_op_glyph_scale(app_math.LARGE_OP_KIND_SUM)
     glyph_scale_int := app_math.large_op_glyph_scale(app_math.LARGE_OP_KIND_INT)
+    glyph_scale_nary := app_math.large_op_glyph_scale(app_math.LARGE_OP_KIND_NARY)
     limit_scale := app_math.large_op_limit_scale(0.8)
     gap := app_math.large_op_limit_gap_for_kind(
         app_math.LARGE_OP_KIND_INT, 16, 0.25)
 
     testing.expect(t, glyph_scale_sum > 1)
     testing.expect(t, glyph_scale_int > glyph_scale_sum)
+    testing.expect_value(t, glyph_scale_nary, glyph_scale_sum)
     testing.expect(t, limit_scale > 0)
     testing.expect(t, gap > 0)
 }

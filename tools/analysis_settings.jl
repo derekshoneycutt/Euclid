@@ -431,6 +431,28 @@ AnalysisSettings(
                 target="app_core.Dynview_Command_Buffer",
                 certainty=:definite,
                 response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-table-descriptor-import",
+                "src/bridge/dynview_table_descriptor_test.odin",
+                "dynview_table_descriptor_import_preserves_typed_metadata",
+                :context,
+                "Bounded test fixture is released by the procedure's deferred free.";
+                operation="new",
+                target="core.Dynview_Compile_Cache",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-table-descriptor-invalid-alignment",
+                "src/bridge/dynview_table_descriptor_test.odin",
+                "dynview_table_descriptor_import_rejects_invalid_alignment",
+                :context,
+                "Bounded test fixture is released by the procedure's deferred free.";
+                operation="new",
+                target="core.Dynview_Compile_Cache",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore),
             # Shared bounded builders grow within an explicit bulk-lifetime owner.
             ReviewedAllocationPolicy(
                 "core-bounded-byte-builder-growth",

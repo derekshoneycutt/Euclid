@@ -189,14 +189,16 @@ Math mode supports these major groups:
 - Glyph accents: `\hat`, `\widehat`, `\tilde`, `\widetilde`, `\vec`, `\dot`,
   `\ddot`, and `\bar` use MATH attachment points and horizontal constructions.
 - Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
-- Large operators with limits: `\sum`, `\prod`, `\int`, `\lim`.
+- Large operators with semantic growth and limit policies: `\sum`, `\prod`,
+    `\coprod`, `\int`, `\oint`, `\iint`, `\iiint`, `\lim`, and common n-ary
+    operators.
 - Matrix blocks: `\begin{matrix} ... \end{matrix}` and
     `\begin{array}{...} ... \end{array}` with `&` column separators and `\\`
     row separators.
 - Matrix wrapper environments composed through stretch delimiters: `bmatrix`,
-    `pmatrix`, and `vmatrix`.
-- Spacing markers: `\;` for one normal space, `\ ` for one escaped literal
-    space, and `~` for a nonbreaking space.
+    `Bmatrix`, `pmatrix`, `vmatrix`, and `Vmatrix`.
+- Spacing markers: `\,`, `\:`, `\>`, `\;`, `\!`, a backslash followed by a
+    literal space, `\enspace`, `\quad`, `\qquad`, and `~`.
 
 ## Display-Math Layout Contract
 
@@ -233,9 +235,10 @@ boundary; fallback text is never reparsed to recover structure on the Odin side.
 
 ## Character Support
 
-Character handling is practical and intentionally limited. Command support is
-a fixed map in `src/julia/latex.jl`: `UNICODE_COMMAND_MAP` and
-`MATHBB_UPPERCASE_MAP`. It is not general TeX compatibility.
+Character handling is practical and intentionally limited. Fixed commands use
+`MATH_COMMAND_REGISTRY` for output, role, atom class, operator family, growth,
+and limit policy. `MATHBB_UPPERCASE_MAP` handles the currently supported
+double-struck alphabet. This is not general TeX compatibility.
 
 - ASCII letters, digits, and punctuation are the best default for authored
     math source. Examples include `a`, `x_1`, `+`, `(`, and `)`.
@@ -283,8 +286,10 @@ character entry.
 - Triangle operators: `\bigtriangleup`, `\bigtriangledown`, `\triangleleft`,
     `\triangleright`, `\lhd`, `\rhd`, `\unlhd`, and `\unrhd`.
 - Additional operators: `\dagger`, `\ddagger`, and `\amalg`.
-- Calculus and analysis: `\infty`, `\partial`, `\nabla`, `\propto`, `\oint`,
-    `\iint`, `\iiint`, and `\coprod`.
+- Calculus and analysis: `\infty`, `\partial`, `\nabla`, and `\propto`.
+- Large operators: `\sum`, `\prod`, `\coprod`, `\int`, `\oint`, `\iint`,
+    `\iiint`, `\bigcup`, `\bigcap`, `\bigvee`, `\bigwedge`, `\bigsqcup`,
+    `\biguplus`, `\bigoplus`, `\bigotimes`, and `\bigodot`.
 - Logic and quantifiers: `\forall`, `\exists`, `\nexists`, `\neg`, `\land`,
     `\lor`, `\wedge`, `\vee`, `\therefore`, `\because`, `\top`, and `\bot`.
 - Set membership: `\in`, `\notin`, `\ni`, `\owns`, and `\notni`.
@@ -314,8 +319,9 @@ character entry.
     `\Box`, `\square`, `\Diamond`, `\lozenge`, and `\surd`.
 - Suits, music, and marks: `\clubsuit`, `\diamondsuit`, `\heartsuit`,
     `\spadesuit`, `\flat`, `\natural`, `\sharp`, `\checkmark`, and `\degree`.
-- Spacing: `\;` maps to one normal space, `\ ` maps to one escaped literal
-    space, and `~` maps to one nonbreaking space (`\u00a0`).
+- Spacing: `\;` maps to one normal space, a backslash followed by a literal
+    space maps to one escaped space, and `~` maps to one nonbreaking space
+    (`\u00a0`).
 - Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
     `\Vert`, `\backslash`, `\{`, `\}`.
 
@@ -344,6 +350,12 @@ Matrix mode supports rectangular grids and recursive math within cells:
 
 Rows must be rectangular. Malformed matrix shape falls back safely rather than
 crashing the frame path.
+
+Matrix dimensions, cell style, and column alignments cross the Julia/Odin boundary in
+a bounded typed descriptor. Matrix commands reference that descriptor by block-local
+index; native measurement and drawing do not reparse fallback text for layout policy.
+Normal matrix and array cells enter TeX Text style before recursive fractions, scripts,
+radicals, or operators are measured. OpenType MATH style scaling remains authoritative.
 
 ## Delimiter Support
 

@@ -13,9 +13,14 @@ const TEX_COMPLIANCE_BASELINE = [
     (category=:scripts, source="x_i^2+V_A"),
     (category=:fractions, source="\\frac{a+b}{c}"),
     (category=:operators, source="\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx"),
+    (category=:extended_operators,
+        source="\\oint_C f+\\iint_D g+\\coprod_i A_i+\\bigcup_i S_i"),
     (category=:radicals, source="\\sqrt[n]{x+1}"),
     (category=:delimiters, source="\\left(\\frac{a}{b}\\right)"),
     (category=:matrices, source="\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}"),
+    (category=:matrix_wrappers,
+        source="\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}+" *
+            "\\begin{Vmatrix}1&0\\\\0&1\\end{Vmatrix}"),
     (category=:bars, source="\\overline{AB}+\\underline{CD}"),
     (category=:nesting, source="\\frac{1}{1+\\frac{1}{x^2}}"),
     (category=:fallback, source="\\unsupported{readable}"),
@@ -218,6 +223,24 @@ end
     @test EuclidLatex.latex_to_plain_text("Ax+Γα=2") == "Ax+Γα=2"
 end
 
+@testset "fixed math command registry" begin
+    expected = [
+        ("\\times", "×", EuclidLatex.MATH_ATOM_BIN),
+        ("\\leq", "≤", EuclidLatex.MATH_ATOM_REL),
+        ("\\rightarrow", "→", EuclidLatex.MATH_ATOM_REL),
+        ("\\lceil", "⌈", EuclidLatex.MATH_ATOM_OPEN),
+        ("\\rceil", "⌉", EuclidLatex.MATH_ATOM_CLOSE),
+        ("\\lvert", "|", EuclidLatex.MATH_ATOM_OPEN),
+        ("\\rvert", "|", EuclidLatex.MATH_ATOM_CLOSE),
+    ]
+    for (command, output, atom_class) in expected
+        spec = EuclidLatex.MATH_COMMAND_REGISTRY[command]
+        @test spec.output == output
+        @test spec.atom_class == atom_class
+        @test spec.operator_family == EuclidLatex.LARGE_OP_KIND_NONE
+    end
+end
+
 @testset "math whitespace and explicit glue" begin
     compact = EuclidLatex.compiled_program_for("a+b=c")
     spaced = EuclidLatex.compiled_program_for(" a + b = c ")
@@ -239,6 +262,19 @@ end
         EuclidLatex.MATH_GLUE_QUAD,
         EuclidLatex.MATH_GLUE_NONE,
         EuclidLatex.MATH_GLUE_THIN,
+        EuclidLatex.MATH_GLUE_NONE,
+    ]
+
+    added = EuclidLatex.compiled_program_for("a\\:b\\>c\\enspace d\\qquad e")
+    @test [op.glue_kind for op in added] == [
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_SPACE,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_SPACE,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_SPACE,
+        EuclidLatex.MATH_GLUE_NONE,
+        EuclidLatex.MATH_GLUE_QUAD,
         EuclidLatex.MATH_GLUE_NONE,
     ]
 end
@@ -363,6 +399,36 @@ end
     @test int_program[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_INT
     @test int_program[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_DISPLAY
     @test int_program[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
+
+    promoted_commands = [
+        ("\\oint", "∮", EuclidLatex.LARGE_OP_KIND_INT,
+            EuclidLatex.OPERATOR_LIMITS_SIDE),
+        ("\\iint", "∬", EuclidLatex.LARGE_OP_KIND_INT,
+            EuclidLatex.OPERATOR_LIMITS_SIDE),
+        ("\\iiint", "∭", EuclidLatex.LARGE_OP_KIND_INT,
+            EuclidLatex.OPERATOR_LIMITS_SIDE),
+        ("\\coprod", "∐", EuclidLatex.LARGE_OP_KIND_PROD,
+            EuclidLatex.OPERATOR_LIMITS_STACKED),
+        ("\\bigcup", "⋃", EuclidLatex.LARGE_OP_KIND_NARY,
+            EuclidLatex.OPERATOR_LIMITS_STACKED),
+        ("\\bigotimes", "⨂", EuclidLatex.LARGE_OP_KIND_NARY,
+            EuclidLatex.OPERATOR_LIMITS_STACKED),
+    ]
+    for (command, glyph, family, limits) in promoted_commands
+        operator = first(EuclidLatex.compiled_program_for(command * "_A^B"))
+        @test operator.kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
+        @test operator.text == glyph
+        @test operator.large_op_kind == family
+        @test operator.operator_growth == EuclidLatex.OPERATOR_GROWTH_DISPLAY
+        @test operator.operator_limits == limits
+        @test EuclidLatex.latex_source_for_program([operator]) == command * "_{A}^{B}"
+    end
+
+    nary_payload = EuclidLatex.bridge_math_block_payload(
+        EuclidLatex.compiled_program_for("\\bigcup_{i=1}^n");
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test nary_payload.ops[1].large_op_kind ==
+        OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY
 end
 
 @testset "accent bars" begin
@@ -638,6 +704,20 @@ end
     @test length(vmatrix_program[1].children) == 1
     @test vmatrix_program[1].children[1].kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE
 
+    Bmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}")
+    @test Bmatrix_program[1].radical_index_text == "\\{"
+    @test Bmatrix_program[1].sup_text == "\\}"
+
+    Vmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}")
+    @test Vmatrix_program[1].radical_index_text == "\\|"
+    @test Vmatrix_program[1].sup_text == "\\|"
+
+    delimiter_aliases = EuclidLatex.latex_to_plain_text(
+        "\\lvert x \\rvert \\lVert y \\rVert")
+    @test delimiter_aliases == "|x|‖y‖"
+
     matrix_program = EuclidLatex.compiled_program_for(
         "\\begin{matrix}a&\\frac{1}{2}\\\\c&d_1\\end{matrix}")
     @test length(matrix_program) == 1
@@ -667,6 +747,24 @@ end
     @test array_program_mixed[1].sub_text == "lcr"
 
     @test matrix_program[1].sub_text == ""
+
+    table_payload = EuclidLatex.bridge_math_block_payload(array_program_mixed;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    table_op = only(filter(op ->
+        op.kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE, table_payload.ops))
+    descriptor = only(table_payload.table_descriptors)
+    @test table_op.table_descriptor_index == Int32(0)
+    @test descriptor.rows == Int32(1)
+    @test descriptor.columns == Int32(3)
+    @test descriptor.cell_style == Int32(1)
+    @test descriptor.column_alignments[1:3] == (Int32(0), Int32(1), Int32(2))
+
+    wrapped_payload = EuclidLatex.bridge_math_block_payload(Bmatrix_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test wrapped_payload.ops[1].table_descriptor_index == Int32(-1)
+    wrapped_matrix_op = only(filter(op ->
+        op.kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE, wrapped_payload.ops))
+    @test wrapped_matrix_op.table_descriptor_index == Int32(0)
 
     malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
     @test malformed == "\\begin"

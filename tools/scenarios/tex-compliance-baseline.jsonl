@@ -9,18 +9,18 @@
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"scratchpad":":reset","as":"reset-warm-1"}
 {"wait_event":"scratchpad_completed","correlation":"reset-warm-1","timeout_ms":10000}
-{"scratchpad":"L\"a+b=c,\\;-a+b\\;x_i^2+V_A\\;\\frac{a+b}{c}\\;\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx\\;\\sqrt[n]{x+1}\\;\\left(\\frac{a}{b}\\right)\\;\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\;\\overline{AB}+\\underline{CD}\\;\\frac{1}{1+\\frac{1}{x^2}}\"","as":"math-warm-1"}
+{"scratchpad":"L\"a+b=c\\qquad x_i^2\\;\\frac{a}{b}\\;\\sum_{i=1}^ni+\\oint_Cf+\\bigcup_iS_i\\;\\sqrt[n]{x}\\;\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}\\;\\begin{Vmatrix}1&0\\\\0&1\\end{Vmatrix}\\;\\lvert x\\rvert+\\lVert y\\rVert\"","as":"math-warm-1"}
 {"wait_event":"scratchpad_completed","correlation":"math-warm-1","timeout_ms":10000}
 {"scratchpad":":reset","as":"reset-warm-2"}
 {"wait_event":"scratchpad_completed","correlation":"reset-warm-2","timeout_ms":10000}
-{"scratchpad":"L\"a+b=c,\\;-a+b\\;x_i^2+V_A\\;\\frac{a+b}{c}\\;\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx\\;\\sqrt[n]{x+1}\\;\\left(\\frac{a}{b}\\right)\\;\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\;\\overline{AB}+\\underline{CD}\\;\\frac{1}{1+\\frac{1}{x^2}}\"","as":"math-warm-2"}
+{"scratchpad":"L\"a+b=c\\qquad x_i^2\\;\\frac{a}{b}\\;\\sum_{i=1}^ni+\\oint_Cf+\\bigcup_iS_i\\;\\sqrt[n]{x}\\;\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}\\;\\begin{Vmatrix}1&0\\\\0&1\\end{Vmatrix}\\;\\lvert x\\rvert+\\lVert y\\rVert\"","as":"math-warm-2"}
 {"wait_event":"scratchpad_completed","correlation":"math-warm-2","timeout_ms":10000}
 {"allocation_checkpoint":"animation"}
 {"allocation_checkpoint":"snapshot_slots"}
 {"allocation_checkpoint":"display_cache"}
 {"scratchpad":":reset","as":"reset-measured"}
 {"wait_event":"scratchpad_completed","correlation":"reset-measured","timeout_ms":10000}
-{"scratchpad":"L\"a+b=c,\\;-a+b\\;x_i^2+V_A\\;\\frac{a+b}{c}\\;\\sum_{i=1}^{n}i+\\int_0^1f(x)\\,dx\\;\\sqrt[n]{x+1}\\;\\left(\\frac{a}{b}\\right)\\;\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\;\\overline{AB}+\\underline{CD}\\;\\frac{1}{1+\\frac{1}{x^2}}\"","as":"math-measured"}
+{"scratchpad":"L\"a+b=c\\qquad x_i^2\\;\\frac{a}{b}\\;\\sum_{i=1}^ni+\\oint_Cf+\\bigcup_iS_i\\;\\sqrt[n]{x}\\;\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}\\;\\begin{Vmatrix}1&0\\\\0&1\\end{Vmatrix}\\;\\lvert x\\rvert+\\lVert y\\rVert\"","as":"math-measured"}
 {"wait_event":"scratchpad_completed","correlation":"math-measured","timeout_ms":10000}
 {"wait_event":"frame_presented","timeout_ms":10000}
 {"assert_allocation_baseline":"animation"}

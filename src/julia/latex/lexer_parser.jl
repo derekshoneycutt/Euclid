@@ -205,24 +205,14 @@ function parse_command_atom(
         return glue_runs
     end
 
-    unicode_runs = parse_unicode_command(command)
-    if !isnothing(unicode_runs)
-        return unicode_runs
+    fixed_runs = parse_fixed_math_command(command)
+    if !isnothing(fixed_runs)
+        return fixed_runs
     end
 
     mathbb_runs = parse_mathbb_atom(command, tokens, idx)
     if !isnothing(mathbb_runs)
         return mathbb_runs
-    end
-
-    large_operator_runs = parse_large_operator_atom(command)
-    if !isnothing(large_operator_runs)
-        return large_operator_runs
-    end
-
-    operator_runs = parse_text_operator_atom(command)
-    if !isnothing(operator_runs)
-        return operator_runs
     end
 
     structured_runs = parse_structured_math_command(command, tokens, idx)
@@ -236,25 +226,25 @@ end
 """Parse supported explicit math-space commands into semantic glue runs."""
 function parse_explicit_glue_command(command::AbstractString)
     command == "\\;" && return [latex_glue_run(" ", MATH_GLUE_THICK)]
+    (command == "\\:" || command == "\\>") &&
+        return [latex_glue_run(" ", MATH_GLUE_SPACE)]
     command == "\\ " && return [latex_glue_run(" ", MATH_GLUE_SPACE)]
+    command == "\\enspace" && return [latex_glue_run(" ", MATH_GLUE_SPACE)]
     command == "\\!" && return [latex_glue_run("", MATH_GLUE_NEGATIVE_THIN)]
     command == "\\quad" && return [latex_glue_run(" ", MATH_GLUE_QUAD)]
+    command == "\\qquad" && return [latex_glue_run("  ", MATH_GLUE_QUAD)]
     command == "\\," && return [latex_glue_run(" ", MATH_GLUE_THIN)]
     return nothing
 end
 
-"""Parse display-style large operators that accept stacked upper/lower limits."""
-function parse_large_operator_atom(command::AbstractString)
-    value = get(LARGE_OPERATOR_COMMAND_MAP, command, nothing)
-    if isnothing(value)
+"""Parse one fixed math command using its registered semantic classification."""
+function parse_fixed_math_command(command::AbstractString)
+    spec = get(MATH_COMMAND_REGISTRY, command, nothing)
+    if isnothing(spec)
         return nothing
     end
 
-    glyph, large_op_kind = value
-    role = large_op_kind == LARGE_OP_KIND_SUM ? :largeop_sum :
-        (large_op_kind == LARGE_OP_KIND_PROD ? :largeop_prod :
-            (large_op_kind == LARGE_OP_KIND_INT ? :largeop_int : :largeop_lim))
-    return [latex_atom_run(glyph, role, MATH_ATOM_OP)]
+    return [latex_atom_run(spec.output, spec.role, spec.atom_class)]
 end
 
 """Parse special command forms that produce plain text runs."""
@@ -266,15 +256,6 @@ function parse_special_text_command(
     if command == "\\text" || command == "\\mathrm"
         return [latex_atom_run(
             parse_required_group_as_text(tokens, idx), :text, MATH_ATOM_ORD)]
-    end
-
-    return nothing
-end
-
-"""Parse direct Unicode command substitutions."""
-function parse_unicode_command(command::AbstractString)
-    if haskey(UNICODE_COMMAND_MAP, command)
-        return normal_math_atom_runs(UNICODE_COMMAND_MAP[command])
     end
 
     return nothing
@@ -296,15 +277,6 @@ function parse_mathbb_atom(
     end
 
     return normal_math_atom_runs("\\mathbb")
-end
-
-"""Parse upright text-operator commands."""
-function parse_text_operator_atom(command::AbstractString)
-    if command in TEXT_OPERATOR_COMMANDS
-        return [latex_atom_run(command_to_text_operator(command), :text, MATH_ATOM_OP)]
-    end
-
-    return nothing
 end
 
 """Parse structured math commands that produce child-run nodes."""
@@ -392,7 +364,8 @@ matrix_parse_fallback() = latex_atom_run("\\begin", :math)
 """Return true when one environment name is matrix-like and supported."""
 is_matrix_like_environment(env_name::AbstractString) =
     env_name == "matrix" || env_name == "array" ||
-    env_name == "bmatrix" || env_name == "pmatrix" || env_name == "vmatrix"
+    env_name == "bmatrix" || env_name == "Bmatrix" || env_name == "pmatrix" ||
+    env_name == "vmatrix" || env_name == "Vmatrix"
 
 """Normalize one array alignment preamble by removing all whitespace."""
 function normalize_array_preamble_text(text::AbstractString)
@@ -486,6 +459,11 @@ function matrix_environment_run(
         return latex_stretch_delimiter_run("[", "]", [matrix_run])
     end
 
+    if env_name == "Bmatrix"
+        matrix_run = latex_matrix_run(rows, cols, cells)
+        return latex_stretch_delimiter_run("\\{", "\\}", [matrix_run])
+    end
+
     if env_name == "pmatrix"
         matrix_run = latex_matrix_run(rows, cols, cells)
         return latex_stretch_delimiter_run("(", ")", [matrix_run])
@@ -494,6 +472,11 @@ function matrix_environment_run(
     if env_name == "vmatrix"
         matrix_run = latex_matrix_run(rows, cols, cells)
         return latex_stretch_delimiter_run("|", "|", [matrix_run])
+    end
+
+    if env_name == "Vmatrix"
+        matrix_run = latex_matrix_run(rows, cols, cells)
+        return latex_stretch_delimiter_run("\\|", "\\|", [matrix_run])
     end
 
     return latex_matrix_run(rows, cols, cells)
@@ -1297,22 +1280,12 @@ function large_operator_with_limits(
     return segment
 end
 
-"""Map large-operator kind code to canonical LaTeX command text."""
-function large_operator_command_text(kind::Int32)
-    if kind == LARGE_OP_KIND_SUM
-        return "\\sum"
-    end
-    if kind == LARGE_OP_KIND_PROD
-        return "\\prod"
-    end
-    if kind == LARGE_OP_KIND_INT
-        return "\\int"
-    end
-    if kind == LARGE_OP_KIND_LIM
-        return "\\lim"
-    end
-    return ""
-end
+const LARGE_OPERATOR_GLYPH_TO_COMMAND =
+    Dict(output => command for (command, (output, _)) in LARGE_OPERATOR_COMMAND_MAP)
+
+"""Map a large-operator glyph to its canonical registered command text."""
+large_operator_command_text(glyph::AbstractString) =
+    get(LARGE_OPERATOR_GLYPH_TO_COMMAND, String(glyph), "")
 
 """Map delimiter token text to bridge delimiter kind constants."""
 bridge_delimiter_kind(delimiter::AbstractString) =
@@ -1368,7 +1341,7 @@ end
 """Render one recursive non-script payload op to canonical LaTeX-ish source."""
 function latex_source_for_recursive_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        command = large_operator_command_text(op.large_op_kind)
+        command = large_operator_command_text(op.text)
         if isempty(command)
             command = op.text
         end

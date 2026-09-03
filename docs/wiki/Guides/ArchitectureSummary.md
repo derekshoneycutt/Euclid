@@ -219,7 +219,7 @@ normalization and payload compilation:
 | Normalize | `latex/lexer_parser.jl` | `normalize_runs` and script canonicalization | Stable AST form |
 | Compile | `latex/compiler.jl`, `latex/dynview_math.jl` | `compile_emit_program`, `math_payload_ops_for_runs` | Recursive `MathPayloadOp[]` |
 | Serialize/Cache | `latex/compiler.jl`, `latex/cache.jl` | `resolve_cache_entry`, `latex_to_plain_text` | Cached parse + canonical fallback |
-| Bridge Encode | `latex/dynview_math.jl` | `bridge_math_payload_preorder`, `replay_emit_math_block!` | Flat op stream + shared text blob |
+| Bridge Encode | `latex/dynview_math.jl` | `bridge_math_payload_preorder!`, `replay_emit_math_block!` | Flat op stream + typed table descriptors + shared text blob |
 
 Key parsing behavior now covered in tests includes nested scripts, accents,
 radicals, fractions, stretch delimiters, and matrix environments.
@@ -232,7 +232,7 @@ flowchart LR
     B[src/julia/latex/lexer_parser.jl\nparse_latex]
     C[LatexRun tree]
     D[compile_emit_program\nMathPayloadOp tree]
-    E[bridge_math_payload_preorder\nops + text blob]
+    E[bridge_math_payload_preorder!\nops + table descriptors + text blob]
     F[Odin bridge\ndynview_math_block_from_ops]
     G[Odin cache\nmath_programs/math_commands]
     H[Odin dynview layout\nmeasure_math_program + layout_consume_math_block]
@@ -251,10 +251,14 @@ flowchart LR
   - Script attachments serialize base, superscript, and subscript programs as
     distinct preorder branches. Radical degree programs use the secondary
     branch; canonical text fields remain deterministic fallback content.
+  - Matrix and array operations reference block-local typed table descriptors.
+    Descriptors carry bounded dimensions, Text-style cell policy, and 16 fixed
+    column-alignment entries; source strings remain fallback content only.
   - Parse cache key is `(source, PARSER_GRAMMAR_VERSION, style_profile)`.
 - Odin side:
-  - `dynview_math_block_from_ops` validates spans/capacity and recursively imports
-    child programs into `math_programs` and `math_commands`.
+  - `dynview_math_block_from_ops` validates spans, descriptor references, and
+    capacity, then transactionally imports child programs, commands, and table
+    descriptors. Rejected payloads restore all mutable import counters.
   - `src/dynview/math/programs.odin` measures script/large-op/fraction/radical/matrix
     structures before draw. It owns display, text, script, and script-script
     transitions, including cramped child state.
@@ -491,10 +495,12 @@ unchanged.
 Julia owns mathematical intent: atom and glue classes, recursive structure, delimiter
 and accent kinds, and independent operator growth and limit policies. The mirrored
 `BridgeDynviewMathOp` and `Bridge_Dynview_Math_Op` records use exact-width fields in
-the same order. Odin validates every enum, text span, direct-child count, and bounded
+the same order. Mirrored table descriptors use exact-width dimensions, cell style,
+and fixed alignment storage; matrix operations carry block-local descriptor indexes.
+Odin validates every enum, text span, descriptor index, direct-child count, and bounded
 preorder subtree before importing commands; invalid input publishes no partial math
-program. Recursive scripts, fraction branches, and radical degrees cross as child
-program identities rather than reparsed fallback text.
+program or descriptor. Recursive scripts, fraction branches, and radical degrees cross
+as child program identities rather than reparsed fallback text.
 
 Odin alone owns font-sensitive decisions. A worker-borrowed Math_Regular capability
 provides one immutable generation-stamped constants snapshot plus bounded glyph
@@ -604,10 +610,11 @@ This policy is strict by design.
   arena; publication clears the retired arena. Both arenas are destroyed only
   after the Julia owner thread has stopped during application teardown.
 - Each Julia runtime view-snapshot slot owns one growing arena and bounded builders.
-  Fallback text, semantic command text, commands, math programs, math commands, and math
-  nodes are sealed arena-backed slices. A slot reset is permitted only after it is
+  Fallback text, semantic command text, commands, math programs, table descriptors,
+  math commands, and math nodes are sealed arena-backed slices. A slot reset is
+  permitted only after it is
   `Free`, so every payload remains valid through `Pending`, `Complete`, and `Published`.
-  Display publication installs immutable views of all six payloads before releasing the
+  Display publication installs immutable views of all seven payloads before releasing the
   previous slot. Compilation copies math records only into its private mutable working
   cache for derived metrics and shaping indexes. Display aliases are cleared before
   free-slot reuse or service teardown.

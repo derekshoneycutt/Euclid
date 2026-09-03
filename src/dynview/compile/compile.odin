@@ -849,9 +849,12 @@ prepare_math_working_records :: proc(runtime: ^app_core.Dynview_System) {
     content := &runtime^.content
     cache := &runtime^.compile_cache
     cache^.math_program_count = len(content^.math_programs)
+    cache^.math_table_descriptor_count = len(content^.math_table_descriptors)
     cache^.math_command_count = len(content^.math_commands)
     cache^.math_node_count = len(content^.math_nodes)
     copy(cache^.math_programs[:cache^.math_program_count], content^.math_programs)
+    copy(cache^.math_table_descriptors[:cache^.math_table_descriptor_count],
+        content^.math_table_descriptors)
     copy(cache^.math_commands[:cache^.math_command_count], content^.math_commands)
     copy(cache^.math_nodes[:cache^.math_node_count], content^.math_nodes)
 }

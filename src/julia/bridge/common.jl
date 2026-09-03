@@ -71,6 +71,7 @@ struct BridgeDynviewMathOp
     large_op_kind::Int32
     operator_growth::Int32
     operator_limits::Int32
+    table_descriptor_index::Int32
     text_offset::Int32
     text_len::Int32
     index_text_offset::Int32
@@ -85,6 +86,18 @@ struct BridgeDynviewMathOp
     script_gap::Float32
     accent_thickness::Float32
     accent_offset::Float32
+end
+
+"""
+Fixed-capacity semantic metadata for one table-like math operation.
+
+Mirrors the Odin `Bridge_Dynview_Math_Table_Descriptor` ABI struct field-for-field.
+"""
+struct BridgeDynviewMathTableDescriptor
+    rows::Int32
+    columns::Int32
+    cell_style::Int32
+    column_alignments::NTuple{16,Int32}
 end
 
 struct BridgeColor
@@ -151,6 +164,8 @@ struct BridgeDynviewMathProgram
     ops::Ptr{BridgeDynviewMathOp}
     op_count::Int32
     top_level_op_count::Int32
+    table_descriptors::Ptr{BridgeDynviewMathTableDescriptor}
+    table_descriptor_count::Int32
 end
 
 """
@@ -397,7 +412,7 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(3)
+const BRIDGE_VERSION = Int32(4)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 
@@ -431,6 +446,7 @@ const BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM = Int32(1)
 const BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD = Int32(2)
 const BRIDGE_DYNVIEW_LARGE_OP_KIND_INT = Int32(3)
 const BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM = Int32(4)
+const BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY = Int32(5)
 const BRIDGE_DYNVIEW_MATH_ATOM_NONE = Int32(0)
 const BRIDGE_DYNVIEW_MATH_ATOM_ORD = Int32(1)
 const BRIDGE_DYNVIEW_MATH_ATOM_OP = Int32(2)

@@ -28,6 +28,15 @@ Dynview_Import_Context :: struct {
     blob_offset:     int,
     blob_count:      int,
     next_program_id: ^int,
+    table_descriptors: [^]Bridge_Dynview_Math_Table_Descriptor,
+    table_descriptor_count: int,
+    table_descriptor_base: int,
+}
+
+Dynview_Command_Import_Context :: struct {
+    block_id: i32,
+    blob_offset: int,
+    table_descriptor_base: int,
 }
 
 //   Dynview command kind for each bridge math-op kind, indexed by op kind.
@@ -42,6 +51,66 @@ BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
     BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .Frac,
     BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .Stretch_Delimiter,
     BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .Matrix,
+}
+
+//   Return whether one bridge table descriptor is canonical and bounded.
+dynview_math_table_descriptor_valid :: proc(
+    descriptor: Bridge_Dynview_Math_Table_Descriptor) -> bool {
+
+    if descriptor.rows <= 0 || descriptor.rows > 16 ||
+        descriptor.columns <= 0 || descriptor.columns > 16 ||
+        descriptor.cell_style < i32(core.Dynview_Math_Style_Level.Display) ||
+        descriptor.cell_style > i32(core.Dynview_Math_Style_Level.Script_Script) {
+        return false
+    }
+    for alignment in descriptor.column_alignments {
+        if alignment < i32(core.Dynview_Matrix_Column_Alignment.Left) ||
+            alignment > i32(core.Dynview_Matrix_Column_Alignment.Right) {
+            return false
+        }
+    }
+    return true
+}
+
+//   Copy one validated bridge table descriptor into native bounded storage.
+dynview_math_table_descriptor_from_bridge :: proc(
+    descriptor: Bridge_Dynview_Math_Table_Descriptor) ->
+        core.Dynview_Math_Table_Descriptor {
+
+    result := core.Dynview_Math_Table_Descriptor{
+        rows = int(descriptor.rows),
+        columns = int(descriptor.columns),
+        cell_style = core.Dynview_Math_Style_Level(descriptor.cell_style),
+    }
+    for alignment, index in descriptor.column_alignments {
+        result.column_alignments[index] =
+            core.Dynview_Matrix_Column_Alignment(alignment)
+    }
+    return result
+}
+
+//   Validate and append all block-local table descriptors as one native prefix.
+dynview_import_math_table_descriptors :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    descriptors: [^]Bridge_Dynview_Math_Table_Descriptor,
+    descriptor_count: int) -> i32 {
+
+    if descriptor_count < 0 || (descriptor_count > 0 && descriptors == nil) ||
+        cache^.math_table_descriptor_count + descriptor_count >
+            core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    start := cache^.math_table_descriptor_count
+    for descriptor_index in 0..<descriptor_count {
+        descriptor := descriptors[descriptor_index]
+        if !dynview_math_table_descriptor_valid(descriptor) {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+        cache^.math_table_descriptors[start + descriptor_index] =
+            dynview_math_table_descriptor_from_bridge(descriptor)
+    }
+    cache^.math_table_descriptor_count += descriptor_count
+    return BRIDGE_STATUS_OK
 }
 
 //   Convert bridge decoration integer values to label decoration enum values.
@@ -186,7 +255,34 @@ dynview_math_op_semantics_valid :: #force_inline proc(
     if op.glue_kind != BRIDGE_DYNVIEW_MATH_GLUE_NONE {
         return op.atom_class == BRIDGE_DYNVIEW_MATH_ATOM_NONE
     }
-    return op.atom_class != BRIDGE_DYNVIEW_MATH_ATOM_NONE
+    if op.atom_class == BRIDGE_DYNVIEW_MATH_ATOM_NONE {
+        return false
+    }
+    if op.kind == BRIDGE_DYNVIEW_MATH_OP_LARGE_OP_RECURSIVE {
+        return op.atom_class == BRIDGE_DYNVIEW_MATH_ATOM_OP &&
+            op.large_op_kind > 0 &&
+            op.large_op_kind <= BRIDGE_DYNVIEW_LARGE_OP_KIND_MAX &&
+            op.operator_growth >= BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
+            op.operator_growth <= BRIDGE_DYNVIEW_OPERATOR_GROWTH_DISPLAY &&
+            op.operator_limits >= BRIDGE_DYNVIEW_OPERATOR_LIMITS_SIDE &&
+            op.operator_limits <= BRIDGE_DYNVIEW_OPERATOR_LIMITS_STACKED
+    }
+    return op.large_op_kind == 0 &&
+        op.operator_growth == BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
+        op.operator_limits == BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE
+}
+
+//   Require table descriptor references only on matrix operations.
+dynview_math_op_table_reference_valid :: #force_inline proc(
+    op: Bridge_Dynview_Math_Op,
+    command_kind: core.Dynview_Command_Kind,
+    descriptor_count: int) -> bool {
+
+    if command_kind == .Matrix {
+        return op.table_descriptor_index >= 0 &&
+            int(op.table_descriptor_index) < descriptor_count
+    }
+    return op.table_descriptor_index == -1
 }
 
 //   Import one recursive child program into the dynview compile cache.
@@ -295,6 +391,19 @@ dynview_import_direct_child :: proc(
     return {child_id, 0, 0, child_status}
 }
 
+//   Validate a matrix descriptor's cell count and import its direct child program.
+dynview_import_matrix_child :: proc(
+    ctx: Dynview_Import_Context,
+    op: Bridge_Dynview_Math_Op) -> Dynview_Imported_Children {
+
+    child_count := int(op.child_program_id)
+    descriptor := ctx.table_descriptors[op.table_descriptor_index]
+    if child_count != int(descriptor.rows * descriptor.columns) {
+        return {0, 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+    return dynview_import_direct_child(ctx, child_count)
+}
+
 //   Resolve the child program ids for one recursive math op.
 //
 // Notes:
@@ -314,8 +423,10 @@ dynview_import_op_children :: proc(
             return Dynview_Imported_Children{0, 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
         }
         return dynview_import_ordered_children(ctx, op, false)
-    case .Accent_Bar, .Matrix:
+    case .Accent_Bar:
         return dynview_import_direct_child(ctx, child_direct_count)
+    case .Matrix:
+        return dynview_import_matrix_child(ctx, op)
     case .Frac:
         return dynview_import_fraction_children(ctx, op)
     case .Stretch_Delimiter:
@@ -357,15 +468,19 @@ dynview_math_command_apply_text_spans :: proc(
 dynview_math_command_from_op :: proc(
     op: Bridge_Dynview_Math_Op,
     command_kind: core.Dynview_Command_Kind,
-    block_id: i32,
     children: Dynview_Imported_Children,
-    blob_offset: int) -> core.Dynview_Command {
+    import_ctx: Dynview_Command_Import_Context) -> core.Dynview_Command {
 
+    table_descriptor_index: i32 = -1
+    if command_kind == .Matrix {
+        table_descriptor_index =
+            i32(import_ctx.table_descriptor_base) + op.table_descriptor_index
+    }
     command := core.Dynview_Command{
         kind = command_kind,
         math_atom_class = core.Dynview_Math_Atom_Class(op.atom_class),
         math_glue_kind = core.Dynview_Math_Glue_Kind(op.glue_kind),
-        block_id = block_id,
+        block_id = import_ctx.block_id,
         style_id = op.style_id,
         math_program_id = children.child_program_id,
         secondary_math_program_id = children.secondary_child_program_id,
@@ -380,11 +495,12 @@ dynview_math_command_from_op :: proc(
         large_op_kind = op.large_op_kind,
         operator_growth = op.operator_growth,
         operator_limits = op.operator_limits,
+        table_descriptor_index = table_descriptor_index,
         accent_style_id = op.accent_style_id,
         accent_thickness = op.accent_thickness,
         accent_offset = op.accent_offset,
     }
-    dynview_math_command_apply_text_spans(&command, op, blob_offset)
+    dynview_math_command_apply_text_spans(&command, op, import_ctx.blob_offset)
     return command
 }
 
@@ -393,7 +509,8 @@ dynview_read_validated_op :: proc(
     ops: [^]Bridge_Dynview_Math_Op,
     op_count: int,
     cursor: ^int,
-    blob_count: int) -> Dynview_Validated_Op {
+    blob_count: int,
+    table_descriptor_count: int) -> Dynview_Validated_Op {
 
     if cursor^ >= op_count {
         return Dynview_Validated_Op{{}, .Text_Run, BRIDGE_STATUS_INVALID_ARGUMENT}
@@ -403,7 +520,9 @@ dynview_read_validated_op :: proc(
     cursor^ += 1
     command_kind, ok := dynview_math_command_kind_from_bridge(op.kind)
     if !ok || !dynview_math_op_spans_valid(op, blob_count) ||
-        !dynview_math_op_semantics_valid(op) {
+        !dynview_math_op_semantics_valid(op) ||
+        !dynview_math_op_table_reference_valid(
+            op, command_kind, table_descriptor_count) {
         return Dynview_Validated_Op{{}, .Text_Run, BRIDGE_STATUS_INVALID_ARGUMENT}
     }
     return Dynview_Validated_Op{op, command_kind, BRIDGE_STATUS_OK}
@@ -421,9 +540,8 @@ dynview_import_one_op :: proc(
     }
 
     ctx.cache^.math_commands[command_slot] =
-        dynview_math_command_from_op(validated.op, validated.kind, ctx.block_id,
-            children,
-            ctx.blob_offset)
+        dynview_math_command_from_op(validated.op, validated.kind, children, {
+            ctx.block_id, ctx.blob_offset, ctx.table_descriptor_base})
     return BRIDGE_STATUS_OK
 }
 
@@ -450,7 +568,7 @@ dynview_import_math_program_from_ops :: proc(
 
     for local_index in 0..<direct_count {
         validated := dynview_read_validated_op(ctx.ops, ctx.op_count, ctx.cursor,
-            ctx.blob_count)
+            ctx.blob_count, ctx.table_descriptor_count)
         if validated.status != BRIDGE_STATUS_OK {
             return validated.status
         }

@@ -124,6 +124,14 @@ Matrix_Cell_Draw :: struct {
     item_y : f32,
 }
 
+Matrix_Cell_Resolve :: struct {
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    rows, cols: int,
+    math_style: dynmath.Math_Style,
+    cells: ^Matrix_Draw_Cells,
+}
+
 //   Resolved script font and offsets for one script-attach item.
 Script_Attach_Style :: struct {
     font : rl.Font,
@@ -1472,18 +1480,16 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
 //   - cell_program: The matrix cell program when ok.
 //   - ok: true when the program resolved and all cells measured.
 matrix_resolve_cells :: proc(
-    ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
-    rows, cols: int,
-    cells: ^Matrix_Draw_Cells) -> (^core.Dynview_Math_Program, bool) {
+    input: Matrix_Cell_Resolve) -> (^core.Dynview_Math_Program, bool) {
 
     cell_program, ok :=
-        dynmath.math_program_from_id(&ctx.runtime^.compile_cache, item.math_program_id)
-    if !ok || cell_program^.command_count < rows * cols {
+        dynmath.math_program_from_id(&input.ctx.runtime^.compile_cache,
+            input.item.math_program_id)
+    if !ok || cell_program^.command_count < input.rows * input.cols {
         return nil, false
     }
 
-    if !measure_matrix_draw_cells(ctx, cell_program, rows, cols, cells) {
+    if !measure_matrix_draw_cells(input, cell_program) {
         return nil, false
     }
     return cell_program, true
@@ -1494,21 +1500,14 @@ matrix_draw_geometry :: proc(
     ctx: Layout_Draw_Context,
     style: dyncore.Dynview_Text_Style,
     item: core.Dynview_Layout_Item,
-    rows, cols: int) -> Matrix_Draw_Geometry {
+    descriptor: ^core.Dynview_Math_Table_Descriptor) -> Matrix_Draw_Geometry {
 
-    alignments, _ := dynmath.decode_matrix_column_alignments(
-        &ctx.runtime^.command_buffer,
-        core.Dynview_Command{
-            script_sub_text_offset = item.script_sub_text_offset,
-            script_sub_text_len = item.script_sub_text_len,
-        },
-        cols)
     base_advance :=
         dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     return Matrix_Draw_Geometry{
-        alignments = alignments,
-        rows = rows,
-        cols = cols,
+        alignments = descriptor^.column_alignments,
+        rows = descriptor^.rows,
+        cols = descriptor^.columns,
         column_gap = dynmath.matrix_column_gap(ctx.font_size, base_advance),
         row_gap = dynmath.matrix_row_gap(ctx.font_size),
     }
@@ -1521,22 +1520,33 @@ draw_recursive_matrix_item :: #force_inline proc(
     item: core.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    rows := int(item.accent_mode)
-    cols := int(item.radical_mode)
-    if rows <= 0 || cols <= 0 || rows > 16 || cols > 16 {
+    descriptor, descriptor_ok := dynmath.matrix_descriptor_from_command(
+        &ctx.runtime^.compile_cache,
+        core.Dynview_Command{table_descriptor_index = item.table_descriptor_index})
+    if !descriptor_ok {
         return
     }
+    rows := descriptor^.rows
+    cols := descriptor^.columns
+    parent_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    cell_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(descriptor^.cell_style), false}
+    cell_ctx := ctx
+    cell_ctx.font_size = dynmath.math_target_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size, parent_style, cell_style)
 
     cells := Matrix_Draw_Cells{}
-    cell_program, cells_ok := matrix_resolve_cells(ctx, item, rows, cols, &cells)
+    cell_program, cells_ok := matrix_resolve_cells({
+        cell_ctx, item, rows, cols, cell_style, &cells})
     if !cells_ok {
         return
     }
 
-    geometry := matrix_draw_geometry(ctx, style, item, rows, cols)
+    geometry := matrix_draw_geometry(ctx, style, item, descriptor)
 
     draw_matrix_cells(Matrix_Cell_Draw{
-        ctx = ctx,
+        ctx = cell_ctx,
         cell_program = cell_program,
         cells = &cells,
         geometry = geometry,
@@ -1617,17 +1627,15 @@ draw_matrix_cells :: proc(d: Matrix_Cell_Draw) {
 
 //   Measure every matrix cell, accumulating items, column widths, row extents.
 measure_matrix_draw_cells :: proc(
-    ctx: Layout_Draw_Context,
-    cell_program: ^core.Dynview_Math_Program,
-    rows, cols: int,
-    cells: ^Matrix_Draw_Cells) -> bool {
+    input: Matrix_Cell_Resolve,
+    cell_program: ^core.Dynview_Math_Program) -> bool {
 
-    runtime := ctx.runtime
-    font_size := ctx.font_size
+    runtime := input.ctx.runtime
+    font_size := input.ctx.font_size
 
-    for row in 0..<rows {
-        for col in 0..<cols {
-            cell_index := row * cols + col
+    for row in 0..<input.rows {
+        for col in 0..<input.cols {
+            cell_index := row * input.cols + col
             cmd_index := cell_program^.command_start + cell_index
             cell_cmd := runtime^.compile_cache.math_commands[cmd_index]
             cell_item, cell_ok := dynmath.math_program_item({
@@ -1636,14 +1644,18 @@ measure_matrix_draw_cells :: proc(
                 cmd = cell_cmd,
                 font_size = font_size,
                 command_index = cmd_index,
+                math_style = input.math_style,
             })
             if !cell_ok {
                 return false
             }
 
-            cells.col_widths[col] = max(cells.col_widths[col], cell_item.draw_width)
-            cells.row_ascents[row] = max(cells.row_ascents[row], cell_item.ascent)
-            cells.row_descents[row] = max(cells.row_descents[row], cell_item.descent)
+            input.cells.col_widths[col] =
+                max(input.cells.col_widths[col], cell_item.draw_width)
+            input.cells.row_ascents[row] =
+                max(input.cells.row_ascents[row], cell_item.ascent)
+            input.cells.row_descents[row] =
+                max(input.cells.row_descents[row], cell_item.descent)
         }
     }
     return true

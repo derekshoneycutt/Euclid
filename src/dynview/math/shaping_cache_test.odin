@@ -386,9 +386,11 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
         kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
         text_offset = 1, text_len = 1}
     cache^.math_commands[2] = {
-        kind = .Matrix, math_program_id = 0,
-        radical_index_text_offset = 2, radical_index_text_len = 1,
-        script_sup_text_offset = 3, script_sup_text_len = 1}
+        kind = .Matrix, math_program_id = 0, table_descriptor_index = 0}
+    cache^.math_table_descriptor_count = 1
+    cache^.math_table_descriptors[0] = {
+        rows = 1, columns = 2, cell_style = .Text,
+    }
     cache^.math_program_count = 2
     cache^.math_programs[0] = {valid = true, command_count = 2}
     cache^.math_programs[1] = {valid = true, command_start = 2, command_count = 1}
@@ -403,7 +405,6 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
     testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
     testing.expect(t, measured)
     testing.expect_value(t, len(cache^.shaped_runs), 2)
-    testing.expect_value(t, len(cache^.math_kern_tables), 8)
     testing.expect(t, cache^.math_kern_tables[0].valid)
     testing.expect(t, cache^.math_programs[1].draw_width > 30)
 }

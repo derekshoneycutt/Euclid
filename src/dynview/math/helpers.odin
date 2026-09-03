@@ -16,12 +16,6 @@ Script_Draw_Offsets :: struct {
     sub_drop_px:      f32,
 }
 
-Matrix_Dims :: struct {
-    rows: int,
-    cols: int,
-    ok:   bool,
-}
-
 //   Resolve script draw offsets using one shared model for layout and rendering.
 script_draw_offsets :: #force_inline proc(
     font_size, script_scale, sup_raise, sub_drop: f32) -> Script_Draw_Offsets {
@@ -100,78 +94,18 @@ matrix_row_gap :: #force_inline proc(font_size: f32) -> f32 {
     return max(0.8, font_size * 0.28)
 }
 
-//   Parse one positive decimal integer from text.
-parse_positive_int :: #force_inline proc(text: string) -> (int, bool) {
-    if len(text) <= 0 {
-        return 0, false
+//   Resolve one matrix command's bounded native table descriptor.
+matrix_descriptor_from_command :: #force_inline proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    cmd: app_core.Dynview_Command) -> (^app_core.Dynview_Math_Table_Descriptor, bool) {
+
+    index := int(cmd.table_descriptor_index)
+    if cache == nil || index < 0 || index >= cache^.math_table_descriptor_count {
+        return nil, false
     }
-
-    value := 0
-    for c in text {
-        if c < '0' || c > '9' {
-            return 0, false
-        }
-        value = value * 10 + int(c - '0')
-    }
-    return value, value > 0
-}
-
-//   Read matrix row/column metadata from command text fields.
-matrix_dims_from_command :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer,
-    cmd: app_core.Dynview_Command) -> Matrix_Dims {
-
-    rows_text := dyncore.text_span_from_buffer(
-        buffer,
-        cmd.radical_index_text_offset,
-        cmd.radical_index_text_len)
-    cols_text := dyncore.text_span_from_buffer(
-        buffer,
-        cmd.script_sup_text_offset,
-        cmd.script_sup_text_len)
-    rows, rows_ok := parse_positive_int(rows_text)
-    cols, cols_ok := parse_positive_int(cols_text)
-    return Matrix_Dims{rows, cols, rows_ok && cols_ok}
-}
-
-//   Decode strict array alignment metadata; return all-center on any invalid shape.
-decode_matrix_column_alignments :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer,
-    cmd: app_core.Dynview_Command,
-    cols: int) -> ([16]Dynview_Matrix_Column_Alignment, bool) {
-
-    alignments: [16]Dynview_Matrix_Column_Alignment
-    if cols <= 0 || cols > 16 {
-        return alignments, false
-    }
-
-    for col in 0..<cols {
-        alignments[col] = .Center
-    }
-
-    preamble := dyncore.text_span_from_buffer(
-        buffer,
-        cmd.script_sub_text_offset,
-        cmd.script_sub_text_len)
-    if len(preamble) <= 0 {
-        return alignments, true
-    }
-    if len(preamble) != cols {
-        return alignments, false
-    }
-
-    for col in 0..<cols {
-        alignment, ok := matrix_alignment_from_char(preamble[col])
-        if !ok {
-            for idx in 0..<cols {
-                alignments[idx] = .Center
-            }
-            return alignments, false
-        }
-        alignments[col] = alignment
-    }
-
-    return alignments, true
+    descriptor := &cache^.math_table_descriptors[index]
+    return descriptor, descriptor^.rows > 0 && descriptor^.rows <= 16 &&
+        descriptor^.columns > 0 && descriptor^.columns <= 16
 }
 
 //   Map one l/c/r alignment character to its matrix column alignment.
@@ -298,7 +232,7 @@ stretch_delimiter_width :: #force_inline proc(
 //   Return glyph scale factor for display-style large operators.
 large_op_glyph_scale :: #force_inline proc(large_op_kind: i32) -> f32 {
     switch large_op_kind {
-    case LARGE_OP_KIND_SUM, LARGE_OP_KIND_PROD:
+    case LARGE_OP_KIND_SUM, LARGE_OP_KIND_PROD, LARGE_OP_KIND_NARY:
         return 1.35
     case LARGE_OP_KIND_INT:
         return 1.65

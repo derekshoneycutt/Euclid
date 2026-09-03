@@ -43,6 +43,8 @@ view_snapshot_free_slot_prepares_all_builders :: proc(t: ^testing.T) {
         core.DYNVIEW_MAX_COMMANDS)
     testing.expect_value(t, slot^.math_program_builder.max_count,
         core.DYNVIEW_MAX_MATH_PROGRAMS)
+    testing.expect_value(t, slot^.math_table_descriptor_builder.max_count,
+        core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS)
     testing.expect_value(t, slot^.math_command_builder.max_count,
         core.DYNVIEW_MAX_MATH_COMMANDS)
     testing.expect_value(t, slot^.math_node_builder.max_count,
@@ -151,7 +153,7 @@ view_snapshot_record_transfer_accepts_exact_limits :: proc(t: ^testing.T) {
     nodes[len(nodes) - 1].style_id = 42
 
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, commands, programs, math_commands, nodes))
+        slot, {commands, programs, math_commands, nodes, nil}))
     view_snapshot_expect_record_limits(t, slot, {
         commands, programs, math_commands, nodes})
 }
@@ -164,8 +166,8 @@ view_snapshot_record_overflow_rejected :: proc(
     slot^.state = .Free
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, payloads.commands, payloads.programs,
-        payloads.math_commands, payloads.nodes))
+        slot, {payloads.commands, payloads.programs,
+            payloads.math_commands, payloads.nodes, nil}))
     testing.expect(t, !slot^.command_builder.sealed &&
         !slot^.math_program_builder.sealed && !slot^.math_command_builder.sealed &&
         !slot^.math_node_builder.sealed)
@@ -212,7 +214,7 @@ view_snapshot_record_validation_rejects_forged_aliases :: proc(t: ^testing.T) {
     math_commands := []core.Dynview_Command{{math_atom_class = .Ord}}
     nodes := []core.Dynview_Math_Node{{kind = .Glyph_Run}}
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, commands, programs, math_commands, nodes))
+        slot, {commands, programs, math_commands, nodes, nil}))
     testing.expect(t, view_snapshot_is_valid(slot))
     forged_commands := [1]core.Dynview_Command{commands[0]}
     forged_programs := [1]core.Dynview_Math_Program{programs[0]}
@@ -278,8 +280,8 @@ view_snapshot_math_record_validation_rejects_malformed_structure :: proc(
         {kind = .Glyph_Run, text_len = 4},
     }
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, nil, programs,
-        []core.Dynview_Command{{math_atom_class = .Ord}}, nodes))
+        slot, {nil, programs,
+            []core.Dynview_Command{{math_atom_class = .Ord}}, nodes, nil}))
     testing.expect(t, view_snapshot_is_valid(slot))
     view_snapshot_expect_malformed_math_rejected(t, slot)
 }
@@ -321,7 +323,7 @@ view_snapshot_reset_requires_free_state :: proc(t: ^testing.T) {
     testing.expect_value(t, core.bounded_byte_builder_append(
         &slot^.fallback_text_builder, []u8{'x'}), core.Bounded_Builder_Status.Ok)
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, []core.Dynview_Command{{block_id = 7}}, nil, nil, nil))
+        slot, {commands = []core.Dynview_Command{{block_id = 7}}}))
     storage := raw_data(slot^.fallback_text_builder.storage)
     record_storage := raw_data(slot^.commands)
 
@@ -453,7 +455,7 @@ view_snapshot_shutdown_release_clears_published_views :: proc(t: ^testing.T) {
     testing.expect(t, build_view_snapshot_text_payloads(
         published, "fallback", nil))
     testing.expect(t, build_view_snapshot_record_payloads(
-        published, []core.Dynview_Command{{block_id = 7}}, nil, nil, nil))
+        published, {commands = []core.Dynview_Command{{block_id = 7}}}))
     install_view_snapshot_content(published, &state^.dynview)
     published^.state = .Published
     service^.published_view_snapshot_index = 0

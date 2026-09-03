@@ -24,6 +24,16 @@ Dynview_Math_Block_Input :: struct {
     op_count:          i32,
     top_level_op_count: i32,
     style_id:          i32,
+    table_descriptors: [^]Bridge_Dynview_Math_Table_Descriptor,
+    table_descriptor_count: i32,
+}
+
+Dynview_Math_Import_Checkpoint :: struct {
+    text_bytes_len: int,
+    command_count: int,
+    math_program_count: int,
+    math_command_count: int,
+    math_table_descriptor_count: int,
 }
 
 //   Lazily prepare the request-owned view candidate for structured emission.
@@ -393,7 +403,8 @@ dynview_math_block :: proc "c" (
 dynview_math_capacity_available :: proc(
     cache: ^core.Dynview_Compile_Cache,
     ops: [^]Bridge_Dynview_Math_Op,
-    op_count: int) -> bool {
+    op_count: int,
+    table_descriptor_count: int) -> bool {
 
     if cache^.math_program_count >= core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
@@ -404,8 +415,38 @@ dynview_math_capacity_available :: proc(
         core.DYNVIEW_MAX_MATH_PROGRAMS {
         return false
     }
+    if table_descriptor_count < 0 || cache^.math_table_descriptor_count +
+        table_descriptor_count > core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS {
+        return false
+    }
     return cache^.math_command_count + op_count + extra_commands <=
         core.DYNVIEW_MAX_MATH_COMMANDS
+}
+
+//   Capture mutable counters touched by one math-block import transaction.
+dynview_math_import_checkpoint :: #force_inline proc(
+    runtime: ^core.Dynview_System) -> Dynview_Math_Import_Checkpoint {
+
+    return {
+        runtime^.command_buffer.text_bytes_len,
+        runtime^.command_buffer.command_count,
+        runtime^.compile_cache.math_program_count,
+        runtime^.compile_cache.math_command_count,
+        runtime^.compile_cache.math_table_descriptor_count,
+    }
+}
+
+//   Restore mutable counters after a rejected math-block import.
+dynview_math_import_rollback :: #force_inline proc(
+    runtime: ^core.Dynview_System,
+    checkpoint: Dynview_Math_Import_Checkpoint) {
+
+    runtime^.command_buffer.text_bytes_len = checkpoint.text_bytes_len
+    runtime^.command_buffer.command_count = checkpoint.command_count
+    runtime^.compile_cache.math_program_count = checkpoint.math_program_count
+    runtime^.compile_cache.math_command_count = checkpoint.math_command_count
+    runtime^.compile_cache.math_table_descriptor_count =
+        checkpoint.math_table_descriptor_count
 }
 
 //   Resolve the runtime and command buffer for an inline atom emission.
@@ -436,13 +477,13 @@ dynview_inline_atom_target :: proc(
 //   Report whether the math-block arguments are non-nil and non-empty.
 dynview_math_block_args_valid :: proc(
     plain_text: cstring,
-    ops: [^]Bridge_Dynview_Math_Op,
-    op_count: i32,
-    top_level_op_count: i32,
+    program: Bridge_Dynview_Math_Program,
     text_blob: cstring) -> bool {
 
-    return plain_text != nil && text_blob != nil && ops != nil &&
-        op_count > 0 && top_level_op_count > 0
+    return plain_text != nil && text_blob != nil && program.ops != nil &&
+        program.op_count > 0 && program.top_level_op_count > 0 &&
+        program.table_descriptor_count >= 0 && (program.table_descriptor_count == 0 ||
+        program.table_descriptors != nil)
 }
 
 //   Append the plain-text and shared blob payloads, returning both spans.
@@ -470,6 +511,26 @@ dynview_append_math_text_payloads :: proc(
         blob_count,
         BRIDGE_STATUS_OK,
     }
+}
+
+//   Append text and import one complete math block with counter rollback on failure.
+dynview_math_block_transaction :: proc(
+    runtime: ^core.Dynview_System,
+    buffer: ^core.Dynview_Command_Buffer,
+    input: Dynview_Math_Block_Input,
+    plain_text, text_blob: cstring) -> i32 {
+
+    checkpoint := dynview_math_import_checkpoint(runtime)
+    payloads := dynview_append_math_text_payloads(runtime, plain_text, text_blob)
+    if payloads.status != BRIDGE_STATUS_OK {
+        dynview_math_import_rollback(runtime, checkpoint)
+        return payloads.status
+    }
+    status := dynview_emit_math_block(runtime, buffer, input, payloads)
+    if status != BRIDGE_STATUS_OK {
+        dynview_math_import_rollback(runtime, checkpoint)
+    }
+    return status
 }
 
 //   Append one whole inline math block from a flat child-command payload.
@@ -508,24 +569,50 @@ dynview_math_block_from_ops :: proc "c" (
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    if !dynview_math_block_args_valid(plain_text, program.ops, program.op_count,
-        program.top_level_op_count, text_blob) {
+    if !dynview_math_block_args_valid(plain_text, program, text_blob) {
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     if !dynview_math_capacity_available(&runtime^.compile_cache, program.ops,
-        int(program.op_count)) {
+        int(program.op_count), int(program.table_descriptor_count)) {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
     }
 
-    payloads := dynview_append_math_text_payloads(runtime, plain_text, text_blob)
-    if payloads.status != BRIDGE_STATUS_OK {
-        return payloads.status
-    }
-
     input := Dynview_Math_Block_Input{
-        program.ops, program.op_count, program.top_level_op_count, style_id}
-    return dynview_emit_math_block(runtime, buffer, input, payloads)
+        program.ops, program.op_count, program.top_level_op_count, style_id,
+        program.table_descriptors, program.table_descriptor_count}
+    return dynview_math_block_transaction(
+        runtime, buffer, input, plain_text, text_blob)
+}
+
+//   Import the root and recursive child programs from one validated block payload.
+dynview_import_root_math_program :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    buffer: ^core.Dynview_Command_Buffer,
+    input: Dynview_Math_Block_Input,
+    payloads: Dynview_Math_Text_Payloads,
+    program_id: int) -> (next_program_id: int, status: i32) {
+
+    next_program_id = program_id + 1
+    cursor := 0
+    descriptor_base := cache^.math_table_descriptor_count
+    status = dynview_import_math_table_descriptors(
+        cache, input.table_descriptors, int(input.table_descriptor_count))
+    if status != BRIDGE_STATUS_OK {
+        return
+    }
+    status = dynview_import_math_program_from_ops(Dynview_Import_Context{
+        cache = cache, block_id = buffer^.stream_open_block_id,
+        ops = input.ops, op_count = int(input.op_count), cursor = &cursor,
+        blob_offset = payloads.blob_offset, blob_count = payloads.blob_count,
+        next_program_id = &next_program_id, table_descriptors = input.table_descriptors,
+        table_descriptor_count = int(input.table_descriptor_count),
+        table_descriptor_base = descriptor_base,
+    }, int(input.top_level_op_count), program_id)
+    if status == BRIDGE_STATUS_OK && cursor != int(input.op_count) {
+        status = BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return
 }
 
 //   Import a math op program into the compile cache and emit the math block command.
@@ -546,27 +633,10 @@ dynview_emit_math_block :: proc(
 
     cache := &runtime^.compile_cache
     program_id := cache^.math_program_count
-    next_child_program_id := program_id + 1
-    cursor := 0
-
-    status := dynview_import_math_program_from_ops(
-        Dynview_Import_Context{
-            cache = cache,
-            block_id = buffer^.stream_open_block_id,
-            ops = input.ops,
-            op_count = int(input.op_count),
-            cursor = &cursor,
-            blob_offset = payloads.blob_offset,
-            blob_count = payloads.blob_count,
-            next_program_id = &next_child_program_id,
-        },
-        int(input.top_level_op_count),
-        program_id)
+    next_child_program_id, status := dynview_import_root_math_program(
+        cache, buffer, input, payloads, program_id)
     if status != BRIDGE_STATUS_OK {
         return dynview_fail(runtime, status)
-    }
-    if cursor != int(input.op_count) {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
 
     return dynview_commit_math_block(

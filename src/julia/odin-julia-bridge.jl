@@ -12,7 +12,8 @@ using Colors
 using UUIDs
 
 export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
-    BridgeSolveResult, BridgeDynviewMathOp,
+    BridgeSolveResult, BridgeDynviewMathOp, BridgeDynviewMathTableDescriptor,
+    BridgeDynviewMathProgram,
     AnimationKey, animation_schema_id, set_animation_value!, get_animation_value,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle, BridgeShapeTriangle,
     BridgeShapeSquare, BridgeShapePentagon, BridgeShapePen, BridgeShapeCompass,
@@ -34,6 +35,7 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     BRIDGE_DYNVIEW_RADICAL_MODE_SQRT, BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT,
     BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM, BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD,
     BRIDGE_DYNVIEW_LARGE_OP_KIND_INT, BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM,
+    BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY,
     BRIDGE_DYNVIEW_DELIMITER_KIND_NONE,
     BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN,
     BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN,

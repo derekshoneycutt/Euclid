@@ -30,7 +30,7 @@ BRIDGE_FEATURE_ANIMATION_STABLE_ID :: (1 << 3)
 BRIDGE_FEATURE_TYPED_ANIMATION_STATE :: (1 << 4)
 BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
 
-BRIDGE_VERSION :: 3
+BRIDGE_VERSION :: 4
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_DYNVIEW_STREAM |
@@ -81,6 +81,13 @@ BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM :: 1
 BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD :: 2
 BRIDGE_DYNVIEW_LARGE_OP_KIND_INT :: 3
 BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :: 4
+BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY :: 5
+BRIDGE_DYNVIEW_LARGE_OP_KIND_MAX :: BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY
+BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE :: 0
+BRIDGE_DYNVIEW_OPERATOR_GROWTH_DISPLAY :: 1
+BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE :: 0
+BRIDGE_DYNVIEW_OPERATOR_LIMITS_SIDE :: 1
+BRIDGE_DYNVIEW_OPERATOR_LIMITS_STACKED :: 2
 BRIDGE_DYNVIEW_DELIMITER_KIND_NONE :: 0
 BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN :: 1
 BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN :: 2
@@ -177,6 +184,7 @@ Bridge_Dynview_Math_Op :: struct {
     large_op_kind: i32,
     operator_growth: i32,
     operator_limits: i32,
+    table_descriptor_index: i32,
     text_offset: i32,
     text_len: i32,
     index_text_offset: i32,
@@ -193,12 +201,21 @@ Bridge_Dynview_Math_Op :: struct {
     accent_offset: f32,
 }
 
+Bridge_Dynview_Math_Table_Descriptor :: struct {
+    rows: i32,
+    columns: i32,
+    cell_style: i32,
+    column_alignments: [16]i32,
+}
+
 //   Flat op payload for one inline math block, grouped so the C export
 //   signature stays within the bridge parameter budget.
 Bridge_Dynview_Math_Program :: struct {
     ops:                [^]Bridge_Dynview_Math_Op,
     op_count:           i32,
     top_level_op_count: i32,
+    table_descriptors:  [^]Bridge_Dynview_Math_Table_Descriptor,
+    table_descriptor_count: i32,
 }
 
 Bridge_Point_View :: struct {

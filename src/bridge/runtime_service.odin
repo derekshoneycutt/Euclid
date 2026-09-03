@@ -60,6 +60,23 @@ Animation_Tick_Slot :: core.Animation_Tick_Slot
 
 View_Snapshot_Slot_State :: core.View_Snapshot_Slot_State
 View_Snapshot :: core.View_Snapshot
+
+View_Snapshot_Record_Payloads :: struct {
+    commands: []core.Dynview_Command,
+    math_programs: []core.Dynview_Math_Program,
+    math_commands: []core.Dynview_Command,
+    math_nodes: []core.Dynview_Math_Node,
+    math_table_descriptors: []core.Dynview_Math_Table_Descriptor,
+}
+
+View_Snapshot_Sealed_Records :: struct {
+    commands: []core.Dynview_Command,
+    programs: []core.Dynview_Math_Program,
+    descriptors: []core.Dynview_Math_Table_Descriptor,
+    math_commands: []core.Dynview_Command,
+    nodes: []core.Dynview_Math_Node,
+}
+
 Scratchpad_Async_Kind :: core.Scratchpad_Async_Kind
 Scratchpad_Async_Slot_State :: core.Scratchpad_Async_Slot_State
 Scratchpad_Async_Slot :: core.Scratchpad_Async_Slot
@@ -532,11 +549,37 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
     }
     for command in slot^.math_commands {
         if !view_snapshot_command_text_spans_valid(command, len(slot^.command_text)) ||
-            !view_snapshot_math_command_semantics_are_valid(command) {
+            !view_snapshot_math_command_semantics_are_valid(command) ||
+            (command.kind == .Matrix && (command.table_descriptor_index < 0 ||
+            int(command.table_descriptor_index) >= len(slot^.math_table_descriptors))) {
+            return false
+        }
+    }
+    for descriptor in slot^.math_table_descriptors {
+        if !view_snapshot_math_table_descriptor_is_valid(descriptor) {
             return false
         }
     }
     return view_snapshot_math_records_are_valid(slot)
+}
+
+//   Validate one sealed native table descriptor at the publication boundary.
+view_snapshot_math_table_descriptor_is_valid :: proc(
+    descriptor: core.Dynview_Math_Table_Descriptor) -> bool {
+
+    if descriptor.rows <= 0 || descriptor.rows > 16 ||
+        descriptor.columns <= 0 || descriptor.columns > 16 ||
+        i32(descriptor.cell_style) < i32(core.Dynview_Math_Style_Level.Display) ||
+        i32(descriptor.cell_style) > i32(core.Dynview_Math_Style_Level.Script_Script) {
+        return false
+    }
+    for alignment in descriptor.column_alignments {
+        if i32(alignment) < i32(core.Dynview_Matrix_Column_Alignment.Left) ||
+            i32(alignment) > i32(core.Dynview_Matrix_Column_Alignment.Right) {
+            return false
+        }
+    }
+    return true
 }
 
 //   Validate atom and explicit-glue metadata before snapshot publication.
@@ -563,6 +606,8 @@ view_snapshot_record_payloads_are_valid :: proc(slot: ^View_Snapshot) -> bool {
         &slot^.command_builder, slot^.commands, core.DYNVIEW_MAX_COMMANDS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_program_builder,
             slot^.math_programs, core.DYNVIEW_MAX_MATH_PROGRAMS) &&
+        view_snapshot_record_payload_is_valid(&slot^.math_table_descriptor_builder,
+            slot^.math_table_descriptors, core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_command_builder,
             slot^.math_commands, core.DYNVIEW_MAX_MATH_COMMANDS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_node_builder,
@@ -840,6 +885,8 @@ published_view_snapshot_equals :: proc(
         view_snapshot_slice_equal(published^.command_text, candidate^.command_text) &&
         view_snapshot_slice_equal(published^.commands, candidate^.commands) &&
         view_snapshot_slice_equal(published^.math_programs, candidate^.math_programs) &&
+        view_snapshot_slice_equal(published^.math_table_descriptors,
+            candidate^.math_table_descriptors) &&
         view_snapshot_slice_equal(published^.math_commands, candidate^.math_commands) &&
         view_snapshot_slice_equal(published^.math_nodes, candidate^.math_nodes)
 }
@@ -922,13 +969,14 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.stream_open_block_id = 0
     slot^.commands = nil
     slot^.math_programs = nil
+    slot^.math_table_descriptors = nil
     slot^.math_commands = nil
     slot^.math_nodes = nil
 }
 
 //   Initialize every future arena-backed payload builder for one free slot generation.
 prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
-    statuses := [6]core.Bounded_Builder_Status{
+    statuses := [7]core.Bounded_Builder_Status{
         core.bounded_byte_builder_init(
             &slot^.fallback_text_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
         core.bounded_byte_builder_init(
@@ -937,6 +985,8 @@ prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
             &slot^.command_builder, core.DYNVIEW_MAX_COMMANDS, &slot^.arena),
         core.bounded_element_builder_init(
             &slot^.math_program_builder, core.DYNVIEW_MAX_MATH_PROGRAMS, &slot^.arena),
+        core.bounded_element_builder_init(&slot^.math_table_descriptor_builder,
+            core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS, &slot^.arena),
         core.bounded_element_builder_init(
             &slot^.math_command_builder, core.DYNVIEW_MAX_MATH_COMMANDS, &slot^.arena),
         core.bounded_element_builder_init(
@@ -965,6 +1015,7 @@ prepare_view_snapshot_slot :: proc(slot: ^View_Snapshot) -> bool {
     slot^.command_text_builder = {}
     slot^.command_builder = {}
     slot^.math_program_builder = {}
+    slot^.math_table_descriptor_builder = {}
     slot^.math_command_builder = {}
     slot^.math_node_builder = {}
     return false
@@ -1013,11 +1064,15 @@ build_generated_view_snapshot_payloads :: proc(
     slot^.stream_open_block = staging^.command_buffer.stream_open_block
     slot^.stream_open_block_id = staging^.command_buffer.stream_open_block_id
     cache := &staging^.compile_cache
-    return build_view_snapshot_record_payloads(slot,
-        staging^.command_buffer.commands[:staging^.command_buffer.command_count],
-        cache^.math_programs[:cache^.math_program_count],
-        cache^.math_commands[:cache^.math_command_count],
-        cache^.math_nodes[:cache^.math_node_count])
+    return build_view_snapshot_record_payloads(slot, {
+        commands = staging^.command_buffer.commands[
+            :staging^.command_buffer.command_count],
+        math_programs = cache^.math_programs[:cache^.math_program_count],
+        math_commands = cache^.math_commands[:cache^.math_command_count],
+        math_nodes = cache^.math_nodes[:cache^.math_node_count],
+        math_table_descriptors = cache^.math_table_descriptors[
+            :cache^.math_table_descriptor_count],
+    })
 }
 
 //   Copy and seal both text families as one complete snapshot candidate.
@@ -1047,41 +1102,56 @@ build_view_snapshot_text_payloads :: proc(
 //   Copy and seal all semantic record families as one complete snapshot candidate.
 build_view_snapshot_record_payloads :: proc(
     slot: ^View_Snapshot,
-    commands: []core.Dynview_Command,
-    math_programs: []core.Dynview_Math_Program,
-    math_commands: []core.Dynview_Command,
-    math_nodes: []core.Dynview_Math_Node) -> bool {
+    payloads: View_Snapshot_Record_Payloads) -> bool {
 
-    statuses := [4]core.Bounded_Builder_Status{
-        core.bounded_element_builder_append(&slot^.command_builder, commands),
+    statuses := [5]core.Bounded_Builder_Status{
         core.bounded_element_builder_append(
-            &slot^.math_program_builder, math_programs),
+            &slot^.command_builder, payloads.commands),
         core.bounded_element_builder_append(
-            &slot^.math_command_builder, math_commands),
-        core.bounded_element_builder_append(&slot^.math_node_builder, math_nodes),
+            &slot^.math_program_builder, payloads.math_programs),
+        core.bounded_element_builder_append(
+            &slot^.math_table_descriptor_builder, payloads.math_table_descriptors),
+        core.bounded_element_builder_append(
+            &slot^.math_command_builder, payloads.math_commands),
+        core.bounded_element_builder_append(
+            &slot^.math_node_builder, payloads.math_nodes),
     }
     for status in statuses {
         if status != .Ok {
             return false
         }
     }
-    command_payload, command_status :=
-        core.bounded_element_builder_seal(&slot^.command_builder)
-    program_payload, program_status :=
-        core.bounded_element_builder_seal(&slot^.math_program_builder)
-    math_command_payload, math_command_status :=
-        core.bounded_element_builder_seal(&slot^.math_command_builder)
-    node_payload, node_status :=
-        core.bounded_element_builder_seal(&slot^.math_node_builder)
-    if command_status != .Ok || program_status != .Ok ||
-        math_command_status != .Ok || node_status != .Ok {
+    sealed, ok := seal_view_snapshot_record_payloads(slot)
+    if !ok {
         return false
     }
-    slot^.commands = command_payload
-    slot^.math_programs = program_payload
-    slot^.math_commands = math_command_payload
-    slot^.math_nodes = node_payload
+    slot^.commands = sealed.commands
+    slot^.math_programs = sealed.programs
+    slot^.math_table_descriptors = sealed.descriptors
+    slot^.math_commands = sealed.math_commands
+    slot^.math_nodes = sealed.nodes
     return true
+}
+
+//   Seal every appended semantic record family as one immutable payload set.
+seal_view_snapshot_record_payloads :: proc(
+    slot: ^View_Snapshot) -> (View_Snapshot_Sealed_Records, bool) {
+
+    commands, command_status :=
+        core.bounded_element_builder_seal(&slot^.command_builder)
+    programs, program_status :=
+        core.bounded_element_builder_seal(&slot^.math_program_builder)
+    descriptors, descriptor_status :=
+        core.bounded_element_builder_seal(&slot^.math_table_descriptor_builder)
+    math_commands, math_command_status :=
+        core.bounded_element_builder_seal(&slot^.math_command_builder)
+    nodes, node_status :=
+        core.bounded_element_builder_seal(&slot^.math_node_builder)
+    if command_status != .Ok || program_status != .Ok || descriptor_status != .Ok ||
+        math_command_status != .Ok || node_status != .Ok {
+        return {}, false
+    }
+    return {commands, programs, descriptors, math_commands, nodes}, true
 }
 
 //   Reset worker-only semantic emission storage for one generation.
@@ -1097,6 +1167,7 @@ reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
     staging^.command_buffer.stream_open_block_id = -1
     staging^.command_buffer.revision += 1
     staging^.compile_cache.math_program_count = 0
+    staging^.compile_cache.math_table_descriptor_count = 0
     staging^.compile_cache.math_command_count = 0
     staging^.compile_cache.math_node_count = 0
     staging^.compile_cache.last_error_code = 0
@@ -1116,6 +1187,7 @@ install_view_snapshot_content :: proc(
         commands = slot^.commands,
         text_bytes = slot^.command_text,
         math_programs = slot^.math_programs,
+        math_table_descriptors = slot^.math_table_descriptors,
         math_commands = slot^.math_commands,
         math_nodes = slot^.math_nodes,
     }
@@ -1130,6 +1202,7 @@ install_view_snapshot_content :: proc(
     buffer^.text_view = slot^.command_text
     cache := &runtime^.compile_cache
     cache^.math_program_count = len(slot^.math_programs)
+    cache^.math_table_descriptor_count = len(slot^.math_table_descriptors)
     cache^.math_command_count = len(slot^.math_commands)
     cache^.math_node_count = len(slot^.math_nodes)
     cache^.is_valid = false

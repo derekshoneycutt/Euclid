@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(18)
+const PARSER_GRAMMAR_VERSION = Int32(19)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -116,6 +116,7 @@ const LARGE_OP_KIND_SUM = Int32(1)
 const LARGE_OP_KIND_PROD = Int32(2)
 const LARGE_OP_KIND_INT = Int32(3)
 const LARGE_OP_KIND_LIM = Int32(4)
+const LARGE_OP_KIND_NARY = Int32(5)
 
 const TEXT_OPERATOR_COMMANDS = Set([
     "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\cos", "\\csc", "\\cot",
@@ -127,7 +128,20 @@ const TEXT_OPERATOR_COMMANDS = Set([
 const LARGE_OPERATOR_COMMAND_MAP = Dict(
     "\\sum" => ("∑", LARGE_OP_KIND_SUM),
     "\\prod" => ("∏", LARGE_OP_KIND_PROD),
+    "\\coprod" => ("∐", LARGE_OP_KIND_PROD),
     "\\int" => ("∫", LARGE_OP_KIND_INT),
+    "\\oint" => ("∮", LARGE_OP_KIND_INT),
+    "\\iint" => ("∬", LARGE_OP_KIND_INT),
+    "\\iiint" => ("∭", LARGE_OP_KIND_INT),
+    "\\bigcup" => ("⋃", LARGE_OP_KIND_NARY),
+    "\\bigcap" => ("⋂", LARGE_OP_KIND_NARY),
+    "\\bigvee" => ("⋁", LARGE_OP_KIND_NARY),
+    "\\bigwedge" => ("⋀", LARGE_OP_KIND_NARY),
+    "\\bigsqcup" => ("⨆", LARGE_OP_KIND_NARY),
+    "\\biguplus" => ("⨄", LARGE_OP_KIND_NARY),
+    "\\bigoplus" => ("⨁", LARGE_OP_KIND_NARY),
+    "\\bigotimes" => ("⨂", LARGE_OP_KIND_NARY),
+    "\\bigodot" => ("⨀", LARGE_OP_KIND_NARY),
     "\\lim" => ("lim", LARGE_OP_KIND_LIM))
 
 const UNICODE_COMMAND_MAP = Dict(
@@ -212,10 +226,6 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\infty" => "∞",
     "\\partial" => "∂",
     "\\nabla" => "∇",
-    "\\oint" => "∮",
-    "\\iint" => "∬",
-    "\\iiint" => "∭",
-    "\\coprod" => "∐",
     "\\forall" => "∀",
     "\\exists" => "∃",
     "\\nexists" => "∄",
@@ -353,11 +363,46 @@ const UNICODE_COMMAND_MAP = Dict(
     "\\lfloor" => "⌊",
     "\\rfloor" => "⌋",
     "\\vert" => "|",
+    "\\lvert" => "|",
+    "\\rvert" => "|",
     "\\|" => "‖",
     "\\Vert" => "‖",
+    "\\lVert" => "‖",
+    "\\rVert" => "‖",
     "\\backslash" => "∖",
     "\\{" => "{",
     "\\}" => "}")
+
+const BINARY_ATOM_COMMANDS = Set([
+    "\\pm", "\\mp", "\\times", "\\div", "\\cdot", "\\ast", "\\star",
+    "\\bullet", "\\diamond", "\\bigtriangleup", "\\bigtriangledown",
+    "\\triangleleft", "\\triangleright", "\\lhd", "\\rhd", "\\unlhd",
+    "\\unrhd", "\\oplus", "\\ominus", "\\otimes", "\\oslash", "\\odot",
+    "\\bigcirc", "\\dagger", "\\ddagger", "\\amalg", "\\wr", "\\setminus",
+    "\\sqcap", "\\sqcup", "\\uplus", "\\land", "\\lor", "\\wedge", "\\vee",
+    "\\cup", "\\cap", "\\circ", "\\rtimes",
+])
+const RELATION_ATOM_COMMANDS = Set([
+    "\\in", "\\notin", "\\ni", "\\owns", "\\notni", "\\subset", "\\subseteq",
+    "\\subsetneq", "\\nsubseteq", "\\supset", "\\supseteq", "\\supsetneq",
+    "\\nsupseteq", "\\sqsubset", "\\sqsubseteq", "\\sqsupset", "\\sqsupseteq",
+    "\\to", "\\rightarrow", "\\leftarrow", "\\leftrightarrow", "\\uparrow",
+    "\\downarrow", "\\updownarrow", "\\Rightarrow", "\\Leftarrow", "\\iff",
+    "\\Leftrightarrow", "\\Uparrow", "\\Downarrow", "\\Updownarrow",
+    "\\longleftarrow", "\\longrightarrow", "\\longleftrightarrow",
+    "\\Longleftarrow", "\\Longrightarrow", "\\Longleftrightarrow",
+    "\\hookleftarrow", "\\hookrightarrow", "\\nearrow", "\\searrow", "\\swarrow",
+    "\\nwarrow", "\\leftharpoonup", "\\leftharpoondown", "\\rightharpoonup",
+    "\\rightharpoondown", "\\rightleftharpoons", "\\leftrightharpoons", "\\leadsto",
+    "\\mapsto", "\\leq", "\\le", "\\ge", "\\geq", "\\ll", "\\gg", "\\ne",
+    "\\neq", "\\approx", "\\equiv", "\\propto", "\\prec", "\\succ", "\\preceq",
+    "\\succeq", "\\sim", "\\simeq", "\\cong", "\\asymp", "\\doteq",
+    "\\parallel", "\\nparallel", "\\mid", "\\nmid", "\\perp", "\\models",
+    "\\vdash", "\\dashv", "\\bowtie", "\\smile", "\\frown", "\\therefore",
+    "\\because",
+])
+const OPEN_ATOM_COMMANDS = Set(["\\lceil", "\\lfloor", "\\lvert", "\\lVert", "\\{"])
+const CLOSE_ATOM_COMMANDS = Set(["\\rceil", "\\rfloor", "\\rvert", "\\rVert", "\\}"])
 
 const NONBREAKING_SPACE = "\u00a0"
 
@@ -400,6 +445,16 @@ const COMMANDS_IGNORE_TRAILING_SPACE = Set([
 struct LatexToken
     kind::Symbol
     text::String
+end
+
+"""Semantic classification for one fixed math command."""
+struct MathCommandSpec
+    output::String
+    role::Symbol
+    atom_class::Int32
+    operator_family::Int32
+    operator_growth::Int32
+    operator_limits::Int32
 end
 
 struct LatexRun
@@ -571,6 +626,66 @@ function normal_math_atom_runs(text::AbstractString)
     flush_normal_math_run!(runs, current, current_role, current_class)
     return runs
 end
+
+"""Return the explicit TeX atom class for one fixed scalar command."""
+function fixed_math_command_atom_class(command::String, fallback::Int32)
+    command in BINARY_ATOM_COMMANDS && return MATH_ATOM_BIN
+    command in RELATION_ATOM_COMMANDS && return MATH_ATOM_REL
+    command in OPEN_ATOM_COMMANDS && return MATH_ATOM_OPEN
+    command in CLOSE_ATOM_COMMANDS && return MATH_ATOM_CLOSE
+    return fallback
+end
+
+"""Return one scalar command spec when output normalizes to one math atom."""
+function scalar_math_command_spec(command::String, output::String)
+    runs = normal_math_atom_runs(output)
+    if length(runs) != 1 || runs[1].segment != :atom
+        return nothing
+    end
+    run = runs[1]
+    atom_class = fixed_math_command_atom_class(command, run.atom_class)
+    return MathCommandSpec(output, run.role, atom_class, LARGE_OP_KIND_NONE,
+        OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_NONE)
+end
+
+"""Return the semantic run role for one registered large-operator family."""
+function large_operator_role(family::Int32)
+    family == LARGE_OP_KIND_SUM && return :largeop_sum
+    family == LARGE_OP_KIND_PROD && return :largeop_prod
+    family == LARGE_OP_KIND_INT && return :largeop_int
+    family == LARGE_OP_KIND_LIM && return :largeop_lim
+    return :largeop_nary
+end
+
+"""Return one fixed command spec for a semantic large operator."""
+function large_math_command_spec(output::String, family::Int32)
+    growth = family == LARGE_OP_KIND_LIM ?
+        OPERATOR_GROWTH_NONE : OPERATOR_GROWTH_DISPLAY
+    limits = family == LARGE_OP_KIND_INT ?
+        OPERATOR_LIMITS_SIDE : OPERATOR_LIMITS_STACKED
+    return MathCommandSpec(output, large_operator_role(family), MATH_ATOM_OP,
+        family, growth, limits)
+end
+
+"""Build the fixed-command registry after scalar classification helpers are available."""
+function build_math_command_registry()
+    registry = Dict{String,MathCommandSpec}()
+    for (command, output) in UNICODE_COMMAND_MAP
+        spec = scalar_math_command_spec(command, output)
+        !isnothing(spec) && (registry[command] = spec)
+    end
+    for command in TEXT_OPERATOR_COMMANDS
+        registry[command] = MathCommandSpec(replace(command, "\\" => ""),
+            :text, MATH_ATOM_OP, LARGE_OP_KIND_NONE,
+            OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_SIDE)
+    end
+    for (command, (output, family)) in LARGE_OPERATOR_COMMAND_MAP
+        registry[command] = large_math_command_spec(output, family)
+    end
+    return registry
+end
+
+const MATH_COMMAND_REGISTRY = build_math_command_registry()
 
 """Return one superscript script run with recursive semantic children."""
 latex_sup_run(text::AbstractString, children::Vector{LatexRun}) =

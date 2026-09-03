@@ -11,6 +11,7 @@ struct BridgeMathBlockPayload
     plain_text::String
     text_blob::String
     ops::Vector{OdinJuliaBridge.BridgeDynviewMathOp}
+    table_descriptors::Vector{OdinJuliaBridge.BridgeDynviewMathTableDescriptor}
     top_level_count::Int
 end
 
@@ -134,7 +135,9 @@ function atom_payload_op(run::LatexRun)
         run.role == :largeop_sum ? LARGE_OP_KIND_SUM :
         (run.role == :largeop_prod ? LARGE_OP_KIND_PROD :
             (run.role == :largeop_int ? LARGE_OP_KIND_INT :
-                (run.role == :largeop_lim ? LARGE_OP_KIND_LIM : LARGE_OP_KIND_NONE)))
+                (run.role == :largeop_lim ? LARGE_OP_KIND_LIM :
+                    (run.role == :largeop_nary ? LARGE_OP_KIND_NARY :
+                        LARGE_OP_KIND_NONE))))
     if large_op_kind != LARGE_OP_KIND_NONE
         return large_operator_payload_op(run.text, large_op_kind)
     end
@@ -406,6 +409,16 @@ struct MathPayloadBlobSpans
     sub_len::Int32
 end
 
+struct BridgeMathOpContext
+    child_direct_count::Int32
+    secondary_child_direct_count::Int32
+    tertiary_child_direct_count::Int32
+    table_descriptor_index::Int32
+    text_style::Int32
+    math_style::Int32
+    mathbb_style::Int32
+end
+
 """Append all text spans for one math payload op in bridge field order."""
 function append_math_payload_spans!(io::IOBuffer, op::MathPayloadOp)
     text_offset, text_len = append_math_block_blob!(io, op.text)
@@ -420,16 +433,11 @@ end
 function bridge_math_payload_op(
     io::IOBuffer,
     op::MathPayloadOp,
-    child_direct_count::Int32,
-    secondary_child_direct_count::Int32,
-    tertiary_child_direct_count::Int32,
-    text_style::Integer,
-    math_style::Integer,
-    mathbb_style::Integer)
+    ctx::BridgeMathOpContext)
 
     spans = append_math_payload_spans!(io, op)
     base_style = math_payload_style_id(op.kind,
-        op.style_role, text_style, math_style, mathbb_style)
+        op.style_role, ctx.text_style, ctx.math_style, ctx.mathbb_style)
     mode_codes = math_block_mode_codes(op)
 
     return OdinJuliaBridge.BridgeDynviewMathOp(
@@ -437,16 +445,17 @@ function bridge_math_payload_op(
         op.atom_class,
         op.glue_kind,
         base_style,
-        child_direct_count,
-        secondary_child_direct_count,
-        tertiary_child_direct_count,
-        Int32(math_style),
+        ctx.child_direct_count,
+        ctx.secondary_child_direct_count,
+        ctx.tertiary_child_direct_count,
+        ctx.math_style,
         base_style,
         mode_codes.accent_mode,
         mode_codes.radical_mode,
         mode_codes.large_op_kind,
         mode_codes.operator_growth,
         mode_codes.operator_limits,
+        ctx.table_descriptor_index,
         spans.text_offset,
         spans.text_len,
         spans.index_offset,
@@ -463,36 +472,76 @@ function bridge_math_payload_op(
         ACCENT_BAR_OFFSET)
 end
 
-"""Flatten recursive payload ops into preorder bridge ops and return direct child count."""
-function bridge_math_payload_preorder(
+"""Return one bridge table descriptor for a recursive matrix payload."""
+function bridge_math_table_descriptor(op::MathPayloadOp)
+    rows, rows_ok = parse_positive_int(op.radical_index_text)
+    columns, columns_ok = parse_positive_int(op.sup_text)
+    rows_ok && columns_ok || error("matrix payload has invalid dimensions")
+    alignments = ntuple(16) do index
+        index > ncodeunits(op.sub_text) && return Int32(1)
+        alignment = codeunit(op.sub_text, index)
+        alignment == UInt8('l') && return Int32(0)
+        alignment == UInt8('r') && return Int32(2)
+        return Int32(1)
+    end
+    return OdinJuliaBridge.BridgeDynviewMathTableDescriptor(
+        Int32(rows), Int32(columns), Int32(1), alignments)
+end
+
+"""Append one table descriptor and return its block-local index, or -1 for non-tables."""
+function append_math_table_descriptor!(
+    descriptors::Vector{OdinJuliaBridge.BridgeDynviewMathTableDescriptor},
+    payload::MathPayloadOp)
+
+    payload.kind != MATH_OP_MATRIX_RECURSIVE && return Int32(-1)
+    push!(descriptors, bridge_math_table_descriptor(payload))
+    return Int32(length(descriptors) - 1)
+end
+
+"""Flatten recursive payload ops while collecting block-local table descriptors."""
+function bridge_math_payload_preorder!(
     payloads::Vector{MathPayloadOp},
     io::IOBuffer,
+    descriptors::Vector{OdinJuliaBridge.BridgeDynviewMathTableDescriptor},
     text_style::Integer,
     math_style::Integer,
     mathbb_style::Integer)
 
     ops = OdinJuliaBridge.BridgeDynviewMathOp[]
     for payload in payloads
-        child_direct_count, child_ops = bridge_math_payload_preorder(
+        descriptor_index = append_math_table_descriptor!(descriptors, payload)
+        child_direct_count, child_ops = bridge_math_payload_preorder!(
             payload.children,
             io,
+            descriptors,
             text_style,
             math_style,
             mathbb_style)
         secondary_child_direct_count, secondary_child_ops =
-            bridge_math_payload_preorder(payload.secondary_children, io, text_style,
-                math_style, mathbb_style)
+            bridge_math_payload_preorder!(payload.secondary_children, io, descriptors,
+                text_style, math_style, mathbb_style)
         tertiary_child_direct_count, tertiary_child_ops =
-            bridge_math_payload_preorder(payload.tertiary_children, io, text_style,
-                math_style, mathbb_style)
-        push!(ops, bridge_math_payload_op(io, payload, Int32(child_direct_count),
-            Int32(secondary_child_direct_count), Int32(tertiary_child_direct_count),
-            text_style, math_style, mathbb_style))
+            bridge_math_payload_preorder!(payload.tertiary_children, io, descriptors,
+                text_style, math_style, mathbb_style)
+        push!(ops, bridge_math_payload_op(io, payload, BridgeMathOpContext(
+            Int32(child_direct_count), Int32(secondary_child_direct_count),
+            Int32(tertiary_child_direct_count), descriptor_index,
+            Int32(text_style), Int32(math_style), Int32(mathbb_style))))
         append!(ops, child_ops)
         append!(ops, secondary_child_ops)
         append!(ops, tertiary_child_ops)
     end
     return length(payloads), ops
+end
+
+"""Flatten recursive payload ops into preorder bridge ops and return direct child count."""
+function bridge_math_payload_preorder(
+    payloads::Vector{MathPayloadOp}, io::IOBuffer, text_style::Integer,
+    math_style::Integer, mathbb_style::Integer)
+
+    descriptors = OdinJuliaBridge.BridgeDynviewMathTableDescriptor[]
+    return bridge_math_payload_preorder!(
+        payloads, io, descriptors, text_style, math_style, mathbb_style)
 end
 
 """Append one string to a shared math-block blob and return byte offset/length."""
@@ -527,7 +576,9 @@ function math_block_mode_codes(op::MathPayloadOp)
                     OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_INT :
                     (op.large_op_kind == LARGE_OP_KIND_LIM ?
                         OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM :
-                        Int32(0))))
+                        (op.large_op_kind == LARGE_OP_KIND_NARY ?
+                            OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY :
+                            Int32(0)))))
     return MathBlockModeCodes(
         Int32(accent_mode), Int32(radical_mode), Int32(large_op_kind),
         op.operator_growth, op.operator_limits)
@@ -541,9 +592,11 @@ function bridge_math_block_payload(
     mathbb_style::Integer)
 
     blob = IOBuffer()
-    top_level_count, ops = bridge_math_payload_preorder(
+    table_descriptors = OdinJuliaBridge.BridgeDynviewMathTableDescriptor[]
+    top_level_count, ops = bridge_math_payload_preorder!(
         program,
         blob,
+        table_descriptors,
         text_style,
         math_style,
         mathbb_style)
@@ -551,6 +604,7 @@ function bridge_math_block_payload(
         plain_text_for_program(program),
         String(take!(blob)),
         ops,
+        table_descriptors,
         top_level_count)
 end
 
@@ -563,9 +617,11 @@ function bridge_math_block_payload(
 
     payloads = math_payload_ops_for_runs(runs)
     blob = IOBuffer()
-    top_level_count, ops = bridge_math_payload_preorder(
+    table_descriptors = OdinJuliaBridge.BridgeDynviewMathTableDescriptor[]
+    top_level_count, ops = bridge_math_payload_preorder!(
         payloads,
         blob,
+        table_descriptors,
         text_style,
         math_style,
         mathbb_style)
@@ -573,6 +629,7 @@ function bridge_math_block_payload(
         plain_text_for_runs(runs),
         String(take!(blob)),
         ops,
+        table_descriptors,
         top_level_count)
 end
 
@@ -596,6 +653,7 @@ function replay_emit_math_block!(
         math_style,
         payload.ops,
         payload.top_level_count,
+        payload.table_descriptors,
         payload.text_blob)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end
@@ -623,6 +681,7 @@ function replay_emit_math_block!(
         math_style,
         payload.ops,
         payload.top_level_count,
+        payload.table_descriptors,
         payload.text_blob)
     return status == OdinJuliaBridge.BRIDGE_STATUS_OK
 end

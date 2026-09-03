@@ -62,6 +62,7 @@ Math_Measure_Context :: struct {
     cache: ^app_core.Dynview_Compile_Cache,
     buffer: ^app_core.Dynview_Command_Buffer,
     font_size: f32,
+    math_style: Math_Style,
 }
 
 Math_Program_Item_Context :: struct {
@@ -160,6 +161,7 @@ Stretch_Delimiter_Dimensions :: struct {
 
 Matrix_Program :: struct {
     program: ^app_core.Dynview_Math_Program,
+    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
     rows, cols: int,
 }
 
@@ -233,6 +235,33 @@ math_child_font_size :: proc(
         return child_style, font_size
     }
     return child_style, font_size * child_scale / current_scale
+}
+
+//   Resolve an explicit target math style and font size from a parent style.
+math_target_font_size :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    font_size: f32,
+    parent, target: Math_Style) -> f32 {
+
+    parent_scale, parent_ok := math_style_scale(cache^.math_constants,
+        cache^.shaped_font_generation, parent)
+    target_scale, target_ok := math_style_scale(cache^.math_constants,
+        cache^.shaped_font_generation, target)
+    if !parent_ok || !target_ok || parent_scale <= 0 {
+        return font_size
+    }
+    return font_size * target_scale / parent_scale
+}
+
+//   Build the recursive measurement context selected by one table descriptor.
+matrix_cell_measure_context :: proc(
+    ctx: Math_Program_Item_Context,
+    descriptor: ^app_core.Dynview_Math_Table_Descriptor) -> Math_Measure_Context {
+
+    cell_style := Math_Style{Math_Style_Level(descriptor^.cell_style), false}
+    cell_font_size := math_target_font_size(
+        ctx.cache, ctx.font_size, ctx.math_style, cell_style)
+    return {ctx.cache, ctx.buffer, cell_font_size, cell_style}
 }
 
 //   Measure script text and its scaled typography for a recursive math item.
@@ -1527,6 +1556,7 @@ measure_matrix_cells :: proc(
             cell_item, cell_ok := math_program_item({
                 cache = ctx.cache, buffer = ctx.buffer,
                 cmd = cell_cmd, font_size = ctx.font_size,
+                command_index = cmd_index, math_style = ctx.math_style,
             })
             if !cell_ok {
                 return false
@@ -1579,8 +1609,7 @@ matrix_item :: #force_inline proc(
     ascent := half_height + axis_height
     return app_core.Dynview_Layout_Item{
         kind = .Matrix, style_id = cmd.style_id, math_program_id = cmd.math_program_id,
-        script_sub_text_offset = cmd.script_sub_text_offset,
-        script_sub_text_len = cmd.script_sub_text_len,
+        table_descriptor_index = cmd.table_descriptor_index,
         accent_mode = i32(metrics.rows), radical_mode = i32(metrics.cols),
         draw_width = metrics.draw_width, draw_height = metrics.total_height,
         ascent = ascent, descent = metrics.total_height - ascent,
@@ -1588,38 +1617,34 @@ matrix_item :: #force_inline proc(
     }
 }
 
-//   Resolve and measure a matrix child program with a matching row-major cell count.
+//   Resolve a matrix child program with a matching descriptor cell count.
 matrix_program_from_command :: proc(
     cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
-    cmd: app_core.Dynview_Command,
-    font_size: f32) -> (Matrix_Program, bool) {
+    cmd: app_core.Dynview_Command) -> (Matrix_Program, bool) {
 
-    dims := matrix_dims_from_command(buffer, cmd)
-    if !dims.ok || dims.rows > 16 || dims.cols > 16 {
+    descriptor, descriptor_ok := matrix_descriptor_from_command(cache, cmd)
+    if !descriptor_ok {
         return {}, false
     }
     program, ok := math_program_from_command(cache, cmd)
-    if !ok || !measure_math_program(cache, buffer, program, font_size) ||
-        program^.command_count != dims.rows * dims.cols {
+    if !ok || program^.command_count != descriptor^.rows * descriptor^.columns {
         return {}, false
     }
-    return {program, dims.rows, dims.cols}, true
+    return {program, descriptor, descriptor^.rows, descriptor^.columns}, true
 }
 
 //   Build one layout-like item for a recursive matrix with row-major child cells.
 math_program_recursive_matrix_item :: #force_inline proc(
     ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
 
-    matrix_info, ok := matrix_program_from_command(
-        ctx.cache, ctx.buffer, ctx.cmd, ctx.font_size)
+    matrix_info, ok := matrix_program_from_command(ctx.cache, ctx.cmd)
     if !ok {
         return app_core.Dynview_Layout_Item{}, false
     }
 
     cell_dims := Matrix_Cell_Dims{}
     if !measure_matrix_cells(
-        {ctx.cache, ctx.buffer, ctx.font_size}, matrix_info.program,
+        matrix_cell_measure_context(ctx, matrix_info.descriptor), matrix_info.program,
         matrix_info.rows, matrix_info.cols, &cell_dims) {
         return app_core.Dynview_Layout_Item{}, false
     }
