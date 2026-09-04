@@ -70,6 +70,24 @@ math_constants_scale_fake_metrics_exactly :: proc(t: ^testing.T) {
     testing.expect_value(t, script_script, f32(0.6))
 }
 
+//   Verify the text match scale is generation-gated and falls back to identity.
+@(test)
+math_text_match_scale_requires_current_generation :: proc(t: ^testing.T) {
+    constants := app_core.Font_Math_Constants{
+        valid = true,
+        generation = 9,
+        base_pixel_size = 32,
+        text_match_scale = 1.25,
+    }
+    unmeasured := constants
+    unmeasured.text_match_scale = 0
+
+    testing.expect_value(t, math_text_match_scale(constants, 9), f32(1.25))
+    testing.expect_value(t, math_text_match_scale(constants, 10), f32(1))
+    testing.expect_value(t, math_text_match_scale(constants, 0), f32(1))
+    testing.expect_value(t, math_text_match_scale(unmeasured, 9), f32(1))
+}
+
 //   Verify stale or unavailable snapshots fail without returning partial values.
 @(test)
 math_constants_reject_stale_or_unavailable_generations :: proc(t: ^testing.T) {

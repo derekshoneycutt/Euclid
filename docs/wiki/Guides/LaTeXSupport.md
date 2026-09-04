@@ -94,6 +94,13 @@ A single source newline in prose normalizes to one space. A blank line emits a
 paragraph break. Display math receives surrounding line breaks unless adjacent
 document runs already provide them.
 
+Inline and display math select different TeX math styles. `$...$` and `\(...\)`
+compile at Text style; `$$...$$` and `\[...\]` compile at Display style. Text style
+keeps fraction branches script-sized with tighter shifts, places large-operator limits
+beside the operator instead of above and below, and suppresses display operator
+variants, so inline math stays close to the height of surrounding prose. Source with no
+outer delimiter is treated as a standalone expression and uses Display style.
+
 ### Inline Text Colors
 
 `\textcolor{color}{...}` applies a brush color to nested document text while
@@ -220,9 +227,16 @@ Math mode supports these major groups:
 
 Julia parses supported LaTeX into semantic atoms, explicit glue, and recursive child
 programs. Odin validates that preorder bridge stream and owns all font-sensitive
-measurement against the active Math_Regular generation. The display root uses display
-style; fractions, scripts, limits, and radical degrees derive text, script,
-script-script, and cramped child styles as required.
+measurement against the active Math_Regular generation. The measurement root is Display
+style; inline math scopes itself to Text style through the same recursive style-override
+primitive that serves `\displaystyle` and `\textstyle`. Fractions, scripts, limits, and
+radical degrees derive text, script, script-script, and cramped child styles as required.
+
+The math root size is the surrounding text size multiplied by a measured optical scale
+that matches NewCM's lowercase ink height to JuliaMono's, equivalent to `unicode-math`'s
+`Scale=MatchLowercase`. That factor is captured with the OpenType MATH constants and
+shares their generation, so a font republication invalidates it with everything else. It
+is applied once at the root, and every MATH-relative construction follows from it.
 
 Successful native layout uses NewCM's OpenType MATH data for:
 
@@ -250,6 +264,18 @@ The bridge record is mirrored field-for-field in Julia and Odin. Atom, glue, sty
 operator-policy, span, and child-count validation occurs before import. Scripts,
 fraction branches, and radical degrees retain recursive child identities across the
 boundary; fallback text is never reparsed to recover structure on the Odin side.
+
+### Line Bands And Ink Overflow
+
+Document lines occupy whole grid rows. A line reserves an additional row only when its
+ink cannot be accommodated, and ink is permitted to rise into the unused leading of the
+preceding line rather than forcing a taller band. This is TeX's `\lineskiplimit`
+behavior: the baseline lattice is preserved even though ink protrudes past a band.
+
+The allowance for one line is the exact unused space left below the preceding line's
+lowest ink, so a permitted overflow can never collide. Ink below the baseline always
+reserves rows, which is what keeps that allowance sound. Display math is the deliberate
+exception and still claims its own multi-row band.
 
 ## Character Support
 

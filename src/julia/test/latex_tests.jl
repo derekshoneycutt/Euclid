@@ -538,6 +538,41 @@ end
     @test text_binomial.radical_mode == :text
 end
 
+@testset "inline math uses text style and display math uses display style" begin
+    @test EuclidLatex.whole_math_fragment("\$x^2\$").run_kind == :math_inline
+    @test EuclidLatex.whole_math_fragment("\\(x^2\\)").run_kind == :math_inline
+    @test EuclidLatex.whole_math_fragment("\$\$x^2\$\$").run_kind == :math_display
+    @test EuclidLatex.whole_math_fragment("\\[x^2\\]").run_kind == :math_display
+    @test EuclidLatex.whole_math_fragment("x^2") === nothing
+    @test EuclidLatex.whole_math_source("\$x^2\$") == "x^2"
+    @test EuclidLatex.document_math_root_style(:math_inline) == :text
+    @test EuclidLatex.document_math_root_style(:math_display) == :display
+
+    program = EuclidLatex.compiled_program_for("\\frac{a}{b}")
+    @test EuclidLatex.style_scoped_program(program, :display) === program
+    @test EuclidLatex.style_scoped_program(EuclidLatex.MathPayloadOp[], :text) ==
+        EuclidLatex.MathPayloadOp[]
+
+    scoped = EuclidLatex.style_scoped_program(program, :text)
+    @test length(scoped) == 1
+    @test only(scoped).kind == EuclidLatex.MATH_OP_STYLE_OVERRIDE_RECURSIVE
+    @test only(scoped).radical_mode == :text
+    @test only(scoped).atom_class == EuclidLatex.MATH_ATOM_INNER
+    @test only(scoped).children === program
+
+    display_payload = EuclidLatex.bridge_math_block_payload(program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    text_payload = EuclidLatex.bridge_math_block_payload(program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3),
+        root_style=:text)
+    @test display_payload.ops[1].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test text_payload.top_level_count == 1
+    @test text_payload.ops[1].kind == EuclidLatex.MATH_OP_STYLE_OVERRIDE_RECURSIVE
+    @test text_payload.ops[1].radical_mode == EuclidLatex.STYLE_OVERRIDE_MODES[:text]
+    @test text_payload.ops[2].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test text_payload.plain_text == display_payload.plain_text
+end
+
 @testset "accent bars" begin
     over = EuclidLatex.latex_to_plain_text("\\overline{AB}")
     @test over == "\\overline{AB}"

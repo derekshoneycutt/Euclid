@@ -139,7 +139,7 @@ The side-by-side circles make grouping visible while the endpoint confirms equal
 
 Associativity means the grouping of the operation does not matter:
 
-$(a \circ b) \circ c = a \circ (b \circ c)$ for all $a,b,c$.
+$$(a \circ b) \circ c = a \circ (b \circ c)\; \text{for all}\; a,b,c$$
 
 Here, compare the two ways of grouping the same three rotations.
 

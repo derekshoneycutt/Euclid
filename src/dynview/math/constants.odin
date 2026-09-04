@@ -125,6 +125,22 @@ math_constant_raw :: #force_inline proc(
     return constants.values[int(constant)], true
 }
 
+//   Return the optical scale matching the math face's lowercase height to the text face.
+//
+// Returns:
+//   - The captured ratio for a current generation, or one when unavailable. Applying it
+//     at the display root keeps every MATH-relative construction consistent.
+math_text_match_scale :: #force_inline proc(
+    constants: app_core.Font_Math_Constants,
+    generation: u64) -> f32 {
+
+    if !math_constants_are_current(constants, generation) ||
+        constants.text_match_scale <= 0 {
+        return 1
+    }
+    return constants.text_match_scale
+}
+
 //   Scale one positional 26.6 MATH constant to the requested pixel size.
 math_constant_position_px :: #force_inline proc(
     constants: app_core.Font_Math_Constants,

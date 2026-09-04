@@ -141,7 +141,7 @@ An abelian group is one where order does not matter: doing one allowed rotation 
 
 For cyclic rotations about one center, order never changes the outcome.
 
-1. $\rho^2\rho^4 = \rho^6$.
+1. $\rho^2\rho^4 = \rho^6$.\\
 2. $\rho^4\rho^2 = \rho^6$.
 
 Order does not change the result, so this is a concrete visual proof that $C_n$ is abelian.

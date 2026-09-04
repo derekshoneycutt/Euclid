@@ -13,12 +13,22 @@ function classify_latex_mode(source::AbstractString)
 end
 
 """Remove one complete outer math delimiter pair, or return `nothing`."""
-function whole_math_source(source::String)
+function whole_math_fragment(source::String)
     isempty(source) && return nothing
     parser = LatexDocumentParser(source, firstindex(source))
     result = consume_document_math!(parser)
-    return result.ok && parser.index > lastindex(source) ? result.content : nothing
+    return result.ok && parser.index > lastindex(source) ? result : nothing
 end
+
+"""Return the content of one complete outer math delimiter pair, or `nothing`."""
+function whole_math_source(source::String)
+    fragment = whole_math_fragment(source)
+    return fragment === nothing ? nothing : fragment.content
+end
+
+"""Return the root math style implied by one document math run kind."""
+document_math_root_style(run_kind::Symbol) =
+    run_kind == :math_inline ? :text : :display
 
 struct DocumentMathDelimiterInfo
     opener::String
@@ -1004,7 +1014,8 @@ function replay_document_run!(
             OdinJuliaBridge.BRIDGE_STATUS_OK
     end
     if run.kind == :math_inline
-        return replay_emit_math_block!(state_ptr, run.text; text_style=text_style)
+        return replay_emit_math_block!(
+            state_ptr, run.text; text_style=text_style, root_style=:text)
     end
     if run.kind == :shape
         return replay_document_shape!(state_ptr, run, text_style)
@@ -1022,6 +1033,18 @@ function replay_emit_document!(
     return true
 end
 
+"""
+Resolve whole-fragment math source and its root math style.
+
+An undelimited fragment is a standalone expression and stays Display style; a complete
+outer delimiter pair selects Text style for inline math and Display style otherwise.
+"""
+function whole_math_emission(stripped_source::String)
+    fragment = whole_math_fragment(stripped_source)
+    fragment === nothing && return (stripped_source, :display)
+    return (fragment.content, document_math_root_style(fragment.run_kind))
+end
+
 """Attempt whole-fragment LaTeX dynview emission and always return the supplied fallback."""
 function emit_latex_view_text!(
     state_ptr::Ptr{Cvoid},
@@ -1033,9 +1056,8 @@ function emit_latex_view_text!(
 
     fallback_text = String(fallback)
     mode = classify_latex_mode(source)
-    stripped_source = String(strip(source))
-    math_source = mode == LATEX_MODE_MATH ?
-        something(whole_math_source(stripped_source), stripped_source) : ""
+    math_source, math_root_style = mode == LATEX_MODE_MATH ?
+        whole_math_emission(String(strip(source))) : ("", :display)
     document_runs = mode == LATEX_MODE_DOCUMENT ?
         parse_latex_document(source) : LatexDocumentRun[]
     if mode == LATEX_MODE_DOCUMENT && document_runs === nothing
@@ -1049,7 +1071,9 @@ function emit_latex_view_text!(
     OdinJuliaBridge.dynview_copyable_text_run(state_ptr, fallback_text) ==
         OdinJuliaBridge.BRIDGE_STATUS_OK || return fallback_text
     rendered = mode == LATEX_MODE_MATH ?
-        replay_emit_math_block!(state_ptr, math_source; text_style=text_style) :
+        replay_emit_math_block!(
+            state_ptr, math_source;
+            text_style=text_style, root_style=math_root_style) :
         replay_emit_document!(state_ptr, document_runs, text_style)
     rendered || return fallback_text
     OdinJuliaBridge.dynview_end_block(state_ptr)

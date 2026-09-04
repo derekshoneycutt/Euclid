@@ -7,6 +7,10 @@ Cell_Metrics :: struct {
     cell_width: f32,
     cell_height: f32,
     baseline_from_top: f32,
+
+    // Ink height permitted above the band before another row is reserved. This is
+    // TeX's `\lineskiplimit`: ink may protrude into a neighbour's unused leading.
+    ascent_overflow: f32,
 }
 
 // Tight visual bounds supplied by one embeddable renderer.
@@ -38,10 +42,13 @@ cell_metrics_valid :: #force_inline proc(metrics: Cell_Metrics) -> bool {
     return scalar_is_finite(metrics.cell_width) &&
         scalar_is_finite(metrics.cell_height) &&
         scalar_is_finite(metrics.baseline_from_top) &&
+        scalar_is_finite(metrics.ascent_overflow) &&
         metrics.cell_width > 0 &&
         metrics.cell_height > 0 &&
         metrics.baseline_from_top >= 0 &&
-        metrics.baseline_from_top <= metrics.cell_height
+        metrics.baseline_from_top <= metrics.cell_height &&
+        metrics.ascent_overflow >= 0 &&
+        metrics.ascent_overflow <= metrics.cell_height
 }
 
 // Report whether intrinsic content dimensions and optional baseline are valid.
@@ -97,14 +104,21 @@ place_centered_content :: #force_inline proc(
 }
 
 // Place baseline content in the smallest box preserving the canonical baseline lattice.
+//
+// Notes:
+//   - Ink above the band is permitted up to `cells.ascent_overflow`, which yields a
+//     negative `content_offset_y` rather than an additional reserved row.
+//   - Ink below the baseline always reserves rows, so placed content never protrudes
+//     past the bottom of its own allocation.
 place_baseline_content :: #force_inline proc(
     cells: Cell_Metrics,
     content: Embedded_Content_Metrics) -> Embedded_Grid_Placement {
 
     top_extent := content.baseline_from_top
     bottom_extent := content.height - content.baseline_from_top
+    contained_top := f64(cells.baseline_from_top) + f64(cells.ascent_overflow)
     baseline_row := max(0, int(math.ceil(
-        (f64(top_extent) - f64(cells.baseline_from_top)) / f64(cells.cell_height))))
+        (f64(top_extent) - contained_top) / f64(cells.cell_height))))
     baseline_y := f64(baseline_row) * f64(cells.cell_height) +
         f64(cells.baseline_from_top)
     row_span := span_for_extent(f32(baseline_y + f64(bottom_extent)), cells.cell_height)

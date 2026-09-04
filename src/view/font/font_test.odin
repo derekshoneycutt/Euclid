@@ -163,6 +163,46 @@ view_test_math_required_source_policy :: proc(t: ^testing.T) {
     testing.expect_value(t, text_seed.count, i32(96))
 }
 
+// Verify the shipped faces yield a measurable lowercase match scale in MATH constants.
+@(test)
+view_test_math_text_match_scale_is_measured :: proc(t: ^testing.T) {
+    text_source, text_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    math_source, math_error := os.read_entire_file(
+        "assets/NewCMSansMath-Regular.otf", context.allocator)
+    testing.expect(t, text_error == nil && math_error == nil)
+    defer delete(text_source)
+    defer delete(math_source)
+
+    text_shaping: Font_Shaping_Resource
+    math_shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        text_source, JULIA_MONO_FONT_SIZE, &text_shaping))
+    defer harfbuzz_shaper_destroy(&text_shaping)
+    testing.expect(t, harfbuzz_shaper_init(
+        math_source, JULIA_MONO_FONT_SIZE, &math_shaping))
+    defer harfbuzz_shaper_destroy(&math_shaping)
+
+    text_height, text_ok := harfbuzz_lowercase_ink_height(&text_shaping)
+    math_height, math_ok := harfbuzz_lowercase_ink_height(&math_shaping)
+    testing.expect(t, text_ok && math_ok)
+    testing.expect(t, text_height > 0 && math_height > 0)
+
+    scale := harfbuzz_text_match_scale(&text_shaping, &math_shaping)
+    testing.expect_value(t, scale, text_height / math_height)
+    testing.expect(t, scale > 0.5 && scale < 2.0)
+
+    constants: Font_Math_Constants
+    testing.expect(t, harfbuzz_math_constants_capture(
+        &math_shaping, 7, f32(JULIA_MONO_FONT_SIZE), &constants, scale))
+    testing.expect_value(t, constants.text_match_scale, scale)
+
+    empty: Font_Shaping_Resource
+    testing.expect_value(t, harfbuzz_text_match_scale(&empty, &math_shaping), f32(1))
+    testing.expect(t, !harfbuzz_math_constants_capture(
+        &math_shaping, 7, f32(JULIA_MONO_FONT_SIZE), &constants, 0))
+}
+
 // Verify every scalar in one advertised mathematical alphabet resolves in NewCM.
 view_expect_math_alphabet_coverage :: proc(
     t: ^testing.T,

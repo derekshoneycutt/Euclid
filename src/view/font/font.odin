@@ -541,7 +541,10 @@ math_shaping_replace :: proc(
     if !harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, &candidate.resource) ||
         !harfbuzz_face_has_math_table(&candidate.resource) ||
         !harfbuzz_math_constants_capture(&candidate.resource, candidate.generation,
-            f32(JULIA_MONO_FONT_SIZE), &candidate.constants) {
+            f32(JULIA_MONO_FONT_SIZE), &candidate.constants,
+            harfbuzz_text_match_scale(
+                &cache.entries[int(Font_Key.Regular)].shaping,
+                &candidate.resource)) {
         math_shaping_destroy(&candidate)
         capability.failed_generation = entry.generation
         return false

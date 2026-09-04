@@ -279,20 +279,56 @@ foreign harfbuzz {
         face: ^Harfbuzz_Face, glyph: u32) -> c.int ---
 }
 
+//   Measure one face's lowercase ink height in its configured 26.6 pixel units.
+//
+// Notes:
+//   - Uses the ink extent of `x`, which is what `Scale=MatchLowercase` compares.
+harfbuzz_lowercase_ink_height :: proc(shaper: ^Font_Shaping_Resource) -> (f32, bool) {
+    if shaper == nil || shaper.font == nil {
+        return 0, false
+    }
+    font := cast(^Harfbuzz_Font)shaper.font
+    glyph: u32
+    if hb_font_get_nominal_glyph(font, 'x', &glyph) == 0 {
+        return 0, false
+    }
+    extents: Harfbuzz_Glyph_Extents
+    if hb_font_get_glyph_extents(font, glyph, &extents) == 0 {
+        return 0, false
+    }
+    height := f32(abs(extents.height))
+    return height, height > 0
+}
+
+//   Resolve the optical scale matching a math face's lowercase height to the text face.
+//
+// Returns:
+//   - The ratio to apply to the math root size, or one when either face is unmeasurable.
+harfbuzz_text_match_scale :: proc(text, math_face: ^Font_Shaping_Resource) -> f32 {
+    text_height, text_ok := harfbuzz_lowercase_ink_height(text)
+    math_height, math_ok := harfbuzz_lowercase_ink_height(math_face)
+    if !text_ok || !math_ok {
+        return 1
+    }
+    return text_height / math_height
+}
+
 //   Capture all OpenType MATH constants for one initialized capability generation.
 harfbuzz_math_constants_capture :: proc(
     shaper: ^Font_Shaping_Resource,
     generation: u64,
     base_pixel_size: f32,
-    output: ^Font_Math_Constants) -> bool {
+    output: ^Font_Math_Constants,
+    text_match_scale: f32 = 1) -> bool {
 
     if shaper == nil || shaper.font == nil || generation == 0 ||
-        base_pixel_size <= 0 || output == nil {
+        base_pixel_size <= 0 || output == nil || text_match_scale <= 0 {
         return false
     }
     candidate := Font_Math_Constants{
         generation = generation,
         base_pixel_size = base_pixel_size,
+        text_match_scale = text_match_scale,
     }
     for constant in Harfbuzz_Math_Constant {
         candidate.values[int(constant)] = hb_ot_math_get_constant(

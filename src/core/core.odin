@@ -1340,6 +1340,10 @@ Dynview_Layout_Line :: struct {
     baseline_row: int,
     max_ascent: f32,
     max_descent: f32,
+
+    // Unused vertical space between this line's lowest ink and its band bottom. The
+    // next line may raise ink into it without colliding.
+    ink_slack_below: f32,
 }
 
 Dynview_Command_Buffer :: struct {
@@ -1627,6 +1631,10 @@ Font_Math_Constants :: struct {
     generation: u64,
     base_pixel_size: f32,
     values: [FONT_MATH_CONSTANT_COUNT]i32,
+
+    // Optical size ratio matching the math face's lowercase height to the text face's,
+    // equivalent to `unicode-math`'s `Scale=MatchLowercase`. One when unmeasurable.
+    text_match_scale: f32,
 }
 
 // Font_Math_Glyph_Variant is one font-owned glyph and vertical advance in 26.6 units.

@@ -155,9 +155,14 @@ layout_max_cols :: #force_inline proc(
 }
 
 //   Construct canonical cell geometry from tracked dimensions and base text metrics.
+//
+// Parameters:
+//   - ascent_overflow: Ink height a line may raise above its band without reserving
+//     another row. Callers pass the preceding line's unused bottom leading.
 layout_cell_metrics :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
-    base_ascent, base_descent: f32) -> grid.Cell_Metrics {
+    base_ascent, base_descent: f32,
+    ascent_overflow: f32 = 0) -> grid.Cell_Metrics {
 
     text_height := base_ascent + base_descent
     top_inset := max(0.0, (cache^.last_cell_height - text_height) * 0.5)
@@ -165,7 +170,24 @@ layout_cell_metrics :: #force_inline proc(
         cell_width = cache^.last_cell_width,
         cell_height = cache^.last_cell_height,
         baseline_from_top = top_inset + base_ascent,
+        ascent_overflow = clamp(ascent_overflow, 0, cache^.last_cell_height),
     }
+}
+
+//   Return the ink overflow one new line may raise above its own band.
+//
+// Notes:
+//   - Without a preceding line the allowance is the row's own top leading, which the
+//     panel's content padding absorbs.
+layout_ascent_overflow_allowance :: #force_inline proc(
+    cache: ^core.Dynview_Compile_Cache,
+    base_ascent, base_descent: f32) -> f32 {
+
+    if cache^.layout_line_count > 0 {
+        return cache^.layout_lines[cache^.layout_line_count - 1].ink_slack_below
+    }
+    text_height := base_ascent + base_descent
+    return max(0.0, (cache^.last_cell_height - text_height) * 0.5)
 }
 
 //   Report whether one item participates in the shared text and math baseline.
@@ -332,6 +354,44 @@ layout_apply_item_grid_offsets :: proc(
     }
 }
 
+//   Return one placed item's lowest ink measured from the top of its line band.
+//
+// Notes:
+//   - Content extents mirror `layout_place_item_on_grid` so the reported ink bottom
+//     matches the box that was actually quantized.
+layout_item_ink_bottom :: #force_inline proc(
+    item: core.Dynview_Layout_Item,
+    line: core.Dynview_Layout_Line,
+    cells: grid.Cell_Metrics) -> f32 {
+
+    if !layout_item_has_baseline(item) {
+        return f32(item.row_offset) * cells.cell_height + item.content_offset_y +
+            max(1.0, item.draw_height)
+    }
+    baseline_y := f32(line.baseline_row) * cells.cell_height + cells.baseline_from_top
+    if item.kind == .Math_Block {
+        return baseline_y + item.descent + item.visual_padding_bottom
+    }
+    return baseline_y + item.descent
+}
+
+//   Measure unused vertical space below one finalized line's lowest ink.
+layout_line_ink_slack_below :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    line: core.Dynview_Layout_Line,
+    cells: grid.Cell_Metrics) -> f32 {
+
+    band_height := f32(line.row_span) * cells.cell_height
+    ink_bottom := f32(0)
+    item_end := line.item_start + line.item_count
+    for item_index in line.item_start..<item_end {
+        ink_bottom = max(
+            ink_bottom, layout_item_ink_bottom(cache^.layout_items[item_index],
+                line, cells))
+    }
+    return clamp(band_height - ink_bottom, 0, cells.cell_height)
+}
+
 //   Advance state after one line finalization.
 layout_advance_after_line :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
@@ -355,7 +415,8 @@ layout_finalize_line :: proc(
     acc: ^Dynview_Layout_Line_Accumulator,
     base_ascent, base_descent: f32) -> i32 {
 
-    cells := layout_cell_metrics(cache, base_ascent, base_descent)
+    cells := layout_cell_metrics(cache, base_ascent, base_descent,
+        layout_ascent_overflow_allowance(cache, base_ascent, base_descent))
     extents, ok := layout_measure_item_rows(
         cache, acc^.item_start, acc^.item_count, cells)
     if !ok {
@@ -381,6 +442,7 @@ layout_finalize_line :: proc(
     line := &cache^.layout_lines[cache^.layout_line_builder.count - 1]
 
     layout_apply_item_grid_offsets(cache, line, cells)
+    line^.ink_slack_below = layout_line_ink_slack_below(cache, line^, cells)
     layout_advance_after_line(cache, state, acc, row_span, {
         base_ascent, base_descent,
     })
@@ -651,14 +713,20 @@ math_block_columns :: #force_inline proc(
 }
 
 //   Measure one math block and derive its line placement metrics.
+//
+// Notes:
+//   - The root size is the text size scaled to match the math face's lowercase height,
+//     so NewCM math sits optically level with surrounding JuliaMono prose.
 math_block_layout_metrics :: proc(
     ctx: ^Dynview_Layout_Build_Context,
     cmd: core.Dynview_Command,
     style: dyncore.Dynview_Text_Style) -> (Math_Block_Layout, i32) {
 
+    root_size := ctx^.font_size * dynmath.math_text_match_scale(
+        ctx^.cache^.math_constants, ctx^.cache^.shaped_font_generation)
     program, ok := dynmath.math_program_from_command(ctx^.cache, cmd)
     if !ok || !dynmath.measure_math_program(
-        ctx^.cache, ctx^.buffer, program, ctx^.font_size) {
+        ctx^.cache, ctx^.buffer, program, root_size) {
         return {}, dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 

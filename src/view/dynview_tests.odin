@@ -1444,6 +1444,72 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
     testing.expect_value(t, cache^.layout_lines[0].baseline_row, 1)
 }
 
+//   Finalize one line holding a single math block of the requested vertical extent.
+dynview_test_finalize_math_line :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    state: ^app_dynlayout.Dynview_Layout_State,
+    acc: ^app_dynlayout.Dynview_Layout_Line_Accumulator,
+    ascent, descent: f32) -> i32 {
+
+    item := app_core.Dynview_Layout_Item{
+        kind = .Math_Block, col_span = 1, draw_width = 8,
+        draw_height = ascent + descent, ascent = ascent, descent = descent}
+    if status := app_dynlayout.layout_push_item(cache, state, acc, item);
+        status != dyncore.DYNVIEW_STATUS_OK {
+        return status
+    }
+    return app_dynlayout.layout_finalize_line(cache, state, acc, 12, 4)
+}
+
+//   Verify inline math within the lineskip allowance keeps its line one row tall.
+@(test)
+dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
+    cache := new(app_core.Dynview_Compile_Cache)
+    defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
+    cache^.last_cell_width = 8
+    cache^.last_cell_height = 22
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
+
+    text := app_core.Dynview_Layout_Item{
+        kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
+    text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
+    first_status := app_dynlayout.layout_finalize_line(cache, &state, &acc, 12, 4)
+    second_status := dynview_test_finalize_math_line(cache, &state, &acc, 17, 4)
+
+    testing.expect_value(t, text_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, first_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, second_status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, cache^.layout_lines[0].ink_slack_below, f32(3))
+    testing.expect_value(t, cache^.layout_lines[1].row_span, 1)
+    testing.expect_value(t, cache^.layout_items[1].content_offset_y, f32(-2))
+}
+
+//   Verify ink beyond the lineskip allowance still reserves an additional row.
+@(test)
+dynview_line_reserves_row_when_ink_exceeds_allowance :: proc(t: ^testing.T) {
+    cache := new(app_core.Dynview_Compile_Cache)
+    defer free(cache)
+    arena: app_core.Arena_Owner
+    dynview_test_layout_builders_init(t, cache, &arena)
+    defer app_core.arena_owner_destroy(&arena)
+    cache^.last_cell_width = 8
+    cache^.last_cell_height = 22
+    state := app_dynlayout.Dynview_Layout_State{}
+    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
+
+    status := dynview_test_finalize_math_line(cache, &state, &acc, 19, 4)
+
+    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
+    testing.expect_value(t, cache^.layout_lines[0].row_span, 2)
+    testing.expect_value(t, cache^.layout_lines[0].baseline_row, 1)
+}
+
 //   Verify an oversized inline line preserves geometry and centers its clipping.
 expect_oversized_inline_line_grid_placement :: proc(
     t: ^testing.T,

@@ -1556,6 +1556,24 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "test-dynview-line-ink-overflow-allowance",
+                "src/view/dynview_tests.odin",
+                "dynview_line_permits_ink_overflow_into_neighbor_leading",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "test-dynview-line-ink-overflow-reserves-row",
+                "src/view/dynview_tests.odin",
+                "dynview_line_reserves_row_when_ink_exceeds_allowance",
+                :implicit,
+                "Test fixture destroyed by defer free in the test body.";
+                operation="new",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
                 "test-dynview-layout-consume-text-run-wraps",
                 "src/view/dynview_tests.odin",
                 "dynview_layout_consume_text_run_wraps_and_places_segments",

@@ -23,7 +23,8 @@ function replay_emit_program!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR),
+    root_style::Symbol=:display)
 
     source = latex_source_for_program(program)
     return replay_emit_math_block!(
@@ -31,7 +32,8 @@ function replay_emit_program!(
         source;
         text_style=text_style,
         math_style=math_style,
-        mathbb_style=mathbb_style)
+        mathbb_style=mathbb_style,
+        root_style=root_style)
 end
 
 """Resolve bridge style id from payload role and kind."""
@@ -79,6 +81,24 @@ function style_override_payload_op(run::LatexRun)
         :none, run.role,
         LARGE_OP_KIND_NONE, :math, MATH_ATOM_INNER, MATH_GLUE_NONE,
         children, MathPayloadOp[], MathPayloadOp[])
+end
+
+"""
+Wrap one compiled program in an explicit root math style scope.
+
+The Odin measurement root is Display style, matching TeX's display-math default.
+Inline math (`\$...\$`) is Text style in TeX, so it is scoped through the same
+recursive style-override op that serves `\\textstyle`. A `:display` request and any
+unknown style name return `program` unchanged.
+"""
+function style_scoped_program(program::Vector{MathPayloadOp}, style::Symbol)
+    (style == :display || isempty(program)) && return program
+    haskey(STYLE_OVERRIDE_MODES, style) || return program
+    return [MathPayloadOp(MATH_OP_STYLE_OVERRIDE_RECURSIVE,
+        plain_text_for_program(program), "", "", "",
+        :none, style,
+        LARGE_OP_KIND_NONE, :math, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        program, MathPayloadOp[], MathPayloadOp[])]
 end
 
 """Return one recursive ruleless stack payload with top and bottom programs."""
@@ -780,12 +800,13 @@ function bridge_math_block_payload(
     program::Vector{MathPayloadOp};
     text_style::Integer,
     math_style::Integer,
-    mathbb_style::Integer)
+    mathbb_style::Integer,
+    root_style::Symbol=:display)
 
     blob = IOBuffer()
     table_descriptors = OdinJuliaBridge.BridgeDynviewMathTableDescriptor[]
     top_level_count, ops = bridge_math_payload_preorder!(
-        program,
+        style_scoped_program(program, root_style),
         blob,
         table_descriptors,
         text_style,
@@ -804,9 +825,10 @@ function bridge_math_block_payload(
     runs::Vector{LatexRun};
     text_style::Integer,
     math_style::Integer,
-    mathbb_style::Integer)
+    mathbb_style::Integer,
+    root_style::Symbol=:display)
 
-    payloads = math_payload_ops_for_runs(runs)
+    payloads = style_scoped_program(math_payload_ops_for_runs(runs), root_style)
     blob = IOBuffer()
     table_descriptors = OdinJuliaBridge.BridgeDynviewMathTableDescriptor[]
     top_level_count, ops = bridge_math_payload_preorder!(
@@ -831,13 +853,15 @@ function replay_emit_math_block!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR),
+    root_style::Symbol=:display)
 
     payload = bridge_math_block_payload(
         program;
         text_style=text_style,
         math_style=math_style,
-        mathbb_style=mathbb_style)
+        mathbb_style=mathbb_style,
+        root_style=root_style)
     status = OdinJuliaBridge.dynview_math_block_from_ops(
         state_ptr,
         payload.plain_text,
@@ -857,7 +881,8 @@ function replay_emit_math_block!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR),
+    root_style::Symbol=:display)
 
     _ = style_profile
     normalized_ast, _ = compile_latex_runs(source)
@@ -865,7 +890,8 @@ function replay_emit_math_block!(
         normalized_ast;
         text_style=text_style,
         math_style=math_style,
-        mathbb_style=mathbb_style)
+        mathbb_style=mathbb_style,
+        root_style=root_style)
     status = OdinJuliaBridge.dynview_math_block_from_ops(
         state_ptr,
         payload.plain_text,
@@ -889,7 +915,8 @@ function emit_latex_dynview!(
     text_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT,
     math_style::Integer=OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC,
     mathbb_style::Integer=OdinJuliaBridge.dynview_style_with_font_flags(
-        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR))
+        OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR),
+    root_style::Symbol=:display)
 
     if OdinJuliaBridge.dynview_reset_stream(state_ptr) != OdinJuliaBridge.BRIDGE_STATUS_OK
         return false
@@ -914,7 +941,8 @@ function emit_latex_dynview!(
             style_profile=style_profile,
             text_style=text_style,
             math_style=math_style,
-            mathbb_style=mathbb_style)
+            mathbb_style=mathbb_style,
+            root_style=root_style)
         return false
     end
 

@@ -153,3 +153,78 @@ grid_geometry_unrepresentable_span_is_rejected :: proc(t: ^testing.T) {
 
     testing.expect(t, !ok)
 }
+
+// Verify ascent within the overflow allowance keeps one row and raises ink above it.
+@(test)
+grid_geometry_ascent_overflow_allowance_avoids_extra_row :: proc(t: ^testing.T) {
+    cells := Cell_Metrics{
+        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        ascent_overflow = 3,
+    }
+    content := Embedded_Content_Metrics{
+        width = 8, height = 22, has_baseline = true, baseline_from_top = 18,
+    }
+    placement, ok := place_embedded_content(cells, content)
+
+    testing.expect(t, ok)
+    testing.expect_value(t, placement.baseline_row, 0)
+    testing.expect_value(t, placement.row_span, 1)
+    test_helpers.expect_close(t, placement.content_offset_y, -2,
+        "permitted ink raised above the band")
+    baseline_y := placement.content_offset_y + content.baseline_from_top
+    test_helpers.expect_close(t, baseline_y, cells.baseline_from_top,
+        "baseline stays on the canonical lattice")
+}
+
+// Verify ascent beyond the overflow allowance still reserves a preceding row.
+@(test)
+grid_geometry_ascent_beyond_allowance_reserves_row :: proc(t: ^testing.T) {
+    cells := Cell_Metrics{
+        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        ascent_overflow = 3,
+    }
+    placement, ok := place_embedded_content(cells, Embedded_Content_Metrics{
+        width = 8, height = 24, has_baseline = true, baseline_from_top = 20,
+    })
+
+    testing.expect(t, ok)
+    testing.expect_value(t, placement.baseline_row, 1)
+    testing.expect(t, placement.content_offset_y >= 0)
+}
+
+// Verify descent never protrudes past its own allocation even with an allowance.
+@(test)
+grid_geometry_descent_always_reserves_rows :: proc(t: ^testing.T) {
+    cells := Cell_Metrics{
+        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        ascent_overflow = 6,
+    }
+    content := Embedded_Content_Metrics{
+        width = 8, height = 30, has_baseline = true, baseline_from_top = 12,
+    }
+    placement, ok := place_embedded_content(cells, content)
+
+    testing.expect(t, ok)
+    testing.expect_value(t, placement.baseline_row, 0)
+    testing.expect(t,
+        placement.content_offset_y + content.height <= placement.allocated_height)
+}
+
+// Verify an out-of-range or non-finite overflow allowance is rejected.
+@(test)
+grid_geometry_invalid_ascent_overflow_is_rejected :: proc(t: ^testing.T) {
+    content := Embedded_Content_Metrics{
+        width = 8, height = 22, has_baseline = true, baseline_from_top = 16,
+    }
+    _, negative_ok := place_embedded_content(Cell_Metrics{
+        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        ascent_overflow = -1,
+    }, content)
+    _, oversized_ok := place_embedded_content(Cell_Metrics{
+        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        ascent_overflow = 23,
+    }, content)
+
+    testing.expect(t, !negative_ok)
+    testing.expect(t, !oversized_ok)
+}
