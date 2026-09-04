@@ -801,6 +801,90 @@ end
         op.kind == EuclidLatex.MATH_OP_MATRIX_RECURSIVE, wrapped_payload.ops))
     @test wrapped_matrix_op.table_descriptor_index == Int32(0)
 
+    smallmatrix_program = EuclidLatex.compiled_program_for(
+        "\\begin{smallmatrix}a&\\frac{1}{2}\\\\c&d\\end{smallmatrix}")
+    smallmatrix_payload = EuclidLatex.bridge_math_block_payload(smallmatrix_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    smallmatrix_descriptor = only(smallmatrix_payload.table_descriptors)
+    @test smallmatrix_descriptor.cell_style == Int32(2)
+    @test smallmatrix_descriptor.row_spacing == Int32(1)
+    @test smallmatrix_descriptor.column_alignments[1:2] == (Int32(1), Int32(1))
+
+    cases_program = EuclidLatex.compiled_program_for(
+        "\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}")
+    @test cases_program[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    @test cases_program[1].radical_index_text == "\\{"
+    @test cases_program[1].sup_text == "."
+    cases_payload = EuclidLatex.bridge_math_block_payload(cases_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    cases_descriptor = only(cases_payload.table_descriptors)
+    @test cases_descriptor.cell_style == Int32(1)
+    @test cases_descriptor.row_spacing == Int32(2)
+    @test cases_descriptor.column_alignments[1:2] == (Int32(0), Int32(0))
+    @test cases_descriptor.column_boundary_gaps[2].value == 1.0f0
+    @test cases_descriptor.column_boundary_gaps[2].unit == Int32(2)
+
+    dcases_program = EuclidLatex.compiled_program_for(
+        "\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}")
+    dcases_payload = EuclidLatex.bridge_math_block_payload(dcases_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test only(dcases_payload.table_descriptors).cell_style == Int32(0)
+
+    aligned_program = EuclidLatex.compiled_program_for(
+        "\\begin{aligned}a&=b&c&=d\\\\e&=f&g&=h\\end{aligned}")
+    aligned_payload = EuclidLatex.bridge_math_block_payload(aligned_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    aligned_descriptor = only(aligned_payload.table_descriptors)
+    @test aligned_descriptor.cell_style == Int32(0)
+    @test aligned_descriptor.row_spacing == Int32(3)
+    @test aligned_descriptor.column_alignments[1:4] ==
+        (Int32(2), Int32(0), Int32(2), Int32(0))
+    @test aligned_descriptor.column_boundary_gaps[3].value == 1.0f0
+    @test aligned_descriptor.column_boundary_gaps[3].unit == Int32(2)
+
+    alignedat_program = EuclidLatex.compiled_program_for(
+        "\\begin{alignedat}{2}a&=b&c&=d\\end{alignedat}")
+    alignedat_payload = EuclidLatex.bridge_math_block_payload(alignedat_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    alignedat_descriptor = only(alignedat_payload.table_descriptors)
+    @test alignedat_descriptor.columns == Int32(4)
+    @test all(gap.unit == Int32(1) for gap in
+        alignedat_descriptor.column_boundary_gaps[1:5])
+
+    gathered_program = EuclidLatex.compiled_program_for(
+        "\\begin{gathered}a+b\\\\c+d\\end{gathered}")
+    gathered_payload = EuclidLatex.bridge_math_block_payload(gathered_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    gathered_descriptor = only(gathered_payload.table_descriptors)
+    @test gathered_descriptor.columns == Int32(1)
+    @test gathered_descriptor.cell_style == Int32(0)
+
+    subarray_program = EuclidLatex.compiled_program_for(
+        "\\begin{subarray}{l}i=1\\\\j=2\\end{subarray}")
+    subarray_payload = EuclidLatex.bridge_math_block_payload(subarray_program;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    subarray_descriptor = only(subarray_payload.table_descriptors)
+    @test subarray_descriptor.columns == Int32(1)
+    @test subarray_descriptor.cell_style == Int32(2)
+    @test subarray_descriptor.column_alignments[1] == Int32(0)
+
+    nested_table = EuclidLatex.compiled_program_for(
+        "\\begin{aligned}x&=\\frac{1}{2}\\begin{smallmatrix}a&b\\end{smallmatrix}\\end{aligned}")
+    nested_payload = EuclidLatex.bridge_math_block_payload(nested_table;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test length(nested_payload.table_descriptors) == 2
+
+    @test EuclidLatex.latex_to_plain_text(
+        "\\begin{cases}a&b&c\\end{cases}") == "\\begin"
+    @test EuclidLatex.latex_to_plain_text(
+        "\\begin{aligned}a&b&c\\end{aligned}") == "\\begin"
+    @test EuclidLatex.latex_to_plain_text(
+        "\\begin{alignedat}{2}a&b\\end{alignedat}") == "\\begin"
+    @test EuclidLatex.latex_to_plain_text(
+        "\\begin{gathered}a&b\\end{gathered}") == "\\begin"
+    @test EuclidLatex.latex_to_plain_text(
+        "\\begin{subarray}{r}i=1\\end{subarray}") == "\\begin"
+
     malformed = EuclidLatex.latex_to_plain_text("\\begin{matrix}a&b\\\\c\\end{matrix}")
     @test malformed == "\\begin"
 

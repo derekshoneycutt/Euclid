@@ -304,7 +304,8 @@ function matrix_payload_op(run::LatexRun)
     end
 
     array_alignment = ""
-    if run.segment == :array && !isempty(run.secondary_children)
+    if (run.segment == :array || run.segment in TABLE_ARGUMENT_ENVIRONMENTS) &&
+        !isempty(run.secondary_children)
         array_alignment = run.secondary_children[1].text
     end
 
@@ -367,7 +368,8 @@ function payload_for_non_script_segment(run::LatexRun)
     if run.segment == :stretch_delimiter
         return stretch_delimiter_payload_op(run)
     end
-    if run.segment == :matrix || run.segment == :array
+    if run.segment == :matrix || run.segment == :array ||
+        run.segment in TABLE_SEMANTIC_SEGMENTS
         return matrix_payload_op(run)
     end
     return nothing
@@ -480,8 +482,9 @@ end
 """Return default semantic table metadata for one plain matrix."""
 function default_math_table_semantics(rows::Int, columns::Int)
     return MathTableSemanticDescriptor(
-        fill('c', columns), fill(true, columns + 1), fill(0, columns + 1),
-        fill(MathTableLength(0.0f0, :zero), rows), fill(0, rows + 1))
+        fill('c', columns), fill(MathTableLength(0.0f0, :default), columns + 1),
+        fill(0, columns + 1), fill(MathTableLength(0.0f0, :zero), rows),
+        fill(0, rows + 1), :text, :matrix)
 end
 
 """Encode fixed alignment slots from one semantic table descriptor."""
@@ -498,12 +501,13 @@ end
 
 """Encode fixed column boundary lengths and vertical rule counts."""
 function bridge_math_table_columns(semantic::MathTableSemanticDescriptor)
+    units = Dict(:default => 0, :zero => 1, :em => 2, :ex => 3, :pt => 4)
     lengths = ntuple(17) do index
-        if index > length(semantic.boundary_defaults)
+        if index > length(semantic.boundary_gaps)
             return OdinJuliaBridge.BridgeDynviewMathLength(0.0f0, Int32(0))
         end
-        unit = semantic.boundary_defaults[index] ? 0 : 1
-        OdinJuliaBridge.BridgeDynviewMathLength(0.0f0, Int32(unit))
+        gap = semantic.boundary_gaps[index]
+        OdinJuliaBridge.BridgeDynviewMathLength(gap.value, Int32(units[gap.unit]))
     end
     rules = ntuple(17) do index
         index <= length(semantic.vertical_rule_counts) ?
@@ -538,8 +542,11 @@ function bridge_math_table_descriptor(op::MathPayloadOp)
     alignments = bridge_math_table_alignments(semantic)
     lengths, rules = bridge_math_table_columns(semantic)
     row_gaps, horizontal_rules = bridge_math_table_rows(semantic)
+    styles = Dict(:display => 0, :text => 1, :script => 2, :script_script => 3)
+    spacings = Dict(:matrix => 0, :tight => 1, :cases => 2, :alignment => 3)
     return OdinJuliaBridge.BridgeDynviewMathTableDescriptor(
-        Int32(rows), Int32(columns), Int32(1), Int32(0), alignments,
+        Int32(rows), Int32(columns), Int32(styles[semantic.cell_style]),
+        Int32(spacings[semantic.row_spacing]), alignments,
         lengths, rules, row_gaps, horizontal_rules)
 end
 

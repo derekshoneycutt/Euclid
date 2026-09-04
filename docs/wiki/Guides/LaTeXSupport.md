@@ -346,7 +346,9 @@ Matrix mode supports rectangular grids and recursive math within cells:
     `pt`, `em`, or `ex` units.
 - Supported inside cells: other structured math primitives such as fractions,
     radicals, and scripts.
-- Composition wrappers: `bmatrix`, `pmatrix`, and `vmatrix`.
+- Composition wrappers: `bmatrix`, `Bmatrix`, `pmatrix`, `vmatrix`, and `Vmatrix`.
+- Preset environments: `smallmatrix`, `cases`, `dcases`, `aligned`, `alignedat`,
+    `gathered`, and `subarray`.
 - Canonical wrapper output becomes `\left[...\right]`, `\left(...\right)`, or
     `\left|...\right|` around a `matrix` environment.
 
@@ -357,8 +359,17 @@ Matrix dimensions, cell style, row policy, alignments, typed boundary gaps, rule
 and row additions cross the Julia/Odin boundary in a bounded typed descriptor. Matrix
 commands reference that descriptor by block-local index; native measurement and drawing
 do not reparse fallback text for layout policy.
-Normal matrix and array cells enter TeX Text style before recursive fractions, scripts,
-radicals, or operators are measured. OpenType MATH style scaling remains authoritative.
+Normal matrix, array, and `cases` cells enter TeX Text style. `smallmatrix` and
+`subarray` use Script style; `dcases`, `aligned`, `alignedat`, and `gathered` use
+Display style. The selected style applies before recursive fractions, scripts,
+radicals, nested tables, or operators are measured. OpenType MATH style scaling
+remains authoritative.
+
+Preset shape rules are enforced during parsing. `cases` and `dcases` require two
+left-aligned columns and use a structural left brace with an omitted right delimiter.
+`aligned` requires right/left column pairs, while `alignedat{n}` requires exactly
+`2n` columns and suppresses automatic pair gaps. `gathered` accepts one centered
+column. `subarray{l}` and `subarray{c}` accept one column with the requested alignment.
 
 ## Delimiter Support
 
@@ -428,14 +439,15 @@ structured stream the only source of user-visible meaning.
 ## Known Limitations
 
 - This is not a TeX engine. Macros, packages, declarations, sections, lists,
-    tables, equation environments, alignment environments, and general
+    document tables, top-level equation environments, and general
     `\begin{...}` document environments are unsupported.
 - Document styling is limited to nested bold and italic spans. There is no
     document-level font size, color, heading, or alignment syntax.
 - Math delimiters in document mode use direct closer search; nested delimiter
     escaping is not general TeX-compatible parsing.
-- Matrix support is limited to rectangular `matrix`, validated `array`, and the
-    `bmatrix`, `pmatrix`, and `vmatrix` wrappers.
+- Table support is limited to the documented rectangular matrix, array, wrapper,
+    and nested preset environments. Top-level numbering, tags, and references are
+    unsupported.
 - `\mathbb` supports uppercase Latin letters only.
 - Raw Unicode math is best effort; command forms provide more reliable semantic
     styling.

@@ -33,6 +33,21 @@ struct ArrayPreambleSpec
     valid::Bool
 end
 
+const MATRIX_WRAPPER_DELIMITERS = Dict(
+    "bmatrix" => ("[", "]"), "Bmatrix" => ("\\{", "\\}"),
+    "pmatrix" => ("(", ")"), "vmatrix" => ("|", "|"),
+    "Vmatrix" => ("\\|", "\\|"))
+const TABLE_PRESET_ENVIRONMENTS = Set([
+    "smallmatrix", "cases", "dcases", "aligned", "alignedat", "gathered", "subarray"])
+const TABLE_ARGUMENT_ENVIRONMENTS = Set(["alignedat", "subarray"])
+const TABLE_DIRECT_ENVIRONMENTS = Set([
+    "smallmatrix", "aligned", "alignedat", "gathered", "subarray"])
+const TABLE_SEMANTIC_SEGMENTS = Set([
+    :smallmatrix, :aligned, :alignedat, :gathered, :subarray])
+const TABLE_FIXED_COLUMN_COUNTS = Dict(
+    "cases" => 2, "dcases" => 2, "gathered" => 1)
+const SUBARRAY_ALIGNMENT_ARGUMENTS = Set(["l", "c"])
+
 """Map single punctuation characters to their token kinds."""
 const PUNCTUATION_TOKEN_KINDS = Dict{Char,Symbol}(
     '{' => :lbrace,
@@ -386,8 +401,7 @@ matrix_parse_fallback() = latex_atom_run("\\begin", :math)
 """Return true when one environment name is matrix-like and supported."""
 is_matrix_like_environment(env_name::AbstractString) =
     env_name == "matrix" || env_name == "array" ||
-    env_name == "bmatrix" || env_name == "Bmatrix" || env_name == "pmatrix" ||
-    env_name == "vmatrix" || env_name == "Vmatrix"
+    haskey(MATRIX_WRAPPER_DELIMITERS, env_name) || env_name in TABLE_PRESET_ENVIRONMENTS
 
 """Normalize one array alignment preamble by removing all whitespace."""
 function normalize_array_preamble_text(text::AbstractString)
@@ -497,22 +511,87 @@ function skip_environment_body!(
     return nothing
 end
 
-"""Return true when matrix-like environment metadata is compatible with parsed cell shape."""
+"""Return true when a subarray has one column and a supported alignment argument."""
+function subarray_columns_ok(cols::Int, environment_argument::AbstractString)
+    return cols == 1 && environment_argument in SUBARRAY_ALIGNMENT_ARGUMENTS
+end
+
+"""Return true when alignedat's pair count is bounded and matches its columns."""
+function alignedat_columns_ok(cols::Int, environment_argument::AbstractString)
+    pair_count, count_ok = parse_positive_int(environment_argument)
+    return count_ok && pair_count <= 8 && cols == pair_count * 2
+end
+
+"""Return true when one preset environment accepts its parsed column shape."""
+function table_environment_columns_ok(
+    env_name::AbstractString, cols::Int, environment_argument::AbstractString)
+
+    env_name == "array" && return false
+    fixed_columns = get(TABLE_FIXED_COLUMN_COUNTS, env_name, 0)
+    fixed_columns > 0 && return cols == fixed_columns
+    env_name == "aligned" && return cols >= 2 && iseven(cols)
+    env_name == "subarray" && return subarray_columns_ok(cols, environment_argument)
+    env_name == "alignedat" && return alignedat_columns_ok(cols, environment_argument)
+    return true
+end
+
+"""Return true when matrix-like environment metadata agrees with parsed cell shape."""
 function matrix_environment_metadata_ok(
-    env_name::AbstractString,
-    array_preamble::AbstractString,
-    matrix_rows::Vector{Vector{Vector{LatexRun}}})
+    env_name::AbstractString, array_preamble::AbstractString,
+    matrix_rows::Vector{Vector{Vector{LatexRun}}}, environment_argument::AbstractString)
 
-    if env_name != "array"
-        return true
-    end
-
-    if isempty(matrix_rows)
-        return false
-    end
-
+    isempty(matrix_rows) && return false
     cols = length(matrix_rows[1])
-    return length(parse_array_preamble_spec(array_preamble).alignments) == cols
+    env_name == "array" &&
+        return length(parse_array_preamble_spec(array_preamble).alignments) == cols
+    return table_environment_columns_ok(env_name, cols, environment_argument)
+end
+
+"""Return fixed boundary lengths for one preset table environment."""
+function table_preset_boundary_gaps(env_name::AbstractString, columns::Int)
+    gaps = fill(MathTableLength(0.0f0, :default), columns + 1)
+    if env_name in ("cases", "dcases")
+        fill!(gaps, MathTableLength(0.0f0, :zero))
+        gaps[2] = MathTableLength(1.0f0, :em)
+    elseif env_name in ("aligned", "alignedat")
+        fill!(gaps, MathTableLength(0.0f0, :zero))
+        if env_name == "aligned"
+            for boundary in 3:2:columns
+                gaps[boundary] = MathTableLength(1.0f0, :em)
+            end
+        end
+    end
+    return gaps
+end
+
+"""Build one typed descriptor preset for a validated table environment."""
+function table_environment_descriptor(
+    env_name::AbstractString, columns::Int, row_result::MatrixRowsParseResult,
+    environment_argument::AbstractString)
+
+    alignments = fill('c', columns)
+    cell_style = :text
+    row_spacing = :matrix
+    if env_name in ("cases", "dcases")
+        alignments .= 'l'
+        cell_style = env_name == "dcases" ? :display : :text
+        row_spacing = :cases
+    elseif env_name in ("aligned", "alignedat")
+        alignments = [isodd(index) ? 'r' : 'l' for index in 1:columns]
+        cell_style = :display
+        row_spacing = :alignment
+    elseif env_name == "gathered"
+        cell_style = :display
+        row_spacing = :alignment
+    elseif env_name in ("smallmatrix", "subarray")
+        cell_style = :script
+        row_spacing = :tight
+        env_name == "subarray" && (alignments[1] = only(environment_argument))
+    end
+    return MathTableSemanticDescriptor(
+        alignments, table_preset_boundary_gaps(env_name, columns),
+        fill(0, columns + 1), row_result.row_extra_gaps,
+        row_result.horizontal_rule_counts, cell_style, row_spacing)
 end
 
 """Return one matrix-like semantic run for parsed environment name and cells."""
@@ -529,29 +608,22 @@ function matrix_environment_run(
         return latex_array_run(rows, cols, cells, array_preamble, descriptor)
     end
 
-    if env_name == "bmatrix"
-        matrix_run = latex_matrix_run(rows, cols, cells)
-        return latex_stretch_delimiter_run("[", "]", [matrix_run])
+    if env_name in ("cases", "dcases")
+        descriptor isa MathTableSemanticDescriptor || return matrix_parse_fallback()
+        table_run = latex_table_run(rows, cols, cells, :array, descriptor, "ll")
+        return latex_stretch_delimiter_run("\\{", ".", [table_run])
     end
 
-    if env_name == "Bmatrix"
-        matrix_run = latex_matrix_run(rows, cols, cells)
-        return latex_stretch_delimiter_run("\\{", "\\}", [matrix_run])
+    if env_name in TABLE_DIRECT_ENVIRONMENTS
+        descriptor isa MathTableSemanticDescriptor || return matrix_parse_fallback()
+        return latex_table_run(
+            rows, cols, cells, Symbol(env_name), descriptor, array_preamble)
     end
 
-    if env_name == "pmatrix"
+    if haskey(MATRIX_WRAPPER_DELIMITERS, env_name)
+        left, right = MATRIX_WRAPPER_DELIMITERS[env_name]
         matrix_run = latex_matrix_run(rows, cols, cells)
-        return latex_stretch_delimiter_run("(", ")", [matrix_run])
-    end
-
-    if env_name == "vmatrix"
-        matrix_run = latex_matrix_run(rows, cols, cells)
-        return latex_stretch_delimiter_run("|", "|", [matrix_run])
-    end
-
-    if env_name == "Vmatrix"
-        matrix_run = latex_matrix_run(rows, cols, cells)
-        return latex_stretch_delimiter_run("\\|", "\\|", [matrix_run])
+        return latex_stretch_delimiter_run(left, right, [matrix_run])
     end
 
     return latex_matrix_run(rows, cols, cells)
@@ -947,6 +1019,16 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
         end
     end
 
+    environment_argument = ""
+    if env_name in TABLE_ARGUMENT_ENVIRONMENTS
+        environment_argument, argument_ok = parse_required_group_token_text(tokens, idx)
+        environment_argument = normalize_array_preamble_text(environment_argument)
+        if !argument_ok
+            skip_environment_body!(tokens, idx, env_name)
+            return matrix_parse_fallback(), false
+        end
+    end
+
     row_result = parse_matrix_rows(tokens, idx, env_name)
     matrix_rows = row_result.rows
     if !row_result.ok || !matrix_rows_valid(matrix_rows)
@@ -954,17 +1036,19 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
         return matrix_parse_fallback(), false
     end
 
-    if !matrix_environment_metadata_ok(env_name, array_preamble, matrix_rows)
+    if !matrix_environment_metadata_ok(
+        env_name, array_preamble, matrix_rows, environment_argument)
         return matrix_parse_fallback(), false
     end
 
     return matrix_environment_run_from_rows(
-        env_name, array_preamble, matrix_rows, row_result), true
+        env_name, array_preamble, environment_argument, matrix_rows, row_result), true
 end
 
 """Build one matrix-like semantic run from validated row parser output."""
 function matrix_environment_run_from_rows(
     env_name::AbstractString, array_preamble::AbstractString,
+    environment_argument::AbstractString,
     matrix_rows::Vector{Vector{Vector{LatexRun}}}, row_result::MatrixRowsParseResult)
 
     cells = LatexRun[]
@@ -974,13 +1058,19 @@ function matrix_environment_run_from_rows(
     descriptor = nothing
     if env_name == "array"
         preamble = parse_array_preamble_spec(array_preamble)
+        boundary_gaps = [MathTableLength(0.0f0, enabled ? :default : :zero)
+            for enabled in preamble.boundary_defaults]
         descriptor = MathTableSemanticDescriptor(
-            preamble.alignments, preamble.boundary_defaults,
+            preamble.alignments, boundary_gaps,
             preamble.vertical_rule_counts, row_result.row_extra_gaps,
-            row_result.horizontal_rule_counts)
+            row_result.horizontal_rule_counts, :text, :matrix)
+    elseif env_name in TABLE_PRESET_ENVIRONMENTS
+        descriptor = table_environment_descriptor(
+            env_name, length(matrix_rows[1]), row_result, environment_argument)
     end
+    metadata = isempty(environment_argument) ? array_preamble : environment_argument
     return matrix_environment_run(env_name, length(matrix_rows), length(matrix_rows[1]),
-        cells, array_preamble, descriptor)
+        cells, metadata, descriptor)
 end
 
 """Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""
@@ -1093,7 +1183,7 @@ function matrix_serialized_text(
     rows::Int, cols::Int, cells::Vector{LatexRun},
     env_name::AbstractString, preamble::AbstractString="")
     matrix_text = "\\begin{" * env_name * "}"
-    if env_name == "array"
+    if env_name == "array" || env_name in TABLE_ARGUMENT_ENVIRONMENTS
         matrix_text *= "{" * preamble * "}"
     end
     cell_index = 1
@@ -1122,6 +1212,11 @@ function matrix_like_env_metadata(run::LatexRun)
     if run.segment == :array
         preamble = isempty(run.secondary_children) ? "c" : run.secondary_children[1].text
         return "array", preamble
+    end
+
+    if run.segment in TABLE_SEMANTIC_SEGMENTS
+        metadata = isempty(run.secondary_children) ? "" : run.secondary_children[1].text
+        return String(run.segment), metadata
     end
 
     return "matrix", ""
@@ -1186,7 +1281,8 @@ function latex_run_serialized_text(run::LatexRun)
             (latex_run_serialized_text(child) for child in run.secondary_children), "")
     end
 
-    if run.segment == :matrix || run.segment == :array
+    if run.segment == :matrix || run.segment == :array ||
+        run.segment in TABLE_SEMANTIC_SEGMENTS
         return serialize_matrix_like_run(run)
     end
     return latex_run_non_matrix_text(run, child_text, secondary_child_text)

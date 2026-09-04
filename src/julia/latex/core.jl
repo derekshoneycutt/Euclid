@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(20)
+const PARSER_GRAMMAR_VERSION = Int32(21)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -464,10 +464,12 @@ end
 
 struct MathTableSemanticDescriptor
     alignments::Vector{Char}
-    boundary_defaults::Vector{Bool}
+    boundary_gaps::Vector{MathTableLength}
     vertical_rule_counts::Vector{Int}
     row_extra_gaps::Vector{MathTableLength}
     horizontal_rule_counts::Vector{Int}
+    cell_style::Symbol
+    row_spacing::Symbol
 end
 
 struct LatexRun
@@ -777,3 +779,11 @@ latex_array_run(rows::Int, cols::Int, cells::Vector{LatexRun}, preamble::String,
     descriptor::MathTableSemanticDescriptor) =
     LatexRun(matrix_dims_text(rows, cols), :math, :array, MATH_ATOM_INNER,
         MATH_GLUE_NONE, cells, [latex_atom_run(preamble, :math)], descriptor)
+
+"""Return one preset table run using the shared recursive matrix operation."""
+latex_table_run(rows::Int, cols::Int, cells::Vector{LatexRun}, segment::Symbol,
+    descriptor::MathTableSemanticDescriptor, metadata::String="") =
+    LatexRun(matrix_dims_text(rows, cols), :math, segment, MATH_ATOM_INNER,
+        MATH_GLUE_NONE, cells,
+        isempty(metadata) ? EMPTY_CHILD_RUNS : [latex_atom_run(metadata, :math)],
+        descriptor)

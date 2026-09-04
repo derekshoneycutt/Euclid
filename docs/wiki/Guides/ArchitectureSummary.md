@@ -251,8 +251,9 @@ flowchart LR
   - Script attachments serialize base, superscript, and subscript programs as
     distinct preorder branches. Radical degree programs use the secondary
     branch; canonical text fields remain deterministic fallback content.
-  - Matrix and array operations reference block-local typed table descriptors.
-    Descriptors carry bounded dimensions, Text-style cell policy, and 16 fixed
+  - Matrix, array, and table-preset operations reference block-local typed table
+    descriptors. Descriptors carry bounded dimensions, explicit cell style and row
+    spacing policies, typed boundary gaps, rules, row additions, and 16 fixed
     column-alignment entries; source strings remain fallback content only.
   - Parse cache key is `(source, PARSER_GRAMMAR_VERSION, style_profile)`.
 - Odin side:

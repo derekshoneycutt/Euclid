@@ -1,0 +1,11 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}\\;\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}\\;\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}\"","as":"complex-a"}
+{"wait_event":"scratchpad_completed","correlation":"complex-a","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"scratchpad":"L\"\\frac{2\\pi}{3}\\;\\;\\; \\sum \\left\\{\\begin{matrix} 1 & 2 & 3 & 4 \\\\ 5 & 6 & 7 & 8 \\end{matrix}\\right\\}\\;\\;\\; C_n = \\{e,\\rho,\\rho^2,\\dots,\\rho^{n-1}\\}\\;\\;\\; \\sqrt[3]{\\left(\\int_0^1\\begin{bmatrix} 1 & 2 & 3 & 4 \\\\ 5 & 6 & 7 & 8 \\end{bmatrix}\\right)}\"","as":"complex-b"}
+{"wait_event":"scratchpad_completed","correlation":"complex-b","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"shutdown":true}

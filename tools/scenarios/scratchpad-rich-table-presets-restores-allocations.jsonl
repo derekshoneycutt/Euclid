@@ -1,0 +1,36 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_committed","correlation":"reload","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}\\;\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}\\;\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}\"","as":"tables-a-warm"}
+{"wait_event":"scratchpad_completed","correlation":"tables-a-warm","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{alignedat}{2}a&=b&c&=d\\\\e&=f&g&=h\\end{alignedat}\\;\\begin{gathered}u+v\\\\w+t\\end{gathered}\\;\\sum_{\\begin{subarray}{c}i=1\\\\j=2\\end{subarray}}^n i\"","as":"tables-b-warm"}
+{"wait_event":"scratchpad_completed","correlation":"tables-b-warm","timeout_ms":10000}
+{"scratchpad":":reset","as":"reset-warm-2"}
+{"wait_event":"scratchpad_completed","correlation":"reset-warm-2","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}\\;\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}\\;\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}\"","as":"tables-a-warm-2"}
+{"wait_event":"scratchpad_completed","correlation":"tables-a-warm-2","timeout_ms":10000}
+{"screenshot":".build/rich-table-cases-stage4.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{alignedat}{2}a&=b&c&=d\\\\e&=f&g&=h\\end{alignedat}\\;\\begin{gathered}u+v\\\\w+t\\end{gathered}\\;\\sum_{\\begin{subarray}{c}i=1\\\\j=2\\end{subarray}}^n i\"","as":"tables-b-warm-2"}
+{"wait_event":"scratchpad_completed","correlation":"tables-b-warm-2","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"scratchpad":":reset","as":"reset-measured"}
+{"wait_event":"scratchpad_completed","correlation":"reset-measured","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}\\;\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}\\;\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}\"","as":"tables-a-measured"}
+{"wait_event":"scratchpad_completed","correlation":"tables-a-measured","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{alignedat}{2}a&=b&c&=d\\\\e&=f&g&=h\\end{alignedat}\\;\\begin{gathered}u+v\\\\w+t\\end{gathered}\\;\\sum_{\\begin{subarray}{c}i=1\\\\j=2\\end{subarray}}^n i\"","as":"tables-b-measured"}
+{"wait_event":"scratchpad_completed","correlation":"tables-b-measured","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/rich-table-presets-stage4.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}
