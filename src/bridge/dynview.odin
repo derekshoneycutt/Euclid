@@ -57,19 +57,18 @@ BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
 dynview_math_table_descriptor_valid :: proc(
     descriptor: Bridge_Dynview_Math_Table_Descriptor) -> bool {
 
-    if descriptor.rows <= 0 || descriptor.rows > 16 ||
-        descriptor.columns <= 0 || descriptor.columns > 16 ||
-        descriptor.cell_style < i32(core.Dynview_Math_Style_Level.Display) ||
-        descriptor.cell_style > i32(core.Dynview_Math_Style_Level.Script_Script) {
-        return false
-    }
-    for alignment in descriptor.column_alignments {
-        if alignment < i32(core.Dynview_Matrix_Column_Alignment.Left) ||
-            alignment > i32(core.Dynview_Matrix_Column_Alignment.Right) {
+    for count in descriptor.vertical_rule_counts {
+        if count < 0 || count > 2 {
             return false
         }
     }
-    return true
+    for count in descriptor.horizontal_rule_counts {
+        if count < 0 || count > 2 {
+            return false
+        }
+    }
+    native := dynview_math_table_descriptor_from_bridge(descriptor)
+    return core.dynview_math_table_descriptor_is_valid(native)
 }
 
 //   Copy one validated bridge table descriptor into native bounded storage.
@@ -81,10 +80,23 @@ dynview_math_table_descriptor_from_bridge :: proc(
         rows = int(descriptor.rows),
         columns = int(descriptor.columns),
         cell_style = core.Dynview_Math_Style_Level(descriptor.cell_style),
+        row_spacing = core.Dynview_Math_Table_Row_Spacing(descriptor.row_spacing),
     }
     for alignment, index in descriptor.column_alignments {
         result.column_alignments[index] =
             core.Dynview_Matrix_Column_Alignment(alignment)
+    }
+    for gap, index in descriptor.column_boundary_gaps {
+        result.column_boundary_gaps[index] = {
+            gap.value, core.Dynview_Math_Length_Unit(gap.unit)}
+        result.vertical_rule_counts[index] = u8(descriptor.vertical_rule_counts[index])
+    }
+    for gap, index in descriptor.row_extra_gaps {
+        result.row_extra_gaps[index] = {
+            gap.value, core.Dynview_Math_Length_Unit(gap.unit)}
+    }
+    for count, index in descriptor.horizontal_rule_counts {
+        result.horizontal_rule_counts[index] = u8(count)
     }
     return result
 }

@@ -20,17 +20,30 @@ dynview_table_descriptor_import_preserves_typed_metadata :: proc(t: ^testing.T) 
         i32(core.Dynview_Matrix_Column_Alignment.Center)
     descriptors[0].column_alignments[2] =
         i32(core.Dynview_Matrix_Column_Alignment.Right)
+    descriptors[0].column_boundary_gaps[1] = {
+        0.5, i32(core.Dynview_Math_Length_Unit.Em)}
+    descriptors[0].vertical_rule_counts[1] = 2
+    descriptors[0].row_extra_gaps[0] = {1.25, i32(core.Dynview_Math_Length_Unit.Ex)}
+    descriptors[0].horizontal_rule_counts[0] = 1
 
     status := dynview_import_math_table_descriptors(cache, raw_data(descriptors[:]), 1)
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
-    testing.expect_value(t, cache^.math_table_descriptor_count, 1)
     testing.expect_value(t, cache^.math_table_descriptors[0].rows, 2)
     testing.expect_value(t, cache^.math_table_descriptors[0].columns, 3)
     testing.expect_value(t, cache^.math_table_descriptors[0].cell_style,
         core.Dynview_Math_Style_Level.Text)
     testing.expect_value(t, cache^.math_table_descriptors[0].column_alignments[2],
         core.Dynview_Matrix_Column_Alignment.Right)
+    testing.expect_value(t,
+        cache^.math_table_descriptors[0].column_boundary_gaps[1].unit,
+        core.Dynview_Math_Length_Unit.Em)
+    testing.expect_value(t,
+        cache^.math_table_descriptors[0].vertical_rule_counts[1], u8(2))
+    testing.expect_value(t, cache^.math_table_descriptors[0].row_extra_gaps[0].value,
+        f32(1.25))
+    testing.expect_value(t, cache^.math_table_descriptors[0].horizontal_rule_counts[0],
+        u8(1))
 }
 
 //   Verify invalid descriptor enums reject without publishing a native count.
@@ -44,6 +57,25 @@ dynview_table_descriptor_import_rejects_invalid_alignment :: proc(t: ^testing.T)
         cell_style = i32(core.Dynview_Math_Style_Level.Text),
     }}
     descriptors[0].column_alignments[0] = 9
+
+    status := dynview_import_math_table_descriptors(cache, raw_data(descriptors[:]), 1)
+
+    testing.expect_value(t, status, i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+    testing.expect_value(t, cache^.math_table_descriptor_count, 0)
+}
+
+//   Verify invalid typed lengths and rule multiplicities reject transactionally.
+@(test)
+dynview_table_descriptor_import_rejects_invalid_boundaries :: proc(t: ^testing.T) {
+    cache := new(core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache)
+    descriptors := [1]Bridge_Dynview_Math_Table_Descriptor{{
+        rows = 1,
+        columns = 1,
+        cell_style = i32(core.Dynview_Math_Style_Level.Text),
+    }}
+    descriptors[0].column_boundary_gaps[0].unit = 99
+    descriptors[0].vertical_rule_counts[0] = 3
 
     status := dynview_import_math_table_descriptors(cache, raw_data(descriptors[:]), 1)
 

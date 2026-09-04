@@ -196,6 +196,8 @@ function accent_payload_op(run::LatexRun)
         accent_mode,
         :none,
         LARGE_OP_KIND_NONE,
+        OPERATOR_GROWTH_NONE,
+        OPERATOR_LIMITS_NONE,
         :math,
         MATH_ATOM_ORD,
         MATH_GLUE_NONE,
@@ -306,7 +308,7 @@ function matrix_payload_op(run::LatexRun)
         array_alignment = run.secondary_children[1].text
     end
 
-    return MathPayloadOp(
+    return MathPayloadOp((
         MATH_OP_MATRIX_RECURSIVE,
         String(latex_run_serialized_text(run)),
         string(rows),
@@ -315,12 +317,15 @@ function matrix_payload_op(run::LatexRun)
         :none,
         :none,
         LARGE_OP_KIND_NONE,
+        OPERATOR_GROWTH_NONE,
+        OPERATOR_LIMITS_NONE,
         :math,
         MATH_ATOM_INNER,
         MATH_GLUE_NONE,
         cells,
         MathPayloadOp[],
-        MathPayloadOp[])
+        MathPayloadOp[]),
+        run.table_descriptor)
 end
 
 """Append one script payload op when no compatible prior payload exists."""
@@ -472,20 +477,70 @@ function bridge_math_payload_op(
         ACCENT_BAR_OFFSET)
 end
 
+"""Return default semantic table metadata for one plain matrix."""
+function default_math_table_semantics(rows::Int, columns::Int)
+    return MathTableSemanticDescriptor(
+        fill('c', columns), fill(true, columns + 1), fill(0, columns + 1),
+        fill(MathTableLength(0.0f0, :zero), rows), fill(0, rows + 1))
+end
+
+"""Encode fixed alignment slots from one semantic table descriptor."""
+function bridge_math_table_alignments(semantic::MathTableSemanticDescriptor)
+    alignments = ntuple(16) do index
+        index > length(semantic.alignments) && return Int32(1)
+        alignment = semantic.alignments[index]
+        alignment == 'l' && return Int32(0)
+        alignment == 'r' && return Int32(2)
+        return Int32(1)
+    end
+    return alignments
+end
+
+"""Encode fixed column boundary lengths and vertical rule counts."""
+function bridge_math_table_columns(semantic::MathTableSemanticDescriptor)
+    lengths = ntuple(17) do index
+        if index > length(semantic.boundary_defaults)
+            return OdinJuliaBridge.BridgeDynviewMathLength(0.0f0, Int32(0))
+        end
+        unit = semantic.boundary_defaults[index] ? 0 : 1
+        OdinJuliaBridge.BridgeDynviewMathLength(0.0f0, Int32(unit))
+    end
+    rules = ntuple(17) do index
+        index <= length(semantic.vertical_rule_counts) ?
+            Int32(semantic.vertical_rule_counts[index]) : Int32(0)
+    end
+    return lengths, rules
+end
+
+"""Encode fixed row additions and horizontal rule counts."""
+function bridge_math_table_rows(semantic::MathTableSemanticDescriptor)
+    units = Dict(:zero => 1, :em => 2, :ex => 3, :pt => 4)
+    row_gaps = ntuple(16) do index
+        index > length(semantic.row_extra_gaps) &&
+            return OdinJuliaBridge.BridgeDynviewMathLength(0.0f0, Int32(0))
+        gap = semantic.row_extra_gaps[index]
+        OdinJuliaBridge.BridgeDynviewMathLength(gap.value, Int32(units[gap.unit]))
+    end
+    horizontal_rules = ntuple(17) do index
+        index <= length(semantic.horizontal_rule_counts) ?
+            Int32(semantic.horizontal_rule_counts[index]) : Int32(0)
+    end
+    return row_gaps, horizontal_rules
+end
+
 """Return one bridge table descriptor for a recursive matrix payload."""
 function bridge_math_table_descriptor(op::MathPayloadOp)
     rows, rows_ok = parse_positive_int(op.radical_index_text)
     columns, columns_ok = parse_positive_int(op.sup_text)
     rows_ok && columns_ok || error("matrix payload has invalid dimensions")
-    alignments = ntuple(16) do index
-        index > ncodeunits(op.sub_text) && return Int32(1)
-        alignment = codeunit(op.sub_text, index)
-        alignment == UInt8('l') && return Int32(0)
-        alignment == UInt8('r') && return Int32(2)
-        return Int32(1)
-    end
+    semantic = something(op.table_descriptor,
+        default_math_table_semantics(rows, columns))
+    alignments = bridge_math_table_alignments(semantic)
+    lengths, rules = bridge_math_table_columns(semantic)
+    row_gaps, horizontal_rules = bridge_math_table_rows(semantic)
     return OdinJuliaBridge.BridgeDynviewMathTableDescriptor(
-        Int32(rows), Int32(columns), Int32(1), alignments)
+        Int32(rows), Int32(columns), Int32(1), Int32(0), alignments,
+        lengths, rules, row_gaps, horizontal_rules)
 end
 
 """Append one table descriptor and return its block-local index, or -1 for non-tables."""

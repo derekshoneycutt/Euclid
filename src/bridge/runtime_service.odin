@@ -566,20 +566,7 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
 //   Validate one sealed native table descriptor at the publication boundary.
 view_snapshot_math_table_descriptor_is_valid :: proc(
     descriptor: core.Dynview_Math_Table_Descriptor) -> bool {
-
-    if descriptor.rows <= 0 || descriptor.rows > 16 ||
-        descriptor.columns <= 0 || descriptor.columns > 16 ||
-        i32(descriptor.cell_style) < i32(core.Dynview_Math_Style_Level.Display) ||
-        i32(descriptor.cell_style) > i32(core.Dynview_Math_Style_Level.Script_Script) {
-        return false
-    }
-    for alignment in descriptor.column_alignments {
-        if i32(alignment) < i32(core.Dynview_Matrix_Column_Alignment.Left) ||
-            i32(alignment) > i32(core.Dynview_Matrix_Column_Alignment.Right) {
-            return false
-        }
-    }
-    return true
+    return core.dynview_math_table_descriptor_is_valid(descriptor)
 }
 
 //   Validate atom and explicit-glue metadata before snapshot publication.

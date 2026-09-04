@@ -496,7 +496,8 @@ Julia owns mathematical intent: atom and glue classes, recursive structure, deli
 and accent kinds, and independent operator growth and limit policies. The mirrored
 `BridgeDynviewMathOp` and `Bridge_Dynview_Math_Op` records use exact-width fields in
 the same order. Mirrored table descriptors use exact-width dimensions, cell style,
-and fixed alignment storage; matrix operations carry block-local descriptor indexes.
+row policy, fixed alignments, typed boundary lengths, and bounded rule counts; matrix
+operations carry block-local descriptor indexes.
 Odin validates every enum, text span, descriptor index, direct-child count, and bounded
 preorder subtree before importing commands; invalid input publishes no partial math
 program or descriptor. Recursive scripts, fraction branches, and radical degrees cross

@@ -89,6 +89,16 @@ struct BridgeDynviewMathOp
 end
 
 """
+Typed table length resolved by native layout against the active font metrics.
+
+Mirrors the Odin `Bridge_Dynview_Math_Length` ABI struct field-for-field.
+"""
+struct BridgeDynviewMathLength
+    value::Float32
+    unit::Int32
+end
+
+"""
 Fixed-capacity semantic metadata for one table-like math operation.
 
 Mirrors the Odin `Bridge_Dynview_Math_Table_Descriptor` ABI struct field-for-field.
@@ -97,7 +107,12 @@ struct BridgeDynviewMathTableDescriptor
     rows::Int32
     columns::Int32
     cell_style::Int32
+    row_spacing::Int32
     column_alignments::NTuple{16,Int32}
+    column_boundary_gaps::NTuple{17,BridgeDynviewMathLength}
+    vertical_rule_counts::NTuple{17,Int32}
+    row_extra_gaps::NTuple{16,BridgeDynviewMathLength}
+    horizontal_rule_counts::NTuple{17,Int32}
 end
 
 struct BridgeColor
@@ -412,7 +427,7 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(4)
+const BRIDGE_VERSION = Int32(5)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 

@@ -84,7 +84,8 @@ Math_Program_Metrics :: struct {
 
 Stretch_Delimiter_Item_Geometry :: struct {
     selected: Stretch_Delimiter_Selection,
-    padding, content_width, base_advance, axis: f32,
+    left_clearance, right_clearance: f32,
+    content_width, base_advance, axis: f32,
     generation: u64,
     scale: f32,
 }
@@ -1209,15 +1210,17 @@ stretch_delimiter_widths :: #force_inline proc(
     dimensions: Stretch_Delimiter_Dimensions) -> f32 {
 
     base_advance := dyncore.effective_advance(style, cache^.last_cell_width)
-    side_padding := stretch_delimiter_side_padding(dimensions.font_size, base_advance)
+    clearance := vertical_math_content_clearance(dimensions.font_size, base_advance)
+    left_clearance := clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0
+    right_clearance := clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
     left_width := stretch_delimiter_width(
         style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.accent_mode)
     right_width := stretch_delimiter_width(
         style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.radical_mode)
-    return max(dimensions.content_width + left_width + right_width + side_padding * 2.0,
-        base_advance)
+    return max(dimensions.content_width + left_width + right_width +
+        left_clearance + right_clearance, base_advance)
 }
 
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.
@@ -1345,13 +1348,13 @@ stretch_delimiter_apply_item :: proc(
     geometry: Stretch_Delimiter_Item_Geometry) {
 
     selected := geometry.selected
-    item^.math_stretch_left_x = geometry.padding + selected.origins[0]
-    item^.math_stretch_content_x = geometry.padding + selected.widths[0]
+    item^.math_stretch_left_x = selected.origins[0]
+    item^.math_stretch_content_x = selected.widths[0] + geometry.left_clearance
     item^.math_stretch_right_x = item^.math_stretch_content_x +
-        geometry.content_width + selected.origins[1]
+        geometry.content_width + geometry.right_clearance + selected.origins[1]
     item^.draw_width = max(geometry.base_advance,
-        geometry.padding*2 + selected.widths[0] + geometry.content_width +
-            selected.widths[1])
+        selected.widths[0] + geometry.left_clearance + geometry.content_width +
+            geometry.right_clearance + selected.widths[1])
     for side in 0..<2 {
         item^.math_stretch_vertical_origins[side] =
             selected.vertical_origins[side]-geometry.axis
@@ -1388,12 +1391,15 @@ math_program_apply_stretch_delimiters :: proc(
     }
     base_advance := dyncore.effective_advance(
         dyncore.style_by_id(cmd.style_id), cache^.last_cell_width)
-    padding := stretch_delimiter_side_padding(font_size, base_advance)
+    clearance := vertical_math_content_clearance(font_size, base_advance)
+    left_clearance := clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0
+    right_clearance := clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
     content_width := stretch_delimiter_content_width(cache, cmd.math_program_id)
     axis, _ := math_constant_position_px(constants, generation, .Axis_Height, font_size)
     stretch_delimiter_apply_item(item, {
         selected = selected,
-        padding = padding,
+        left_clearance = left_clearance,
+        right_clearance = right_clearance,
         content_width = content_width,
         base_advance = base_advance,
         axis = axis,
@@ -1545,12 +1551,16 @@ math_program_apply_radical_construction :: proc(
 measure_matrix_cells :: proc(
     ctx: Math_Measure_Context,
     cell_program: ^app_core.Dynview_Math_Program,
-    rows, cols: int,
+    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
     dims: ^Matrix_Cell_Dims) -> bool {
 
-    for row in 0..<rows {
-        for col in 0..<cols {
-            cell_index := row * cols + col
+    strut_ascent, strut_descent :=
+        math_table_row_strut(descriptor^.row_spacing, ctx.font_size)
+    for row in 0..<descriptor^.rows {
+        dims.row_ascents[row] = strut_ascent
+        dims.row_descents[row] = strut_descent
+        for col in 0..<descriptor^.columns {
+            cell_index := row * descriptor^.columns + col
             cmd_index := cell_program^.command_start + cell_index
             cell_cmd := ctx.cache^.math_commands[cmd_index]
             cell_item, cell_ok := math_program_item({
@@ -1575,25 +1585,23 @@ measure_matrix_cells :: proc(
 //   Aggregate matrix draw width and total height from per-column/row cell metrics.
 matrix_aggregate_dims :: proc(
     dims: ^Matrix_Cell_Dims,
-    rows, cols: int,
+    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
     font_size: f32,
     base_advance: f32) -> (draw_width, total_height: f32) {
 
-    column_gap := matrix_column_gap(font_size, base_advance)
-    row_gap := matrix_row_gap(font_size)
-
-    for col in 0..<cols {
+    for boundary in 0..=descriptor^.columns {
+        draw_width += math_table_column_boundary_width(
+            descriptor, boundary, font_size, base_advance)
+    }
+    for col in 0..<descriptor^.columns {
         draw_width += dims.col_widths[col]
     }
-    if cols > 1 {
-        draw_width += f32(cols - 1) * column_gap
-    }
 
-    for row in 0..<rows {
-        total_height += dims.row_ascents[row] + dims.row_descents[row]
+    for boundary in 0..=descriptor^.rows {
+        total_height += math_table_row_boundary_height(descriptor, boundary, font_size)
     }
-    if rows > 1 {
-        total_height += f32(rows - 1) * row_gap
+    for row in 0..<descriptor^.rows {
+        total_height += dims.row_ascents[row] + dims.row_descents[row]
     }
 
     return draw_width, total_height
@@ -1645,7 +1653,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
     cell_dims := Matrix_Cell_Dims{}
     if !measure_matrix_cells(
         matrix_cell_measure_context(ctx, matrix_info.descriptor), matrix_info.program,
-        matrix_info.rows, matrix_info.cols, &cell_dims) {
+        matrix_info.descriptor, &cell_dims) {
         return app_core.Dynview_Layout_Item{}, false
     }
     top_pad := cell_dims.top_pad
@@ -1654,8 +1662,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
     base_advance := dyncore.effective_advance(ctx.style, ctx.cache^.last_cell_width)
     draw_width, total_height := matrix_aggregate_dims(
         &cell_dims,
-        matrix_info.rows,
-        matrix_info.cols,
+        matrix_info.descriptor,
         ctx.font_size, base_advance)
     axis_height, axis_ok := math_constant_position_px(
         ctx.cache^.math_constants, ctx.cache^.shaped_font_generation,

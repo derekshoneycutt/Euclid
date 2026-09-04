@@ -13,6 +13,26 @@ struct MatrixRowSeparatorResult
     pending_break::Bool
 end
 
+struct MatrixRowsParseResult
+    rows::Vector{Vector{Vector{LatexRun}}}
+    row_extra_gaps::Vector{MathTableLength}
+    horizontal_rule_counts::Vector{Int}
+    ok::Bool
+end
+
+struct MatrixRowTerminatorResult
+    consumed::Bool
+    finished::Bool
+    valid::Bool
+end
+
+struct ArrayPreambleSpec
+    alignments::Vector{Char}
+    boundary_defaults::Vector{Bool}
+    vertical_rule_counts::Vector{Int}
+    valid::Bool
+end
+
 """Map single punctuation characters to their token kinds."""
 const PUNCTUATION_TOKEN_KINDS = Dict{Char,Symbol}(
     '{' => :lbrace,
@@ -29,6 +49,8 @@ mutable struct MatrixRowState
     row_cells::Vector{Vector{LatexRun}}
     cell_runs::Vector{LatexRun}
     pending_row_break::Bool
+    row_extra_gaps::Vector{MathTableLength}
+    horizontal_rule_counts::Vector{Int}
 end
 
 
@@ -378,27 +400,78 @@ function normalize_array_preamble_text(text::AbstractString)
     return String(take!(io))
 end
 
-"""Validate normalized array preamble symbols for `l/c/r` support."""
-function array_preamble_is_valid(text::AbstractString)
-    if isempty(text)
-        return false
+"""Parse the bounded array preamble into columns and boundary directives."""
+function parse_array_preamble_spec(text::AbstractString)
+    alignments = Char[]
+    boundary_defaults = Bool[true]
+    vertical_rule_counts = Int[0]
+    index = firstindex(text)
+    while index <= lastindex(text)
+        index, ok = consume_array_preamble_item!(
+            text, index, alignments, boundary_defaults, vertical_rule_counts)
+        ok || return ArrayPreambleSpec(
+            alignments, boundary_defaults, vertical_rule_counts, false)
     end
+    valid = !isempty(alignments) && length(boundary_defaults) == length(alignments) + 1
+    return ArrayPreambleSpec(
+        alignments, boundary_defaults, vertical_rule_counts, valid)
+end
 
-    for c in text
-        if c != 'l' && c != 'c' && c != 'r'
-            return false
+"""Consume one alignment, rule, or empty insertion from an array preamble."""
+function consume_array_preamble_item!(
+    text::AbstractString, index::Int, alignments::Vector{Char},
+    boundary_defaults::Vector{Bool}, vertical_rule_counts::Vector{Int})
+
+    char = text[index]
+    if char == 'l' || char == 'c' || char == 'r'
+        length(alignments) >= 16 && return index, false
+        push!(alignments, char)
+        push!(boundary_defaults, true)
+        push!(vertical_rule_counts, 0)
+        return nextind(text, index), true
+    end
+    if char == '|'
+        vertical_rule_counts[end] += 1
+        return nextind(text, index), vertical_rule_counts[end] <= 2
+    end
+    if startswith(SubString(text, index), "@{}")
+        boundary_defaults[end] = false
+        return nextind(text, index, 3), true
+    end
+    return index, false
+end
+
+"""Collect one required group as raw token text while preserving nested braces."""
+function parse_required_group_token_text(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+
+    if idx[] > length(tokens) || tokens[idx[]].kind != :lbrace
+        return "", false
+    end
+    idx[] += 1
+    depth = 1
+    io = IOBuffer()
+    while idx[] <= length(tokens)
+        token = tokens[idx[]]
+        idx[] += 1
+        if token.kind == :lbrace
+            depth += 1
+        elseif token.kind == :rbrace
+            depth -= 1
+            depth == 0 && return String(take!(io)), true
         end
+        write(io, token.text)
     end
-
-    return true
+    return "", false
 end
 
 """Parse and validate one required `{...}` array alignment preamble."""
 function parse_array_alignment_preamble(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
-    preamble_source = parse_required_group_as_text(tokens, idx)
+    preamble_source, group_ok = parse_required_group_token_text(tokens, idx)
+    group_ok || return "", false
     preamble = normalize_array_preamble_text(preamble_source)
-    if !array_preamble_is_valid(preamble)
+    if !parse_array_preamble_spec(preamble).valid
         return "", false
     end
     return preamble, true
@@ -439,7 +512,7 @@ function matrix_environment_metadata_ok(
     end
 
     cols = length(matrix_rows[1])
-    return ncodeunits(array_preamble) == cols
+    return length(parse_array_preamble_spec(array_preamble).alignments) == cols
 end
 
 """Return one matrix-like semantic run for parsed environment name and cells."""
@@ -448,10 +521,12 @@ function matrix_environment_run(
     rows::Int,
     cols::Int,
     cells::Vector{LatexRun},
-    array_preamble::AbstractString)
+    array_preamble::AbstractString,
+    descriptor::Union{Nothing,MathTableSemanticDescriptor})
 
     if env_name == "array"
-        return latex_array_run(rows, cols, cells, array_preamble)
+        descriptor isa MathTableSemanticDescriptor || return matrix_parse_fallback()
+        return latex_array_run(rows, cols, cells, array_preamble, descriptor)
     end
 
     if env_name == "bmatrix"
@@ -480,6 +555,56 @@ function matrix_environment_run(
     end
 
     return latex_matrix_run(rows, cols, cells)
+end
+
+"""Parse one bounded signed table length in pt, em, or ex units."""
+function parse_math_table_length(text::AbstractString)
+    matched = match(r"^([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(pt|em|ex)$", text)
+    matched === nothing && return MathTableLength(0.0f0, :zero), false
+    value_text = something(matched.captures[1], "")
+    value = tryparse(Float32, value_text)
+    if value === nothing || !isfinite(value) || abs(value) > 1024.0f0
+        return MathTableLength(0.0f0, :zero), false
+    end
+    unit_text = something(matched.captures[2], "")
+    return MathTableLength(value, Symbol(unit_text)), true
+end
+
+"""Consume an optional signed row addition immediately after a row separator."""
+function parse_optional_matrix_row_gap!(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+
+    if idx[] > length(tokens) || tokens[idx[]].kind != :lbracket
+        return MathTableLength(0.0f0, :zero), true
+    end
+    idx[] += 1
+    io = IOBuffer()
+    while idx[] <= length(tokens) && tokens[idx[]].kind != :rbracket
+        write(io, tokens[idx[]].text)
+        idx[] += 1
+    end
+    if idx[] > length(tokens)
+        return MathTableLength(0.0f0, :zero), false
+    end
+    idx[] += 1
+    return parse_math_table_length(normalize_array_preamble_text(String(take!(io))))
+end
+
+"""Consume one legal array horizontal rule at the current row boundary."""
+function consume_array_hline!(
+    token::LatexToken, idx::Base.RefValue{Int}, env_name::AbstractString,
+    state::MatrixRowState)
+
+    if token.kind != :command || token.text != "\\hline"
+        return false, true
+    end
+    if env_name != "array" || !matrix_builders_empty(state.row_cells, state.cell_runs)
+        return true, false
+    end
+    state.horizontal_rule_counts[end] += 1
+    state.horizontal_rule_counts[end] <= 2 || return true, false
+    idx[] += 1
+    return true, true
 end
 
 """Append one normalized matrix cell to the active matrix-row buffer."""
@@ -694,13 +819,16 @@ end
 function parse_matrix_rows(
     tokens::Vector{LatexToken}, idx::Base.RefValue{Int}, env_name::AbstractString)
     state = MatrixRowState(
-        Vector{Vector{Vector{LatexRun}}}(), Vector{Vector{LatexRun}}(), LatexRun[], false)
+        Vector{Vector{Vector{LatexRun}}}(), Vector{Vector{LatexRun}}(), LatexRun[], false,
+        MathTableLength[], Int[0])
     while idx[] <= length(tokens)
         finished, end_ok = step_matrix_row!(tokens, idx, env_name, state)
-        finished && return state.rows, end_ok
+        finished && return MatrixRowsParseResult(
+            state.rows, state.row_extra_gaps, state.horizontal_rule_counts, end_ok)
     end
 
-    return state.rows, false
+    return MatrixRowsParseResult(
+        state.rows, state.row_extra_gaps, state.horizontal_rule_counts, false)
 end
 
 """Advance matrix-row parsing by one token, returning whether the environment closed."""
@@ -713,6 +841,9 @@ function step_matrix_row!(
     end
 
     token = tokens[idx[]]
+
+    consumed_hline, hline_ok = consume_array_hline!(token, idx, env_name, state)
+    consumed_hline && return !hline_ok, hline_ok
 
     if is_leading_matrix_row_whitespace(token, state.row_cells, state.cell_runs)
         idx[] += 1
@@ -727,23 +858,42 @@ function step_matrix_row!(
         return false, false
     end
 
-    consumed_end, end_ok = consume_matrix_environment_end!(token, tokens, idx,
-        env_name, state.rows, state.row_cells, state.cell_runs, state.pending_row_break)
-    if consumed_end
-        return true, end_ok
-    end
-
-    separator_result = consume_matrix_row_separator!(
-        token, idx, state.rows, state.row_cells, state.cell_runs)
-    if separator_result.consumed
-        state.row_cells = separator_result.row_cells
-        state.cell_runs = separator_result.cell_runs
-        state.pending_row_break = separator_result.pending_break
-        return false, false
-    end
+    terminator = consume_matrix_row_terminator!(
+        token, tokens, idx, env_name, state)
+    terminator.consumed && return terminator.finished, terminator.valid
 
     consume_matrix_atom!(tokens, idx, token, state)
     return false, false
+end
+
+"""Consume an environment end or row separator and update typed row metadata."""
+function consume_matrix_row_terminator!(
+    token::LatexToken, tokens::Vector{LatexToken}, idx::Base.RefValue{Int},
+    env_name::AbstractString, state::MatrixRowState)
+
+    row_count = length(state.rows)
+    consumed_end, end_ok = consume_matrix_environment_end!(token, tokens, idx,
+        env_name, state.rows, state.row_cells, state.cell_runs, state.pending_row_break)
+    if consumed_end
+        if end_ok && length(state.rows) > row_count
+            push!(state.row_extra_gaps, MathTableLength(0.0f0, :zero))
+            push!(state.horizontal_rule_counts, 0)
+        end
+        return MatrixRowTerminatorResult(true, true, end_ok)
+    end
+    result = consume_matrix_row_separator!(
+        token, idx, state.rows, state.row_cells, state.cell_runs)
+    result.consumed || return MatrixRowTerminatorResult(false, false, true)
+    state.row_cells = result.row_cells
+    state.cell_runs = result.cell_runs
+    state.pending_row_break = result.pending_break
+    if length(state.rows) > row_count
+        gap, gap_ok = parse_optional_matrix_row_gap!(tokens, idx)
+        gap_ok || return MatrixRowTerminatorResult(true, true, false)
+        push!(state.row_extra_gaps, gap)
+        push!(state.horizontal_rule_counts, 0)
+    end
+    return MatrixRowTerminatorResult(true, false, true)
 end
 
 """Append one braced group or atom to the current matrix cell."""
@@ -797,8 +947,10 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
         end
     end
 
-    matrix_rows, parse_ok = parse_matrix_rows(tokens, idx, env_name)
-    if !parse_ok || !matrix_rows_valid(matrix_rows)
+    row_result = parse_matrix_rows(tokens, idx, env_name)
+    matrix_rows = row_result.rows
+    if !row_result.ok || !matrix_rows_valid(matrix_rows)
+        skip_environment_body!(tokens, idx, env_name)
         return matrix_parse_fallback(), false
     end
 
@@ -806,21 +958,29 @@ function parse_matrix_environment(tokens::Vector{LatexToken}, idx::Base.RefValue
         return matrix_parse_fallback(), false
     end
 
-    cols = length(matrix_rows[1])
+    return matrix_environment_run_from_rows(
+        env_name, array_preamble, matrix_rows, row_result), true
+end
+
+"""Build one matrix-like semantic run from validated row parser output."""
+function matrix_environment_run_from_rows(
+    env_name::AbstractString, array_preamble::AbstractString,
+    matrix_rows::Vector{Vector{Vector{LatexRun}}}, row_result::MatrixRowsParseResult)
 
     cells = LatexRun[]
     for row in matrix_rows
-        for cell in row
-            push!(cells, latex_matrix_cell_run(cell))
-        end
+        append!(cells, latex_matrix_cell_run.(row))
     end
-
-    return matrix_environment_run(
-        env_name,
-        length(matrix_rows),
-        cols,
-        cells,
-        array_preamble), true
+    descriptor = nothing
+    if env_name == "array"
+        preamble = parse_array_preamble_spec(array_preamble)
+        descriptor = MathTableSemanticDescriptor(
+            preamble.alignments, preamble.boundary_defaults,
+            preamble.vertical_rule_counts, row_result.row_extra_gaps,
+            row_result.horizontal_rule_counts)
+    end
+    return matrix_environment_run(env_name, length(matrix_rows), length(matrix_rows[1]),
+        cells, array_preamble, descriptor)
 end
 
 """Parse one delimiter token after `\\left` or `\\right` and return canonical delimiter text."""

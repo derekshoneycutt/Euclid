@@ -30,7 +30,7 @@ BRIDGE_FEATURE_ANIMATION_STABLE_ID :: (1 << 3)
 BRIDGE_FEATURE_TYPED_ANIMATION_STATE :: (1 << 4)
 BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
 
-BRIDGE_VERSION :: 4
+BRIDGE_VERSION :: 5
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_DYNVIEW_STREAM |
@@ -205,7 +205,17 @@ Bridge_Dynview_Math_Table_Descriptor :: struct {
     rows: i32,
     columns: i32,
     cell_style: i32,
+    row_spacing: i32,
     column_alignments: [16]i32,
+    column_boundary_gaps: [17]Bridge_Dynview_Math_Length,
+    vertical_rule_counts: [17]i32,
+    row_extra_gaps: [16]Bridge_Dynview_Math_Length,
+    horizontal_rule_counts: [17]i32,
+}
+
+Bridge_Dynview_Math_Length :: struct {
+    value: f32,
+    unit: i32,
 }
 
 //   Flat op payload for one inline math block, grouped so the C export

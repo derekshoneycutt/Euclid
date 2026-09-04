@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(19)
+const PARSER_GRAMMAR_VERSION = Int32(20)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -457,6 +457,19 @@ struct MathCommandSpec
     operator_limits::Int32
 end
 
+struct MathTableLength
+    value::Float32
+    unit::Symbol
+end
+
+struct MathTableSemanticDescriptor
+    alignments::Vector{Char}
+    boundary_defaults::Vector{Bool}
+    vertical_rule_counts::Vector{Int}
+    row_extra_gaps::Vector{MathTableLength}
+    horizontal_rule_counts::Vector{Int}
+end
+
 struct LatexRun
     text::String
     role::Symbol
@@ -465,7 +478,14 @@ struct LatexRun
     glue_kind::Int32
     children::Vector{LatexRun}
     secondary_children::Vector{LatexRun}
+    table_descriptor::Union{Nothing,MathTableSemanticDescriptor}
 end
+
+"""Construct one non-table semantic run with no table descriptor."""
+LatexRun(text::AbstractString, role::Symbol, segment::Symbol, atom_class::Int32,
+    glue_kind::Int32, children::Vector{LatexRun}, secondary::Vector{LatexRun}) =
+    LatexRun(String(text), role, segment, atom_class, glue_kind,
+        children, secondary, nothing)
 
 struct ParsedScript
     text::String
@@ -490,15 +510,25 @@ struct MathPayloadOp
     children::Vector{MathPayloadOp}
     secondary_children::Vector{MathPayloadOp}
     tertiary_children::Vector{MathPayloadOp}
+    table_descriptor::Union{Nothing,MathTableSemanticDescriptor}
+
+    function MathPayloadOp(parts::Tuple,
+        descriptor::Union{Nothing,MathTableSemanticDescriptor})
+        length(parts) == 16 || throw(ArgumentError("expected 16 base payload fields"))
+        return new(parts..., descriptor)
+    end
 end
 
-"""Construct one nonoperator payload with neutral growth and limit policies."""
+"""Construct one nontable payload from compact or explicit operator policies."""
 function MathPayloadOp(parts...)
-    length(parts) == 14 || throw(ArgumentError("expected 14 payload fields"))
-    return MathPayloadOp(parts[1], parts[2], parts[3], parts[4], parts[5],
-        parts[6], parts[7], parts[8], OPERATOR_GROWTH_NONE,
-        OPERATOR_LIMITS_NONE, parts[9], parts[10], parts[11], parts[12],
-        parts[13], parts[14])
+    if length(parts) == 14
+        return MathPayloadOp((parts[1], parts[2], parts[3], parts[4], parts[5],
+            parts[6], parts[7], parts[8], OPERATOR_GROWTH_NONE,
+            OPERATOR_LIMITS_NONE, parts[9], parts[10], parts[11], parts[12],
+            parts[13], parts[14]), nothing)
+    end
+    length(parts) == 16 || throw(ArgumentError("expected 14 or 16 payload fields"))
+    return MathPayloadOp(parts, nothing)
 end
 
 struct LatexDocumentShape
@@ -742,7 +772,8 @@ latex_matrix_run(rows::Int, cols::Int, cells::Vector{LatexRun}) =
     LatexRun(matrix_dims_text(rows, cols), :math, :matrix, MATH_ATOM_INNER,
         MATH_GLUE_NONE, cells, EMPTY_CHILD_RUNS)
 
-"""Return one array run payload with row/column metadata and normalized alignment preamble."""
-latex_array_run(rows::Int, cols::Int, cells::Vector{LatexRun}, preamble::String) =
+"""Return one array run with typed row, column, gap, and rule metadata."""
+latex_array_run(rows::Int, cols::Int, cells::Vector{LatexRun}, preamble::String,
+    descriptor::MathTableSemanticDescriptor) =
     LatexRun(matrix_dims_text(rows, cols), :math, :array, MATH_ATOM_INNER,
-        MATH_GLUE_NONE, cells, [latex_atom_run(preamble, :math)])
+        MATH_GLUE_NONE, cells, [latex_atom_run(preamble, :math)], descriptor)

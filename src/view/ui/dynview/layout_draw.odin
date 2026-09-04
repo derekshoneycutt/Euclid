@@ -21,10 +21,15 @@ Matrix_Draw_Cells :: struct {
 //   Matrix grid geometry: column alignments, grid extents, and inter-cell gaps.
 Matrix_Draw_Geometry :: struct {
     alignments : [16]dynmath.Dynview_Matrix_Column_Alignment,
+    column_boundaries : [17]f32,
+    row_boundaries : [17]f32,
+    vertical_rule_counts : [17]u8,
+    horizontal_rule_counts : [17]u8,
     rows : int,
     cols : int,
-    column_gap : f32,
-    row_gap : f32,
+    rule_thickness : f32,
+    rule_separation : f32,
+    color : rl.Color,
 }
 
 //   Control points and style for one normalized cubic Bezier segment.
@@ -120,6 +125,7 @@ Matrix_Cell_Draw :: struct {
     cell_program : ^core.Dynview_Math_Program,
     cells : ^Matrix_Draw_Cells,
     geometry : Matrix_Draw_Geometry,
+    math_style : dynmath.Math_Style,
     draw_x : f32,
     item_y : f32,
 }
@@ -129,6 +135,7 @@ Matrix_Cell_Resolve :: struct {
     item: core.Dynview_Layout_Item,
     rows, cols: int,
     math_style: dynmath.Math_Style,
+    descriptor: ^core.Dynview_Math_Table_Descriptor,
     cells: ^Matrix_Draw_Cells,
 }
 
@@ -1457,18 +1464,25 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
     }
     base_advance :=
         dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
-    side_padding := dynmath.stretch_delimiter_side_padding(ctx.font_size, base_advance)
+    clearance := dynmath.vertical_math_content_clearance(ctx.font_size, base_advance)
+    left_clearance, right_clearance: f32
+    if item.accent_mode != dynmath.DELIMITER_KIND_NONE {
+        left_clearance = clearance
+    }
+    if item.radical_mode != dynmath.DELIMITER_KIND_NONE {
+        right_clearance = clearance
+    }
 
-    left_draw_x := draw_x + side_padding
+    left_draw_x := draw_x
     left_width := draw_stretch_delimiter_glyph(
         stretch_delimiter_glyph_params(ctx, style, item, baseline_y,
             Stretch_Glyph_Side{item.accent_mode, left_draw_x}))
 
-    content_x := left_draw_x + left_width
+    content_x := left_draw_x + left_width + left_clearance
     content_width := draw_stretch_delimiter_content(
         ctx, item, content_x, baseline_y)
 
-    right_draw_x := content_x + content_width
+    right_draw_x := content_x + content_width + right_clearance
     _ = draw_stretch_delimiter_glyph(
         stretch_delimiter_glyph_params(ctx, style, item, baseline_y,
             Stretch_Glyph_Side{item.radical_mode, right_draw_x}))
@@ -1504,13 +1518,26 @@ matrix_draw_geometry :: proc(
 
     base_advance :=
         dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
-    return Matrix_Draw_Geometry{
+    geometry := Matrix_Draw_Geometry{
         alignments = descriptor^.column_alignments,
+        vertical_rule_counts = descriptor^.vertical_rule_counts,
+        horizontal_rule_counts = descriptor^.horizontal_rule_counts,
         rows = descriptor^.rows,
         cols = descriptor^.columns,
-        column_gap = dynmath.matrix_column_gap(ctx.font_size, base_advance),
-        row_gap = dynmath.matrix_row_gap(ctx.font_size),
+        rule_thickness = dynmath.math_table_rule_thickness(ctx.font_size),
+        rule_separation = dynmath.math_table_rule_separation(ctx.font_size),
+        color = style.color,
     }
+    for boundary in 0..=descriptor^.columns {
+        geometry.column_boundaries[boundary] =
+            dynmath.math_table_column_boundary_width(
+                descriptor, boundary, ctx.font_size, base_advance)
+    }
+    for boundary in 0..=descriptor^.rows {
+        geometry.row_boundaries[boundary] =
+            dynmath.math_table_row_boundary_height(descriptor, boundary, ctx.font_size)
+    }
+    return geometry
 }
 
 //   Draw one recursive matrix wrapper by centering cells per column and baselining per row.
@@ -1538,7 +1565,7 @@ draw_recursive_matrix_item :: #force_inline proc(
 
     cells := Matrix_Draw_Cells{}
     cell_program, cells_ok := matrix_resolve_cells({
-        cell_ctx, item, rows, cols, cell_style, &cells})
+        cell_ctx, item, rows, cols, cell_style, descriptor, &cells})
     if !cells_ok {
         return
     }
@@ -1550,6 +1577,7 @@ draw_recursive_matrix_item :: #force_inline proc(
         cell_program = cell_program,
         cells = &cells,
         geometry = geometry,
+        math_style = cell_style,
         draw_x = draw_x,
         item_y = item_y,
     })
@@ -1585,7 +1613,7 @@ draw_matrix_row :: proc(
     row_baseline: f32) {
 
     ctx := d.ctx
-    col_x := d.draw_x
+    col_x := d.draw_x + d.geometry.column_boundaries[0]
     for col in 0..<d.geometry.cols {
         cell_index := row * d.geometry.cols + col
         command_index := d.cell_program^.command_start + cell_index
@@ -1595,17 +1623,98 @@ draw_matrix_row :: proc(
             buffer = &ctx.runtime^.command_buffer,
             cmd = command, font_size = ctx.font_size,
             command_index = command_index,
+            math_style = d.math_style,
         })
         if ok {
             cell_x := dynmath.matrix_aligned_cell_x(
                 col_x, d.cells.col_widths[col], cell_item.draw_width,
                 d.geometry.alignments[col])
             draw_matrix_cell(ctx, d.cell_program, cell_index, cell_item,
-                Program_Draw_Position{cell_x, row_baseline, 0, {}})
+                Program_Draw_Position{cell_x, row_baseline, 0, d.math_style})
         }
         col_x += d.cells.col_widths[col]
-        if col + 1 < d.geometry.cols {
-            col_x += d.geometry.column_gap
+        col_x += d.geometry.column_boundaries[col + 1]
+    }
+}
+
+//   Draw all rules carried by one column boundary.
+draw_matrix_vertical_boundary_rules :: proc(
+    d: Matrix_Cell_Draw, boundary_x, table_height: f32, boundary: int) {
+
+    count := int(d.geometry.vertical_rule_counts[boundary])
+    if count == 0 {
+        return
+    }
+    occupied := f32(count) * d.geometry.rule_thickness +
+        f32(count - 1) * d.geometry.rule_separation
+    free_space := d.geometry.column_boundaries[boundary] - occupied
+    rule_x := boundary_x + free_space * 0.5
+    if boundary == 0 {
+        rule_x = boundary_x
+    } else if boundary == d.geometry.cols {
+        rule_x = boundary_x + free_space
+    }
+    for _ in 0..<count {
+        center_x := rule_x + d.geometry.rule_thickness * 0.5
+        rl.DrawLineEx({center_x, d.item_y}, {center_x, d.item_y + table_height},
+            d.geometry.rule_thickness, d.geometry.color)
+        rule_x += d.geometry.rule_thickness + d.geometry.rule_separation
+    }
+}
+
+//   Draw every vertical table rule from sealed boundary spans.
+draw_matrix_vertical_rules :: proc(d: Matrix_Cell_Draw) {
+    table_height: f32
+    for row in 0..<d.geometry.rows {
+        table_height += d.cells.row_ascents[row] + d.cells.row_descents[row]
+    }
+    for boundary in 0..=d.geometry.rows {
+        table_height += d.geometry.row_boundaries[boundary]
+    }
+    boundary_x := d.draw_x
+    for boundary in 0..=d.geometry.cols {
+        draw_matrix_vertical_boundary_rules(d, boundary_x, table_height, boundary)
+        boundary_x += d.geometry.column_boundaries[boundary]
+        if boundary < d.geometry.cols {
+            boundary_x += d.cells.col_widths[boundary]
+        }
+    }
+}
+
+//   Draw all rules carried by one row boundary.
+draw_matrix_horizontal_boundary_rules :: proc(
+    d: Matrix_Cell_Draw, boundary_y, table_width: f32, boundary: int) {
+
+    count := int(d.geometry.horizontal_rule_counts[boundary])
+    if count == 0 {
+        return
+    }
+    occupied := f32(count) * d.geometry.rule_thickness +
+        f32(count - 1) * d.geometry.rule_separation
+    rule_y := boundary_y + (d.geometry.row_boundaries[boundary] - occupied) * 0.5
+    for _ in 0..<count {
+        center_y := rule_y + d.geometry.rule_thickness * 0.5
+        rl.DrawLineEx({d.draw_x, center_y}, {d.draw_x + table_width, center_y},
+            d.geometry.rule_thickness, d.geometry.color)
+        rule_y += d.geometry.rule_thickness + d.geometry.rule_separation
+    }
+}
+
+//   Draw every horizontal table rule from sealed boundary spans.
+draw_matrix_horizontal_rules :: proc(d: Matrix_Cell_Draw) {
+    table_width: f32
+    for col in 0..<d.geometry.cols {
+        table_width += d.cells.col_widths[col]
+    }
+    for boundary in 0..=d.geometry.cols {
+        table_width += d.geometry.column_boundaries[boundary]
+    }
+    boundary_y := d.item_y
+    for boundary in 0..=d.geometry.rows {
+        draw_matrix_horizontal_boundary_rules(d, boundary_y, table_width, boundary)
+        boundary_y += d.geometry.row_boundaries[boundary]
+        if boundary < d.geometry.rows {
+            boundary_y += d.cells.row_ascents[boundary] + d.cells.row_descents[boundary]
         }
     }
 }
@@ -1614,14 +1723,14 @@ draw_matrix_row :: proc(
 draw_matrix_cells :: proc(d: Matrix_Cell_Draw) {
     cells := d.cells
     geometry := d.geometry
-    row_top := d.item_y
+    draw_matrix_vertical_rules(d)
+    draw_matrix_horizontal_rules(d)
+    row_top := d.item_y + geometry.row_boundaries[0]
     for row in 0..<geometry.rows {
         row_baseline := row_top + cells.row_ascents[row]
         draw_matrix_row(d, row, row_baseline)
         row_top += cells.row_ascents[row] + cells.row_descents[row]
-        if row + 1 < geometry.rows {
-            row_top += geometry.row_gap
-        }
+        row_top += geometry.row_boundaries[row + 1]
     }
 }
 
@@ -1632,8 +1741,12 @@ measure_matrix_draw_cells :: proc(
 
     runtime := input.ctx.runtime
     font_size := input.ctx.font_size
+    strut_ascent, strut_descent :=
+        dynmath.math_table_row_strut(input.descriptor^.row_spacing, font_size)
 
     for row in 0..<input.rows {
+        input.cells.row_ascents[row] = strut_ascent
+        input.cells.row_descents[row] = strut_descent
         for col in 0..<input.cols {
             cell_index := row * input.cols + col
             cmd_index := cell_program^.command_start + cell_index

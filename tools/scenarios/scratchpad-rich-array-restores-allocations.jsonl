@@ -1,0 +1,28 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Scratchpad","as":"scratchpad"}
+{"wait_event":"animation_selected","correlation":"scratchpad","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"scratchpad","timeout_ms":10000}
+{"scratchpad":":reset","as":"reset-warm-1"}
+{"wait_event":"scratchpad_completed","correlation":"reset-warm-1","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{array}{@{}||l|r||@{}}\\hline x&\\frac{1}{2}\\\\[1em]\\hline y&\\sqrt{z}\\\\[-1pt]\\hline\\hline\\end{array}\"","as":"table-warm-1"}
+{"wait_event":"scratchpad_completed","correlation":"table-warm-1","timeout_ms":10000}
+{"scratchpad":":reset","as":"reset-warm-2"}
+{"wait_event":"scratchpad_completed","correlation":"reset-warm-2","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{array}{@{}||l|r||@{}}\\hline x&\\frac{1}{2}\\\\[1em]\\hline y&\\sqrt{z}\\\\[-1pt]\\hline\\hline\\end{array}\"","as":"table-warm-2"}
+{"wait_event":"scratchpad_completed","correlation":"table-warm-2","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"scratchpad":":reset","as":"reset-measured"}
+{"wait_event":"scratchpad_completed","correlation":"reset-measured","timeout_ms":10000}
+{"scratchpad":"L\"\\begin{array}{@{}||l|r||@{}}\\hline x&\\frac{1}{2}\\\\[1em]\\hline y&\\sqrt{z}\\\\[-1pt]\\hline\\hline\\end{array}\"","as":"table-measured"}
+{"wait_event":"scratchpad_completed","correlation":"table-measured","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/rich-array-stage3.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

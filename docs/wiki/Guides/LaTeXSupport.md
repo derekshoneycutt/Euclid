@@ -193,8 +193,8 @@ Math mode supports these major groups:
     `\coprod`, `\int`, `\oint`, `\iint`, `\iiint`, `\lim`, and common n-ary
     operators.
 - Matrix blocks: `\begin{matrix} ... \end{matrix}` and
-    `\begin{array}{...} ... \end{array}` with `&` column separators and `\\`
-    row separators.
+    `\begin{array}{...} ... \end{array}` with `&` column separators, `\\`
+    row separators, boundary rules, and typed row additions.
 - Matrix wrapper environments composed through stretch delimiters: `bmatrix`,
     `Bmatrix`, `pmatrix`, `vmatrix`, and `Vmatrix`.
 - Spacing markers: `\,`, `\:`, `\>`, `\;`, `\!`, a backslash followed by a
@@ -340,8 +340,10 @@ treat it as unsupported for now.
 Matrix mode supports rectangular grids and recursive math within cells:
 
 - Supported: `\begin{matrix}...\end{matrix}`.
-- Supported: `\begin{array}{...}...\end{array}` with a validated `l/c/r`
-    preamble and strict shape checks.
+- Supported: `\begin{array}{...}...\end{array}` with a validated preamble of
+    `l`, `c`, `r`, `|`, `||`, and empty `@{}` directives.
+- Supported: `\hline` at row boundaries and signed `\\[length]` additions in
+    `pt`, `em`, or `ex` units.
 - Supported inside cells: other structured math primitives such as fractions,
     radicals, and scripts.
 - Composition wrappers: `bmatrix`, `pmatrix`, and `vmatrix`.
@@ -351,9 +353,10 @@ Matrix mode supports rectangular grids and recursive math within cells:
 Rows must be rectangular. Malformed matrix shape falls back safely rather than
 crashing the frame path.
 
-Matrix dimensions, cell style, and column alignments cross the Julia/Odin boundary in
-a bounded typed descriptor. Matrix commands reference that descriptor by block-local
-index; native measurement and drawing do not reparse fallback text for layout policy.
+Matrix dimensions, cell style, row policy, alignments, typed boundary gaps, rule counts,
+and row additions cross the Julia/Odin boundary in a bounded typed descriptor. Matrix
+commands reference that descriptor by block-local index; native measurement and drawing
+do not reparse fallback text for layout policy.
 Normal matrix and array cells enter TeX Text style before recursive fractions, scripts,
 radicals, or operators are measured. OpenType MATH style scaling remains authoritative.
 

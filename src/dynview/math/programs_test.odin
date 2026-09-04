@@ -4,6 +4,37 @@ import app_core "../../core"
 
 import "core:testing"
 
+//   Verify table lengths and rule records resolve once into boundary spans.
+@(test)
+math_table_boundaries_resolve_typed_lengths_and_rules :: proc(t: ^testing.T) {
+    descriptor := app_core.Dynview_Math_Table_Descriptor{rows = 2, columns = 2}
+    descriptor.column_boundary_gaps[0] = {0, .Zero}
+    descriptor.column_boundary_gaps[1] = {0.5, .Em}
+    descriptor.vertical_rule_counts[0] = 2
+    descriptor.vertical_rule_counts[1] = 2
+    descriptor.row_extra_gaps[0] = {0.5, .Ex}
+    descriptor.horizontal_rule_counts[1] = 1
+
+    thickness := math_table_rule_thickness(20)
+    separation := math_table_rule_separation(20)
+    occupied := thickness * 2 + separation
+    clearance := vertical_math_content_clearance(20, 10)
+    outer_width := math_table_column_boundary_width(&descriptor, 0, 20, 10)
+    column_width := math_table_column_boundary_width(&descriptor, 1, 20, 10)
+    row_height := math_table_row_boundary_height(&descriptor, 1, 20)
+
+    testing.expect(t, clearance > 6)
+    testing.expect_value(t, outer_width - occupied, clearance)
+    testing.expect_value(t, column_width - occupied, clearance * 2)
+    testing.expect_value(t, row_height,
+        matrix_row_gap(20) + f32(5) + thickness)
+    testing.expect_value(t,
+        math_table_length_px({3, .Point}, 20, 0), f32(4))
+    tight_ascent, tight_descent := math_table_row_strut(.Tight, 20)
+    testing.expect_value(t, tight_ascent, f32(12))
+    testing.expect_value(t, tight_descent, f32(4))
+}
+
 //   Verify the display-style TeX table resolves thin, medium, and thick atom spacing.
 @(test)
 math_atom_spacing_uses_tex_display_table :: proc(t: ^testing.T) {

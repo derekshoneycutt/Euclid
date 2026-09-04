@@ -759,6 +759,41 @@ end
     @test descriptor.cell_style == Int32(1)
     @test descriptor.column_alignments[1:3] == (Int32(0), Int32(1), Int32(2))
 
+    rich_array = EuclidLatex.compiled_program_for(
+        "\\begin{array}{@{}l|r@{}}a&b\\end{array}")
+    rich_payload = EuclidLatex.bridge_math_block_payload(rich_array;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    rich_descriptor = only(rich_payload.table_descriptors)
+    @test rich_descriptor.column_alignments[1:2] == (Int32(0), Int32(2))
+    @test rich_descriptor.column_boundary_gaps[1].unit == Int32(1)
+    @test rich_descriptor.column_boundary_gaps[2].unit == Int32(0)
+    @test rich_descriptor.column_boundary_gaps[3].unit == Int32(1)
+    @test rich_descriptor.column_boundary_gaps[4].unit == Int32(0)
+    @test rich_descriptor.vertical_rule_counts[1:3] ==
+        (Int32(0), Int32(1), Int32(0))
+
+    ruled_array = EuclidLatex.compiled_program_for(
+        "\\begin{array}{||c|c||}\\hline a&b\\\\[1.5em]c&d\\\\[-2pt]\\hline\\hline\\end{array}")
+    ruled_payload = EuclidLatex.bridge_math_block_payload(ruled_array;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    ruled_descriptor = only(ruled_payload.table_descriptors)
+    @test ruled_descriptor.vertical_rule_counts[1:3] ==
+        (Int32(2), Int32(1), Int32(2))
+    @test ruled_descriptor.row_extra_gaps[1].value == 1.5f0
+    @test ruled_descriptor.row_extra_gaps[1].unit == Int32(2)
+    @test ruled_descriptor.row_extra_gaps[2].value == -2.0f0
+    @test ruled_descriptor.row_extra_gaps[2].unit == Int32(4)
+    @test ruled_descriptor.horizontal_rule_counts[1:3] ==
+        (Int32(1), Int32(0), Int32(2))
+
+    misplaced_hline = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{c}a\\hline\\end{array}")
+    @test misplaced_hline == "\\begin"
+
+    malformed_row_gap = EuclidLatex.latex_to_plain_text(
+        "\\begin{array}{c}a\\\\[1cm]b\\end{array}")
+    @test malformed_row_gap == "\\begin"
+
     wrapped_payload = EuclidLatex.bridge_math_block_payload(Bmatrix_program;
         text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
     @test wrapped_payload.ops[1].table_descriptor_index == Int32(-1)
