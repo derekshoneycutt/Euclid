@@ -183,7 +183,11 @@ Math mode supports these major groups:
 - Upright text operators like `\sin`, `\cos`, `\log`, `\lim`, `\max`.
 - `\text{...}` and `\mathrm{...}` for non-italic text inside math.
 - Scripts: `^` and `_` including grouped forms.
-- Fractions: `\frac{...}{...}`.
+- Scoped math styles: `\displaystyle`, `\textstyle`, `\scriptstyle`, and
+    `\scriptscriptstyle`; each declaration applies through the end of its current group.
+- Fractions: `\frac{...}{...}`, `\dfrac{...}{...}`, and `\tfrac{...}{...}`.
+- Ruleless binomial stacks: `\binom{...}{...}`, `\dbinom{...}{...}`, and
+    `\tbinom{...}{...}`.
 - Radicals: `\sqrt{...}` and `\sqrt[n]{...}`.
 - Accent rules: `\overline{...}` and `\underline{...}`.
 - Glyph accents: `\hat`, `\widehat`, `\tilde`, `\widetilde`, `\vec`, `\dot`,
@@ -191,7 +195,8 @@ Math mode supports these major groups:
 - Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
 - Large operators with semantic growth and limit policies: `\sum`, `\prod`,
     `\coprod`, `\int`, `\oint`, `\iint`, `\iiint`, `\lim`, and common n-ary
-    operators.
+    operators. `\limits`, `\nolimits`, and `\displaylimits` override placement when
+    they immediately follow a large operator.
 - Matrix blocks: `\begin{matrix} ... \end{matrix}` and
     `\begin{array}{...} ... \end{array}` with `&` column separators, `\\`
     row separators, boundary rules, and typed row additions.
@@ -211,6 +216,7 @@ script-script, and cramped child styles as required.
 Successful native layout uses NewCM's OpenType MATH data for:
 
 - style scaling, axis placement, script constraints, fraction and bar geometry;
+- ruleless stack shifts and minimum gaps;
 - operator variants and limit placement;
 - radical and delimiter variants or bounded assemblies;
 - height-dependent corner kern after final script placement;

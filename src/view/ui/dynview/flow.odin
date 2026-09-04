@@ -34,6 +34,8 @@ FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
     .Frac = consume_text_based_command,
     .Stretch_Delimiter = consume_text_based_command,
     .Matrix = consume_text_based_command,
+    .Style_Override = consume_text_based_command,
+    .Stack = consume_text_based_command,
     .Large_Op = consume_large_op_command,
     .Accent_Bar = consume_text_based_command,
     .Radical_Bar = consume_text_based_command,

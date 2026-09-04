@@ -54,6 +54,15 @@ function plain_text_for_recursive_payload(op::MathPayloadOp)
         return matrix_payload_fallback_text(op, plain_text_for_payload)
     end
 
+    if op.kind == MATH_OP_STYLE_OVERRIDE_RECURSIVE
+        return plain_text_for_program(op.children)
+    end
+
+    if op.kind == MATH_OP_STACK_RECURSIVE
+        return "(" * plain_text_for_program(op.children) * ";" *
+            plain_text_for_program(op.secondary_children) * ")"
+    end
+
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE
         commands = Dict(
             :overline => "\\overline", :underline => "\\underline",

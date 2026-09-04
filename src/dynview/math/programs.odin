@@ -22,6 +22,8 @@ MATH_PROGRAM_ITEM_HANDLERS :: [app_core.Dynview_Command_Kind]Math_Program_Item_H
     .Frac = math_program_recursive_fraction_item,
     .Stretch_Delimiter = math_program_recursive_stretch_delimiter_item,
     .Matrix = math_program_recursive_matrix_item,
+    .Style_Override = math_program_recursive_style_override_item,
+    .Stack = math_program_recursive_stack_item,
     .Large_Op = math_program_large_op_item_entry,
     .Accent_Bar = math_program_accent_item_entry,
     .Radical_Bar = math_program_recursive_radical_item,
@@ -218,6 +220,39 @@ Radical_Construction_Input :: struct {
     degree: Radical_Degree_Dimensions,
     scale, left, right: f32,
     generation: u64,
+}
+
+//   Measure one child program under an explicit scoped math style.
+math_program_recursive_style_override_item :: proc(
+    ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
+
+    target_level := int(ctx.cmd.radical_mode)
+    if target_level < int(Math_Style_Level.Display) ||
+        target_level > int(Math_Style_Level.Script_Script) {
+        return {}, false
+    }
+    child, ok := math_program_from_command(ctx.cache, ctx.cmd)
+    if !ok {
+        return {}, false
+    }
+    target := Math_Style{Math_Style_Level(target_level), false}
+    target_size := math_target_font_size(
+        ctx.cache, ctx.font_size, ctx.math_style, target)
+    if !measure_math_program(ctx.cache, ctx.buffer, child, target_size, target) {
+        return {}, false
+    }
+    return app_core.Dynview_Layout_Item{
+        kind = .Style_Override,
+        style_id = ctx.cmd.style_id,
+        math_program_id = ctx.cmd.math_program_id,
+        radical_mode = ctx.cmd.radical_mode,
+        draw_width = child^.draw_width,
+        draw_height = child^.ascent + child^.descent,
+        ascent = child^.ascent,
+        descent = child^.descent,
+        visual_padding_top = child^.visual_padding_top,
+        visual_padding_bottom = child^.visual_padding_bottom,
+    }, true
 }
 
 //   Resolve a child style and its font size relative to the current style.
@@ -1173,6 +1208,49 @@ math_program_recursive_fraction_item :: #force_inline proc(
         visual_pad = visual_pad,
         geometry = geometry,
     }), true
+}
+
+//   Build one ruleless two-part stack from font-driven MATH constants.
+math_program_recursive_stack_item :: proc(
+    ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
+
+    top, top_ok := math_program_from_command(ctx.cache, ctx.cmd)
+    top_style, top_size := math_child_font_size(
+        ctx.cache, ctx.font_size, ctx.math_style, .Fraction_Numerator)
+    bottom, bottom_ok := secondary_math_program_from_command(ctx.cache, ctx.cmd)
+    bottom_style, bottom_size := math_child_font_size(
+        ctx.cache, ctx.font_size, ctx.math_style, .Fraction_Denominator)
+    if !top_ok || !bottom_ok ||
+        !measure_math_program(ctx.cache, ctx.buffer, top, top_size, top_style) ||
+        !measure_math_program(
+            ctx.cache, ctx.buffer, bottom, bottom_size, bottom_style) {
+        return {}, false
+    }
+    geometry := math_stack_geometry({
+        constants = ctx.cache^.math_constants,
+        generation = ctx.cache^.shaped_font_generation,
+        font_size = ctx.font_size,
+        style = ctx.math_style,
+        top = {top^.draw_width, top^.ascent, top^.descent},
+        bottom = {bottom^.draw_width, bottom^.ascent, bottom^.descent},
+    })
+    if !geometry.valid {
+        return {}, false
+    }
+    return app_core.Dynview_Layout_Item{
+        kind = .Stack,
+        style_id = ctx.cmd.style_id,
+        math_program_id = ctx.cmd.math_program_id,
+        secondary_math_program_id = ctx.cmd.secondary_math_program_id,
+        fraction_numerator_x = geometry.top_x,
+        fraction_numerator_baseline = geometry.top_baseline,
+        fraction_denominator_x = geometry.bottom_x,
+        fraction_denominator_baseline = geometry.bottom_baseline,
+        draw_width = geometry.width,
+        draw_height = geometry.ascent + geometry.descent,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
+    }, true
 }
 
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.

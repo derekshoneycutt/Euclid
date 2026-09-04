@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(21)
+const PARSER_GRAMMAR_VERSION = Int32(22)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -17,6 +17,8 @@ const MATH_OP_LARGE_OP_RECURSIVE = Int32(6)
 const MATH_OP_FRACTION_RECURSIVE = Int32(7)
 const MATH_OP_STRETCH_DELIMITER_RECURSIVE = Int32(8)
 const MATH_OP_MATRIX_RECURSIVE = Int32(9)
+const MATH_OP_STYLE_OVERRIDE_RECURSIVE = Int32(10)
+const MATH_OP_STACK_RECURSIVE = Int32(11)
 
 const OPERATOR_GROWTH_NONE = Int32(0)
 const OPERATOR_GROWTH_DISPLAY = Int32(1)
@@ -755,6 +757,15 @@ latex_fraction_run(
     numerator_children::Vector{LatexRun}, denominator_children::Vector{LatexRun}) =
     LatexRun("", :math, :fraction, MATH_ATOM_INNER, MATH_GLUE_NONE,
         numerator_children, denominator_children)
+
+"""Return one recursive style override around a scoped child run list."""
+latex_style_override_run(style::Symbol, children::Vector{LatexRun}) =
+    LatexRun("", style, :style_override, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        children, EMPTY_CHILD_RUNS)
+
+"""Return one ruleless two-part stack semantic run."""
+latex_stack_run(top::Vector{LatexRun}, bottom::Vector{LatexRun}) =
+    LatexRun("", :math, :stack, MATH_ATOM_INNER, MATH_GLUE_NONE, top, bottom)
 
 """Return one stretch-delimiter run payload with left/right delimiters and inner runs."""
 latex_stretch_delimiter_run(left::String, right::String, children::Vector{LatexRun}) =

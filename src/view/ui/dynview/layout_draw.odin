@@ -1791,6 +1791,10 @@ draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
         draw_recursive_stretch_delimiter_item(ctx, style, item, draw_x, item_y)
     case .Matrix:
         draw_recursive_matrix_item(ctx, style, item, draw_x, item_y)
+    case .Style_Override:
+        draw_recursive_style_override_item(ctx, item, draw_x, item_y)
+    case .Stack:
+        draw_recursive_stack_item(ctx, item, draw_x, item_y)
     case .Large_Op:
         draw_large_op_recursive_item(d)
     case .Accent_Bar:
@@ -1802,6 +1806,54 @@ draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
         .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
         .Inline_Triangle, .Inline_Pentagon:
     }
+}
+
+//   Draw one ruleless two-part stack from its sealed child positions.
+draw_recursive_stack_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    draw_x, item_y: f32) {
+
+    programs, ok := fraction_resolve_programs(ctx, item)
+    if !ok {
+        return
+    }
+    baseline_y := item_y + item.ascent
+    style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    top_style, top_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        style, .Fraction_Numerator)
+    bottom_style, bottom_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        style, .Fraction_Denominator)
+    draw_math_program_at(ctx, programs.numerator^, Program_Draw_Position{
+        draw_x + item.fraction_numerator_x,
+        baseline_y + item.fraction_numerator_baseline, top_size, top_style})
+    draw_math_program_at(ctx, programs.denominator^, Program_Draw_Position{
+        draw_x + item.fraction_denominator_x,
+        baseline_y + item.fraction_denominator_baseline, bottom_size, bottom_style})
+}
+
+//   Draw one scoped child program under its explicit math style.
+draw_recursive_style_override_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Layout_Item,
+    draw_x, item_y: f32) {
+
+    child, ok := dynmath.math_program_from_id(
+        &ctx.runtime^.compile_cache, item.math_program_id)
+    if !ok {
+        return
+    }
+    parent := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    target := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.radical_mode), false}
+    target_size := dynmath.math_target_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size, parent, target)
+    draw_math_program_at(ctx, child^, Program_Draw_Position{
+        draw_x, item_y + item.ascent, target_size, target})
 }
 
 //   Overlay exact cached glyph and limit dimensions used by measurement.
@@ -2134,7 +2186,7 @@ draw_cached_text_item_dispatch :: proc(
 
     switch item.kind {
     case .Script_Attach, .Frac, .Stretch_Delimiter,
-        .Matrix, .Large_Op, .Accent_Bar, .Radical_Bar:
+        .Matrix, .Style_Override, .Stack, .Large_Op, .Accent_Bar, .Radical_Bar:
         draw_recursive_structured_item(Math_Item_Draw{
             ctx = ctx,
             style = style,
@@ -2294,7 +2346,7 @@ draw_cached_inline_basic_item :: #force_inline proc(
     case .Inline_Circle:
         draw_inline_circle_outline(item, item_x, item_y, color)
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Filled_Box, .Inline_Filled_Circle,
          .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
     }
@@ -2354,7 +2406,7 @@ draw_cached_inline_filled_item :: #force_inline proc(
     case .Inline_Filled_Circle:
         draw_inline_filled_circle(style, item, item_x, item_y, color)
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
          .Inline_Circle, .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle,
          .Inline_Pentagon:
@@ -2456,7 +2508,7 @@ draw_cached_inline_advanced_item :: #force_inline proc(
     case .Inline_Pentagon:
         draw_inline_pentagon_item(item, item_x, item_y, color)
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
+         .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
          .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
          .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle:
     }
@@ -2477,7 +2529,7 @@ draw_cached_inline_item :: proc(
     case .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
         draw_cached_inline_advanced_item(style, item, item_x, item_y, color)
     case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-        .Stretch_Delimiter, .Matrix, .Large_Op,
+        .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
         .Accent_Bar, .Radical_Bar:
     }
 }

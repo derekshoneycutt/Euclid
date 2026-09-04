@@ -51,6 +51,8 @@ BRIDGE_DYNVIEW_OP_KIND_TO_COMMAND ::
     BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE = .Frac,
     BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE = .Stretch_Delimiter,
     BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE = .Matrix,
+    BRIDGE_DYNVIEW_MATH_OP_STYLE_OVERRIDE_RECURSIVE = .Style_Override,
+    BRIDGE_DYNVIEW_MATH_OP_STACK_RECURSIVE = .Stack,
 }
 
 //   Return whether one bridge table descriptor is canonical and bounded.
@@ -279,6 +281,13 @@ dynview_math_op_semantics_valid :: #force_inline proc(
             op.operator_limits >= BRIDGE_DYNVIEW_OPERATOR_LIMITS_SIDE &&
             op.operator_limits <= BRIDGE_DYNVIEW_OPERATOR_LIMITS_STACKED
     }
+    if op.kind == BRIDGE_DYNVIEW_MATH_OP_STYLE_OVERRIDE_RECURSIVE {
+        return op.atom_class == BRIDGE_DYNVIEW_MATH_ATOM_INNER &&
+            op.radical_mode >= 0 && op.radical_mode <= 3 &&
+            op.large_op_kind == 0 &&
+            op.operator_growth == BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
+            op.operator_limits == BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE
+    }
     return op.large_op_kind == 0 &&
         op.operator_growth == BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
         op.operator_limits == BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE
@@ -435,11 +444,13 @@ dynview_import_op_children :: proc(
             return Dynview_Imported_Children{0, 0, 0, BRIDGE_STATUS_INVALID_ARGUMENT}
         }
         return dynview_import_ordered_children(ctx, op, false)
-    case .Accent_Bar:
+    case .Accent_Bar, .Style_Override:
         return dynview_import_direct_child(ctx, child_direct_count)
     case .Matrix:
         return dynview_import_matrix_child(ctx, op)
     case .Frac:
+        return dynview_import_fraction_children(ctx, op)
+    case .Stack:
         return dynview_import_fraction_children(ctx, op)
     case .Stretch_Delimiter:
         if child_direct_count <= 0 {
@@ -665,8 +676,12 @@ dynview_count_recursive_math_capacity :: proc(
         case BRIDGE_DYNVIEW_MATH_OP_FRACTION_RECURSIVE:
             extra_programs += 2
             extra_commands += 2
+        case BRIDGE_DYNVIEW_MATH_OP_STACK_RECURSIVE:
+            extra_programs += 2
+            extra_commands += 2
         case BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE,
-            BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE:
+            BRIDGE_DYNVIEW_MATH_OP_MATRIX_RECURSIVE,
+            BRIDGE_DYNVIEW_MATH_OP_STYLE_OVERRIDE_RECURSIVE:
             if ops[i].child_program_id > 0 {
                 extra_programs += 1
                 extra_commands += 1

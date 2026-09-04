@@ -30,7 +30,7 @@ LAYOUT_INLINE_SHAPE_HANDLERS ::
     [core.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
     .Begin_Block = nil, .End_Block = nil, .Text_Run = nil, .Math_Glyph_Run = nil,
     .Math_Block = nil, .Script_Attach = nil, .Frac = nil,
-    .Stretch_Delimiter = nil, .Matrix = nil,
+    .Stretch_Delimiter = nil, .Matrix = nil, .Style_Override = nil, .Stack = nil,
     .Large_Op = nil, .Accent_Bar = nil, .Radical_Bar = nil,
     .Copyable_Text_Run = nil, .Line_Break = nil, .Divider = nil,
     .Inline_Line = layout_consume_inline_line,
@@ -1346,7 +1346,7 @@ layout_consume_visible_command :: proc(
         return layout_consume_text_like_command(ctx, cmd, effective_style)
     case .Math_Block, .Script_Attach, .Frac,
         .Large_Op, .Accent_Bar,
-        .Stretch_Delimiter, .Matrix,
+        .Stretch_Delimiter, .Matrix, .Style_Override, .Stack,
         .Radical_Bar:
         return layout_consume_structured_math_command(ctx, cmd, effective_style)
     case .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,

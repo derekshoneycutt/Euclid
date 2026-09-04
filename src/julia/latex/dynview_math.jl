@@ -61,8 +61,33 @@ function payload_op_accepts_scripts(op::MathPayloadOp)
         op.kind == MATH_OP_FRACTION_RECURSIVE ||
         op.kind == MATH_OP_STRETCH_DELIMITER_RECURSIVE ||
         op.kind == MATH_OP_MATRIX_RECURSIVE ||
+        op.kind == MATH_OP_STYLE_OVERRIDE_RECURSIVE ||
+        op.kind == MATH_OP_STACK_RECURSIVE ||
         op.kind == MATH_OP_ACCENT_BAR_RECURSIVE ||
         op.kind == MATH_OP_RADICAL_BAR_RECURSIVE
+end
+
+const STYLE_OVERRIDE_MODES = Dict(
+    :display => Int32(0), :text => Int32(1),
+    :script => Int32(2), :script_script => Int32(3))
+
+"""Return one recursive payload measured under an explicit math style."""
+function style_override_payload_op(run::LatexRun)
+    children = math_payload_ops_for_runs(run.children)
+    return MathPayloadOp(MATH_OP_STYLE_OVERRIDE_RECURSIVE,
+        plain_text_for_program(children), "", "", "",
+        :none, run.role,
+        LARGE_OP_KIND_NONE, :math, MATH_ATOM_INNER, MATH_GLUE_NONE,
+        children, MathPayloadOp[], MathPayloadOp[])
+end
+
+"""Return one recursive ruleless stack payload with top and bottom programs."""
+function stack_payload_op(run::LatexRun)
+    top = math_payload_ops_for_runs(run.children)
+    bottom = math_payload_ops_for_runs(run.secondary_children)
+    return MathPayloadOp(MATH_OP_STACK_RECURSIVE,
+        "", "", "", "", :none, :none, LARGE_OP_KIND_NONE, :math,
+        MATH_ATOM_INNER, MATH_GLUE_NONE, top, bottom, MathPayloadOp[])
 end
 
 """Lift one payload op into a script-attach payload and set one script field."""
@@ -365,6 +390,12 @@ function payload_for_non_script_segment(run::LatexRun)
     if run.segment == :fraction
         return fraction_payload_op(run)
     end
+    if run.segment == :style_override
+        return style_override_payload_op(run)
+    end
+    if run.segment == :stack
+        return stack_payload_op(run)
+    end
     if run.segment == :stretch_delimiter
         return stretch_delimiter_payload_op(run)
     end
@@ -377,6 +408,21 @@ end
 
 """Return true when this segment is one of the script marker segments."""
 is_script_segment(segment::Symbol) = segment == :script_sup || segment == :script_sub
+
+"""Apply one explicit limit policy to the immediately preceding large operator."""
+function consume_operator_limit_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
+    isempty(payloads) && return nothing
+    op = payloads[end]
+    op.kind == MATH_OP_LARGE_OP_RECURSIVE || return nothing
+    limits = run.segment == :operator_limits_side ? OPERATOR_LIMITS_SIDE :
+        OPERATOR_LIMITS_STACKED
+    payloads[end] = MathPayloadOp(
+        op.kind, op.text, op.radical_index_text, op.sup_text, op.sub_text,
+        op.accent_mode, op.radical_mode, op.large_op_kind, op.operator_growth,
+        limits, op.style_role, op.atom_class, op.glue_kind, op.children,
+        op.secondary_children, op.tertiary_children)
+    return nothing
+end
 
 """Append one script run to prior payload when possible, otherwise append fallback payload."""
 function consume_script_payload!(payloads::Vector{MathPayloadOp}, run::LatexRun)
@@ -400,6 +446,8 @@ function math_payload_ops_for_runs(runs::Vector{LatexRun})
 
         if is_script_segment(run.segment)
             consume_script_payload!(payloads, run)
+        elseif startswith(String(run.segment), "operator_limits_")
+            consume_operator_limit_payload!(payloads, run)
         end
     end
     return payloads
@@ -620,6 +668,10 @@ function math_block_mode_codes(op::MathPayloadOp)
         return MathBlockModeCodes(
             bridge_delimiter_kind(op.radical_index_text),
             bridge_delimiter_kind(op.sup_text),
+            Int32(0), OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_NONE)
+    end
+    if op.kind == MATH_OP_STYLE_OVERRIDE_RECURSIVE
+        return MathBlockModeCodes(Int32(0), STYLE_OVERRIDE_MODES[op.radical_mode],
             Int32(0), OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_NONE)
     end
 

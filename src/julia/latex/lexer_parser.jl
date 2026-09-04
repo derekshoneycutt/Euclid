@@ -199,12 +199,27 @@ function parse_sequence(
             continue
         end
 
+        style = token.kind == :command ? get(EXPLICIT_MATH_STYLES, token.text, nothing) :
+            nothing
+        if !isnothing(style)
+            idx[] += 1
+            children = parse_sequence(tokens, idx, stop_on_rbrace)
+            push!(runs, latex_style_override_run(style, children))
+            return runs
+        end
+
         append!(runs, parse_atom(tokens, idx))
         consume_scripts!(runs, tokens, idx)
     end
 
     return runs
 end
+
+const EXPLICIT_MATH_STYLES = Dict(
+    "\\displaystyle" => :display,
+    "\\textstyle" => :text,
+    "\\scriptstyle" => :script,
+    "\\scriptscriptstyle" => :script_script)
 
 """Parse one atom token into a semantic run list."""
 function parse_atom(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
@@ -255,6 +270,10 @@ function parse_command_atom(
     structured_runs = parse_structured_math_command(command, tokens, idx)
     if !isnothing(structured_runs)
         return structured_runs
+    end
+
+    if haskey(OPERATOR_LIMIT_MODIFIER_SEGMENTS, command)
+        return [latex_atom_run(command, :math_upright)]
     end
 
     return normal_math_atom_runs(command)
@@ -316,6 +335,39 @@ function parse_mathbb_atom(
     return normal_math_atom_runs("\\mathbb")
 end
 
+const FRACTION_VARIANT_STYLES = Dict(
+    "\\frac" => nothing, "\\dfrac" => :display, "\\tfrac" => :text)
+
+const BINOMIAL_VARIANT_STYLES = Dict(
+    "\\binom" => nothing, "\\dbinom" => :display, "\\tbinom" => :text)
+
+"""Parse a fraction variant and apply its optional explicit style."""
+function parse_fraction_variant(
+    command::AbstractString,
+    tokens::Vector{LatexToken},
+    idx::Base.RefValue{Int})
+
+    numerator = parse_required_group_runs(tokens, idx)
+    denominator = parse_required_group_runs(tokens, idx)
+    fraction = latex_fraction_run(numerator, denominator)
+    style = FRACTION_VARIANT_STYLES[command]
+    return style === nothing ? fraction : latex_style_override_run(style, [fraction])
+end
+
+"""Parse a binomial variant as a delimited ruleless stack with optional style."""
+function parse_binomial_variant(
+    command::AbstractString,
+    tokens::Vector{LatexToken},
+    idx::Base.RefValue{Int})
+
+    top = parse_required_group_runs(tokens, idx)
+    bottom = parse_required_group_runs(tokens, idx)
+    stack = latex_stack_run(top, bottom)
+    delimited = latex_stretch_delimiter_run("(", ")", [stack])
+    style = BINOMIAL_VARIANT_STYLES[command]
+    return style === nothing ? delimited : latex_style_override_run(style, [delimited])
+end
+
 """Parse structured math commands that produce child-run nodes."""
 function parse_structured_math_command(
     command::AbstractString,
@@ -344,10 +396,12 @@ function parse_structured_math_command(
         return [parse_sqrt_run(tokens, idx)]
     end
 
-    if command == "\\frac"
-        numerator_children = parse_required_group_runs(tokens, idx)
-        denominator_children = parse_required_group_runs(tokens, idx)
-        return [latex_fraction_run(numerator_children, denominator_children)]
+    if haskey(FRACTION_VARIANT_STYLES, command)
+        return [parse_fraction_variant(command, tokens, idx)]
+    end
+
+    if haskey(BINOMIAL_VARIANT_STYLES, command)
+        return [parse_binomial_variant(command, tokens, idx)]
     end
 
     if command == "\\left"
@@ -1358,6 +1412,7 @@ end
 """Consume trailing super/subscript tokens and append mapped script runs."""
 function consume_scripts!(
     runs::Vector{LatexRun}, tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    consume_operator_limit_modifier!(runs, tokens, idx)
     while idx[] <= length(tokens)
         marker = tokens[idx[]].kind
         if marker != :sup && marker != :sub
@@ -1378,6 +1433,28 @@ function consume_scripts!(
 
         push!(runs, latex_sub_run(script_token, script.runs))
     end
+end
+
+const OPERATOR_LIMIT_MODIFIER_SEGMENTS = Dict(
+    "\\limits" => :operator_limits_stacked,
+    "\\nolimits" => :operator_limits_side,
+    "\\displaylimits" => :operator_limits_display)
+
+"""Consume one limit modifier only when it immediately follows a large operator."""
+function consume_operator_limit_modifier!(
+    runs::Vector{LatexRun}, tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+
+    isempty(runs) && return nothing
+    startswith(String(runs[end].role), "largeop_") || return nothing
+    idx[] <= length(tokens) || return nothing
+    token = tokens[idx[]]
+    segment = get(OPERATOR_LIMIT_MODIFIER_SEGMENTS, token.text, nothing)
+    if token.kind == :command && !isnothing(segment)
+        push!(runs, LatexRun(token.text, :math, segment, MATH_ATOM_ORD,
+            MATH_GLUE_NONE, LatexRun[], LatexRun[]))
+        idx[] += 1
+    end
+    return nothing
 end
 
 """Parse one script payload, either grouped (`{...}`) or single-atom."""
@@ -1594,6 +1671,21 @@ function matrix_payload_fallback_text(op::MathPayloadOp, cell_text_fn::Function)
         cell_text_fn)
 end
 
+"""Render a scoped style override to canonical source."""
+function style_override_payload_source(op::MathPayloadOp)
+    commands = ("\\displaystyle", "\\textstyle",
+        "\\scriptstyle", "\\scriptscriptstyle")
+    mode = clamp(Int(STYLE_OVERRIDE_MODES[op.radical_mode]) + 1, 1, 4)
+    return commands[mode] * "{" * latex_source_for_program(op.children) * "}"
+end
+
+"""Render a native ruleless stack to canonical source."""
+function stack_payload_source(op::MathPayloadOp)
+    top = latex_source_for_program(op.children)
+    bottom = latex_source_for_program(op.secondary_children)
+    return "{" * top * "\\atop " * bottom * "}"
+end
+
 """Render one recursive non-script payload op to canonical LaTeX-ish source."""
 function latex_source_for_recursive_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
@@ -1617,6 +1709,14 @@ function latex_source_for_recursive_payload(op::MathPayloadOp)
 
     if op.kind == MATH_OP_MATRIX_RECURSIVE
         return matrix_payload_fallback_text(op, latex_source_for_payload)
+    end
+
+    if op.kind == MATH_OP_STYLE_OVERRIDE_RECURSIVE
+        return style_override_payload_source(op)
+    end
+
+    if op.kind == MATH_OP_STACK_RECURSIVE
+        return stack_payload_source(op)
     end
 
     if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE

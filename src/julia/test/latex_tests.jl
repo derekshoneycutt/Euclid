@@ -400,6 +400,15 @@ end
     @test int_program[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_DISPLAY
     @test int_program[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
 
+    sum_side = first(EuclidLatex.compiled_program_for("\\sum\\nolimits_0^1"))
+    @test sum_side.operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
+    integral_stacked = first(EuclidLatex.compiled_program_for("\\int\\limits_0^1"))
+    @test integral_stacked.operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    display_limits = first(
+        EuclidLatex.compiled_program_for("\\int\\displaylimits_0^1"))
+    @test display_limits.operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    @test EuclidLatex.latex_to_plain_text("x\\limits_0") == "x{\\limits}_{0}"
+
     promoted_commands = [
         ("\\oint", "∮", EuclidLatex.LARGE_OP_KIND_INT,
             EuclidLatex.OPERATOR_LIMITS_SIDE),
@@ -429,6 +438,34 @@ end
         text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
     @test nary_payload.ops[1].large_op_kind ==
         OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_NARY
+end
+
+@testset "scoped math styles and fraction variants" begin
+    scoped = EuclidLatex.compiled_program_for(
+        "{\\textstyle \\frac{a}{b}}+\\frac{c}{d}")
+    @test length(scoped) == 3
+    @test scoped[1].kind == EuclidLatex.MATH_OP_STYLE_OVERRIDE_RECURSIVE
+    @test scoped[1].radical_mode == :text
+    @test only(scoped[1].children).kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+    @test scoped[3].kind == EuclidLatex.MATH_OP_FRACTION_RECURSIVE
+
+    display_fraction = first(EuclidLatex.compiled_program_for("\\dfrac{a}{b}"))
+    text_fraction = first(EuclidLatex.compiled_program_for("\\tfrac{a}{b}"))
+    @test display_fraction.kind == EuclidLatex.MATH_OP_STYLE_OVERRIDE_RECURSIVE
+    @test display_fraction.radical_mode == :display
+    @test text_fraction.radical_mode == :text
+    @test EuclidLatex.latex_to_plain_text("\\dfrac{a}{b}") == "{a}/{b}"
+
+    binomial = first(EuclidLatex.compiled_program_for("\\binom{n}{k}"))
+    @test binomial.kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    stack = only(binomial.children)
+    @test stack.kind == EuclidLatex.MATH_OP_STACK_RECURSIVE
+    @test only(stack.children).text == "n"
+    @test only(stack.secondary_children).text == "k"
+    display_binomial = first(EuclidLatex.compiled_program_for("\\dbinom{n}{k}"))
+    text_binomial = first(EuclidLatex.compiled_program_for("\\tbinom{n}{k}"))
+    @test display_binomial.radical_mode == :display
+    @test text_binomial.radical_mode == :text
 end
 
 @testset "accent bars" begin

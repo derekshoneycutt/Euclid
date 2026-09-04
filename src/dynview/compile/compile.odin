@@ -41,6 +41,8 @@ COMPILE_COMMAND_HANDLERS ::
     .Frac = compile_text_run,
     .Stretch_Delimiter = compile_text_run,
     .Matrix = compile_text_run,
+    .Style_Override = compile_text_run,
+    .Stack = compile_text_run,
     .Large_Op = compile_large_op_recursive,
     .Accent_Bar = compile_text_run,
     .Radical_Bar = compile_text_run,
