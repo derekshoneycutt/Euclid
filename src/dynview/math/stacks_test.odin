@@ -30,3 +30,21 @@ math_stack_geometry_enforces_display_gap :: proc(t: ^testing.T) {
     testing.expect_value(t, geometry.top_x, f32(0))
     testing.expect_value(t, geometry.bottom_x, f32(2))
 }
+
+//   Verify over annotations retain the base baseline and satisfy the MATH gap.
+@(test)
+math_over_under_geometry_keeps_base_baseline :: proc(t: ^testing.T) {
+    constants := math_stack_test_constants()
+    constants.values[int(Math_Constant.Stretch_Stack_Top_Shift_Up)] = 4*64
+    constants.values[int(Math_Constant.Stretch_Stack_Gap_Above_Min)] = 3*64
+    geometry := math_over_under_geometry({
+        constants = constants, generation = 17, font_size = 32, over = true,
+        annotation = {width = 4, ascent = 2, descent = 1},
+        base = {width = 10, ascent = 6, descent = 2},
+    })
+    gap := -geometry.top_baseline-1-6
+    testing.expect(t, geometry.valid)
+    testing.expect_value(t, geometry.bottom_baseline, f32(0))
+    testing.expect_value(t, gap, f32(3))
+    testing.expect_value(t, geometry.top_x, f32(3))
+}

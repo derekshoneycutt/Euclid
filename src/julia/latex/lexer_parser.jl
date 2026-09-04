@@ -247,6 +247,15 @@ function parse_command_atom(
         consume_command_delimiter_whitespace!(tokens, idx)
     end
 
+    if haskey(FIXED_DELIMITER_COMMANDS, command)
+        delimiter, ok = parse_stretch_delimiter_token!(tokens, idx)
+        if !ok
+            return normal_math_atom_runs(command)
+        end
+        size, atom_class = FIXED_DELIMITER_COMMANDS[command]
+        return [latex_fixed_delimiter_run(delimiter, size, atom_class)]
+    end
+
     text_runs = parse_special_text_command(command, tokens, idx)
     if !isnothing(text_runs)
         return text_runs
@@ -341,6 +350,15 @@ const FRACTION_VARIANT_STYLES = Dict(
 const BINOMIAL_VARIANT_STYLES = Dict(
     "\\binom" => nothing, "\\dbinom" => :display, "\\tbinom" => :text)
 
+const GLYPH_ACCENT_COMMANDS = Dict(
+    "\\hat" => :accent_hat, "\\widehat" => :accent_hat,
+    "\\tilde" => :accent_tilde, "\\widetilde" => :accent_tilde,
+    "\\vec" => :accent_vec, "\\dot" => :accent_dot,
+    "\\ddot" => :accent_ddot, "\\bar" => :accent_bar,
+    "\\check" => :accent_check, "\\breve" => :accent_breve,
+    "\\acute" => :accent_acute, "\\grave" => :accent_grave,
+    "\\mathring" => :accent_ring)
+
 """Parse a fraction variant and apply its optional explicit style."""
 function parse_fraction_variant(
     command::AbstractString,
@@ -368,28 +386,46 @@ function parse_binomial_variant(
     return style === nothing ? delimited : latex_style_override_run(style, [delimited])
 end
 
+"""Parse one accent or over/under annotation command when recognized."""
+function parse_math_decoration_command(
+    command::AbstractString,
+    tokens::Vector{LatexToken},
+    idx::Base.RefValue{Int})
+
+    if command == "\\overline" || command == "\\underline"
+        children = parse_required_group_runs(tokens, idx)
+        run = command == "\\overline" ? latex_overline_run(children) :
+            latex_underline_run(children)
+        return [run]
+    end
+    if haskey(GLYPH_ACCENT_COMMANDS, command)
+        children = parse_math_argument_runs(tokens, idx)
+        return [latex_glyph_accent_run(GLYPH_ACCENT_COMMANDS[command], children)]
+    end
+    if command == "\\overset" || command == "\\underset"
+        annotation = parse_required_group_runs(tokens, idx)
+        base = parse_required_group_runs(tokens, idx)
+        run = command == "\\overset" ? latex_overset_run(annotation, base) :
+            latex_underset_run(annotation, base)
+        return [run]
+    end
+    if command == "\\overbrace" || command == "\\underbrace"
+        children = parse_required_group_runs(tokens, idx)
+        segment = command == "\\overbrace" ? :accent_overbrace : :accent_underbrace
+        return [latex_glyph_accent_run(segment, children)]
+    end
+    return nothing
+end
+
 """Parse structured math commands that produce child-run nodes."""
 function parse_structured_math_command(
     command::AbstractString,
     tokens::Vector{LatexToken},
     idx::Base.RefValue{Int})
 
-    if command == "\\overline"
-        return [latex_overline_run(parse_required_group_runs(tokens, idx))]
-    end
-
-    if command == "\\underline"
-        return [latex_underline_run(parse_required_group_runs(tokens, idx))]
-    end
-
-    glyph_accents = Dict(
-        "\\hat" => :accent_hat, "\\widehat" => :accent_hat,
-        "\\tilde" => :accent_tilde, "\\widetilde" => :accent_tilde,
-        "\\vec" => :accent_vec, "\\dot" => :accent_dot,
-        "\\ddot" => :accent_ddot, "\\bar" => :accent_bar)
-    if haskey(glyph_accents, command)
-        return [latex_glyph_accent_run(
-            glyph_accents[command], parse_required_group_runs(tokens, idx))]
+    decoration = parse_math_decoration_command(command, tokens, idx)
+    if decoration !== nothing
+        return decoration
     end
 
     if command == "\\sqrt"
@@ -1180,13 +1216,23 @@ function consume_text_stretch_delimiter!(
     return mapped, true
 end
 
-"""Parse runs until a matching `\\right` marker at current nesting depth."""
+"""Parse runs and structural middles until `\\right` at current nesting depth."""
 function parse_runs_until_right(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
     runs = LatexRun[]
     while idx[] <= length(tokens)
         token = tokens[idx[]]
         if token.kind == :command && token.text == STRETCH_DELIMITER_RIGHT
             return runs, true
+        end
+
+        if token.kind == :command && token.text == STRETCH_DELIMITER_MIDDLE
+            idx[] += 1
+            delimiter, ok = parse_stretch_delimiter_token!(tokens, idx)
+            if !ok
+                return runs, false
+            end
+            push!(runs, latex_middle_delimiter_run(delimiter))
+            continue
         end
 
         if token.kind == :lbrace
@@ -1376,6 +1422,22 @@ function parse_required_group_runs(tokens::Vector{LatexToken}, idx::Base.RefValu
 
     idx[] += 1
     return parse_sequence(tokens, idx, true)
+end
+
+"""Parse one grouped or single-token math argument after a control word."""
+function parse_math_argument_runs(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+    consume_command_delimiter_whitespace!(tokens, idx)
+    if idx[] > length(tokens)
+        return LatexRun[]
+    end
+    if tokens[idx[]].kind == :lbrace
+        return parse_required_group_runs(tokens, idx)
+    end
+    if tokens[idx[]].kind == :text
+        text = consume_single_script_text_token!(tokens, idx)
+        return normal_math_atom_runs(text)
+    end
+    return parse_atom(tokens, idx)
 end
 
 """Parse one required `{...}` group and return its flattened text."""
@@ -1723,7 +1785,10 @@ function latex_source_for_recursive_payload(op::MathPayloadOp)
         commands = Dict(
             :overline => "\\overline", :underline => "\\underline",
             :hat => "\\hat", :tilde => "\\tilde", :vec => "\\vec",
-            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar")
+            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar",
+            :check => "\\check", :breve => "\\breve", :acute => "\\acute",
+            :grave => "\\grave", :ring => "\\mathring",
+            :overbrace => "\\overbrace", :underbrace => "\\underbrace")
         command = get(commands, op.accent_mode, "\\overline") * "{"
         return command * latex_source_for_program(op.children) * "}"
     end

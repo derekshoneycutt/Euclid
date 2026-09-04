@@ -26,6 +26,17 @@ math_accent_test_ready_source :: proc(
     return source
 }
 
+//   Build one combining-mark source with degenerate reported horizontal ink.
+math_accent_test_degenerate_source :: proc(
+    glyph_id: u32) -> app_core.Font_Math_Stretch_Source {
+
+    source := math_accent_test_ready_source(glyph_id)
+    source.variants.values[0].advance = 1
+    source.variants.values[0].extents.width = 0
+    source.variants.values[0].top_accent_attachment = 0
+    return source
+}
+
 //   Build one two-part horizontal assembly source.
 math_accent_test_assembly_source :: proc(
     glyph_id: u32) -> app_core.Font_Math_Stretch_Source {
@@ -59,6 +70,23 @@ math_glyph_accent_aligns_narrow_attachment_points :: proc(t: ^testing.T) {
     testing.expect_value(t, geometry.ascent, f32(12))
 }
 
+//   Verify zero-width combining metrics still produce finite visible geometry.
+@(test)
+math_glyph_accent_recovers_degenerate_combining_bounds :: proc(t: ^testing.T) {
+    sources := [2]app_core.Font_Math_Stretch_Source{
+        math_accent_test_degenerate_source(42),
+        math_accent_test_degenerate_source(43)}
+    geometry := math_glyph_accent_geometry({
+        constants = math_accent_test_constants(), generation = 23, font_size = 32,
+        child_width = 8, child_ascent = 8, child_descent = 2,
+        base_attachment = 4, sources = sources,
+    })
+    testing.expect(t, geometry.valid)
+    testing.expect(t, geometry.construction.valid)
+    testing.expect(t, geometry.width >= 8 && geometry.ascent > 8)
+    testing.expect(t, geometry.accent_line_top == geometry.accent_line_top)
+}
+
 //   Verify wide and high bases select assemblies and the flattened source.
 @(test)
 math_glyph_accent_selects_wide_flattened_assembly :: proc(t: ^testing.T) {
@@ -74,4 +102,23 @@ math_glyph_accent_selects_wide_flattened_assembly :: proc(t: ^testing.T) {
     testing.expect(t, geometry.construction.assembled)
     testing.expect_value(t, geometry.construction.base_glyph_id, u32(60))
     testing.expect(t, geometry.width >= 20 && geometry.ascent > 14)
+}
+
+//   Verify an underbrace expands descent while preserving the base ascent.
+@(test)
+math_glyph_accent_places_underbrace_below_base :: proc(t: ^testing.T) {
+    constants := math_accent_test_constants()
+    constants.values[int(Math_Constant.Stretch_Stack_Gap_Below_Min)] = 3*64
+    sources := [2]app_core.Font_Math_Stretch_Source{
+        math_accent_test_assembly_source(70), math_accent_test_assembly_source(80)}
+    geometry := math_glyph_accent_geometry({
+        constants = constants, generation = 23, font_size = 32,
+        child_width = 12, child_ascent = 7, child_descent = 2,
+        base_attachment = 6, sources = sources, brace_mode = 15,
+    })
+    testing.expect(t, geometry.valid)
+    testing.expect_value(t, geometry.ascent, f32(7))
+    testing.expect(t, geometry.descent > 5)
+    testing.expect(t, geometry.construction.assembled)
+    testing.expect(t, geometry.accent_line_top == geometry.accent_line_top)
 }

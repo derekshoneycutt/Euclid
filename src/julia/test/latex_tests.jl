@@ -495,6 +495,18 @@ end
     accent_modes = [op.accent_mode for op in glyph_accents if
         op.kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE]
     @test accent_modes == [:hat, :hat, :tilde, :vec, :dot, :ddot, :bar]
+    common_accents = EuclidLatex.compiled_program_for(
+        "\\check{a}+\\breve{b}+\\acute{c}+\\grave{d}+\\mathring{e}")
+    common_modes = [op.accent_mode for op in common_accents if
+        op.kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE]
+    @test common_modes == [:check, :breve, :acute, :grave, :ring]
+    unbraced_accents = EuclidLatex.compiled_program_for(
+        "\\check a+\\breve b+\\acute c+\\grave d+\\mathring e")
+    unbraced = filter(op ->
+        op.kind == EuclidLatex.MATH_OP_ACCENT_BAR_RECURSIVE, unbraced_accents)
+    @test [op.accent_mode for op in unbraced] ==
+        [:check, :breve, :acute, :grave, :ring]
+    @test [only(op.children).text for op in unbraced] == ["a", "b", "c", "d", "e"]
     hat_payload = EuclidLatex.bridge_math_block_payload(
         EuclidLatex.compiled_program_for("\\hat{x}");
         text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
@@ -523,6 +535,68 @@ end
     @test embedded_scripts[3].children[1].text == "CD"
     @test embedded_scripts[3].children[1].sub_text == "4"
     @test embedded_scripts[3].style_role == :math
+end
+
+@testset "fixed and middle delimiters" begin
+    fixed = EuclidLatex.compiled_program_for(
+        "\\bigl( x \\Bigm| y \\biggr)")
+    delimiters = filter(op ->
+        op.kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE, fixed)
+    @test [op.operator_growth for op in delimiters] == Int32[1, 2, 3]
+    @test [op.atom_class for op in delimiters] == Int32[
+        EuclidLatex.MATH_ATOM_OPEN,
+        EuclidLatex.MATH_ATOM_REL,
+        EuclidLatex.MATH_ATOM_CLOSE]
+    @test delimiters[1].radical_index_text == "("
+    @test delimiters[1].sup_text == EuclidLatex.STRETCH_DELIMITER_NONE
+    @test delimiters[3].radical_index_text == EuclidLatex.STRETCH_DELIMITER_NONE
+    @test delimiters[3].sup_text == ")"
+    fixed_payload = EuclidLatex.bridge_math_block_payload(fixed;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    fixed_bridge_ops = filter(op ->
+        op.kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE,
+        fixed_payload.ops)
+    @test [op.operator_growth for op in fixed_bridge_ops] == Int32[1, 2, 3]
+
+    middle = EuclidLatex.compiled_program_for(
+        "\\left\\{x \\middle| y \\middle\\| z\\right\\}")
+    @test length(middle) == 1
+    @test middle[1].kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE
+    middle_ops = filter(op -> op.operator_limits == 1, middle[1].children)
+    @test length(middle_ops) == 2
+    @test all(op ->
+        op.kind == EuclidLatex.MATH_OP_STRETCH_DELIMITER_RECURSIVE, middle_ops)
+    middle_payload = EuclidLatex.bridge_math_block_payload(middle;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test count(op -> op.operator_limits == 1, middle_payload.ops) == 2
+
+    stray = EuclidLatex.compiled_program_for("x \\middle| y")
+    @test all(op -> op.operator_limits == 0, stray)
+end
+
+@testset "over and under annotations" begin
+    overset = only(EuclidLatex.compiled_program_for("\\overset{!}{=}"))
+    @test overset.kind == EuclidLatex.MATH_OP_STACK_RECURSIVE
+    @test overset.operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
+    @test only(overset.children).text == "!"
+    @test only(overset.secondary_children).text == "="
+
+    underset = only(EuclidLatex.compiled_program_for("\\underset{n}{x}"))
+    @test underset.kind == EuclidLatex.MATH_OP_STACK_RECURSIVE
+    @test underset.operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    @test only(underset.children).text == "x"
+    @test only(underset.secondary_children).text == "n"
+
+    overbrace = only(EuclidLatex.compiled_program_for("\\overbrace{a+b}^{n}"))
+    @test overbrace.kind == EuclidLatex.MATH_OP_STACK_RECURSIVE
+    @test overbrace.operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
+    @test only(overbrace.children).text == "n"
+    @test only(overbrace.secondary_children).accent_mode == :overbrace
+    underbrace = only(EuclidLatex.compiled_program_for("\\underbrace{x+y}_{m}"))
+    @test underbrace.kind == EuclidLatex.MATH_OP_STACK_RECURSIVE
+    @test underbrace.operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    @test only(underbrace.children).accent_mode == :underbrace
+    @test only(underbrace.secondary_children).text == "m"
 end
 
 @testset "radicals" begin

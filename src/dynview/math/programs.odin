@@ -75,6 +75,7 @@ Math_Program_Item_Context :: struct {
     font_size: f32,
     command_index: int,
     math_style: Math_Style,
+    delimiter_target_height: f32,
 }
 
 Math_Program_Metrics :: struct {
@@ -87,7 +88,7 @@ Math_Program_Metrics :: struct {
 Stretch_Delimiter_Item_Geometry :: struct {
     selected: Stretch_Delimiter_Selection,
     left_clearance, right_clearance: f32,
-    content_width, base_advance, axis: f32,
+    content_width, axis: f32,
     generation: u64,
     scale: f32,
 }
@@ -220,6 +221,26 @@ Radical_Construction_Input :: struct {
     degree: Radical_Degree_Dimensions,
     scale, left, right: f32,
     generation: u64,
+}
+
+//   Resolve optical interior gaps from one delimiter's structural atom role.
+stretch_delimiter_clearances :: #force_inline proc(
+    cmd: app_core.Dynview_Command,
+    font_size: f32) -> (left, right: f32) {
+
+    clearance := stretch_delimiter_content_clearance(font_size)
+    if cmd.math_program_id > 0 {
+        return clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0,
+            clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
+    }
+    switch cmd.math_atom_class {
+    case .Open:
+        left = clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0
+    case .Close:
+        right = clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
+    case .None, .Ord, .Op, .Bin, .Rel, .Punct, .Inner:
+    }
+    return
 }
 
 //   Measure one child program under an explicit scoped math style.
@@ -1214,6 +1235,10 @@ math_program_recursive_fraction_item :: #force_inline proc(
 math_program_recursive_stack_item :: proc(
     ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
 
+    if ctx.cmd.operator_limits > 0 {
+        return math_program_recursive_over_under_item(ctx)
+    }
+
     top, top_ok := math_program_from_command(ctx.cache, ctx.cmd)
     top_style, top_size := math_child_font_size(
         ctx.cache, ctx.font_size, ctx.math_style, .Fraction_Numerator)
@@ -1253,13 +1278,56 @@ math_program_recursive_stack_item :: proc(
     }, true
 }
 
+//   Build one over- or under-annotation with an unscaled base and script annotation.
+math_program_recursive_over_under_item :: proc(
+    ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
+
+    top, top_ok := math_program_from_command(ctx.cache, ctx.cmd)
+    bottom, bottom_ok := secondary_math_program_from_command(ctx.cache, ctx.cmd)
+    annotation_style, annotation_size := math_child_font_size(
+        ctx.cache, ctx.font_size, ctx.math_style, .Superscript)
+    over := ctx.cmd.operator_limits == 1
+    annotation := top if over else bottom
+    base := bottom if over else top
+    if !top_ok || !bottom_ok ||
+        !measure_math_program(ctx.cache, ctx.buffer, annotation,
+            annotation_size, annotation_style) ||
+        !measure_math_program(ctx.cache, ctx.buffer, base, ctx.font_size, ctx.math_style) {
+        return {}, false
+    }
+    geometry := math_over_under_geometry({
+        constants = ctx.cache^.math_constants,
+        generation = ctx.cache^.shaped_font_generation,
+        font_size = ctx.font_size,
+        annotation = {annotation^.draw_width, annotation^.ascent, annotation^.descent},
+        base = {base^.draw_width, base^.ascent, base^.descent},
+        over = over,
+    })
+    if !geometry.valid {
+        return {}, false
+    }
+    return app_core.Dynview_Layout_Item{
+        kind = .Stack, style_id = ctx.cmd.style_id,
+        math_program_id = ctx.cmd.math_program_id,
+        secondary_math_program_id = ctx.cmd.secondary_math_program_id,
+        operator_limits = ctx.cmd.operator_limits,
+        fraction_numerator_x = geometry.top_x,
+        fraction_numerator_baseline = geometry.top_baseline,
+        fraction_denominator_x = geometry.bottom_x,
+        fraction_denominator_baseline = geometry.bottom_baseline,
+        draw_width = geometry.width, draw_height = geometry.ascent+geometry.descent,
+        ascent = geometry.ascent, descent = geometry.descent,
+    }, true
+}
+
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.
 stretch_delimiter_content :: proc(
     cache: ^app_core.Dynview_Compile_Cache,
     buffer: ^app_core.Dynview_Command_Buffer,
     cmd: app_core.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
-    font_size: f32) -> (Stretch_Delimiter_Content, bool) {
+    font_size: f32,
+    math_style: Math_Style) -> (Stretch_Delimiter_Content, bool) {
 
     ascent, descent := dyncore.style_ascent_descent(style, font_size)
     content := Stretch_Delimiter_Content{ascent = ascent, descent = descent}
@@ -1268,7 +1336,8 @@ stretch_delimiter_content :: proc(
     }
 
     child_program, ok := math_program_from_command(cache, cmd)
-    if !ok || !measure_math_program(cache, buffer, child_program, font_size) {
+    if !ok || !measure_math_program(
+        cache, buffer, child_program, font_size, math_style) {
         return {}, false
     }
     return Stretch_Delimiter_Content{
@@ -1288,17 +1357,16 @@ stretch_delimiter_widths :: #force_inline proc(
     dimensions: Stretch_Delimiter_Dimensions) -> f32 {
 
     base_advance := dyncore.effective_advance(style, cache^.last_cell_width)
-    clearance := vertical_math_content_clearance(dimensions.font_size, base_advance)
-    left_clearance := clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0
-    right_clearance := clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
+    left_clearance, right_clearance := stretch_delimiter_clearances(
+        cmd, dimensions.font_size)
     left_width := stretch_delimiter_width(
         style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.accent_mode)
     right_width := stretch_delimiter_width(
         style, cache^.last_cell_width, dimensions.font_size,
         dimensions.content_height, cmd.radical_mode)
-    return max(dimensions.content_width + left_width + right_width +
-        left_clearance + right_clearance, base_advance)
+    return dimensions.content_width + left_width + right_width +
+        left_clearance + right_clearance
 }
 
 //   Build one layout-like item for a recursive stretch-delimiter wrapper.
@@ -1306,7 +1374,7 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
     ctx: Math_Program_Item_Context) -> (app_core.Dynview_Layout_Item, bool) {
 
     content, ok := stretch_delimiter_content(
-        ctx.cache, ctx.buffer, ctx.cmd, ctx.style, ctx.font_size)
+        ctx.cache, ctx.buffer, ctx.cmd, ctx.style, ctx.font_size, ctx.math_style)
     if !ok {
         return app_core.Dynview_Layout_Item{}, false
     }
@@ -1321,6 +1389,9 @@ math_program_recursive_stretch_delimiter_item :: #force_inline proc(
         secondary_math_program_id = ctx.cmd.secondary_math_program_id,
         accent_mode = ctx.cmd.accent_mode,
         radical_mode = ctx.cmd.radical_mode,
+        operator_growth = ctx.cmd.operator_growth,
+        operator_limits = ctx.cmd.operator_limits,
+        math_atom_class = ctx.cmd.math_atom_class,
         draw_width = draw_width,
         draw_height = content_height,
         ascent = content.ascent,
@@ -1430,9 +1501,8 @@ stretch_delimiter_apply_item :: proc(
     item^.math_stretch_content_x = selected.widths[0] + geometry.left_clearance
     item^.math_stretch_right_x = item^.math_stretch_content_x +
         geometry.content_width + geometry.right_clearance + selected.origins[1]
-    item^.draw_width = max(geometry.base_advance,
-        selected.widths[0] + geometry.left_clearance + geometry.content_width +
-            geometry.right_clearance + selected.widths[1])
+    item^.draw_width = selected.widths[0] + geometry.left_clearance +
+        geometry.content_width + geometry.right_clearance + selected.widths[1]
     for side in 0..<2 {
         item^.math_stretch_vertical_origins[side] =
             selected.vertical_origins[side]-geometry.axis
@@ -1447,12 +1517,46 @@ stretch_delimiter_apply_item :: proc(
     item^.math_stretch_geometry_valid = true
 }
 
+//   Return the child width after remeasuring shared middle delimiters.
+stretch_delimiter_shared_content_width :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    buffer: ^app_core.Dynview_Command_Buffer,
+    program_id: i32,
+    font_size, target_height: f32) -> f32 {
+
+    content_width := stretch_delimiter_content_width(cache, program_id)
+    child, child_ok := math_program_from_id(cache, program_id)
+    if !child_ok {
+        return content_width
+    }
+    command_end := child^.command_start+child^.command_count
+    for child_index in child^.command_start..<command_end {
+        child_cmd := cache^.math_commands[child_index]
+        if child_cmd.kind != .Stretch_Delimiter || child_cmd.operator_limits != 1 {
+            continue
+        }
+        base_item, base_ok := math_program_item({
+            cache = cache, buffer = buffer, cmd = child_cmd,
+            font_size = font_size, command_index = child_index})
+        shared_item, shared_ok := math_program_item({
+            cache = cache, buffer = buffer, cmd = child_cmd,
+            font_size = font_size, command_index = child_index,
+            delimiter_target_height = target_height})
+        if base_ok && shared_ok {
+            content_width += shared_item.draw_width-base_item.draw_width
+        }
+    }
+    return content_width
+}
+
 //   Select both visible delimiters and replace fallback dimensions transactionally.
 math_program_apply_stretch_delimiters :: proc(
     cache: ^app_core.Dynview_Compile_Cache,
+    buffer: ^app_core.Dynview_Command_Buffer,
     cmd: app_core.Dynview_Command,
     font_size: f32,
     command_index: int,
+    shared_target_height: f32,
     item: ^app_core.Dynview_Layout_Item) {
 
     constants := cache^.math_constants
@@ -1461,29 +1565,31 @@ math_program_apply_stretch_delimiters :: proc(
         return
     }
     scale := font_size/constants.base_pixel_size/64.0
-    target := i32((item^.ascent+item^.descent)/scale + 0.999)
+    target_height := max(item^.ascent+item^.descent,
+        delimiter_requested_height(font_size, cmd.operator_growth))
+    if cmd.operator_limits == 1 {
+        target_height = max(target_height, shared_target_height)
+    }
+    target := i32(target_height/scale + 0.999)
     selected := math_stretch_select_delimiters(
         cache^.math_stretch_sources[command_index], cmd, generation, scale, target)
     if !selected.ok {
         return
     }
-    base_advance := dyncore.effective_advance(
-        dyncore.style_by_id(cmd.style_id), cache^.last_cell_width)
-    clearance := vertical_math_content_clearance(font_size, base_advance)
-    left_clearance := clearance if cmd.accent_mode != DELIMITER_KIND_NONE else 0
-    right_clearance := clearance if cmd.radical_mode != DELIMITER_KIND_NONE else 0
-    content_width := stretch_delimiter_content_width(cache, cmd.math_program_id)
+    left_clearance, right_clearance := stretch_delimiter_clearances(cmd, font_size)
+    content_width := stretch_delimiter_shared_content_width(
+        cache, buffer, cmd.math_program_id, font_size, target_height)
     axis, _ := math_constant_position_px(constants, generation, .Axis_Height, font_size)
     stretch_delimiter_apply_item(item, {
         selected = selected,
         left_clearance = left_clearance,
         right_clearance = right_clearance,
         content_width = content_width,
-        base_advance = base_advance,
         axis = axis,
         generation = generation,
         scale = scale,
     })
+    item^.math_stretch_target_height = target_height
 }
 
 //   Resolve all six MATH constants controlling radical and degree placement.
@@ -1887,6 +1993,7 @@ math_program_apply_glyph_accent :: proc(
         child_descent = child^.descent,
         base_attachment = math_program_base_accent_attachment(child),
         sources = cache^.math_accent_sources[command_index],
+        brace_mode = cmd.accent_mode,
     })
     if !geometry.valid {
         return
@@ -2105,7 +2212,8 @@ math_program_item :: #force_inline proc(
     }
     if ok && ctx.cmd.kind == .Stretch_Delimiter && ctx.command_index >= 0 {
         math_program_apply_stretch_delimiters(
-            ctx.cache, ctx.cmd, ctx.font_size, ctx.command_index, &item)
+            ctx.cache, ctx.buffer, ctx.cmd, ctx.font_size, ctx.command_index,
+            ctx.delimiter_target_height, &item)
     }
     if ok && ctx.cmd.kind == .Radical_Bar && ctx.command_index >= 0 {
         geometry := math_program_radical_construction(

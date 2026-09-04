@@ -90,6 +90,17 @@ function stack_payload_op(run::LatexRun)
         MATH_ATOM_INNER, MATH_GLUE_NONE, top, bottom, MathPayloadOp[])
 end
 
+"""Return one stretch-stack payload for an over- or under-annotation."""
+function over_under_payload_op(run::LatexRun)
+    top = math_payload_ops_for_runs(run.children)
+    bottom = math_payload_ops_for_runs(run.secondary_children)
+    mode = run.segment == :overset ? OPERATOR_LIMITS_SIDE : OPERATOR_LIMITS_STACKED
+    return MathPayloadOp(MATH_OP_STACK_RECURSIVE,
+        "", "", "", "", :none, :none, LARGE_OP_KIND_NONE,
+        OPERATOR_GROWTH_NONE, mode, :math, run.atom_class, MATH_GLUE_NONE,
+        top, bottom, MathPayloadOp[])
+end
+
 """Lift one payload op into a script-attach payload and set one script field."""
 function payload_op_with_script(op::MathPayloadOp, run::LatexRun)
     sup_text = op.sup_text
@@ -102,6 +113,21 @@ function payload_op_with_script(op::MathPayloadOp, run::LatexRun)
     elseif run.segment == :script_sub
         sub_text = script_payload_text(run.text)
         subscript = math_payload_ops_for_runs(run.children)
+    end
+
+    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE &&
+        op.accent_mode == :overbrace && run.segment == :script_sup
+        return MathPayloadOp(MATH_OP_STACK_RECURSIVE,
+            "", "", "", "", :none, :none, LARGE_OP_KIND_NONE,
+            OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_SIDE, :math,
+            op.atom_class, MATH_GLUE_NONE, superscript, [op], MathPayloadOp[])
+    end
+    if op.kind == MATH_OP_ACCENT_BAR_RECURSIVE &&
+        op.accent_mode == :underbrace && run.segment == :script_sub
+        return MathPayloadOp(MATH_OP_STACK_RECURSIVE,
+            "", "", "", "", :none, :none, LARGE_OP_KIND_NONE,
+            OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_STACKED, :math,
+            op.atom_class, MATH_GLUE_NONE, [op], subscript, MathPayloadOp[])
     end
 
     if op.kind == MATH_OP_SCRIPT_ATTACH_RECURSIVE ||
@@ -210,7 +236,11 @@ function accent_payload_op(run::LatexRun)
     accent_modes = Dict(
         :accent_over => :overline, :accent_under => :underline,
         :accent_hat => :hat, :accent_tilde => :tilde, :accent_vec => :vec,
-        :accent_dot => :dot, :accent_ddot => :ddot, :accent_bar => :bar)
+        :accent_dot => :dot, :accent_ddot => :ddot, :accent_bar => :bar,
+        :accent_check => :check, :accent_breve => :breve,
+        :accent_acute => :acute, :accent_grave => :grave,
+        :accent_ring => :ring, :accent_overbrace => :overbrace,
+        :accent_underbrace => :underbrace)
     accent_mode = get(accent_modes, run.segment, :overline)
     return MathPayloadOp(
         MATH_OP_ACCENT_BAR_RECURSIVE,
@@ -241,7 +271,14 @@ function bridge_accent_mode(mode::Symbol)
         :vec => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_VEC,
         :dot => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_DOT,
         :ddot => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_DDOT,
-        :bar => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_BAR)
+        :bar => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_BAR,
+        :check => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_CHECK,
+        :breve => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_BREVE,
+        :acute => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_ACUTE,
+        :grave => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_GRAVE,
+        :ring => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_RING,
+        :overbrace => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_OVERBRACE,
+        :underbrace => OdinJuliaBridge.BRIDGE_DYNVIEW_ACCENT_MODE_UNDERBRACE)
     return get(modes, mode, Int32(0))
 end
 
@@ -291,6 +328,21 @@ function stretch_delimiter_payload_op(run::LatexRun)
         left, right, "", :none, :none, LARGE_OP_KIND_NONE, :math,
         MATH_ATOM_INNER, MATH_GLUE_NONE,
         child_payloads, MathPayloadOp[], MathPayloadOp[])
+end
+
+"""Return one delimiter payload carrying fixed-size or shared-extent policy."""
+function standalone_delimiter_payload_op(run::LatexRun)
+    size = run.segment == :fixed_delimiter ?
+        parse(Int32, String(run.role)[lastindex(String(run.role)):end]) : Int32(0)
+    shared_extent = run.segment == :middle_delimiter ? Int32(1) : Int32(0)
+    left = run.atom_class == MATH_ATOM_CLOSE ? STRETCH_DELIMITER_NONE : run.text
+    right = run.atom_class == MATH_ATOM_CLOSE ? run.text : STRETCH_DELIMITER_NONE
+    return MathPayloadOp(
+        MATH_OP_STRETCH_DELIMITER_RECURSIVE,
+        run.text, left, right, "", :none, :none,
+        LARGE_OP_KIND_NONE, size, shared_extent, :math,
+        run.atom_class, MATH_GLUE_NONE,
+        MathPayloadOp[], MathPayloadOp[], MathPayloadOp[])
 end
 
 """Return one matrix-cell payload op with cell children wrapped into one root payload."""
@@ -374,15 +426,35 @@ function push_script_fallback_payload!(payloads::Vector{MathPayloadOp}, run::Lat
     return nothing
 end
 
+"""Return payload for an accent, annotation, or delimiter segment when recognized."""
+function decoration_payload_op(run::LatexRun)
+    if run.segment in (
+        :accent_over, :accent_under, :accent_hat, :accent_tilde,
+        :accent_vec, :accent_dot, :accent_ddot, :accent_bar,
+        :accent_check, :accent_breve, :accent_acute, :accent_grave, :accent_ring,
+        :accent_overbrace, :accent_underbrace)
+        return accent_payload_op(run)
+    end
+    if run.segment == :overset || run.segment == :underset
+        return over_under_payload_op(run)
+    end
+    if run.segment == :fixed_delimiter || run.segment == :middle_delimiter
+        return standalone_delimiter_payload_op(run)
+    end
+    if run.segment == :stretch_delimiter
+        return stretch_delimiter_payload_op(run)
+    end
+    return nothing
+end
+
 """Return recursive payload op for a non-script structured run, or nothing if none applies."""
 function payload_for_non_script_segment(run::LatexRun)
     if run.segment == :atom || run.segment == :glue
         return atom_payload_op(run)
     end
-    if run.segment in (
-        :accent_over, :accent_under, :accent_hat, :accent_tilde,
-        :accent_vec, :accent_dot, :accent_ddot, :accent_bar)
-        return accent_payload_op(run)
+    decoration = decoration_payload_op(run)
+    if decoration !== nothing
+        return decoration
     end
     if run.segment == :radical_sqrt
         return radical_payload_op(run)
@@ -395,9 +467,6 @@ function payload_for_non_script_segment(run::LatexRun)
     end
     if run.segment == :stack
         return stack_payload_op(run)
-    end
-    if run.segment == :stretch_delimiter
-        return stretch_delimiter_payload_op(run)
     end
     if run.segment == :matrix || run.segment == :array ||
         run.segment in TABLE_SEMANTIC_SEGMENTS
@@ -668,7 +737,7 @@ function math_block_mode_codes(op::MathPayloadOp)
         return MathBlockModeCodes(
             bridge_delimiter_kind(op.radical_index_text),
             bridge_delimiter_kind(op.sup_text),
-            Int32(0), OPERATOR_GROWTH_NONE, OPERATOR_LIMITS_NONE)
+            Int32(0), op.operator_growth, op.operator_limits)
     end
     if op.kind == MATH_OP_STYLE_OVERRIDE_RECURSIVE
         return MathBlockModeCodes(Int32(0), STYLE_OVERRIDE_MODES[op.radical_mode],

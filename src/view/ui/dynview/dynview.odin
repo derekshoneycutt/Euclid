@@ -44,6 +44,7 @@ Program_Draw_Position :: struct {
     baseline_y : f32,
     font_size: f32,
     math_style: dynmath.Math_Style,
+    delimiter_target_height: f32,
 }
 
 
@@ -120,6 +121,7 @@ draw_math_program_at :: proc(
             font_size = child_ctx.font_size,
             command_index = command_index,
             math_style = position.math_style,
+            delimiter_target_height = position.delimiter_target_height,
         })
         if !ok {
             continue

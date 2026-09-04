@@ -18,21 +18,47 @@ math_table_boundaries_resolve_typed_lengths_and_rules :: proc(t: ^testing.T) {
     thickness := math_table_rule_thickness(20)
     separation := math_table_rule_separation(20)
     occupied := thickness * 2 + separation
-    clearance := vertical_math_content_clearance(20, 10)
     outer_width := math_table_column_boundary_width(&descriptor, 0, 20, 10)
     column_width := math_table_column_boundary_width(&descriptor, 1, 20, 10)
     row_height := math_table_row_boundary_height(&descriptor, 1, 20)
+    rule_offset := math_table_row_rule_offset(&descriptor, 1, 20)
+    descriptor.horizontal_rule_counts[1] = 0
+    unruled_row_height := math_table_row_boundary_height(&descriptor, 1, 20)
 
-    testing.expect(t, clearance > 6)
-    testing.expect_value(t, outer_width - occupied, clearance)
-    testing.expect_value(t, column_width - occupied, clearance * 2)
-    testing.expect_value(t, row_height,
-        matrix_row_gap(20) + f32(5) + thickness)
+    testing.expect_value(t, outer_width, occupied)
+    testing.expect_value(t, column_width - occupied, f32(10))
+    testing.expect_value(t, row_height, f32(5) + thickness)
+    testing.expect_value(t, rule_offset, f32(5))
+    testing.expect_value(t, unruled_row_height, matrix_row_gap(20) + f32(5))
     testing.expect_value(t,
         math_table_length_px({3, .Point}, 20, 0), f32(4))
     tight_ascent, tight_descent := math_table_row_strut(.Tight, 20)
     testing.expect_value(t, tight_ascent, f32(12))
     testing.expect_value(t, tight_descent, f32(4))
+}
+
+//   Verify delimiter interiors use optical spacing rather than table-rule clearance.
+@(test)
+stretch_delimiter_clearance_is_tight_and_scale_aware :: proc(t: ^testing.T) {
+    small := stretch_delimiter_content_clearance(20)
+    large := stretch_delimiter_content_clearance(40)
+    testing.expect(t, small < vertical_math_content_clearance(20, 10))
+    testing.expect(t, abs(small-1.2) < 0.001)
+    testing.expect(t, abs(large-small*2) < 0.001)
+}
+
+//   Verify standalone delimiter roles place clearance only on their interior side.
+@(test)
+stretch_delimiter_clearance_follows_atom_role :: proc(t: ^testing.T) {
+    open_left, open_right := stretch_delimiter_clearances({
+        math_atom_class = .Open, accent_mode = DELIMITER_KIND_LEFT_PAREN}, 20)
+    close_left, close_right := stretch_delimiter_clearances({
+        math_atom_class = .Close, radical_mode = DELIMITER_KIND_RIGHT_PAREN}, 20)
+    middle_left, middle_right := stretch_delimiter_clearances({
+        math_atom_class = .Rel, accent_mode = DELIMITER_KIND_VERT}, 20)
+    testing.expect(t, open_left > 0 && open_right == 0)
+    testing.expect(t, close_left == 0 && close_right > 0)
+    testing.expect(t, middle_left == 0 && middle_right == 0)
 }
 
 //   Verify the display-style TeX table resolves thin, medium, and thick atom spacing.

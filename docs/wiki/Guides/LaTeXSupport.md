@@ -191,8 +191,14 @@ Math mode supports these major groups:
 - Radicals: `\sqrt{...}` and `\sqrt[n]{...}`.
 - Accent rules: `\overline{...}` and `\underline{...}`.
 - Glyph accents: `\hat`, `\widehat`, `\tilde`, `\widetilde`, `\vec`, `\dot`,
-  `\ddot`, and `\bar` use MATH attachment points and horizontal constructions.
-- Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
+    `\ddot`, `\bar`, `\check`, `\breve`, `\acute`, `\grave`, and `\mathring` use
+    MATH attachment points and horizontal constructions.
+- Stretch delimiters: `\left ... \right` with mixed delimiter pairs and structural
+    `\middle` markers. Every visible delimiter in a group shares one measured extent.
+- Fixed delimiter families: `\big`, `\Big`, `\bigg`, and `\Bigg`, including their
+    `l`, `r`, and `m` atom-class variants.
+- Over/under structures: `\overset`, `\underset`, `\overbrace`, and `\underbrace`;
+    ordinary scripts may annotate the completed brace construct.
 - Large operators with semantic growth and limit policies: `\sum`, `\prod`,
     `\coprod`, `\int`, `\oint`, `\iint`, `\iiint`, `\lim`, and common n-ary
     operators. `\limits`, `\nolimits`, and `\displaylimits` override placement when
@@ -219,6 +225,7 @@ Successful native layout uses NewCM's OpenType MATH data for:
 - ruleless stack shifts and minimum gaps;
 - operator variants and limit placement;
 - radical and delimiter variants or bounded assemblies;
+- horizontal brace variants or bounded assemblies and stretch-stack annotation gaps;
 - height-dependent corner kern after final script placement;
 - glyph-accent attachment, horizontal variants, and flattened-accent shaping.
 

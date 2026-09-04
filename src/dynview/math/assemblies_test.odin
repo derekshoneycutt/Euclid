@@ -80,6 +80,20 @@ math_stretch_preserves_invisible_delimiter :: proc(t: ^testing.T) {
     testing.expect_value(t, selected.widths[1], f32(0))
 }
 
+//   Verify narrow standalone delimiter ink does not reserve a full text cell.
+@(test)
+stretch_delimiter_item_uses_ink_width_without_trailing_cell_space :: proc(
+    t: ^testing.T) {
+
+    item: app_core.Dynview_Layout_Item
+    selected := Stretch_Delimiter_Selection{ok = true}
+    selected.widths[0] = 3
+    stretch_delimiter_apply_item(&item, {
+        selected = selected, axis = 2, generation = 9, scale = 0.01})
+    testing.expect_value(t, item.draw_width, f32(3))
+    testing.expect_value(t, item.math_stretch_content_x, f32(3))
+}
+
 //   Verify a stale second side rejects without returning a partial construction.
 @(test)
 math_stretch_rejects_partial_delimiter_selection :: proc(t: ^testing.T) {

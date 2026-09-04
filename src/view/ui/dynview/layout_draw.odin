@@ -23,6 +23,7 @@ Matrix_Draw_Geometry :: struct {
     alignments : [16]dynmath.Dynview_Matrix_Column_Alignment,
     column_boundaries : [17]f32,
     row_boundaries : [17]f32,
+    row_rule_offsets : [17]f32,
     vertical_rule_counts : [17]u8,
     horizontal_rule_counts : [17]u8,
     rows : int,
@@ -410,7 +411,7 @@ draw_math_block_item :: proc(
 
     baseline_y := item_y + item.visual_padding_top + item.ascent
     draw_math_program_at(ctx,
-        program, Program_Draw_Position{item_x, baseline_y, 0, {}})
+        program, Program_Draw_Position{item_x, baseline_y, 0, {}, 0})
 }
 
 //   Draw one fully resident horizontal glyph-accent construction.
@@ -464,7 +465,7 @@ draw_recursive_accent_item :: proc(
     draw_math_program_at(ctx,
         child_program^, Program_Draw_Position{
             draw_x+item.accent_child_x,
-            baseline_y + item.accent_child_baseline, 0, {}})
+            baseline_y + item.accent_child_baseline, 0, {}, 0})
 
     accent_style := dyncore.style_by_id(item.accent_style_id)
     if item.accent_mode > 2 {
@@ -601,7 +602,7 @@ radical_layout_for_child :: proc(
         &ctx.runtime^.compile_cache, item.math_font_size,
         math_style, .Radical_Radicand)
     draw_math_program_at(ctx, child_program^, Program_Draw_Position{
-        content_x, baseline_y, radicand_size, radicand_style})
+        content_x, baseline_y, radicand_size, radicand_style, 0})
     return {
         ctx = ctx, item = item, draw_x = draw_x, baseline_y = baseline_y,
         child_program = child_program, front_padding = front_padding,
@@ -650,7 +651,7 @@ draw_radical_degree :: proc(layout: Radical_Layout, sealed: bool) -> bool {
     position := Program_Draw_Position{
         layout.draw_x+item.radical_degree_x,
         layout.baseline_y+item.radical_degree_baseline,
-        degree_size, degree_style}
+        degree_size, degree_style, 0}
     if !sealed {
         right := layout.draw_x + layout.front_padding + layout.lead_width * 0.36
         position.draw_x = right - degree^.draw_width
@@ -848,7 +849,7 @@ draw_script_attach_child :: proc(
     child_style, child_size := dynmath.math_child_font_size(
         &ctx.runtime^.compile_cache, item.math_font_size, math_style, child.role)
     draw_math_program_at(ctx, program^, Program_Draw_Position{
-        child.x, child.baseline, child_size, child_style})
+        child.x, child.baseline, child_size, child_style, 0})
 }
 
 //   Draw one recursive ScriptAttach wrapper by drawing a child program and script text.
@@ -868,12 +869,12 @@ draw_recursive_script_attach_item :: #force_inline proc(
         dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
     draw_math_program_at(ctx,
         child_program^, Program_Draw_Position{
-            draw_x, baseline_y, item.math_font_size, math_style})
+            draw_x, baseline_y, item.math_font_size, math_style, 0})
 
     script := script_attach_style(ctx, item)
     draw_script_attach_scripts(ctx, item, script,
         child_program^.draw_width, Program_Draw_Position{
-            draw_x, baseline_y, item.math_font_size, math_style})
+            draw_x, baseline_y, item.math_font_size, math_style, 0})
 
     draw_script_attach_child(ctx, item, math_style, {
         item.secondary_math_program_id, draw_x + item.script_sup_x,
@@ -961,12 +962,12 @@ draw_recursive_fraction_item :: #force_inline proc(
         numerator_program^,
         Program_Draw_Position{draw_x + item.fraction_numerator_x,
             baseline_y + item.fraction_numerator_baseline,
-            numerator_size, numerator_style})
+            numerator_size, numerator_style, 0})
     draw_math_program_at(ctx,
         denominator_program^,
         Program_Draw_Position{draw_x + item.fraction_denominator_x,
             baseline_y + item.fraction_denominator_baseline,
-            denominator_size, denominator_style})
+            denominator_size, denominator_style, 0})
     draw_fraction_divider(style, item, draw_x, baseline_y)
 }
 
@@ -1422,6 +1423,16 @@ stretch_delimiter_glyph_params :: #force_inline proc(
     }
 }
 
+//   Recover the measured style inherited by recursive delimiter content.
+stretch_delimiter_child_style :: #force_inline proc(
+    item: core.Dynview_Layout_Item) -> dynmath.Math_Style {
+
+    return {
+        dynmath.Math_Style_Level(item.math_style_level),
+        item.math_style_cramped,
+    }
+}
+
 //   Draw optional content between one pair of stretch delimiters.
 draw_stretch_delimiter_content :: proc(
     ctx: Layout_Draw_Context,
@@ -1436,8 +1447,8 @@ draw_stretch_delimiter_content :: proc(
     if !ok {
         return 0
     }
-    draw_math_program_at(ctx, child_program^,
-        Program_Draw_Position{content_x, baseline_y, 0, {}})
+    draw_math_program_at(ctx, child_program^, Program_Draw_Position{
+        content_x, baseline_y, 0, stretch_delimiter_child_style(item), 0})
     return child_program^.draw_width
 }
 
@@ -1457,21 +1468,20 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
                 &ctx.runtime^.compile_cache, item.math_program_id)
             if ok {
                 draw_math_program_at(ctx, child_program^, Program_Draw_Position{
-                    draw_x+item.math_stretch_content_x, baseline_y, 0, {}})
+                    draw_x+item.math_stretch_content_x, baseline_y, 0,
+                    stretch_delimiter_child_style(item),
+                    item.math_stretch_target_height})
             }
         }
         return
     }
-    base_advance :=
-        dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
-    clearance := dynmath.vertical_math_content_clearance(ctx.font_size, base_advance)
     left_clearance, right_clearance: f32
-    if item.accent_mode != dynmath.DELIMITER_KIND_NONE {
-        left_clearance = clearance
-    }
-    if item.radical_mode != dynmath.DELIMITER_KIND_NONE {
-        right_clearance = clearance
-    }
+    left_clearance, right_clearance = dynmath.stretch_delimiter_clearances({
+        math_program_id = item.math_program_id,
+        math_atom_class = item.math_atom_class,
+        accent_mode = item.accent_mode,
+        radical_mode = item.radical_mode,
+    }, ctx.font_size)
 
     left_draw_x := draw_x
     left_width := draw_stretch_delimiter_glyph(
@@ -1536,6 +1546,8 @@ matrix_draw_geometry :: proc(
     for boundary in 0..=descriptor^.rows {
         geometry.row_boundaries[boundary] =
             dynmath.math_table_row_boundary_height(descriptor, boundary, ctx.font_size)
+        geometry.row_rule_offsets[boundary] =
+            dynmath.math_table_row_rule_offset(descriptor, boundary, ctx.font_size)
     }
     return geometry
 }
@@ -1630,7 +1642,7 @@ draw_matrix_row :: proc(
                 col_x, d.cells.col_widths[col], cell_item.draw_width,
                 d.geometry.alignments[col])
             draw_matrix_cell(ctx, d.cell_program, cell_index, cell_item,
-                Program_Draw_Position{cell_x, row_baseline, 0, d.math_style})
+                Program_Draw_Position{cell_x, row_baseline, 0, d.math_style, 0})
         }
         col_x += d.cells.col_widths[col]
         col_x += d.geometry.column_boundaries[col + 1]
@@ -1689,9 +1701,7 @@ draw_matrix_horizontal_boundary_rules :: proc(
     if count == 0 {
         return
     }
-    occupied := f32(count) * d.geometry.rule_thickness +
-        f32(count - 1) * d.geometry.rule_separation
-    rule_y := boundary_y + (d.geometry.row_boundaries[boundary] - occupied) * 0.5
+    rule_y := boundary_y + d.geometry.row_rule_offsets[boundary]
     for _ in 0..<count {
         center_y := rule_y + d.geometry.rule_thickness * 0.5
         rl.DrawLineEx({d.draw_x, center_y}, {d.draw_x + table_width, center_y},
@@ -1827,12 +1837,20 @@ draw_recursive_stack_item :: proc(
     bottom_style, bottom_size := dynmath.math_child_font_size(
         &ctx.runtime^.compile_cache, item.math_font_size,
         style, .Fraction_Denominator)
+    if item.operator_limits == 1 {
+        bottom_style, bottom_size = style, item.math_font_size
+    } else if item.operator_limits == 2 {
+        top_style, top_size = style, item.math_font_size
+        bottom_style, bottom_size = dynmath.math_child_font_size(
+            &ctx.runtime^.compile_cache, item.math_font_size,
+            style, .Superscript)
+    }
     draw_math_program_at(ctx, programs.numerator^, Program_Draw_Position{
         draw_x + item.fraction_numerator_x,
-        baseline_y + item.fraction_numerator_baseline, top_size, top_style})
+        baseline_y + item.fraction_numerator_baseline, top_size, top_style, 0})
     draw_math_program_at(ctx, programs.denominator^, Program_Draw_Position{
         draw_x + item.fraction_denominator_x,
-        baseline_y + item.fraction_denominator_baseline, bottom_size, bottom_style})
+        baseline_y + item.fraction_denominator_baseline, bottom_size, bottom_style, 0})
 }
 
 //   Draw one scoped child program under its explicit math style.
@@ -1853,7 +1871,7 @@ draw_recursive_style_override_item :: proc(
     target_size := dynmath.math_target_font_size(
         &ctx.runtime^.compile_cache, item.math_font_size, parent, target)
     draw_math_program_at(ctx, child^, Program_Draw_Position{
-        draw_x, item_y + item.ascent, target_size, target})
+        draw_x, item_y + item.ascent, target_size, target, 0})
 }
 
 //   Overlay exact cached glyph and limit dimensions used by measurement.
@@ -2035,7 +2053,7 @@ large_op_draw_program_limit :: proc(
     child_style, child_size := dynmath.math_child_font_size(
         &d.ctx.runtime^.compile_cache, d.item.math_font_size, math_style, role)
     draw_math_program_at(d.ctx, program^, Program_Draw_Position{
-        position.x, position.top + program^.ascent, child_size, child_style})
+        position.x, position.top + program^.ascent, child_size, child_style, 0})
     return true
 }
 

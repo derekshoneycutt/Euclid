@@ -288,6 +288,15 @@ dynview_math_op_semantics_valid :: #force_inline proc(
             op.operator_growth == BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
             op.operator_limits == BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE
     }
+    if op.kind == BRIDGE_DYNVIEW_MATH_OP_STRETCH_DELIMITER_RECURSIVE {
+        return op.large_op_kind == 0 && op.operator_growth >= 0 &&
+            op.operator_growth <= 4 && op.operator_limits >= 0 &&
+            op.operator_limits <= 1
+    }
+    if op.kind == BRIDGE_DYNVIEW_MATH_OP_STACK_RECURSIVE {
+        return op.large_op_kind == 0 && op.operator_growth == 0 &&
+            op.operator_limits >= 0 && op.operator_limits <= 2
+    }
     return op.large_op_kind == 0 &&
         op.operator_growth == BRIDGE_DYNVIEW_OPERATOR_GROWTH_NONE &&
         op.operator_limits == BRIDGE_DYNVIEW_OPERATOR_LIMITS_NONE

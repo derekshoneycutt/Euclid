@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(22)
+const PARSER_GRAMMAR_VERSION = Int32(23)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -79,6 +79,24 @@ const LATEX_PRIME_FALLBACK = "Euclid document x in R"
 
 const STRETCH_DELIMITER_NONE = "."
 const STRETCH_DELIMITER_RIGHT = "\\right"
+const STRETCH_DELIMITER_MIDDLE = "\\middle"
+const FIXED_DELIMITER_COMMANDS = Dict(
+    "\\big" => (Int32(1), MATH_ATOM_ORD),
+    "\\bigl" => (Int32(1), MATH_ATOM_OPEN),
+    "\\bigr" => (Int32(1), MATH_ATOM_CLOSE),
+    "\\bigm" => (Int32(1), MATH_ATOM_REL),
+    "\\Big" => (Int32(2), MATH_ATOM_ORD),
+    "\\Bigl" => (Int32(2), MATH_ATOM_OPEN),
+    "\\Bigr" => (Int32(2), MATH_ATOM_CLOSE),
+    "\\Bigm" => (Int32(2), MATH_ATOM_REL),
+    "\\bigg" => (Int32(3), MATH_ATOM_ORD),
+    "\\biggl" => (Int32(3), MATH_ATOM_OPEN),
+    "\\biggr" => (Int32(3), MATH_ATOM_CLOSE),
+    "\\biggm" => (Int32(3), MATH_ATOM_REL),
+    "\\Bigg" => (Int32(4), MATH_ATOM_ORD),
+    "\\Biggl" => (Int32(4), MATH_ATOM_OPEN),
+    "\\Biggr" => (Int32(4), MATH_ATOM_CLOSE),
+    "\\Biggm" => (Int32(4), MATH_ATOM_REL))
 const STRETCH_DELIMITER_TOKEN_MAP = Dict(
     "(" => "(",
     ")" => ")",
@@ -767,10 +785,29 @@ latex_style_override_run(style::Symbol, children::Vector{LatexRun}) =
 latex_stack_run(top::Vector{LatexRun}, bottom::Vector{LatexRun}) =
     LatexRun("", :math, :stack, MATH_ATOM_INNER, MATH_GLUE_NONE, top, bottom)
 
+"""Return one top annotation over an unscaled base program."""
+latex_overset_run(annotation::Vector{LatexRun}, base::Vector{LatexRun}) =
+    LatexRun("", :math, :overset, MATH_ATOM_ORD, MATH_GLUE_NONE, annotation, base)
+
+"""Return one bottom annotation under an unscaled base program."""
+latex_underset_run(annotation::Vector{LatexRun}, base::Vector{LatexRun}) =
+    LatexRun("", :math, :underset, MATH_ATOM_ORD, MATH_GLUE_NONE, base, annotation)
+
 """Return one stretch-delimiter run payload with left/right delimiters and inner runs."""
 latex_stretch_delimiter_run(left::String, right::String, children::Vector{LatexRun}) =
     LatexRun(left, :math, :stretch_delimiter, MATH_ATOM_INNER, MATH_GLUE_NONE,
         children, [latex_atom_run(right, :math)])
+
+"""Return one fixed-size delimiter with explicit atom class and size policy."""
+latex_fixed_delimiter_run(delimiter::String, size::Int32, atom_class::Int32) =
+    LatexRun(delimiter, Symbol("delimiter_size_" * string(size)),
+        :fixed_delimiter, atom_class, MATH_GLUE_NONE,
+        EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
+
+"""Return one middle delimiter whose size is resolved by its enclosing group."""
+latex_middle_delimiter_run(delimiter::String) =
+    LatexRun(delimiter, :delimiter_shared_extent, :middle_delimiter,
+        MATH_ATOM_REL, MATH_GLUE_NONE, EMPTY_CHILD_RUNS, EMPTY_CHILD_RUNS)
 
 """Return compact matrix dimension text for one matrix run."""
 matrix_dims_text(rows::Int, cols::Int) = string(rows) * "," * string(cols)

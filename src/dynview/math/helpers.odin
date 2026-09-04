@@ -85,6 +85,20 @@ vertical_math_content_clearance :: #force_inline proc(
     return max(2.0, max(base_advance * 0.60, font_size * 0.32))
 }
 
+//   Return the small optical gap between a delimiter and enclosed math ink.
+stretch_delimiter_content_clearance :: #force_inline proc(font_size: f32) -> f32 {
+    return max(0.5, font_size * 0.06)
+}
+
+//   Return the minimum visual height requested by one TeX fixed delimiter family.
+delimiter_requested_height :: #force_inline proc(font_size: f32, policy: i32) -> f32 {
+    factors := [5]f32{0, 1.2, 1.8, 2.4, 3.0}
+    if policy <= 0 || policy >= len(factors) {
+        return 0
+    }
+    return font_size*factors[policy]
+}
+
 //   Return horizontal gap used between matrix columns.
 matrix_column_gap :: #force_inline proc(font_size, base_advance: f32) -> f32 {
     return max(1.0, max(base_advance * 0.38, font_size * 0.34))
@@ -160,12 +174,11 @@ math_table_column_boundary_width :: #force_inline proc(
         descriptor^.column_boundary_gaps[boundary], font_size, default_gap)
     count := int(descriptor^.vertical_rule_counts[boundary])
     if count > 0 {
-        adjacent_cells := 2
-        if boundary == 0 || boundary == descriptor^.columns {
-            adjacent_cells = 1
+        gap := descriptor^.column_boundary_gaps[boundary]
+        if gap.unit == .Default &&
+            (boundary == 0 || boundary == descriptor^.columns) {
+            width = vertical_math_content_clearance(font_size, base_advance)
         }
-        clearance := vertical_math_content_clearance(font_size, base_advance)
-        width = max(width, f32(adjacent_cells) * clearance)
         width += f32(count) * math_table_rule_thickness(font_size)
         width += f32(count - 1) * math_table_rule_separation(font_size)
     }
@@ -178,8 +191,9 @@ math_table_row_boundary_height :: #force_inline proc(
     boundary: int,
     font_size: f32) -> f32 {
 
+    count := int(descriptor^.horizontal_rule_counts[boundary])
     default_gap: f32
-    if boundary > 0 && boundary < descriptor^.rows {
+    if boundary > 0 && boundary < descriptor^.rows && count == 0 {
         default_gap = math_table_default_row_gap(descriptor^.row_spacing, font_size)
     }
     height := default_gap
@@ -187,12 +201,24 @@ math_table_row_boundary_height :: #force_inline proc(
         height += math_table_length_px(
             descriptor^.row_extra_gaps[boundary - 1], font_size, 0)
     }
-    count := int(descriptor^.horizontal_rule_counts[boundary])
     if count > 0 {
         height += f32(count) * math_table_rule_thickness(font_size)
         height += f32(count - 1) * math_table_rule_separation(font_size)
     }
     return max(0, height)
+}
+
+//   Return the signed row adjustment preceding rule ink at one boundary.
+math_table_row_rule_offset :: #force_inline proc(
+    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
+    boundary: int,
+    font_size: f32) -> f32 {
+
+    if boundary <= 0 || boundary > descriptor^.rows {
+        return 0
+    }
+    return math_table_length_px(
+        descriptor^.row_extra_gaps[boundary - 1], font_size, 0)
 }
 
 //   Resolve one matrix command's bounded native table descriptor.

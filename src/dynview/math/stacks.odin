@@ -19,6 +19,47 @@ Stack_Geometry :: struct {
     width, ascent, descent: f32,
 }
 
+// Over_Under_Geometry_Input describes an annotation and base at one placement side.
+Over_Under_Geometry_Input :: struct {
+    constants: app_core.Font_Math_Constants,
+    generation: u64,
+    font_size: f32,
+    annotation, base: Fraction_Box_Metrics,
+    over: bool,
+}
+
+//   Place an annotation around a base using OpenType stretch-stack constants.
+math_over_under_geometry :: proc(input: Over_Under_Geometry_Input) -> Stack_Geometry {
+    shift_key := Math_Constant.Stretch_Stack_Bottom_Shift_Down
+    gap_key := Math_Constant.Stretch_Stack_Gap_Below_Min
+    if input.over {
+        shift_key = .Stretch_Stack_Top_Shift_Up
+        gap_key = .Stretch_Stack_Gap_Above_Min
+    }
+    shift, shift_ok := math_constant_position_px(
+        input.constants, input.generation, shift_key, input.font_size)
+    gap, gap_ok := math_constant_position_px(
+        input.constants, input.generation, gap_key, input.font_size)
+    if !shift_ok || !gap_ok || input.font_size <= 0 {
+        return {}
+    }
+    width := max(input.annotation.width, input.base.width)
+    annotation_x := (width-input.annotation.width)*0.5
+    base_x := (width-input.base.width)*0.5
+    if input.over {
+        annotation_shift := max(shift,
+            input.base.ascent+gap+input.annotation.descent)
+        return {true, annotation_x, -annotation_shift, base_x, 0, width,
+            max(input.base.ascent, annotation_shift+input.annotation.ascent),
+            input.base.descent}
+    }
+    annotation_shift := max(shift,
+        input.base.descent+gap+input.annotation.ascent)
+    return {true, base_x, 0, annotation_x, annotation_shift, width,
+        input.base.ascent,
+        max(input.base.descent, annotation_shift+input.annotation.descent)}
+}
+
 //   Resolve font-driven positions for one ruleless two-part stack.
 math_stack_geometry :: proc(input: Stack_Geometry_Input) -> Stack_Geometry {
     top_key := Math_Constant.Stack_Top_Shift_Up

@@ -67,7 +67,10 @@ function plain_text_for_recursive_payload(op::MathPayloadOp)
         commands = Dict(
             :overline => "\\overline", :underline => "\\underline",
             :hat => "\\hat", :tilde => "\\tilde", :vec => "\\vec",
-            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar")
+            :dot => "\\dot", :ddot => "\\ddot", :bar => "\\bar",
+            :check => "\\check", :breve => "\\breve", :acute => "\\acute",
+            :grave => "\\grave", :ring => "\\mathring",
+            :overbrace => "\\overbrace", :underbrace => "\\underbrace")
         command = get(commands, op.accent_mode, "\\overline") * "{"
         return command * plain_text_for_program(op.children) * "}"
     end
