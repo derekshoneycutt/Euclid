@@ -1,4 +1,4 @@
-const PARSER_GRAMMAR_VERSION = Int32(23)
+const PARSER_GRAMMAR_VERSION = Int32(24)
 const DEFAULT_STYLE_PROFILE = Int32(0)
 const SCRIPT_SCALE = Float32(0.62)
 const SCRIPT_SUP_RAISE = Float32(0.44)
@@ -426,36 +426,46 @@ const CLOSE_ATOM_COMMANDS = Set(["\\rceil", "\\rfloor", "\\rvert", "\\rVert", "\
 
 const NONBREAKING_SPACE = "\u00a0"
 
-const MATHBB_UPPERCASE_MAP = Dict(
-    "A" => "𝔸",
-    "B" => "𝔹",
-    "C" => "ℂ",
-    "D" => "𝔻",
-    "E" => "𝔼",
-    "F" => "𝔽",
-    "G" => "𝔾",
-    "H" => "ℍ",
-    "I" => "𝕀",
-    "J" => "𝕁",
-    "K" => "𝕂",
-    "L" => "𝕃",
-    "M" => "𝕄",
-    "N" => "ℕ",
-    "O" => "𝕆",
-    "P" => "ℙ",
-    "Q" => "ℚ",
-    "R" => "ℝ",
-    "S" => "𝕊",
-    "T" => "𝕋",
-    "U" => "𝕌",
-    "V" => "𝕍",
-    "W" => "𝕎",
-    "X" => "𝕏",
-    "Y" => "𝕐",
-    "Z" => "ℤ")
+"""Build one ASCII-to-Unicode mathematical alphabet map from standard ranges."""
+function build_math_alphabet_map(
+    uppercase_start::Integer, lowercase_start::Integer, digit_start::Integer;
+    exceptions::Dict{Char,Char}=Dict{Char,Char}())
 
-const MATHBB_GLYPH_TO_SOURCE_MAP =
-    Dict(value => key for (key, value) in MATHBB_UPPERCASE_MAP)
+    result = Dict{Char,Char}()
+    for (source_start, target_start, count) in (
+        ('A', uppercase_start, 26), ('a', lowercase_start, 26),
+        ('0', digit_start, 10))
+        target_start == 0 && continue
+        for offset in 0:(count - 1)
+            source = Char(Int(source_start) + offset)
+            result[source] = get(exceptions, source, Char(target_start + offset))
+        end
+    end
+    return result
+end
+
+const MATHBB_MAP = build_math_alphabet_map(0x1d538, 0x1d552, 0x1d7d8;
+    exceptions=Dict(
+        'C' => 'ℂ', 'H' => 'ℍ', 'N' => 'ℕ', 'P' => 'ℙ', 'Q' => 'ℚ',
+        'R' => 'ℝ', 'Z' => 'ℤ'))
+const MATHBF_MAP = build_math_alphabet_map(0x1d400, 0x1d41a, 0x1d7ce)
+const MATHIT_MAP = build_math_alphabet_map(0x1d434, 0x1d44e, 0;
+    exceptions=Dict('h' => 'ℎ'))
+const MATHCAL_MAP = build_math_alphabet_map(0x1d49c, 0, 0;
+    exceptions=Dict(
+        'B' => 'ℬ', 'E' => 'ℰ', 'F' => 'ℱ', 'H' => 'ℋ', 'I' => 'ℐ',
+        'L' => 'ℒ', 'M' => 'ℳ', 'R' => 'ℛ'))
+
+const MATH_ALPHABET_COMMANDS = Dict(
+    "\\mathbb" => (:mathbb, MATHBB_MAP),
+    "\\mathbf" => (:mathbf, MATHBF_MAP),
+    "\\mathit" => (:mathit, MATHIT_MAP),
+    "\\mathcal" => (:mathcal, MATHCAL_MAP))
+const MATH_ALPHABET_SOURCE_MAPS = Dict(
+    role => Dict(glyph => source for (source, glyph) in mapping)
+    for (_, (role, mapping)) in MATH_ALPHABET_COMMANDS)
+const MATH_ALPHABET_ROLE_COMMANDS = Dict(
+    role => command for (command, (role, _)) in MATH_ALPHABET_COMMANDS)
 const COMMANDS_IGNORE_TRAILING_SPACE = Set([
     "\\angle",
     "\\measuredangle",

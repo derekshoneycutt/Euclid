@@ -95,10 +95,27 @@ function plain_text_for_payload(op::MathPayloadOp)
     return plain_text_for_recursive_payload(op)
 end
 
-"""Return the canonical source text for one payload atom, preserving mathbb styling when known."""
+"""Decode one mathematical alphabet glyph run to its ASCII source, when complete."""
+function math_alphabet_source_text(text::AbstractString, role::Symbol)
+    mapping = get(MATH_ALPHABET_SOURCE_MAPS, role, nothing)
+    isnothing(mapping) && return nothing
+    output = IOBuffer()
+    for glyph in text
+        source = get(mapping, glyph, nothing)
+        isnothing(source) && return nothing
+        write(output, source)
+    end
+    return String(take!(output))
+end
+
+"""Return canonical source for one payload atom, preserving structured commands."""
 function latex_source_atom_text(op::MathPayloadOp)
-    if op.style_role == :mathbb && haskey(MATHBB_GLYPH_TO_SOURCE_MAP, op.text)
-        return "\\mathbb{" * MATHBB_GLYPH_TO_SOURCE_MAP[op.text] * "}"
+    if op.style_role == :operatorname
+        return "\\operatorname{" * op.text * "}"
+    end
+    source = math_alphabet_source_text(op.text, op.style_role)
+    if !isnothing(source)
+        return MATH_ALPHABET_ROLE_COMMANDS[op.style_role] * "{" * source * "}"
     end
     return op.text
 end

@@ -1356,7 +1356,6 @@ stretch_delimiter_widths :: #force_inline proc(
     style: dyncore.Dynview_Text_Style,
     dimensions: Stretch_Delimiter_Dimensions) -> f32 {
 
-    base_advance := dyncore.effective_advance(style, cache^.last_cell_width)
     left_clearance, right_clearance := stretch_delimiter_clearances(
         cmd, dimensions.font_size)
     left_width := stretch_delimiter_width(

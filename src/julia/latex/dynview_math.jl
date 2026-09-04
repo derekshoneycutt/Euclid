@@ -46,7 +46,7 @@ function math_payload_style_id(kind::Int32, role::Symbol,
     if role == :mathbb
         return Int32(mathbb_style)
     end
-    if role == :math_upright
+    if role in (:math_upright, :operatorname, :mathbf, :mathit, :mathcal)
         return OdinJuliaBridge.dynview_style_with_font_flags(
             OdinJuliaBridge.BRIDGE_DYNVIEW_FONT_FLAG_REGULAR)
     end
@@ -182,6 +182,14 @@ end
 
 """Return one atom payload op from one normalized atom run."""
 function atom_payload_op(run::LatexRun)
+    if run.role == :operatorname_star
+        op = large_operator_payload_op(run.text, LARGE_OP_KIND_LIM)
+        return MathPayloadOp(
+            op.kind, op.text, op.radical_index_text, op.sup_text, op.sub_text,
+            op.accent_mode, op.radical_mode, op.large_op_kind, op.operator_growth,
+            op.operator_limits, run.role, op.atom_class, op.glue_kind, op.children,
+            op.secondary_children, op.tertiary_children)
+    end
     large_op_kind =
         run.role == :largeop_sum ? LARGE_OP_KIND_SUM :
         (run.role == :largeop_prod ? LARGE_OP_KIND_PROD :

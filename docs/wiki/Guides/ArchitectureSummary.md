@@ -222,7 +222,8 @@ normalization and payload compilation:
 | Bridge Encode | `latex/dynview_math.jl` | `bridge_math_payload_preorder!`, `replay_emit_math_block!` | Flat op stream + typed table descriptors + shared text blob |
 
 Key parsing behavior now covered in tests includes nested scripts, accents,
-radicals, fractions, stretch delimiters, and matrix environments.
+radicals, fractions, stretch delimiters, matrix environments, declared operator
+names, and grouped mathematical alphabets.
 
 ### End-To-End Flow
 
@@ -251,6 +252,11 @@ flowchart LR
   - Script attachments serialize base, superscript, and subscript programs as
     distinct preorder branches. Radical degree programs use the secondary
     branch; canonical text fields remain deterministic fallback content.
+  - `\operatorname` remains an upright Op atom; its starred form reuses the
+    no-growth large-operator limit policy without adding bridge fields.
+  - Mathematical alphabets map approved ASCII groups all-or-nothing to audited
+    Unicode scalars. They remain `Math_Glyph_Run` operations shaped and drawn by
+    the active NewCM generation rather than selecting text fallback faces.
   - Matrix, array, and table-preset operations reference block-local typed table
     descriptors. Descriptors carry bounded dimensions, explicit cell style and row
     spacing policies, typed boundary gaps, rules, row additions, and 16 fixed
@@ -267,6 +273,9 @@ flowchart LR
     immutable font-generation snapshot. Worker shaping and derived layout cache
     publication reject stale generations and publish constants transactionally
     with shaped records.
+  - Required NewCM seed storage is fixed at 512 scalars; the current 417-scalar
+    seed includes all advertised alphabet families. Font tests query every
+    advertised alphabet scalar through HarfBuzz before accepting the face.
   - Worker-only HarfBuzz queries publish bounded vertical variants and glyph
     assemblies after shaped-cache sealing. Layout selects and seals exact radical
     and delimiter constructions; display drawing resolves every selected part

@@ -299,13 +299,83 @@ end
     @test canonical_swapped == "{x}^{2}_{1}"
 end
 
-@testset "mathbb uppercase mapping" begin
+@testset "operatorname semantics" begin
+    ordinary = EuclidLatex.compiled_program_for("\\operatorname{rank}_A")
+    @test length(ordinary) == 1
+    @test ordinary[1].kind == EuclidLatex.MATH_OP_SCRIPT_ATTACH_RECURSIVE
+    @test ordinary[1].children[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
+    @test ordinary[1].children[1].atom_class == EuclidLatex.MATH_ATOM_OP
+    @test ordinary[1].children[1].style_role == :operatorname
+    @test EuclidLatex.latex_source_for_program(ordinary) ==
+        "{\\operatorname{rank}}_{A}"
+
+    starred = EuclidLatex.compiled_program_for("\\operatorname*{argmax}_{x}")
+    @test length(starred) == 1
+    @test starred[1].kind == EuclidLatex.MATH_OP_LARGE_OP_RECURSIVE
+    @test starred[1].large_op_kind == EuclidLatex.LARGE_OP_KIND_LIM
+    @test starred[1].operator_growth == EuclidLatex.OPERATOR_GROWTH_NONE
+    @test starred[1].operator_limits == EuclidLatex.OPERATOR_LIMITS_STACKED
+    @test starred[1].style_role == :operatorname_star
+    @test starred[1].sub_text == "x"
+    @test EuclidLatex.latex_source_for_program(starred) ==
+        "\\operatorname*{argmax}_{x}"
+
+    side = first(EuclidLatex.compiled_program_for(
+        "\\operatorname*{argmax}\\nolimits_{x}"))
+    @test side.operator_limits == EuclidLatex.OPERATOR_LIMITS_SIDE
+    payload = EuclidLatex.bridge_math_block_payload(starred;
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test payload.ops[1].large_op_kind ==
+        OdinJuliaBridge.BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM
+    @test payload.ops[1].operator_limits ==
+        EuclidLatex.OPERATOR_LIMITS_STACKED
+
+    malformed = EuclidLatex.latex_to_plain_text("\\operatorname*x")
+    @test malformed == "\\operatorname*x"
+end
+
+@testset "verified math alphabet mapping" begin
     plain = EuclidLatex.latex_to_plain_text(
         "\\mathbb{A}\\mathbb{B}\\mathbb{C}\\mathbb{H}\\mathbb{N}\\mathbb{P}\\mathbb{Q}\\mathbb{R}\\mathbb{Y}\\mathbb{Z}")
     @test plain == "𝔸𝔹ℂℍℕℙℚℝ𝕐ℤ"
 
-    unsupported = EuclidLatex.latex_to_plain_text("\\mathbb{a}")
-    @test unsupported == "\\mathbb"
+    @test EuclidLatex.latex_to_plain_text("\\mathbb{Az09}") == "𝔸𝕫𝟘𝟡"
+    @test EuclidLatex.latex_to_plain_text("\\mathbf{Az09}") == "𝐀𝐳𝟎𝟗"
+    @test EuclidLatex.latex_to_plain_text("\\mathit{Ahz}") == "𝐴ℎ𝑧"
+    @test EuclidLatex.latex_to_plain_text("\\mathcal{ABHRZ}") == "𝒜ℬℋℛ𝒵"
+
+    unsupported = EuclidLatex.latex_to_plain_text("\\mathcal{a}")
+    @test unsupported == "\\mathcal"
+
+    source = "\\mathbb{Az09}\\mathbf{Az09}\\mathit{Ahz}\\mathcal{ABHRZ}"
+    @test EuclidLatex.latex_source_for_program(
+        EuclidLatex.compiled_program_for(source)) == source
+
+    @test length(EuclidLatex.MATHBB_MAP) == 62
+    @test length(EuclidLatex.MATHBF_MAP) == 62
+    @test length(EuclidLatex.MATHIT_MAP) == 52
+    @test length(EuclidLatex.MATHCAL_MAP) == 26
+    for (command, (_, mapping)) in EuclidLatex.MATH_ALPHABET_COMMANDS
+        ascii = String(sort!(collect(keys(mapping))))
+        program = EuclidLatex.compiled_program_for(command * "{" * ascii * "}")
+        @test length(program) == 1
+        @test program[1].kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
+        @test length(program[1].text) == length(mapping)
+        @test EuclidLatex.latex_source_for_program(program) ==
+            command * "{" * ascii * "}"
+    end
+
+    malformed_group = EuclidLatex.latex_to_plain_text("\\mathbf{A+Z}")
+    @test malformed_group == "\\mathbf"
+    missing_group = EuclidLatex.latex_to_plain_text("\\mathit x")
+    @test missing_group == "\\mathitx"
+
+    alphabet_payload = EuclidLatex.bridge_math_block_payload(
+        EuclidLatex.compiled_program_for(source);
+        text_style=Int32(1), math_style=Int32(2), mathbb_style=Int32(3))
+    @test length(alphabet_payload.ops) == 4
+    @test all(op.kind == EuclidLatex.MATH_OP_MATH_GLYPH_RUN
+        for op in alphabet_payload.ops)
 end
 
 @testset "mathbb segmentation and style role" begin

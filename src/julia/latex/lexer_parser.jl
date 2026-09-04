@@ -261,6 +261,11 @@ function parse_command_atom(
         return text_runs
     end
 
+    operator_runs = parse_operatorname_atom(command, tokens, idx)
+    if !isnothing(operator_runs)
+        return operator_runs
+    end
+
     glue_runs = parse_explicit_glue_command(command)
     if !isnothing(glue_runs)
         return glue_runs
@@ -271,9 +276,9 @@ function parse_command_atom(
         return fixed_runs
     end
 
-    mathbb_runs = parse_mathbb_atom(command, tokens, idx)
-    if !isnothing(mathbb_runs)
-        return mathbb_runs
+    alphabet_runs = parse_math_alphabet_atom(command, tokens, idx)
+    if !isnothing(alphabet_runs)
+        return alphabet_runs
     end
 
     structured_runs = parse_structured_math_command(command, tokens, idx)
@@ -326,22 +331,64 @@ function parse_special_text_command(
     return nothing
 end
 
-"""Parse `\\mathbb{...}` commands into Unicode set glyphs when mapped."""
-function parse_mathbb_atom(
+"""Consume one leading asterisk from a text token when present."""
+function consume_optional_asterisk!(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+
+    idx[] > length(tokens) && return false
+    token = tokens[idx[]]
+    if token.kind != :text || isempty(token.text) || first(token.text) != '*'
+        return false
+    end
+
+    next_index = nextind(token.text, firstindex(token.text))
+    if next_index <= lastindex(token.text)
+        tokens[idx[]] = LatexToken(:text, token.text[next_index:end])
+    else
+        idx[] += 1
+    end
+    return true
+end
+
+"""Parse `\\operatorname` and its starred display-limit form as upright Op atoms."""
+function parse_operatorname_atom(
     command::AbstractString,
     tokens::Vector{LatexToken},
     idx::Base.RefValue{Int})
 
-    if command != "\\mathbb"
+    command == "\\operatorname" || return nothing
+    original_index = idx[]
+    original_token = original_index <= length(tokens) ? tokens[original_index] : nothing
+    starred = consume_optional_asterisk!(tokens, idx)
+    if idx[] > length(tokens) || tokens[idx[]].kind != :lbrace
+        idx[] = original_index
+        !isnothing(original_token) && (tokens[original_index] = original_token)
+        return normal_math_atom_runs(command)
+    end
+
+    text = parse_required_group_as_text(tokens, idx)
+    role = starred ? :operatorname_star : :operatorname
+    return [latex_atom_run(text, role, MATH_ATOM_OP)]
+end
+
+"""Parse one grouped mathematical alphabet command using its verified Unicode map."""
+function parse_math_alphabet_atom(
+    command::AbstractString,
+    tokens::Vector{LatexToken},
+    idx::Base.RefValue{Int})
+
+    spec = get(MATH_ALPHABET_COMMANDS, command, nothing)
+    if isnothing(spec)
         return nothing
     end
 
-    unicode, parsed = parse_mathbb_command(tokens, idx)
+    role, mapping = spec
+    unicode, parsed = parse_math_alphabet_command(tokens, idx, mapping)
     if parsed
-        return [latex_atom_run(unicode, :mathbb)]
+        return [latex_atom_run(unicode, role)]
     end
 
-    return normal_math_atom_runs("\\mathbb")
+    return normal_math_atom_runs(command)
 end
 
 const FRACTION_VARIANT_STYLES = Dict(
@@ -1341,6 +1388,10 @@ end
 """Serialize one non-matrix run segment into deterministic plain-text LaTeX form."""
 function latex_run_non_matrix_text(
     run::LatexRun, child_text::AbstractString, secondary_child_text::AbstractString)
+    if run.role == :operatorname || run.role == :operatorname_star
+        star = run.role == :operatorname_star ? "*" : ""
+        return "\\operatorname" * star * "{" * run.text * "}"
+    end
     if run.segment == :accent_over
         return "\\overline{" * child_text * "}"
     end
@@ -1449,18 +1500,22 @@ function parse_required_group_as_text(
         latex_run_serialized_text(run) for run in runs), "")
 end
 
-"""Parse `\\mathbb{...}` content and map A-Z to Unicode double-struck glyphs."""
-function parse_mathbb_command(tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
+"""Map one required group through a complete mathematical alphabet."""
+function parse_math_alphabet_command(
+    tokens::Vector{LatexToken}, idx::Base.RefValue{Int}, mapping::Dict{Char,Char})
+
     if idx[] > length(tokens) || tokens[idx[]].kind != :lbrace
         return "", false
     end
 
     content = parse_required_group_as_text(tokens, idx)
-    if haskey(MATHBB_UPPERCASE_MAP, content)
-        return MATHBB_UPPERCASE_MAP[content], true
+    output = IOBuffer()
+    for source in content
+        glyph = get(mapping, source, nothing)
+        isnothing(glyph) && return "", false
+        write(output, glyph)
     end
-
-    return "", false
+    return String(take!(output)), !isempty(content)
 end
 
 """Convert one LaTeX operator command name to its upright text form."""
@@ -1507,7 +1562,9 @@ function consume_operator_limit_modifier!(
     runs::Vector{LatexRun}, tokens::Vector{LatexToken}, idx::Base.RefValue{Int})
 
     isempty(runs) && return nothing
-    startswith(String(runs[end].role), "largeop_") || return nothing
+    role = runs[end].role
+    (startswith(String(role), "largeop_") || role == :operatorname_star) ||
+        return nothing
     idx[] <= length(tokens) || return nothing
     token = tokens[idx[]]
     segment = get(OPERATOR_LIMIT_MODIFIER_SEGMENTS, token.text, nothing)
@@ -1748,13 +1805,19 @@ function stack_payload_source(op::MathPayloadOp)
     return "{" * top * "\\atop " * bottom * "}"
 end
 
+"""Render one large operator body to canonical command source."""
+function large_operator_payload_source(op::MathPayloadOp)
+    if op.style_role == :operatorname_star
+        return "\\operatorname*{" * op.text * "}"
+    end
+    command = large_operator_command_text(op.text)
+    return isempty(command) ? op.text : command
+end
+
 """Render one recursive non-script payload op to canonical LaTeX-ish source."""
 function latex_source_for_recursive_payload(op::MathPayloadOp)
     if op.kind == MATH_OP_LARGE_OP_RECURSIVE
-        command = large_operator_command_text(op.text)
-        if isempty(command)
-            command = op.text
-        end
+        command = large_operator_payload_source(op)
         return large_operator_with_limits(command, op.sup_text, op.sub_text)
     end
 

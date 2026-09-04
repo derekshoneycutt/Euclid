@@ -159,8 +159,55 @@ view_test_math_required_source_policy :: proc(t: ^testing.T) {
     math_seed := required_seed_codepoints(.Math_Regular)
     text_seed := required_seed_codepoints(.Regular)
     testing.expect(t, math_seed.count > text_seed.count)
-    testing.expect_value(t, math_seed.count, i32(216))
+    testing.expect_value(t, math_seed.count, i32(417))
     testing.expect_value(t, text_seed.count, i32(96))
+}
+
+// Verify every scalar in one advertised mathematical alphabet resolves in NewCM.
+view_expect_math_alphabet_coverage :: proc(
+    t: ^testing.T,
+    shaping: ^Font_Shaping_Resource,
+    ranges: []Font_Codepoint_Range,
+    exceptions: []rune) {
+
+    for interval in ranges {
+        for scalar := interval.first; scalar <= interval.last; scalar += 1 {
+            glyph, found := harfbuzz_nominal_glyph(shaping, scalar)
+            testing.expect(t, found && glyph != 0)
+        }
+    }
+    for scalar in exceptions {
+        glyph, found := harfbuzz_nominal_glyph(shaping, scalar)
+        testing.expect(t, found && glyph != 0)
+    }
+}
+
+// Verify every Stage 7 alphabet scalar is supplied by the authoritative math face.
+@(test)
+view_test_math_alphabet_coverage :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/NewCMSansMath-Regular.otf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+    shaping: Font_Shaping_Resource
+    testing.expect(t, harfbuzz_shaper_init(
+        source, JULIA_MONO_FONT_SIZE, &shaping))
+    defer harfbuzz_shaper_destroy(&shaping)
+
+    ranges := [?]Font_Codepoint_Range{
+        {0x1d400, 0x1d454}, {0x1d456, 0x1d467},
+        {0x1d49c, 0x1d49c}, {0x1d49e, 0x1d49f}, {0x1d4a2, 0x1d4a2},
+        {0x1d4a5, 0x1d4a6}, {0x1d4a9, 0x1d4ac}, {0x1d4ae, 0x1d4b5},
+        {0x1d538, 0x1d539}, {0x1d53b, 0x1d53e}, {0x1d540, 0x1d544},
+        {0x1d546, 0x1d546}, {0x1d54a, 0x1d550}, {0x1d552, 0x1d56b},
+        {0x1d7ce, 0x1d7e1},
+    }
+    exceptions := [?]rune{
+        0x2102, 0x210b, 0x210d, 0x210e, 0x2110, 0x2112, 0x2115,
+        0x2119, 0x211a, 0x211b, 0x211d, 0x2124, 0x212c, 0x2130,
+        0x2131, 0x2133,
+    }
+    view_expect_math_alphabet_coverage(t, &shaping, ranges[:], exceptions[:])
 }
 
 // Verify a face without OpenType MATH data cannot become the math generation.

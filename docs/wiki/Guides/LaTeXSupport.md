@@ -181,7 +181,12 @@ Math mode supports these major groups:
 - Unicode substitution commands for many Greek letters, operators, relations,
   arrows, and set symbols.
 - Upright text operators like `\sin`, `\cos`, `\log`, `\lim`, `\max`.
+- Declared operators: `\operatorname{...}` uses ordinary side scripts, while
+    `\operatorname*{...}` stacks display-style limits by default and accepts
+    `\limits`, `\nolimits`, and `\displaylimits`.
 - `\text{...}` and `\mathrm{...}` for non-italic text inside math.
+- Grouped mathematical alphabets: complete alphanumeric `\mathbb` and `\mathbf`,
+    alphabetic `\mathit`, and uppercase `\mathcal`.
 - Scripts: `^` and `_` including grouped forms.
 - Scoped math styles: `\displaystyle`, `\textstyle`, `\scriptstyle`, and
     `\scriptscriptstyle`; each declaration applies through the end of its current group.
@@ -250,8 +255,9 @@ boundary; fallback text is never reparsed to recover structure on the Odin side.
 
 Character handling is practical and intentionally limited. Fixed commands use
 `MATH_COMMAND_REGISTRY` for output, role, atom class, operator family, growth,
-and limit policy. `MATHBB_UPPERCASE_MAP` handles the currently supported
-double-struck alphabet. This is not general TeX compatibility.
+and limit policy. Grouped mathematical alphabet commands use audited Unicode
+Mathematical Alphanumeric Symbols rendered by the same authoritative NewCM math
+face. This is not general TeX compatibility.
 
 - ASCII letters, digits, and punctuation are the best default for authored
     math source. Examples include `a`, `x_1`, `+`, `(`, and `)`.
@@ -338,12 +344,23 @@ character entry.
 - Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
     `\Vert`, `\backslash`, `\{`, `\}`.
 
-### `\mathbb` Coverage
+### Mathematical Alphabet Coverage
 
-| Input | Support |
+| Command | Accepted grouped input |
 | --- | --- |
-| `\mathbb{A}` to `\mathbb{Z}` (uppercase only) | Supported via `MATHBB_UPPERCASE_MAP` |
-| `\mathbb{a}` or other non-uppercase forms | Not supported (falls back; no lowercase map) |
+| `\mathbb{...}` | ASCII `A-Z`, `a-z`, and `0-9` |
+| `\mathbf{...}` | ASCII `A-Z`, `a-z`, and `0-9` |
+| `\mathit{...}` | ASCII `A-Z` and `a-z` |
+| `\mathcal{...}` | ASCII `A-Z` |
+
+Each group is all-or-nothing. An unsupported scalar rejects alphabet conversion
+rather than mixing a fallback face into the run. Canonical serialization restores
+the original command and ASCII source. NewCM cmap tests cover every advertised
+scalar, including legacy letterlike codepoints used by double-struck, italic, and
+calligraphic alphabets.
+
+The fixed-command registry currently emits 242 distinct Unicode scalars. The Stage 7
+font audit found all 242 in the checked-in `NewCMSansMath-Regular.otf` cmap.
 
 If a Greek letter or symbol command is not in the tables above,
 treat it as unsupported for now.
@@ -461,7 +478,8 @@ structured stream the only source of user-visible meaning.
 - Table support is limited to the documented rectangular matrix, array, wrapper,
     and nested preset environments. Top-level numbering, tags, and references are
     unsupported.
-- `\mathbb` supports uppercase Latin letters only.
+- `\mathfrak`, `\mathsf`, and `\mathtt` are not supported. `\mathit` excludes
+    digits, and `\mathcal` is uppercase-only.
 - Raw Unicode math is best effort; command forms provide more reliable semantic
     styling.
 - Parser recovery prioritizes rendering continuity rather than TeX-grade error
