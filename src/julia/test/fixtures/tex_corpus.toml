@@ -1658,10 +1658,10 @@ production_paths = ["src/julia/{algebra,elements,hilbert,proclus}/**"]
 role = "canonical animation-content publication"
 symbol = "publish_view_content"
 [[production_pipeline]]
-production_paths = ["src/julia/latex/facade.jl", "src/julia/scratchpad/presentation_help.jl"]
+production_paths = ["src/julia/bridge/presentation.jl", "src/julia/latex/facade.jl"]
 role = "canonical MIME serialization"
 symbol = "presented_text"
 [[production_pipeline]]
-production_paths = ["src/julia/latex/facade.jl"]
-role = "native raw-math bridge wrapper"
-symbol = "dynview_math_block"
+production_paths = ["src/julia/bridge/presentation.jl"]
+role = "canonical MIME publication"
+symbol = "present"

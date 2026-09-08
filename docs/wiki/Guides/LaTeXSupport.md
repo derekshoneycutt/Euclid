@@ -152,7 +152,7 @@ block child ranges, and math-program references are rewritten to snapshot-relati
 offsets and validated before publication. No document-store handle or
 animation-generation pointer reaches display state. Complete documents compile only
 the native semantic layout; command-layout construction remains limited to standalone
-math and explicit low-level Dynview streams. The display thread draws, scrolls, and
+math imported from canonical MIME bytes. The display thread draws, scrolls, and
 computes copy interaction geometry from the resulting sealed semantic layout.
 
 ## Document Line Breaking
@@ -642,7 +642,7 @@ compilation.
 flowchart TD
     Facade[src/julia/latex.jl]
     Thin[src/julia/latex/facade.jl]
-    ABI[src/julia/bridge/dynview.jl]
+    ABI[src/julia/bridge/presentation.jl]
     Native[src/dynview/parse]
     Store[src/dynview/core/document_store.odin]
     Snapshot[Pointer-free view snapshot]

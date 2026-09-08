@@ -28,6 +28,9 @@ DYNVIEW_STYLE_INLINE_ATOM :: 20
 DYNVIEW_STYLE_CUSTOM_FONT :: (1 << 24)
 DYNVIEW_STYLE_CUSTOM_FONT_MASK :: 0xFF
 
+DYNVIEW_BLOCK_INPUT :: 1
+DYNVIEW_BLOCK_OUTPUT :: 2
+
 Dynview_Text_Alignment :: app_core.Dynview_Text_Alignment
 Dynview_Text_Style :: app_core.Dynview_Text_Style
 

@@ -256,9 +256,9 @@ dynview_track_prose_fonts_includes_effective_variant :: proc(t: ^testing.T) {
 scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
     prompt_style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_PROMPT)
     input_block := app_dynlayout.block_format_for_kind(
-        app_bridge.BRIDGE_DYNVIEW_BLOCK_INPUT)
+        dyncore.DYNVIEW_BLOCK_INPUT)
     output_block := app_dynlayout.block_format_for_kind(
-        app_bridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT)
+        dyncore.DYNVIEW_BLOCK_OUTPUT)
     merged := app_dynlayout.style_with_block_format(prompt_style, input_block)
 
     testing.expect_value(t, merged.indent_cols, 0)
@@ -272,8 +272,7 @@ scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
 @(test)
 scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
     testing.expect_value(t,
-        app_bridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE,
-        dyncore.DYNVIEW_STYLE_UNDERLINE)
+        dyncore.DYNVIEW_STYLE_UNDERLINE, 17)
 
     style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_UNDERLINE)
     testing.expect(t, style.underline)

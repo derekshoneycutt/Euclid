@@ -24,12 +24,6 @@ mutable struct ScratchpadFrameHook
     consecutive_failures::Int
 end
 
-struct ScratchpadOutputSegment
-    text::String
-    style_id::Int32
-    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
-end
-
 struct ScratchpadInputEntry
     text::String
     mode::Int32
@@ -83,13 +77,6 @@ function create_animation_callback!(
     return callback
 end
 
-mutable struct NativeErrorStyle
-    bold::Bool
-    italic::Bool
-    underline::Bool
-    brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
-end
-
 const ScratchpadName = "Scratchpad"
 const ParseError = Int32(0)
 const ParseIncomplete = Int32(1)
@@ -104,21 +91,9 @@ const SlowHookWarnNs = Int(250_000_000)
 const MaxConsecutiveHookFailures = 3
 const MaxExceptionOutputBytes = 16 * 1024
 const ExceptionOutputTruncated = "\n[Scratchpad exception output truncated]"
-const DynviewStyleInput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_PROMPT
-const DynviewStyleOutput = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_OUTPUT
-const DynviewStyleError = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ERROR
-const DynviewStylePromptBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-const DynviewStyleBold = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_BOLD
-const DynviewStyleItalic = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_ITALIC
-const DynviewStyleUnderline = OdinJuliaBridge.BRIDGE_DYNVIEW_STYLE_UNDERLINE
 const ReplPrompt = "julia> "
 const ReplContinuation = " " ^ length(ReplPrompt)
-const ReplPromptColor = OdinJuliaBridge.bridge_color(:julia_green)
 const HelpPrompt = "help?> "
-const HelpPromptColor = OdinJuliaBridge.BridgeColor(0xd9, 0xb4, 0x4a, 0xff)
-const NativeErrorRed = OdinJuliaBridge.BridgeColor(0xdc, 0x5f, 0x5f, 0xff)
-const NativeErrorGray = OdinJuliaBridge.BridgeColor(0x80, 0x80, 0x80, 0xff)
-const NativeErrorMagenta = OdinJuliaBridge.BridgeColor(0x95, 0x58, 0xb2, 0xff)
 
 const HELPER_DOC_ALIASES = Dict(
     "register_frame_hook" => (:Scratchpad, :register_frame_hook,

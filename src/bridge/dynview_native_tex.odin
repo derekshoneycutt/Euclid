@@ -41,6 +41,19 @@ Dynview_Native_Math_Import :: struct {
     blob_offset: int,
 }
 
+// Mutable counters restored when one native math import is rejected.
+Dynview_Math_Import_Checkpoint :: struct {
+    text_bytes_len: int,
+    command_count: int,
+    math_program_count: int,
+    math_command_count: int,
+    math_table_descriptor_count: int,
+    document_text_count: int,
+    document_count: int,
+    document_block_count: int,
+    document_inline_count: int,
+}
+
 // Group staging-relative ranges needed to publish one semantic document descriptor.
 Dynview_Native_Document_Offsets :: struct {
     source: int,
@@ -124,11 +137,11 @@ dynview_native_document_styles :: #force_inline proc(
     text_style: i32) -> Dynview_Native_Math_Styles {
     return {
         text = text_style,
-        math = BRIDGE_DYNVIEW_STYLE_ITALIC,
-        regular = BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT |
-            BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
-        mathbb = BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT |
-            BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
+        math = dyncore.DYNVIEW_STYLE_ITALIC,
+        regular = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
+            i32(core.Font_Variant_Flags.Regular),
+        mathbb = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
+            i32(core.Font_Variant_Flags.Regular),
     }
 }
 
@@ -447,55 +460,6 @@ dynview_native_span_valid :: #force_inline proc(
     return offset >= 0 && count >= 0 && count <= total && offset <= total-count
 }
 
-//   Intern raw math source and copy its semantics into current snapshot staging.
-dynview_native_math_source :: proc(
-    state: ^core.Euclid_General_State,
-    request: Bridge_Dynview_Math_Request) -> i32 {
-    if !dynview_native_math_request_valid(state, request) {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-    context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK || runtime == nil || !runtime.enabled {
-        return status
-    }
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    root_style := dynparse.Tex_Math_Root_Style(request.root_style)
-    handle, intern_status := dyncore.document_store_intern(
-        &state.dynview_documents, string(request.source), .Math, root_style)
-    if intern_status != .Ok {
-        return dynview_native_store_failure(runtime, intern_status)
-    }
-    document, resolve_status := dyncore.document_store_resolve(
-        &state.dynview_documents, handle)
-    if resolve_status != .Ok {
-        return dynview_native_store_failure(runtime, resolve_status)
-    }
-    return dynview_native_import_math(runtime, &document, Dynview_Native_Math_Styles{
-        text = request.text_style,
-        math = request.math_style,
-        regular = BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT |
-            BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
-        mathbb = request.mathbb_style,
-    })
-}
-
-// Validate all scalar and pointer fields of one native math request.
-dynview_native_math_request_valid :: proc(
-    state: ^core.Euclid_General_State,
-    request: Bridge_Dynview_Math_Request) -> bool {
-
-    return state != nil && request.source != nil && request.text_style >= 0 &&
-        request.math_style >= 0 && request.mathbb_style >= 0 &&
-        request.root_style >= BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY &&
-        request.root_style <= BRIDGE_DYNVIEW_MATH_ROOT_TEXT
-}
-
 //   Translate document-store failures to stable bridge status and stream failure.
 dynview_native_store_failure :: proc(
     runtime: ^core.Dynview_System,
@@ -507,6 +471,40 @@ dynview_native_store_failure :: proc(
         return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
     }
     return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
+}
+
+//   Capture mutable counters touched by one native math import transaction.
+dynview_math_import_checkpoint :: #force_inline proc(
+    runtime: ^core.Dynview_System) -> Dynview_Math_Import_Checkpoint {
+
+    return {
+        runtime^.command_buffer.text_bytes_len,
+        runtime^.command_buffer.command_count,
+        runtime^.compile_cache.math_program_count,
+        runtime^.compile_cache.math_command_count,
+        runtime^.compile_cache.math_table_descriptor_count,
+        runtime^.compile_cache.document_text_count,
+        runtime^.compile_cache.document_count,
+        runtime^.compile_cache.document_block_count,
+        runtime^.compile_cache.document_inline_count,
+    }
+}
+
+//   Restore mutable counters after a rejected math import.
+dynview_math_import_rollback :: #force_inline proc(
+    runtime: ^core.Dynview_System,
+    checkpoint: Dynview_Math_Import_Checkpoint) {
+
+    runtime^.command_buffer.text_bytes_len = checkpoint.text_bytes_len
+    runtime^.command_buffer.command_count = checkpoint.command_count
+    runtime^.compile_cache.math_program_count = checkpoint.math_program_count
+    runtime^.compile_cache.math_command_count = checkpoint.math_command_count
+    runtime^.compile_cache.math_table_descriptor_count =
+        checkpoint.math_table_descriptor_count
+    runtime^.compile_cache.document_text_count = checkpoint.document_text_count
+    runtime^.compile_cache.document_count = checkpoint.document_count
+    runtime^.compile_cache.document_block_count = checkpoint.document_block_count
+    runtime^.compile_cache.document_inline_count = checkpoint.document_inline_count
 }
 
 //   Copy one resolved native math document into mutable snapshot staging atomically.
@@ -795,7 +793,7 @@ dynview_native_style_id :: proc(
         return styles.text
     }
     if op.kind == .Large_Operator {
-        return BRIDGE_DYNVIEW_STYLE_MEDIUM
+        return dyncore.DYNVIEW_STYLE_MEDIUM
     }
     switch op.style_role {
     case .Mathbb:

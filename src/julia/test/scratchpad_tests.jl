@@ -299,19 +299,14 @@ end
     @test occursin("f(::Any, !Matched::Any)", formatted)
 end
 
-@testset "native error SGR parsing" begin
-    segments = Scratchpad.parse_native_error_segments(
-        "\e[35mMain\e[39m \e[90m\e[4mREPL[1]:1\e[24m\e[39m")
+@testset "native error SGR sanitization" begin
+    with_test_session() do session
+        Scratchpad.append_native_error_block!(session,
+            "\e[35mMain\e[39m \e[90m\e[4mREPL[1]:1\e[24m\e[39m")
 
-    @test length(segments) == 3
-    @test segments[1].text == "Main"
-    @test segments[1].brush_color == Scratchpad.NativeErrorMagenta
-    @test segments[2].text == " "
-    @test segments[2].brush_color === nothing
-    @test segments[3].text == "REPL[1]:1"
-    @test segments[3].style_id == Scratchpad.DynviewStyleUnderline
-    @test segments[3].brush_color == Scratchpad.NativeErrorGray
-    @test !occursin('\e', join(segment.text for segment in segments))
+        @test session.output == ["Main REPL[1]:1"]
+        @test !occursin('\e', only(session.output))
+    end
 end
 
 @testset "evaluate newly defined function mismatch" begin

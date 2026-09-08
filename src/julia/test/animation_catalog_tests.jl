@@ -81,6 +81,20 @@ end
     end
 end
 
+@testset "production presentation boundary" begin
+    julia_root = dirname(@__DIR__)
+    forbidden = r"\b(?:dynview_[a-z0-9_]+|BRIDGE_DYNVIEW_[A-Z0-9_]+)\b"
+    violations = String[]
+    for (directory, _, files) in walkdir(julia_root)
+        startswith(directory, joinpath(julia_root, "test")) && continue
+        for file in filter(path -> endswith(path, ".jl"), files)
+            path = joinpath(directory, file)
+            occursin(forbidden, read(path, String)) && push!(violations, path)
+        end
+    end
+    @test isempty(violations)
+end
+
 @testset "animation loading contract" begin
     implementation = ensure_animation_loaded(
         dirname(@__DIR__), test_catalog(), CatalogLeafId)

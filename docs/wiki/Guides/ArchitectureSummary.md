@@ -211,8 +211,8 @@ parsing, normalization, semantic storage, snapshot copying, measurement, and lay
 
 | Stage | Implementation | Core functions | Result |
 | --- | --- | --- | --- |
-| Serialize | `src/julia/bridge/dynview.jl` | `presented_text`, `publish_view_content` | One bounded MIME value with exact UTF-8 bytes |
-| Transfer | `src/bridge/abi-dynview.odin` | `publish_presented_text` | Producer-owned `View_Content_Ready` egress envelope |
+| Serialize | `src/julia/bridge/presentation.jl` | `presented_text`, `present`, `publish_view_content` | One bounded MIME value with exact UTF-8 bytes |
+| Transfer | `src/bridge/abi-presentation.odin` | `publish_presented_text` | Producer-owned `View_Content_Ready` egress envelope |
 | Submit | animation producer | `get_view_content`, `publish_view_content` | One canonical displayable |
 | Classify | `src/bridge/dynview_native_tex.odin`, `src/dynview/parse/document_grammar.odin` | `presentation_source_mode`, `tex_document_whole_math` | Plain, delimited math, or unwrapped document mode |
 | Schedule | `src/view/presentation_runtime.odin` | `service_presentation_runtime` | One active parse and one newest pending presentation |

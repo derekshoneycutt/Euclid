@@ -209,110 +209,13 @@ function append_output_block!(session::ScratchpadSession, text::AbstractString)
     end
 end
 
-"""Resolve the Dynview style represented by native error formatter state."""
-function native_error_style_id(style::NativeErrorStyle)
-    if style.underline
-        return DynviewStyleUnderline
-    elseif style.bold
-        return DynviewStyleBold
-    elseif style.italic
-        return DynviewStyleItalic
-    end
-    return DynviewStyleOutput
-end
-
-"""Apply one supported native SGR font-trait code."""
-function apply_native_error_trait_sgr!(style::NativeErrorStyle, code::Int)
-    if code == 1
-        style.bold = true
-    elseif code == 3
-        style.italic = true
-    elseif code == 4
-        style.underline = true
-    elseif code == 22
-        style.bold = false
-    elseif code == 23
-        style.italic = false
-    elseif code == 24
-        style.underline = false
-    end
-end
-
-"""Apply one supported native SGR foreground-color code."""
-function apply_native_error_color_sgr!(style::NativeErrorStyle, code::Int)
-    if code == 35
-        style.brush_color = NativeErrorMagenta
-    elseif code == 39
-        style.brush_color = nothing
-    elseif code == 90
-        style.brush_color = NativeErrorGray
-    elseif code == 91
-        style.brush_color = NativeErrorRed
-    end
-end
-
-"""Apply one supported Julia error formatter SGR code."""
-function apply_native_error_sgr!(style::NativeErrorStyle, code::Int)
-    if code == 0
-        style.bold = false
-        style.italic = false
-        style.underline = false
-        style.brush_color = nothing
-        return
-    end
-
-    apply_native_error_trait_sgr!(style, code)
-    apply_native_error_color_sgr!(style, code)
-end
-
-"""Append one sanitized native formatter text run using the current SGR state."""
-function append_native_error_run!(
-    segments::Vector{ScratchpadOutputSegment},
-    text::AbstractString,
-    style::NativeErrorStyle)
-
-    sanitized = replace(String(text), r"\e(?:\[[0-9;]*)?" => "")
-    if isempty(sanitized)
-        return
-    end
-    push!(segments, ScratchpadOutputSegment(
-        sanitized, native_error_style_id(style), style.brush_color))
-end
-
-"""Parse Julia's bounded native error SGR stream into styled text runs."""
-function parse_native_error_segments(text::AbstractString)
-    source = String(text)
-    segments = ScratchpadOutputSegment[]
-    style = NativeErrorStyle(false, false, false, nothing)
-    cursor = firstindex(source)
-
-    for sgr_match in eachmatch(r"\e\[([0-9;]*)m", source)
-        if cursor < sgr_match.offset
-            append_native_error_run!(segments,
-                SubString(source, cursor, prevind(source, sgr_match.offset)), style)
-        end
-        codes_text = something(sgr_match.captures[1], "")
-        codes = isempty(codes_text) ?
-            (0,) : something.(tryparse.(Int, split(codes_text, ';')), -1)
-        for code in codes
-            apply_native_error_sgr!(style, code)
-        end
-        cursor = sgr_match.offset + ncodeunits(sgr_match.match)
-    end
-
-    if cursor <= ncodeunits(source)
-        append_native_error_run!(segments, SubString(source, cursor), style)
-    end
-    return segments
-end
-
 """Append ANSI-free output lines from Julia's native styled error stream."""
 function append_native_error_block!(session::ScratchpadSession, text::AbstractString)
     if isempty(text)
         return
     end
 
-    plain_text = join(segment.text for segment in parse_native_error_segments(text))
+    plain_text = replace(String(text), r"\e\[[0-9;]*m" => "")
     for line in split(plain_text, '\n'; keepempty=true)
         append_output_line!(session, line)
     end

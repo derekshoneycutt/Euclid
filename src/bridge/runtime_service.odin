@@ -478,7 +478,7 @@ stage_presentation_snapshot :: proc(
     if dynview_push_command(staging, {
         kind = .Begin_Block,
         block_id = block_id,
-        style_id = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+        style_id = dyncore.DYNVIEW_BLOCK_OUTPUT,
     }) != BRIDGE_STATUS_OK {
         return false
     }
@@ -504,11 +504,11 @@ stage_presentation_content :: proc(
     if request.document != nil && request.mode == .Math {
         return dynview_native_import_math(
             staging, request.document, dynview_native_document_styles(
-                BRIDGE_DYNVIEW_STYLE_OUTPUT))
+                dyncore.DYNVIEW_STYLE_OUTPUT))
     }
     if request.document != nil && request.mode == .Document {
         return dynview_native_replay_document(
-            staging, request.document, BRIDGE_DYNVIEW_STYLE_OUTPUT)
+            staging, request.document, dyncore.DYNVIEW_STYLE_OUTPUT)
     }
     return stage_presentation_text_command(staging, request.source, block_id)
 }
@@ -526,7 +526,7 @@ stage_presentation_text_command :: proc(
     command := core.Dynview_Command{
         kind = .Text_Run,
         block_id = block_id,
-        style_id = BRIDGE_DYNVIEW_STYLE_OUTPUT,
+        style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = offset,
         text_len = count,
     }

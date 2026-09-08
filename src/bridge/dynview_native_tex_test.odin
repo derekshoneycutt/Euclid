@@ -5,6 +5,7 @@ import "core:os"
 import "../core"
 import dyncore "../dynview/core"
 import dyncompile "../dynview/compile"
+import dynparse "../dynview/parse"
 
 //   Stage one document through the native semantic importer for focused tests.
 dynview_native_test_document :: proc(
@@ -12,24 +13,46 @@ dynview_native_test_document :: proc(
     source: string,
     block_id: i32) -> i32 {
 
-    status := dynview_reset_stream(state)
-    if status == BRIDGE_STATUS_OK {
-        status = dynview_begin_block(state, BRIDGE_DYNVIEW_BLOCK_OUTPUT, block_id)
-    }
+    reset_view_snapshot_staging(&state^.dynview)
+    status := dynview_push_command(&state^.dynview, core.Dynview_Command{
+        kind = .Begin_Block,
+        block_id = block_id,
+        style_id = dyncore.DYNVIEW_BLOCK_OUTPUT,
+    })
     if status != BRIDGE_STATUS_OK {
         return status
     }
+    state^.dynview.command_buffer.stream_open_block = true
+    state^.dynview.command_buffer.stream_open_block_id = block_id
     status = dynview_native_import_document(
-        state, &state^.dynview, source, BRIDGE_DYNVIEW_STYLE_OUTPUT)
-    close_status := dynview_end_block(state)
+        state, &state^.dynview, source, dyncore.DYNVIEW_STYLE_OUTPUT)
+    close_status := dynview_push_command(&state^.dynview, core.Dynview_Command{
+        kind = .End_Block,
+        block_id = block_id,
+    })
+    state^.dynview.command_buffer.stream_open_block = false
+    state^.dynview.command_buffer.stream_open_block_id = -1
     return status if close_status == BRIDGE_STATUS_OK else close_status
 }
 
-//   Verify the C ABI classifier preserves native document-mode decisions.
-@(test)
-dynview_tex_source_mode_classifies_scratchpad_document :: proc(t: ^testing.T) {
-    testing.expect_value(t, dynview_tex_source_mode(
-        "\\textbf{Definition}\\newline A point has no part."), i32(1))
+//   Intern and import one math source through the native semantic boundary.
+dynview_native_test_math :: proc(
+    state: ^core.Euclid_General_State,
+    source: string,
+    root_style: dynparse.Tex_Math_Root_Style,
+    styles: Dynview_Native_Math_Styles) -> i32 {
+
+    handle, intern_status := dyncore.document_store_intern(
+        &state^.dynview_documents, source, .Math, root_style)
+    if intern_status != .Ok {
+        return dynview_native_store_status(intern_status)
+    }
+    document, resolve_status := dyncore.document_store_resolve(
+        &state^.dynview_documents, handle)
+    if resolve_status != .Ok {
+        return dynview_native_store_status(resolve_status)
+    }
+    return dynview_native_import_math(&state^.dynview, &document, styles)
 }
 
 //   Verify MIME and complete outer delimiters jointly determine presentation mode.
@@ -69,18 +92,13 @@ dynview_native_math_source_survives_animation_reset :: proc(t: ^testing.T) {
     state.dynview.command_buffer.stream_open_block = true
     state.dynview.command_buffer.stream_open_block_id = 7
 
-    request := Bridge_Dynview_Math_Request{
-        source = "x^2",
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        math_style = BRIDGE_DYNVIEW_STYLE_ITALIC,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT |
-            BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
-        root_style = BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY,
-    }
-    testing.expect_value(t, dynview_math_block(state, request),
+    styles := dynview_native_document_styles(dyncore.DYNVIEW_STYLE_OUTPUT)
+    testing.expect_value(t, dynview_native_test_math(
+        state, "x^2", .Display, styles),
         i32(BRIDGE_STATUS_OK))
     before := dyncore.document_store_diagnostics(&state.dynview_documents)
-    testing.expect_value(t, dynview_math_block(state, request),
+    testing.expect_value(t, dynview_native_test_math(
+        state, "x^2", .Display, styles),
         i32(BRIDGE_STATUS_OK))
     after := dyncore.document_store_diagnostics(&state.dynview_documents)
     testing.expect_value(t, after.entry_count, 1)
@@ -309,18 +327,18 @@ dynview_native_math_request_preserves_styles :: proc(t: ^testing.T) {
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
     state.dynview.command_buffer.stream_open_block_id = 13
-    request := Bridge_Dynview_Math_Request{
-        source = "\\text{word}+x",
-        text_style = BRIDGE_DYNVIEW_STYLE_ERROR,
-        math_style = BRIDGE_DYNVIEW_STYLE_MEDIUM,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_BOLD,
-        root_style = BRIDGE_DYNVIEW_MATH_ROOT_TEXT,
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_ERROR,
+        math = dyncore.DYNVIEW_STYLE_MEDIUM,
+        regular = dyncore.DYNVIEW_STYLE_OUTPUT,
+        mathbb = dyncore.DYNVIEW_STYLE_BOLD,
     }
 
-    testing.expect_value(t, dynview_math_block(state, request),
+    testing.expect_value(t, dynview_native_test_math(
+        state, "\\text{word}+x", .Text, styles),
         i32(BRIDGE_STATUS_OK))
     command := state.dynview.command_buffer.commands[0]
-    testing.expect_value(t, command.style_id, i32(BRIDGE_DYNVIEW_STYLE_MEDIUM))
+    testing.expect_value(t, command.style_id, i32(dyncore.DYNVIEW_STYLE_MEDIUM))
     root := &state.dynview.compile_cache.math_programs[command.math_program_id]
     root_command := state.dynview.compile_cache.math_commands[root.command_start]
     testing.expect_value(t, root_command.kind,
@@ -336,18 +354,19 @@ dynview_native_math_preserves_mathbb_style :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    request := Bridge_Dynview_Math_Request{
-        source = "\\mathbb{R}",
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        math_style = BRIDGE_DYNVIEW_STYLE_MEDIUM,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_BOLD,
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_OUTPUT,
+        math = dyncore.DYNVIEW_STYLE_MEDIUM,
+        regular = dyncore.DYNVIEW_STYLE_OUTPUT,
+        mathbb = dyncore.DYNVIEW_STYLE_BOLD,
     }
-    testing.expect_value(t, dynview_math_block(state, request),
+    testing.expect_value(t, dynview_native_test_math(
+        state, "\\mathbb{R}", .Display, styles),
         i32(BRIDGE_STATUS_OK))
     block := state.dynview.command_buffer.commands[0]
     program := &state.dynview.compile_cache.math_programs[block.math_program_id]
     command := state.dynview.compile_cache.math_commands[program.command_start]
-    testing.expect_value(t, command.style_id, i32(BRIDGE_DYNVIEW_STYLE_BOLD))
+    testing.expect_value(t, command.style_id, i32(dyncore.DYNVIEW_STYLE_BOLD))
 }
 
 //   Verify native large-operator scripts occupy the renderer's sup/sub program slots.
@@ -359,14 +378,15 @@ dynview_native_math_maps_large_operator_script_programs :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    request := Bridge_Dynview_Math_Request{
-        source = "\\sum_i+\\lim_{x\\to0}+\\int_0^1",
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        math_style = BRIDGE_DYNVIEW_STYLE_ITALIC,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_BOLD,
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_OUTPUT,
+        math = dyncore.DYNVIEW_STYLE_ITALIC,
+        regular = dyncore.DYNVIEW_STYLE_OUTPUT,
+        mathbb = dyncore.DYNVIEW_STYLE_BOLD,
     }
-    testing.expect_value(t,
-        dynview_math_block(state, request), i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, dynview_native_test_math(
+        state, "\\sum_i+\\lim_{x\\to0}+\\int_0^1", .Display, styles),
+        i32(BRIDGE_STATUS_OK))
     block := state.dynview.command_buffer.commands[0]
     root := &state.dynview.compile_cache.math_programs[block.math_program_id]
     sum := state.dynview.compile_cache.math_commands[root.command_start]
@@ -399,16 +419,18 @@ dynview_native_math_repeats_reported_formula :: proc(t: ^testing.T) {
             "\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4" +
             "\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}",
     }
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_OUTPUT,
+        math = dyncore.DYNVIEW_STYLE_ITALIC,
+        regular = dyncore.DYNVIEW_STYLE_OUTPUT,
+        mathbb = dyncore.DYNVIEW_STYLE_BOLD,
+    }
     for source in formulas {
-        request := Bridge_Dynview_Math_Request{
-            source = source,
-            text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-            math_style = BRIDGE_DYNVIEW_STYLE_ITALIC,
-            mathbb_style = BRIDGE_DYNVIEW_STYLE_BOLD,
-        }
-        testing.expect_value(t, dynview_math_block(state, request),
+        testing.expect_value(t, dynview_native_test_math(
+            state, string(source), .Display, styles),
             i32(BRIDGE_STATUS_OK))
-        testing.expect_value(t, dynview_math_block(state, request),
+        testing.expect_value(t, dynview_native_test_math(
+            state, string(source), .Display, styles),
             i32(BRIDGE_STATUS_OK))
     }
 }
@@ -422,23 +444,24 @@ dynview_native_math_maps_stretch_delimiter_modes :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    request := Bridge_Dynview_Math_Request{
-        source = "\\left\\langle x\\right\\rangle",
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        math_style = BRIDGE_DYNVIEW_STYLE_MEDIUM,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_BOLD,
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_OUTPUT,
+        math = dyncore.DYNVIEW_STYLE_MEDIUM,
+        regular = dyncore.DYNVIEW_STYLE_OUTPUT,
+        mathbb = dyncore.DYNVIEW_STYLE_BOLD,
     }
-    testing.expect_value(t,
-        dynview_math_block(state, request), i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, dynview_native_test_math(
+        state, "\\left\\langle x\\right\\rangle", .Display, styles),
+        i32(BRIDGE_STATUS_OK))
     block := state.dynview.command_buffer.commands[0]
     program := &state.dynview.compile_cache.math_programs[block.math_program_id]
     command := state.dynview.compile_cache.math_commands[program.command_start]
     testing.expect_value(t, command.kind,
         core.Dynview_Command_Kind.Stretch_Delimiter)
     testing.expect_value(t, command.accent_mode,
-        BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_ANGLE)
+        i32(dynparse.Tex_Delimiter_Kind.Left_Angle))
     testing.expect_value(t, command.radical_mode,
-        BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_ANGLE)
+        i32(dynparse.Tex_Delimiter_Kind.Right_Angle))
 }
 
 //   Verify repeated facade submissions reuse native semantics without store growth.
@@ -473,16 +496,18 @@ dynview_native_matrix_snapshot_is_valid :: proc(t: ^testing.T) {
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
     state.dynview.command_buffer.stream_open_block_id = 15
-    request := Bridge_Dynview_Math_Request{
-        source = "\\sum \\left\\{\\begin{matrix}1&2&3&4\\\\5&6&7&8" +
-            "\\end{matrix}\\right\\}",
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        math_style = BRIDGE_DYNVIEW_STYLE_ITALIC,
-        mathbb_style = BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT |
-            BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
-        root_style = BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY,
+    source := "\\sum \\left\\{\\begin{matrix}1&2&3&4\\\\5&6&7&8" +
+        "\\end{matrix}\\right\\}"
+    styles := Dynview_Native_Math_Styles{
+        text = dyncore.DYNVIEW_STYLE_OUTPUT,
+        math = dyncore.DYNVIEW_STYLE_ITALIC,
+        regular = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
+            i32(core.Font_Variant_Flags.Regular),
+        mathbb = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
+            i32(core.Font_Variant_Flags.Regular),
     }
-    testing.expect_value(t, dynview_math_block(state, request),
+    testing.expect_value(t, dynview_native_test_math(
+        state, source, .Display, styles),
         i32(BRIDGE_STATUS_OK))
     state.dynview.command_buffer.stream_open_block = false
     service := view_snapshot_arena_test_service(t)

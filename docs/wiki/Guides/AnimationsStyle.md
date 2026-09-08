@@ -373,8 +373,8 @@ Authoring rules for embedded shapes:
 - Do not reproduce a full diagram in prose from many inline atoms.
 - Keep the surrounding prose meaningful when an embedded shape is read as source.
 
-The shape command belongs in document mode. For a custom low-level Dynview
-stream, use the corresponding `dynview_inline_*` bridge APIs.
+Shape commands belong in document mode. Julia publishes their source as
+`text/latex`; Odin parses, lays out, and renders the resulting inline semantics.
 
 ### Source, Copy, And Failure Semantics
 
@@ -395,36 +395,10 @@ the structured stream instead of displaying a partial document.
 | Ordinary `String` | Plain `text/plain` content. |
 | `L"..."` | One standalone, delimited `text/latex` expression. |
 | `tex"..."`, `tex"""..."""`, or `TeXDocument` | Unwrapped `text/latex` document source. |
-| Direct Dynview bridge calls | Last resort for composition the high-level APIs cannot express. |
+| `present(state_ptr, value)` | Publish one displayable directly. |
+| `publish_view_content(state_ptr, producer)` | Publish the displayable returned by an animation callback. |
 
 Do not manually parse LaTeX or approximate structured math with spaced text.
-
-### Low-Level Dynview Escape Hatch
-
-Use direct `OdinJuliaBridge` Dynview calls only when the high-level document and
-math APIs cannot express the required composition. Typical low-level content
-calls are:
-
-- `dynview_text_run(state_ptr, text, style_id)`;
-- `dynview_line_break(state_ptr)`;
-- `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`;
-- `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`;
-- `dynview_inline_circle(state_ptr, radius_cols, stroke_px, style_id)`.
-
-A manual stream must strictly follow this lifecycle:
-
-1. `dynview_reset_stream(state_ptr)`.
-1. `dynview_begin_block(state_ptr, block_kind, block_id)`.
-1. Emit complete visible semantic content; canonical presentation bytes remain the
-  copy source.
-1. `dynview_end_block(state_ptr)`.
-
-Every bridge call returns a `BRIDGE_STATUS_*` value. Stop on the first non-OK
-status. Never continue writing a partially failed stream.
-
-Low-level atoms use layout-relative column or pixel units, not world-space
-coordinates. They are text-layout content and must follow the same semantic,
-color and density rules as document-mode shapes.
 
 ## Practical Review Check
 

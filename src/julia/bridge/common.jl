@@ -56,126 +56,11 @@ macro ccall(expression)
     return esc(:(Base.@ccall $rewritten))
 end
 
-"""
-Raw math text and presentation metadata for one native bridge transaction.
-
-Mirrors the Odin `Bridge_Dynview_Math_Request` ABI struct field-for-field.
-"""
-struct BridgeDynviewMathRequest
-    source::Cstring
-    text_style::Int32
-    math_style::Int32
-    mathbb_style::Int32
-    root_style::Int32
-end
-
 struct BridgeColor
     r::UInt8
     g::UInt8
     b::UInt8
     a::UInt8
-end
-
-"""
-Fill plus five edge colors for one inline pentagon atom.
-
-Mirrors the Odin `Bridge_Pentagon_Colors` ABI struct field-for-field.
-"""
-struct BridgePentagonColors
-    fill::BridgeColor
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-    edge4::BridgeColor
-    edge5::BridgeColor
-end
-
-"""
-Fill plus three edge colors for one inline triangle atom.
-
-Mirrors the Odin `Bridge_Triangle_Colors` ABI struct field-for-field.
-"""
-struct BridgeTriangleColors
-    fill::BridgeColor
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-end
-
-"""
-Four independent edge colors for one inline box atom.
-
-Mirrors the Odin `Bridge_Box_Edge_Colors` ABI struct field-for-field.
-"""
-struct BridgeBoxEdgeColors
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-    edge4::BridgeColor
-end
-
-"""
-Fill and arc colors for one inline pie-section atom.
-
-Mirrors the Odin `Bridge_Pie_Colors` ABI struct field-for-field.
-"""
-struct BridgePieColors
-    fill::BridgeColor
-    arc::BridgeColor
-end
-
-"""
-Width, height, and stroke for one rectangular inline atom.
-
-Mirrors the Odin `Bridge_Inline_Box_Dims` ABI struct field-for-field.
-"""
-struct BridgeInlineBoxDims
-    width::Cfloat
-    height::Cfloat
-    stroke::Cfloat
-end
-
-"""
-Width and height for one sized inline atom.
-
-Mirrors the Odin `Bridge_Inline_Size` ABI struct field-for-field.
-"""
-struct BridgeInlineSize
-    width::Cfloat
-    height::Cfloat
-end
-
-"""
-Top-bar length, stem height, and stroke for one inline perpendicular atom.
-
-Mirrors the Odin `Bridge_Inline_Perpendicular_Dims` ABI struct field-for-field.
-"""
-struct BridgeInlinePerpendicularDims
-    length::Cfloat
-    stem_height::Cfloat
-    stroke::Cfloat
-end
-
-"""
-Top and stem colors for one inline perpendicular atom.
-
-Mirrors the Odin `Bridge_Perpendicular_Colors` ABI struct field-for-field.
-"""
-struct BridgePerpendicularColors
-    top::BridgeColor
-    stem::BridgeColor
-end
-
-"""
-Radius and sweep angles for one inline pie-section atom.
-
-Mirrors the Odin `Bridge_Pie_Section_Geometry` ABI struct field-for-field.
-"""
-struct BridgePieSectionGeometry
-    radius::Cfloat
-    start_angle_degrees::Cfloat
-    end_angle_degrees::Cfloat
-    outline_stroke::Cfloat
 end
 
 """
@@ -373,50 +258,6 @@ const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
 
-const BRIDGE_DYNVIEW_BLOCK_INPUT = Int32(1)
-const BRIDGE_DYNVIEW_BLOCK_OUTPUT = Int32(2)
-const BRIDGE_DYNVIEW_STYLE_DEFAULT = Int32(0)
-const BRIDGE_DYNVIEW_STYLE_PROMPT = Int32(1)
-const BRIDGE_DYNVIEW_STYLE_OUTPUT = Int32(2)
-const BRIDGE_DYNVIEW_STYLE_ERROR = Int32(3)
-const BRIDGE_DYNVIEW_STYLE_BOLD = Int32(10)
-const BRIDGE_DYNVIEW_STYLE_ITALIC = Int32(11)
-const BRIDGE_DYNVIEW_STYLE_CENTER = Int32(12)
-const BRIDGE_DYNVIEW_STYLE_MEDIUM = Int32(13)
-const BRIDGE_DYNVIEW_STYLE_SEMIBOLD = Int32(14)
-const BRIDGE_DYNVIEW_STYLE_EXTRABOLD = Int32(15)
-const BRIDGE_DYNVIEW_STYLE_BLACK = Int32(16)
-const BRIDGE_DYNVIEW_STYLE_UNDERLINE = Int32(17)
-const BRIDGE_DYNVIEW_STYLE_INLINE_ATOM = Int32(20)
-const BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT = Int32(1 << 24)
-const BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY = Int32(0)
-const BRIDGE_DYNVIEW_MATH_ROOT_TEXT = Int32(1)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_NONE = Int32(0)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN = Int32(1)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN = Int32(2)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACKET = Int32(3)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACKET = Int32(4)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACE = Int32(5)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACE = Int32(6)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_VERT = Int32(7)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_DOUBLE_VERT = Int32(8)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_CEIL = Int32(9)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_CEIL = Int32(10)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_FLOOR = Int32(11)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_FLOOR = Int32(12)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_ANGLE = Int32(13)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_ANGLE = Int32(14)
-
-const BRIDGE_DYNVIEW_FONT_FLAG_NONE = Int32(0)
-const BRIDGE_DYNVIEW_FONT_FLAG_ITALIC = Int32(1 << 0)
-const BRIDGE_DYNVIEW_FONT_FLAG_LIGHT = Int32(1 << 1)
-const BRIDGE_DYNVIEW_FONT_FLAG_REGULAR = Int32(1 << 2)
-const BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM = Int32(1 << 3)
-const BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD = Int32(1 << 4)
-const BRIDGE_DYNVIEW_FONT_FLAG_BOLD = Int32(1 << 5)
-const BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD = Int32(1 << 6)
-const BRIDGE_DYNVIEW_FONT_FLAG_BLACK = Int32(1 << 7)
-
 const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
 const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
 const CONSTRAINT_SPEC_RESTRICTION = Int32(1 << 2)
@@ -427,15 +268,6 @@ const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
 const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
 
 const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
-
-"""
-Build a dynview style id that carries explicit JuliaMono font variant flags.
-
-Combine one or more `BRIDGE_DYNVIEW_FONT_FLAG_*` bits (including `ITALIC`) and
-pass the resulting style id into `dynview_text_run`/`dynview_math_glyph_run`.
-"""
-dynview_style_with_font_flags(flags::Integer) =
-    Int32(BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT | Int32(flags))
 
 """
 Derive a deterministic animation stable ID string from a semantic key.
