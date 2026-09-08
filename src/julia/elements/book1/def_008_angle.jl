@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const JointPoint = [0.30f0, 0.30f0, 0f0]
 const LineLength = 0.55f0
@@ -91,19 +91,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.line1, state.line2, state.marker, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Plane Angle
-
-A plane angle is the inclination to one another of two lines in a plane which meet one another and do not lie in a straight line.
-
-And when the lines containing the angle are straight, the angle is called rectilinear."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Angle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Angle}
 
 A plane angle \euclidangle[color=khaki3,radius=2,end=60,filled] is the inclination to one another of two lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] in a plane which meet one another and do not lie in a straight line.
 
 And when the lines containing the angle are straight, the angle is called rectilinear."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native geometry handles."""
@@ -160,7 +154,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         CircleIds(marker.host_id, marker.start_id, marker.end_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

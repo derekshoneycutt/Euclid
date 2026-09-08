@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
 const PointB = [0.50f0, 0.54f0, 0f0]
@@ -304,24 +304,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 10 (First theorem of congruence for triangles)
-
-If, for the two triangles ABC and A'B'C', the congruences
-
-    AB ≡ A'B', AC ≡ A'C', ∠A ≡ ∠A'
-
-hold, then the two triangles are congruent to each other.
-
-Proof: From axiom IV, 6, it follows that the two congruences
-
-    ∠B ≡ ∠B' and ∠C ≡ ∠C'
-
-are fulfilled, and it is, therefore, sufficient to show that the two sides BC and B'C' are congruent. We will assume the contrary to be true, namely, that BC and B'C' are not congruent, and show that this leads to a contradiction. We take upon B'C' a point D' such that BC ≡ B'D'. The two triangles ABC and A'B'D' have, then, two sides and the included angle of the one agreeing, respectively, to two sides and the included angle of the other. It follows from axiom IV, 6 that the two angles BAC and B'A'D' are also congruent to each other. Consequently, by aid of axiom IV, 5, the two angles B'A'C' and B'A'D' must be congruent.
-
-This, however, is impossible, since, by axiom IV, 4, an angle can be laid off in one and only one way on a given side of a given half-ray of a plane. From this contradiction the theorem follows."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 10 (First theorem of congruence for triangles)}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 10 (First theorem of congruence for triangles)}
 
 If, for the two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1]
 and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1], the congruences
@@ -350,7 +335,6 @@ are also congruent to each other. Consequently, by aid of \textit{axiom IV, 5}, 
 $\angle B'A'C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and $\angle B'A'D'$ \euclidangle[color=firebrick,radius=2,end=60,filled] must be congruent.
 
 This, however, is impossible, since, by \textit{axiom IV, 4}, an angle can be laid off in one and only one way on a given side of a given half-ray of a plane. From this contradiction the theorem follows."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -502,7 +486,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_d_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

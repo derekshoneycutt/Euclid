@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -83,15 +83,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.center, state.circle, state.diameter, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Semicircle
-
-A semicircle is the figure contained by the diameter and the circumference cut off by it. And the center of the semicircle is the same as that of the circle."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Semicircle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Semicircle}
 
 A semicircle \euclidsemicircle[color=steelblue,radius=2,thickness=2] is the figure contained by the diameter and the circumference cut off by it. And the center \euclidpoint[color=palevioletred1,size=1] of the semicircle is the same as that of the circle."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -147,7 +143,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(diameter.host_id, diameter.joint1_id, diameter.joint2_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

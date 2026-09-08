@@ -29,14 +29,16 @@ BRIDGE_FEATURE_DYNVIEW_STREAM :: (1 << 2)
 BRIDGE_FEATURE_ANIMATION_STABLE_ID :: (1 << 3)
 BRIDGE_FEATURE_TYPED_ANIMATION_STATE :: (1 << 4)
 BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
+BRIDGE_FEATURE_MIME_PRESENTATION :: (1 << 6)
 
-BRIDGE_VERSION :: 5
+BRIDGE_VERSION :: 6
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_DYNVIEW_STREAM |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
     BRIDGE_FEATURE_TYPED_ANIMATION_STATE |
-    BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG
+    BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG |
+    BRIDGE_FEATURE_MIME_PRESENTATION
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -120,15 +122,6 @@ Bridge_Pentagon_Colors :: core.Bridge_Pentagon_Colors
 Bridge_Triangle_Colors :: core.Bridge_Triangle_Colors
 Bridge_Box_Edge_Colors :: core.Bridge_Box_Edge_Colors
 Bridge_Pie_Colors :: core.Bridge_Pie_Colors
-
-// Carry raw document text and presentation metadata across the Julia C ABI.
-Bridge_Dynview_Document_Request :: struct {
-    source: cstring,
-    fallback: cstring,
-    block_kind: i32,
-    block_id: i32,
-    text_style: i32,
-}
 
 // Carry raw math text and presentation metadata across the Julia C ABI.
 Bridge_Dynview_Math_Request :: struct {

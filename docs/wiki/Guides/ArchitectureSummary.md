@@ -74,7 +74,7 @@ If you are new, read in this order:
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
 | **Julia** | Shared Animation Utilities | Reusable animation and geometry helper routines. | `src/julia/animations.jl`, `src/julia/geometry.jl`, `src/julia/nullanimation.jl` |
 | **Julia** | Interactive Runtime | Scratchpad/REPL session lifecycle, queueing, and evaluation flow. | `src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl` |
-| **Julia** | LaTeX Facade | Submits source, fallback text, and presentation metadata to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
+| **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
 | **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
 
 Dynview production callers import the child package that owns each symbol. Root
@@ -88,7 +88,7 @@ One invalidated derived-cache transaction runs in dependency order:
 
 1. Clear partial views, shaped records, and the worker-owned cache arena.
 1. Copy immutable semantic math records into mutable measurement storage.
-1. Compile and seal plain text, copy payloads, and copy blocks.
+1. Compile and seal plain text, canonical copy payloads, and copy blocks.
 1. Shape and seal intrinsic math records.
 1. Rebuild and seal document layout records.
 1. Publish revision metadata, clear invalidation, and mark the cache valid.
@@ -97,7 +97,7 @@ Content-module contract:
 
 - Startup registers the complete metadata catalog without evaluating path-backed programs.
 - Every catalog item has a permanent UUID and a generation-local implementation path.
-- Animation files provide named `get_view_text`, `initialize`, `loop`, `clean`, and a
+- Animation files provide named `get_view_content`, `initialize`, `loop`, `clean`, and a
   direct `animation_entry` that dispatches bridge-stable lifecycle operations.
 - First activation loads and validates the selected UUID, then Odin caches its entry on
   that generation's registry node. Normal ticks call the cached entry directly.
@@ -168,19 +168,16 @@ Odin/Julia ownership, communication, evaluation, rendering, and lifecycle model.
 
 ## Dynview Text Engine (Hybrid-Immediate Rendering)
 
-Dynview snapshots contain two parallel surfaces:
-
-- Plain fallback text (`get_view_text`) for guaranteed readability.
-- Structured command stream for styled text, inline atoms, and recursive math blocks.
+Dynview snapshots contain one canonical MIME presentation materialized as either exact
+plain text or native parsed semantic document content.
 
 Snapshot and display flow:
 
-1. A named Julia producer emits fallback text and dynview commands only inside
-  its owning lifecycle or animation-tick transaction.
-1. Julia explicitly calls `publish_view_update`; Odin never polls
-  `get_view_text` or stores it as a callback.
-1. The worker publishes a complete animation-tagged semantic snapshot.
-1. Odin validates and installs immutable populated views at a frame boundary.
+1. A named Julia producer returns one displayable value.
+1. Julia explicitly publishes its canonical MIME value through `publish_view_content`.
+1. The display owner admits at most one active parse and one newest pending value.
+1. Odin validates and installs an immutable populated snapshot independently of scene
+  batch completion.
 1. Odin emits required `Dynview_Published` evidence after animation identity
   validation and display publication succeed.
 1. A snapshot stamped by a completed Scratchpad evaluation additionally emits
@@ -194,29 +191,36 @@ Snapshot and display flow:
 | Ownership | Odin | Julia |
 | --- | --- | --- |
 | Runtime/UI state | Owns front buffer/cache/layout/draw and copy-hit targets | Reads nothing directly |
-| Text intent | Validates and consumes immutable snapshots | Produces fallback + optional stream in worker staging |
-| Failure semantics | Invalid stream marks cache invalid and falls back | Must treat non-OK bridge status as stop-and-fallback |
+| Text intent | Validates MIME messages and owns parsing, storage, and immutable snapshots | Produces one canonical displayable |
+| Failure semantics | Current invalid TeX is published as its exact literal source | Serialization and transport failures publish nothing partial |
 
 ---
 
 ## Dynamic LaTeX Pipeline (Native Parse And Layout)
 
 Dynamic LaTeX support is now a first-class dynview path, not a special case.
-`src/julia/latex.jl` exposes a stable authoring facade. It forwards source,
-authored fallback, and small presentation metadata through raw-source bridge
-requests. Dynview owns classification, bounded recursive-descent parsing,
-normalization, semantic storage, snapshot copying, measurement, and layout.
+`src/julia/latex.jl` exposes `TeXDocument` and raw `tex"..."` literals.
+`OdinJuliaBridge.presented_text`
+selects one canonical `text/plain` or `text/latex` representation, and
+`publish_view_content` clones its exact bounded bytes into the Julia-owned
+egress pool. Animation producers return these displayables directly through named
+`get_view_content` functions. Dynview owns classification, bounded recursive-descent
+parsing, normalization, semantic storage, snapshot copying, measurement, and layout.
 
 ### Native Ingestion
 
 | Stage | Implementation | Core functions | Result |
 | --- | --- | --- | --- |
-| Submit | `src/julia/latex/facade.jl` | `emit_latex_view_text!`, `replay_emit_math_block!` | Raw source plus presentation metadata |
-| Classify | `src/dynview/parse/document_grammar.odin` | `tex_classify_source_mode`, `tex_document_whole_math` | Document or math mode and root style |
-| Parse/lower | `src/dynview/parse/` | bounded cursor, document grammar, math grammar, semantic builders | Font-independent math programs plus document blocks and inlines |
-| Intern | `src/dynview/core/document_store.odin` | `document_store_intern`, `document_store_resolve` | Immutable generation-scoped semantic document |
-| Stage | `src/bridge/dynview_native_tex.odin` | native document/math import | Pointer-free semantic records in worker staging |
-| Publish | `src/bridge/runtime_service.odin` | snapshot validation and publication | Immutable slot-owned semantic snapshot |
+| Serialize | `src/julia/bridge/dynview.jl` | `presented_text`, `publish_view_content` | One bounded MIME value with exact UTF-8 bytes |
+| Transfer | `src/bridge/abi-dynview.odin` | `publish_presented_text` | Producer-owned `View_Content_Ready` egress envelope |
+| Submit | animation producer | `get_view_content`, `publish_view_content` | One canonical displayable |
+| Classify | `src/bridge/dynview_native_tex.odin`, `src/dynview/parse/document_grammar.odin` | `presentation_source_mode`, `tex_document_whole_math` | Plain, delimited math, or unwrapped document mode |
+| Schedule | `src/view/presentation_runtime.odin` | `service_presentation_runtime` | One active parse and one newest pending presentation |
+| Lookup | `src/dynview/core/document_store.odin` | `document_store_lookup_keyed` | Exact generation-local positive or negative cache hit |
+| Parse/build | `src/dynview/parse/`, `src/dynview/core/document_store.odin` | `dynview_parse_build_keyed` | Shared-taskpool work over operation-owned `Dynview_Parse_Result` |
+| Commit | `src/dynview/core/document_store.odin` | `document_store_commit`, `document_store_resolve` | Immutable generation-scoped semantic document |
+| Stage | `src/bridge/dynview_native_tex.odin` | native document/math import | Pointer-free semantic records in display-owned staging |
+| Publish | `src/bridge/runtime_service.odin` | `publish_presentation_snapshot` | Immutable slot-owned semantic snapshot or exact literal source |
 
 Native compatibility tests cover nested scripts, accents,
 radicals, fractions, stretch delimiters, matrix environments, declared operator
@@ -228,6 +232,16 @@ records. Space records
 retain source byte spans and carry one canonical space byte for native shaping. These
 records otherwise use indices and values only. They are the sole stored document
 representation. A parse or capacity failure publishes no semantic blocks or inlines.
+
+Parsing and store mutation are separate ownership stages. A pure parse build receives
+source, key, generation identity, and caller-owned fixed-capacity result storage; it has
+no document-store, animation-memory, snapshot, or visible-runtime reference. The result
+retains a borrowed exact source view, so its message storage remains alive through join
+and commit. After join, the display owner revalidates generation, exact source bytes, and
+the complete key before allocating and publishing one immutable store entry. The
+transitional `document_store_intern` API still composes these stages for legacy callers.
+Canonical presentation misses use the shared taskpool, while exact positive and negative
+cache hits remain display-owned and complete without task submission.
 
 ### End-To-End Flow
 
@@ -241,29 +255,53 @@ flowchart LR
   F[Worker shaping and layout]
   G[Sealed display cache]
   H[Rendered Dynview content]
-  I[Authored fallback]
+  I[Exact literal source on failure]
 
   A --> B --> C --> D --> E --> F --> G --> H
-  A --> I
-  I --> E
+  C --> I --> E
 ```
 
 ### Runtime Boundaries For LaTeX
 
 - Julia side:
-  - `emit_latex_view_text!` sends complete source plus caller-authored fallback.
-  - `replay_emit_math_block!` sends one source fragment plus text, math,
-    mathematical-alphabet, and root-style metadata.
+  - `TeXDocument` and `tex"..."` preserve unwrapped document source.
+  - `LaTeXString` uses its installed `text/latex` display, including delimiters.
+  - Generic values prefer an explicit `text/latex` display, otherwise strings
+    remain unquoted and other values use bounded `text/plain` display.
+  - Animation and Scratchpad producers return one canonical displayable from
+    `get_view_content` and publish it with `publish_view_content`.
   - Julia does not classify, parse, normalize, cache, or encode TeX semantics.
 - Odin side:
+  - `View_Content_Ready` owns its byte slice in the Julia egress TLSF pool until
+    the display returns the borrowed envelope.
+  - A saturated lane retains only the newest presentation; replacement destroys
+    the older envelope and nested bytes on the Julia owner thread.
+  - The display owns one active parse and one newest pending replacement. A newer
+    presentation clears visible and copy state immediately, requests cooperative
+    cancellation of active work, and retains every borrowed envelope through join.
+  - Normal frame service polls task readiness and joins only ready work. Selection,
+    reset, reload, and shutdown invalidate or cancel work; shutdown joins before the
+    shared taskpool and Julia-owned transport are destroyed.
   - The parser applies explicit source, work, depth, command, node, span, run,
     and table limits before publishing semantics.
   - The document store keys exact source bytes with grammar, semantic profile,
     parse mode, and root style. Repeated source within one animation generation
     resolves the same immutable document.
+  - Cache lookup and commit remain display-owned. Parse-build entry points mutate only
+    their caller-owned `Dynview_Parse_Result`, which embeds bounded semantic output and
+    carries the borrowed exact source, generation, and complete semantic key required
+    for commit validation.
+  - Joined results revalidate runtime generation, animation generation, animation
+    identity, presentation generation, reload state, and reset state before commit.
+    Current rejected TeX and store failures publish the exact canonical source literally.
+  - Animation tick slots own only query and scene-batch results. Scene validation and
+    `Animation_Tick_Committed` never depend on presentation reservation or parse status.
+  - Lifecycle callbacks scope target animation identity and generation only for messages;
+    selection, reset, and reload clear visible presentation and cancel stale parsing when
+    the display observes the committed generation.
   - Bridge staging checkpoints cover text, commands, math records, document bytes,
     blocks, and inlines. Any parse, store, range, or capacity failure restores the
-    complete fragment and preserves the authored fallback.
+    complete fragment and preserves the exact canonical source.
   - Native document import copies exact source and semantic text into dedicated
     staging bytes. It rebases block children, source/text spans, and inline math
     programs before the animation-lifetime document handle leaves the owner path.
@@ -287,8 +325,8 @@ flowchart LR
     through bounded glyph-page demand and uses synthetic geometry only when font
     construction data is rejected or not yet resident.
 
-Practical effect: Julia authors source and fallback policy; native Dynview owns
-the complete semantic and physical realization pipeline.
+Practical effect: Julia selects one displayable and MIME representation; native
+Dynview owns classification, parsing, semantic storage, and physical realization.
 
 ---
 
@@ -315,11 +353,12 @@ sequenceDiagram
     W->>J: run global + selected animation loops
     J->>B: read immutable query snapshot
     J->>B: capture mutations in scene-command batch
-    J->>B: optionally publish view candidate
+    J->>B: optionally enqueue canonical MIME presentation
     W-->>D: complete tick event
-    D->>D: validate and jointly commit batch + view
+    D->>D: validate and commit scene batch
+    D->>D: independently poll or publish presentation
     D->>D: solve constraints before next snapshot
-    D->>D: publish, compile, layout, draw
+    D->>D: compile, layout, draw
   end
 
   alt Asset package changed
@@ -433,8 +472,8 @@ Shape preparation reads settled point state and exclusively writes
 Dynview compile and layout caches. Dynview owns one growing display-cache arena with a
 1 MiB initial reservation. An invalidated Dynview task enters worker-mutable ownership,
 resets the arena, and builds derived views. Failure clears partial derived views and
-retains plain fallback. Task completion returns display-readable ownership, and the
-fence joins before panel drawing or copy access.
+retains exact literal presentation. Task completion returns display-readable ownership,
+and the fence joins before panel drawing or copy access.
 
 Bounded builders publish compiled plain-text and copy-payload slices only after both
 complete streams seal within the existing text limit. These display-readable aliases
@@ -527,7 +566,7 @@ arena-backed authoritative cache. Items retain semantic source and canonical tex
 prose copy targets derive their horizontal positions and UTF-8 ranges from sealed
 HarfBuzz clusters, while math and shape targets retain their source spans. Missing
 prose measurements or any lowering or capacity failure clears every document-layout
-slice. Complete failure returns the view to its authored plain-text fallback.
+slice. Complete failure returns the view to its exact canonical presentation source.
 
 The document cache places composed lines in exact pixels with TeX-inspired
 previous-depth leading. Each next baseline uses the configured baseline skip when the
@@ -542,18 +581,18 @@ including resolved leading glue, rounds outward from the current row boundary; t
 layout cache records the reserved row range and trailing padding separately from the
 exact ink bounds. Semantic drawing and scrolling consume these sealed positions, while
 the grid package owns only generic extent rounding and contains no document semantics.
-Copy icons use the same semantic block bounds and retain the authored fallback payload.
+Copy icons use the same semantic block bounds and exact canonical presentation bytes.
 
 Dynview owns a separate generation-tagged NewCM buffer on its preparation worker.
 Julia marks normal math runs as italic variables or upright symbols using existing
 style IDs. Before NewCM shaping, Odin strictly decodes the original run into bounded
 worker-owned temporary bytes and projects only eligible Latin and lowercase Greek
-variables to mathematical italic Unicode. Original command, fallback, and copy bytes
-are never rewritten by projection.
+variables to mathematical italic Unicode. Original semantic text and canonical
+presentation bytes are never rewritten by projection.
 
-Ordinary UI text, fallback prose, top-level dynview `Text_Run` items, transcripts,
-and scratchpad input are shape-eligible. Scratchpad runs split at the cursor and the
-covered UTF-8 character is drawn unshaped. During invalidated Dynview preparation,
+Ordinary UI text, literal presentation prose, top-level dynview `Text_Run` items,
+transcripts, and scratchpad input are shape-eligible. Scratchpad runs split at the cursor
+and the covered UTF-8 character is drawn unshaped. During invalidated Dynview preparation,
 eligible math-command sites are shaped once and measured from cached NewCM advances,
 extents, italic correction, and top-accent attachment. Recursive scripts, fractions,
 delimiters, radicals, accents, matrices, and large operators inherit those dimensions;
@@ -566,9 +605,9 @@ scaler. Stale generations, invalid spans, and pending glyphs reject the complete
 before the existing whole-run fallback draws; copy bytes and non-math paths are
 unchanged.
 
-Julia owns authored source, fallback content, and presentation metadata. Raw-source
-requests cross as mirrored by-value structs; recursive semantic records do not cross the
-language boundary. Native Dynview derives atom and glue classes, recursive structure,
+Julia owns one authored displayable and serializes one canonical MIME value. One
+producer-owned envelope crosses the language boundary; recursive semantic records do
+not. Native Dynview derives atom and glue classes, recursive structure,
 delimiter and accent kinds, operator policy, and typed table descriptors. It validates
 every source span, enum, descriptor index, and bounded tree relation before snapshot
 publication; invalid input publishes no partial document or math program.
@@ -680,10 +719,10 @@ This policy is strict by design.
 - Reload clears the inactive arena before staging. Rollback clears that same
   arena; publication clears the retired arena. Both arenas are destroyed only
   after the Julia owner thread has stopped during application teardown.
-- Each Julia runtime view-snapshot slot owns one growing arena and bounded builders.
-  Fallback text, semantic command text, commands, math programs, table descriptors,
-  math commands, math nodes, document bytes, document descriptors, blocks, and
-  inlines are sealed arena-backed slices. A slot reset is permitted only after it is
+- Each display-published view-snapshot slot owns one growing arena and bounded builders.
+  Canonical presentation bytes, semantic command text, commands, math programs, table
+  descriptors, math commands, math nodes, document bytes, document descriptors, blocks,
+  and inlines are sealed arena-backed slices. A slot reset is permitted only after it is
   `Free`, so every payload remains valid through `Pending`, `Complete`, and `Published`.
   Display publication installs immutable views of every payload before releasing the
   previous slot. Compilation copies math records only into its private mutable working
@@ -766,10 +805,10 @@ Choose the owning module first, then touch that module's highlighted files.
 ### Typical New Animation Workflow
 
 1. Add Julia animation module/file in `src/julia/...`.
-1. Implement `get_view_text`, `initialize`, `loop`, `clean`.
+1. Implement `get_view_content`, `initialize`, `loop`, `clean`.
 1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
-1. Publish the named `get_view_text` producer from `initialize`, or from `loop`
-  only when semantic view content changes, using `publish_view_update`.
+1. Publish the named `get_view_content` producer from `initialize`, or from `loop`
+  only when semantic view content changes, using `publish_view_content`.
 1. Register `animation_entry` via `add_child_animation_interface` in the relevant
   group init script.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
@@ -788,10 +827,9 @@ make animations "fit in".
 - The bridge is the contract: keep Odin exports and Julia wrappers aligned.
 - Host memory strategy is lifecycle-scoped: startup allocations, temp scratch,
   and dedicated arenas for targeted subsystems.
-- Dynview is now a dual-path text system: fallback plain text plus validated
-  structured streams.
-- LaTeX is parsed and compiled by the Julia `EuclidLatex` module
-  (`src/julia/latex.jl` and `src/julia/latex/`) and laid out/rendered in Odin
-  dynview.
+- Dynview materializes one canonical MIME presentation as exact plain text, validated
+  native semantics, or exact literal source after TeX rejection.
+- Julia selects and serializes displayables; Odin classifies, parses, compiles, lays
+  out, and renders LaTeX through Dynview.
 - Assets are packaged and loaded at runtime, enabling script/content iteration
   without redesigning host architecture.

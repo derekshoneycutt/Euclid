@@ -7,8 +7,8 @@ module EuclidLatex
 
 using ..OdinJuliaBridge
 
-export replay_emit_math_block!,
-    emit_latex_view_text!,
+export TeXDocument,
+    @tex_str,
     prime_latex!
 
 include("latex/facade.jl")

@@ -2,6 +2,7 @@ package bridge
 
 import "base:runtime"
 import "../core"
+import dyncore "../dynview/core"
 import "../julialib"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
@@ -9,7 +10,6 @@ import evidence_trace "../evidence/trace"
 import "core:fmt"
 import "core:log"
 import "core:os"
-import "core:sync/chan"
 import "core:thread"
 import "core:time"
 
@@ -20,6 +20,8 @@ import "core:time"
 
 JULIA_REQUEST_CAPACITY :: core.JULIA_REQUEST_CAPACITY
 JULIA_EVENT_CAPACITY :: core.JULIA_EVENT_CAPACITY
+JULIA_REQUEST_LINK_POOL_CAPACITY :: core.JULIA_REQUEST_LINK_POOL_CAPACITY
+JULIA_EVENT_LINK_POOL_CAPACITY :: core.JULIA_EVENT_LINK_POOL_CAPACITY
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: core.JULIA_EVIDENCE_HANDOFF_CAPACITY
 SCRATCHPAD_ASYNC_SLOT_COUNT :: core.SCRATCHPAD_ASYNC_SLOT_COUNT
 SCRATCHPAD_ASYNC_TEXT_CAPACITY :: core.SCRATCHPAD_ASYNC_TEXT_CAPACITY
@@ -85,6 +87,14 @@ View_Snapshot_Sealed_Records :: struct {
     document_blocks: []core.Dynview_Document_Block,
     document_inlines: []core.Dynview_Document_Inline,
     document_display_rows: []core.Dynview_Document_Display_Row,
+}
+
+// Presentation_Snapshot_Request groups one current canonical materialization request.
+Presentation_Snapshot_Request :: struct {
+    content: core.View_Content_Ready,
+    source: string,
+    mode: Presentation_Source_Mode,
+    document: ^dyncore.Dynview_Document,
 }
 
 Scratchpad_Async_Kind :: core.Scratchpad_Async_Kind
@@ -158,18 +168,12 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         service^.animation_ticks_dropped += 1
         return false
     }
-    view_snapshot_index := reserve_view_candidate(service)
-    if view_snapshot_index < 0 {
-        service^.animation_ticks_dropped += 1
-        return false
-    }
 
     total_dt := min(dt + service^.animation_accumulated_dt, MAX_ACCUMULATED_ANIMATION_DT)
     service^.animation_accumulated_dt = 0
     service^.animation_tick_sequence += 1
     fill_animation_tick_slot(
-        service, &service^.animation_tick_slots[slot_index], state, total_dt,
-        view_snapshot_index)
+        service, &service^.animation_tick_slots[slot_index], state, total_dt)
     slot := &service^.animation_tick_slots[slot_index]
     return submit_animation_tick_slot(service, slot, slot_index, total_dt)
 }
@@ -177,8 +181,7 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
 //   Populate one animation tick slot and snapshot its query state for the request.
 fill_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
-    state: ^core.Euclid_General_State, total_dt: f32,
-    view_snapshot_index: int) {
+    state: ^core.Euclid_General_State, total_dt: f32) {
 
     slot^ = Animation_Tick_Slot{
         state = .Pending,
@@ -189,7 +192,6 @@ fill_animation_tick_slot :: proc(
         animation = state^.julia_interface^.current_animation,
         dt = total_dt,
         submitted_at = time.tick_now(),
-        view_snapshot_index = view_snapshot_index,
     }
     capture_animation_query_snapshot(state, &slot^.query_snapshot)
 }
@@ -198,7 +200,6 @@ fill_animation_tick_slot :: proc(
 rollback_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot, total_dt: f32) {
 
-    release_reserved_view_candidate(service, slot^.view_snapshot_index)
     slot^.state = .Free
     service^.animation_accumulated_dt = total_dt
     service^.animation_ticks_dropped += 1
@@ -229,18 +230,12 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     reject_reason := ""
     if !matches_current {
         reject_reason = animation_tick_reject_reason(state, service, slot)
-    } else if !animation_tick_view_candidate_is_valid(state, service, slot) {
-        reject_reason = "invalid_view_candidate"
     } else if !commit_scene_command_batch(state, &slot^.scene_batch) {
         reject_reason = "invalid_command_batch"
     } else {
-        commit_animation_tick_view_candidate(service, slot)
         committed = true
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
-    if !committed {
-        release_animation_tick_view_candidate(service, slot)
-    }
     release_completed_animation_ticks(service)
     return committed
 }
@@ -396,15 +391,18 @@ publish_view_snapshot_slot :: proc(
 }
 
 //   Publish the newest valid complete snapshot and recycle superseded storage.
-publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bool {
+publish_available_view_snapshot :: proc(
+    state: ^core.Euclid_General_State, drain_events: bool = true) -> bool {
     if state == nil || state^.julia_runtime_service == nil {
         return false
     }
     service := state^.julia_runtime_service
-    for {
-        _, ok := try_receive_julia_event(service)
-        if !ok {
-            break
+    if drain_events {
+        for {
+            _, ok := try_receive_julia_event(service)
+            if !ok {
+                break
+            }
         }
     }
     slot_index := newest_completed_view_snapshot_index(service)
@@ -429,6 +427,110 @@ publish_available_view_snapshot :: proc(state: ^core.Euclid_General_State) -> bo
     }
     publish_view_snapshot_slot(state, service, slot_index)
     return true
+}
+
+//   Materialize one canonical presentation through the existing snapshot publisher.
+// The caller owns staging and guarantees that any semantic document remains borrowed
+// until this procedure returns.
+publish_presentation_snapshot :: proc(
+    state: ^core.Euclid_General_State,
+    staging: ^core.Dynview_System,
+    request: Presentation_Snapshot_Request) -> bool {
+    if state == nil || staging == nil || state^.julia_runtime_service == nil {
+        return false
+    }
+    service := state^.julia_runtime_service
+    slot_index := reserve_view_candidate(service)
+    if slot_index < 0 {
+        return false
+    }
+    slot := &service^.view_snapshots[slot_index]
+    service^.view_snapshot_generation += 1
+    slot^.state = .Pending
+    slot^.request_id = request.content.request_id
+    slot^.generation = service^.view_snapshot_generation
+    slot^.runtime_generation = request.content.runtime_generation
+    slot^.animation_generation = request.content.animation_generation
+    slot^.scratchpad_request_id = request.content.scratchpad_request_id
+    slot^.scratchpad_runtime_generation = request.content.runtime_generation
+    slot^.host_state = state
+    slot^.animation = request.content.animation
+    slot^.presentation_mime = request.content.content.mime
+    reset_view_snapshot_staging(staging)
+    staging^.enabled = true
+    if !stage_presentation_snapshot(staging, request) ||
+        !build_generated_view_snapshot_payloads(slot, staging, request.source) ||
+        !view_snapshot_is_valid(slot) {
+        slot^.state = .Free
+        return false
+    }
+    slot^.candidate_committed = true
+    slot^.state = .Complete
+    publish_view_snapshot_slot(state, service, slot_index)
+    return true
+}
+
+//   Stage one output block whose canonical source is owned separately by the snapshot.
+stage_presentation_snapshot :: proc(
+    staging: ^core.Dynview_System,
+    request: Presentation_Snapshot_Request) -> bool {
+    block_id := i32(0)
+    if dynview_push_command(staging, {
+        kind = .Begin_Block,
+        block_id = block_id,
+        style_id = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
+    }) != BRIDGE_STATUS_OK {
+        return false
+    }
+    staging^.command_buffer.stream_open_block = true
+    staging^.command_buffer.stream_open_block_id = block_id
+    status := stage_presentation_content(staging, request, block_id)
+    if status != BRIDGE_STATUS_OK || dynview_push_command(staging, {
+        kind = .End_Block,
+        block_id = block_id,
+    }) != BRIDGE_STATUS_OK {
+        return false
+    }
+    staging^.command_buffer.stream_open_block = false
+    staging^.command_buffer.stream_open_block_id = -1
+    return true
+}
+
+//   Stage semantic content when available, otherwise preserve exact literal bytes.
+stage_presentation_content :: proc(
+    staging: ^core.Dynview_System,
+    request: Presentation_Snapshot_Request,
+    block_id: i32) -> i32 {
+    if request.document != nil && request.mode == .Math {
+        return dynview_native_import_math(
+            staging, request.document, dynview_native_document_styles(
+                BRIDGE_DYNVIEW_STYLE_OUTPUT))
+    }
+    if request.document != nil && request.mode == .Document {
+        return dynview_native_replay_document(
+            staging, request.document, BRIDGE_DYNVIEW_STYLE_OUTPUT)
+    }
+    return stage_presentation_text_command(staging, request.source, block_id)
+}
+
+//   Append exact bytes and one text-bearing command without a C-string conversion.
+stage_presentation_text_command :: proc(
+    staging: ^core.Dynview_System,
+    source: string,
+    block_id: i32) -> i32 {
+    offset, count: int
+    status := dynview_append_text_payload(staging, source, &offset, &count)
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    command := core.Dynview_Command{
+        kind = .Text_Run,
+        block_id = block_id,
+        style_id = BRIDGE_DYNVIEW_STYLE_OUTPUT,
+        text_offset = offset,
+        text_len = count,
+    }
+    return dynview_push_command(staging, command)
 }
 
 //   Record an accepted Scratchpad request only after its semantic view is visible.
@@ -491,7 +593,7 @@ clear_scratchpad_completion_watermark :: proc(service: ^Julia_Runtime_Service) {
 }
 
 //   Keep previous semantic commands from appearing under a new selection.
-// The old slot and display staging are released together so fallback and semantic content
+// The old slot and display staging are released together so presentation and semantic content
 // cannot refer to different animations.
 clear_stale_published_view :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service) {
@@ -540,7 +642,7 @@ view_snapshot_matches_current :: proc(
 // Sealed aliases are checked before any copy into display-owned storage.
 view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
     if slot == nil || !view_snapshot_text_payload_is_valid(
-        &slot^.fallback_text_builder, slot^.fallback_text,
+        &slot^.presentation_builder, slot^.presentation_bytes,
         VIEW_SNAPSHOT_TEXT_CAPACITY) || !view_snapshot_text_payload_is_valid(
         &slot^.command_text_builder, slot^.command_text,
         core.DYNVIEW_MAX_TEXT_BYTES) || !view_snapshot_text_payload_is_valid(
@@ -649,9 +751,8 @@ view_snapshot_text_payload_is_valid :: proc(
 view_snapshot_command_text_spans_valid :: proc(
     command: core.Dynview_Command, text_count: int) -> bool {
 
-    spans := [6][2]int{
+    spans := [5][2]int{
         {command.text_offset, command.text_len},
-        {command.copy_text_offset, command.copy_text_len},
         {command.script_base_text_offset, command.script_base_text_len},
         {command.script_sup_text_offset, command.script_sup_text_len},
         {command.script_sub_text_offset, command.script_sub_text_len},
@@ -886,7 +987,7 @@ view_snapshot_subspan_is_valid :: proc(
     return child_count <= owner_count && relative_start <= owner_count-child_count
 }
 
-//   Return fallback text only when it belongs to the active animation.
+//   Return canonical presentation text only when it belongs to the active animation.
 // The returned string aliases service-owned published slot storage until replacement.
 current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string {
     if state == nil || state^.julia_runtime_service == nil ||
@@ -902,12 +1003,12 @@ current_view_snapshot_text :: proc(state: ^core.Euclid_General_State) -> string 
     if !view_snapshot_matches_current(state, service, slot) {
         return ""
     }
-    return string(slot^.fallback_text)
+    return string(slot^.presentation_bytes)
 }
 
 //   Return a free snapshot slot that is neither pending nor displayed.
 // Published slots are intentionally unavailable even after their semantic data is copied,
-// because fallback text still aliases the slot.
+// because presentation bytes still alias the slot.
 reserve_view_snapshot :: proc(service: ^Julia_Runtime_Service) -> int {
     for &slot, slot_index in service^.view_snapshots {
         if slot.state == .Free {
@@ -931,81 +1032,6 @@ reserve_view_candidate :: proc(service: ^Julia_Runtime_Service) -> int {
     return slot_index
 }
 
-//   Expose one request reservation to transactional dynview ABI calls.
-begin_request_view_candidate :: proc(
-    state: ^core.Euclid_General_State, slot_index: int, request_id: u64,
-    animation_generation: u64,
-    animation: ^core.Euclid_Julia_Animation_Interface) {
-
-    if state == nil || state^.julia_runtime_service == nil || slot_index < 0 {
-        return
-    }
-    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
-    slot^.request_id = request_id
-    slot^.animation_generation = animation_generation
-    slot^.animation = animation
-    state^.view_update_candidate = slot
-}
-
-//   Stop exposing one request candidate and discard failed callback output.
-end_request_view_candidate :: proc(
-    state: ^core.Euclid_General_State, slot_index: int, succeeded: bool) {
-
-    if state == nil || state^.julia_runtime_service == nil || slot_index < 0 {
-        return
-    }
-    state^.dynview_emit_target = nil
-    state^.view_update_candidate = nil
-    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
-    if !succeeded && slot^.state != .Published {
-        slot^.state = .Free
-    }
-}
-
-//   Publish a successful synchronous lifecycle candidate or release silence.
-finish_lifecycle_view_candidate :: proc(
-    state: ^core.Euclid_General_State, slot_index: int, succeeded: bool) {
-
-    end_request_view_candidate(state, slot_index, succeeded)
-    if !succeeded || state == nil || state^.julia_runtime_service == nil {
-        return
-    }
-    slot := &state^.julia_runtime_service^.view_snapshots[slot_index]
-    if slot^.state == .Pending && slot^.candidate_committed {
-        slot^.state = .Complete
-    } else if slot^.state == .Reserved {
-        if !prepare_empty_view_candidate(state, slot) {
-            slot^.state = .Free
-            return
-        }
-        slot^.state = .Complete
-    }
-}
-
-//   Build the implicit empty view attached to a successful silent lifecycle.
-prepare_empty_view_candidate :: proc(
-    state: ^core.Euclid_General_State, slot: ^View_Snapshot) -> bool {
-
-    animation_generation := slot^.animation_generation
-    animation := slot^.animation
-    request_id := slot^.request_id
-    service := state^.julia_runtime_service
-    service^.view_snapshot_generation += 1
-    slot^.request_id = request_id
-    slot^.generation = service^.view_snapshot_generation
-    slot^.runtime_generation = service^.runtime_generation
-    slot^.animation_generation = animation_generation
-    slot^.host_state = state
-    slot^.animation = animation
-    reset_view_snapshot_staging(service^.dynview_staging)
-    if !build_generated_view_snapshot_payloads(
-        slot, service^.dynview_staging, "") {
-        return false
-    }
-    slot^.candidate_committed = true
-    return true
-}
-
 //   Compare complete semantic payloads without relying on hashes or generations.
 published_view_snapshot_equals :: proc(
     service: ^Julia_Runtime_Service, candidate: ^View_Snapshot) -> bool {
@@ -1019,7 +1045,8 @@ published_view_snapshot_equals :: proc(
         return false
     }
     return view_snapshot_slice_equal(
-        published^.fallback_text, candidate^.fallback_text) &&
+        published^.presentation_bytes, candidate^.presentation_bytes) &&
+        published^.presentation_mime == candidate^.presentation_mime &&
         view_snapshot_slice_equal(published^.command_text, candidate^.command_text) &&
         view_snapshot_slice_equal(published^.commands, candidate^.commands) &&
         view_snapshot_slice_equal(published^.math_programs, candidate^.math_programs) &&
@@ -1050,52 +1077,6 @@ view_snapshot_slice_equal :: proc(left, right: []$Element) -> bool {
     return true
 }
 
-//   Validate an optional candidate without treating a silent request as an error.
-animation_tick_view_candidate_is_valid :: proc(
-    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
-    tick: ^Animation_Tick_Slot) -> bool {
-
-    slot := &service^.view_snapshots[tick^.view_snapshot_index]
-    if slot^.state == .Reserved {
-        return true
-    }
-    return slot^.state == .Pending && slot^.candidate_committed &&
-        view_snapshot_matches_current(state, service, slot) &&
-        view_snapshot_is_valid(slot)
-}
-
-//   Make an accepted tick candidate visible to normal snapshot publication.
-commit_animation_tick_view_candidate :: proc(
-    service: ^Julia_Runtime_Service, tick: ^Animation_Tick_Slot) {
-
-    slot := &service^.view_snapshots[tick^.view_snapshot_index]
-    if slot^.state == .Pending {
-        slot^.state = .Complete
-    } else if slot^.state == .Reserved {
-        slot^.state = .Free
-    }
-}
-
-//   Release candidate storage when the owning animation tick is rejected.
-release_animation_tick_view_candidate :: proc(
-    service: ^Julia_Runtime_Service, tick: ^Animation_Tick_Slot) {
-
-    slot := &service^.view_snapshots[tick^.view_snapshot_index]
-    if slot^.state != .Published {
-        slot^.state = .Free
-    }
-}
-
-//   Release a candidate only when Julia never began building its payload.
-release_reserved_view_candidate :: proc(
-    service: ^Julia_Runtime_Service, slot_index: int) {
-
-    if service != nil && slot_index >= 0 &&
-        service^.view_snapshots[slot_index].state == .Reserved {
-        service^.view_snapshots[slot_index].state = .Free
-    }
-}
-
 //   Clear generation payload metadata without copying the slot-owned arena owner.
 reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.candidate_committed = false
@@ -1107,7 +1088,8 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.scratchpad_runtime_generation = 0
     slot^.host_state = nil
     slot^.animation = nil
-    slot^.fallback_text = nil
+    slot^.presentation_mime = .Text_Plain
+    slot^.presentation_bytes = nil
     slot^.command_text = nil
     slot^.command_revision = 0
     slot^.stream_has_error = false
@@ -1129,7 +1111,7 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
 prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
     statuses := [12]core.Bounded_Builder_Status{
         core.bounded_byte_builder_init(
-            &slot^.fallback_text_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
+            &slot^.presentation_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
         core.bounded_byte_builder_init(
             &slot^.command_text_builder, core.DYNVIEW_MAX_TEXT_BYTES, &slot^.arena),
         core.bounded_byte_builder_init(
@@ -1172,7 +1154,7 @@ prepare_view_snapshot_slot :: proc(slot: ^View_Snapshot) -> bool {
         return true
     }
     core.arena_owner_reset(&slot^.arena)
-    slot^.fallback_text_builder = {}
+    slot^.presentation_builder = {}
     slot^.command_text_builder = {}
     slot^.command_builder = {}
     slot^.math_program_builder = {}
@@ -1215,14 +1197,14 @@ view_snapshot_slots_destroy :: proc(service: ^Julia_Runtime_Service) {
     }
 }
 
-//   Generate fallback and semantic dynview data into worker staging.
-// Runs only on the Julia owner thread. The completed slot contains self-owned copies of all
-// populated spans and can be published without consulting Julia.
+//   Generate canonical presentation and semantic data into snapshot-owned storage.
+// The completed slot contains self-owned copies of all populated spans and can be
+// published without consulting Julia.
 build_generated_view_snapshot_payloads :: proc(
     slot: ^View_Snapshot,
     staging: ^core.Dynview_System,
-    fallback: string) -> bool {
-    if !build_view_snapshot_text_payloads(slot, fallback,
+    presentation: string) -> bool {
+    if !build_view_snapshot_text_payloads(slot, presentation,
         staging^.command_buffer.text_bytes[:staging^.command_buffer.text_bytes_len]) {
         return false
     }
@@ -1248,26 +1230,27 @@ build_generated_view_snapshot_payloads :: proc(
     })
 }
 
-//   Copy and seal both text families as one complete snapshot candidate.
+//   Copy and seal canonical presentation and semantic text as one snapshot candidate.
 build_view_snapshot_text_payloads :: proc(
-    slot: ^View_Snapshot, fallback: string, command_text: []u8) -> bool {
+    slot: ^View_Snapshot, presentation: string, command_text: []u8) -> bool {
 
-    fallback_count := min(len(fallback), VIEW_SNAPSHOT_TEXT_CAPACITY)
-    fallback_status := core.bounded_byte_builder_append(
-        &slot^.fallback_text_builder, transmute([]u8)fallback[:fallback_count])
+    presentation_count := min(len(presentation), VIEW_SNAPSHOT_TEXT_CAPACITY)
+    presentation_status := core.bounded_byte_builder_append(
+        &slot^.presentation_builder,
+        transmute([]u8)presentation[:presentation_count])
     command_status := core.bounded_byte_builder_append(
         &slot^.command_text_builder, command_text)
-    if fallback_status != .Ok || command_status != .Ok {
+    if presentation_status != .Ok || command_status != .Ok {
         return false
     }
-    fallback_payload, fallback_seal_status :=
-        core.bounded_byte_builder_seal(&slot^.fallback_text_builder)
+    presentation_payload, presentation_seal_status :=
+        core.bounded_byte_builder_seal(&slot^.presentation_builder)
     command_payload, command_seal_status :=
         core.bounded_byte_builder_seal(&slot^.command_text_builder)
-    if fallback_seal_status != .Ok || command_seal_status != .Ok {
+    if presentation_seal_status != .Ok || command_seal_status != .Ok {
         return false
     }
-    slot^.fallback_text = fallback_payload
+    slot^.presentation_bytes = presentation_payload
     slot^.command_text = command_payload
     return true
 }
@@ -1397,8 +1380,20 @@ reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
 install_view_snapshot_content :: proc(
     slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
 
+    install_view_snapshot_aliases(slot, runtime)
+    install_view_snapshot_buffer(slot, &runtime^.command_buffer)
+    install_view_snapshot_cache_counts(slot, &runtime^.compile_cache)
+    runtime^.pending_invalidation_mask |= 1
+}
+
+// Install immutable semantic aliases from one published snapshot.
+install_view_snapshot_aliases :: proc(
+    slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
+
     runtime^.content = {
         revision = slot^.command_revision,
+        presentation_mime = slot^.presentation_mime,
+        presentation_bytes = slot^.presentation_bytes,
         has_stream_error = slot^.stream_has_error,
         stream_open_block = slot^.stream_open_block,
         stream_open_block_id = slot^.stream_open_block_id,
@@ -1414,7 +1409,12 @@ install_view_snapshot_content :: proc(
         document_inlines = slot^.document_inlines,
         document_display_rows = slot^.document_display_rows,
     }
-    buffer := &runtime^.command_buffer
+}
+
+// Install immutable command aliases from one published snapshot.
+install_view_snapshot_buffer :: proc(
+    slot: ^View_Snapshot, buffer: ^core.Dynview_Command_Buffer) {
+
     buffer^.revision = slot^.command_revision
     buffer^.command_count = len(slot^.commands)
     buffer^.text_bytes_len = len(slot^.command_text)
@@ -1423,7 +1423,12 @@ install_view_snapshot_content :: proc(
     buffer^.stream_open_block_id = slot^.stream_open_block_id
     buffer^.command_view = slot^.commands
     buffer^.text_view = slot^.command_text
-    cache := &runtime^.compile_cache
+}
+
+// Install semantic family counts and invalidate derived cache state.
+install_view_snapshot_cache_counts :: proc(
+    slot: ^View_Snapshot, cache: ^core.Dynview_Compile_Cache) {
+
     cache^.math_program_count = len(slot^.math_programs)
     cache^.math_table_descriptor_count = len(slot^.math_table_descriptors)
     cache^.math_command_count = len(slot^.math_commands)
@@ -1436,7 +1441,6 @@ install_view_snapshot_content :: proc(
     cache^.is_valid = false
     cache^.layout_is_valid = false
     cache^.copy_hit_target_count = 0
-    runtime^.pending_invalidation_mask |= 1
 }
 
 //   Return display-owned lifecycle, failure, and backpressure diagnostics.
@@ -1459,34 +1463,31 @@ julia_runtime_diagnostics :: proc(
     }
 }
 
-//   Create both bounded service channels, rolling back the request channel if needed.
+//   Create both directional links, rolling back request ownership on event-link failure.
 init_julia_runtime_channels :: proc(
     service: ^Julia_Runtime_Service) -> runtime.Allocator_Error {
-    requests, request_err := chan.create(
-        chan.Chan(Julia_Request), JULIA_REQUEST_CAPACITY, context.allocator)
+    request_err := communication_link_init(
+        &service^.request_link, JULIA_REQUEST_CAPACITY,
+        JULIA_REQUEST_LINK_POOL_CAPACITY)
     if request_err != .None {
         return request_err
     }
-    events, event_err := chan.create(
-        chan.Chan(Julia_Event), JULIA_EVENT_CAPACITY, context.allocator)
+    event_err := communication_link_init(
+        &service^.event_link, JULIA_EVENT_CAPACITY,
+        JULIA_EVENT_LINK_POOL_CAPACITY)
     if event_err != .None {
-        _ = chan.destroy(requests)
+        communication_link_destroy(&service^.request_link)
         return event_err
     }
-    service^.requests = requests
-    service^.events = events
     return .None
 }
 
 //   Initialize display-independent state before starting the Julia owner worker.
 initialize_julia_runtime_state :: proc(
     service: ^Julia_Runtime_Service,
-    staging: ^core.Dynview_System,
     profile_path: string) {
     service^.next_request_id = 1
     service^.lifecycle = .Not_Started
-    service^.dynview_staging = staging
-    service^.dynview_staging^.enabled = true
     service^.published_view_snapshot_index = -1
     if len(profile_path) > 0 &&
         !evidence_profile.init_spall(&service^.profile, profile_path) {
@@ -1508,22 +1509,20 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
         return nil, channel_error
     }
     if !view_snapshot_slots_init(service) {
-        _ = chan.destroy(service^.events)
-        _ = chan.destroy(service^.requests)
+        communication_link_destroy(&service^.event_link)
+        communication_link_destroy(&service^.request_link)
         free(service)
         return nil, .Out_Of_Memory
     }
 
-    initialize_julia_runtime_state(service,
-         new(core.Dynview_System, context.allocator), profile_path)
+    initialize_julia_runtime_state(service, profile_path)
     service^.worker =
         thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
     if service^.worker == nil {
         evidence_profile.destroy(&service^.profile)
-        free(service^.dynview_staging)
         view_snapshot_slots_destroy(service)
-        _ = chan.destroy(service^.events)
-        _ = chan.destroy(service^.requests)
+        communication_link_destroy(&service^.event_link)
+        communication_link_destroy(&service^.request_link)
         free(service)
         return nil, .Out_Of_Memory
     }
@@ -1539,18 +1538,186 @@ diagnostic_occurrence_should_log :: proc(count: u64) -> bool {
     return count > 0 && count & (count - 1) == 0
 }
 
+//   Borrow one available Julia-owned egress envelope without blocking.
+// The display owner must return every successful receive exactly once after all aliases
+// into the envelope, including nested presentation bytes, are no longer in use.
+try_receive_julia_egress :: proc(
+    service: ^Julia_Runtime_Service) -> (^core.Julia_Host_Egress, bool) {
+    if service == nil {
+        return nil, false
+    }
+    return communication_link_try_recv(&service^.event_link)
+}
+
+//   Return one consumed Julia-owned egress envelope to its producer for reclamation.
+return_julia_egress :: proc(
+    service: ^Julia_Runtime_Service,
+    message: ^core.Julia_Host_Egress) -> bool {
+    return service != nil && message != nil &&
+        communication_link_return(&service^.event_link, message)
+}
+
 //   Receive one available worker event without blocking the display thread.
 // Successful receives also apply lifecycle and slot-completion metadata exactly once.
 try_receive_julia_event :: proc(
     service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+    for {
+        event_message, ok := try_receive_julia_egress(service)
+        if !ok {
+            return {}, false
+        }
+        event, is_event := event_message^.(Julia_Event)
+        if is_event {
+            _ = return_julia_egress(service, event_message)
+            accept_julia_event(service, event)
+            return event, true
+        }
+        defer_view_content(service, event_message)
+    }
+}
+
+//   Retain only the newest presentation encountered by an event-only consumer.
+defer_view_content :: proc(
+    service: ^Julia_Runtime_Service,
+    message: ^core.Julia_Host_Egress) {
+    if service^.display_deferred_view_content != nil {
+        _ = return_julia_egress(
+            service, service^.display_deferred_view_content)
+    }
+    service^.display_deferred_view_content = message
+}
+
+//   Transfer the newest presentation deferred by an event-only display consumer.
+take_deferred_view_content :: proc(
+    service: ^Julia_Runtime_Service) -> ^core.Julia_Host_Egress {
     if service == nil {
-        return {}, false
+        return nil
     }
-    event, ok := chan.try_recv(service^.events)
-    if ok {
-        accept_julia_event(service, event)
+    message := service^.display_deferred_view_content
+    service^.display_deferred_view_content = nil
+    return message
+}
+
+//   Destroy one Julia-owned egress envelope and any nested pool allocation.
+destroy_julia_egress_message :: proc(
+    service: ^Julia_Runtime_Service, message: ^core.Julia_Host_Egress) {
+    content, is_content := message^.(core.View_Content_Ready)
+    if is_content {
+        communication_link_free_bytes(&service^.event_link, content.content.bytes)
     }
-    return event, ok
+    message^ = {}
+    communication_link_free(&service^.event_link, message)
+}
+
+//   Reclaim returned Julia egress envelopes on their producer thread.
+drain_julia_egress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
+    count := 0
+    for {
+        message, ok := communication_link_try_take_return(&service^.event_link)
+        if !ok {
+            return count
+        }
+        destroy_julia_egress_message(service, message)
+        count += 1
+    }
+}
+
+//   Clone canonical presentation bytes into the Julia-owned egress pool.
+allocate_view_content_message :: proc(
+    state: ^core.Euclid_General_State, mime: core.Presentation_Mime,
+    source: []u8) -> (^core.Julia_Host_Egress, runtime.Allocator_Error) {
+    service := state^.julia_runtime_service
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None {
+        return nil, message_error
+    }
+    bytes, bytes_error := communication_link_alloc_bytes(
+        &service^.event_link, len(source))
+    if bytes_error != .None {
+        communication_link_free(&service^.event_link, message)
+        return nil, bytes_error
+    }
+    copy(bytes, source)
+    generation := service^.presentation_generation + 1
+    animation_generation := service^.animation_generation
+    if service^.presentation_animation_generation_override != 0 {
+        animation_generation = service^.presentation_animation_generation_override
+    }
+    animation := state^.julia_interface^.current_animation
+    if service^.presentation_animation_override != nil {
+        animation = service^.presentation_animation_override
+    }
+    message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+        request_id = service^.active_request_id,
+        runtime_generation = service^.runtime_generation,
+        animation_generation = animation_generation,
+        presentation_generation = generation,
+        animation = animation,
+        scratchpad_request_id = service^.worker_scratchpad_completed_request_id,
+        content = {mime = mime, bytes = bytes},
+    })
+    service^.presentation_generation = generation
+    return message, .None
+}
+
+//   Enqueue canonical view content without blocking, retaining only the newest retry.
+send_presented_text :: proc(
+    state: ^core.Euclid_General_State, mime: core.Presentation_Mime,
+    source: []u8) -> core.Communication_Send_Outcome {
+    service := state^.julia_runtime_service
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_egress_returns(service)
+    message, allocation_error := allocate_view_content_message(state, mime, source)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    if communication_link_try_send(&service^.event_link, message) {
+        return .Sent
+    }
+    if service^.pending_view_content != nil {
+        destroy_julia_egress_message(service, service^.pending_view_content)
+    }
+    service^.pending_view_content = message
+    return .Queue_Full
+}
+
+//   Reliably transfer one retained presentation before its request completion event.
+flush_pending_view_content :: proc(
+    service: ^Julia_Runtime_Service) -> core.Communication_Send_Outcome {
+    message := service^.pending_view_content
+    if message == nil {
+        return .Sent
+    }
+    if !communication_link_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        service^.pending_view_content = nil
+        return .Channel_Closed
+    }
+    service^.pending_view_content = nil
+    return .Sent
+}
+
+//   Allocate and nonblockingly send one display-owned request envelope.
+send_julia_request :: proc(
+    service: ^Julia_Runtime_Service,
+    request: Julia_Request) -> core.Communication_Send_Outcome {
+    if service^.lifecycle == .Shutdown_Requested ||
+        service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = communication_link_drain_returns(&service^.request_link)
+    message, allocation_error := communication_link_alloc(&service^.request_link)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    message^ = core.Julia_Host_Ingress(request)
+    if !communication_link_try_send(&service^.request_link, message) {
+        communication_link_free(&service^.request_link, message)
+        return .Queue_Full
+    }
+    return .Sent
 }
 
 //   Submit one lifecycle or compatibility request without blocking the caller.
@@ -1573,11 +1740,12 @@ try_submit_julia_request :: proc(
         data = data,
         slot_index = slot_index,
     }
-    if !chan.try_send(service^.requests, request) {
+    send_outcome := send_julia_request(service, request)
+    if send_outcome != .Sent {
         service^.request_saturation_count += 1
         if diagnostic_occurrence_should_log(service^.request_saturation_count) {
-            log.warnf("julia_request_saturated kind=%d count=%d",
-                int(kind), service^.request_saturation_count)
+            log.warnf("julia_request_saturated kind=%d outcome=%d count=%d",
+                int(kind), int(send_outcome), service^.request_saturation_count)
         }
         return 0, false
     }
@@ -1702,10 +1870,16 @@ invoke_julia_compatibility_task :: proc(
         return false
     }
     for {
-        event, ok := chan.recv(service^.events)
+        event_message, ok := communication_link_recv(&service^.event_link)
         if !ok {
             return false
         }
+        event, is_event := event_message^.(Julia_Event)
+        if !is_event {
+            defer_view_content(service, event_message)
+            continue
+        }
+        _ = communication_link_return(&service^.event_link, event_message)
         accept_julia_event(service, event)
         if event.kind == .Invoke_Complete && event.request_id == request_id {
             return event.succeeded
@@ -1724,10 +1898,18 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
         thread.destroy(service^.worker)
     }
     evidence_profile.destroy(&service^.profile)
-    free(service^.dynview_staging)
     view_snapshot_slots_destroy(service)
-    _ = chan.destroy(service^.events)
-    _ = chan.destroy(service^.requests)
+    _ = communication_link_drain_returns(&service^.request_link)
+    _ = drain_julia_egress_returns(service)
+    if service^.display_deferred_view_content != nil {
+        destroy_julia_egress_message(
+            service, service^.display_deferred_view_content)
+    }
+    if service^.pending_view_content != nil {
+        destroy_julia_egress_message(service, service^.pending_view_content)
+    }
+    communication_link_destroy(&service^.event_link)
+    communication_link_destroy(&service^.request_link)
     free(service)
 }
 
@@ -1897,6 +2079,27 @@ execute_julia_worker_request :: proc(
     return event, shutting_down
 }
 
+//   Allocate and reliably send one worker-owned event envelope.
+send_julia_event :: proc(
+    service: ^Julia_Runtime_Service,
+    event: Julia_Event) -> core.Communication_Send_Outcome {
+    _ = drain_julia_egress_returns(service)
+    pending_outcome := flush_pending_view_content(service)
+    if pending_outcome != .Sent {
+        return pending_outcome
+    }
+    message, allocation_error := communication_link_alloc(&service^.event_link)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    message^ = core.Julia_Host_Egress(event)
+    if !communication_link_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        return .Channel_Closed
+    }
+    return .Sent
+}
+
 //   Own the rooted Julia host stack frame and serialized requests until shutdown.
 // The returned shutdown event is published only after this stack frame is gone.
 julia_runtime_worker_run_host :: proc(
@@ -1907,13 +2110,19 @@ julia_runtime_worker_run_host :: proc(
     host_frame: Julia_Runtime_Gc_Frame
     initialized := false
     for {
-        request, ok := chan.recv(service^.requests)
+        request_message, ok := communication_link_recv(&service^.request_link)
         if !ok {
+            return {}, false
+        }
+        request, is_request := request_message^.(Julia_Request)
+        if !is_request {
+            _ = communication_link_return(&service^.request_link, request_message)
             return {}, false
         }
 
         event, shutting_down := execute_julia_worker_request(
             service, request, &host, &host_frame, &initialized)
+        _ = communication_link_return(&service^.request_link, request_message)
         if shutting_down {
             attach_julia_request_evidence(service, request, &event)
             finalize_julia_worker_host(service, &host, &host_frame)
@@ -1921,7 +2130,9 @@ julia_runtime_worker_run_host :: proc(
             return event, true
         }
         attach_julia_request_evidence(service, request, &event)
-        _ = chan.send(service^.events, event)
+        if send_julia_event(service, event) != .Sent {
+            return {}, false
+        }
         context = worker_context
         free_all(context.temp_allocator)
     }
@@ -1938,7 +2149,10 @@ julia_runtime_worker :: proc(data: rawptr) {
         log.error("julia_worker_requests_closed_before_shutdown")
         return
     }
-    _ = chan.send(service^.events, shutdown_event)
+    if send_julia_event(service, shutdown_event) != .Sent {
+        log.error("julia_worker_shutdown_event_send_failed")
+        return
+    }
     log.info("julia_worker_stopped")
 }
 

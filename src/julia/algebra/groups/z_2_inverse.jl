@@ -10,7 +10,7 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
 const VertexB = Float32[0.68f0, 0.34f0, 0f0]
@@ -63,15 +63,6 @@ const PhasePauseBetweenReflections = 7f0
 const PhaseReflectSecond = 8f0
 const PhasePauseAfterSecondReflection = 9f0
 
-const InverseFallbackText = raw"""Inverse
-
-An inverse is the motion that undoes a given motion. In Z_2, every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.
-
-For an element a in a group, an inverse a^{-1} is an element such that a o a^{-1} = a^{-1} o a = e, where e is the identity.
-
-1. e^{-1} = e: doing nothing undoes itself.
-2. r^{-1} = r: one reflection undoes itself because reflecting twice gives back the original figure."""
-
 const InverseLatexDocument = raw"""\textbf{Inverse}
 
 An inverse is the motion that undoes a given motion. In $\mathbb{Z}_2$, every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.
@@ -110,10 +101,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr,
-        InverseLatexDocument, InverseFallbackText)
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(InverseLatexDocument)
 end
 
 """Apply a set of reflection poses to the tracked points."""
@@ -237,7 +227,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     reset_cycle_state(
         state_ptr, AnimationState(lines, PhasePenDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

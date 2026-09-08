@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -121,21 +121,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.circle, state.points, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = raw"""Associativity
-    
-Associativity means the grouping of the operation does not matter:
-(a ∘ b) ∘ c = a ∘ (b ∘ c) for all a,b,c.
-
-Here, compare the two ways of grouping the same three rotations.
-
-1. Left grouping: $(ρ¹ρ²)ρ³ = ρ⁶$.
-2. Right grouping: $ρ¹(ρ²ρ³) = ρ⁶$.
-3. Both paths match because function composition is associative.
-
-The side-by-side circles make grouping visible while the endpoint confirms equality. Formally, the same final motion appears no matter how the three actions are grouped."""
-    latex = raw"""\textbf{Associativity}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Associativity}
 
 Associativity means the grouping of the operation does not matter:
 
@@ -149,7 +137,6 @@ Here, compare the two ways of grouping the same three rotations.
 
 The side-by-side circles make grouping visible while the endpoint confirms equality.
 Formally, the same final motion appears no matter how the three actions are grouped."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -246,7 +233,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             point9.index, point10.index, point11.index, point12.index),
         PhaseCompassDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

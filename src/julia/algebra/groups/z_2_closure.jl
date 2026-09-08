@@ -10,7 +10,7 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
 const VertexB = Float32[0.68f0, 0.34f0, 0f0]
@@ -63,18 +63,6 @@ const PhaseReflectThird = 9f0
 const PhaseReflectFourth = 10f0
 const PhasePauseAfterFourth = 11f0
 
-const ClosureFallbackText = raw"""Closure
-
-Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
-
-In this example, composing reflections still produces one of the same allowed motions:
-
-1. One reflection maps the figure to its mirror image, still in the same state space.
-2. Two reflections across the same axis return to the original state.
-3. Any allowed composition remains one of the 2 allowed motions: e or r.
-
-So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
-
 const ClosureLatexDocument = raw"""\textbf{Closure}
 
 Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
@@ -115,10 +103,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(
-        state_ptr, ClosureLatexDocument, ClosureFallbackText)
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(ClosureLatexDocument)
 end
 
 """Apply a set of reflection poses to the tracked points."""
@@ -241,7 +228,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     reset_cycle_state(
         state_ptr, AnimationState(lines, PhasePenDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

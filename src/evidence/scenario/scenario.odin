@@ -31,6 +31,8 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"animation_loaded", .Animation_Loaded},
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
+    {"presentation_cleared", .Presentation_Cleared},
+    {"presentation_superseded", .Presentation_Superseded},
     {"dynview_published", .Dynview_Published},
     {"scratchpad_completed", .Scratchpad_Completed},
     {"frame_presented", .Frame_Presented},
@@ -680,6 +682,7 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
     case "runtime_ready": return display.runtime_lifecycle == .Ready
     case "runtime_idle": return display.active_runtime_request_id == 0
+    // Presentation parsing is independently scheduled and does not extend animation work.
     case "animation_idle": return !display.animation_tick_pending
     case "scratchpad_idle": return display.scratchpad_idle
     case "simulation_paused": return display.simulation_paused

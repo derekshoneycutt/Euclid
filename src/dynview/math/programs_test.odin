@@ -76,11 +76,8 @@ math_atom_spacing_uses_tex_display_table :: proc(t: ^testing.T) {
 //   Verify binary atoms retain binary spacing only between compatible neighbors.
 @(test)
 math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     program := app_core.Dynview_Math_Program{command_count = 3}
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_atom_class = .Bin
@@ -111,11 +108,8 @@ math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
 //   Verify explicit math glue contributes its own fixed mu width between atoms.
 @(test)
 math_explicit_glue_uses_semantic_width :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     program := app_core.Dynview_Math_Program{command_count = 3}
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_glue_kind = .Thick

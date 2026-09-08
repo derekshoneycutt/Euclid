@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.14f0, 0.62f0, 0f0]
 const LineAEnd = [0.86f0, 0.62f0, 0f0]
@@ -105,20 +105,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a_prime, state.label_b_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,1
-
-IV, I. If A, B are two points on a straight line a, and if A' is a point upon the same or another straight line a', then, upon a given side of A' on the straight line a', we can always find one and only one point B' so that the segment AB (or BA) is congruent to the segment A'B'. We indicate this relation by writing
-
-    AB ≡ A'B'.
-
-Every segment is congruent to itself; that is, we always have
-
-    AB ≡ AB.
-
-We can state the above axiom briefly by saying that every segment can be laid off upon a given side of a given point of a given straight line in one and only one way."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,1}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,1}
 
 \textbf{IV, I.} If $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1] are two points on a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4], and if $A'$ \euclidpoint[color=palevioletred1,size=1] is a point upon the same or another straight line $a'$ \euclidline[color=khaki3,length=3,thickness=4], then, upon a given side of $A'$ \euclidpoint[color=palevioletred1,size=1] on the straight line $a'$ \euclidline[color=khaki3,length=3,thickness=4], we can always find one and only one point $B'$ \euclidpoint[color=steelblue,size=1] so that the segment $AB$ (or $BA$) \euclidline[color=steelblue,length=3,thickness=4] is congruent to the segment $A'B'$ \euclidline[color=khaki3,length=3,thickness=4]. We indicate this relation by writing
 
@@ -129,7 +118,6 @@ Every segment is congruent to itself; that is, we always have
     $AB \equiv AB$ \euclidline[color=steelblue,length=3,thickness=4].
 
 We can state the above axiom briefly by saying that every segment can be laid off upon a given side of a given point of a given straight line in one and only one way."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -221,7 +209,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         labela.index, label_a_prime_line.index, label_a.index, label_b.index,
         label_a_prime.index, label_b_prime.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

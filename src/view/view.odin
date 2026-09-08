@@ -165,6 +165,7 @@ sync_window_prose_shaping :: proc(state: ^Euclid_General_State) {
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(
     state: ^Euclid_General_State,
+    presentation: ^Presentation_Runtime,
     scenario_runtime: ^Scenario_Runtime = nil,
     capture_sink: capture.Sink = {},
     display_profile: ^evidence_profile.State = nil) {
@@ -173,8 +174,9 @@ run_window_frame :: proc(
         &state^.font_cache, &state^.simulation_executor^.pool)
     sync_window_math_shaping(state)
     sync_window_prose_shaping(state)
+    julia.publish_available_view_snapshot(state, false)
+    service_presentation_runtime(state, presentation)
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
-    julia.publish_available_view_snapshot(state)
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation(state, alpha)
     audio.update_chalk_runtime(&state^.chalk_audio)
@@ -218,9 +220,11 @@ init_display_profile :: proc(
 //   Process display frames until the window or active scenario requests completion.
 run_window_frames :: proc(
     state: ^Euclid_General_State, scenario_runtime: ^Scenario_Runtime,
-    capture_sink: capture.Sink, display_profile: ^evidence_profile.State) {
+    presentation: ^Presentation_Runtime, capture_sink: capture.Sink,
+    display_profile: ^evidence_profile.State) {
     for !rl.WindowShouldClose() {
-        run_window_frame(state, scenario_runtime, capture_sink, display_profile)
+        run_window_frame(
+            state, presentation, scenario_runtime, capture_sink, display_profile)
         if scenario_runtime_finished(scenario_runtime) {
             return
         }
@@ -283,7 +287,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     free_all(context.temp_allocator)
 
     run_window_frames(
-        state, active_scenario, capture_sink, &display_profile)
+        state, active_scenario, session.presentation, capture_sink, &display_profile)
     log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
         state^.fixed_step, active_scenario != nil)
 

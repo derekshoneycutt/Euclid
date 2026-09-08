@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
 const BPoint = [0.75f0, 0.25f0, 0f0]
@@ -92,15 +92,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a, state.label_b, state.label_c, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom I,4
-
-I, 4. Any three points A, B, C of a plane α, which do not lie in the same straight line, completely determine that plane."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,4}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,4}
 
 \textbf{I, 4.} Any three points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] of a plane $\alpha$, which do not lie in the same straight line \euclidline[color=steelblue,length=3,thickness=4], completely determine that plane."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""
@@ -158,7 +154,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         point_a.index, point_b.index, point_c.index,
         label_a.index, label_b.index, label_c.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

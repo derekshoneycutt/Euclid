@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
 const EndPoint = [0.75f0, 0.25f0, 0f0]
@@ -82,17 +82,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.marker_host, state.marker_start, state.marker_end, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Supplementary Angles
-
-Two angles having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles. Two angles having a common vertex and whose sides form straight lines are called vertical angles. An angle which is congruent to its supplementary angle is called a right angle."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Supplementary Angles}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Supplementary Angles}
 
 Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles.
 Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having a common vertex and whose sides form straight lines are called vertical angles.
 An angle which is congruent to its supplementary angle is called a right angle \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -152,7 +148,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         perpline.host_id, perpline.joint1_id, perpline.joint2_id,
         marker.host_id, marker.start_id, marker.end_id, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

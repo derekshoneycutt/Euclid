@@ -406,15 +406,10 @@ tex_table_apply_environment_preset :: proc(
     columns := descriptor.columns
     argument_text := tex_semantic_text(output, argument)
     if environment == "cases" || environment == "dcases" {
-        if columns != 2 { return false }
-        tex_table_apply_cases_preset(descriptor, environment == "dcases")
+        if !tex_table_apply_cases_environment(descriptor, environment) {return false}
     } else if environment == "aligned" || environment == "alignedat" {
-        if columns < 2 || columns%2 != 0 { return false }
-        if environment == "alignedat" &&
-            !tex_table_alignedat_columns_match(argument_text, columns) {
-            return false
-        }
-        tex_table_apply_aligned_preset(descriptor, environment == "aligned")
+        if !tex_table_apply_aligned_environment(
+            descriptor, environment, argument_text) {return false}
     } else if environment == "gathered" {
         if columns != 1 { return false }
         descriptor.cell_style, descriptor.row_spacing = .Display, .Alignment
@@ -429,6 +424,29 @@ tex_table_apply_environment_preset :: proc(
             .Left if argument_text == "l" else .Center
     }
     descriptor.present = true
+    return true
+}
+
+// Validate and apply one cases-family environment preset.
+tex_table_apply_cases_environment :: proc(
+    descriptor: ^Tex_Table_Descriptor,
+    environment: string) -> bool {
+
+    if descriptor.columns != 2 {return false}
+    tex_table_apply_cases_preset(descriptor, environment == "dcases")
+    return true
+}
+
+// Validate and apply one aligned-family environment preset.
+tex_table_apply_aligned_environment :: proc(
+    descriptor: ^Tex_Table_Descriptor,
+    environment, argument: string) -> bool {
+
+    columns := descriptor.columns
+    if columns < 2 || columns%2 != 0 {return false}
+    if environment == "alignedat" &&
+        !tex_table_alignedat_columns_match(argument, columns) {return false}
+    tex_table_apply_aligned_preset(descriptor, environment == "aligned")
     return true
 }
 

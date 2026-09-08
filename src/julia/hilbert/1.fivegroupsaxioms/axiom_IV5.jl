@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexO = [0.18f0, 0.68f0, 0f0]
 const VertexOPrime = [0.42f0, 0.50f0, 0f0]
@@ -192,12 +192,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_k_double_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,5
-
-IV, 5. If the angle (h, k) is congruent to the angle (h', k') and to the angle (h'', k''), then the angle (h', k') is congruent to the angle (h'', k''); that is to say, if ∠(h, k) ≡ ∠(h', k') and ∠(h, k) ≡ ∠(h'', k''), then ∠(h', k') ≡ ∠(h'', k'')."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,5}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,5}
 
 \textbf{IV, 5.} If the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] is
 congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] and to
@@ -207,7 +204,6 @@ $(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]; that is to say, 
 $\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled]
 and $\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled],
 then $\angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -359,7 +355,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_h_prime.index, label_k_prime.index, label_o_double_prime.index,
         label_h_double_prime.index, label_k_double_prime.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

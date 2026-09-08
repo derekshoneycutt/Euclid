@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.16f0, 0.52f0, 0f0]
 const LineEnd = [0.84f0, 0.52f0, 0f0]
@@ -64,15 +64,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.line, state.point_a, state.point_b, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 3
-
-Between any two points of a straight line, there always exists an unlimited number of points."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 3}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 3}
 
 Between any two points \euclidpoint[color=steelblue,size=1] \euclidpoint[color=palevioletred1,size=1] of a straight line \euclidline[color=grey60,length=3,thickness=4], there always exists an unlimited number of points \euclidpoint[color=khaki3,size=1]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -112,7 +108,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line.host_id, line.joint1_id, line.joint2_id),
         point_a.index, point_b.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -12,7 +12,7 @@ using ..EuclidGeometry
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.16f0, 0.78f0, 0f0]
 const VertexB = [0.58f0, 0.78f0, 0f0]
@@ -108,15 +108,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.markers, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Rhombus
-
-Of quadrilateral figures, ... a rhombus that which is equilateral but not right angled; ..."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhombus}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhombus}
 
 Of quadrilateral figures, ... a rhombus \euclidbox[height=2,width=2,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=palevioletred1,edge4_color=palevioletred1] that which is equilateral \euclidline[color=palevioletred1,length=3,thickness=4] but not right angled \euclidangle[color=steelblue,radius=2,end=60,filled] \euclidangle[color=khaki3,radius=2,end=120,filled]; ..."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -175,7 +171,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     state = AnimationState(lines, markers, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

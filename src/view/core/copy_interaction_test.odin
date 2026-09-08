@@ -13,8 +13,8 @@ copy_interaction_tracks_hovered_and_pressed_target :: proc(t: ^testing.T) {
     arena: core.Arena_Owner
     testing.expect(t, core.arena_owner_init(&arena, 64*uint(mem.Kilobyte)))
     defer core.arena_owner_destroy(&arena)
-    allocator := core.arena_owner_allocator(&arena)
-    runtime := new(core.Dynview_System, allocator)
+    runtime := new(core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     cache := &runtime^.compile_cache
     testing.expect_value(t, core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, core.DYNVIEW_MAX_COMMANDS, &arena),
@@ -46,11 +46,8 @@ copy_interaction_tracks_hovered_and_pressed_target :: proc(t: ^testing.T) {
 //   Verify copying resolves the exact payload span owned by a hit target.
 @(test)
 copy_interaction_resolves_target_payload_span :: proc(t: ^testing.T) {
-    arena: core.Arena_Owner
-    testing.expect(t, core.arena_owner_init(&arena, 64*uint(mem.Kilobyte)))
-    defer core.arena_owner_destroy(&arena)
-    allocator := core.arena_owner_allocator(&arena)
-    runtime := new(core.Dynview_System, allocator)
+    runtime := new(core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     payload := []u8{'a', 'b', 'c', 'd', 'e', 'f'}
     runtime^.compile_cache.compiled_copy_payload = payload
     runtime^.compile_cache.compiled_copy_payload_len = 6

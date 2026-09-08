@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.10f0, 0.55f0, 0f0]
 const LineEnd = [0.90f0, 0.55f0, 0f0]
@@ -109,16 +109,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a1, state.label_a2, state.label_a3, state.label_a4, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom V
-
-Let A₁ be any point upon a straight line between the arbitrarily chosen points A and B. Take the points A₂, A₃, A₄, ... so that A₁ lies between A and A₂, A₂ between A₁ and A₃, A₃ between A₂ and A₄, etc. Moreover, let the segments
-
-    AA₁, A₁A₂, A₂A₃, A₃A₄, ...
-
-be equal to one another. Then, among this series of points, there always exists a certain point Aₙ such that B lies between A and Aₙ."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom V}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom V}
 
 Let $A_1$ \euclidpoint[color=grey60,size=1] be any point upon a straight line \euclidline[color=khaki3,length=3,thickness=4] between the arbitrarily chosen points
 $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1]. Take the points
@@ -133,7 +126,6 @@ and $A_4$ \euclidpoint[color=grey60,size=1], etc. Moreover, let the segments
 be equal to one another. Then, among this series of points, there always exists a certain point
 $A_n$ \euclidpoint[color=grey60,size=1] such that $B$ \euclidpoint[color=palevioletred1,size=1] lies between
 $A$ \euclidpoint[color=steelblue,size=1] and $A_n$ \euclidpoint[color=grey60,size=1]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -218,7 +210,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a1.index, label_a2.index, label_a3.index, label_a4.index,
         PhaseDescendStart, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -9,13 +9,13 @@ import "core:testing"
 // Verify display observation copies authoritative Euclid scalars without mutation.
 @(test)
 observe_test_display_scalars :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
-    state^.particle_system = new(app_core.Particle_System)
+    state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.julia_runtime_service = new(app_core.Julia_Runtime_Service)
+    state^.julia_runtime_service = new(app_core.Julia_Runtime_Service, context.allocator)
     defer free(state^.julia_runtime_service)
     state^.fixed_step = 17
     state^.simulation_time = 2.5
@@ -47,7 +47,7 @@ observe_test_display_scalars :: proc(t: ^testing.T) {
 // Verify Julia-host observation includes its independent producer evidence state.
 @(test)
 observe_test_julia_host_scalars :: proc(t: ^testing.T) {
-    service := new(app_core.Julia_Runtime_Service)
+    service := new(app_core.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.runtime_generation = 5
     service^.failed_request_count = 2

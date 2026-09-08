@@ -93,25 +93,25 @@ view_snapshot_test_text_builders_init :: proc(
     testing.expect(t, app_core.arena_owner_init(
         &snapshot^.arena, app_core.VIEW_SNAPSHOT_ARENA_RESERVATION))
     testing.expect_value(t, app_core.bounded_byte_builder_init(
-        &snapshot^.fallback_text_builder, app_core.VIEW_SNAPSHOT_TEXT_CAPACITY,
+        &snapshot^.presentation_builder, app_core.VIEW_SNAPSHOT_TEXT_CAPACITY,
         &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, app_core.bounded_byte_builder_init(
         &snapshot^.command_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES,
         &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
     view_snapshot_test_record_builders_init(t, snapshot)
     testing.expect_value(t, app_core.bounded_byte_builder_append(
-        &snapshot^.fallback_text_builder, transmute([]u8)fallback_text),
+        &snapshot^.presentation_builder, transmute([]u8)fallback_text),
         app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, app_core.bounded_byte_builder_append(
         &snapshot^.command_text_builder, transmute([]u8)command_text),
         app_core.Bounded_Builder_Status.Ok)
     fallback, fallback_status := app_core.bounded_byte_builder_seal(
-        &snapshot^.fallback_text_builder)
+        &snapshot^.presentation_builder)
     commands, command_status := app_core.bounded_byte_builder_seal(
         &snapshot^.command_text_builder)
     testing.expect_value(t, fallback_status, app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, command_status, app_core.Bounded_Builder_Status.Ok)
-    snapshot^.fallback_text = fallback
+    snapshot^.presentation_bytes = fallback
     snapshot^.command_text = commands
 }
 
@@ -194,7 +194,7 @@ view_snapshot_expect_published_generation :: proc(
     service := state^.julia_runtime_service
     slot := &service^.view_snapshots[service^.published_view_snapshot_index]
     testing.expect(t, app_bridge.current_view_snapshot_text(state) == expected.text)
-    testing.expect_value(t, raw_data(slot.fallback_text), expected.fallback_storage)
+    testing.expect_value(t, raw_data(slot.presentation_bytes), expected.fallback_storage)
     testing.expect_value(t, raw_data(state^.dynview.content.commands),
         expected.record_storage)
     testing.expect_value(t, state^.dynview.content.commands[0].block_id,
@@ -204,7 +204,7 @@ view_snapshot_expect_published_generation :: proc(
 //   Verify cell height participates in Dynview font invalidation identity.
 @(test)
 dynview_track_font_retains_canonical_cell_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     runtime^.compile_cache.is_valid = true
 
@@ -283,7 +283,7 @@ scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
 //   Verify the Julia interface staging slots alternate between the two slots.
 @(test)
 julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface_active_slot = 0
     state^.julia_interface = &state^.julia_interface_slots[0]
@@ -304,15 +304,15 @@ julia_interface_generation_slots_are_stable_and_alternate :: proc(t: ^testing.T)
 view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
     t: ^testing.T) {
 
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     animation := &state^.julia_interface_slots[0].null_animation
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.current_animation = animation
     service^.runtime_generation = 2
-    snapshot := new(app_bridge.View_Snapshot)
+    snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     snapshot^ = app_bridge.View_Snapshot{
         runtime_generation = 0,
@@ -327,13 +327,13 @@ view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
 //   Verify a scene command batch commits point positions in submission order.
 @(test)
 scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -358,13 +358,13 @@ scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
 //   Verify an invalid tail command rejects the whole batch atomically.
 @(test)
 scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -385,15 +385,15 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
 //   Verify overflow and stale-animation commands reject the batch atomically.
 @(test)
 scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    current := new(app_core.Euclid_Julia_Animation_Interface)
+    current := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current)
-    stale := new(app_core.Euclid_Julia_Animation_Interface)
+    stale := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(stale)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
@@ -410,13 +410,13 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
 animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
     t: ^testing.T) {
 
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    current := new(app_core.Euclid_Julia_Animation_Interface)
+    current := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
@@ -443,13 +443,13 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
 //   Verify general point properties are deferred until the batch commits.
 @(test)
 scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -473,13 +473,13 @@ scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^tes
 scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
     t: ^testing.T) {
 
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -500,9 +500,9 @@ scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
 //   Verify the animation query snapshot is immutable while the worker ticks.
 @(test)
 animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    point_system := new(app_core.Shapes_Point_System)
+    point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
     state^.point_system = point_system
     state^.pen.joint1_id = 0
@@ -523,13 +523,13 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
 //   Verify an animation tick rejects stale generation and stale sequence.
 @(test)
 animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface)
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_interface = interface
     interface^.current_animation = animation
@@ -553,7 +553,7 @@ animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
 //   Verify tick coalescing caps the backlog without growing the queue.
 @(test)
 animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
 
     for _ in 0..<100 {
@@ -574,7 +574,7 @@ julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
     logging_state: diagnostics.Logging_State
     testing.expect(t, diagnostics.logging_start(&logging_state, path, .Info))
     context.logger = logging_state.logger
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.active_request_id = 8
     service^.active_request_kind = .Animation_Tick
@@ -605,7 +605,7 @@ julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
 @(test)
 julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
     context.logger = log.nil_logger()
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.lifecycle = .Shutdown_Requested
     event := app_bridge.Julia_Event{
@@ -623,7 +623,7 @@ julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
 //   Verify runtime diagnostics report failure and saturation counters.
 @(test)
 julia_runtime_diagnostics_report_failure_and_saturation :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.lifecycle = .Ready
     service^.failed_request_count = 3
@@ -658,7 +658,7 @@ julia_runtime_saturation_diagnostics_are_power_of_two_bounded :: proc(t: ^testin
 //   Verify a reload failure records the package revision.
 @(test)
 julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
 
     app_bridge.mark_julia_reload_failed(service, 1234)
@@ -712,11 +712,11 @@ view_snapshot_expect_recursive_math_content :: proc(
 //   Verify a view snapshot copy preserves recursive math spans.
 @(test)
 view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
-    snapshot := new(app_bridge.View_Snapshot)
+    snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "fallback", "semantic")
     defer app_core.arena_owner_destroy(&snapshot^.arena)
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
 
     commands := []app_core.Dynview_Command{{kind = .Math_Block}}
@@ -775,9 +775,9 @@ view_snapshot_expect_publication_evidence :: proc(
 @(test)
 view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     fixture := View_Snapshot_Publication_Fixture{
-        new(app_core.Euclid_General_State),
-        new(app_bridge.Julia_Runtime_Service),
-        new(app_core.Euclid_Julia_Animation_Interface)}
+        new(app_core.Euclid_General_State, context.allocator),
+        new(app_bridge.Julia_Runtime_Service, context.allocator),
+        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)}
     defer free(fixture.animation)
     defer free(fixture.service)
     defer free(fixture.state)
@@ -807,9 +807,9 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
 //   Verify invalid current content cannot claim Scratchpad display completion.
 @(test)
 scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := &state^.julia_interface^.null_animation
@@ -836,9 +836,9 @@ scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
 @(test)
 scratchpad_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T) {
     fixture := View_Snapshot_Publication_Fixture{
-        new(app_core.Euclid_General_State),
-        new(app_bridge.Julia_Runtime_Service),
-        new(app_core.Euclid_Julia_Animation_Interface)}
+        new(app_core.Euclid_General_State, context.allocator),
+        new(app_bridge.Julia_Runtime_Service, context.allocator),
+        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)}
     defer free(fixture.animation)
     defer free(fixture.service)
     defer free(fixture.state)
@@ -872,7 +872,7 @@ scratchpad_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T)
 //   Verify stale runtime identity and evidence pressure cannot produce false proof.
 @(test)
 scratchpad_completion_requires_current_complete_evidence :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     init_test_evidence(state)
     snapshot := app_bridge.View_Snapshot{
@@ -897,7 +897,7 @@ scratchpad_completion_requires_current_complete_evidence :: proc(t: ^testing.T) 
 //   Verify reload and shutdown lifecycle boundaries discard uncommitted identities.
 @(test)
 scratchpad_completion_watermark_clears_at_lifecycle_boundary :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.worker_scratchpad_completed_request_id = 41
     service^.worker_scratchpad_completed_runtime_generation = 3
@@ -911,7 +911,7 @@ scratchpad_completion_watermark_clears_at_lifecycle_boundary :: proc(t: ^testing
 //   Verify view snapshot validation rejects incomplete command streams.
 @(test)
 view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
-    snapshot := new(app_bridge.View_Snapshot)
+    snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "", "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
@@ -929,13 +929,12 @@ view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
 //   Verify every semantic command text span and sealed-builder alias is validated.
 @(test)
 view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T) {
-    snapshot := new(app_bridge.View_Snapshot)
+    snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "same", "text")
     defer app_core.arena_owner_destroy(&snapshot^.arena)
-    malformed := [6]app_core.Dynview_Command{
+    malformed := [5]app_core.Dynview_Command{
         {text_offset = 4, text_len = 1},
-        {copy_text_offset = 4, copy_text_len = 1},
         {script_base_text_offset = 4, script_base_text_len = 1},
         {script_sup_text_offset = 4, script_sup_text_len = 1},
         {script_sub_text_offset = 4, script_sub_text_len = 1},
@@ -954,7 +953,7 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
     snapshot^.math_commands = nil
     command_text := snapshot^.command_text
-    snapshot^.command_text = snapshot^.fallback_text
+    snapshot^.command_text = snapshot^.presentation_bytes
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
     snapshot^.command_text = command_text
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
@@ -987,7 +986,7 @@ view_snapshot_expect_replacement_published :: proc(
     testing.expect(t, app_bridge.publish_available_view_snapshot(fixture.state))
     view_snapshot_expect_released_without_reset(t, first)
     expected := View_Snapshot_Published_Expected{
-        "second", raw_data(second^.fallback_text), raw_data(second^.commands), 2}
+        "second", raw_data(second^.presentation_bytes), raw_data(second^.commands), 2}
     view_snapshot_expect_published_generation(t, fixture.state, expected)
     testing.expect(t, app_bridge.prepare_view_snapshot_slot(first))
     testing.expect_value(t, first^.arena.reset_count, u64(1))
@@ -999,9 +998,9 @@ view_snapshot_expect_replacement_published :: proc(
 view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
     t: ^testing.T) {
 
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := &state^.julia_interface^.null_animation
@@ -1017,7 +1016,7 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
     defer app_core.arena_owner_destroy(&first^.arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
-    first_storage := raw_data(first^.fallback_text)
+    first_storage := raw_data(first^.presentation_bytes)
     first_records := raw_data(first^.commands)
     first_expected := View_Snapshot_Published_Expected{
         "first", first_storage, first_records, 1}
@@ -1033,7 +1032,7 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
 //   Verify a completed view snapshot is found without needing its event index.
 @(test)
 completed_view_snapshot_is_found_without_event_index :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.view_snapshots[0].state = .Published
     service^.view_snapshots[0].generation = 10
@@ -1053,7 +1052,7 @@ completed_view_snapshot_is_found_without_event_index :: proc(t: ^testing.T) {
 //   Verify the newest completed view snapshot supersedes an older completion.
 @(test)
 newest_completed_view_snapshot_supersedes_older_completion :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.view_snapshots[0].state = .Complete
     service^.view_snapshots[0].generation = 10
@@ -1073,15 +1072,16 @@ newest_completed_view_snapshot_supersedes_older_completion :: proc(t: ^testing.T
 //   Verify a stale view snapshot clears the previous animation commands.
 @(test)
 stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service)
+    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface)
+    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    previous_animation := new(app_core.Euclid_Julia_Animation_Interface)
+    previous_animation :=
+        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(previous_animation)
-    current_animation := new(app_core.Euclid_Julia_Animation_Interface)
+    current_animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current_animation)
 
     service^.published_view_snapshot_index = 0
@@ -1103,7 +1103,7 @@ stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
     // Validates dynview text span extraction bounds checks for base and scripted spans.
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     text := "abc"
     for i in 0..<len(text) {
@@ -1135,7 +1135,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
 dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
     t: ^testing.T) {
     // Verifies style placement can force a line break and apply configured indentation at the next line start.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1167,7 +1167,7 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
 @(test)
 dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T) {
     // Confirms pushed layout items capture block metadata and advance line-column bookkeeping correctly.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1202,12 +1202,12 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
 //   Verify layout context derives one canonical cell and centered text baseline.
 @(test)
 dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1224,7 +1224,7 @@ dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
 //   Verify panel capacity and item origins use style-independent canonical columns.
 @(test)
 dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1249,7 +1249,7 @@ dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
 //   Verify mixed baseline and non-baseline items compose one integral row band.
 @(test)
 dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1282,12 +1282,12 @@ dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
 //   Verify paragraph spacing rounds outward without moving off the row lattice.
 @(test)
 dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1304,7 +1304,7 @@ dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
 //   Verify content and scroll-step metrics derive from finalized row spans.
 @(test)
 dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1312,7 +1312,7 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1333,7 +1333,7 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
 //   Verify Scratchpad scrolling consumes finalized row-derived layout metrics.
 @(test)
 dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     runtime^.enabled = true
     runtime^.command_buffer.command_count = 1
@@ -1413,7 +1413,7 @@ dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     testing.expect_value(t, app_core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
@@ -1453,7 +1453,7 @@ dynview_math_block_columns_use_intrinsic_width :: proc(t: ^testing.T) {
 //   Verify outer math placement includes visual padding and preserves its baseline.
 @(test)
 dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
@@ -1486,7 +1486,7 @@ dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
 //   Verify oversized outer math keeps intrinsic width and centers into its reservation.
 @(test)
 dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
@@ -1516,7 +1516,7 @@ dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
 //   Verify text and padded outer math resolve to one canonical line baseline.
 @(test)
 dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1571,7 +1571,7 @@ dynview_test_finalize_math_line :: proc(
 //   Verify inline math within the lineskip allowance keeps its line one row tall.
 @(test)
 dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1599,7 +1599,7 @@ dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
 //   Verify ink beyond the lineskip allowance still reserves an additional row.
 @(test)
 dynview_line_reserves_row_when_ink_exceeds_allowance :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1648,7 +1648,7 @@ expect_oversized_inline_line_grid_placement :: proc(
 //   Verify inline lines preserve intrinsic length and stroke inside grid placement.
 @(test)
 dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^ = app_core.Dynview_Compile_Cache{
         last_cell_width = 8,
@@ -1787,7 +1787,7 @@ expect_oversized_inline_triangle_grid_placement :: proc(
 //   Verify shape grid placement preserves tall geometry and symmetric overflow.
 @(test)
 dynview_inline_shapes_use_centered_grid_placement :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
@@ -1827,7 +1827,7 @@ dynview_inline_pie_section_retains_tight_visual_bounds :: proc(t: ^testing.T) {
 @(test)
 dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T) {
     // Checks wrapped text-run consumption emits layout items and lines with a valid reported last line index.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     arena: app_core.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
@@ -1837,7 +1837,7 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     cache.last_cell_height = 22
     cache.last_font_size = 12
 
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1919,13 +1919,13 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
 @(test)
 dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     // Confirms math program measurement aggregates child command metrics into non-zero outer dimensions.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.math_program_count = 1
     cache^.math_command_count = 1
 
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     buffer.text_bytes[0] = 'a'
     buffer.text_bytes[1] = 'b'
@@ -1990,10 +1990,10 @@ dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.
 @(test)
 dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
     // Ensures math program measurement rejects invalid or out-of-range command windows.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
 
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
 
     invalid_program := app_core.Dynview_Math_Program{}
@@ -2046,10 +2046,10 @@ dynview_seed_two_command_cache :: proc(
 @(test)
 dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T) {
     // Confirms measured width increases when additional child commands are included in the same math program.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
 
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     dynview_seed_two_command_cache(cache, buffer)
 
@@ -2075,7 +2075,7 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
 @(test)
 dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
     // Verifies layout cache reset clears counters, aggregate metrics, and layout validity state.
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.layout_line_count = 2
     cache.layout_item_count = 3

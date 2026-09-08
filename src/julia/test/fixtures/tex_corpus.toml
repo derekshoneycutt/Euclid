@@ -1655,12 +1655,12 @@ table_rows = 0
 
 [[production_pipeline]]
 production_paths = ["src/julia/{algebra,elements,hilbert,proclus}/**"]
-role = "stable animation-content facade"
-symbol = "emit_latex_view_text!"
+role = "canonical animation-content publication"
+symbol = "publish_view_content"
 [[production_pipeline]]
 production_paths = ["src/julia/latex/facade.jl", "src/julia/scratchpad/presentation_help.jl"]
-role = "raw-source document and Scratchpad math facade"
-symbol = "replay_emit_math_block!"
+role = "canonical MIME serialization"
+symbol = "presented_text"
 [[production_pipeline]]
 production_paths = ["src/julia/latex/facade.jl"]
 role = "native raw-math bridge wrapper"

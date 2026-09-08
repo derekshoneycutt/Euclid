@@ -419,7 +419,7 @@ scratchpad_zero_request_does_not_force_bottom :: proc(t: ^testing.T) {
 //   Verify changed Scratchpad output moves a pinned transcript to its new bottom.
 @(test)
 scratchpad_output_growth_repins_to_bottom :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     ui_runtime := &state^.ui_runtime
     ui_runtime.scratchpad_bottom_pinned = true

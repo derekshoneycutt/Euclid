@@ -11,7 +11,7 @@ Math_Program_Item_Handler :: #type proc(
 //   Dispatch table mapping each recursive math command kind to its item builder.
 //   Non-math kinds map to nil and are rejected by the caller.
 MATH_PROGRAM_ITEM_HANDLERS :: [app_core.Dynview_Command_Kind]Math_Program_Item_Handler{
-    .Begin_Block = nil, .End_Block = nil, .Copyable_Text_Run = nil, .Line_Break = nil,
+    .Begin_Block = nil, .End_Block = nil, .Line_Break = nil,
     .Divider = nil, .Math_Block = nil, .Inline_Line = nil, .Inline_Box = nil,
     .Inline_Circle = nil, .Inline_Filled_Box = nil, .Inline_Filled_Circle = nil,
     .Inline_Pie_Section = nil, .Inline_Perpendicular = nil, .Inline_Triangle = nil,

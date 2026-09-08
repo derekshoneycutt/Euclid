@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
 const BPoint = [0.75f0, 0.25f0, 0f0]
@@ -92,19 +92,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a, state.label_b, state.label_c, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom I,3
-
-I, 3. Three points A, B, C not situated in the same straight line always completely determine a plane α. We write ABC = α.
-
-We employ also the expressions: A, B, C, "lie in" α; A, B, C "are points of" α, etc."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,3}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,3}
 
 \textbf{I, 3.} Three points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] not situated in the same straight line \euclidline[color=steelblue,length=3,thickness=4] always completely determine a plane $\alpha$. We write $ABC = \alpha$.
 
 We employ also the expressions: $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1], "lie in" $\alpha$; $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] "are points of" $\alpha$, etc."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""
@@ -162,7 +156,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         point_a.index, point_b.index, point_c.index,
         label_a.index, label_b.index, label_c.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.50f0, 0f0]
 const LineEnd = [0.86f0, 0.50f0, 0f0]
@@ -93,19 +93,15 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Side of Line
-
-Making use of the notation of theorem 5, we say: The points A, A' lie in the plane α upon one and the same side of the straight line a, and the points A, B lie in the plane α upon different sides of the straight line a."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Side of Line}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Side of Line}
 
 Making use of the notation of \textit{theorem 5}, we say: The points $A$ \euclidpoint[color=steelblue,size=1],
 $A'$ \euclidpoint[color=khaki3,size=1] lie in the plane $\alpha$ upon one and the same side of the straight line
 $a$ \euclidline[color=grey60,length=3,thickness=4], and the points $A$ \euclidpoint[color=steelblue,size=1],
 $B$ \euclidpoint[color=palevioletred1,size=1] lie in the plane $\alpha$ upon different sides of the
 straight line $a$ \euclidline[color=grey60,length=3,thickness=4]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -190,7 +186,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_a_prime.index,
         PhaseDescendToLine, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

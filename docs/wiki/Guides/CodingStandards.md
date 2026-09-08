@@ -602,13 +602,16 @@ independently from related APIs.
 - Runtime-loaded scripts must surface parse, load, and evaluation failures with
   useful context.
 
-### View Text Rule
+### View Content Rule
 
-- `get_view_text` output should be plain Unicode text with renderer wrapping.
-- Keep `get_view_text` as a named producer and invoke it through
-  `publish_view_update` from lifecycle or semantic-change points. Do not register
-  it as a native callback or poll it per frame.
-- Do not manually pre-wrap ordinary view text unless fixed-width or semantic
+- Keep `get_view_content` as a named producer returning one canonical displayable:
+  an ordinary string for `text/plain`, `L"..."` for standalone delimited math, or
+  `tex"..."`/`TeXDocument` for an unwrapped document.
+- Invoke the producer through `publish_view_content` from lifecycle or
+  semantic-change points. Do not register it as a native callback or poll it per frame.
+- The selected MIME bytes are authoritative for rendering, copying, hashing, and
+  literal failure. Do not maintain a second fallback representation.
+- Do not manually pre-wrap ordinary view content unless fixed-width or semantic
   layout demands it.
 
 ### Function/Control Flow Guidance

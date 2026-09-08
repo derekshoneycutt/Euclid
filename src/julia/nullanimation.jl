@@ -5,7 +5,7 @@ using ..EuclidAnimations
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartRotation = π / 4f0
 const CircleRadius = 0.25f0
@@ -66,9 +66,9 @@ function with_circle_motion(
         state.draw_line_flag, draw_circle_flag)
 end
 
-"""Return the placeholder root view text for the null animation."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    "Welcome to Euclid"
+"""Return the placeholder root view content for the null animation."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return "Welcome to Euclid"
 end
 
 """Initialize the null animation's pen, compass, and canonical state."""

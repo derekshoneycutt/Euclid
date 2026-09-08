@@ -18,6 +18,7 @@ import "core:encoding/uuid"
 import "core:math"
 import "core:mem"
 import rand "core:math/rand"
+import "core:mem/tlsf"
 import vmem "core:mem/virtual"
 import "core:sync/chan"
 import "core:thread"
@@ -78,11 +79,14 @@ Vector3 :: rl.Vector3
 
 JULIA_REQUEST_CAPACITY :: 16
 JULIA_EVENT_CAPACITY :: 16
+JULIA_REQUEST_LINK_POOL_CAPACITY :: 64 * 1024
+JULIA_EVENT_LINK_POOL_CAPACITY :: 640 * 1024
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
 SCRATCHPAD_ASYNC_SLOT_COUNT :: 16
 SCRATCHPAD_ASYNC_TEXT_CAPACITY :: 4096
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
 VIEW_SNAPSHOT_TEXT_CAPACITY :: DYNVIEW_MAX_TEXT_BYTES
+PRESENTATION_MAX_SOURCE_BYTES :: DYNVIEW_MAX_TEXT_BYTES
 VIEW_SNAPSHOT_ARENA_RESERVATION :: uint(2 * mem.Megabyte)
 ANIMATION_TICK_SLOT_COUNT :: 2
 
@@ -289,7 +293,6 @@ Animation_Tick_Slot :: struct {
     animation: ^Euclid_Julia_Animation_Interface,
     dt: f32,
     submitted_at: time.Tick,
-    view_snapshot_index: int,
     query_snapshot: Animation_Query_Snapshot,
     scene_batch: Scene_Command_Batch,
 }
@@ -313,9 +316,10 @@ View_Snapshot :: struct {
     scratchpad_runtime_generation: u64,
     host_state: ^Euclid_General_State,
     animation: ^Euclid_Julia_Animation_Interface,
+    presentation_mime: Presentation_Mime,
 
     arena: Arena_Owner,
-    fallback_text_builder: Bounded_Byte_Builder,
+    presentation_builder: Bounded_Byte_Builder,
     command_text_builder: Bounded_Byte_Builder,
     command_builder: Bounded_Element_Builder(Dynview_Command),
     math_program_builder: Bounded_Element_Builder(Dynview_Math_Program),
@@ -329,7 +333,7 @@ View_Snapshot :: struct {
     document_display_row_builder:
         Bounded_Element_Builder(Dynview_Document_Display_Row),
 
-    fallback_text: []u8,
+    presentation_bytes: []u8,
     command_text: []u8,
     command_revision: u64,
     stream_has_error: bool,
@@ -429,6 +433,59 @@ Julia_Event :: struct {
     evidence_count: int,
 }
 
+// Presentation_Mime identifies the language of canonical presentation bytes.
+Presentation_Mime :: enum u8 {
+    Text_Plain,
+    Text_Latex,
+}
+
+// Presented_Text borrows exact bytes from its containing producer-owned envelope.
+Presented_Text :: struct {
+    mime: Presentation_Mime,
+    bytes: []u8,
+}
+
+// View_Content_Ready carries independently replaceable presentation source.
+View_Content_Ready :: struct {
+    request_id: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    presentation_generation: u64,
+    animation: ^Euclid_Julia_Animation_Interface,
+    scratchpad_request_id: u64,
+    content: Presented_Text,
+}
+
+// Communication_Send_Outcome distinguishes bounded transport pressure from closure.
+Communication_Send_Outcome :: enum u8 {
+    Sent,
+    Queue_Full,
+    Allocation_Failed,
+    Runtime_Stopping,
+    Channel_Closed,
+}
+
+// Julia_Host_Ingress contains display-produced messages borrowed by the Julia owner.
+Julia_Host_Ingress :: union {
+    Julia_Request,
+}
+
+// Julia_Host_Egress contains Julia-produced messages borrowed by the display owner.
+Julia_Host_Egress :: union {
+    Julia_Event,
+    View_Content_Ready,
+}
+
+// Communication_Link carries producer-allocated envelopes through a bounded outbound
+// channel and returns consumed pointers to that producer for reclamation.
+Communication_Link :: struct($T: typeid) {
+    outbound: chan.Chan(^T),
+    returns: chan.Chan(^T),
+    pool: tlsf.Allocator,
+    backing: []byte,
+    backing_allocator: mem.Allocator,
+}
+
 Julia_Runtime_Service :: struct {
     evidence_ring: evidence_trace.Ring,
     evidence_session: ^evidence_session.Session,
@@ -436,8 +493,13 @@ Julia_Runtime_Service :: struct {
     // Borrowed from the Julia worker's GC frame; valid only while that worker is running.
     runtime_host: ^julialib.jl_value_t,
     worker: ^thread.Thread,
-    requests: chan.Chan(Julia_Request),
-    events: chan.Chan(Julia_Event),
+    request_link: Communication_Link(Julia_Host_Ingress),
+    event_link: Communication_Link(Julia_Host_Egress),
+    pending_view_content: ^Julia_Host_Egress,
+    display_deferred_view_content: ^Julia_Host_Egress,
+    presentation_generation: u64,
+    presentation_animation_generation_override: u64,
+    presentation_animation_override: ^Euclid_Julia_Animation_Interface,
     next_request_id: u64,
     owner_thread_id: int,
     lifecycle: Julia_Lifecycle_State,
@@ -459,7 +521,6 @@ Julia_Runtime_Service :: struct {
     completed_scratchpad_count: int,
     worker_scratchpad_completed_request_id: u64,
     worker_scratchpad_completed_runtime_generation: u64,
-    dynview_staging: ^Dynview_System,
     view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
     view_snapshot_generation: u64,
     published_view_snapshot_index: int,
@@ -1017,7 +1078,6 @@ Dynview_Command_Kind :: enum {
     Large_Op,
     Accent_Bar,
     Radical_Bar,
-    Copyable_Text_Run,
     Line_Break,
     Divider,
     Inline_Line,
@@ -1089,8 +1149,6 @@ Dynview_Command :: struct {
     accent_style_id: i32,
     accent_thickness: f32,
     accent_offset: f32,
-    copy_text_offset: int,
-    copy_text_len: int,
     inline_atom_dimension: f32,
     inline_atom_stroke: f32,
     inline_box_height: f32,
@@ -1736,6 +1794,8 @@ Dynview_Cache_Access_State :: enum {
 
 Dynview_Content_View :: struct {
     revision: u64,
+    presentation_mime: Presentation_Mime,
+    presentation_bytes: []u8,
     has_stream_error: bool,
     stream_open_block: bool,
     stream_open_block_id: i32,
@@ -2420,8 +2480,6 @@ Euclid_General_State :: struct {
     particle_system : ^Particle_System,
 
     dynview: Dynview_System,
-    dynview_emit_target: ^Dynview_System,
-    view_update_candidate: ^View_Snapshot,
 
     chalk_audio: Chalk_Audio_Runtime,
     user_drawing_sound_enabled: bool,

@@ -109,12 +109,12 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
 //   Verify a deterministic fixed step advances identity after the worker joins.
 @(test)
 deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
-    state^.particle_system = new(app_core.Particle_System)
+    state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     init_test_evidence(state)
 
@@ -169,16 +169,16 @@ expect_single_point_checkpoint :: proc(
 //   Verify a deterministic fixed step emits a post-join checkpoint snapshot.
 @(test)
 deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
     state^.julia_interface^.null_animation.name = "null"
-    state^.julia_runtime_service = new(app_core.Julia_Runtime_Service)
+    state^.julia_runtime_service = new(app_core.Julia_Runtime_Service, context.allocator)
     defer free(state^.julia_runtime_service)
-    state^.particle_system = new(app_core.Particle_System)
+    state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     state^.point_system^.next_point_index = 1
     state^.point_system^.points[0].kind = .Point
@@ -202,11 +202,11 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
 //   Verify a parallel step joins the particle and constraint updates.
 @(test)
 parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.particle_system = new(app_core.Particle_System)
+    state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
 
     particles := state^.particle_system
@@ -291,9 +291,9 @@ expect_failed_dynview_rebuild :: proc(
 //   Verify frame preparation joins the shape and dynview cache updates.
 @(test)
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     state^.point_system^.next_point_index = 1
     state^.point_system^.points[0].kind = .Point
@@ -331,9 +331,9 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
 //   Verify failed worker rebuilds clear partial views and retain plain fallback.
 @(test)
 dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     state^.dynview.enabled = true
 

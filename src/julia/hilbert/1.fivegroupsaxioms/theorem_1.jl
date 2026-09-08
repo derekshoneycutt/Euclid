@@ -12,7 +12,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PlaneEdgeLeft = [0.18f0, 0.58f0, 0f0]
 const PlaneEdgeRight = [0.82f0, 0.58f0, 0f0]
@@ -91,15 +91,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 1
-
-Two straight lines of a plane have either one point or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
 
 Two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] of a plane have either one point \euclidpoint[color=khaki3,size=1] or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Set the plane's fill alpha from a normalized [0, 1] opacity."""
@@ -195,7 +191,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line_b.host_id, line_b.joint1_id, line_b.joint2_id),
         intersection_point.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

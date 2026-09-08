@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.12f0, 0.56f0, 0f0]
 const LineEnd = [0.88f0, 0.56f0, 0f0]
@@ -97,12 +97,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom II,4
-
-II, 4. Any four points A, B, C, D of a straight line can always be so arranged that B shall lie between A and C and also between A and D, and, furthermore, that C shall lie between A and D and also between B and D."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,4}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,4}
 
 \textbf{II, 4.} Any four points $A$ \euclidpoint[color=palevioletred1,size=1],
 $B$ \euclidpoint[color=steelblue,size=1], $C$ \euclidpoint[color=khaki3,size=1],
@@ -116,7 +113,6 @@ $C$ \euclidpoint[color=khaki3,size=1] shall lie between
 $A$ \euclidpoint[color=palevioletred1,size=1] and
 $D$ \euclidpoint[color=palevioletred1,size=1] and also between
 $B$ \euclidpoint[color=steelblue,size=1] and $D$ \euclidpoint[color=palevioletred1,size=1]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""
@@ -178,7 +174,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_c.index, label_d.index,
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

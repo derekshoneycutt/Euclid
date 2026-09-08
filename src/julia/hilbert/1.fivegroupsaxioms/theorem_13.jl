@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointO = [0.16f0, 0.70f0, 0f0]
 const PointA = [0.38f0, 0.62f0, 0f0]
@@ -361,24 +361,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 13
-
-Let the angle (h, k) of the plane α be congruent to the angle (h', k') of the plane α', and, furthermore, let l be a half-ray in the plane α emanating from the vertex of the angle (h, k) and lying within this angle. Then there always exists in the plane α' a half-ray l' emanating from the vertex of the angle (h', k') and lying within this angle so that we have
-
-    ∠(h, l) ≡ ∠(h', l'),   ∠(k, l) ≡ ∠(k', l').
-
-Proof: We will represent the vertices of the angles (h, k) and (h', k') by O and O', respectively, and so select upon the sides h, k, h', k' the points A, B, A', B' so that the congruences
-
-    OA ≡ O'A',   OB ≡ O'B'
-
-are fulfilled. Because of the congruence of the triangles OAB and O'A'B', we have at once
-
-    AB ≡ A'B',   ∠OAB ≡ ∠O'A'B',   ∠OBA ≡ ∠O'B'A'.
-
-Let the straight line AB intersect l in C. Take the point C' upon the segment A'B' so that A'C' ≡ AC. Then O'C' is the required half-ray. In fact, it follows directly from these congruences, by aid of axiom IV, 3, that BC ≡ B'C'. Furthermore, the triangles OAC and O'A'C' are congruent to each other, and the same is true also of the triangles OCB and O'B'C'. With this our proposition is demonstrated."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 13}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 13}
 
 Let the angle $\angle(h, k)$ \euclidangle[color=lightgreen,radius=2,end=60,filled] of the plane $\alpha$ be congruent
 to the angle $\angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled] of the plane $\alpha'$,
@@ -421,7 +406,6 @@ and the same is true also of the triangles
 $OCB$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3] and
 $O'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3].
 With this our proposition is demonstrated."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -608,7 +592,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_h_prime.index, label_k_prime.index, label_l.index, label_l_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

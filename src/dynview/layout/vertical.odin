@@ -212,19 +212,30 @@ document_place_vertical_block :: proc(
         return {row_cursor, .Invalid_Argument}
     }
     source_block := content^.document_blocks[block.source_block_index]
-    first_line_indent := document_block_first_line_indent(
-        source_block, cache^.last_font_size)
-    document_place_block_horizontally(
-        source_block, lines, content^.document_display_rows,
-        ctx.available_width, first_line_indent)
-    for line, relative_index in lines {
-        if !document_place_line_contents(
-            builders, block.line_start+relative_index, line) {
-            return {row_cursor, .Invalid_Argument}
-        }
+    if !document_place_block_contents(ctx, block^, source_block, lines) {
+        return {row_cursor, .Invalid_Argument}
     }
     document_publish_block_reservation(block, spacing, reservation)
     return {row_cursor+reservation.row_count, .Ok}
+}
+
+// Position one block horizontally and publish every line's child contents.
+document_place_block_contents :: proc(
+    ctx: Document_Vertical_Context,
+    block: app_core.Dynview_Document_Layout_Block,
+    source_block: app_core.Dynview_Document_Block,
+    lines: []app_core.Dynview_Document_Layout_Line) -> bool {
+
+    first_line_indent := document_block_first_line_indent(
+        source_block, ctx.runtime^.compile_cache.last_font_size)
+    document_place_block_horizontally(
+        source_block, lines, ctx.runtime^.content.document_display_rows,
+        ctx.available_width, first_line_indent)
+    for line, relative_index in lines {
+        if !document_place_line_contents(
+            ctx.builders, block.line_start+relative_index, line) {return false}
+    }
+    return true
 }
 
 // Place all semantic blocks and reserve each completed extent on the outer grid.

@@ -12,7 +12,7 @@ import app_view "./core"
 //   Verify clearing then setting a long GIF status note truncates with a terminator.
 @(test)
 clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
 
     app_view.clear_gif_status_note(ui_runtime)
@@ -31,7 +31,7 @@ clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
 //   Verify clearing then setting a long GIF path truncates with a terminator.
 @(test)
 clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_Ui_Runtime_State)
+    ui_runtime := new(app_core.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
 
     app_view.clear_last_gif_path(ui_runtime)
@@ -74,7 +74,7 @@ gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) 
 //   Verify a cycle boundary is consumed exactly once per generation.
 @(test)
 gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
 
     testing.expect(t, !app_view.gif_capture_consume_cycle_boundary(state))
@@ -124,15 +124,15 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
 //   Verify a large hide-point batch splits into multiple commands.
 @(test)
 scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State)
+    state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
 
-    state^.point_system = new(app_core.Shapes_Point_System)
+    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
-    state^.julia_interface = new(app_core.Euclid_Julia_Interface)
+    state^.julia_interface = new(app_core.Euclid_Julia_Interface, context.allocator)
     defer free(state^.julia_interface)
     state^.julia_interface^.current_animation =
-        new(app_core.Euclid_Julia_Animation_Interface)
+        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(state^.julia_interface^.current_animation)
 
     batch: app_bridge.Scene_Command_Batch

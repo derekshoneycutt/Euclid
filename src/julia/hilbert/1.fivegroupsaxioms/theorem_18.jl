@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.18f0, 0.82f0, 0f0]
 const PointB = [0.46f0, 0.82f0, 0f0]
@@ -159,14 +159,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_d_prime, state.label_p_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 18
-
-If (A, B, C, ...) and (A', B', C', ...) are congruent figures and P represents any arbitrary point, then there can always be found a point P' so that the two figures (A, B, C, ..., P) and (A', B', C', ..., P') shall likewise be congruent. If the figure (A, B, C, ..., P) contains at least four points not lying in the same plane, then the determination of P' can be made in but one way.
-
-This theorem contains an important result; namely, that all the facts concerning space which have reference to congruence, that is to say, to displacements in space, are (by the addition of the axioms of groups I and II) exclusively the consequences of the six linear and plane axioms mentioned above. Hence, it is not necessary to assume the axiom of parallels in order to establish these facts."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 18}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 18}
 
 If $(A, B, C, ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue]
 and $(A', B', C', ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue]
@@ -179,7 +174,6 @@ $(A, B, C, ..., P)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=khaki3,e
 contains at least four points not lying in the same plane, then the determination of $P'$ \euclidpoint[color=grey60,size=1] can be made in but one way.
 
 This theorem contains an important result; namely, that all the facts concerning space which have reference to congruence, that is to say, to displacements in space, are (by the addition of the axioms of \textit{groups I and II}) exclusively the consequences of the six linear and plane axioms mentioned above. Hence, it is not necessary to assume the axiom of parallels in order to establish these facts."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the state of the animation cycle back to the start of the animation."""
@@ -372,7 +366,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a_prime.index, label_b_prime.index, label_c_prime.index,
         label_d_prime.index, label_p_prime.index, PhaseDescendA, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

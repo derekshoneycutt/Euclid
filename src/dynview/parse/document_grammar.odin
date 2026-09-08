@@ -61,6 +61,15 @@ Tex_Document_Parser :: struct {
     output: ^Tex_Semantic_Output,
 }
 
+// Tex_Document_Math_Input describes one parsed math run awaiting publication.
+Tex_Document_Math_Input :: struct {
+    text: Tex_Text_Span,
+    color: Tex_Document_Color,
+    root_style: Tex_Math_Root_Style,
+    math_program, source_start: int,
+    is_inline: bool,
+}
+
 //   Classify one source using the frozen document-marker heuristic.
 tex_classify_source_mode :: proc(source: string) -> Tex_Source_Mode {
     text := tex_document_trim(source)
@@ -233,40 +242,48 @@ tex_document_parse_style_command :: proc(
     parse_ctx: Tex_Document_Parse_Context) -> (Tex_Parse_Status, bool) {
 
     if tex_document_starts(parser, "\\textbf{") {
-        parser.offset += len("\\textbf{")
-        nested := parse_ctx
-        nested.font_flags |= TEX_DOCUMENT_STYLE_BOLD
-        nested.stop_on_brace = true
-        return tex_document_parse_sequence(parser, nested), true
+        return tex_document_parse_nested_style(
+            parser, parse_ctx, "\\textbf{", TEX_DOCUMENT_STYLE_BOLD, false), true
     }
     if tex_document_starts(parser, "\\textit{") ||
         tex_document_starts(parser, "\\emph{") {
         command := "\\textit{" if tex_document_starts(
             parser, "\\textit{") else "\\emph{"
-        parser.offset += len(command)
-        nested := parse_ctx
-        nested.font_flags |= TEX_DOCUMENT_STYLE_ITALIC
-        nested.stop_on_brace = true
-        return tex_document_parse_sequence(parser, nested), true
+        return tex_document_parse_nested_style(
+            parser, parse_ctx, command, TEX_DOCUMENT_STYLE_ITALIC, false), true
     }
     if tex_document_starts(parser, "\\textnormal{") {
-        parser.offset += len("\\textnormal{")
-        nested := parse_ctx
-        nested.font_flags = TEX_DOCUMENT_STYLE_REGULAR
-        nested.stop_on_brace = true
-        return tex_document_parse_sequence(parser, nested), true
+        return tex_document_parse_nested_style(parser, parse_ctx,
+            "\\textnormal{", TEX_DOCUMENT_STYLE_REGULAR, true), true
     }
     if tex_document_starts(parser, "\\texttt{") {
-        parser.offset += len("\\texttt{")
-        nested := parse_ctx
-        nested.stop_on_brace = true
-        return tex_document_parse_sequence(parser, nested), true
+        return tex_document_parse_nested_style(
+            parser, parse_ctx, "\\texttt{", 0, false), true
     }
     if tex_document_starts(parser, "\\textrm{") ||
         tex_document_starts(parser, "\\textsc{") {
         return .Unexpected_Token, true
     }
     return .Ok, false
+}
+
+// Parse one braced style scope after applying its font flag policy.
+tex_document_parse_nested_style :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context,
+    command: string,
+    font_flags: i32,
+    replace_flags: bool) -> Tex_Parse_Status {
+
+    parser.offset += len(command)
+    nested := parse_ctx
+    if replace_flags {
+        nested.font_flags = font_flags
+    } else {
+        nested.font_flags |= font_flags
+    }
+    nested.stop_on_brace = true
+    return tex_document_parse_sequence(parser, nested)
 }
 
 //   Parse one nested text-color command with unresolved-name inheritance.
@@ -343,28 +360,26 @@ tex_document_parse_math_run :: proc(
     if !span_ok {
         return .Work_Limit
     }
-    return tex_document_append_semantic_math(
-        parser, span, color, style, program, source_start, delimiters.is_inline)
+    return tex_document_append_semantic_math(parser, {
+        text = span, color = color, root_style = style,
+        math_program = program, source_start = source_start,
+        is_inline = delimiters.is_inline,
+    })
 }
 
 //   Append parsed math to its semantic paragraph or display block.
 tex_document_append_semantic_math :: proc(
     parser: ^Tex_Document_Parser,
-    text: Tex_Text_Span,
-    color: Tex_Document_Color,
-    root_style: Tex_Math_Root_Style,
-    math_program: int,
-    source_start: int,
-    is_inline: bool) -> Tex_Parse_Status {
+    input: Tex_Document_Math_Input) -> Tex_Parse_Status {
     item := Tex_Document_Inline{
         kind = .Math,
-        source = {source_start, parser.offset - source_start},
-        text = text,
-        color = color,
-        root_style = root_style,
-        math_program = math_program,
+        source = {input.source_start, parser.offset-input.source_start},
+        text = input.text,
+        color = input.color,
+        root_style = input.root_style,
+        math_program = input.math_program,
     }
-    if is_inline {
+    if input.is_inline {
         return tex_document_append_paragraph_inline(parser, item)
     }
     tex_document_close_paragraph(parser)

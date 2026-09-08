@@ -30,15 +30,6 @@ struct ScratchpadOutputSegment
     brush_color::Union{Nothing,OdinJuliaBridge.BridgeColor}
 end
 
-struct ScratchpadOutputEntry
-    line::String
-    block_kind::Int32
-    style_id::Int32
-    latex_source::String
-    latex_is_math::Bool
-    segments::Vector{ScratchpadOutputSegment}
-end
-
 struct ScratchpadInputEntry
     text::String
     mode::Int32
@@ -49,34 +40,11 @@ end
 ScratchpadInputEntry(text::String, mode::Int32) =
     ScratchpadInputEntry(text, mode, UInt64(0))
 
-"""Construct an output entry without optional inline segments."""
-function ScratchpadOutputEntry(
-    line::String,
-    block_kind::Int32,
-    style_id::Int32,
-    latex_source::String)
-
-    ScratchpadOutputEntry(
-        line, block_kind, style_id, latex_source, false, ScratchpadOutputSegment[])
-end
-
-"""Construct an output entry with segments and no explicit LaTeX math mode."""
-function ScratchpadOutputEntry(
-    line::String,
-    block_kind::Int32,
-    style_id::Int32,
-    latex_source::String,
-    segments::Vector{ScratchpadOutputSegment})
-
-    ScratchpadOutputEntry(line, block_kind, style_id, latex_source, false, segments)
-end
-
 mutable struct ScratchpadSession
     id::Int
     runtime::Module
     queue::Vector{ScratchpadInputEntry}
     output::Vector{String}
-    output_entries::Vector{ScratchpadOutputEntry}
     history::Vector{ScratchpadInputEntry}
     hooks::Vector{ScratchpadFrameHook}
     metrics::ScratchpadMetrics
@@ -374,9 +342,8 @@ function create_session(
         session_id,
         runtime,
         ScratchpadInputEntry[],
-        ScratchpadInputEntry[],
-        ScratchpadOutputEntry[],
         String[],
+        ScratchpadInputEntry[],
         ScratchpadFrameHook[],
         ScratchpadMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         UInt64(0),
@@ -515,60 +482,15 @@ function ensure_session!(
     return session
 end
 
-"""Append one output entry while enforcing the configured output retention cap."""
-function append_output_entry!(session::ScratchpadSession, entry::ScratchpadOutputEntry)
-    push!(session.output, entry.line)
-    push!(session.output_entries, entry)
+"""Append one output line while enforcing the configured output retention cap."""
+function append_output_line!(session::ScratchpadSession, line::AbstractString)
+    push!(session.output, String(line))
     session.output_revision += 1
     extra = length(session.output) - MaxOutputLines
     if extra > 0
         session.metrics.output_trimmed += extra
         deleteat!(session.output, 1:extra)
-        deleteat!(session.output_entries, 1:extra)
     end
-end
-
-"""Append one output line while enforcing the configured output retention cap."""
-function append_output_line!(session::ScratchpadSession, line::AbstractString)
-    text = String(line)
-    block_kind, style_id = dynview_ids_for_line(text)
-    append_output_entry!(session, ScratchpadOutputEntry(text, block_kind, style_id, ""))
-end
-
-"""Build one regular-weight output segment with an optional named brush color."""
-function output_segment(text::AbstractString, color_name::Union{Nothing,Symbol}=nothing)
-    brush_color = color_name === nothing ?
-        nothing : OdinJuliaBridge.bridge_color(color_name)
-    return ScratchpadOutputSegment(String(text), DynviewStyleOutput, brush_color)
-end
-
-"""Append one output line composed from independently colored text segments."""
-function append_segmented_output_line!(
-    session::ScratchpadSession,
-    segments::Vector{ScratchpadOutputSegment})
-
-    line = join(segment.text for segment in segments)
-    append_output_entry!(session, ScratchpadOutputEntry(
-        line,
-        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        DynviewStyleOutput,
-        "",
-        false,
-        segments))
-end
-
-"""Append one eval-result output line that should render as inline formatted LaTeX."""
-function append_latex_result_line!(
-    session::ScratchpadSession, latex_source::AbstractString, plain_text::AbstractString,
-    latex_is_math::Bool=false)
-    line = String(plain_text)
-    append_output_entry!(session, ScratchpadOutputEntry(
-        line,
-        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        DynviewStyleOutput,
-        String(latex_source),
-        latex_is_math,
-        ScratchpadOutputSegment[]))
 end
 
 """Apply REPL softscope transformation to parsed expressions when available."""

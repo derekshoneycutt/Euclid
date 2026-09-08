@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
 const MidPoint = [0.3f0, 0.7f0, 0f0]
@@ -65,19 +65,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.initial_line, state.line, state.points, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Postulates: Produce a Finite Line
-
-Let the following be postulated:
-
-To produce a finite straight line continuously in a straight line."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Produce a Finite Line}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Produce a Finite Line}
 
 \textit{Let the following be postulated:}
 
 To produce a finite straight line \euclidline[color=steelblue,length=3,thickness=4] continuously in a straight line."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -142,7 +136,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line.host_id, line.joint1_id, line.joint2_id),
         (point1.index, point2.index), PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

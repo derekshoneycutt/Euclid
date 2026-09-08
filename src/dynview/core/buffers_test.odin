@@ -7,7 +7,7 @@ import "core:testing"
 //   Verify command and text views prefer immutable publication over staging.
 @(test)
 command_buffer_views_prefer_published_content :: proc(t: ^testing.T) {
-    buffer := new(app_core.Dynview_Command_Buffer)
+    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     buffer^.command_count = 1
     buffer^.commands[0] = {block_id = 3}

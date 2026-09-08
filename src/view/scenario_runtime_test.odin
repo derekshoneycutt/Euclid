@@ -43,7 +43,7 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     logging_state: diagnostics.Logging_State
     testing.expect(t, diagnostics.logging_start(&logging_state, path, .Info))
     context.logger = logging_state.logger
-    state := new(Euclid_General_State)
+    state := new(Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.evidence_session.enabled = true
@@ -78,7 +78,7 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
 // Verify a required screenshot keeps the run active until post-presentation completion.
 @(test)
 scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State)
+    state := new(Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.evidence_session.enabled = true
@@ -129,9 +129,9 @@ scenario_scratchpad_submission_marks_forced_bottom_scroll :: proc(t: ^testing.T)
 // Verify scenario selection uses the programmatic tree synchronization path.
 @(test)
 scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service)
+    service := new(core.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_runtime_service = service
     ji := &state^.julia_interface_slots[0]
@@ -163,9 +163,9 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
 // Verify deferred reload actions identify the runtime generation they will publish.
 @(test)
 scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service)
+    service := new(core.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_runtime_service = service
     service^.runtime_generation = 7
@@ -185,7 +185,7 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
 // Verify rejected scenario Scratchpad work does not mutate display scroll state.
 @(test)
 scenario_rejected_scratchpad_submission_preserves_scroll_state :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.ui_runtime.text_scroll_dragging = true
     command_text, copied := scenario.text_copy("1 + 1")

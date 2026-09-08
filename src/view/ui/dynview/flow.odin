@@ -24,7 +24,6 @@ Flow_Command_Handler :: #type proc(
 FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
     .Begin_Block = nil,
     .End_Block = nil,
-    .Copyable_Text_Run = nil,
     .Line_Break = nil,
     .Divider = nil,
     .Text_Run = consume_text_based_command,

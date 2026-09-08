@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.50f0, 0.76f0, 0f0]
 const VertexB = [0.69f0, 0.62f0, 0f0]
@@ -160,12 +160,9 @@ function set_pentagon_alpha(state_ptr::Ptr{Cvoid}, shape_host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, shape_host_id, color)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Polygon
-
-A system of segments AB, BC, CD, ..., KL is called a broken line joining A with L and is designated, briefly, as the broken line ABCDE ... MKL. The points lying within the segments AB, BC, CD, ..., KL, as also the points A, B, C, D, ..., K, L, are called the points of the broken line. In particular, if the point A coincides with L, the broken line is called a polygon and is designated as the polygon ABCD ... KL. The segments AB, BC, CD, ..., KA are called the sides of the polygon and the points A, B, C, D, ..., K, are the vertices. Polygons having 3, 4, 5, ..., n vertices are called, respectively, triangles, quadrangles, pentagons, ..., n-gons. If the vertices of a polygon are all distinct and none of them lie within the segments composing the sides of the polygon, and, furthermore, if no two sides have a point in common, then the polygon is called a simple polygon."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Polygon}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Polygon}
 
 A system of segments $AB, BC, CD, ..., KL$ \euclidline[color=steelblue,length=3,thickness=4] is called a broken line joining
 $A$ \euclidpoint[color=khaki3,size=1] with $L$ \euclidpoint[color=palevioletred1,size=1] and is
@@ -180,7 +177,6 @@ Polygons having $3, 4, 5, ..., n$ vertices are called, respectively, triangles, 
 pentagons, ..., n-gons. If the vertices of a polygon are all distinct and none of them lie
 within the segments composing the sides of the polygon, and, furthermore, if no two sides
 have a point in common, then the polygon is called a simple polygon."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -280,7 +276,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_c.index, label_d.index, label_k.index,
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

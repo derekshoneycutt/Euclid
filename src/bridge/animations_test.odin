@@ -7,7 +7,7 @@ import "core:testing"
 //   Verify programmatic selection synchronizes flags, ancestry, and reveal intent.
 @(test)
 programmatic_selection_synchronizes_tree_state :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
@@ -35,7 +35,7 @@ programmatic_selection_synchronizes_tree_state :: proc(t: ^testing.T) {
 //   Verify a target outside the registry cannot disturb current selection.
 @(test)
 programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
@@ -54,9 +54,9 @@ programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
 //   Verify an explicit reload request schedules owner-thread lifecycle work.
 @(test)
 explicit_reload_requests_animation_lifecycle_update :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service)
+    service := new(core.Julia_Runtime_Service, context.allocator)
     defer free(service)
     ji := &state^.julia_interface_slots[0]
     animation := &ji^.null_animation

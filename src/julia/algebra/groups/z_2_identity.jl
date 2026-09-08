@@ -10,7 +10,7 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
 const VertexB = Float32[0.68f0, 0.34f0, 0f0]
@@ -61,18 +61,6 @@ const PhaseReflectFirst = 6f0
 const PhaseReflectSecond = 7f0
 const PhasePauseAfterDoubleReflect = 8f0
 
-const IdentityFallbackText = raw"""Identity
-
-Identity means there is a motion that changes nothing at all.
-
-In this model, that is the do-nothing motion e.
-
-1. e ∘ r = r: doing nothing before reflection changes nothing.
-2. r ∘ e = r: doing nothing after reflection changes nothing.
-3. The visual cue r ∘ r = e also reinforces that returning to start is a valid identity outcome.
-
-Formally, this means e ∘ a = a ∘ e = a for every allowed motion a."""
-
 const IdentityLatexDocument = raw"""\textbf{Identity}
 
 Identity means there is a motion that changes nothing at all.
@@ -113,10 +101,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr,
-        IdentityLatexDocument, IdentityFallbackText)
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(IdentityLatexDocument)
 end
 
 """Apply a set of reflection poses to the tracked points."""
@@ -240,7 +227,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     reset_cycle_state(
         state_ptr, AnimationState(lines, PhasePenDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

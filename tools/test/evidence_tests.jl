@@ -53,6 +53,8 @@ end
     @test "animation_tick_committed" in EuclidEvidence.scenario_schema().events
     @test "animation_loaded" in EuclidEvidence.scenario_schema().events
     @test "dynview_published" in EuclidEvidence.scenario_schema().events
+    @test "presentation_cleared" in EuclidEvidence.scenario_schema().events
+    @test "presentation_superseded" in EuclidEvidence.scenario_schema().events
     @test EuclidEvidence.capabilities().trace_event_bytes == 64
 end
 

@@ -12,7 +12,7 @@ using ..EuclidGeometry
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.18f0, 0.76f0, 0f0]
 const VertexB = [0.66f0, 0.76f0, 0f0]
@@ -108,15 +108,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.markers, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Rhomboid
-
-Of quadrilateral figures, ... and a rhomboid that which has its opposite sides and angles equal to one another but is neither equilateral nor right-angled."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhomboid}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhomboid}
 
 Of quadrilateral figures, ... and a rhomboid \euclidbox[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=palevioletred1] that which has its opposite sides \euclidline[color=palevioletred1,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4] and angles \euclidangle[color=steelblue,radius=2,end=60,filled] \euclidangle[color=grey60,radius=2,end=120,filled] equal to one another but is neither equilateral nor right-angled."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -175,7 +171,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     state = AnimationState(lines, markers, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -17,7 +17,7 @@ breaks, and Euclid inline shapes.
 1. [Matrix Support](#matrix-support)
 1. [Delimiter Support](#delimiter-support)
 1. [Cache And Invalidation](#cache-and-invalidation)
-1. [Fallback And Failure Behavior](#fallback-and-failure-behavior)
+1. [Literal Failure Behavior](#literal-failure-behavior)
 1. [Practical Authoring Tips](#practical-authoring-tips)
 1. [Known Limitations](#known-limitations)
 1. [Appendix: Module Architecture](#appendix-module-architecture)
@@ -25,32 +25,40 @@ breaks, and Euclid inline shapes.
 
 ## Recommended Usage
 
-Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It
-submits source and the supplied fallback to Dynview, which classifies and parses
-the complete input, builds one semantic stream, and uses the fallback as the copy
-payload. The facade always returns the fallback string expected by `get_view_text`.
+The MIME authoring API is the production presentation contract:
 
 ```julia
-const DefinitionLatexDocument = raw"""\textbf{Definition 1.}
+const Equation = L"\frac{a+b}{c}"
+const Definition = tex"""
+    extbf{Definition 1.}
+
+A point is that which has no part.
+"""
+
+get_view_content(_state_ptr) = Definition
+```
+
+`LaTeXString` serializes as delimited `text/latex` standalone math.
+`TeXDocument` and raw, non-interpolating `tex"..."` literals serialize as
+unwrapped `text/latex` documents. Ordinary strings are always `text/plain`.
+`OdinJuliaBridge.presented_text` selects one exact representation, while
+`publish_view_content` transfers it through bounded producer-owned storage.
+
+Production animations return one canonical displayable from `get_view_content`.
+Use `tex"..."` or `TeXDocument` for complete documents and `L"..."` for one
+standalone math expression. Publish that named producer with
+`OdinJuliaBridge.publish_view_content`.
+
+```julia
+const Definition = tex"""\textbf{Definition 1.}
 
 A point is that which has no part. The symbol $A_1$ marks a point.
 
 \euclidpoint[color=plum1,size=1]
 """
 
-const DefinitionFallback = "Definition 1. A point is that which has no part."
-
-function get_view_text(state_ptr)
-    EuclidLatex.emit_latex_view_text!(
-        state_ptr,
-        DefinitionLatexDocument,
-        DefinitionFallback)
-end
+get_view_content(_state_ptr) = Definition
 ```
-
-Use `replay_emit_math_block!` when a Dynview block is already open and only one
-math expression needs to be inserted. It submits one source-based, non-wrapping math
-block and returns `false` on bridge failure.
 
 ## Modes And Classification
 
@@ -58,14 +66,19 @@ The native parser selects one of two modes:
 
 | Mode | Intended source | Main API |
 | --- | --- | --- |
-| Math | One standalone expression | `replay_emit_math_block!` |
-| Document | Prose mixed with styling, math, breaks, or shapes | `emit_latex_view_text!` |
+| Math | One standalone expression | `L"..."` |
+| Document | Prose mixed with styling, math, breaks, or shapes | `tex"..."`, `tex"""..."""`, or `TeXDocument` |
 
 A fragment enclosed entirely by `$...$`, `$$...$$`, `\(...\)`, or `\[...\]`
 is classified as math. Otherwise, document markers such as `\textbf`,
 `\textit`, `\emph`, `\newline`, `\\`, `\euclid...`, or embedded math
 delimiters select document mode. Plain unmarked source is treated as math for
 backward compatibility.
+
+For canonical MIME presentations, classification is stricter: `text/plain` is
+always literal, a complete outer delimiter makes `text/latex` standalone math,
+and every unwrapped `text/latex` value is a document. This avoids inferring math
+from unwrapped source during the new producer migration.
 
 Dynview strips a complete outer math delimiter before parsing math mode. In document
 mode it parses the full source into typed native semantic records;
@@ -111,7 +124,7 @@ preserve source byte spans, style and color,
 math-program identity, and shape values. Breakable and nonbreaking spaces remain
 distinct; each carries one canonical space byte for shaping, and `~` produces
 nonbreaking space semantics. Capacity exhaustion rejects the complete structured
-document and leaves the caller-authored fallback authoritative.
+document and publishes the exact canonical source literally.
 
 ### Prose Style And Alignment Matrix
 
@@ -357,10 +370,10 @@ path rather than mixing generations or partially drawing a construction. Per-ite
 native-geometry validity and generation fields expose which path was sealed; font-page
 demand and fallback resolution are also retained in generation-local telemetry.
 
-The bridge record is mirrored field-for-field in Julia and Odin. Atom, glue, style,
+The native semantic record is validated before snapshot publication. Atom, glue, style,
 operator-policy, span, and child-count validation occurs before import. Scripts,
-fraction branches, and radical degrees retain recursive child identities across the
-boundary; fallback text is never reparsed to recover structure on the Odin side.
+fraction branches, and radical degrees retain recursive child identities without
+crossing the language boundary; canonical source is not reparsed for layout policy.
 
 ### Line Bands And Ink Overflow
 
@@ -505,13 +518,13 @@ Matrix mode supports rectangular grids and recursive math within cells:
 - Canonical wrapper output becomes `\left[...\right]`, `\left(...\right)`, or
     `\left|...\right|` around a `matrix` environment.
 
-Rows must be rectangular. Malformed matrix shape falls back safely rather than
-crashing the frame path.
+Rows must be rectangular. Malformed matrix shape rejects structured output and displays
+the exact canonical source rather than crashing the frame path.
 
-Matrix dimensions, cell style, row policy, alignments, typed boundary gaps, rule counts,
-and row additions cross the Julia/Odin boundary in a bounded typed descriptor. Matrix
-commands reference that descriptor by block-local index; native measurement and drawing
-do not reparse fallback text for layout policy.
+The native parser records matrix dimensions, cell style, row policy, alignments, typed
+boundary gaps, rule counts, and row additions in a bounded descriptor. Matrix commands
+reference that descriptor by block-local index; native measurement and drawing do not
+reparse canonical source for layout policy.
 Normal matrix, array, and `cases` cells enter TeX Text style. `smallmatrix` and
 `subarray` use Script style; `dcases`, `aligned`, `alignedat`, and `gathered` use
 Display style. The selected style applies before recursive fractions, scripts,
@@ -553,38 +566,36 @@ Available cache APIs:
 - `invalidate_cache_for_style!(style_profile)`
 - `invalidate_cache_for_grammar!(grammar_version)`
 
-In normal animation usage, calling `replay_emit_math_block!` is sufficient and
-cache behavior is automatic.
+In normal animation usage, returning `L"..."` is sufficient and cache behavior
+is automatic.
 
 The current cache applies to math parsing and compiled math programs. Exact-source
 documents are interned for the animation generation; embedded math expressions reuse
 the math cache.
 
-## Fallback And Failure Behavior
+## Literal Failure Behavior
 
-Fallback text is part of the API contract, not an exceptional afterthought.
-`emit_latex_view_text!` writes the supplied fallback as the Dynview copy payload
-and returns that same string whether structured emission succeeds or fails. Copy-icon
-geometry comes from the sealed semantic block bounds used by drawing, while copied
-content remains the authored fallback.
+The canonical MIME bytes govern rendering, copying, hashing, and failure output.
+Copy-icon geometry comes from the sealed semantic block bounds used by drawing,
+while copied content remains the exact authored source.
 
 Document mode fails closed: unsupported commands, malformed style groups,
 unclosed math delimiters, empty math fragments, and invalid Euclid shape options
 abort structured emission. Math mode uses parser recovery for unsupported or
-malformed constructs where possible. In either case, the host keeps rendering
-readable fallback text rather than exposing a partial stream.
+malformed constructs where possible. When parsing cannot publish semantic content,
+the host renders the exact literal source rather than a partial stream or duplicate
+authored text.
 
-Bridge status failures also stop emission. Authors should never make the
-structured stream the only source of user-visible meaning.
+Bridge status failures also stop publication without exposing partial content.
 
 ## Practical Authoring Tips
 
 - Prefer one semantic LaTeX expression over manually spaced pseudo-layout text.
-- Keep fallback text readable on its own.
-- Use `emit_latex_view_text!` for complete view documents instead of manually
+- Keep literal source understandable when native parsing rejects it.
+- Use `tex"..."` or `TeXDocument` for complete view documents instead of manually
     opening and closing a Dynview block.
-- Use raw Julia strings for document source when practical so LaTeX backslashes
-    remain readable.
+- Prefer raw, non-interpolating `tex"..."` literals so LaTeX backslashes remain
+    readable.
 - Keep LaTeX strings stable across frames when possible to maximize cache reuse.
 - Use `\text{...}` for words or labels that should not be italicized.
 - Use `\textbf`, `\textit`, and `\emph` only in document mode; use `\text` or
@@ -619,11 +630,11 @@ compilation.
 
 | File | Primary Role | Key Public/Top-Level Surface |
 | --- | --- | --- |
-| `src/julia/latex.jl` | Facade module and stable API surface | `module EuclidLatex`, exports, include order |
-| `src/julia/latex/facade.jl` | Raw-source submission and priming | `emit_latex_view_text!`, `replay_emit_math_block!`, `prime_latex!` |
+| `src/julia/latex.jl` | Facade module and stable API surface | `TeXDocument`, `tex_str`, exports, include order |
+| `src/julia/latex/facade.jl` | Canonical document representation and priming | `TeXDocument`, `tex_str`, `prime_latex!` |
 | `src/dynview/parse/` | Classification, bounded parsing, normalization, semantic lowering | document/math grammars and semantic builders |
 | `src/dynview/core/document_store.odin` | Generation-scoped exact-source interning | immutable document handles and diagnostics |
-| `src/bridge/dynview_native_tex.odin` | Native semantics to worker staging | transactional span rewriting and record import |
+| `src/bridge/dynview_native_tex.odin` | Native semantic replay into snapshot staging | transactional span rewriting and record import |
 
 ### Include And Dependency Direction
 
@@ -646,18 +657,18 @@ flow back into Julia.
 
 ```mermaid
 flowchart LR
-    A[Source LaTeX text]
-    B[Raw-source bridge]
+    A[Julia displayable]
+    B[Canonical MIME envelope]
     C{Native classification}
-    D[Bounded document/math parse]
+    D[Taskpool document/math parse]
     E[Generation-scoped interned semantics]
     F[Pointer-free snapshot]
     G[Worker shaping and layout]
     H[Rendered Dynview content]
-    I[Authored fallback]
+    I[Exact literal source on failure]
 
     A --> B --> C --> D --> E --> F --> G --> H
-    A --> I --> F
+    C --> I --> F
 ```
 
 ### Ownership And Failure Boundaries
@@ -666,15 +677,14 @@ flowchart LR
 | --- | --- | --- |
 | Tokenization, parsing, and normalization | `src/dynview/parse/` | Preserves frozen recovery behavior or rejects atomically |
 | Semantic reuse | `src/dynview/core/document_store.odin` | Bounded exact-source interning and stable negative caching |
-| Snapshot staging | `src/bridge/dynview_native_tex.odin` | Rebases pointer-free document ranges and rolls back the complete fragment on failure |
-| Shaping, layout, and derived caches | `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/compile/` | Retains fallback when a rebuild cannot publish |
-| User-visible copy fallback contract | `emit_latex_view_text!` | Always returns supplied fallback string |
+| Snapshot staging | `src/bridge/dynview_native_tex.odin` | Rebases pointer-free document ranges and publishes no partial fragment |
+| Shaping, layout, and derived caches | `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/compile/` | Publishes exact literal source when semantic content cannot be rebuilt |
+| User-visible copy/failure contract | Canonical MIME presentation | Uses the exact selected bytes |
 
 ## Summary
 
-For complete animation view text, use `emit_latex_view_text!` with a readable
-fallback. Use `replay_emit_math_block!` for math inserted into an already open
-Dynview block. Together, document mode and math mode cover styled prose,
+For complete animation view content, use `tex"..."` or `TeXDocument`; use
+`L"..."` for standalone math. Together, document mode and math mode cover styled prose,
 inline/display math, Euclid shapes, scripts, fractions, radicals, large
 operators, stretch delimiters, and matrix blocks through one bounded snapshot
 and replay pipeline.

@@ -4,7 +4,7 @@ import "core:testing"
 
 //   Allocate parser output for one focused test without large stack storage.
 tex_math_test_output :: proc() -> ^Tex_Semantic_Output {
-    return new(Tex_Semantic_Output)
+    return new(Tex_Semantic_Output, context.allocator)
 }
 
 //   Verify the frozen atom-spacing operation sequence and classifications.
@@ -220,6 +220,56 @@ tex_parse_math_matches_annotation_fixtures :: proc(t: ^testing.T) {
 }
 
 //   Verify fixed and middle delimiters retain size, class, and shared extent.
+tex_math_test_fixed_delimiters :: proc(
+    t: ^testing.T,
+    output: ^Tex_Semantic_Output) {
+
+    growths: [3]i32
+    classes: [3]Tex_Math_Atom_Class
+    fixed_count := 0
+    index := output.programs[output.root_program].first_op
+    for index >= 0 {
+        op := &output.ops[index]
+        if op.kind == .Stretch_Delimiter && op.operator_growth > 0 {
+            growths[fixed_count] = op.operator_growth
+            classes[fixed_count] = op.atom_class
+            fixed_count += 1
+        }
+        index = op.next_op
+    }
+    testing.expect_value(t, growths, [3]i32{1, 2, 3})
+    testing.expect_value(t, classes, [3]Tex_Math_Atom_Class{.Open, .Rel, .Close})
+    testing.expect_value(t, fixed_count, 3)
+}
+
+// Verify the outer stretch program retains both shared middle delimiters.
+tex_math_test_middle_delimiters :: proc(
+    t: ^testing.T,
+    output: ^Tex_Semantic_Output) {
+
+    outer_child := -1
+    index := output.programs[output.root_program].first_op
+    for index >= 0 {
+        op := &output.ops[index]
+        if op.kind == .Stretch_Delimiter && op.operator_growth == 0 &&
+            op.child_program >= 0 {outer_child = op.child_program}
+        index = op.next_op
+    }
+    testing.expect(t, outer_child >= 0)
+    middle_count := 0
+    if outer_child >= 0 {
+        for child_index := output.programs[outer_child].first_op;
+            child_index >= 0; child_index = output.ops[child_index].next_op {
+            child := &output.ops[child_index]
+            if child.kind == .Stretch_Delimiter && child.operator_limits == 1 {
+                middle_count += 1
+            }
+        }
+    }
+    testing.expect_value(t, middle_count, 2)
+}
+
+//   Verify fixed and middle delimiters retain size, class, and shared extent.
 @(test)
 tex_parse_math_matches_fixed_and_middle_delimiters :: proc(t: ^testing.T) {
     output := tex_math_test_output()
@@ -228,45 +278,8 @@ tex_parse_math_matches_fixed_and_middle_delimiters :: proc(t: ^testing.T) {
         "\\bigl( x \\Bigm| y \\biggr)+\\left\\{x \\middle| y " +
         "\\middle\\| z\\right\\}", .Display, output), Tex_Parse_Status.Ok)
     testing.expect(t, !output.recoverable)
-    growths: [3]i32
-    classes: [3]Tex_Math_Atom_Class
-    fixed_count := 0
-    root_index := output.programs[output.root_program].first_op
-    for root_index >= 0 {
-        op := &output.ops[root_index]
-        if op.kind == .Stretch_Delimiter && op.operator_growth > 0 {
-            growths[fixed_count] = op.operator_growth
-            classes[fixed_count] = op.atom_class
-            fixed_count += 1
-        }
-        root_index = op.next_op
-    }
-    testing.expect_value(t, growths, [3]i32{1, 2, 3})
-    testing.expect_value(t, classes, [3]Tex_Math_Atom_Class{.Open, .Rel, .Close})
-    testing.expect_value(t, fixed_count, 3)
-    outer_child := -1
-    root_index = output.programs[output.root_program].first_op
-    for root_index >= 0 {
-        op := &output.ops[root_index]
-        if op.kind == .Stretch_Delimiter && op.operator_growth == 0 &&
-            op.child_program >= 0 {
-            outer_child = op.child_program
-        }
-        root_index = op.next_op
-    }
-    testing.expect(t, outer_child >= 0)
-    middle_count := 0
-    if outer_child >= 0 {
-        child_index := output.programs[outer_child].first_op
-        for child_index >= 0 {
-            child := &output.ops[child_index]
-            if child.kind == .Stretch_Delimiter && child.operator_limits == 1 {
-                middle_count += 1
-            }
-            child_index = child.next_op
-        }
-    }
-    testing.expect_value(t, middle_count, 2)
+    tex_math_test_fixed_delimiters(t, output)
+    tex_math_test_middle_delimiters(t, output)
 }
 
 //   Verify command, escaped, and nonbreaking spaces remain distinguishable.

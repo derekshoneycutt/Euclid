@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.10f0, 0.82f0, 0f0]
 const PointB = [0.38f0, 0.82f0, 0f0]
@@ -188,12 +188,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 17
-
-If (A, B, C, ...) and (A', B', C', ...) are congruent plane figures and P is a point in the plane of the first, then it is always possible to find a point P' in the plane of the second figure so that (A, B, C, ..., P) and (A', B', C', ..., P') shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of P' can be made in only one way."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 17}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 17}
 
 If $(A, B, C, ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] and
 $(A', B', C', ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] are
@@ -203,7 +200,6 @@ $(A, B, C, ..., P)$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,e
 $(A', B', C', ..., P')$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=khaki3,edge4_color=khaki3]
 shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of
 $P'$ \euclidpoint[color=grey60,size=1] can be made in only one way."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -400,7 +396,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_p_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

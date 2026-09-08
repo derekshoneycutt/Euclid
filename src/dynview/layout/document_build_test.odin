@@ -136,19 +136,30 @@ document_layout_builders_enforce_all_output_limits :: proc(t: ^testing.T) {
         app_core.Bounded_Builder_Status.Limit_Exceeded)
 }
 
-// Verify mixed semantic nodes seal into measured lines and positioned source items.
-@(test)
-document_layout_builds_mixed_measured_records :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
-    fixture: Document_Layout_Test_Fixture
-    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+// Require canonical copy targets and nonoverlapping vertical placement.
+document_layout_expect_mixed_copy_and_bounds :: proc(
+    t: ^testing.T, cache: ^app_core.Dynview_Compile_Cache) {
+    testing.expect_value(t, len(cache^.document_layout_copy_targets), 4)
+    testing.expect(t, cache^.document_layout_copy_targets[0].canonical_text)
+    testing.expect_value(t, cache^.document_layout_copy_targets[0].count, 2)
+    testing.expect_value(t, cache^.document_layout_copy_targets[1].offset, 2)
+    testing.expect_value(t, cache^.document_layout_copy_targets[2].offset, 5)
+    for line_index in 1..<len(cache^.document_layout_lines) {
+        previous := cache^.document_layout_lines[line_index-1]
+        current := cache^.document_layout_lines[line_index]
+        testing.expect(t, previous.bottom <= current.top)
+    }
+    block := cache^.document_layout_blocks[0]
+    testing.expect(t, block.bottom <= block.reserved_bottom)
+    testing.expect_value(t, cache^.document_layout_total_height,
+        block.reserved_bottom)
+}
 
-    status := rebuild_document_layout_cache(runtime, &cache_owner)
-    cache := &runtime^.compile_cache
-
+// Require the complete mixed-content layout contract after a successful rebuild.
+document_layout_expect_mixed_records :: proc(
+    t: ^testing.T,
+    status: app_core.Bounded_Builder_Status,
+    cache: ^app_core.Dynview_Compile_Cache) {
     testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
     testing.expect(t, cache^.document_layout_is_valid)
     testing.expect_value(t, len(cache^.document_layout_nodes), 6)
@@ -168,20 +179,20 @@ document_layout_builds_mixed_measured_records :: proc(t: ^testing.T) {
     testing.expect_value(t, cache^.document_layout_items[2].descent, f32(16.5))
     testing.expect_value(t, cache^.document_layout_blocks[0].node_count, 6)
     testing.expect_value(t, cache^.document_layout_blocks[0].line_count, 3)
-    testing.expect_value(t, len(cache^.document_layout_copy_targets), 4)
-    testing.expect(t, cache^.document_layout_copy_targets[0].canonical_text)
-    testing.expect_value(t, cache^.document_layout_copy_targets[0].count, 2)
-    testing.expect_value(t, cache^.document_layout_copy_targets[1].offset, 2)
-    testing.expect_value(t, cache^.document_layout_copy_targets[2].offset, 5)
-    for line_index in 1..<len(cache^.document_layout_lines) {
-        previous := cache^.document_layout_lines[line_index-1]
-        current := cache^.document_layout_lines[line_index]
-        testing.expect(t, previous.bottom <= current.top)
-    }
-    block := cache^.document_layout_blocks[0]
-    testing.expect(t, block.bottom <= block.reserved_bottom)
-    testing.expect_value(t, cache^.document_layout_total_height,
-        block.reserved_bottom)
+    document_layout_expect_mixed_copy_and_bounds(t, cache)
+}
+
+// Verify mixed semantic nodes seal into measured lines and positioned source items.
+@(test)
+document_layout_builds_mixed_measured_records :: proc(t: ^testing.T) {
+    runtime_owner, cache_owner: app_core.Arena_Owner
+    fixture: Document_Layout_Test_Fixture
+    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
+    defer app_core.arena_owner_destroy(&runtime_owner)
+    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer app_core.arena_owner_destroy(&cache_owner)
+    status := rebuild_document_layout_cache(runtime, &cache_owner)
+    document_layout_expect_mixed_records(t, status, &runtime^.compile_cache)
 }
 
 // Verify changing only panel width deterministically reflows measured prose.
@@ -314,6 +325,29 @@ document_layout_vertical_reservations_contain_three_widths :: proc(t: ^testing.T
 }
 
 // Verify paragraph/display flow shares exact positions and reserves completed blocks.
+document_layout_expect_outer_grid :: proc(
+    t: ^testing.T,
+    cache: ^app_core.Dynview_Compile_Cache) {
+
+    testing.expect_value(t, cache^.document_layout_blocks[1].spacing_before, f32(12))
+    testing.expect_value(t, cache^.document_layout_blocks[2].spacing_before, f32(12))
+    testing.expect_value(t, cache^.document_layout_lines[1].x, f32(23.5))
+    testing.expect_value(t, cache^.document_layout_lines[2].x, f32(71))
+    testing.expect_value(t, cache^.document_layout_items[1].baseline,
+        cache^.document_layout_lines[1].baseline)
+    testing.expect_value(t, cache^.document_layout_copy_targets[1].y,
+        cache^.document_layout_items[1].top)
+    for block in cache^.document_layout_blocks {
+        testing.expect(t, block.bottom <= block.reserved_bottom)
+        testing.expect(t, block.trailing_padding >= 0)
+    }
+    testing.expect_value(t, cache^.document_layout_blocks[0].row_count, 1)
+    testing.expect_value(t, cache^.document_layout_blocks[1].row_count, 3)
+    testing.expect_value(t, cache^.document_layout_blocks[2].row_count, 2)
+    testing.expect_value(t, cache^.document_layout_total_height, f32(120))
+}
+
+// Verify paragraph/display flow shares exact positions and reserves completed blocks.
 @(test)
 document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
     runtime_owner, cache_owner: app_core.Arena_Owner
@@ -346,23 +380,7 @@ document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
     testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
-    cache := &runtime^.compile_cache
-    testing.expect_value(t, cache^.document_layout_blocks[1].spacing_before, f32(12))
-    testing.expect_value(t, cache^.document_layout_blocks[2].spacing_before, f32(12))
-    testing.expect_value(t, cache^.document_layout_lines[1].x, f32(23.5))
-    testing.expect_value(t, cache^.document_layout_lines[2].x, f32(71))
-    testing.expect_value(t, cache^.document_layout_items[1].baseline,
-        cache^.document_layout_lines[1].baseline)
-    testing.expect_value(t, cache^.document_layout_copy_targets[1].y,
-        cache^.document_layout_items[1].top)
-    for block in cache^.document_layout_blocks {
-        testing.expect(t, block.bottom <= block.reserved_bottom)
-        testing.expect(t, block.trailing_padding >= 0)
-    }
-    testing.expect_value(t, cache^.document_layout_blocks[0].row_count, 1)
-    testing.expect_value(t, cache^.document_layout_blocks[1].row_count, 3)
-    testing.expect_value(t, cache^.document_layout_blocks[2].row_count, 2)
-    testing.expect_value(t, cache^.document_layout_total_height, f32(120))
+    document_layout_expect_outer_grid(t, &runtime^.compile_cache)
 }
 
 // Verify align rows share one measured alignment axis and reserve number space.
@@ -398,6 +416,15 @@ document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
+
+    document_layout_expect_aligned_columns(t, status, cache)
+}
+
+// Require aligned rows to share an axis while preserving numbering policy.
+document_layout_expect_aligned_columns :: proc(
+    t: ^testing.T,
+    status: app_core.Bounded_Builder_Status,
+    cache: ^app_core.Dynview_Compile_Cache) {
 
     testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(cache^.document_layout_lines), 2)
@@ -443,6 +470,16 @@ document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
     lines := cache^.document_layout_lines
+
+    document_layout_expect_narrow_multline(t, status, cache, lines)
+}
+
+// Require deterministic narrow multline placement and number fallback.
+document_layout_expect_narrow_multline :: proc(
+    t: ^testing.T,
+    status: app_core.Bounded_Builder_Status,
+    cache: ^app_core.Dynview_Compile_Cache,
+    lines: []app_core.Dynview_Document_Layout_Line) {
 
     testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(lines), 3)

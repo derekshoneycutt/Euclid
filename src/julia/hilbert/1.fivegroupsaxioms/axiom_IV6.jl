@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
 const PointB = [0.52f0, 0.50f0, 0f0]
@@ -267,12 +267,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_b_prime, state.label_c_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,6
-
-IV, 6. If, in the two triangles ABC and A'B'C' the congruences AB ≡ A'B', AC ≡ A'C', ∠BAC ≡ ∠B'A'C' hold, then the congruences ∠ABC ≡ ∠A'B'C' and ∠ACB ≡ ∠A'C'B' also hold."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,6}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,6}
 
 \textbf{IV, 6.} If, in the two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3]
 and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=grey60,edge3_color=palevioletred1]
@@ -281,7 +278,6 @@ $AC$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv A'C'$ \eucli
 $\angle BAC$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle B'A'C'$ \euclidangle[color=khaki3,radius=2,end=60,filled] hold,
 then the congruences $\angle ABC$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'B'C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
 and $\angle ACB$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'C'B'$ \euclidangle[color=lightgreen,radius=2,end=60,filled] also hold."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -416,7 +412,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_c.index, label_a_prime.index,
         label_b_prime.index, label_c_prime.index, PhaseDescendToA, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -12,7 +12,7 @@ using ..EuclidGeometry
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.19f0, 0.76f0, 0f0]
 const VertexB = [0.81f0, 0.76f0, 0f0]
@@ -108,15 +108,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.markers, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Oblong
-
-Of quadrilateral figures, ... an oblong that which is right-angled but not equilateral; ..."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Oblong}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Oblong}
 
 Of quadrilateral figures, ... an oblong \euclidbox[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=palevioletred1] that which is right-angled \euclidangle[color=steelblue,radius=2,thickness=2] but not equilateral \euclidline[color=palevioletred1,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4]; ..."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -176,7 +172,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     state = AnimationState(lines, markers, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -9,19 +9,17 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
-"""Emit the welcome view text for Euclid's Elements."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    latex = raw"""\textbf{Welcome to Euclid's Elements!}"""
-    fallback = "Welcome to Euclid's Elements!"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
+"""Emit the welcome view content for Euclid's Elements."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Welcome to Euclid's Elements!}"""
 end
 
 """Initialize the null animation and publish the Elements overview."""
 function initialize(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Advance the shared null animation for the Elements overview."""

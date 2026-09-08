@@ -1,13 +1,3 @@
-
-struct DynviewBlockSwitchResult
-    ok::Bool
-    open_block::Bool
-    current_kind::Int32
-    block_id::Int32
-end
-
-
-
 """Return helper method names laid out in 2-3 text columns for :help output."""
 function helper_method_name_columns()
     names = sort!(collect(keys(HELPER_DOC_ALIASES)))
@@ -87,26 +77,10 @@ end
 
 """Append the Julia runtime banner shown when Scratchpad opens."""
 function append_startup_banner!(session::ScratchpadSession)
-    append_segmented_output_line!(session, [
-        output_segment("               _", :julia_green),
-    ])
-    append_segmented_output_line!(session, [
-        output_segment("   _", :julia_blue),
-        output_segment("       _ "),
-        output_segment("_", :julia_red),
-        output_segment("(_)", :julia_green),
-        output_segment("_", :julia_purple),
-        output_segment("     |  Documentation: https://docs.julialang.org"),
-    ])
-    append_segmented_output_line!(session, [
-        output_segment("  (_)", :julia_blue),
-        output_segment("     | "),
-        output_segment("(_)", :julia_red),
-        output_segment(" "),
-        output_segment("(_)", :julia_purple),
-        output_segment("    |"),
-    ])
     lines = [
+        "               _",
+        "   _       _ _(_)_     |  Documentation: https://docs.julialang.org",
+        "  (_)     | (_) (_)    |",
         "   _ _   _| |_  __ _   |  Type \"?\" for Julia help mode,",
         "  | | | | | | |/ _` |  |  \":help\" for Scratchpad commands.",
         julia_version_banner_line(),
@@ -133,53 +107,9 @@ function format_result_value(value, runtime::Module)
     return String(take!(io))
 end
 
-"""Remove surrounding dollar-delimiter runs from one `text/latex` result."""
-function normalize_latex_result_source(latex_source::AbstractString)
-    source = strip(String(latex_source))
-    if length(source) >= 2 && startswith(source, "\$") && endswith(source, "\$")
-        return strip(strip(source, '\$'))
-    end
-
-    return source
-end
-
-"""Render and classify one `text/latex` MIME result, or return `nothing`."""
-function format_result_latex(value, runtime::Module)
-    io = IOBuffer()
-    context = IOContext(io, :color => false, :limit => true, :module => runtime)
-    try
-        Base.invokelatest(show, context, MIME("text/latex"), value)
-    catch e
-        e isa Exception || rethrow()
-        return nothing
-    end
-
-    latex_source = String(take!(io))
-    normalized = normalize_latex_result_source(latex_source)
-    isempty(normalized) && return nothing
-    stripped = strip(latex_source)
-    is_math = length(stripped) >= 2 && startswith(stripped, "\$") &&
-        endswith(stripped, "\$")
-    return (source=normalized, is_math=is_math)
-end
-
-"""Render a result value using `text/latex` MIME when supported, else return `nothing`."""
-function format_result_latex_source(value, runtime::Module)
-    formatted = format_result_latex(value, runtime)
-    return formatted === nothing ? nothing : formatted.source
-end
-
-"""Append one eval-result output using LaTeX rendering when available."""
+"""Append one eval result using its authoritative plain representation."""
 function append_eval_result_output!(session::ScratchpadSession, result)
-    plain_text = format_result_value(result, session.runtime)
-    formatted = format_result_latex(result, session.runtime)
-    if formatted === nothing
-        append_output_line!(session, plain_text)
-        return
-    end
-
-    append_latex_result_line!(
-        session, formatted.source, plain_text, formatted.is_math)
+    append_output_line!(session, format_result_value(result, session.runtime))
 end
 
 """Truncate UTF-8 text to a byte budget and append an explicit marker."""
@@ -253,24 +183,8 @@ function append_input_echo_line!(
     input_mode::Int32)
 
     prompt = input_mode == InputModeHelp ? HelpPrompt : ReplPrompt
-    prompt_color = input_mode == InputModeHelp ? HelpPromptColor : ReplPromptColor
     prefix = first_line ? prompt : ReplContinuation
-    segments = ScratchpadOutputSegment[]
-    if first_line
-        push!(segments, ScratchpadOutputSegment(
-            prompt, DynviewStylePromptBold, prompt_color))
-    else
-        push!(segments, ScratchpadOutputSegment(
-            ReplContinuation, DynviewStyleOutput, nothing))
-    end
-    push!(segments, ScratchpadOutputSegment(
-        String(text), DynviewStyleOutput, nothing))
-    append_output_entry!(session, ScratchpadOutputEntry(
-        prefix * String(text),
-        OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_INPUT,
-        DynviewStyleInput,
-        "",
-        segments))
+    append_output_line!(session, prefix * String(text))
 end
 
 """Echo submitted input with its mode prompt and normal command text."""
@@ -398,194 +312,10 @@ function append_native_error_block!(session::ScratchpadSession, text::AbstractSt
         return
     end
 
-    lines = [ScratchpadOutputSegment[]]
-    for segment in parse_native_error_segments(text)
-        parts = split(segment.text, '\n'; keepempty=true)
-        for (index, part) in enumerate(parts)
-            if !isempty(part)
-                push!(lines[end], ScratchpadOutputSegment(
-                    String(part), segment.style_id, segment.brush_color))
-            end
-            if index < length(parts)
-                push!(lines, ScratchpadOutputSegment[])
-            end
-        end
+    plain_text = join(segment.text for segment in parse_native_error_segments(text))
+    for line in split(plain_text, '\n'; keepempty=true)
+        append_output_line!(session, line)
     end
-
-    for segments in lines
-        append_segmented_output_line!(session, segments)
-    end
-end
-
-"""Return true when a host bridge status code represents success."""
-is_bridge_status_ok(code::Integer) = Int32(code) == OdinJuliaBridge.BRIDGE_STATUS_OK
-
-"""Map one output line into block/style ids for dynview emission."""
-function dynview_ids_for_line(line::AbstractString)
-    if startswith(line, "ERROR:") || startswith(line, "Error:") ||
-        startswith(line, "help error:") ||
-            startswith(line, "Blocked ")
-        return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleError
-    end
-
-    return OdinJuliaBridge.BRIDGE_DYNVIEW_BLOCK_OUTPUT, DynviewStyleOutput
-end
-
-"""Switch dynview block when needed, preserving strict begin/end ordering."""
-function dynview_switch_block!(
-    state_ptr::Ptr{Cvoid}, open_block::Bool, current_kind::Int32,
-    next_kind::Int32, block_id::Int32)
-    if open_block && next_kind == current_kind
-        return DynviewBlockSwitchResult(true, open_block, current_kind, block_id)
-    end
-
-    if open_block && !is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
-        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
-    end
-    if !is_bridge_status_ok(
-        OdinJuliaBridge.dynview_begin_block(state_ptr, next_kind, block_id))
-        return DynviewBlockSwitchResult(false, open_block, current_kind, block_id)
-    end
-
-    return DynviewBlockSwitchResult(true, true, next_kind, block_id + Int32(1))
-end
-
-"""Emit one optional-color text segment into the active dynview block."""
-function dynview_emit_segment!(state_ptr::Ptr{Cvoid}, segment::ScratchpadOutputSegment)
-    status = segment.brush_color === nothing ?
-        OdinJuliaBridge.dynview_text_run(state_ptr, segment.text, segment.style_id) :
-        OdinJuliaBridge.dynview_text_run_brush(
-            state_ptr, segment.text, segment.style_id, segment.brush_color)
-    return is_bridge_status_ok(status)
-end
-
-"""Emit one plain or segmented line and its copy payload into the active block."""
-function dynview_emit_line!(
-    state_ptr::Ptr{Cvoid},
-    entry::ScratchpadOutputEntry,
-    add_line_break::Bool)
-
-    if isempty(entry.segments)
-        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(
-            state_ptr, entry.line, entry.style_id))
-            return false
-        end
-    else
-        for segment in entry.segments
-            if !dynview_emit_segment!(state_ptr, segment)
-                return false
-            end
-        end
-    end
-    if !is_bridge_status_ok(
-        OdinJuliaBridge.dynview_copyable_text_run(state_ptr, entry.line))
-        return false
-    end
-    if add_line_break &&
-        !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
-        return false
-    end
-    return true
-end
-
-"""Emit one LaTeX result line with a plain-text fallback."""
-function dynview_emit_latex_result_line!(
-    state_ptr::Ptr{Cvoid},
-    entry::ScratchpadOutputEntry,
-    add_line_break::Bool)
-
-    line = entry.line
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_copyable_text_run(state_ptr, line))
-        return false
-    end
-
-    rendered = EuclidLatex.replay_emit_math_block!(
-        state_ptr,
-        entry.latex_source;
-        text_style=entry.style_id)
-
-    if !rendered
-        if !is_bridge_status_ok(OdinJuliaBridge.dynview_text_run(
-            state_ptr, line, entry.style_id))
-            return false
-        end
-    end
-
-    if add_line_break &&
-        !is_bridge_status_ok(OdinJuliaBridge.dynview_line_break(state_ptr))
-        return false
-    end
-    return true
-end
-
-"""Return the most recent LaTeX result, if the output ends with one."""
-function latest_latex_output(session::ScratchpadSession)
-    isempty(session.output_entries) && return nothing
-    entry = last(session.output_entries)
-    isempty(entry.latex_source) && return nothing
-    return entry
-end
-
-"""Return whether one LaTeX result should replace history as a semantic document."""
-function latex_output_is_document(entry::ScratchpadOutputEntry)
-    return !entry.latex_is_math && OdinJuliaBridge.dynview_tex_source_mode(
-        entry.latex_source) == OdinJuliaBridge.DYNVIEW_TEX_MODE_DOCUMENT
-end
-
-"""Replace Scratchpad history with its latest native semantic document when eligible."""
-function emit_latest_document!(state_ptr::Ptr{Cvoid}, session::ScratchpadSession)
-    entry = latest_latex_output(session)
-    entry === nothing && return nothing
-    latex_output_is_document(entry) || return nothing
-    is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) || return false
-    status = OdinJuliaBridge.dynview_tex_document(
-        state_ptr, entry.latex_source, entry.line,
-        entry.block_kind, Int32(1), entry.style_id)
-    return is_bridge_status_ok(status)
-end
-
-"""Emit current scratchpad output as a dynview command stream for host-side rendering."""
-function emit_dynview_output_stream!(state_ptr::Ptr{Cvoid}, session::ScratchpadSession)
-    document_status = emit_latest_document!(state_ptr, session)
-    document_status === nothing || return document_status
-    if !is_bridge_status_ok(OdinJuliaBridge.dynview_reset_stream(state_ptr)) ||
-        isempty(session.output_entries)
-        return isempty(session.output_entries)
-    end
-
-    block_id = Int32(1)
-    current_kind = Int32(0)
-    open_block = false
-    last_line_index = lastindex(session.output_entries)
-    for i in eachindex(session.output_entries)
-        entry = session.output_entries[i]
-        switch_result = dynview_switch_block!(
-            state_ptr,
-            open_block,
-            current_kind,
-            entry.block_kind,
-            block_id)
-        if !switch_result.ok
-            return false
-        end
-        open_block = switch_result.open_block
-        current_kind = switch_result.current_kind
-        block_id = switch_result.block_id
-
-        if isempty(entry.latex_source)
-            if !dynview_emit_line!(state_ptr, entry, i != last_line_index)
-                return false
-            end
-            continue
-        end
-
-        if !dynview_emit_latex_result_line!(state_ptr, entry, i != last_line_index)
-            return false
-        end
-    end
-
-    return !open_block ||
-        is_bridge_status_ok(OdinJuliaBridge.dynview_end_block(state_ptr))
 end
 
 """Render docs metadata objects into plain user-facing help text."""

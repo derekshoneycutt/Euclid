@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.466667f0, 0.53333336f0, 0f0]
 const BPoint = [0.53333336f0, 0.466667f0, 0f0]
@@ -104,16 +104,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.circles, state.labels, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Proclus - Isosceles Triangle
-
-On a given finite straight line to construct an isosceles triangle.
-
-This follows Euclid's Elements Book I, Proposition I, with modifications.
-
-To make an isosceles triangle he produces AB in both directions to meet the respective circles in D, E and then describes circles with A, B as centers and AE, BD as radii respectively. The result is an isosceles triangle with each of two sides double of the third side."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Proclus - Isosceles Triangle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Proclus - Isosceles Triangle}
 
 On a given finite straight line to construct an isosceles triangle.
 
@@ -127,7 +120,6 @@ $B$ \euclidcircle[color=grey60,size=1,thickness=2] as centers and
 $AE$ \euclidline[color=grey60,length=3,thickness=4],
 $BD$ \euclidline[color=grey60,length=3,thickness=4] as radii respectively.
 The result is an isosceles triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=steelblue] with each of two sides double of the third side."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -244,7 +236,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             CircleIds(circle4.host_id, circle4.start_id, circle4.end_id)),
         (label_a.index, label_b.index, label_c.index), PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

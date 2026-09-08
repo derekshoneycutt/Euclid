@@ -190,34 +190,31 @@ tex_math_registry_is_fixed_delimiter :: proc(command: string) -> bool {
 //   Resolve the complete frozen fixed-command registry with exact semantics.
 tex_math_registry_fixed_symbol :: proc(
     command: string) -> (Tex_Math_Symbol_Result, bool) {
-    for entry in TEX_MATH_GREEK_SYMBOLS {
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_GREEK_SYMBOLS, .Math_Italic, .Ord); ok {return result, true}
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_BINARY_SYMBOLS, .Math_Upright, .Bin); ok {return result, true}
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_RELATION_SYMBOLS, .Math_Upright, .Rel); ok {return result, true}
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_OPEN_SYMBOLS, .Math_Upright, .Open); ok {return result, true}
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_CLOSE_SYMBOLS, .Math_Upright, .Close); ok {return result, true}
+    if result, ok := tex_math_registry_find_symbol(
+        command, TEX_MATH_ORDINARY_SYMBOLS, .Math_Upright, .Ord); ok {return result, true}
+    return {}, false
+}
+
+// Search one fixed-symbol family and attach its shared semantic properties.
+tex_math_registry_find_symbol :: proc(
+    command: string,
+    entries: $T,
+    role: Tex_Math_Style_Role,
+    atom_class: Tex_Math_Atom_Class) -> (Tex_Math_Symbol_Result, bool) {
+
+    for entry in entries {
         if entry.command == command {
-            return {entry.text, {role = .Math_Italic, atom_class = .Ord}}, true
-        }
-    }
-    for entry in TEX_MATH_BINARY_SYMBOLS {
-        if entry.command == command {
-            return {entry.text, {role = .Math_Upright, atom_class = .Bin}}, true
-        }
-    }
-    for entry in TEX_MATH_RELATION_SYMBOLS {
-        if entry.command == command {
-            return {entry.text, {role = .Math_Upright, atom_class = .Rel}}, true
-        }
-    }
-    for entry in TEX_MATH_OPEN_SYMBOLS {
-        if entry.command == command {
-            return {entry.text, {role = .Math_Upright, atom_class = .Open}}, true
-        }
-    }
-    for entry in TEX_MATH_CLOSE_SYMBOLS {
-        if entry.command == command {
-            return {entry.text, {role = .Math_Upright, atom_class = .Close}}, true
-        }
-    }
-    for entry in TEX_MATH_ORDINARY_SYMBOLS {
-        if entry.command == command {
-            return {entry.text, {role = .Math_Upright, atom_class = .Ord}}, true
+            return {entry.text, {role = role, atom_class = atom_class}}, true
         }
     }
     return {}, false

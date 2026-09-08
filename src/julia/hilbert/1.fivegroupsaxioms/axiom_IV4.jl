@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexO = [0.28f0, 0.66f0, 0f0]
 const VertexOPrime = [0.28f0, 0.30f0, 0f0]
@@ -143,24 +143,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_o_prime, state.label_h_prime, state.label_k_prime, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom IV,4
-
-IV, 4. Let an angle (h, k) be given in the plane α and let a straight line a' be given in a plane α'. Suppose also that, in the plane α, a definite side of the straight line a' be assigned. Denote by h' a half-ray of the straight line a' emanating from a point O' of this line. Then in the plane α' there is one and only one half-ray k' such that the angle (h, k), or (k, h), is congruent to the angle (h', k') and that at the same time all interior points of the angle (h', k') lie upon the given side of a'. We express this relation by means of the notation
-
-∠(h, k) ≡ ∠(h', k')
-
-Every angle is congruent to itself; that is,
-
-∠(h, k) ≡ ∠(h, k)
-
-or
-
-∠(h, k) ≡ ∠(k, h)
-
-We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,4}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,4}
 
 \textbf{IV, 4.} Let an angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] be given in the plane $\alpha$ and let a straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] be given in a plane $\alpha'$. Suppose also that, in the plane $\alpha$, a definite side of the straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] be assigned. Denote by $h'$ \euclidline[color=steelblue,length=3,thickness=4] a half-ray of the straight line $a'$ \euclidline[color=steelblue,length=3,thickness=4] emanating from a point $O'$ \euclidpoint[color=plum1,size=0.5] of this line. Then in the plane $\alpha'$ there is one and only one half-ray $k'$ \euclidline[color=grey60,length=3,thickness=4] such that the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled], or $(k, h)$ \euclidangle[color=khaki3,radius=2,end=60,filled], is congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] and that at the same time all interior points of the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] lie upon the given side of $a'$ \euclidline[color=steelblue,length=3,thickness=4]. We express this relation by means of the notation
 
@@ -175,7 +160,6 @@ or
 $\angle(h, k) \equiv \angle(k, h)$ \euclidangle[color=khaki3,radius=2,end=60,filled]
 
 We say, briefly, that every angle in a given plane can be laid off upon a given side of a given half-ray in one and only one way."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -280,7 +264,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_o.index, label_h.index, label_k.index, label_o_prime.index,
         label_h_prime.index, label_k_prime.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

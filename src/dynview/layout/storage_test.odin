@@ -12,8 +12,8 @@ layout_storage_publishes_ordered_records :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
     cache^.last_cell_width = 8
@@ -51,8 +51,8 @@ layout_storage_rejects_exact_limit_overflow :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
     cache^.layout_item_builder.count = app_core.DYNVIEW_MAX_LAYOUT_ITEMS
@@ -75,8 +75,8 @@ layout_storage_reset_clears_partial_aliases :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
     state := Dynview_Layout_State{}

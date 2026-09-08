@@ -34,6 +34,15 @@ Document_Display_Measurement :: struct {
     align_numbers_below: bool,
 }
 
+// Document_Block_Compose_Context groups immutable inputs for per-block composition.
+Document_Block_Compose_Context :: struct {
+    cache: ^app_core.Dynview_Compile_Cache,
+    builders: ^Document_Layout_Builders,
+    source_blocks: []app_core.Dynview_Document_Block,
+    display_rows: []app_core.Dynview_Document_Display_Row,
+    available_width: f32,
+}
+
 // Clear every semantic document-layout alias without touching command layout.
 document_layout_clear :: proc(cache: ^app_core.Dynview_Compile_Cache) {
     if cache == nil {
@@ -374,7 +383,8 @@ document_layout_append_display_row :: proc(
         display_number = row.number,
         display_number_x = ctx.available_width-number_width,
         display_number_width = number_width,
-        display_number_baseline_offset = ctx.cache^.last_font_size*1.2 if number_below else 0,
+        display_number_baseline_offset =
+            ctx.cache^.last_font_size*1.2 if number_below else 0,
         display_content_width = content_width,
     }
     status := app_core.bounded_element_builder_append(
@@ -405,37 +415,45 @@ document_layout_compose_blocks :: proc(
     display_rows: []app_core.Dynview_Document_Display_Row,
     available_width: f32) -> app_core.Bounded_Builder_Status {
 
-    for block, block_index in builders^.blocks.storage[:builders^.blocks.count] {
-        if block.source_block_index < 0 ||
-            block.source_block_index >= len(source_blocks) {
-            return .Invalid_Argument
-        }
-        source_block := source_blocks[block.source_block_index]
-        first_line_indent := document_block_first_line_indent(
-            source_block, cache^.last_font_size)
-        node_start := block.node_start
-        node_count := block.node_count
-        line_start := builders^.lines.count
-        status: app_core.Bounded_Builder_Status
-        if source_block.kind == .Display && source_block.display_kind != .Plain {
-            status = document_layout_compose_display({
-                cache = cache, builders = builders, block = block,
-                source = source_block, rows = display_rows,
-                block_index = block_index, available_width = available_width,
-            })
-        } else {
-            break_result := document_optimal_break(builders^.nodes.storage[
-                node_start:node_start+node_count], block_index,
-                available_width, &builders^.lines, first_line_indent)
-            status = break_result.status
-            document_layout_record_break_result(cache, break_result)
-        }
-        if status != .Ok {return status}
-        status = document_layout_finish_block(
-            cache, builders, block_index, node_start, line_start)
+    ctx := Document_Block_Compose_Context{
+        cache = cache, builders = builders, source_blocks = source_blocks,
+        display_rows = display_rows, available_width = available_width,
+    }
+    for _, block_index in builders^.blocks.storage[:builders^.blocks.count] {
+        status := document_layout_compose_block(ctx, block_index)
         if status != .Ok {return status}
     }
     return .Ok
+}
+
+// Break and finalize one validated semantic document block.
+document_layout_compose_block :: proc(
+    ctx: Document_Block_Compose_Context,
+    block_index: int) -> app_core.Bounded_Builder_Status {
+
+    block := ctx.builders^.blocks.storage[block_index]
+    if block.source_block_index < 0 ||
+        block.source_block_index >= len(ctx.source_blocks) {return .Invalid_Argument}
+    source := ctx.source_blocks[block.source_block_index]
+    line_start := ctx.builders^.lines.count
+    status: app_core.Bounded_Builder_Status
+    if source.kind == .Display && source.display_kind != .Plain {
+        status = document_layout_compose_display({
+            cache = ctx.cache, builders = ctx.builders, block = block,
+            source = source, rows = ctx.display_rows, block_index = block_index,
+            available_width = ctx.available_width,
+        })
+    } else {
+        indent := document_block_first_line_indent(source, ctx.cache^.last_font_size)
+        result := document_optimal_break(ctx.builders^.nodes.storage[
+            block.node_start:block.node_start+block.node_count], block_index,
+            ctx.available_width, &ctx.builders^.lines, indent)
+        status = result.status
+        document_layout_record_break_result(ctx.cache, result)
+    }
+    if status != .Ok {return status}
+    return document_layout_finish_block(
+        ctx.cache, ctx.builders, block_index, block.node_start, line_start)
 }
 
 // Seal all semantic layout families and publish one complete document cache.

@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.14f0, 0.74f0, 0f0]
 const LineAEnd = [0.86f0, 0.74f0, 0f0]
@@ -74,19 +74,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 8
-
-If two straight lines a, b of a plane do not meet a third straight line c of the same plane, then they do not meet each other.
-
-For, if a, b had a point A in common, there would then exist in the same plane with c two straight lines a and b each passing through the point A and not meeting the straight line c. This condition of affairs is, however, contradictory to the second assertion contained in the axiom of parallels as originally stated. Conversely, the second part of the axiom of parallels, in its original form, follows as a consequence of theorem 8."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 8}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 8}
 
 If two straight lines $a$ \euclidline[color=steelblue,length=3,thickness=4], $b$ \euclidline[color=palevioletred1,length=3,thickness=4] of a plane do not meet a third straight line $c$ \euclidline[color=khaki3,length=3,thickness=4] of the same plane, then they do not meet each other.
 
 For, if $a$ \euclidline[color=steelblue,length=3,thickness=4], $b$ \euclidline[color=palevioletred1,length=3,thickness=4] had a point $A$ \euclidpoint[color=plum1,size=0.5] in common, there would then exist in the same plane with $c$ \euclidline[color=khaki3,length=3,thickness=4] two straight lines $a$ \euclidline[color=steelblue,length=3,thickness=4] and $b$ \euclidline[color=palevioletred1,length=3,thickness=4] each passing through the point $A$ \euclidpoint[color=plum1,size=0.5] and not meeting the straight line $c$ \euclidline[color=khaki3,length=3,thickness=4]. This condition of affairs is, however, contradictory to the second assertion contained in the axiom of parallels as originally stated. Conversely, the second part of the axiom of parallels, in its original form, follows as a consequence of \textit{theorem 8}."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -150,7 +144,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         line_c.joint2_id, labela.index, labelb.index, labelc.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

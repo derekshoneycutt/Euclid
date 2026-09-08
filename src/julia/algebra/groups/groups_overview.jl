@@ -9,22 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
-export get_view_text, initialize, clean, loop, animation_entry
-
-const Fallback = raw"""Algebra - Groups
-    
-For this project, think of a group as a collection of actions taken on a figure. The main questions are: what motions are allowed, how do they compose or behave when you do more than one in sequence, and what happens when you repeat or undo them?
-
-Formally, a group is a set G with a binary operation ∘: G × G → G satisfying 4 axioms:
-
-1. Closure: if a, b ∈ G, then a ∘ b ∈ G.
-2. Associativity: (a ∘ b) ∘ c = a ∘ (b ∘ c) for all a,b,c ∈ G.
-3. Identity: there is an element e ∈ G with e ∘ a = a ∘ e = a for all a ∈ G.
-4. Inverses: for each a ∈ G, there is a⁻¹ ∈ G with a ∘ a⁻¹ = a⁻¹ ∘ a = e.
-
-Some actions commute and some do not. If a ∘ b = b ∘ a for all a,b ∈ G, then the group is commutative, also called abelian. Commutativity is not required.
-
-In this sequence, we move from simple discrete symmetries to continuous geometric motions on the Euclidean plane."""
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LatexDocument = raw"""\textbf{Algebra - Groups}
 
@@ -41,15 +26,15 @@ Some actions commute and some do not. If $a \circ b = b \circ a$ for all $a,b \i
 
 In this sequence, we move from simple discrete symmetries to continuous geometric motions on the Euclidean plane."""
 
-"""Emit the root view text for the group-theory animation sequence."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr, LatexDocument, Fallback)
+"""Emit the root view content for the group-theory animation sequence."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(LatexDocument)
 end
 
 """Initialize the null animation and publish the Groups overview."""
 function initialize(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Advance the shared null animation for the Groups overview."""

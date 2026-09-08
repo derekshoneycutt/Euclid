@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -60,14 +60,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.circle_end, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Circle
-
-If M is an arbitrary point in the plane α, the totality of all points A, for which the segments MA are congruent to one another, is called a circle. M is called the centre of the circle.
-
-From this definition can be easily deduced, with the help of the axioms of groups III and IV, the known properties of the circle; in particular, the possibility of constructing a circle through any three points not lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Circle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Circle}
 
 If $M$ \euclidpoint[color=palevioletred1,size=1] is an arbitrary point in the plane $\alpha$, the totality of all points
 $A$ \euclidpoint[color=steelblue,size=0.5], for which the segments $MA$ \euclidline[color=plum1,length=3,thickness=1] are congruent to one another, is called a circle
@@ -76,7 +71,6 @@ $A$ \euclidpoint[color=steelblue,size=0.5], for which the segments $MA$ \euclidl
 From this definition can be easily deduced, with the help of the axioms of \textit{groups III and IV},
 the known properties of the circle; in particular, the possibility of constructing a circle through any three points not
 lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -121,7 +115,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         center_point.index, circle.host_id, circle.start_id, circle.end_id,
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -74,10 +74,7 @@ dynview_require_runtime :: proc(
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
-    runtime_out^ = state^.dynview_emit_target
-    if runtime_out^ == nil {
-        runtime_out^ = &state^.dynview
-    }
+    runtime_out^ = &state^.dynview
     return BRIDGE_STATUS_OK
 }
 

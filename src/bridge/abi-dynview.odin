@@ -4,7 +4,6 @@ import "../core"
 import dynparse "../dynview/parse"
 
 import "base:runtime"
-import "core:log"
 import rl "vendor:raylib"
 
 Dynview_Inline_Target :: struct {
@@ -35,101 +34,54 @@ dynview_tex_source_mode :: proc "c" (source: cstring) -> i32 {
     return i32(dynparse.tex_classify_source_mode(string(source)))
 }
 
-//   Lazily prepare the request-owned view candidate for structured emission.
-@(export)
-begin_view_update :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
-    if state == nil {
-        return BRIDGE_STATUS_ILLEGAL_STATE
+//   Decode the stable ABI MIME value into its native representation.
+presentation_mime_from_abi :: proc(value: i32) -> (core.Presentation_Mime, bool) {
+    switch value {
+    case 0:
+        return .Text_Plain, true
+    case 1:
+        return .Text_Latex, true
     }
-    context = state^.saved_context
-    if state^.julia_runtime_service == nil || state^.view_update_candidate == nil {
-        log.warnf("begin_view_update_without_candidate service=%v candidate=%v",
-            state^.julia_runtime_service != nil, state^.view_update_candidate != nil)
-        return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    slot := state^.view_update_candidate
-    if slot^.state != .Reserved {
-        log.warnf("begin_view_update_invalid_candidate state=%d", slot^.state)
-        return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    service := state^.julia_runtime_service
-    service^.view_snapshot_generation += 1
-    slot^.state = .Pending
-    slot^.generation = service^.view_snapshot_generation
-    slot^.runtime_generation = service^.runtime_generation
-    slot^.scratchpad_request_id =
-        service^.worker_scratchpad_completed_request_id
-    slot^.scratchpad_runtime_generation =
-        service^.worker_scratchpad_completed_runtime_generation
-    slot^.host_state = state
-    reset_view_snapshot_staging(service^.dynview_staging)
-    state^.dynview_emit_target = service^.dynview_staging
-    return BRIDGE_STATUS_OK
+    return {}, false
 }
 
-//   Copy fallback text into the active request-owned candidate.
-@(export)
-set_view_text :: proc "c" (
-    state: ^core.Euclid_General_State, text: cstring) -> i32 {
+//   Map presentation transport outcomes onto the stable bridge status contract.
+presentation_bridge_status :: proc(outcome: core.Communication_Send_Outcome) -> i32 {
+    switch outcome {
+    case .Sent, .Queue_Full:
+        return BRIDGE_STATUS_OK
+    case .Allocation_Failed:
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    case .Runtime_Stopping, .Channel_Closed:
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
+}
 
-    if state == nil || text == nil || state^.view_update_candidate == nil {
+//   Publish exact MIME-bearing bytes through the Julia-owned egress link.
+@(export)
+publish_presented_text :: proc "c" (
+    state: ^core.Euclid_General_State, mime_value: i32,
+    source: rawptr, byte_count: i32) -> i32 {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.julia_interface == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if byte_count < 0 || byte_count > i32(core.PRESENTATION_MAX_SOURCE_BYTES) ||
+        (source == nil && byte_count > 0) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
-    slot := state^.view_update_candidate
-    if slot^.state != .Pending {
-        return BRIDGE_STATUS_ILLEGAL_STATE
+    mime, valid_mime := presentation_mime_from_abi(mime_value)
+    if !valid_mime {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    payload := string(text)
-    payload_count := min(len(payload), VIEW_SNAPSHOT_TEXT_CAPACITY)
-    status := core.bounded_byte_builder_append(
-        &slot^.fallback_text_builder, transmute([]u8)payload[:payload_count])
-    return status == .Ok ? BRIDGE_STATUS_OK : BRIDGE_STATUS_OUT_OF_CAPACITY
-}
-
-//   Seal structured and fallback payloads without publishing them independently.
-@(export)
-commit_view_update :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
-    if state == nil || state^.julia_runtime_service == nil ||
-        state^.view_update_candidate == nil {
-        return BRIDGE_STATUS_ILLEGAL_STATE
+    payload: []u8
+    if byte_count > 0 {
+        source_bytes := cast([^]u8)source
+        payload = source_bytes[:int(byte_count)]
     }
-    context = state^.saved_context
-    slot := state^.view_update_candidate
-    if slot^.state != .Pending || slot^.candidate_committed {
-        return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    staging := state^.julia_runtime_service^.dynview_staging
-    if !build_generated_view_snapshot_payloads(slot, staging, "") {
-        return BRIDGE_STATUS_OUT_OF_CAPACITY
-    }
-    if !view_snapshot_is_valid(slot) {
-        return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    slot^.candidate_committed = true
-    service := state^.julia_runtime_service
-    if slot^.scratchpad_request_id != 0 &&
-        slot^.scratchpad_request_id ==
-            service^.worker_scratchpad_completed_request_id {
-        service^.worker_scratchpad_completed_request_id = 0
-        service^.worker_scratchpad_completed_runtime_generation = 0
-    }
-    state^.dynview_emit_target = nil
-    return BRIDGE_STATUS_OK
-}
-
-//   Publish an explicit empty candidate through the current request transaction.
-@(export)
-clear_view :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
-    status := begin_view_update(state)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    status = set_view_text(state, "")
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    return commit_view_update(state)
+    return presentation_bridge_status(send_presented_text(state, mime, payload))
 }
 
 //   Reset the dynview command stream for the current frame.
@@ -371,18 +323,6 @@ dynview_math_block :: proc "c" (
     return dynview_native_math_source(state, request)
 }
 
-//   Build one complete mixed-TeX stream while retaining fallback on import failure.
-@(export)
-dynview_tex_document :: proc "c" (
-    state: ^core.Euclid_General_State,
-    request: Bridge_Dynview_Document_Request) -> i32 {
-    if state == nil {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-    context = state^.saved_context
-    return dynview_native_document_source(state, request)
-}
-
 //   Capture mutable counters touched by one math-block import transaction.
 dynview_math_import_checkpoint :: #force_inline proc(
     runtime: ^core.Dynview_System) -> Dynview_Math_Import_Checkpoint {
@@ -440,56 +380,6 @@ dynview_inline_atom_target :: proc(
         target.status = status
     }
     return target
-}
-
-//   Append one non-rendering copyable payload segment to the current dynview block.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - copy_text: Plain-text payload to copy into the dynview stream.
-//
-// Returns:
-//   - BRIDGE_STATUS_OK when the command is emitted.
-//   - BRIDGE_STATUS_ILLEGAL_STATE when no block is open.
-@(export)
-dynview_copyable_text_run :: proc "c" (
-    state: ^core.Euclid_General_State,
-    copy_text: cstring) -> i32 {
-
-    context = state^.saved_context
-    runtime: ^core.Dynview_System
-    status := dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    if runtime == nil || !runtime^.enabled {
-        return BRIDGE_STATUS_OK
-    }
-
-    buffer: ^core.Dynview_Command_Buffer
-    status = dynview_require_buffer(runtime, &buffer, true)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-
-    copy_text_value := ""
-    if copy_text != nil {
-        copy_text_value = string(copy_text)
-    }
-
-    offset := 0
-    count := 0
-    status = dynview_append_text_payload(runtime, copy_text_value, &offset, &count)
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-
-    return dynview_push_command(runtime, core.Dynview_Command{
-        kind = .Copyable_Text_Run,
-        block_id = buffer^.stream_open_block_id,
-        copy_text_offset = offset,
-        copy_text_len = count,
-    })
 }
 
 //   Append one inline line atom to the current dynview block.

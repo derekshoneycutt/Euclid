@@ -295,6 +295,27 @@ Text_Run_Draw_Params :: struct {
     item_y : f32,
 }
 
+// Retain one resolved draw kind and its effective outline policy.
+Document_Shape_Draw_Kind_Result :: struct {
+    kind: core.Dynview_Layout_Item_Kind,
+    outline_stroke: f32,
+    ok: bool,
+}
+
+DOCUMENT_SHAPE_DRAW_KINDS ::
+    [core.Dynview_Document_Shape_Kind]core.Dynview_Layout_Item_Kind {
+    .None = {},
+    .Point = .Inline_Filled_Circle,
+    .Line = .Inline_Line,
+    .Circle = .Inline_Circle,
+    .Box = .Inline_Box,
+    .Angle = .Inline_Pie_Section,
+    .Semicircle = .Inline_Pie_Section,
+    .Perpendicular = .Inline_Perpendicular,
+    .Triangle = .Inline_Triangle,
+    .Pentagon = .Inline_Pentagon,
+}
+
 //   Draw math text without shaping while allowing any cmap-supported glyph.
 draw_math_text :: proc(draw: Math_Text_Draw) {
     if draw.state == nil {
@@ -2574,7 +2595,8 @@ draw_cached_inline_item :: proc(
 }
 
 // Resolve one semantic color against the standard Dynview foreground.
-document_draw_color :: #force_inline proc(color: core.Dynview_Document_Color) -> rl.Color {
+document_draw_color :: #force_inline proc(
+    color: core.Dynview_Document_Color) -> rl.Color {
     return color.value if color.present else UI_TEXT_COLOR
 }
 
@@ -2610,21 +2632,29 @@ document_shape_draw_item :: proc(
     result.shape_edge_color_3 = document_draw_color(shape.edge_colors[2])
     result.shape_edge_color_4 = document_draw_color(shape.edge_colors[3])
     result.shape_edge_color_5 = document_draw_color(shape.edge_colors[4])
-    switch shape.kind {
-    case .Point:
-        result.kind = .Inline_Filled_Circle
-        result.inline_outline_stroke = 0
-    case .Line: result.kind = .Inline_Line
-    case .Circle:
-        result.kind = .Inline_Filled_Circle if shape.filled else .Inline_Circle
-    case .Box: result.kind = .Inline_Filled_Box if shape.filled else .Inline_Box
-    case .Angle, .Semicircle: result.kind = .Inline_Pie_Section
-    case .Perpendicular: result.kind = .Inline_Perpendicular
-    case .Triangle: result.kind = .Inline_Triangle
-    case .Pentagon: result.kind = .Inline_Pentagon
-    case .None: return {}, false
-    }
+    draw_kind := document_shape_draw_kind(shape, result.inline_outline_stroke)
+    if !draw_kind.ok {return {}, false}
+    result.kind = draw_kind.kind
+    result.inline_outline_stroke = draw_kind.outline_stroke
     return result, true
+}
+
+// Map one semantic shape kind to its draw kind and outline policy.
+document_shape_draw_kind :: proc(
+    shape: core.Dynview_Document_Shape,
+    outline_stroke: f32) -> Document_Shape_Draw_Kind_Result {
+
+    if shape.kind == .None {return {{}, outline_stroke, false}}
+    kinds := DOCUMENT_SHAPE_DRAW_KINDS
+    kind := kinds[shape.kind]
+    if shape.kind == .Point {return {kind, 0, true}}
+    if shape.filled {
+        #partial switch shape.kind {
+        case .Circle: kind = .Inline_Filled_Circle
+        case .Box: kind = .Inline_Filled_Box
+        }
+    }
+    return {kind, outline_stroke, true}
 }
 
 // Draw one sealed semantic prose run through its exact resident font generation.

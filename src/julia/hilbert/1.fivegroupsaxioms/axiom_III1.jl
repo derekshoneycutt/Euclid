@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.14f0, 0.36f0, 0f0]
 const LineAEnd = [0.84f0, 0.36f0, 0f0]
@@ -71,19 +71,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom III
-
-III. In a plane α there can be drawn through any point A, lying outside of a straight line a, one and only one straight line which does not intersect the line a. This straight line is called the parallel to a through the given point A.
-
-This statement of the axiom of parallels contains two assertions. The first of these is that, in the plane α, there is always a straight line passing through A which does not intersect the given line a. The second states that only one such line is possible. The latter of these statements is the essential one, and it may also be expressed as Theorem 8."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom III}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom III}
 
 \textbf{III.} In a plane $\alpha$ there can be drawn through any point $A$ \euclidpoint[color=palevioletred1,size=1], lying outside of a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4], one and only one straight line \euclidline[color=khaki3,length=3,thickness=4] which does not intersect the line $a$ \euclidline[color=steelblue,length=3,thickness=4]. This straight line \euclidline[color=khaki3,length=3,thickness=4] is called the parallel to $a$ \euclidline[color=steelblue,length=3,thickness=4] through the given point $A$ \euclidpoint[color=palevioletred1,size=1].
 
 This statement of the axiom of parallels contains two assertions. The first of these is that, in the plane $\alpha$, there is always a straight line \euclidline[color=khaki3,length=3,thickness=4] passing through $A$ \euclidpoint[color=palevioletred1,size=1] which does not intersect the given line $a$ \euclidline[color=steelblue,length=3,thickness=4]. The second states that only one such line is possible. The latter of these statements is the essential one, and it may also be expressed as \textit{Theorem 8}."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""
@@ -139,7 +133,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             parallel_line.joint2_id),
         labela.index, label_a.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

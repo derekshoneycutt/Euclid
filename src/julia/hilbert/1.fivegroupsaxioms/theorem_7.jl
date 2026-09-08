@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PlaneEdgeLeft = [0f0, 0.58f0, 0f0]
 const PlaneEdgeRight = [1f0, 0.58f0, 0f0]
@@ -119,18 +119,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 7
-
-Every plane α divides the remaining points of space into two regions having the following properties: Every point A of the one region determines with each point B of the other region a segment AB, within which lies a point of α. On the other hand, any two points A, A' lying within the same region determine a segment AA' containing no point of α.
-
-...
-
-Making use of the notation of theorem 7, we may now say: The points A, A' are situated in space upon one and the same side of the plane α, and the points A, B are situated in space upon different sides of the plane α.
-
-Theorem 7 gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in group II."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 7}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 7}
 
 Every plane $\alpha$ divides the remaining points of space into two regions having the following properties: Every point $A$ \euclidpoint[color=steelblue,size=1] of the one region determines with each point $B$ \euclidpoint[color=palevioletred1,size=1] of the other region a segment $AB$ \euclidline[color=khaki3,length=3,thickness=4], within which lies a point of $\alpha$. On the other hand, any two points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] lying within the same region determine a segment $AA'$ \euclidline[color=palevioletred1,length=3,thickness=4] containing no point of $\alpha$.
 
@@ -139,7 +130,6 @@ Every plane $\alpha$ divides the remaining points of space into two regions havi
 Making use of the notation of \textit{theorem 7}, we may now say: The points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] are situated in space upon one and the same side of the plane $\alpha$, and the points $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1] are situated in space upon different sides of the plane $\alpha$.
 
 \textit{Theorem 7} gives us the most important facts relating to the order of sequence of the elements of space. These facts are the results, exclusively, of the axioms already considered, and, hence, no new space axioms are required in \textit{group II}."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Set the plane's fill alpha from a normalized [0, 1] opacity."""
@@ -283,7 +273,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

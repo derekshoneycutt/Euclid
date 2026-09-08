@@ -9,23 +9,19 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
-"""Emit the Proclus's Commentary overview text."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Proclus's Commentary
-    
-Proclus provided an ancient commentary on Book I of Euclid's Elements, including additional constructions and analyses. Some will be included here."""
-    latex = raw"""\textbf{Proclus's Commentary}
+"""Emit the Proclus's Commentary overview content."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Proclus's Commentary}
     
 Proclus provided an ancient commentary on Book I of \textit{Euclid's Elements}, including additional constructions and analyses. Some will be included here."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Initialize the null animation and publish the Proclus overview."""
 function initialize(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Advance the shared null animation for the Proclus overview."""

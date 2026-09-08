@@ -6,25 +6,21 @@ using ..EuclidLatex
 using ..NullAnimation
 using ..AnimationCatalog
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903")
 
-"""Emit the welcome view text for Algebra."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Welcome to Euclid!
+"""Emit the welcome view content for Algebra."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Welcome to Euclid!}
     
 Here we explore Algebra for ways that are helpful for understanding geometry and animation."""
-    latex = raw"""\textbf{Welcome to Euclid!}
-    
-Here we explore Algebra for ways that are helpful for understanding geometry and animation."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Initialize the null animation and publish the Algebra overview."""
 function initialize(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Advance the shared null animation for the Algebra overview."""

@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
 const VertexB = [0.50f0, 0.34f0, 0f0]
@@ -96,23 +96,15 @@ function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, triangle_host_id, color)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Figure
-
-Any finite number of points is called a figure. If all the points lie in a plane, the figure is called a plane figure.
-
-Two figures are said to be congruent if their points can be arranged in a one-to-one correspondence so that the corresponding segments and the corresponding angles of the two figures are in every case congruent to each other.
-
-Congruent figures have, as may be seen from theorems 9 and 12, the following properties. Three points of a figure lying in a straight line are likewise in a straight line in every figure congruent to it. In congruent figures, the arrangement of the points in corresponding planes with respect to corresponding lines is always the same. The same is true of the sequence of corresponding points situated on corresponding lines."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Figure}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Figure}
 
 Any finite number of points is called a figure \euclidtriangle[color=steelblue,height=2,width=3,filled]. If all the points lie in a plane, the figure is called a plane figure.
 
 Two figures are said to be congruent if their points can be arranged in a one-to-one correspondence so that the corresponding segments and the corresponding angles of the two figures are in every case congruent to each other.
 
 Congruent figures have, as may be seen from \textit{theorems 9} and \textit{12}, the following properties. Three points of a figure lying in a straight line are likewise in a straight line in every figure congruent to it. In congruent figures, the arrangement of the points in corresponding planes with respect to corresponding lines is always the same. The same is true of the sequence of corresponding points situated on corresponding lines."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -169,7 +161,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         triangle.host_id, triangle.joint1_id, triangle.joint2_id,
         triangle.joint3_id, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

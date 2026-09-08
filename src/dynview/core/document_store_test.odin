@@ -3,8 +3,39 @@ package dynview_core
 import "base:runtime"
 import "core:mem"
 import "core:testing"
+import "core:thread"
 import app_core "../../core"
 import dynparse "../parse"
+
+Dynview_Parse_Test_Task :: struct {
+    source: string,
+    key: Dynview_Document_Key,
+    generation: u64,
+    result: ^Dynview_Parse_Result,
+    status: Dynview_Document_Status,
+}
+
+//   Build one isolated parser fixture on a test-owned worker thread.
+document_parse_test_worker :: proc(thread_handle: ^thread.Thread) {
+    task := (^Dynview_Parse_Test_Task)(thread_handle.data)
+    task.status = dynview_parse_build_keyed(
+        task.source, task.key, task.generation, task.result)
+}
+
+//   Run both isolated parse fixtures concurrently and join before inspection.
+document_parse_test_run_concurrently :: proc(tasks: ^[2]Dynview_Parse_Test_Task) {
+    threads: [2]^thread.Thread
+    for index in 0..<len(threads) {
+        threads[index] = thread.create(document_parse_test_worker)
+        threads[index].data = &tasks[index]
+        threads[index].init_context = context
+        thread.start(threads[index])
+    }
+    for worker in threads {
+        thread.join(worker)
+        thread.destroy(worker)
+    }
+}
 
 //   Initialize one document store and shared arena for focused tests.
 document_store_test_init :: proc(
@@ -32,6 +63,172 @@ document_store_test_destroy :: proc(
     store: ^app_core.Dynview_Document_Store) {
     app_core.dynview_document_store_destroy(store)
     app_core.animation_memory_destroy(memory)
+}
+
+//   Verify concurrent parse builds mutate only their independent result records.
+@(test)
+document_parse_builds_are_isolated_from_store_state :: proc(t: ^testing.T) {
+    memory: app_core.Animation_Memory
+    store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 31))
+    defer document_store_test_destroy(&memory, &store)
+    math_result := new(Dynview_Parse_Result, context.temp_allocator)
+    document_result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(math_result, context.temp_allocator)
+    defer free(document_result, context.temp_allocator)
+    math_source := "x^2"
+    document_source := "first $x$\n\nsecond"
+    tasks := [2]Dynview_Parse_Test_Task{
+        {source = math_source, generation = 31, result = math_result,
+            key = document_store_key(math_source, 1, .Math, .Display,
+                document_store_source_hash(math_source))},
+        {source = document_source, generation = 31, result = document_result,
+            key = document_store_key(document_source, 1, .Document, .Display,
+                document_store_source_hash(document_source))},
+    }
+    before := document_store_diagnostics(&store)
+    document_parse_test_run_concurrently(&tasks)
+
+    testing.expect_value(t, tasks[0].status, Dynview_Document_Status.Ok)
+    testing.expect_value(t, tasks[1].status, Dynview_Document_Status.Ok)
+    testing.expect(t, math_result.ready && document_result.ready)
+    testing.expect_value(t, math_result.generation, u64(31))
+    testing.expect_value(t, document_result.generation, u64(31))
+    testing.expect_value(t, document_store_diagnostics(&store), before)
+    _, math_lookup := document_store_lookup(&store, math_source, .Math, .Display)
+    _, document_lookup := document_store_lookup(
+        &store, document_source, .Document, .Display)
+    testing.expect_value(t, math_lookup, Dynview_Document_Status.Not_Found)
+    testing.expect_value(t, document_lookup, Dynview_Document_Status.Not_Found)
+}
+
+//   Verify owner commit publishes the same immutable bytes as legacy interning.
+@(test)
+document_parse_commit_matches_legacy_intern :: proc(t: ^testing.T) {
+    direct_memory, split_memory: app_core.Animation_Memory
+    direct_store, split_store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&direct_memory, &direct_store, 32))
+    defer document_store_test_destroy(&direct_memory, &direct_store)
+    testing.expect(t, document_store_test_init(&split_memory, &split_store, 32))
+    defer document_store_test_destroy(&split_memory, &split_store)
+    source := "first $x^2$\n\nsecond"
+    direct, direct_status := document_store_intern(
+        &direct_store, source, .Document, .Display)
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    build_status := dynview_parse_build_document(source, 1, 32, result)
+    split, split_status := document_store_commit(&split_store, source, result)
+
+    testing.expect_value(t, build_status, Dynview_Document_Status.Ok)
+    testing.expect_value(t, split_status, direct_status)
+    direct_entry := &direct_store.entries[direct.index]
+    split_entry := &split_store.entries[split.index]
+    testing.expect_value(t, split_entry.blob_byte_count, direct_entry.blob_byte_count)
+    testing.expect(t, mem.compare(document_store_blob_bytes(split_entry),
+        document_store_blob_bytes(direct_entry)) == 0)
+}
+
+//   Verify a committed rejected parse remains an exact negative-cache entry.
+@(test)
+document_parse_commit_preserves_negative_cache :: proc(t: ^testing.T) {
+    memory: app_core.Animation_Memory
+    store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 33))
+    defer document_store_test_destroy(&memory, &store)
+    source := "\\textbf{x"
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    build_status := dynview_parse_build_document(source, 1, 33, result)
+    first, first_status := document_store_commit(&store, source, result)
+    second, second_status := document_store_commit(&store, source, result)
+
+    testing.expect_value(t, build_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t, first_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t, second_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t, second, first)
+    testing.expect_value(t,
+        document_store_diagnostics(&store).negative_cache_hits, u64(1))
+}
+
+//   Verify a result built for a retired generation cannot mutate the new store.
+@(test)
+document_parse_commit_rejects_retired_generation :: proc(t: ^testing.T) {
+    memory: app_core.Animation_Memory
+    store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 34))
+    defer document_store_test_destroy(&memory, &store)
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    testing.expect_value(t, dynview_parse_build_math(
+        "x", .Display, 1, 34, result), Dynview_Document_Status.Ok)
+    app_core.dynview_document_store_clear_generation(&store)
+    testing.expect_value(t, app_core.animation_memory_begin_generation(
+        &memory, 35), app_core.Animation_Memory_Status.Ok)
+    testing.expect(t, document_store_test_publish(&store, &memory, 35))
+    before := document_store_diagnostics(&store)
+    handle, status := document_store_commit(&store, "x", result)
+
+    testing.expect_value(t, status, Dynview_Document_Status.Illegal_State)
+    testing.expect_value(t, handle, app_core.Dynview_Document_Handle{})
+    testing.expect_value(t, document_store_diagnostics(&store), before)
+}
+
+//   Verify invalid rebuilds and failed owner allocation publish no partial entry.
+@(test)
+document_parse_split_path_fails_atomically :: proc(t: ^testing.T) {
+    memory: app_core.Animation_Memory
+    store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 36))
+    defer document_store_test_destroy(&memory, &store)
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    testing.expect_value(t, dynview_parse_build_math(
+        "x", .Display, 1, 36, result), Dynview_Document_Status.Ok)
+    invalid_key := result.key
+    invalid_key.source_length += 1
+    testing.expect_value(t, dynview_parse_build_keyed(
+        "x", invalid_key, 36, result), Dynview_Document_Status.Invalid_Argument)
+    testing.expect(t, !result.ready)
+    testing.expect_value(t, dynview_parse_build_math(
+        "x", .Display, 1, 36, result), Dynview_Document_Status.Ok)
+    _, mismatch_status := document_store_commit(&store, "y", result)
+    testing.expect_value(t, mismatch_status, Dynview_Document_Status.Invalid_Argument)
+    testing.expect_value(t, store.entry_count, 0)
+    remaining_allocations := 0
+    store.allocator = document_store_test_allocator(&remaining_allocations)
+    before := document_store_diagnostics(&store)
+    handle, status := document_store_commit(&store, "x", result)
+    after := document_store_diagnostics(&store)
+
+    testing.expect_value(t, status, Dynview_Document_Status.Allocation_Failed)
+    testing.expect_value(t, handle, app_core.Dynview_Document_Handle{})
+    testing.expect_value(t, after.entry_count, before.entry_count)
+    testing.expect_value(t, after.blob_bytes, before.blob_bytes)
+    testing.expect_value(t, after.arena.current_used, before.arena.current_used)
+    testing.expect_value(t, after.allocation_failures, before.allocation_failures + 1)
+}
+
+//   Verify unsupported keyed parse modes commit as deterministic rejections.
+@(test)
+document_parse_commit_preserves_dispatch_rejection :: proc(t: ^testing.T) {
+    memory: app_core.Animation_Memory
+    store: app_core.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 37))
+    defer document_store_test_destroy(&memory, &store)
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    key := document_store_key("x", 1, .Math, .Display,
+        document_store_source_hash("x"))
+    key.parse_mode = dynparse.Tex_Source_Mode(255)
+    build_status := dynview_parse_build_keyed("x", key, 37, result)
+    handle, commit_status := document_store_commit(&store, "x", result)
+    document, resolve_status := document_store_resolve(&store, handle)
+
+    testing.expect_value(t, build_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t, commit_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t, resolve_status, Dynview_Document_Status.Rejected)
+    testing.expect_value(t,
+        document.parse_status, dynparse.Tex_Parse_Status.Unexpected_Token)
 }
 
 //   Verify identical parse requests allocate once and resolve immutable semantics.
@@ -131,7 +328,7 @@ document_store_resolves_forced_hash_collisions :: proc(t: ^testing.T) {
     testing.expect_value(t, second_status, Dynview_Document_Status.Ok)
     testing.expect(t, first.index != second.index)
     diagnostics := document_store_diagnostics(&store)
-    testing.expect(t, diagnostics.collision_count > 0)
+    testing.expect_value(t, diagnostics.collision_count, u64(1))
 
     first_document, _ := document_store_resolve(&store, first)
     second_document, _ := document_store_resolve(&store, second)

@@ -138,7 +138,6 @@ event repeats the request kind, request ID, slot index, and success state.
 | `Initialize` | Initialize Julia and include the packaged script | `Initialized` |
 | `Invoke` | Execute a serialized owner-thread task | `Invoke_Complete` |
 | `Scratchpad` | Execute one copied Scratchpad operation | `Scratchpad_Complete` |
-| `View_Snapshot` | Generate fallback text and Dynview semantics | `View_Snapshot_Complete` |
 | `Animation_Tick` | Run Julia loops against a query snapshot and command batch | `Animation_Tick_Complete` |
 | `Shutdown` | Tear Julia down and exit the worker loop | `Shutdown_Complete` |
 
@@ -201,13 +200,12 @@ The display loop performs Julia publication and submission at explicit points:
 
 ```text
 apply completed Scratchpad replies
-publish newest complete view snapshot
+service presentation envelopes and ready parse work
 run zero or more fixed simulation steps
     publish newest valid animation tick
     schedule the next animation tick
     run and join particle + constraint tasks
 run and join per-frame shape + optional Dynview preparation
-request the next view snapshot
 draw
 ```
 
@@ -324,60 +322,71 @@ and capped while display, input, simulation, and rendering continue.
 
 ## View And Dynview Pipeline
 
-View generation is independent of drawing. Two service-owned snapshot slots
-provide one published generation and one replacement generation.
+Presentation generation is independent of animation-tick publication and drawing.
+Julia selects one canonical MIME representation and clones its exact bytes into a
+producer-owned bounded egress envelope. The display borrows that envelope until any
+native parse work joins, then returns it to the Julia owner for destruction.
 
 Each `View_Snapshot` owns:
 
-- request ID and monotonically increasing snapshot generation
+- request ID, runtime generation, animation generation, and snapshot generation
 - producing-animation identity
-- one growing arena and bounded builders for fallback text, command text, commands,
-  math programs, math commands, and math nodes
-- up to 32 KiB of fallback text
+- one canonical MIME value and up to 32 KiB of exact presentation bytes
+- one growing arena and bounded builders for command text, commands, math programs,
+  math commands, math nodes, and semantic document records
 - up to 1,024 Dynview commands and 32 KiB of command text
 - up to 256 math programs
 - up to 4,096 math commands
 - up to 4,096 math nodes
 
-Only one view request may be pending. Additional frame requests are suppressed
-until its completion event clears `view_snapshot_pending`.
+The display admits one active parse and one newest pending presentation. Accepting a
+new current generation clears visible content immediately, replaces any older pending
+envelope, and cooperatively cancels active stale work. `Presentation_Cleared` and
+`Presentation_Superseded` record those owner-controlled transitions.
 
 Slots retain the `Free`, `Pending`, `Complete`, and `Published` lifecycle. A slot arena
 is reset and its builders are reinitialized only after the display has returned that
 slot to `Free` and reservation selects it for another generation. Saturated slots,
 stale completions, superseded completions, and published aliases therefore cannot lose
-storage before release. All six payload families use sealed arena-backed slices.
+storage before release. Every payload family uses sealed arena-backed slices.
 
-### Owner-Thread Generation
+### Julia Serialization And Transfer
 
-The owner resets `dynview_staging`, redirects `dynview_emit_target` to that
-worker-only runtime, and calls the selected animation's view callback. Fallback
-text and every populated semantic span are copied into the reserved snapshot
-before completion.
+Animation modules expose `get_view_content` and publish through `publish_view_content`.
+Julia chooses `text/latex` only for values that explicitly support it; ordinary strings
+remain unquoted `text/plain`. Serialization is bounded and atomic. `View_Content_Ready`
+carries one MIME value, exact bytes, animation identity, generation fields, and an
+optional Scratchpad completion watermark.
 
-TeX source submitted by the thin Julia facade is classified, parsed, and interned
-natively on this owner-controlled ingestion path. Interned documents live in
-animation-generation memory only long enough to be resolved and copied; handles and
-arena pointers never enter a `View_Snapshot`.
+The Julia egress communication link has fixed queue and TLSF backing. A saturated link
+retains only the newest presentation, and all replaced or returned envelopes are
+destroyed by their producing owner. Neither the display nor a taskpool worker frees
+memory into the Julia-owned pool.
 
-No returned string may depend on the worker temporary allocator after task completion.
-The worker appends fallback and semantic command bytes into the reserved slot's bounded
-byte builders, then appends commands, math programs, math commands, and math nodes into
-typed bounded builders. Each transfer seals all of its populated prefixes and publishes
-no aliases unless every family succeeds. Fallback retains its prior 32 KiB truncation
-policy; semantic byte or record overflow rejects the candidate.
+### Display-Owned Parse Scheduling
+
+The display classifies exact bytes as plain text, delimited math, or an unwrapped TeX
+document. Plain text and exact positive or negative document-store hits materialize
+without task submission. Cache misses run finite parser work on the shared taskpool in
+operation-owned `Dynview_Parse_Result` storage. Workers do not enter Julia, mutate the
+document store, or touch visible state.
+
+The producer envelope remains borrowed through task join because the parse result keeps
+an exact source view. After join, the display revalidates runtime generation, animation
+generation and identity, presentation generation, reload state, and reset state before
+committing to the generation-local document store. Rejected TeX materializes as the
+exact canonical source; transport or serialization failure publishes nothing partial.
 
 ### Display Publication
 
-The display selects the newest completed snapshot by generation without
-depending on event order. It requires a closed, error-free Dynview stream before import.
+The display stages one current plain value or immutable semantic document into a free
+snapshot slot. Staging copies canonical bytes and pointer-free semantic records, seals
+all builders, and validates the complete snapshot before publication.
 
-Validation requires all six slices to alias their sealed builder prefixes. It checks
-primary, copy, script-base, superscript, subscript, and radical-index spans in every base
-and math command, plus math-program ranges, roots, node text, child ranges, and child
-indexes. The display installs immutable views of semantic bytes and records before
-releasing the previous published slot. Fallback text and semantic views continue to
-alias that slot until replacement or invalidation.
+Validation requires every slice to alias its sealed builder prefix. It checks command
+text spans, math-program ranges and roots, node text and child ranges, document spans,
+and enum values. The display installs immutable views of canonical presentation bytes
+and semantic records before releasing the previous published slot.
 
 Publication also requires the producing animation to remain current. A stale
 snapshot is released, and old published content is cleared rather than shown
@@ -407,16 +416,17 @@ the arena for an invalidated rebuild, and returns display-readable ownership bef
 fence completion. Fence waiting may execute queued work on the display thread, so
 ownership is defined by task role and guarded execution identity rather than by
 requiring a distinct operating-system thread. Failed builds clear partial derived
-views, record a stable error, and retain source fallback. Unchanged frames do not reset
-the arena; shutdown destroys it after the task pool has joined and stopped.
+views, record a stable error, and retain exact literal source. Unchanged frames do not
+reset the arena; shutdown destroys it after the task pool has joined and stopped.
 
 Bounded builders compile plain text and copy payload bytes into this arena while
-preserving the existing logical text limit. Both builders seal before either populated
-slice is published. Those slices are display-readable aliases whose lifetime ends at
-the next invalidated cache-arena reset; failure clears both aliases before returning to
-source fallback. A bounded copy-block builder participates in the same transaction and
-seals before any compiled bytes or blocks publish, preserving source order and payload
-spans under the command-count limit.
+preserving the existing logical text limit. Copy payload begins with the snapshot's
+canonical presentation bytes rather than a copy-only command. Both builders seal before
+either populated slice is published. Those slices are display-readable aliases whose
+lifetime ends at the next invalidated cache-arena reset; failure clears both aliases
+before returning to exact literal source. A bounded copy-block builder participates in
+the same transaction and seals before any compiled bytes or blocks publish, preserving
+source order and payload spans under the command-count limit.
 
 Copy hit targets are panel- and scroll-dependent display geometry. After the worker
 fence returns display ownership, the display thread clears and repopulates one reusable

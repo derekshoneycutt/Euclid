@@ -73,6 +73,11 @@ end
         implementation = load_generation_animation(generation, descriptor.id)
         @test implementation.id == descriptor.id
         @test nameof(implementation.entry) == :animation_entry
+        source = read(joinpath(dirname(@__DIR__), descriptor.implementation_path), String)
+        @test occursin(r"export[^\n]*get_view_content", source)
+        @test occursin("publish_view_content", source)
+        @test !occursin("get_view_text", source)
+        @test !occursin("publish_view_update", source)
     end
 end
 

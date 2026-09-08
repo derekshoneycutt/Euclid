@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointO = [0.36f0, 0.40f0, 0f0]
 const HalfRayLength = 0.44f0
@@ -96,12 +96,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_o, state.label_h, state.label_k, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Angle
-
-Let α be any arbitrary plane and h, k any two distinct half-rays lying in α and emanating from the point O so as to form a part of two different straight lines. We call the system formed by these two half-rays h, k an angle and represent it by the symbol ∠(h, k) or ∠(k, h). From axioms II, 1–5, it follows readily that the half-rays h and k, taken together with the point O, divide the remaining points of the plane a into two regions having the following property: If A is a point of one region and B a point of the other, then every broken line joining A and B either passes through O or has a point in common with one of the half-rays h, k. If, however, A, A0 both lie within the same region, then it is always possible to join these two points by a broken line which neither passes through O nor has a point in common with either of the half-rays h, k. One of these two regions is distinguished from the other in that the segment joining any two points of this region lies entirely within the region. The region so characterised is called the interior of the angle (h, k). To distinguish the other region from this, we call it the exterior of the angle (h, k). The half rays h and k are called the sides of the angle, and the point O is called the vertex of the angle."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Angle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Angle}
 
 Let $\alpha$ be any arbitrary plane and $h$ \euclidline[color=steelblue,length=3,thickness=4], $k$ \euclidline[color=palevioletred1,length=3,thickness=4]
 any two distinct half-rays lying in $\alpha$ and emanating from the point $O$ \euclidpoint[color=khaki3,size=1] so as to form a part of two different straight lines.
@@ -124,7 +121,6 @@ angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled]. To distinguish
 from this, we call it the exterior of the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled].
 The half rays $h$ \euclidline[color=steelblue,length=3,thickness=4] and $k$ \euclidline[color=palevioletred1,length=3,thickness=4]
 are called the sides of the angle, and the point $O$ \euclidpoint[color=khaki3,size=1] is called the vertex of the angle."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -189,7 +185,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         marker.host_id, marker.start_id, marker.end_id, point_o.index,
         label_o.index, label_h.index, label_k.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

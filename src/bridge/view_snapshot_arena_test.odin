@@ -13,7 +13,7 @@ View_Snapshot_Record_Test_Payloads :: struct {
 
 //   Allocate a service with initialized snapshot arenas but no worker or channels.
 view_snapshot_arena_test_service :: proc(t: ^testing.T) -> ^Julia_Runtime_Service {
-    service := new(Julia_Runtime_Service)
+    service := new(Julia_Runtime_Service, context.allocator)
     testing.expect(t, service != nil)
     testing.expect(t, view_snapshot_slots_init(service))
     return service
@@ -35,7 +35,7 @@ view_snapshot_free_slot_prepares_all_builders :: proc(t: ^testing.T) {
     testing.expect(t, prepare_view_snapshot_slot(slot))
 
     testing.expect_value(t, slot^.arena.reset_count, u64(1))
-    testing.expect_value(t, slot^.fallback_text_builder.max_count,
+    testing.expect_value(t, slot^.presentation_builder.max_count,
         VIEW_SNAPSHOT_TEXT_CAPACITY)
     testing.expect_value(t, slot^.command_text_builder.max_count,
         core.DYNVIEW_MAX_TEXT_BYTES)
@@ -58,17 +58,17 @@ view_snapshot_builder_saturation_preserves_payload :: proc(t: ^testing.T) {
     defer view_snapshot_arena_test_service_destroy(service)
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
-    bytes := make([]u8, VIEW_SNAPSHOT_TEXT_CAPACITY)
+    bytes := make([]u8, VIEW_SNAPSHOT_TEXT_CAPACITY, context.allocator)
     defer delete(bytes)
     bytes[len(bytes) - 1] = 'z'
 
     testing.expect_value(t, core.bounded_byte_builder_append(
-        &slot^.fallback_text_builder, bytes), core.Bounded_Builder_Status.Ok)
+        &slot^.presentation_builder, bytes), core.Bounded_Builder_Status.Ok)
     testing.expect_value(t, core.bounded_byte_builder_append(
-        &slot^.fallback_text_builder, []u8{'x'}),
+        &slot^.presentation_builder, []u8{'x'}),
         core.Bounded_Builder_Status.Limit_Exceeded)
-    testing.expect_value(t, slot^.fallback_text_builder.count, len(bytes))
-    testing.expect_value(t, slot^.fallback_text_builder.storage[len(bytes) - 1], u8('z'))
+    testing.expect_value(t, slot^.presentation_builder.count, len(bytes))
+    testing.expect_value(t, slot^.presentation_builder.storage[len(bytes) - 1], u8('z'))
 }
 
 //   Verify text transfer truncates fallback, admits exact semantic capacity, and seals.
@@ -86,11 +86,12 @@ view_snapshot_text_transfer_enforces_capacity_and_sealing :: proc(t: ^testing.T)
     testing.expect(t, build_view_snapshot_text_payloads(
         slot, string(fallback_bytes[:]), semantic_bytes[:]))
 
-    testing.expect_value(t, len(slot^.fallback_text), VIEW_SNAPSHOT_TEXT_CAPACITY)
+    testing.expect_value(t, len(slot^.presentation_bytes), VIEW_SNAPSHOT_TEXT_CAPACITY)
     testing.expect_value(t, len(slot^.command_text), core.DYNVIEW_MAX_TEXT_BYTES)
-    testing.expect_value(t, slot^.fallback_text[len(slot^.fallback_text) - 1], u8('f'))
+    testing.expect_value(t,
+        slot^.presentation_bytes[len(slot^.presentation_bytes) - 1], u8('f'))
     testing.expect_value(t, slot^.command_text[len(slot^.command_text) - 1], u8('s'))
-    testing.expect(t, slot^.fallback_text_builder.sealed)
+    testing.expect(t, slot^.presentation_builder.sealed)
     testing.expect(t, slot^.command_text_builder.sealed)
 
     overflow: [core.DYNVIEW_MAX_TEXT_BYTES + 1]u8
@@ -98,9 +99,9 @@ view_snapshot_text_transfer_enforces_capacity_and_sealing :: proc(t: ^testing.T)
     testing.expect(t, prepare_view_snapshot_slot(overflow_slot))
     testing.expect(t, !build_view_snapshot_text_payloads(
         overflow_slot, "fallback", overflow[:]))
-    testing.expect(t, !overflow_slot^.fallback_text_builder.sealed)
+    testing.expect(t, !overflow_slot^.presentation_builder.sealed)
     testing.expect(t, !overflow_slot^.command_text_builder.sealed)
-    testing.expect_value(t, len(overflow_slot^.fallback_text), 0)
+    testing.expect_value(t, len(overflow_slot^.presentation_bytes), 0)
     testing.expect_value(t, len(overflow_slot^.command_text), 0)
 }
 
@@ -135,10 +136,13 @@ view_snapshot_record_transfer_accepts_exact_limits :: proc(t: ^testing.T) {
     defer view_snapshot_arena_test_service_destroy(service)
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
-    commands := make([]core.Dynview_Command, core.DYNVIEW_MAX_COMMANDS)
-    programs := make([]core.Dynview_Math_Program, core.DYNVIEW_MAX_MATH_PROGRAMS)
-    math_commands := make([]core.Dynview_Command, core.DYNVIEW_MAX_MATH_COMMANDS)
-    nodes := make([]core.Dynview_Math_Node, core.DYNVIEW_MAX_MATH_NODES)
+    commands := make([]core.Dynview_Command, core.DYNVIEW_MAX_COMMANDS, context.allocator)
+    programs := make([]core.Dynview_Math_Program,
+        core.DYNVIEW_MAX_MATH_PROGRAMS, context.allocator)
+    math_commands := make([]core.Dynview_Command,
+        core.DYNVIEW_MAX_MATH_COMMANDS, context.allocator)
+    nodes := make([]core.Dynview_Math_Node,
+        core.DYNVIEW_MAX_MATH_NODES, context.allocator)
     defer delete(commands)
     defer delete(programs)
     defer delete(math_commands)
@@ -178,17 +182,31 @@ view_snapshot_record_overflow_rejected :: proc(
     testing.expect_value(t, len(slot^.math_nodes), 0)
 }
 
+// Require an overflowing document transaction to reject before publication.
+view_snapshot_document_overflow_rejected :: proc(
+    t: ^testing.T,
+    slot: ^View_Snapshot,
+    payloads: View_Snapshot_Record_Payloads) {
+
+    slot^.state = .Free
+    testing.expect(t, prepare_view_snapshot_slot(slot))
+    testing.expect(t, !build_view_snapshot_record_payloads(slot, payloads))
+}
+
 //   Verify every record family rejects one element beyond its hard limit.
 @(test)
 view_snapshot_record_transfer_rejects_each_overflow :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
     slot := &service^.view_snapshots[0]
-    commands := make([]core.Dynview_Command, core.DYNVIEW_MAX_COMMANDS + 1)
-    programs := make([]core.Dynview_Math_Program, core.DYNVIEW_MAX_MATH_PROGRAMS + 1)
+    commands := make([]core.Dynview_Command,
+        core.DYNVIEW_MAX_COMMANDS + 1, context.allocator)
+    programs := make([]core.Dynview_Math_Program,
+        core.DYNVIEW_MAX_MATH_PROGRAMS + 1, context.allocator)
     math_commands := make([]core.Dynview_Command,
-        core.DYNVIEW_MAX_MATH_COMMANDS + 1)
-    nodes := make([]core.Dynview_Math_Node, core.DYNVIEW_MAX_MATH_NODES + 1)
+        core.DYNVIEW_MAX_MATH_COMMANDS + 1, context.allocator)
+    nodes := make([]core.Dynview_Math_Node,
+        core.DYNVIEW_MAX_MATH_NODES + 1, context.allocator)
     defer delete(commands)
     defer delete(programs)
     defer delete(math_commands)
@@ -207,39 +225,31 @@ view_snapshot_document_transfer_rejects_overflow :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
     slot := &service^.view_snapshots[0]
-    document_text := make([]u8, core.DYNVIEW_MAX_DOCUMENT_BYTES + 1)
-    documents := make([]core.Dynview_Document, core.DYNVIEW_MAX_DOCUMENTS + 1)
+    document_text := make([]u8,
+        core.DYNVIEW_MAX_DOCUMENT_BYTES + 1, context.allocator)
+    documents := make([]core.Dynview_Document,
+        core.DYNVIEW_MAX_DOCUMENTS + 1, context.allocator)
     blocks := make([]core.Dynview_Document_Block,
-        core.DYNVIEW_MAX_DOCUMENT_BLOCKS + 1)
+        core.DYNVIEW_MAX_DOCUMENT_BLOCKS + 1, context.allocator)
     items := make([]core.Dynview_Document_Inline,
-        core.DYNVIEW_MAX_DOCUMENT_INLINES + 1)
+        core.DYNVIEW_MAX_DOCUMENT_INLINES + 1, context.allocator)
     rows := make([]core.Dynview_Document_Display_Row,
-        core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS + 1)
+        core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS + 1, context.allocator)
     defer delete(document_text)
     defer delete(documents)
     defer delete(blocks)
     defer delete(items)
     defer delete(rows)
 
-    testing.expect(t, prepare_view_snapshot_slot(slot))
-    testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {document_text = document_text}))
-    slot^.state = .Free
-    testing.expect(t, prepare_view_snapshot_slot(slot))
-    testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {documents = documents}))
-    slot^.state = .Free
-    testing.expect(t, prepare_view_snapshot_slot(slot))
-    testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {document_blocks = blocks}))
-    slot^.state = .Free
-    testing.expect(t, prepare_view_snapshot_slot(slot))
-    testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {document_inlines = items}))
-    slot^.state = .Free
-    testing.expect(t, prepare_view_snapshot_slot(slot))
-    testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {document_display_rows = rows}))
+    view_snapshot_document_overflow_rejected(
+        t, slot, {document_text = document_text})
+    view_snapshot_document_overflow_rejected(t, slot, {documents = documents})
+    view_snapshot_document_overflow_rejected(
+        t, slot, {document_blocks = blocks})
+    view_snapshot_document_overflow_rejected(
+        t, slot, {document_inlines = items})
+    view_snapshot_document_overflow_rejected(
+        t, slot, {document_display_rows = rows})
 }
 
 // Verify display row ownership and math references cannot escape sealed records.
@@ -434,10 +444,10 @@ view_snapshot_reset_requires_free_state :: proc(t: ^testing.T) {
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect_value(t, core.bounded_byte_builder_append(
-        &slot^.fallback_text_builder, []u8{'x'}), core.Bounded_Builder_Status.Ok)
+        &slot^.presentation_builder, []u8{'x'}), core.Bounded_Builder_Status.Ok)
     testing.expect(t, build_view_snapshot_record_payloads(
         slot, {commands = []core.Dynview_Command{{block_id = 7}}}))
-    storage := raw_data(slot^.fallback_text_builder.storage)
+    storage := raw_data(slot^.presentation_builder.storage)
     record_storage := raw_data(slot^.commands)
 
     guarded_states := []View_Snapshot_Slot_State{.Pending, .Complete, .Published}
@@ -445,14 +455,14 @@ view_snapshot_reset_requires_free_state :: proc(t: ^testing.T) {
         slot^.state = state
         testing.expect(t, !prepare_view_snapshot_slot(slot))
         testing.expect_value(t, slot^.arena.reset_count, u64(1))
-        testing.expect_value(t, raw_data(slot^.fallback_text_builder.storage), storage)
+        testing.expect_value(t, raw_data(slot^.presentation_builder.storage), storage)
         testing.expect_value(t, raw_data(slot^.commands), record_storage)
     }
 
     slot^.state = .Free
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect_value(t, slot^.arena.reset_count, u64(2))
-    testing.expect_value(t, slot^.fallback_text_builder.count, 0)
+    testing.expect_value(t, slot^.presentation_builder.count, 0)
     testing.expect_value(t, slot^.command_builder.count, 0)
     testing.expect_value(t, len(slot^.commands), 0)
     testing.expect(t, !slot^.command_builder.sealed)
@@ -481,8 +491,8 @@ view_snapshot_supersession_defers_arena_reset :: proc(t: ^testing.T) {
     testing.expect(t, prepare_view_snapshot_slot(older))
     testing.expect(t, prepare_view_snapshot_slot(newer))
     testing.expect_value(t, core.bounded_byte_builder_append(
-        &older^.fallback_text_builder, []u8{'o'}), core.Bounded_Builder_Status.Ok)
-    storage := raw_data(older^.fallback_text_builder.storage)
+        &older^.presentation_builder, []u8{'o'}), core.Bounded_Builder_Status.Ok)
+    storage := raw_data(older^.presentation_builder.storage)
     older^.state = .Complete
     older^.generation = 1
     newer^.state = .Complete
@@ -491,7 +501,7 @@ view_snapshot_supersession_defers_arena_reset :: proc(t: ^testing.T) {
     release_superseded_completed_view_snapshots(service, 1)
 
     testing.expect_value(t, older^.state, View_Snapshot_Slot_State.Free)
-    testing.expect_value(t, raw_data(older^.fallback_text_builder.storage), storage)
+    testing.expect_value(t, raw_data(older^.presentation_builder.storage), storage)
     testing.expect_value(t, older^.arena.reset_count, u64(1))
     testing.expect(t, prepare_view_snapshot_slot(older))
     testing.expect_value(t, older^.arena.reset_count, u64(2))
@@ -502,7 +512,7 @@ view_snapshot_supersession_defers_arena_reset :: proc(t: ^testing.T) {
 view_snapshot_reload_stale_completion_defers_arena_reset :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := &state^.julia_interface^.null_animation
@@ -528,7 +538,7 @@ view_snapshot_reload_stale_completion_defers_arena_reset :: proc(t: ^testing.T) 
 view_snapshot_stale_publication_defers_arena_reset :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_runtime_service = service
@@ -561,7 +571,7 @@ view_snapshot_stale_publication_defers_arena_reset :: proc(t: ^testing.T) {
 view_snapshot_shutdown_release_clears_published_views :: proc(t: ^testing.T) {
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     published := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(published))

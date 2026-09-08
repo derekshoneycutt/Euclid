@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -121,27 +121,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.circle, state.points, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = raw"""The cyclic group of rotations
-
-This represents equal rotations around a fixed center. We turn the marked figure by equal steps, and keep track of which step we have reached.
-
-Formally, Cₙ is the cyclic group of rotations by multiples of 2π/n about a fixed center.
-
-Write ρ for one-step rotation. Then Cₙ = {e,ρ,ρ²,...,ρⁿ⁻¹} with ρⁿ=e.
-
-The point is that these rotations compose cleanly: turn by one step, then another, and you still have a rotation of the same kind.
-
-Brief proof it is a group:
-
-1. Closure: ρⁱρʲ = ρⁱ⁺ʲ ᵐᵒᵈ ⁿ, still in the set.
-2. Associativity: composition of rotations is associative.
-3. Identity: ρ⁰ = e.
-4. Inverses: (ρᵏ)⁻¹ = ρⁿ⁻ᵏ.
-
-Also, Cₙ is abelian because turning by one amount and then another gives the same result as doing those turns in the opposite order."""
-    latex = raw"""\textbf{The cyclic group of rotations}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{The cyclic group of rotations}
 
 This represents equal rotations around a fixed center. We turn the marked figure by equal steps, and keep track of which step we have reached.
 
@@ -159,7 +141,6 @@ Brief proof it is a group:
 \textbf{4. Inverses}: $(\rho^k)^{-1}=\rho^{n-k}$.
 
 Also, $C_n$ is abelian because turning by one amount and then another gives the same result as doing those turns in the opposite order."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -256,7 +237,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             point9.index, point10.index, point11.index, point12.index),
         PhaseCompassDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

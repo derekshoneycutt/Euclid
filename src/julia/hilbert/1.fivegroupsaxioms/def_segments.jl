@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.12f0, 0.56f0, 0f0]
 const LineEnd = [0.88f0, 0.56f0, 0f0]
@@ -78,15 +78,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.label_a, state.label_b, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Definition: Segments
-
-We will call the system of two points A and B, lying upon a straight line, a segment and denote it by AB or BA. The points lying between A and B are called the points of the segment AB or the points lying within the segment AB. All other points of the straight line are referred to as the points lying outside the segment AB. The points A and B are called the extremities of the segment AB."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Segments}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Segments}
 
 We will call the system of two points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1], lying upon a straight line \euclidline[color=grey60,length=3,thickness=4], a segment and denote it by $AB$ \euclidline[color=grey60,length=3,thickness=4] or $BA$ \euclidline[color=grey60,length=3,thickness=4]. The points \euclidpoint[color=steelblue,size=1] lying between $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are called the points of the segment $AB$ \euclidline[color=grey60,length=3,thickness=4] or the points lying within the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]. All other points \euclidpoint[color=khaki3,size=1] of the straight line are referred to as the points lying outside the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]. The points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are called the extremities of the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""
@@ -141,7 +137,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         point_a.index, point_b.index, point_c.index, point_d.index,
         label_a.index, label_b.index, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

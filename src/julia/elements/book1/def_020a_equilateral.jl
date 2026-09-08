@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
 const VertexC = [0.69f0, 0.70f0, 0f0]
@@ -58,15 +58,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Equilateral Triangle
-
-Of trilateral figures, an equilateral triangle is that which has its three sides equal, ..."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Equilateral Triangle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Equilateral Triangle}
 
 Of trilateral figures, an equilateral triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=steelblue,edge3_color=steelblue]  is that which has its three sides equal \euclidline[color=steelblue,length=3,thickness=4], ..."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -118,7 +114,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line3.host_id, line3.joint1_id, line3.joint2_id)),
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

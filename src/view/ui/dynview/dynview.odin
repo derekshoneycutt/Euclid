@@ -80,37 +80,35 @@ draw_scratchpad_styled_or_fallback :: proc(
         return
     }
 
-    runtime := &state^.dynview
-    if runtime^.enabled && runtime^.cache_access_state == .Display_Readable &&
-        runtime^.compile_cache.is_valid &&
-        !runtime^.command_buffer.has_stream_error {
-        if dynlayout.document_layout_is_authoritative(runtime) {
-            draw_document_layout(Layout_Draw_Context{
-                state = state,
-                runtime = runtime,
-                panel = params.panel,
-                font = params.font,
-                font_size = params.metrics.font_size,
-            }, params.scroll_y, params.metrics.padding)
-            return
-        }
-        if runtime^.command_buffer.command_count <= 0 {
-            draw_scratchpad_fallback_text(fallback, params)
-            return
-        }
-        if runtime^.compile_cache.layout_is_valid {
-            draw_cached_layout(Layout_Draw_Context{
-                state = state,
-                runtime = runtime,
-                panel = params.panel,
-                font = params.font,
-                font_size = params.metrics.font_size,
-            }, params.scroll_y, params.metrics.padding)
-            return
-        }
+    if !draw_scratchpad_dynview(state, ui_runtime, params) {
+        draw_scratchpad_fallback_text(fallback, params)
     }
+}
 
-    draw_scratchpad_fallback_text(fallback, params)
+// Draw available authoritative or cached Dynview content for the scratchpad.
+draw_scratchpad_dynview :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    params: Scratchpad_Draw_Params) -> bool {
+
+    runtime := &state^.dynview
+    if !runtime^.enabled || runtime^.cache_access_state != .Display_Readable ||
+        !runtime^.compile_cache.is_valid || runtime^.command_buffer.has_stream_error {
+        return false
+    }
+    ctx := Layout_Draw_Context{
+        state = state, runtime = runtime, panel = params.panel,
+        font = params.font, font_size = params.metrics.font_size,
+    }
+    if dynlayout.document_layout_is_authoritative(runtime) {
+        draw_document_layout(ctx, params.scroll_y, params.metrics.padding)
+        return true
+    }
+    if runtime^.command_buffer.command_count <= 0 {return false}
+    if !runtime^.compile_cache.layout_is_valid {return false}
+    draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
+    _ = ui_runtime
+    return true
 }
 
 //   Draw one measured child math program with a shared baseline.

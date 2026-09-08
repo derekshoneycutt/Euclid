@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
 const EndPoint = [0.75f0, 0.25f0, 0f0]
@@ -44,10 +44,6 @@ const PhaseDescend = 0f0
 const PhaseDrawLine = 1f0
 const PhaseEndLift = 2f0
 
-const DefinitionViewText = """Euclid Elements - Book I - Definition: Line
-
-A line is breadthless length."""
-
 const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Line}
 
 A line \euclidline[color=steelblue,length=3,thickness=4] is breadthless length."""
@@ -57,10 +53,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.line, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(
-        state_ptr, DefinitionLatexDocument, DefinitionViewText)
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(DefinitionLatexDocument)
 end
 
 """Reset the animation cycle while preserving its native line handles."""
@@ -90,7 +85,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     state = AnimationState(
         LineIds(line.host_id, line.joint1_id, line.joint2_id), PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

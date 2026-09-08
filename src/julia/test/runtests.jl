@@ -17,6 +17,10 @@ using Test
         include("bridge_helpers_tests.jl")
     end
 
+    @testset "MIME Presentation" begin
+        include("mime_presentation_tests.jl")
+    end
+
     @testset "Animation Catalog" begin
         include("animation_catalog_tests.jl")
     end

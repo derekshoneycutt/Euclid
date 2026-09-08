@@ -57,19 +57,6 @@ macro ccall(expression)
 end
 
 """
-Raw document text and presentation metadata for one native bridge transaction.
-
-Mirrors the Odin `Bridge_Dynview_Document_Request` ABI struct field-for-field.
-"""
-struct BridgeDynviewDocumentRequest
-    source::Cstring
-    fallback::Cstring
-    block_kind::Int32
-    block_id::Int32
-    text_style::Int32
-end
-
-"""
 Raw math text and presentation metadata for one native bridge transaction.
 
 Mirrors the Odin `Bridge_Dynview_Math_Request` ABI struct field-for-field.
@@ -381,9 +368,10 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(5)
+const BRIDGE_VERSION = Int32(6)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
+const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
 
 const BRIDGE_DYNVIEW_BLOCK_INPUT = Int32(1)
 const BRIDGE_DYNVIEW_BLOCK_OUTPUT = Int32(2)

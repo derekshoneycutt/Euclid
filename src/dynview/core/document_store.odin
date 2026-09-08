@@ -65,6 +65,22 @@ Dynview_Document_Probe :: struct {
     found: bool,
 }
 
+// Retain one owner-side lookup outcome and its validated insertion position.
+Dynview_Document_Lookup :: struct {
+    probe: Dynview_Document_Probe,
+    handle: app_core.Dynview_Document_Handle,
+    status: Dynview_Document_Status,
+}
+
+// Own one bounded parser result from isolated build through owner commit.
+Dynview_Parse_Result :: struct {
+    generation: u64,
+    key: Dynview_Document_Key,
+    source: string,
+    output: dynparse.Tex_Semantic_Output,
+    ready: bool,
+}
+
 // Retain validated inputs while one unpublished document is constructed.
 Dynview_Document_Build :: struct {
     source: string,
@@ -92,37 +108,149 @@ document_store_intern_keyed :: proc(
     source: string,
     key: Dynview_Document_Key) -> (
         app_core.Dynview_Document_Handle, Dynview_Document_Status) {
-    if store == nil || !store.initialized || store.memory == nil ||
-        store.generation == 0 || store.memory.generation != store.generation {
-        return {}, .Illegal_State
+    lookup := document_store_find(store, source, key)
+    if lookup.status != .Not_Found {
+        return lookup.handle, lookup.status
     }
-    if key.source_length != u32(len(source)) || key.grammar_revision == 0 ||
-        key.semantic_profile == 0 {
-        return {}, .Invalid_Argument
-    }
-    probe := document_store_probe(store, source, key)
-    if probe.found {
-        return document_store_hit(store, probe.index)
-    }
-    if probe.index < 0 {
-        store.quota_rejections += 1
-        return {}, .Out_Of_Capacity
-    }
-    output := new(dynparse.Tex_Semantic_Output, context.temp_allocator)
-    if output == nil {
+    result := new(Dynview_Parse_Result, context.temp_allocator)
+    if result == nil {
         store.allocation_failures += 1
         return {}, .Allocation_Failed
     }
-    defer free(output, context.temp_allocator)
+    defer free(result, context.temp_allocator)
+    build_status := dynview_parse_build_keyed(
+        source, key, store.generation, result)
+    if build_status != .Ok && build_status != .Rejected {
+        return {}, build_status
+    }
+    return document_store_commit_at(store, source, result, lookup.probe.index)
+}
+
+//   Look up one production-key document without parsing or allocating semantics.
+document_store_lookup :: proc(
+    store: ^app_core.Dynview_Document_Store,
+    source: string,
+    parse_mode: dynparse.Tex_Source_Mode,
+    root_style: dynparse.Tex_Math_Root_Style) -> (
+        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+    key := document_store_key(source, DYNVIEW_DOCUMENT_SEMANTIC_PROFILE_DEFAULT,
+        parse_mode, root_style, document_store_source_hash(source))
+    return document_store_lookup_keyed(store, source, key)
+}
+
+//   Look up one exact source and complete semantic key without parsing.
+document_store_lookup_keyed :: proc(
+    store: ^app_core.Dynview_Document_Store,
+    source: string,
+    key: Dynview_Document_Key) -> (
+        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+    lookup := document_store_find(store, source, key)
+    return lookup.handle, lookup.status
+}
+
+//   Validate and probe one exact key while recording owner-side diagnostics once.
+document_store_find :: proc(
+    store: ^app_core.Dynview_Document_Store,
+    source: string,
+    key: Dynview_Document_Key) -> Dynview_Document_Lookup {
+    if store == nil || !store.initialized || store.memory == nil ||
+        store.generation == 0 || store.memory.generation != store.generation {
+        return {status = .Illegal_State}
+    }
+    if !document_store_key_valid(source, key) {
+        return {status = .Invalid_Argument}
+    }
+    probe := document_store_probe(store, source, key)
+    if probe.found {
+        handle, status := document_store_hit(store, probe.index)
+        return {probe = probe, handle = handle, status = status}
+    }
+    if probe.index < 0 {
+        store.quota_rejections += 1
+        return {probe = probe, status = .Out_Of_Capacity}
+    }
+    return {probe = probe, status = .Not_Found}
+}
+
+//   Build one bounded math result without touching document-store state.
+dynview_parse_build_math :: proc(
+    source: string,
+    root_style: dynparse.Tex_Math_Root_Style,
+    semantic_profile: u32,
+    generation: u64,
+    result: ^Dynview_Parse_Result) -> Dynview_Document_Status {
+    key := document_store_key(source, semantic_profile, .Math, root_style,
+        document_store_source_hash(source))
+    return dynview_parse_build_keyed(source, key, generation, result)
+}
+
+//   Build one bounded document result without touching document-store state.
+dynview_parse_build_document :: proc(
+    source: string,
+    semantic_profile: u32,
+    generation: u64,
+    result: ^Dynview_Parse_Result) -> Dynview_Document_Status {
+    key := document_store_key(source, semantic_profile, .Document, .Display,
+        document_store_source_hash(source))
+    return dynview_parse_build_keyed(source, key, generation, result)
+}
+
+//   Build one exact keyed result entirely inside caller-owned operation storage.
+dynview_parse_build_keyed :: proc(
+    source: string,
+    key: Dynview_Document_Key,
+    generation: u64,
+    result: ^Dynview_Parse_Result) -> Dynview_Document_Status {
+    if result == nil {
+        return .Invalid_Argument
+    }
+    result^ = {}
+    if generation == 0 || !document_store_key_valid(source, key) {
+        return .Invalid_Argument
+    }
+    result.generation = generation
+    result.key = key
+    result.source = source
     parse_status := document_store_parse(
-        source, key.parse_mode, key.root_style, output)
+        source, key.parse_mode, key.root_style, &result.output)
+    result.output.status = parse_status
+    result.ready = true
+    return .Ok if parse_status == .Ok else .Rejected
+}
+
+//   Commit one joined parse result into the current display-owned generation.
+document_store_commit :: proc(
+    store: ^app_core.Dynview_Document_Store,
+    source: string,
+    result: ^Dynview_Parse_Result) -> (
+        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+    if store == nil || result == nil || !result.ready ||
+        store.generation == 0 || result.generation != store.generation {
+        return {}, .Illegal_State
+    }
+    if source != result.source {
+        return {}, .Invalid_Argument
+    }
+    lookup := document_store_find(store, source, result.key)
+    if lookup.status != .Not_Found {
+        return lookup.handle, lookup.status
+    }
+    return document_store_commit_at(store, source, result, lookup.probe.index)
+}
+
+//   Insert one validated result at its owner-thread lookup position.
+document_store_commit_at :: proc(
+    store: ^app_core.Dynview_Document_Store,
+    source: string,
+    result: ^Dynview_Parse_Result,
+    index: int) -> (app_core.Dynview_Document_Handle, Dynview_Document_Status) {
     build := Dynview_Document_Build{
         source = source,
-        key = key,
-        parse_status = parse_status,
-        output = output,
+        key = result.key,
+        parse_status = result.output.status,
+        output = &result.output,
     }
-    return document_store_insert(store, probe.index, &build)
+    return document_store_insert(store, index, &build)
 }
 
 //   Resolve one current-generation handle without following stale storage.
@@ -218,6 +346,13 @@ document_store_key :: proc(
         parse_mode = parse_mode,
         root_style = root_style,
     }
+}
+
+//   Validate source identity fields shared by lookup, parse build, and commit.
+document_store_key_valid :: proc(
+    source: string, key: Dynview_Document_Key) -> bool {
+    return key.source_length == u32(len(source)) &&
+        key.grammar_revision != 0 && key.semantic_profile != 0
 }
 
 //   Probe the bounded index, comparing complete keys and exact source bytes.

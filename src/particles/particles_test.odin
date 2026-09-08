@@ -43,7 +43,7 @@ dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
 //   Verify slot reservation prefers dead slots and wraps at the particle cap.
 @(test)
 reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 3
     ps^.next_index = 0
@@ -70,7 +70,7 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
 //   Verify the reservation ring index wraps back to zero at the cap.
 @(test)
 reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
     ps^.next_index = MAX_PARTICLES - 1
 
@@ -112,7 +112,7 @@ expect_dust_slot_unchanged :: proc(
 //   Verify a non-overlapping dust pair keeps positions and velocities unchanged.
 @(test)
 resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.2
@@ -140,7 +140,7 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
 //   Verify an approaching overlapping pair receives a separating impulse.
 @(test)
 resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.4
@@ -170,7 +170,7 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
 //   Verify a separating overlapping pair repositions but skips the impulse.
 @(test)
 resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.4
@@ -202,7 +202,7 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
 //   Verify exactly coincident particles separate along a deterministic direction.
 @(test)
 resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.5
@@ -223,9 +223,9 @@ resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testin
 //   Verify two fresh particle systems produce identical seeded random ranges.
 @(test)
 particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) {
-    first := new(app_core.Particle_System)
+    first := new(app_core.Particle_System, context.allocator)
     defer free(first)
-    second := new(app_core.Particle_System)
+    second := new(app_core.Particle_System, context.allocator)
     defer free(second)
 
     testing.expect_value(t,
@@ -239,7 +239,7 @@ particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) 
 //   Verify dense-bucket collision resolution rotates samples and tracks counts.
 @(test)
 resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.use_max_dust_particles = app_core.DUST_GRID_BUCKET_CAP + 8
@@ -263,7 +263,7 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
 @(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.use_max_dust_particles = 2
@@ -335,7 +335,7 @@ screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
 //   Verify slot reservation wraps to index zero when every slot is alive.
 @(test)
 reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.use_max_dust_particles = 2
@@ -352,7 +352,7 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
 //   Verify a shape-hide burst spawns dust for the supported shape kinds.
 @(test)
 emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 4
 
@@ -371,7 +371,7 @@ emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
 //   Verify out-of-bounds particles clamp to the bounds and bounce their velocity.
 @(test)
 clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System)
+    ps := new(app_core.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 1
 

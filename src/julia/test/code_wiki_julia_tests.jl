@@ -90,11 +90,18 @@ end
 
     latex = extract_julia_module(config, "src/julia/latex.jl")
     @test latex.display_name == "EuclidLatex"
-    @test any(symbol -> symbol.name == "emit_latex_view_text!" &&
-        symbol.visibility == :public, latex.symbols)
+    @test any(symbol -> symbol.name == "TeXDocument" &&
+        symbol.declaration_kind == :struct && symbol.visibility == :public,
+        latex.symbols)
+    @test any(symbol -> symbol.name == "tex_str" &&
+        symbol.declaration_kind == :macro && symbol.visibility == :public,
+        latex.symbols)
     rendered_latex = render_julia_module_page(latex)
     @test occursin(
-        "[`emit_latex_view_text!`](#symbol-julia-EuclidLatex-function-emit-latex-view-text)",
+        "[`TeXDocument`](#symbol-julia-EuclidLatex-struct-TeXDocument)",
+        rendered_latex)
+    @test occursin(
+        "[`tex_str`](#symbol-julia-EuclidLatex-macro-tex-str)",
         rendered_latex)
 
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")

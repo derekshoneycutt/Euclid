@@ -128,6 +128,8 @@ Kind :: enum u16 {
     Shape_Cache_Prepared = 368,
     Dynview_Compiled = 369,
     Scratchpad_Completed = 370,
+    Presentation_Cleared = 371,
+    Presentation_Superseded = 372,
 
     // Rich checkpoint storage (420-459).
     Checkpoint_Requested = 420,

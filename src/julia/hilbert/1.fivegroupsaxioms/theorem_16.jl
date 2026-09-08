@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
 const PointB = [0.50f0, 0.54f0, 0f0]
@@ -270,18 +270,14 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 16 (Third theorem of congruence for triangles)
-
-If two triangles have the three sides of one congruent respectively to the corresponding three sides of the other, the triangles are congruent."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 16 (Third theorem of congruence for triangles)}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 16 (Third theorem of congruence for triangles)}
 
 If two triangles \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1]
 \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1] have
 the three sides of one congruent respectively to the corresponding three sides of the other, the triangles are congruent
 \euclidtriangle[height=2,width=3,thickness=1,edge1_color=lightgreen,edge2_color=lightgreen,edge3_color=lightgreen]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -400,7 +396,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_c_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

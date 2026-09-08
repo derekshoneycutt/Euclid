@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -64,19 +64,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.center_point, state.circle, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Postulates: Draw a Circle
-
-Let the following be postulated:
-
-To describe a circle with any center and distance."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Draw a Circle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Draw a Circle}
 
 \textit{Let the following be postulated:}
 
 To describe a circle \euclidcircle[color=steelblue,size=1,thickness=2] with any center \euclidpoint[color=palevioletred1,size=1] and distance."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -122,7 +116,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         CircleIds(circle.host_id, circle.start_id, circle.end_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

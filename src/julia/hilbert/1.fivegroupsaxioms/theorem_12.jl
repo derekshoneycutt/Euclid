@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.10f0, 0.67f0, 0f0]
 const PointC = [0.52f0, 0.53f0, 0f0]
@@ -377,26 +377,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 12
-
-If two angles ABC and A'B'C' are congruent to each other, their supplementary angles CBD and C'B'D' are also congruent.
-
-Proof: Take the points A', C', D' upon the sides passing through B' in such a way that
-
-    A'B' ≡ AB, C'B' ≡ CB, D'B' ≡ DB.
-
-Then, in the two triangles ABC and A'B'C', the sides AB and BC are respectively congruent to A'B' and C'B'. Moreover, since the angles included by these sides are congruent to each other by hypothesis, it follows from theorem 10 that these triangles are congruent; that is to say, we have the congruences
-
-    AC ≡ A'C', ∠BAC ≡ ∠B'A'C'.
-
-On the other hand, since by axiom IV, 3 the segments AD and A'D' are congruent to each other, it follows again from theorem 10 that the triangles CAD and C'A'D' are congruent, and, consequently, we have the congruences:
-
-    CD ≡ C'D', ∠ADC ≡ ∠A'D'C'.
-
-From these congruences and the consideration of the triangles BCD and B'C'D', it follows by virtue of axiom IV, 6 that the angles CBD and C'B'D' are congruent."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 12}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 12}
 
 If two angles $\angle ABC$ \euclidangle[color=palevioletred1,radius=2,end=60,filled] and
 $\angle A'B'C'$ \euclidangle[color=palevioletred1,radius=2,end=60,filled] are congruent to each other,
@@ -427,7 +410,6 @@ $BCD$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_colo
 and $B'C'D'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=grey60,edge3_color=palevioletred1],
 it follows by virtue of \textit{axiom IV, 6} that the angles
 $\angle CBD$ \euclidangle[color=steelblue,radius=2,end=60,filled] and $\angle C'B'D'$ \euclidangle[color=steelblue,radius=2,end=60,filled] are congruent."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -603,7 +585,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         marker_c_prime_b_prime_d_prime.end_id,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

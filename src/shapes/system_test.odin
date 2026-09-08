@@ -143,7 +143,7 @@ polygon_area_and_point_in_triangle_handle_orientation_and_edges :: proc(t: ^test
 @(test)
 clear_animation_data_clears_animation_owned_slots :: proc(t: ^testing.T) {
     system: Shapes_Point_System
-    particle_system := new(app_core.Particle_System)
+    particle_system := new(app_core.Particle_System, context.allocator)
     defer free(particle_system)
 
     particle_system^.use_max_dust_particles = 2

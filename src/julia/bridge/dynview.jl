@@ -1,5 +1,69 @@
 const DYNVIEW_TEX_MODE_MATH = Int32(0)
 const DYNVIEW_TEX_MODE_DOCUMENT = Int32(1)
+const PRESENTATION_MAX_SOURCE_BYTES = 32 * 1024
+
+@enum PresentationMime::UInt8 begin
+    TextPlain = 0
+    TextLatex = 1
+end
+
+"""One canonical MIME selection and its exact serialized UTF-8 bytes."""
+struct PresentedText
+    mime::PresentationMime
+    bytes::String
+end
+
+"""Reject one serialized value when its exact UTF-8 representation exceeds the limit."""
+function validate_presented_text_size(bytes::String)
+    ncodeunits(bytes) <= PRESENTATION_MAX_SOURCE_BYTES ||
+        throw(ArgumentError("presentation exceeds byte capacity"))
+    return bytes
+end
+
+"""Render one displayable through a bounded deterministic MIME context."""
+function serialize_presented_text(value, mime::MIME)
+    buffer = IOBuffer(; maxsize=PRESENTATION_MAX_SOURCE_BYTES + 1)
+    context = IOContext(buffer, :color => false, :limit => true, :compact => false)
+    show(context, mime, value)
+    return validate_presented_text_size(String(take!(buffer)))
+end
+
+"""Select and serialize one Julia displayable into Euclid's canonical MIME value."""
+function presented_text(value)
+    latex_mime = MIME"text/latex"()
+    if showable(latex_mime, value)
+        return PresentedText(TextLatex, serialize_presented_text(value, latex_mime))
+    end
+    if value isa AbstractString
+        return PresentedText(TextPlain, validate_presented_text_size(String(value)))
+    end
+    plain_mime = MIME"text/plain"()
+    return PresentedText(TextPlain, serialize_presented_text(value, plain_mime))
+end
+
+"""Clone one canonical presentation value into the Julia-owned host egress pool."""
+function publish_presented_text(state_ptr::Ptr{Cvoid}, presentation::PresentedText)
+    bytes = presentation.bytes
+    byte_count = ncodeunits(bytes)
+    byte_count <= PRESENTATION_MAX_SOURCE_BYTES ||
+        throw(ArgumentError("presentation exceeds byte capacity"))
+    GC.@preserve bytes begin
+        return @ccall publish_presented_text(
+            state_ptr::Ptr{Cvoid},
+            Int32(presentation.mime)::Int32,
+            pointer(bytes)::Ptr{Cvoid},
+            Int32(byte_count)::Int32)::Int32
+    end
+end
+
+"""Serialize and publish the value returned by one view-content producer."""
+function publish_view_content(state_ptr::Ptr{Cvoid}, producer::Function)
+    presentation = presented_text(producer(state_ptr))
+    status = publish_presented_text(state_ptr, presentation)
+    status == BRIDGE_STATUS_OK ||
+        error("publish_presented_text failed with bridge status $status")
+    return status
+end
 
 """Classify one TeX source through the native grammar authority."""
 function dynview_tex_source_mode(latex_source::AbstractString)
@@ -7,42 +71,6 @@ function dynview_tex_source_mode(latex_source::AbstractString)
     GC.@preserve source_text begin
         return @ccall dynview_tex_source_mode(pointer(source_text)::Cstring)::Int32
     end
-end
-
-"""Begin building the request-owned view candidate and return its bridge status."""
-function begin_view_update(state_ptr::Ptr{Cvoid})
-    @ccall begin_view_update(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""Copy fallback text into the active request-owned view candidate."""
-function set_view_text(state_ptr::Ptr{Cvoid}, text::AbstractString)
-    @ccall set_view_text(state_ptr::Ptr{Cvoid}, text::Cstring)::Int32
-end
-
-"""Seal the active view candidate for its owning host transaction."""
-function commit_view_update(state_ptr::Ptr{Cvoid})
-    @ccall commit_view_update(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""Seal an explicit empty view candidate for the current host transaction."""
-function clear_view(state_ptr::Ptr{Cvoid})
-    @ccall clear_view(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""Build one request-owned view candidate from an existing named producer."""
-function publish_view_update(state_ptr::Ptr{Cvoid}, get_view_text::Function)
-    status = begin_view_update(state_ptr)
-    status == BRIDGE_STATUS_OK ||
-        error("begin_view_update failed with bridge status $status")
-
-    fallback = get_view_text(state_ptr)
-    status = set_view_text(state_ptr, string(fallback))
-    status == BRIDGE_STATUS_OK ||
-        error("set_view_text failed with bridge status $status")
-    status = commit_view_update(state_ptr)
-    status == BRIDGE_STATUS_OK ||
-        error("commit_view_update failed with bridge status $status")
-    return status
 end
 
 """
@@ -162,39 +190,6 @@ function dynview_math_block(
         return @ccall dynview_math_block(
             state_ptr::Ptr{Cvoid}, request::BridgeDynviewMathRequest)::Int32
     end
-end
-
-"""Build one complete native mixed-TeX stream with an authored fallback."""
-function dynview_tex_document(
-    state_ptr::Ptr{Cvoid},
-    latex_source::AbstractString,
-    fallback::AbstractString,
-    block_kind::Integer,
-    block_id::Integer,
-    text_style::Integer)
-    source_text = String(latex_source)
-    fallback_text = String(fallback)
-    GC.@preserve source_text fallback_text begin
-        request = BridgeDynviewDocumentRequest(
-            pointer(source_text), pointer(fallback_text),
-            Int32(block_kind), Int32(block_id), Int32(text_style))
-        return @ccall dynview_tex_document(
-            state_ptr::Ptr{Cvoid}, request::BridgeDynviewDocumentRequest)::Int32
-    end
-end
-
-"""
-Emit a non-rendering copy payload segment for the currently open host dynview block.
-
-Returns a BRIDGE_STATUS_* code.
-"""
-function dynview_copyable_text_run(
-    state_ptr::Ptr{Cvoid},
-    copy_text::AbstractString)
-
-    @ccall dynview_copyable_text_run(
-        state_ptr::Ptr{Cvoid},
-        copy_text::Cstring)::Int32
 end
 
 """

@@ -9,7 +9,7 @@ import "core:testing"
 //   Allocate one generation-ready host state for copied value ABI tests.
 animation_value_test_state_create :: proc(
     generation: u64 = 1) -> ^core.Euclid_General_State {
-    state := new(core.Euclid_General_State)
+    state := new(core.Euclid_General_State, context.allocator)
     state^.saved_context = context
     if !core.animation_storage_init(
         &state^.animation_memory,
@@ -254,7 +254,7 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
-    service := new(Julia_Runtime_Service)
+    service := new(Julia_Runtime_Service, context.allocator)
     testing.expect_value(t, init_julia_runtime_channels(service),
         runtime.Allocator_Error.None)
     defer destroy_julia_runtime_service(service)
@@ -281,4 +281,38 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     _ = core.animation_value_store_copy(
         &state^.animation_values, identity, destination[:])
     testing.expect_value(t, destination[0], u8(1))
+}
+
+//   Verify a current scene batch commits without reserving presentation storage.
+@(test)
+animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create()
+    testing.expect(t, state != nil)
+    defer animation_value_test_state_destroy(state)
+    interface: core.Euclid_Julia_Interface
+    service := new(Julia_Runtime_Service, context.allocator)
+    testing.expect_value(t, init_julia_runtime_channels(service),
+        runtime.Allocator_Error.None)
+    defer destroy_julia_runtime_service(service)
+    animation := &interface.null_animation
+    point_system: core.Shapes_Point_System
+    state^.julia_interface = &interface
+    state^.julia_runtime_service = service
+    state^.point_system = &point_system
+    interface.current_animation = animation
+    interface.selected_animation = animation
+    service.animation_generation = 7
+    slot := &service.animation_tick_slots[0]
+    slot.state = .Complete
+    slot.generation = 7
+    slot.sequence = 1
+    slot.animation = animation
+    slot.scene_batch.animation = animation
+
+    testing.expect(t, publish_available_animation_tick(state))
+    testing.expect_value(t, service.animation_last_committed_sequence, u64(1))
+    testing.expect_value(t, slot.state, core.Animation_Tick_Slot_State.Free)
+    for snapshot in service.view_snapshots {
+        testing.expect_value(t, snapshot.state, core.View_Snapshot_Slot_State.Free)
+    }
 }

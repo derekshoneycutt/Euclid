@@ -254,8 +254,20 @@ loading_initialize_graphics_phase :: proc(
 //   Pair initialized runtime owners for transfer to the window loop.
 loading_runtime_session :: proc(
     state: ^Euclid_General_State,
-    service: ^julia.Julia_Runtime_Service) -> Euclid_Runtime_Session {
-    return {state = state, julia_service = service}
+    service: ^julia.Julia_Runtime_Service) -> (Euclid_Runtime_Session, bool) {
+    presentation := create_presentation_runtime()
+    if presentation == nil {
+        _ = shutdown_runtime_session({
+            state = state,
+            julia_service = service,
+        })
+        return {}, false
+    }
+    return {
+        state = state,
+        julia_service = service,
+        presentation = presentation,
+    }, true
 }
 
 //   Initialize startup phases while the window stays responsive.
@@ -295,5 +307,5 @@ initialize_window_runtime_with_loading :: proc(
     loading_initialize_graphics_phase(timing_profile, state, settings)
     draw_startup_frame(1.0)
     end_startup_phase("Total startup", startup_started_at)
-    return loading_runtime_session(state, started_service.service), true
+    return loading_runtime_session(state, started_service.service)
 }

@@ -12,7 +12,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint1 = [0.25f0, 0.1f0, 0f0]
 const EndPoint12 = [0.51f0, 0.9f0, 0f0]
@@ -118,19 +118,13 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.markers, state.point, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Postulate: Non-Parallel Lines
-
-Let the following be postulated:
-
-That, if a straight line falling on two straight lines make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Postulate}: \textit{Non-Parallel Lines}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Postulate}: \textit{Non-Parallel Lines}
 
 \textit{Let the following be postulated:}
 
 That, if a straight line \euclidline[color=grey60,length=3,thickness=4] falling on two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -213,7 +207,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         CircleIds(marker2.host_id, marker2.start_id, marker2.end_id))
     reset_cycle_state(
         state_ptr, AnimationState(lines, markers, point.index, PhaseDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

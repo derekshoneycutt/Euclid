@@ -9,19 +9,17 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
-"""Emit the Book I Postulates section view text."""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    latex = raw"\textbf{Euclid Elements - Book I - Postulates}"
-    fallback = "Euclid Elements - Book I - Postulates"
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
+"""Emit the Book I Postulates section view content."""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"\textbf{Euclid Elements - Book I - Postulates}"
 end
 
 """Initialize the null animation and publish the Postulates view."""
 function initialize(state_ptr::Ptr{Cvoid})
     NullAnimation.initialize(state_ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Advance the shared null animation for the Postulates view."""

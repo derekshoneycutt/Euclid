@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
 const BPoint = [0.75f0, 0.25f0, 0f0]
@@ -76,15 +76,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Axiom I,2
-
-I, 2. Any two distinct points of a straight line completely determine that line; that is, if AB = a and AC = a, where B ≠ C, then is also BC = a."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,2}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,2}
 
 \textbf{I, 2.} Any two distinct points of a straight line completely determine that line; that is, if $AB = a$ \euclidline[color=steelblue,length=3,thickness=4] and $AC = a$ \euclidline[color=steelblue,length=3,thickness=4], where $B$ \euclidpoint[color=khaki3,size=1] $\neq C$ \euclidpoint[color=grey60,size=1], then is also $BC = a$ \euclidline[color=steelblue,length=3,thickness=4]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""
@@ -146,7 +142,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_c.index, labellinea.index,
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

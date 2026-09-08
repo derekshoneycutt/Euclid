@@ -34,6 +34,28 @@ Tex_Display_Control_Result :: struct {
     next: int,
 }
 
+// Tex_Display_Inline describes one parsed display segment and its source range.
+Tex_Display_Inline :: struct {
+    source_start, source_end: int,
+    program: int,
+    text: string,
+    color: Tex_Document_Color,
+}
+
+// Tex_Display_Commit_Input identifies one row segment to parse and publish.
+Tex_Display_Commit_Input :: struct {
+    block_index: int,
+    row: Tex_Document_Display_Row_Source,
+    start, end: int,
+    color: Tex_Document_Color,
+}
+
+// Tex_Display_Finish_Input identifies one completed display environment.
+Tex_Display_Finish_Input :: struct {
+    block_index, row_start, source_start, body_end: int,
+    info: Tex_Document_Display_Info,
+}
+
 // Return the technical display beginning at the parser cursor, if any.
 tex_document_display_info :: proc(
     parser: ^Tex_Document_Parser) -> Tex_Document_Display_Info {
@@ -120,10 +142,10 @@ tex_display_scan_row :: proc(
     environment_depth := 0
     offset := row_start
     for offset < body_end {
-        if source[offset] == '{' {brace_depth += 1; offset += 1; continue}
-        if source[offset] == '}' {
-            if brace_depth == 0 {return {result, offset, false}}
-            brace_depth -= 1
+        brace_handled, brace_valid := tex_display_scan_brace(
+            source[offset], &brace_depth)
+        if brace_handled {
+            if !brace_valid {return {result, offset, false}}
             offset += 1
             continue
         }
@@ -143,6 +165,18 @@ tex_display_scan_row :: proc(
         offset += tex_utf8_sequence_width(source, offset)
     }
     return {result, body_end, brace_depth == 0 && environment_depth == 0}
+}
+
+// Update nested brace depth and report whether one byte was consumed.
+tex_display_scan_brace :: proc(value: u8, depth: ^int) -> (bool, bool) {
+    if value == '{' {
+        depth^ += 1
+        return true, true
+    }
+    if value != '}' {return false, true}
+    if depth^ == 0 {return true, false}
+    depth^ -= 1
+    return true, true
 }
 
 // Return a trimmed row segment, excluding a trailing numbering suppression command.
@@ -173,18 +207,35 @@ tex_display_parse_program :: proc(
 // Append one display math inline retaining the segment's source and copy geometry.
 tex_display_append_inline :: proc(
     parser: ^Tex_Document_Parser,
-    block_index, source_start, source_end, program: int,
-    text: string,
-    color: Tex_Document_Color) -> Tex_Parse_Status {
+    block_index: int,
+    segment: Tex_Display_Inline) -> Tex_Parse_Status {
 
-    span, ok := tex_semantic_append_text(parser.output, text)
+    span, ok := tex_semantic_append_text(parser.output, segment.text)
     if !ok {return .Work_Limit}
     if !tex_semantic_append_document_inline(parser.output, block_index, {
-        kind = .Math, source = {source_start, source_end-source_start},
-        text = span, color = color, root_style = .Display,
-        math_program = program,
+        kind = .Math,
+        source = {segment.source_start, segment.source_end-segment.source_start},
+        text = span, color = segment.color, root_style = .Display,
+        math_program = segment.program,
     }) {return .Work_Limit}
     return .Ok
+}
+
+// Parse one nonempty display segment and append its semantic inline.
+tex_display_commit_segment :: proc(
+    parser: ^Tex_Document_Parser,
+    input: Tex_Display_Commit_Input) -> (int, Tex_Parse_Status) {
+
+    text, ok := tex_display_row_segment(
+        parser.source, input.row, input.start, input.end)
+    if !ok {return -1, .Unexpected_Token}
+    program, status := tex_display_parse_program(parser, text)
+    if status != .Ok {return -1, status}
+    status = tex_display_append_inline(parser, input.block_index, {
+        source_start = input.start, source_end = input.end,
+        program = program, text = text, color = input.color,
+    })
+    return program, status
 }
 
 // Parse, publish, and retain one bounded row in a technical display block.
@@ -197,27 +248,17 @@ tex_display_commit_row :: proc(
 
     if kind == .Align && row.alignment < 0 {return .Unexpected_Token}
     split := row.alignment if row.alignment >= 0 else row.end
-    primary_text, primary_ok := tex_display_row_segment(
-        parser.source, row, row.start, split)
-    if !primary_ok {return .Unexpected_Token}
-    primary, status := tex_display_parse_program(parser, primary_text)
+    primary, status := tex_display_commit_segment(parser, {
+        block_index = block_index, row = row, start = row.start,
+        end = split, color = color,
+    })
     if status != .Ok {return status}
     secondary := -1
-    secondary_text := ""
     if row.alignment >= 0 {
-        secondary_ok: bool
-        secondary_text, secondary_ok = tex_display_row_segment(
-            parser.source, row, row.alignment+1, row.end)
-        if !secondary_ok {return .Unexpected_Token}
-        secondary, status = tex_display_parse_program(parser, secondary_text)
-        if status != .Ok {return status}
-    }
-    status = tex_display_append_inline(
-        parser, block_index, row.start, split, primary, primary_text, color)
-    if status != .Ok {return status}
-    if row.alignment >= 0 {
-        status = tex_display_append_inline(parser, block_index,
-            row.alignment+1, row.end, secondary, secondary_text, color)
+        secondary, status = tex_display_commit_segment(parser, {
+            block_index = block_index, row = row, start = row.alignment+1,
+            end = row.end, color = color,
+        })
         if status != .Ok {return status}
     }
     row_index := tex_semantic_append_document_display_row(parser.output, {
@@ -226,6 +267,30 @@ tex_display_commit_row :: proc(
         alignment = .Center, suppress_number = row.notag >= 0,
     })
     return .Ok if row_index >= 0 else .Work_Limit
+}
+
+// Finalize display row count, multline alignment, and parser advancement.
+tex_display_finish_environment :: proc(
+    parser: ^Tex_Document_Parser,
+    input: Tex_Display_Finish_Input) -> Tex_Parse_Status {
+
+    block := &parser.output.document_blocks[input.block_index]
+    block.display_row_count = parser.output.document_display_row_count-input.row_start
+    block.source = {input.source_start,
+        input.body_end+len(input.info.closer)-input.source_start}
+    if block.display_row_count == 0 ||
+       input.info.kind == .Equation && block.display_row_count != 1 {
+        return .Unexpected_Token
+    }
+    if input.info.kind == .Multline {
+        rows := parser.output.document_display_rows[
+            input.row_start:input.row_start+block.display_row_count]
+        rows[0].alignment = .Left
+        rows[len(rows)-1].alignment = .Right
+        if len(rows) == 1 {rows[0].alignment = .Center}
+    }
+    parser.offset = input.body_end+len(input.info.closer)
+    return .Ok
 }
 
 // Parse all rows in one top-level technical display environment.
@@ -256,19 +321,8 @@ tex_document_parse_display_environment :: proc(
         if status != .Ok {return status}
         next = scanned.next
     }
-    block := &parser.output.document_blocks[block_index]
-    block.display_row_count = parser.output.document_display_row_count-row_start
-    block.source = {source_start, body_end+len(info.closer)-source_start}
-    if block.display_row_count == 0 || info.kind == .Equation && block.display_row_count != 1 {
-        return .Unexpected_Token
-    }
-    if info.kind == .Multline {
-        rows := parser.output.document_display_rows[
-            row_start:row_start+block.display_row_count]
-        rows[0].alignment = .Left
-        rows[len(rows)-1].alignment = .Right
-        if len(rows) == 1 {rows[0].alignment = .Center}
-    }
-    parser.offset = body_end+len(info.closer)
-    return .Ok
+    return tex_display_finish_environment(parser, {
+        block_index = block_index, row_start = row_start,
+        source_start = source_start, body_end = body_end, info = info,
+    })
 }

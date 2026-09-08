@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.50f0, 0f0]
 const LineEnd = [0.86f0, 0.50f0, 0f0]
@@ -92,15 +92,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 5
-
-Every straight line a, which lies in a plane α, divides the remaining points of this plane into two regions having the following properties: Every point A of the one region determines with each point B of the other region a segment AB containing a point of the straight line a. On the other hand, any two points A, A' of the same region determine a segment AA' containing no point of a."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 5}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 5}
 
 Every straight line $a$ \euclidline[color=grey60,length=3,thickness=4], which lies in a plane $\alpha$, divides the remaining points of this plane into two regions having the following properties: Every point $A$ \euclidpoint[color=steelblue,size=1] of the one region determines with each point $B$ \euclidpoint[color=palevioletred1,size=1] of the other region a segment $AB$ \euclidline[color=steelblue,length=3,thickness=4] containing a point of the straight line $a$ \euclidline[color=grey60,length=3,thickness=4]. On the other hand, any two points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] of the same region determine a segment $AA'$ \euclidline[color=khaki3,length=3,thickness=4] containing no point of $a$ \euclidline[color=grey60,length=3,thickness=4]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -186,7 +182,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         alpha_label.index, line_label.index, label_a.index, label_b.index,
         label_a_prime.index, PhaseDescendToLine, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

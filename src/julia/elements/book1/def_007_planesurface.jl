@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint1 = [0.5f0, 0f0, 0f0]
 const EndPoint1 = [0.5f0, 1f0, 0f0]
@@ -47,15 +47,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Plane Surface
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Surface}
 
 A plane surface is a surface which lies evenly with the straight lines on itself."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Surface}
-
-A plane surface is a surface which lies evenly with the straight lines on itself."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle timing to its initial phase."""
@@ -71,7 +67,7 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     reset_cycle_state(state_ptr, AnimationState(PhaseDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

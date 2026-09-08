@@ -85,6 +85,16 @@ scenario_test_scratchpad_completed_event :: proc(t: ^testing.T) {
     testing.expect_value(t, kind, trace.Kind.Scratchpad_Completed)
 }
 
+// Verify presentation replacement transitions are available to scenarios.
+@(test)
+scenario_test_presentation_lifecycle_events :: proc(t: ^testing.T) {
+    cleared, cleared_valid := event_kind("presentation_cleared")
+    superseded, superseded_valid := event_kind("presentation_superseded")
+    testing.expect(t, cleared_valid && superseded_valid)
+    testing.expect_value(t, cleared, trace.Kind.Presentation_Cleared)
+    testing.expect_value(t, superseded, trace.Kind.Presentation_Superseded)
+}
+
 // Verify the scenario vocabulary exposes generation-owned animation loading.
 @(test)
 scenario_test_animation_loaded_event :: proc(t: ^testing.T) {

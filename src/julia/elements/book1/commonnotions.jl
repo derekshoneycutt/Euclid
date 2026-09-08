@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineLength = 0.35f0
 
@@ -75,23 +75,15 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Common Notions
-
-1. Things which are equal to the same thing are also equal to one another.
-2. If equals be added to equals, the wholes are equal.
-3. If equals be subtracted from equals, the remainders are equal.
-4. Things which coincide with one another are equal to one another.
-5. The whole is greater than the part."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Common Notions}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Common Notions}
 
 \textbf{1.} Things which are equal to the same thing are also equal to one another.\\
 \textbf{2.} If equals be added to equals, the wholes are equal.\\
 \textbf{3.} If equals be subtracted from equals, the remainders are equal.\\
 \textbf{4.} Things which coincide with one another are equal to one another.\\
 \textbf{5.} The whole is greater than the part."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -140,7 +132,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line3.host_id, line3.joint1_id, line3.joint2_id)),
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

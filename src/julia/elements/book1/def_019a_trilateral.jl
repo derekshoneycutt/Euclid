@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
 const VertexB = [0.50f0, 0.34f0, 0f0]
@@ -95,15 +95,11 @@ function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, triangle_host_id, color)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Rectilineal Figures - Trilateral
-
-Rectilineal figures are those which are contained by straight lines, trilateral figures being those contained by three..."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Trilateral}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Trilateral}
 
 Rectilineal figures are those which are contained by straight lines, trilateral figures \euclidtriangle[height=2,width=3,color=steelblue,filled] being those contained by three..."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -160,7 +156,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         TriangleIds(triangle.host_id, triangle.joint1_id, triangle.joint2_id,
             triangle.joint3_id), PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

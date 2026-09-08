@@ -238,7 +238,7 @@ math_shaping_populate_intrinsic_fixture :: proc(runtime: ^app_core.Dynview_Syste
 //   Verify cached NewCM metrics replace synthetic math-glyph measurements.
 @(test)
 dynview_math_shaping_measures_cached_intrinsic_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
     defer app_core.arena_owner_destroy(&runtime^.cache_arena)
@@ -340,7 +340,7 @@ math_shaping_expect_recursive_geometry :: proc(
 //   Verify scripts, fractions, radicals, nesting, and grid width use shaped metrics.
 @(test)
 dynview_math_shaping_propagates_recursive_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
     defer app_core.arena_owner_destroy(&runtime^.cache_arena)
@@ -370,7 +370,7 @@ dynview_math_shaping_propagates_recursive_metrics :: proc(t: ^testing.T) {
 //   Verify recursive matrix columns inherit proportional shaped cell widths.
 @(test)
 dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
     defer app_core.arena_owner_destroy(&runtime^.cache_arena)
@@ -412,7 +412,7 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
 //   Verify missing glyphs retain whole-run synthetic fallback without partial spans.
 @(test)
 dynview_math_shaping_missing_glyph_uses_whole_run_fallback :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System)
+    runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
     defer app_core.arena_owner_destroy(&runtime^.cache_arena)

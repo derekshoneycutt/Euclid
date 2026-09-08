@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointB = [0.08f0, 0.68f0, 0f0]
 const PointA = [0.28f0, 0.68f0, 0f0]
@@ -274,16 +274,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 15
-
-All right angles are congruent to one another.
-
-Proof: Let the angle BAD be congruent to its supplementary angle CAD, and, likewise, let the angle B'A'D' be congruent to its supplementary angle C'A'D'. Hence the angles BAD, CAD, B'A'D', and C'A'D' are all right angles. We will assume that the contrary of our proposition is true, namely, that the right angle B'A'D' is not congruent to the right angle BAD, and will show that this assumption leads to a contradiction. We lay off the angle B'A'D' upon the half-ray AB in such a manner that the side AD'' arising from this operation falls either within the angle BAD or within the angle CAD. Suppose, for example, the first of these possibilities to be true. Because of the congruence of the angles B'A'D' and BAD'', it follows from theorem 12 that angle C'A'D' is congruent to angle CAD'', and, as the angles B'A'D' and C'A'D' are congruent to each other, then, by IV, 5, the angle BAD'' must be congruent to CAD''.
-
-Furthermore, since the angle BAD is congruent to the angle CAD, it is possible, by theorem 13, to find within the angle CAD a half-ray AD''' emanating from A, so that the angle BAD'' will be congruent to the angle CAD''', and also the angle DAD'' will be congruent to the angle DAD'''. The angle BAD'' was shown to be congruent to the angle CAD'', and, hence, by axiom IV, 5, the angle CAD''' is congruent to the angle CAD''. This, however, is not possible; for, according to axiom IV, 4, an angle can be laid off in a plane upon a given side of a given half-ray in only one way. With this our proposition is demonstrated. We can now introduce, in accordance with common usage, the terms "acute angle" and "obtuse angle."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 15}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 15}
 
 All right angles are congruent to one another.
 
@@ -312,7 +305,6 @@ $\angle BAD''$ was shown to be congruent to the angle $\angle CAD''$, and, hence
 $\angle CAD'''$ is congruent to the angle $\angle CAD''$. This, however, is not possible; for, according to
 \textit{axiom IV, 4}, an angle can be laid off in a plane upon a given side of a given half-ray in only one way. With
 this our proposition is demonstrated. We can now introduce, in accordance with common usage, the terms "acute angle" and "obtuse angle."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -450,7 +442,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_d_double.index, label_d_triple.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

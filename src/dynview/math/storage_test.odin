@@ -24,7 +24,7 @@ dynview_shaped_builder_enforces_exact_limits :: proc(t: ^testing.T) {
         &builder, {0, .Primary, 0, 1, glyphs, {}}),
         app_core.Bounded_Builder_Status.Limit_Exceeded)
 
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     testing.expect_value(t, shaped_builder_seal(
         &builder, cache, 1, app_core.DYNVIEW_MAX_SHAPED_RUNS, 7),
@@ -44,7 +44,7 @@ dynview_shaped_builder_rejects_invalid_spans_and_generation :: proc(t: ^testing.
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     glyph := []app_core.Shaped_Glyph{{glyph_id = 1}}
 
@@ -73,7 +73,7 @@ dynview_shaped_builder_rejects_layout_and_glyph_spans :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     testing.expect(t, app_core.arena_owner_init(&arena))
     defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     glyph := []app_core.Shaped_Glyph{{glyph_id = 1}}
     builder: Dynview_Shaped_Builder
@@ -101,7 +101,7 @@ dynview_shaped_builder_rejects_layout_and_glyph_spans :: proc(t: ^testing.T) {
 //   Verify allocation failure retains fallback layout state without partial publication.
 @(test)
 dynview_shaped_builder_allocation_failure_preserves_fallback :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     remaining_allocations := 0
     allocator := shaped_builder_test_allocator(&remaining_allocations)

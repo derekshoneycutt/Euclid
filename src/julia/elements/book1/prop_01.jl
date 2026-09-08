@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.40f0, 0.60f0, 0f0]
 const EndPoint = [0.60f0, 0.40f0, 0f0]
@@ -91,28 +91,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.circles, state.labels, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Proposition I
-
-On a given finite straight line to construct an equilateral triangle.
-
-Let AB be the given finite straight line.
-
-Thus it is required to construct an equilateral triangle on the straing line AB.
-With center A and distance AB let the circle BCD be described;
-again, with center B and distance BA let the circle ACE be described;
-and from the point C, in which the circles cut one another, to the points A, B let the straight lines CA, CB be joined.
-
-Now, since the point A is the center of the circle CDB, AC is equal to AB.
-Again, since the point B is the center of the circle CAE, BC is equal to BA.
-But CA was also proved equal to AB; therefore each of the straight lines CA, CB is equal to AB.
-And things which are equal to the same thing are also equal to one another; therefore CA is also equal to CB.
-Therefore the three straight lines CA, AB, BC are equal to one another.
-Therefore the triangle ABC is equilateral; and it has been constructed on the given finite straight line AB.
-
-Being what it was required to do."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Proposition I}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Proposition I}
 
 \textit{On a given finite straight line to construct an equilateral triangle.}
 
@@ -131,7 +112,6 @@ Therefore the three straight lines $CA$ \euclidline[color=khaki3,length=3,thickn
 Therefore the triangle $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=grey60,edge3_color=palevioletred1] is equilateral; and it has been constructed on the given finite straight line $AB$ \euclidline[color=grey60,length=3,thickness=4].
 
 Being what it was required to do."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -224,7 +204,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     labels = (label_a.index, label_b.index, label_c.index, label_d.index, label_e.index)
     state = AnimationState(lines, circles, labels, PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -22,8 +22,8 @@ semantic_documents_publish_without_command_layout :: proc(t: ^testing.T) {
     defer app_core.arena_owner_destroy(&runtime_arena)
     compiled_bytes_test_arena_init(t, &cache_arena)
     defer app_core.arena_owner_destroy(&cache_arena)
-    allocator := app_core.arena_owner_allocator(&runtime_arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     documents := [1]app_core.Dynview_Document{{}}
     runtime^.content.documents = documents[:]
 
@@ -43,24 +43,23 @@ semantic_documents_publish_without_command_layout :: proc(t: ^testing.T) {
     testing.expect(t, runtime^.compile_cache.layout_is_valid)
 }
 
-//   Verify successful compilation seals plain and copy bytes into arena aliases.
+//   Verify compilation seals command text and canonical presentation bytes.
 @(test)
 compiled_bytes_publish_sealed_plain_and_copy_payloads :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     buffer := &runtime^.command_buffer
-    copy(buffer^.text_bytes[:], "drawcopy")
-    buffer^.text_bytes_len = 8
-    buffer^.command_count = 4
+    copy(buffer^.text_bytes[:], "draw")
+    buffer^.text_bytes_len = 4
+    presentation: string = "copy"
+    runtime^.content.presentation_bytes = transmute([]u8)presentation
+    buffer^.command_count = 3
     buffer^.commands[0] = {kind = .Begin_Block, block_id = 7}
     buffer^.commands[1] = {kind = .Text_Run, text_offset = 0, text_len = 4}
-    buffer^.commands[2] = {
-        kind = .Copyable_Text_Run, copy_text_offset = 4, copy_text_len = 4,
-    }
-    buffer^.commands[3] = {kind = .End_Block}
+    buffer^.commands[2] = {kind = .End_Block}
 
     status := rebuild_compiled_plain_text(runtime, &arena)
 
@@ -81,8 +80,8 @@ compiled_bytes_reject_incomplete_stream_without_publication :: proc(t: ^testing.
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     runtime^.command_buffer.command_count = 1
     runtime^.command_buffer.commands[0] = {kind = .Begin_Block, block_id = 1}
 
@@ -99,8 +98,8 @@ compiled_bytes_consume_published_content_views :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     buffer := &runtime^.command_buffer
     buffer^.command_count = 1
     buffer^.commands[0] = {kind = .Begin_Block, block_id = 99}
@@ -129,8 +128,8 @@ compiled_bytes_reject_plain_text_overflow_without_publication :: proc(t: ^testin
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     state := Dynview_Compile_State{}
     testing.expect_value(t, app_core.bounded_byte_builder_init(
         &state.plain_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES, &arena),
@@ -144,40 +143,33 @@ compiled_bytes_reject_plain_text_overflow_without_publication :: proc(t: ^testin
     testing.expect_value(t, len(cache^.compiled_plain_text), 0)
 }
 
-//   Verify copy blocks preserve source order and payload spans after sealing.
+//   Verify canonical presentation bytes attach once to the first content block.
 @(test)
 compiled_copy_blocks_publish_ordered_payload_spans :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
+    presentation: string = "abcd"
+    runtime^.content.presentation_bytes = transmute([]u8)presentation
     buffer := &runtime^.command_buffer
-    copy(buffer^.text_bytes[:], "abcd")
-    buffer^.text_bytes_len = 4
-    buffer^.command_count = 6
+    buffer^.command_count = 4
     buffer^.commands[0] = {kind = .Begin_Block, block_id = 7}
-    buffer^.commands[1] = {
-        kind = .Copyable_Text_Run, copy_text_offset = 0, copy_text_len = 2,
-    }
-    buffer^.commands[2] = {kind = .End_Block}
-    buffer^.commands[3] = {kind = .Begin_Block, block_id = 9}
-    buffer^.commands[4] = {
-        kind = .Copyable_Text_Run, copy_text_offset = 2, copy_text_len = 2,
-    }
-    buffer^.commands[5] = {kind = .End_Block}
+    buffer^.commands[1] = {kind = .End_Block}
+    buffer^.commands[2] = {kind = .Begin_Block, block_id = 9}
+    buffer^.commands[3] = {kind = .End_Block}
 
     status := rebuild_compiled_plain_text(runtime, &arena)
 
     blocks := runtime^.compile_cache.copy_blocks
     testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, len(blocks), 2)
+    testing.expect_value(t, len(blocks), 1)
     testing.expect_value(t, blocks[0].block_id, i32(7))
     testing.expect_value(t, blocks[0].payload_offset, 0)
-    testing.expect_value(t, blocks[0].payload_len, 2)
-    testing.expect_value(t, blocks[1].block_id, i32(9))
-    testing.expect_value(t, blocks[1].payload_offset, 2)
-    testing.expect_value(t, blocks[1].payload_len, 2)
+    testing.expect_value(t, blocks[0].payload_len, 4)
+    testing.expect_value(t,
+        string(runtime^.compile_cache.compiled_copy_payload), presentation)
 }
 
 //   Verify copy-block admission rejects one record beyond the command limit.
@@ -194,8 +186,8 @@ compiled_copy_blocks_reject_exact_limit_overflow :: proc(t: ^testing.T) {
         &state.copy_block_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
         app_core.Bounded_Builder_Status.Ok)
     state.copy_block_builder.count = app_core.DYNVIEW_MAX_COMMANDS
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     cache^.compiled_copy_payload_len = 1
 
     status := compile_end_block(cache, &state)
@@ -211,8 +203,8 @@ copy_hit_targets_reuse_capacity_across_frames :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     cache := &runtime^.compile_cache
     testing.expect_value(t, app_core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
@@ -251,8 +243,8 @@ document_copy_hit_target_uses_semantic_layout :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
     cache := &runtime^.compile_cache
     testing.expect_value(t, app_core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
@@ -289,8 +281,8 @@ copy_hit_targets_reject_exact_limit_overflow :: proc(t: ^testing.T) {
     arena: app_core.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, allocator)
+    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    defer free(cache, context.allocator)
     testing.expect_value(t, app_core.bounded_element_builder_init(
         &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
         app_core.Bounded_Builder_Status.Ok)

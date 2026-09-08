@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const PointO = [0.18f0, 0.70f0, 0f0]
 const RayHEnd = [0.50f0, 0.58f0, 0f0]
@@ -189,18 +189,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 14
-
-Let h, k, l and h', k', l' be two sets of three half-rays, where those of each set emanate from the same point and lie in the same plane. Then, if the congruences
-
-    ∠(h, l) ≡ ∠(h', l'),   ∠(k, l) ≡ ∠(k', l')
-
-are fulfilled, the following congruence is also valid; viz.:
-
-    ∠(h, k) ≡ ∠(h', k')."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 14}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 14}
 
 Let $h$ \euclidline[color=steelblue,length=3,thickness=4], $k$ \euclidline[color=palevioletred1,length=3,thickness=4],
 $l$ \euclidline[color=grey60,length=3,thickness=4] and
@@ -213,7 +204,6 @@ from the same point and lie in the same plane. Then, if the congruences
 are fulfilled, the following congruence is also valid; viz.:
 
     $\angle(h, k) \equiv \angle(h', k')$ \euclidangle[color=lightgreen,radius=2,end=60,filled]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -323,7 +313,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_h_prime.index, label_k_prime.index, label_l_prime.index,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

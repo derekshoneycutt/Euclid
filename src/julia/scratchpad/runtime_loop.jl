@@ -14,7 +14,6 @@ function handle_local_command!(
     if text == ":clear"
         isempty(session.output) || (session.output_revision += 1)
         empty!(session.output)
-        empty!(session.output_entries)
         return true
     end
     if text == ":hooks"
@@ -171,16 +170,11 @@ function run_frame_hooks!(session::ScratchpadSession, state_ptr::Ptr{Cvoid}, dt)
     end
 end
 
-"""Return current scratchpad output as newline-delimited text for the UI panel."""
-function get_view_text(
+"""Return the authoritative plain transcript for the Scratchpad panel."""
+function get_view_content(
     host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
 
     session = ensure_session!(host_runtime, state_ptr)
-    _ = emit_dynview_output_stream!(state_ptr, session)
-    document_entry = latest_latex_output(session)
-    if document_entry !== nothing && latex_output_is_document(document_entry)
-        return document_entry.line
-    end
     if isempty(session.output)
         return ""
     end
@@ -188,7 +182,7 @@ function get_view_text(
     return join(session.output, "\n")
 end
 
-"""Prime Scratchpad parsing, completion, evaluation, formatting, and dynview emission."""
+"""Prime Scratchpad parsing, completion, evaluation, and transcript formatting."""
 function prime_repl!(
     host_runtime::ScratchpadRuntimeState, state_ptr::Ptr{Cvoid})
 
@@ -199,9 +193,7 @@ function prime_repl!(
         complete_backslash(host_runtime, state_ptr, "\\alpha") == "α" || return false
         isempty(complete_input(host_runtime, state_ptr, "EuclidRep", 9)) && return false
         loop(host_runtime, state_ptr, 0f0)
-        isempty(get_view_text(host_runtime, state_ptr)) && return false
-        status = OdinJuliaBridge.dynview_reset_stream(state_ptr)
-        return status == OdinJuliaBridge.BRIDGE_STATUS_OK
+        return !isempty(get_view_content(host_runtime, state_ptr))
     finally
         host_runtime.current_session = create_session(
             host_runtime, state_ptr, host_runtime.next_session_id)
@@ -215,8 +207,8 @@ function initialize(
     host_runtime.initialize_count += 1
     session = ensure_session!(host_runtime, state_ptr)
     append_startup_banner!(session)
-    callback = ptr -> get_view_text(host_runtime, ptr)
-    OdinJuliaBridge.publish_view_update(state_ptr, callback)
+    callback = ptr -> get_view_content(host_runtime, ptr)
+    OdinJuliaBridge.publish_view_content(state_ptr, callback)
 end
 
 """Clean scratchpad lifecycle state and animation data when the animation unloads."""
@@ -260,8 +252,8 @@ function loop(
     end
     current_session = ensure_session!(host_runtime, state_ptr)
     if current_session !== session || current_session.output_revision != starting_revision
-        callback = ptr -> get_view_text(host_runtime, ptr)
-        OdinJuliaBridge.publish_view_update(state_ptr, callback)
+        callback = ptr -> get_view_content(host_runtime, ptr)
+        OdinJuliaBridge.publish_view_content(state_ptr, callback)
     end
 end
 

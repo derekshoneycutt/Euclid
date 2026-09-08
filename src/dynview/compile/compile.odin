@@ -19,6 +19,8 @@ Dynview_Compile_State :: struct {
     block_row_end: int,
     block_payload_start: int,
     block_has_copy_payload: bool,
+    presentation_consumed: bool,
+    presentation_bytes: []u8,
     current_row: int,
 }
 
@@ -46,7 +48,6 @@ COMPILE_COMMAND_HANDLERS ::
     .Large_Op = compile_large_op_recursive,
     .Accent_Bar = compile_text_run,
     .Radical_Bar = compile_text_run,
-    .Copyable_Text_Run = compile_copyable_text_run,
     .Line_Break = compile_handle_newline,
     .Divider = compile_handle_newline,
     .Inline_Line = compile_handle_inline_line,
@@ -126,29 +127,6 @@ append_copy_payload_byte :: proc(
     return dyncore.compiled_builder_status(status)
 }
 
-//   Copy one command copy-text slice into compiled copy payload cache.
-append_copy_payload_slice :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
-    state: ^Dynview_Compile_State,
-    offset, count: int) -> i32 {
-
-    if offset < 0 || count < 0 {
-        return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
-    }
-    text_bytes := dyncore.command_buffer_text(buffer)
-    if offset + count > len(text_bytes) {
-        return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
-    }
-
-    status := app_core.bounded_byte_builder_append(
-        &state^.copy_payload_builder, text_bytes[offset:offset + count])
-    if status == .Ok {
-        cache^.compiled_copy_payload_len = state^.copy_payload_builder.count
-    }
-    return dyncore.compiled_builder_status(status)
-}
-
 //   Require an open block before consuming block-scoped content commands.
 require_open_block :: #force_inline proc(open_block: bool) -> i32 {
     if open_block {
@@ -174,6 +152,16 @@ compile_begin_block :: #force_inline proc(
     state^.block_row_end = state^.current_row
     state^.block_payload_start = cache^.compiled_copy_payload_len
     state^.block_has_copy_payload = false
+    if !state^.presentation_consumed && len(state^.presentation_bytes) > 0 {
+        status := app_core.bounded_byte_builder_append(
+            &state^.copy_payload_builder, state^.presentation_bytes)
+        if status != .Ok {
+            return dyncore.compiled_builder_status(status)
+        }
+        cache^.compiled_copy_payload_len = state^.copy_payload_builder.count
+        state^.block_has_copy_payload = true
+        state^.presentation_consumed = true
+    }
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -341,30 +329,6 @@ compile_large_op_recursive :: #force_inline proc(
     }
 
     state^.block_row_end = state^.current_row
-    return dyncore.DYNVIEW_STATUS_OK
-}
-
-//   Apply copyable-run compilation rule.
-compile_copyable_text_run :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
-    state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
-
-    status := require_open_block(state^.open_block)
-    if status != dyncore.DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    status = append_copy_payload_slice(
-        cache, buffer, state, cmd.copy_text_offset, cmd.copy_text_len)
-    if status != dyncore.DYNVIEW_STATUS_OK {
-        return status
-    }
-
-    if cmd.copy_text_len > 0 {
-        state^.block_has_copy_payload = true
-    }
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -673,7 +637,9 @@ rebuild_compiled_plain_text :: proc(
     cache^.copy_block_count = 0
     cache^.copy_hit_target_count = 0
 
-    compile_state := Dynview_Compile_State{}
+    compile_state := Dynview_Compile_State{
+        presentation_bytes = runtime^.content.presentation_bytes,
+    }
     init_status := compiled_builders_init(cache, &compile_state, cache_arena)
     if init_status != dyncore.DYNVIEW_STATUS_OK {
         return init_status
@@ -715,6 +681,14 @@ rebuild_copy_hit_targets :: proc(
     if semantic_document {
         return rebuild_document_copy_hit_target(cache, layout)
     }
+
+    return rebuild_legacy_copy_hit_targets(cache, layout)
+}
+
+// Rebuild copy hit targets for the legacy compiled command layout.
+rebuild_legacy_copy_hit_targets :: proc(
+    cache: ^app_core.Dynview_Compile_Cache,
+    layout: Copy_Hit_Target_Layout) -> i32 {
 
     panel_top := layout.panel.y
     last_hover_bottom := panel_top

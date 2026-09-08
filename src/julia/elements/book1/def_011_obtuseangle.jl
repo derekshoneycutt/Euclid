@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const JointPoint = [0.375f0, 0.30f0, 0f0]
 const LineLength = 0.55f0
@@ -90,15 +90,11 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.marker, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Obtuse Angle
-
-An obtuse angle is an angle greater than a right angle."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse Angle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse Angle}
 
 An obtuse angle \euclidangle[color=khaki3,radius=2,end=120,filled] is an angle greater than a right angle."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -156,7 +152,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         CircleIds(marker.host_id, marker.start_id, marker.end_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

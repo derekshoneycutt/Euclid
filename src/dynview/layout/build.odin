@@ -32,7 +32,7 @@ LAYOUT_INLINE_SHAPE_HANDLERS ::
     .Math_Block = nil, .Script_Attach = nil, .Frac = nil,
     .Stretch_Delimiter = nil, .Matrix = nil, .Style_Override = nil, .Stack = nil,
     .Large_Op = nil, .Accent_Bar = nil, .Radical_Bar = nil,
-    .Copyable_Text_Run = nil, .Line_Break = nil, .Divider = nil,
+    .Line_Break = nil, .Divider = nil,
     .Inline_Line = layout_consume_inline_line,
     .Inline_Box = layout_consume_inline_box,
     .Inline_Circle = layout_consume_inline_circle,
@@ -1428,7 +1428,7 @@ layout_consume_visible_command :: proc(
             ctx^.acc,
             ctx^.base_ascent,
             ctx^.base_descent)
-    case .Begin_Block, .End_Block, .Copyable_Text_Run:
+    case .Begin_Block, .End_Block:
     }
 
     return dyncore.DYNVIEW_STATUS_OK

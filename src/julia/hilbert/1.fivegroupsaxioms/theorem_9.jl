@@ -9,7 +9,7 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const LineYUnprimed = 0.68f0
 const LineYPrimed = 0.32f0
@@ -150,12 +150,9 @@ const TraceLegs = (
     (PointAPrime, PointCPrime, PointLPrime, PointOddColor))
 const TotalPassCount = length(TraceLegs)
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """David Hilbert - Foundations of Geometry - Theorem 9
-
-If the first of two congruent series of points A, B, C, D, ..., K, L and A', B', C', D', ..., K', L' is so arranged that B lies between A and C, D, ..., K, L, and C between A, B and D, ..., K, L, etc., then the points A', B', C', D', ..., K', L' of the second series are arranged in a similar way; that is to say, B' lies between A' and C', D', ..., K', L', and C' lies between A', B' and D', ..., K', L', etc."""
-    latex = raw"""\textbf{David Hilbert - Foundations of Geometry - Theorem 9}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 9}
 
 If the first of two congruent series of points $A, B, C, D, ..., K, L$ \euclidline[color=steelblue,length=3,thickness=4]
 and $A', B', C', D', ..., K', L'$ \euclidline[color=steelblue,length=3,thickness=4] is so arranged that
@@ -164,7 +161,6 @@ $A, B$ and $D, ..., K, L$, etc., then the points $A', B', C', D', ..., K', L'$ o
 in a similar way; that is to say, $B'$ \euclidpoint[color=khaki3,size=1]
 lies between $A'$ \euclidpoint[color=palevioletred1,size=1] and $C', D', ..., K', L'$,
 and $C'$ \euclidpoint[color=palevioletred1,size=1] lies between $A', B'$ and $D', ..., K', L'$, etc."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -240,7 +236,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         ntuple(i -> label_pairs[i][1], 6), ntuple(i -> label_pairs[i][2], 6),
         labela_line.index, label_a_prime_line.index, PhaseDescend, 0f0, 0, 0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -26,7 +26,7 @@ session_test_lane_selection_parses_canonical_and_legacy_names :: proc(t: ^testin
 // Verify disabled sessions remain inert regardless of configured output.
 @(test)
 session_test_disabled_policy_is_inert :: proc(t: ^testing.T) {
-    session := new(Session)
+    session := new(Session, context.allocator)
     testing.expect(t, session != nil)
     defer free(session)
     testing.expect(t, session_init(session, Config{
@@ -43,7 +43,7 @@ session_test_disabled_policy_is_inert :: proc(t: ^testing.T) {
 // Verify policy, fixed identity, and lane filtering are initialized together.
 @(test)
 session_test_enabled_policy_copies_configuration :: proc(t: ^testing.T) {
-    session := new(Session)
+    session := new(Session, context.allocator)
     testing.expect(t, session != nil)
     defer free(session)
     testing.expect(t, session_init(session, Config{
@@ -61,7 +61,7 @@ session_test_enabled_policy_copies_configuration :: proc(t: ^testing.T) {
 // Verify required loss remains sticky across later healthy producer snapshots.
 @(test)
 session_test_required_loss_is_sticky :: proc(t: ^testing.T) {
-    session := new(Session)
+    session := new(Session, context.allocator)
     testing.expect(t, session != nil)
     defer free(session)
     testing.expect(t, session_init(session, Config{
@@ -88,7 +88,7 @@ session_test_required_loss_is_sticky :: proc(t: ^testing.T) {
 // Verify optional pressure leaves bounded capacity for later required evidence.
 @(test)
 session_test_optional_pressure_preserves_required_reserve :: proc(t: ^testing.T) {
-    session := new(Session)
+    session := new(Session, context.allocator)
     testing.expect(t, session != nil)
     defer free(session)
     testing.expect(t, session_init(session, Config{

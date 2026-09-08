@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.40f0, 0.60f0, 0f0]
 const BPoint = [0.60f0, 0.40f0, 0f0]
@@ -94,16 +94,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, state.circles, state.labels, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Proclus - Scalene Triangle
-
-On a given finite straight line to construct an scalene triangle.
-
-This follows Euclid's Elements Book I, Proposition I, with modifications.
-
-Suppose AC to be a radius of one of the two circles, and D a point on AC lying in that portion of the circle with center A which is outside the circle with center B, Then, joining BD as in the figure, we have a triangle which obviously has all its sides unequal, that is, a scalene triangle."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Proclus - Scalene Triangle}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Proclus - Scalene Triangle}
 
 On a given finite straight line to construct an scalene triangle.
 
@@ -117,7 +110,6 @@ circle \euclidcircle[color=palevioletred1,size=1,thickness=2] with
 center $B$ \euclidpoint[color=grey,size=0.5]. Then, joining
 $BD$ \euclidline[color=khaki3,length=3,thickness=4] as in the figure, we have a triangle which obviously has all its sides unequal, that is,
 a scalene triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=grey60,edge3_color=khaki3]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -210,7 +202,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         (label_a.index, label_b.index, label_c.index, label_d.index),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

@@ -10,7 +10,7 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
 const VertexB = Float32[0.68f0, 0.34f0, 0f0]
@@ -63,27 +63,6 @@ const PhaseReflectTwiceFirst = 8f0
 const PhaseReflectTwiceSecond = 9f0
 const PhasePauseAfterTwice = 10f0
 
-const Z2FallbackText = raw"""The two-element symmetry group
-
-Start with the simplest nontrivial geometry: given an equilateral triangle, either do nothing to the triangle, or reflect it across one fixed axis.
-
-The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
-
-Z_2 = {0,1}
-
-This is the group under addition mod 2. Let r be reflection across the fixed axis and e the identity motion.
-
-e o e = e, e o r = r, r o e = r, and r o r = e.
-
-Brief proof it is a group:
-
-1. Closure: composing e and r always gives e or r.
-2. Associativity: composition of reflections is associative.
-3. Identity: e does nothing.
-4. Inverses: e^{-1} = e and r^{-1} = r.
-
-So this is the 2-element symmetry group of the triangle, and the two motions commute."""
-
 const Z2LatexDocument = raw"""\textbf{The two-element symmetry group}
 
 Start with the simplest nontrivial geometry: given an equilateral triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3], either \textit{do nothing} to the triangle, or \textit{reflect} it across one fixed axis.
@@ -133,9 +112,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.lines, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    EuclidLatex.emit_latex_view_text!(state_ptr, Z2LatexDocument, Z2FallbackText)
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return EuclidLatex.TeXDocument(Z2LatexDocument)
 end
 
 """Apply a set of reflection poses to the tracked points."""
@@ -255,7 +234,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     reset_cycle_state(
         state_ptr, AnimationState(lines, PhasePenDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

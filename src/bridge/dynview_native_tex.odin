@@ -15,6 +15,14 @@ DYNVIEW_NATIVE_COMMAND_KINDS :: [11]core.Dynview_Command_Kind{
     .Large_Op, .Frac, .Stretch_Delimiter, .Matrix, .Style_Override, .Stack,
 }
 
+// Presentation_Source_Mode selects literal, standalone-math, or document handling.
+Presentation_Source_Mode :: enum u8 {
+    Plain,
+    Math,
+    Document,
+    Rejected,
+}
+
 // Group presentation choices applied while importing parser-owned math semantics.
 Dynview_Native_Math_Styles :: struct {
     text: i32,
@@ -42,53 +50,22 @@ Dynview_Native_Document_Offsets :: struct {
     display_row: int,
 }
 
-//   Build a complete document stream with a fallback command as its commit boundary.
-dynview_native_document_source :: proc(
-    state: ^core.Euclid_General_State,
-    request: Bridge_Dynview_Document_Request) -> i32 {
-    if state == nil || request.source == nil || request.fallback == nil ||
-        request.text_style < 0 {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
+//   Classify canonical presentation bytes without changing their source representation.
+presentation_source_mode :: proc(
+    mime: core.Presentation_Mime, source: string) -> Presentation_Source_Mode {
+    switch mime {
+    case .Text_Plain:
+        return .Plain
+    case .Text_Latex:
+        text := dynparse.tex_document_trim(source)
+        return .Math if dynparse.tex_document_whole_math(text).present else .Document
     }
-    status := dynview_reset_stream(state)
-    if status == BRIDGE_STATUS_OK {
-        status = dynview_begin_block(state, request.block_kind, request.block_id)
-    }
-    if status == BRIDGE_STATUS_OK {
-        status = dynview_copyable_text_run(state, request.fallback)
-    }
-    if status != BRIDGE_STATUS_OK {
-        return status
-    }
-    runtime: ^core.Dynview_System
-    status = dynview_require_runtime(state, &runtime)
-    if status != BRIDGE_STATUS_OK || runtime == nil {
-        return status
-    }
-    checkpoint := dynview_math_import_checkpoint(runtime)
-    status = dynview_native_import_document(
-        state, runtime, string(request.source), request.text_style)
-    if status != BRIDGE_STATUS_OK {
-        fallback_status := dynview_native_stage_document_fallback(
-            state, runtime, checkpoint, request)
-        if fallback_status != BRIDGE_STATUS_OK {
-            return fallback_status
-        }
-    }
-    close_status := dynview_end_block(state)
-    return status if close_status == BRIDGE_STATUS_OK else close_status
+    return .Rejected
 }
 
-//   Roll back rejected semantics and stage the caller's visible fallback text.
-dynview_native_stage_document_fallback :: proc(
-    state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
-    checkpoint: Dynview_Math_Import_Checkpoint,
-    request: Bridge_Dynview_Document_Request) -> i32 {
-    dynview_math_import_rollback(runtime, checkpoint)
-    runtime.command_buffer.has_stream_error = false
-    runtime.compile_cache.last_error_code = BRIDGE_STATUS_OK
-    return dynview_text_run(state, request.fallback, request.text_style)
+//   Borrow exact canonical bytes for copy text and literal parse-failure rendering.
+presentation_literal_source :: proc(content: core.Presented_Text) -> string {
+    return transmute(string)content.bytes
 }
 
 //   Intern one document and replay its immutable native semantics into staging.
@@ -220,6 +197,30 @@ dynview_native_import_document_semantics :: proc(
     block_start := cache.document_block_count
     inline_start := cache.document_inline_count
     display_row_start := cache.document_display_row_count
+    status := dynview_native_import_document_rows(
+        cache, document, source_offset, program_base)
+    if status != BRIDGE_STATUS_OK {return status}
+    status = dynview_native_import_document_blocks(cache, document, {
+        source = source_offset, inline_start = inline_start,
+        display_row = display_row_start,
+    })
+    if status != BRIDGE_STATUS_OK {return status}
+    status = dynview_native_import_document_inlines(
+        cache, document, source_offset, text_offset, program_base)
+    if status != BRIDGE_STATUS_OK {return status}
+    dynview_native_publish_document(cache, document, {
+        source = source_offset, text = text_offset, block = block_start,
+        inline_start = inline_start, display_row = display_row_start,
+    })
+    return BRIDGE_STATUS_OK
+}
+
+// Copy and rewrite all technical display rows into snapshot staging.
+dynview_native_import_document_rows :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    document: ^dyncore.Dynview_Document,
+    source_offset, program_base: int) -> i32 {
+
     for row in document.document_display_rows {
         converted, ok := dynview_native_document_display_row(
             row, document, source_offset, program_base)
@@ -227,33 +228,41 @@ dynview_native_import_document_semantics :: proc(
         cache.document_display_rows[cache.document_display_row_count] = converted
         cache.document_display_row_count += 1
     }
+    return BRIDGE_STATUS_OK
+}
+
+// Copy and rewrite all document blocks into snapshot staging.
+dynview_native_import_document_blocks :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    document: ^dyncore.Dynview_Document,
+    offsets: Dynview_Native_Document_Offsets) -> i32 {
+
     next_number := 1
     for block in document.document_blocks {
         converted, ok := dynview_native_document_block(
-            block, document, source_offset, inline_start, display_row_start)
-        if !ok {
-            return BRIDGE_STATUS_INVALID_ARGUMENT
-        }
+            block, document, offsets.source, offsets.inline_start,
+            offsets.display_row)
+        if !ok {return BRIDGE_STATUS_INVALID_ARGUMENT}
         dynview_native_number_display_rows(cache, converted, &next_number)
         cache.document_blocks[cache.document_block_count] = converted
         cache.document_block_count += 1
     }
+    return BRIDGE_STATUS_OK
+}
+
+// Copy and rewrite all document inlines into snapshot staging.
+dynview_native_import_document_inlines :: proc(
+    cache: ^core.Dynview_Compile_Cache,
+    document: ^dyncore.Dynview_Document,
+    source_offset, text_offset, program_base: int) -> i32 {
+
     for item in document.document_inlines {
         converted, ok := dynview_native_document_inline(
             item, document, source_offset, text_offset, program_base)
-        if !ok {
-            return BRIDGE_STATUS_INVALID_ARGUMENT
-        }
+        if !ok {return BRIDGE_STATUS_INVALID_ARGUMENT}
         cache.document_inlines[cache.document_inline_count] = converted
         cache.document_inline_count += 1
     }
-    dynview_native_publish_document(cache, document, {
-        source = source_offset,
-        text = text_offset,
-        block = block_start,
-        inline_start = inline_start,
-        display_row = display_row_start,
-    })
     return BRIDGE_STATUS_OK
 }
 
@@ -442,10 +451,7 @@ dynview_native_span_valid :: #force_inline proc(
 dynview_native_math_source :: proc(
     state: ^core.Euclid_General_State,
     request: Bridge_Dynview_Math_Request) -> i32 {
-    if state == nil || request.source == nil || request.text_style < 0 ||
-        request.math_style < 0 || request.mathbb_style < 0 ||
-        request.root_style < BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY ||
-        request.root_style > BRIDGE_DYNVIEW_MATH_ROOT_TEXT {
+    if !dynview_native_math_request_valid(state, request) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
@@ -477,6 +483,17 @@ dynview_native_math_source :: proc(
             BRIDGE_DYNVIEW_FONT_FLAG_REGULAR,
         mathbb = request.mathbb_style,
     })
+}
+
+// Validate all scalar and pointer fields of one native math request.
+dynview_native_math_request_valid :: proc(
+    state: ^core.Euclid_General_State,
+    request: Bridge_Dynview_Math_Request) -> bool {
+
+    return state != nil && request.source != nil && request.text_style >= 0 &&
+        request.math_style >= 0 && request.mathbb_style >= 0 &&
+        request.root_style >= BRIDGE_DYNVIEW_MATH_ROOT_DISPLAY &&
+        request.root_style <= BRIDGE_DYNVIEW_MATH_ROOT_TEXT
 }
 
 //   Translate document-store failures to stable bridge status and stream failure.

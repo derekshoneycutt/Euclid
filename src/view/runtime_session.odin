@@ -21,6 +21,7 @@ import "core:time"
 Euclid_Runtime_Session :: struct {
     state: ^Euclid_General_State,
     julia_service: ^julia.Julia_Runtime_Service,
+    presentation: ^Presentation_Runtime,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
@@ -180,8 +181,19 @@ create_runtime_session :: proc(
     if !session_load_content(julia_service, settings, started.initialize_id, &state) {
         return {}, false
     }
-
-    return Euclid_Runtime_Session{state = state, julia_service = julia_service}, true
+    presentation := create_presentation_runtime()
+    if presentation == nil {
+        _ = shutdown_runtime_session({
+            state = state,
+            julia_service = julia_service,
+        })
+        return {}, false
+    }
+    return {
+        state = state,
+        julia_service = julia_service,
+        presentation = presentation,
+    }, true
 }
 
 //   Allocate and initialize the isometric projection scale.
@@ -394,6 +406,8 @@ shutdown_runtime_session :: proc(
         return 0
     }
 
+    quiesce_presentation_runtime(session.state, session.presentation)
+    destroy_presentation_runtime(session.presentation)
     destroy_simulation_executor(session.state^.simulation_executor)
     session.state^.simulation_executor = nil
     shutdown_julia_runtime(session.state, session.julia_service)

@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.50f0, 0.76f0, 0f0]
 const VertexB = [0.70f0, 0.62f0, 0f0]
@@ -112,15 +112,11 @@ function set_pentagon_alpha(state_ptr::Ptr{Cvoid}, shape_host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, shape_host_id, color)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Rectilineal Figures - Multilateral
-
-Rectilineal figures are those which are contained by straight lines, ... and multilateral those contained by more than four straight lines."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Multilateral}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Multilateral}
 
 Rectilineal figures are those which are contained by straight lines, ... and multilateral \euclidpentagon[height=2,width=2,color=steelblue,filled] those contained by more than four straight lines."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""
@@ -195,7 +191,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             pentagon.joint3_id, pentagon.joint4_id, pentagon.joint5_id),
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

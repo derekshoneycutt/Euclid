@@ -41,7 +41,7 @@ here only where Scratchpad depends on them.
 
 Scratchpad is both an animation and an interactive control surface:
 
-- As an **animation**, it registers `get_view_text`, `initialize`, `loop`, and
+- As an **animation**, it registers `get_view_content`, `initialize`, `loop`, and
   `clean` callbacks and receives fixed-step animation ticks.
 - As a **terminal**, it has display-owned input, caret, prompt mode, scrolling,
   completion, and history-navigation state.
@@ -108,6 +108,8 @@ flowchart LR
     JS[ScratchpadSession]
     AT[Animation tick slot]
     SC[Scene-command batch]
+    PE[Canonical MIME envelope]
+    PR[Display-owned presentation runtime]
     VS[View snapshot]
     DV[Odin Dynview and terminal draw]
 
@@ -119,7 +121,8 @@ flowchart LR
     AT -->|Scratchpad loop| JS
     JS -->|bridge mutations| SC
     SC -->|validate and publish| UI
-    JS -->|fallback and semantic output| VS
+    JS -->|plain transcript| PE
+    PE --> PR --> VS
     VS --> DV
 ```
 
@@ -154,7 +157,7 @@ Scratchpad uses the ordinary animation selection lifecycle:
 1. Tree selection makes the Scratchpad animation current and selected.
 1. Its `initialize` callback ensures a session and appends the Julia banner.
 1. Fixed-step animation ticks call its `loop` callback while selected.
-1. View requests call `get_view_text` and publish its transcript.
+1. View requests call `get_view_content` and publish its transcript.
 1. Leaving the animation calls `clean`, clears `session_ref`, and resets
    EuclidRepl's session state.
 
@@ -483,33 +486,28 @@ session that created it.
 
 ## Output And Rendering Pipeline
 
-Julia stores output in two synchronized forms:
+Julia retains one bounded sequence of plain transcript lines and publishes one
+authoritative `text/plain` transcript formed by joining `output` with newline
+separators.
 
-- `output`, a vector of complete plain lines used as fallback text;
-- `output_entries`, structured records containing block kind, style, optional
-  color segments, and optional LaTeX source.
-
-Inputs are echoed as prompt-styled input blocks. Ordinary results use Julia's
-`text/plain` display. When a result also supports `text/latex`, Scratchpad keeps
-the plain representation for fallback/copy and emits the LaTeX expression as a
-Dynview math block.
+Inputs are echoed into the transcript. Results use Julia's `text/plain` display;
+no retained rich-output or LaTeX side representation exists.
 
 Exceptions use Julia's native REPL error formatter. Scratchpad scrubs host eval
-frames, bounds the formatted text, parses the supported ANSI SGR styles into
-Dynview text segments, and never sends raw terminal escape sequences to Odin.
+frames, bounds the formatted text, parses supported ANSI SGR only long enough to
+remove terminal escape sequences, and appends the resulting plain lines.
 
-`get_view_text` rebuilds a Scratchpad Dynview stream from structured entries
-and returns joined plain output. The generic view-snapshot pipeline copies both
-forms into service-owned storage, validates the complete stream, and publishes
-it at a display-frame boundary. Odin then compiles/layouts the stream and draws
-it above the live display-owned prompt. Invalid semantic output falls back to
-the complete plain transcript.
+`get_view_content` returns the joined plain output. `publish_view_content` copies
+that canonical MIME value into producer-owned bounded storage and publishes it at
+a display-frame boundary. The completion watermark is recorded before publication,
+so the resulting snapshot remains correlated with the Scratchpad request that
+produced it.
 
 The resulting path is deliberately separate from the async editor protocol:
 
 ```text
 editor request -> Scratchpad slot -> Julia session mutation
-Julia output -> view snapshot -> Odin Dynview/fallback transcript
+Julia output -> canonical plain presentation -> Odin transcript
 ```
 
 A successful submit reply can therefore clear the editor before its echoed
@@ -544,7 +542,7 @@ Scratchpad input must still be treated as trusted local code.
 - Hook errors are isolated per hook; repeated failures auto-disable that hook.
 - Julia callback exceptions are logged at the Odin bridge and converted to
   operation failure or empty result.
-- Dynview emission failures preserve the plain transcript fallback.
+- Presentation serialization or transport failures publish no partial transcript.
 - History-save errors append a user-visible Julia error line.
 
 Slow evals and hooks over 250 ms increment metrics and log console warnings.
@@ -598,7 +596,7 @@ been accepted and cleared.
 | Async slot input/result | 4 KiB each | Oversize input rejected; result truncated to slot capacity. |
 | Julia execution queue | 64 entries | Oldest queued entry dropped. |
 | Julia history | 400 entries | Oldest history entries trimmed. |
-| Julia output | 400 lines | Oldest output and structured entries trimmed together. |
+| Julia output | 400 lines | Oldest plain transcript lines are trimmed. |
 | Formatted exception output | 16 KiB | UTF-8-safe truncation marker appended. |
 | Consecutive hook failures | 3 | Hook disabled. |
 | Slow eval/hook threshold | 250 ms | Metric and console warning only. |
@@ -614,12 +612,12 @@ Julia tests exercise:
 - isolated session creation and persistent eval scope;
 - Help mode, helper documentation, and local commands;
 - backslash and generic completion;
-- native exception formatting and ANSI-to-Dynview conversion;
-- plain and LaTeX result formatting;
+- native exception formatting and transient ANSI stripping;
+- plain result formatting and canonical transcript publication;
 - mode-tagged history navigation;
 - queue, history, and output retention behavior;
 - safety-policy rejection, metrics, hooks, resets, and lifecycle callbacks;
-- Dynview stream emission and fallback behavior.
+- MIME publication and exact transcript correlation.
 
 Odin tests exercise:
 
@@ -665,10 +663,9 @@ This runs the validated build, repository analysis, and all tests.
 
 ### Change Output Presentation
 
-Preserve both `output` and `output_entries`, including one-to-one trimming.
-Plain output is the fallback and copy contract; structured output is an
-enhancement. A new structured record must fail closed without deleting its
-plain meaning.
+Preserve `output` as the sole retained transcript. A richer future presentation must
+define a new authoritative MIME contract and migration; do not reintroduce parallel
+plain, segmented, or LaTeX session state.
 
 ## Correctness Invariants
 

@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
 const VertexB = [0.50f0, 0.34f0, 0f0]
@@ -96,15 +96,11 @@ function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
 end
 
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Definition: Figure
-
-A figure is that which is contained by any boundary or boundaries."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Figure}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Figure}
 
 A figure \euclidtriangle[color=steelblue,height=2,width=3,filled] is that which is contained by any boundary or boundaries \euclidline[color=steelblue,length=3,thickness=4]."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -163,7 +159,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             triangle.joint2_id, triangle.joint3_id),
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

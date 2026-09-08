@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
 const Radius = 0.24f0
@@ -121,21 +121,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.circle, state.points, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = raw"""Abelian Groups / Commutativity
-    
-An abelian group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
-
-For cyclic rotations about one center, order never changes the outcome.
-
-1. $ρ²ρ⁴ = ρ⁶$.
-2. $ρ⁴ρ² = ρ⁶$.
-
-Order does not change the result, so this is a concrete visual proof that Cₙ is abelian.
-
-Formally, this is the statement $ρ²ρ^4 = ρ⁴ρ²$."""
-    latex = raw"""\textbf{Abelian Groups / Commutativity}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Abelian Groups / Commutativity}
 
 An abelian group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
 
@@ -147,7 +135,6 @@ For cyclic rotations about one center, order never changes the outcome.
 Order does not change the result, so this is a concrete visual proof that $C_n$ is abelian.
 
 Formally, this is the statement $\rho^2\rho^4 = \rho^4\rho^2$."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native handles."""
@@ -244,7 +231,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             point9.index, point10.index, point11.index, point12.index),
         PhaseCompassDescend, 0f0)
     reset_cycle_state(state_ptr, state)
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

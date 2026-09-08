@@ -67,6 +67,8 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Shape_Cache_Prepared = "shape_cache.prepared",
     .Dynview_Compiled = "dynview.compiled",
     .Scratchpad_Completed = "scratchpad.completed",
+    .Presentation_Cleared = "presentation.cleared",
+    .Presentation_Superseded = "presentation.superseded",
     .Checkpoint_Requested = "checkpoint.requested",
     .Checkpoint_Stored = "checkpoint.stored",
     .Checkpoint_Unavailable = "checkpoint.unavailable",

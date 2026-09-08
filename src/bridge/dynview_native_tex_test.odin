@@ -6,11 +6,56 @@ import "../core"
 import dyncore "../dynview/core"
 import dyncompile "../dynview/compile"
 
+//   Stage one document through the native semantic importer for focused tests.
+dynview_native_test_document :: proc(
+    state: ^core.Euclid_General_State,
+    source: string,
+    block_id: i32) -> i32 {
+
+    status := dynview_reset_stream(state)
+    if status == BRIDGE_STATUS_OK {
+        status = dynview_begin_block(state, BRIDGE_DYNVIEW_BLOCK_OUTPUT, block_id)
+    }
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
+    status = dynview_native_import_document(
+        state, &state^.dynview, source, BRIDGE_DYNVIEW_STYLE_OUTPUT)
+    close_status := dynview_end_block(state)
+    return status if close_status == BRIDGE_STATUS_OK else close_status
+}
+
 //   Verify the C ABI classifier preserves native document-mode decisions.
 @(test)
 dynview_tex_source_mode_classifies_scratchpad_document :: proc(t: ^testing.T) {
     testing.expect_value(t, dynview_tex_source_mode(
         "\\textbf{Definition}\\newline A point has no part."), i32(1))
+}
+
+//   Verify MIME and complete outer delimiters jointly determine presentation mode.
+@(test)
+presentation_source_mode_uses_mime_and_outer_delimiters :: proc(t: ^testing.T) {
+    testing.expect_value(t, presentation_source_mode(.Text_Plain, "$x$"),
+        Presentation_Source_Mode.Plain)
+    testing.expect_value(t, presentation_source_mode(.Text_Latex, " $x$ "),
+        Presentation_Source_Mode.Math)
+    testing.expect_value(t, presentation_source_mode(.Text_Latex, "\\[x\\]"),
+        Presentation_Source_Mode.Math)
+    testing.expect_value(t, presentation_source_mode(.Text_Latex, "text $x$"),
+        Presentation_Source_Mode.Document)
+    testing.expect_value(t, presentation_source_mode(.Text_Latex, "x^2"),
+        Presentation_Source_Mode.Document)
+}
+
+//   Verify literal failure and copy policy borrow the exact canonical bytes.
+@(test)
+presentation_literal_source_preserves_exact_bytes :: proc(t: ^testing.T) {
+    bytes := [?]u8{'A', 0, '\n', '\\', 'x'}
+    content := core.Presented_Text{mime = .Text_Latex, bytes = bytes[:]}
+    literal := presentation_literal_source(content)
+    testing.expect_value(t, len(literal), len(bytes))
+    testing.expect(t, literal[0] == 'A' && literal[1] == 0)
+    testing.expect(t, literal[2] == '\n' && literal[3] == '\\' && literal[4] == 'x')
 }
 
 //   Verify raw math is interned once and copied independently into snapshot staging.
@@ -62,21 +107,14 @@ dynview_native_document_replays_mixed_runs :: proc(t: ^testing.T) {
     defer animation_value_test_state_destroy(state)
     state.saved_context = context
     state.dynview.enabled = true
-    status := dynview_tex_document(state, {
-        source = "\\textbf{Title} plain $x^2$ $$y$$",
-        fallback = "fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 9,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    })
+    status := dynview_native_test_document(
+        state, "\\textbf{Title} plain $x^2$ $$y$$", 9)
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
     testing.expect(t, !state.dynview.command_buffer.has_stream_error)
     testing.expect(t, !state.dynview.command_buffer.stream_open_block)
     testing.expect_value(t, state.dynview.command_buffer.commands[0].kind,
         core.Dynview_Command_Kind.Begin_Block)
-    testing.expect_value(t, state.dynview.command_buffer.commands[1].kind,
-        core.Dynview_Command_Kind.Copyable_Text_Run)
     count := state.dynview.command_buffer.command_count
     testing.expect_value(t, state.dynview.command_buffer.commands[count-1].kind,
         core.Dynview_Command_Kind.End_Block)
@@ -100,18 +138,12 @@ dynview_native_document_publishes_authoritative_semantics :: proc(t: ^testing.T)
         "Second paragraph before a display.\n" +
         "\\[\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\\]\n" +
         "Final paragraph."
-    status := dynview_tex_document(state, {
-        source = cstring(raw_data(source)),
-        fallback = "composition fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 17,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    })
+    status := dynview_native_test_document(state, source, 17)
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
-    testing.expect_value(t, state.dynview.command_buffer.command_count, 3)
+    testing.expect_value(t, state.dynview.command_buffer.command_count, 2)
     expected_kinds := [?]core.Dynview_Command_Kind{
-        .Begin_Block, .Copyable_Text_Run, .End_Block,
+        .Begin_Block, .End_Block,
     }
     for command, index in state.dynview.command_buffer.commands[
         :state.dynview.command_buffer.command_count] {
@@ -148,11 +180,7 @@ dynview_native_group_documents_publish_semantics :: proc(t: ^testing.T) {
         state.saved_context = context
         state.dynview.enabled = true
 
-        status := dynview_tex_document(state, {
-            source = cstring(raw_data(source)), fallback = "fallback",
-            block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT, block_id = 1,
-            text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-        })
+        status := dynview_native_test_document(state, source, 1)
 
         testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
         testing.expect_value(t, state.dynview.compile_cache.document_count, 1)
@@ -173,11 +201,7 @@ dynview_native_document_numbers_technical_display_rows :: proc(t: ^testing.T) {
         "\\begin{gather*}u=1\\\\v=2\\end{gather*}" +
         "\\begin{multline}p\\\\q\\end{multline}"
 
-    status := dynview_tex_document(state, {
-        source = cstring(raw_data(source)), fallback = "fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT, block_id = 18,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    })
+    status := dynview_native_test_document(state, source, 18)
     cache := &state.dynview.compile_cache
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
@@ -188,38 +212,6 @@ dynview_native_document_numbers_technical_display_rows :: proc(t: ^testing.T) {
         testing.expect_value(t, row.number, expected[index])
         testing.expect(t, row.primary_program_id >= 0)
     }
-}
-
-//   Verify rejected document semantics roll back while retaining a closable fallback.
-@(test)
-dynview_native_document_failure_preserves_fallback :: proc(t: ^testing.T) {
-    state := animation_value_test_state_create(42)
-    testing.expect(t, state != nil)
-    defer animation_value_test_state_destroy(state)
-    state.saved_context = context
-    state.dynview.enabled = true
-
-    status := dynview_tex_document(state, {
-        source = "broken $math",
-        fallback = "authored fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 10,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    })
-
-    testing.expect_value(t, status, i32(BRIDGE_STATUS_INVALID_ARGUMENT))
-    testing.expect(t, !state.dynview.command_buffer.has_stream_error)
-    testing.expect(t, !state.dynview.command_buffer.stream_open_block)
-    testing.expect_value(t, state.dynview.command_buffer.command_count, 4)
-    testing.expect_value(t, state.dynview.command_buffer.commands[1].kind,
-        core.Dynview_Command_Kind.Copyable_Text_Run)
-    testing.expect_value(t, state.dynview.command_buffer.commands[2].kind,
-        core.Dynview_Command_Kind.Text_Run)
-    testing.expect_value(t, state.dynview.compile_cache.math_program_count, 0)
-    testing.expect_value(t, state.dynview.compile_cache.document_text_count, 0)
-    testing.expect_value(t, state.dynview.compile_cache.document_count, 0)
-    testing.expect_value(t, state.dynview.compile_cache.document_block_count, 0)
-    testing.expect_value(t, state.dynview.compile_cache.document_inline_count, 0)
 }
 
 //   Verify copied semantic aliases remain valid and install directly after reset.
@@ -253,13 +245,9 @@ dynview_native_document_snapshot_survives_animation_reset :: proc(t: ^testing.T)
     defer animation_value_test_state_destroy(state)
     state.saved_context = context
     state.dynview.enabled = true
-    testing.expect_value(t, dynview_tex_document(state, {
-        source = "text $x^2$",
-        fallback = "fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 11,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    }), i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t,
+        dynview_native_test_document(state, "text $x^2$", 11),
+        i32(BRIDGE_STATUS_OK))
     service := view_snapshot_arena_test_service(t)
     defer view_snapshot_arena_test_service_destroy(service)
     slot := &service.view_snapshots[0]
@@ -295,20 +283,13 @@ dynview_native_document_classifies_whole_inline_math :: proc(t: ^testing.T) {
     defer animation_value_test_state_destroy(state)
     state.saved_context = context
     state.dynview.enabled = true
-    request := Bridge_Dynview_Document_Request{
-        source = "  $x^2$  ",
-        fallback = "x squared",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 12,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    }
-
-    testing.expect_value(t, dynview_tex_document(state, request),
+    testing.expect_value(t,
+        dynview_native_test_document(state, "  $x^2$  ", 12),
         i32(BRIDGE_STATUS_OK))
     diagnostics := dyncore.document_store_diagnostics(&state.dynview_documents)
     testing.expect_value(t, diagnostics.entry_count, 1)
     testing.expect_value(t, state.dynview.compile_cache.math_program_count, 4)
-    command := state.dynview.command_buffer.commands[2]
+    command := state.dynview.command_buffer.commands[1]
     testing.expect_value(t, command.kind, core.Dynview_Command_Kind.Math_Block)
     root := &state.dynview.compile_cache.math_programs[command.math_program_id]
     root_command := state.dynview.compile_cache.math_commands[root.command_start]
@@ -468,17 +449,12 @@ dynview_native_document_reuses_interned_source :: proc(t: ^testing.T) {
     defer animation_value_test_state_destroy(state)
     state.saved_context = context
     state.dynview.enabled = true
-    request := Bridge_Dynview_Document_Request{
-        source = "text $x^2$",
-        fallback = "fallback",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 14,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    }
-    testing.expect_value(t, dynview_tex_document(state, request),
+    testing.expect_value(t,
+        dynview_native_test_document(state, "text $x^2$", 14),
         i32(BRIDGE_STATUS_OK))
     before := dyncore.document_store_diagnostics(&state.dynview_documents)
-    testing.expect_value(t, dynview_tex_document(state, request),
+    testing.expect_value(t,
+        dynview_native_test_document(state, "text $x^2$", 14),
         i32(BRIDGE_STATUS_OK))
     after := dyncore.document_store_diagnostics(&state.dynview_documents)
 
@@ -531,13 +507,8 @@ dynview_native_circle_document_compiles :: proc(t: ^testing.T) {
         "\\euclidcircle[color=steelblue,size=1,thickness=2] is a plane figure " +
         "contained by one line from one point " +
         "\\euclidpoint[color=palevioletred1,size=1] within the figure."
-    testing.expect_value(t, dynview_tex_document(state, {
-        source = cstring(raw_data(source)),
-        fallback = "Circle and Center",
-        block_kind = BRIDGE_DYNVIEW_BLOCK_OUTPUT,
-        block_id = 16,
-        text_style = BRIDGE_DYNVIEW_STYLE_OUTPUT,
-    }), i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, dynview_native_test_document(state, source, 16),
+        i32(BRIDGE_STATUS_OK))
 
     testing.expect(t, core.arena_owner_init(&state.dynview.cache_arena))
     defer core.arena_owner_destroy(&state.dynview.cache_arena)

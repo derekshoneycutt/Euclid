@@ -11,7 +11,7 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
-export get_view_text, initialize, clean, loop, animation_entry
+export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.40f0, 0.40f0, 0f0]
 const BPoint = [0.40f0, 0.40f0, 0f0]
@@ -75,30 +75,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.labels, phase, timer)
 end
 
-"""Get the view text for this animation"""
-function get_view_text(state_ptr::Ptr{Cvoid})
-    fallback = """Euclid Elements - Book I - Proposition II
-
-To place at a given point (as an extremity) a straight line equal to a given straight line.
-
-Let A be the given point, and BC the given straight line. Thus it is required to place at the point A (as an extremity) a straight line equal to the given straight line BC.
-
-From the point A to the point B let the straight line AB be joined;
-and on it let the equilateral triangle DAB be constructed.
-
-Let the straight lines AE, BF be produced in a straight line with DA, DB with center B and distance BC let the circle CGH be described;
-and again, with center D and distance DG let the circle GKL be described.
-
-Then, since the point B is the center of the circle CGH, BC is equal to BG.
-Again, since the point D is the center of the circle GKL, DL is equal to DG. And in these DA is equal to DB;
-therefore the remainder AL is equal to the remainder BG.
-
-But BC was also proved equal to BG; therefore each of the straight lines AL, BC is equal to BG.
-And things which are equal to the same thing are also equal to one another; therefore AL is also equal to BC.
-Therefore at the given point A the straight line AL is placed equal to the given straight line BC.
-
-(Being) what it was required to do."""
-    latex = raw"""\textbf{Euclid Elements - Book I - Proposition II}
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return tex"""\textbf{Euclid Elements - Book I - Proposition II}
 
 \textit{To place at a given point (as an extremity) a straight line equal to a given straight line.}
 
@@ -119,7 +98,6 @@ And things which are equal to the same thing are also equal to one another; ther
 Therefore at the given point A the straight line AL is placed equal to the given straight line BC.
 
 (Being) what it was required to do."""
-    EuclidLatex.emit_latex_view_text!(state_ptr, latex, fallback)
 end
 
 """Reset the animation cycle while preserving its native label handles."""
@@ -172,7 +150,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_f.index, label_g.index, label_h.index, label_k.index, label_l.index)
     reset_cycle_state(
         state_ptr, AnimationState(labels, PhasePenDescend, 0f0))
-    OdinJuliaBridge.publish_view_update(state_ptr, get_view_text)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
 """Clean any extra animation data at the end of performance"""

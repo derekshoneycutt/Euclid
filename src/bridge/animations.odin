@@ -18,7 +18,6 @@ ANIMATION_LOOKUP_LOAD_FACTOR_DENOMINATOR :: 10
 
 Animation_Lifecycle_Task_Data :: struct {
     state: ^core.Euclid_General_State,
-    view_snapshot_index: int,
 }
 
 Harness_Scenario_Task_Data :: struct {
@@ -177,18 +176,11 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
         return false
     }
     service^.reload_state = .Quiescing
-    view_snapshot_index := reserve_view_candidate(service)
-    if view_snapshot_index < 0 {
-        service^.reload_state = .Idle
-        return false
-    }
     task_data := Animation_Lifecycle_Task_Data{
         state = state,
-        view_snapshot_index = view_snapshot_index,
     }
     if !invoke_julia_compatibility_task(
         state, update_animation_lifecycle_task, rawptr(&task_data)) {
-        release_reserved_view_candidate(service, view_snapshot_index)
         if service^.reload_state == .Quiescing {
             service^.reload_state = .Idle
         }
@@ -213,13 +205,12 @@ update_animation_lifecycle_task :: proc(data: rawptr) -> bool {
     if animation == nil {
         animation = &task_data^.state^.julia_interface^.null_animation
     }
-    begin_request_view_candidate(
-        task_data^.state, task_data^.view_snapshot_index, 0,
-        service^.animation_generation + 1, animation)
-    succeeded := update_running_animations(task_data^.state)
-    finish_lifecycle_view_candidate(
-        task_data^.state, task_data^.view_snapshot_index, succeeded)
-    return succeeded
+    service^.presentation_animation_generation_override =
+        service^.animation_generation + 1
+    service^.presentation_animation_override = animation
+    defer service^.presentation_animation_generation_override = 0
+    defer service^.presentation_animation_override = nil
+    return update_running_animations(task_data^.state)
 }
 
 //   Produce one immutable scene batch without touching canonical query state.
@@ -228,16 +219,12 @@ generate_animation_tick_task :: proc(data: rawptr) -> bool {
     state := slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
-    begin_request_view_candidate(
-        state, slot^.view_snapshot_index, slot^.request_id,
-        slot^.generation, slot^.animation)
     state^.animation_query_snapshot_target = &slot^.query_snapshot
     begin_scene_command_batch(state, &slot^.scene_batch)
     call_global_euclid_loop(state, slot^.dt)
     callback_succeeded := call_current_animation_loop(state, slot^.dt)
     end_scene_command_batch(state)
     state^.animation_query_snapshot_target = nil
-    end_request_view_candidate(state, slot^.view_snapshot_index, callback_succeeded)
     if !callback_succeeded {
         slot^.scene_batch.overflowed = true
     }
