@@ -3,6 +3,7 @@ package ui
 import "../../core"
 import view_core "../core"
 import "../font"
+import "../input"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -23,6 +24,7 @@ Input_Box_Events :: struct {
     end : bool,
     backspace : bool,
     delete : bool,
+    submit : bool,
 }
 
 Input_Box_Params :: struct {
@@ -34,7 +36,7 @@ Input_Box_Params :: struct {
     viewport_col_start_in : int,
     enabled : bool,
     has_focus : bool,
-    mouse : Mouse_Input_State,
+    mouse : Input_Frame,
     scroll_offset : rl.Vector2,
     interaction_space_rect : rl.Rectangle,
     interaction_enabled : bool,
@@ -74,7 +76,7 @@ Input_Box_Draw_Params :: struct {
     viewport_col_start : int,
     enabled : bool,
     has_focus : bool,
-    mouse : Mouse_Input_State,
+    mouse : Input_Frame,
     font : rl.Font,
     font_color : rl.Color,
     font_size : f32,
@@ -195,12 +197,12 @@ input_box_should_draw_caret :: #force_inline proc(
 
 //   Convert screen-space mouse coordinates into input-local coordinates.
 input_box_local_mouse :: #force_inline proc(
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse_input.position.x - scroll_offset.x,
-        mouse_input.position.y - scroll_offset.y,
+        mouse_input.mouse_position.x - scroll_offset.x,
+        mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -498,7 +500,8 @@ input_box_try_capture_press :: proc(
     can_interact: bool,
     owns_press: ^bool) {
 
-    if !can_interact || press_owner^.active || !params.mouse.left_pressed || !hovered {
+    if !can_interact || press_owner^.active ||
+        !input_frame_left_pressed(params.mouse) || !hovered {
         return
     }
 
@@ -514,7 +517,7 @@ input_box_release_press :: proc(
     press_owner: ^core.Ui_Press_Owner_State,
     owns_press: ^bool) {
 
-    if !owns_press^ || !params.mouse.left_released {
+    if !owns_press^ || !input_frame_left_released(params.mouse) {
         return
     }
 
@@ -549,7 +552,8 @@ input_box_apply_mouse_caret_click :: proc(
     click: Input_Box_Click_Geometry,
     caret: ^int) {
 
-    if !params.enabled || !params.has_focus || !params.mouse.left_pressed ||
+    if !params.enabled || !params.has_focus ||
+        !input_frame_left_pressed(params.mouse) ||
         !click.hovered {
         return
     }
@@ -572,7 +576,8 @@ input_box_apply_terminal_mouse_caret_click :: proc(
     columns: int,
     caret: ^int) {
 
-    if !params.enabled || !params.has_focus || !params.mouse.left_pressed ||
+    if !params.enabled || !params.has_focus ||
+        !input_frame_left_pressed(params.mouse) ||
         !click.hovered {
         return
     }
@@ -788,47 +793,40 @@ input_box_insert_text_at_caret :: proc(
     return true
 }
 
-//   Capture one frame of keyboard text/edit events for Input_Box processing.
-capture_input_box_events :: proc() -> Input_Box_Events {
+// Translate portable frame events into the edit vocabulary consumed by Input_Box.
+input_box_events_from_frame :: proc(frame: input.Input_Frame) -> Input_Box_Events {
     input_events := Input_Box_Events{}
-    for {
-        codepoint := rl.GetCharPressed()
-        if codepoint == 0 {
-            break
-        }
-
-        if codepoint >= 32 &&
+    for event in frame.events {
+        if event.kind == .Text && event.codepoint >= 32 &&
             input_events.text_event_count < INPUT_BOX_MAX_TEXT_EVENTS {
-
             index := input_events.text_event_count
-            input_events.text_events[index] = rune(codepoint)
+            input_events.text_events[index] = event.codepoint
             input_events.text_event_count += 1
         }
     }
 
-    input_events.tab = rl.IsKeyPressed(.TAB)
-    input_events.left = rl.IsKeyPressed(.LEFT)
-    input_events.right = rl.IsKeyPressed(.RIGHT)
-    input_events.up = rl.IsKeyPressed(.UP)
-    input_events.down = rl.IsKeyPressed(.DOWN)
-    input_events.home = rl.IsKeyPressed(.HOME)
-    input_events.end = rl.IsKeyPressed(.END)
-    input_events.backspace = rl.IsKeyPressed(.BACKSPACE)
-    input_events.delete = rl.IsKeyPressed(.DELETE)
+    input_events.tab = input.input_key_pressed(frame, .Tab)
+    input_events.left = input.input_key_pressed(frame, .Left)
+    input_events.right = input.input_key_pressed(frame, .Right)
+    input_events.up = input.input_key_pressed(frame, .Up)
+    input_events.down = input.input_key_pressed(frame, .Down)
+    input_events.home = input.input_key_pressed(frame, .Home)
+    input_events.end = input.input_key_pressed(frame, .End)
+    input_events.backspace = input.input_key_pressed(frame, .Backspace)
+    input_events.delete = input.input_key_pressed(frame, .Delete)
+    input_events.submit = input.input_key_pressed(frame, .Enter) ||
+        input.input_key_pressed(frame, .Keypad_Enter)
+    input_events.paste_requested = input.input_chord_pressed(
+        frame, .V, {.Control})
+    return input_events
+}
 
-    ctrl_down := rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
-    paste_pressed := rl.IsKeyPressed(.V) && ctrl_down
-    if paste_pressed {
-        clipboard_text := rl.GetClipboardText()
-        if clipboard_text != nil {
-            pasted := string(clipboard_text)
-            if len(pasted) > 0 {
-                input_events.paste_requested = true
-                input_events.paste_text = pasted
-            }
-        }
+// Capture one frame of Input_Box events and borrow paste text when requested.
+capture_input_box_events :: proc(frame: input.Input_Frame) -> Input_Box_Events {
+    input_events := input_box_events_from_frame(frame)
+    if input_events.paste_requested {
+        input_events.paste_text = input.input_get_clipboard_text()
     }
-
     return input_events
 }
 
@@ -1147,7 +1145,7 @@ input_box_build_result :: proc(
         tab_pressed = events.tab,
         backspace_pressed = events.backspace,
         paste_applied = outcome.paste_applied,
-        submit_pressed = rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER),
+        submit_pressed = events.submit,
         hovered = interaction.hovered,
         pressed = interaction.owns_press && interaction.mouse_left_down,
     }
@@ -1157,9 +1155,10 @@ input_box_build_result :: proc(
 //   Parent may inspect result and apply policy (history/submit) before drawing.
 handle_input_box :: proc(
     params: Input_Box_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Input_Box_Result {
+    press_owner: ^core.Ui_Press_Owner_State,
+    input_frame: input.Input_Frame) -> Input_Box_Result {
 
-    events := capture_input_box_events()
+    events := capture_input_box_events(input_frame)
 
     drawn_rect := clamp_non_negative_rect(params.rect)
     local_mouse := input_box_local_mouse(params.mouse, params.scroll_offset)
@@ -1189,7 +1188,8 @@ handle_input_box :: proc(
 
     return input_box_build_result(drawn_rect, events, outcome,
         Input_Box_Frame_State{&text_len, &caret, &viewport},
-        Input_Box_Interaction_Flags{owns_press, params.mouse.left_down, hovered})
+        Input_Box_Interaction_Flags{
+            owns_press, input_frame_left_down(params.mouse), hovered})
 }
 
 //   Draw one input fragment through shaping when a matching cache is available.
@@ -1286,7 +1286,7 @@ draw_terminal_input_cursor :: proc(
 
     if !params.has_focus || !params.enabled ||
         !input_box_should_draw_caret(
-            params.mouse.timestamp_seconds, params.caret_blink_half_period_seconds) {
+            params.mouse.sample_time_seconds, params.caret_blink_half_period_seconds) {
         return
     }
 
@@ -1388,7 +1388,7 @@ input_box_draw_caret :: #force_inline proc(
 
     if !params.has_focus || !params.enabled ||
         !input_box_should_draw_caret(
-            params.mouse.timestamp_seconds,
+            params.mouse.sample_time_seconds,
             params.caret_blink_half_period_seconds) {
         return
     }

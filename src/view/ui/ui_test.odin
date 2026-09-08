@@ -5,8 +5,52 @@ import "core:testing"
 import app_core "../../core"
 import app_bridge "../../bridge"
 import app_dynview "../../dynview"
+import app_input "../input"
 
 import rl "vendor:raylib"
+
+// Verify portable text events retain order and respect the existing Input_Box bound.
+@(test)
+input_box_frame_events_retain_bounded_text_order :: proc(t: ^testing.T) {
+    events: [INPUT_BOX_MAX_TEXT_EVENTS + 2]app_input.Input_Event
+    for &event, index in events {
+        event.kind = .Text
+        event.codepoint = rune(32 + index)
+    }
+
+    translated := input_box_events_from_frame({events = events[:]})
+
+    testing.expect_value(
+        t, translated.text_event_count, INPUT_BOX_MAX_TEXT_EVENTS)
+    testing.expect_value(t, translated.text_events[0], rune(32))
+    testing.expect_value(t,
+        translated.text_events[INPUT_BOX_MAX_TEXT_EVENTS - 1],
+        rune(32 + INPUT_BOX_MAX_TEXT_EVENTS - 1))
+}
+
+// Verify editing and submission retain press-edge semantics while Ctrl+V allows extras.
+@(test)
+input_box_frame_events_preserve_press_and_chord_semantics :: proc(t: ^testing.T) {
+    events := []app_input.Input_Event{
+        {kind = .Press, key = .Left},
+        {kind = .Repeat, key = .Right},
+        {kind = .Repeat, key = .Enter},
+        {kind = .Press, key = .Keypad_Enter},
+        {kind = .Press, key = .V, modifiers = {.Control, .Shift}},
+    }
+
+    translated := input_box_events_from_frame({events = events})
+
+    testing.expect(t, translated.left)
+    testing.expect(t, !translated.right)
+    testing.expect(t, translated.submit)
+    testing.expect(t, translated.paste_requested)
+
+    enter := input_box_events_from_frame({events = []app_input.Input_Event{{
+        kind = .Press, key = .Enter,
+    }}})
+    testing.expect(t, enter.submit)
+}
 
 //   Verify the baseline UI regions are valid and mutually consistent.
 @(test)
@@ -101,16 +145,17 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
         horizontal_split_y = VIEW_HEIGHT,
     }
     update_splitters(&ui_runtime, {
-        position = {VIEW_WIDTH, 20}, left_pressed = true, left_down = true}, 0.05)
+        mouse_position = {VIEW_WIDTH, 20},
+        mouse_pressed = {.Left}, mouse_down = {.Left}}, 0.05)
     testing.expect(t, splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID))
 
     update_splitters(&ui_runtime, {
-        position = {0, 20}, left_down = true}, 0.05)
+        mouse_position = {0, 20}, mouse_down = {.Left}}, 0.05)
     testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
     testing.expect(t, ui_runtime.ui_press_owner.active)
 
-    update_splitters(&ui_runtime, {position = {0, 20}}, 0.05)
+    update_splitters(&ui_runtime, {mouse_position = {0, 20}}, 0.05)
     testing.expect(t, !ui_runtime.ui_press_owner.active)
 }
 
@@ -127,7 +172,8 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
                 id = SPLITTER_VERTICAL_PRESS_ID},
         }
         update_splitters(&ui_runtime, {
-            position = {VIEW_WIDTH, 20}, left_pressed = true, left_down = true}, 0.05)
+            mouse_position = {VIEW_WIDTH, 20},
+            mouse_pressed = {.Left}, mouse_down = {.Left}}, 0.05)
         testing.expect(t, !ui_runtime.ui_press_owner.active)
         testing.expect_value(t, ui_runtime.vertical_split_x, f32(VIEW_WIDTH))
     }

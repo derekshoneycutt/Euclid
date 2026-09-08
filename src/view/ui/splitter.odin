@@ -95,20 +95,21 @@ splitter_release_capture :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 //   Capture the hovered splitter when no other control owns the pointer press.
 splitter_try_capture :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     hovered_axis: Splitter_Axis,
     hovered: bool) {
 
-    if !hovered || !mouse_input.left_pressed || ui_runtime.ui_press_owner.active {
+    if !hovered || !input_frame_left_pressed(mouse_input) ||
+        ui_runtime.ui_press_owner.active {
         return
     }
     press_id := SPLITTER_VERTICAL_PRESS_ID
     split_position := ui_runtime.vertical_split_x
-    mouse_position := mouse_input.position.x
+    mouse_position := mouse_input.mouse_position.x
     if hovered_axis == .Horizontal {
         press_id = SPLITTER_HORIZONTAL_PRESS_ID
         split_position = ui_runtime.horizontal_split_y
-        mouse_position = mouse_input.position.y
+        mouse_position = mouse_input.mouse_position.y
     }
     ui_runtime.ui_press_owner = {active = true, kind = .Splitter, id = press_id}
     ui_runtime.splitter_drag_offset = split_position - mouse_position
@@ -117,20 +118,20 @@ splitter_try_capture :: proc(
 //   Apply the active splitter drag while preserving all pane minimums.
 splitter_apply_drag :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
-    if !mouse_input.left_down {
+    if !input_frame_left_down(mouse_input) {
         splitter_release_capture(ui_runtime)
         return
     }
     if splitter_owns_press(ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID) {
         ui_runtime.vertical_split_x = clamp(
-            mouse_input.position.x + ui_runtime.splitter_drag_offset,
+            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset,
             f32(WORLD_MIN_WIDTH), f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
     } else if splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID) {
         ui_runtime.horizontal_split_y = clamp(
-            mouse_input.position.y + ui_runtime.splitter_drag_offset,
+            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset,
             f32(WORLD_MIN_HEIGHT), f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
     }
 }
@@ -138,11 +139,11 @@ splitter_apply_drag :: proc(
 //   Update splitter capture, positions, and hover fades before layout is prepared.
 update_splitters :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     dt: f32) {
 
     locked := splitters_locked_for_gif(ui_runtime.gif_capture_phase)
-    axis, hovered := splitter_hovered_axis(mouse_input.position,
+    axis, hovered := splitter_hovered_axis(input_frame_mouse_position(mouse_input),
         ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
     if locked {
         splitter_release_capture(ui_runtime)

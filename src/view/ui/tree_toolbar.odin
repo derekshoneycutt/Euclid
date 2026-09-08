@@ -15,7 +15,7 @@ Tree_Toolbar_Hit :: struct {
 //   Shared context for one toolbar frame's buttons.
 Tree_Toolbar_Context :: struct {
     panel:            rl.Rectangle,
-    mouse_input:      Mouse_Input_State,
+    mouse_input:      Input_Frame,
     press_owner:      ^core.Ui_Press_Owner_State,
     show_tree:        bool,
     show_gif:         bool,

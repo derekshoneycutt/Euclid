@@ -3,6 +3,7 @@ package ui
 // Shared UI constants and basic drawing helpers for panel modules.
 
 import view_core "../core"
+import "../input"
 import "../../dynview"
 import dyncompile "../../dynview/compile"
 import dyncore "../../dynview/core"
@@ -109,7 +110,27 @@ DYNVIEW_STYLE_OUTPUT :: dyncore.DYNVIEW_STYLE_OUTPUT
 DYNVIEW_STYLE_CUSTOM_FONT :: dyncore.DYNVIEW_STYLE_CUSTOM_FONT
 DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dyncore.DYNVIEW_STYLE_CUSTOM_FONT_MASK
 
-Mouse_Input_State :: view_core.Mouse_Input_State
+Input_Frame :: input.Input_Frame
+
+// Convert one portable screen position for immediate use by Raylib UI APIs.
+input_frame_mouse_position :: #force_inline proc(frame: Input_Frame) -> rl.Vector2 {
+    return {frame.mouse_position.x, frame.mouse_position.y}
+}
+
+// Report whether the primary pointer button was pressed this frame.
+input_frame_left_pressed :: #force_inline proc(frame: Input_Frame) -> bool {
+    return .Left in frame.mouse_pressed
+}
+
+// Report whether the primary pointer button remains down this frame.
+input_frame_left_down :: #force_inline proc(frame: Input_Frame) -> bool {
+    return .Left in frame.mouse_down
+}
+
+// Report whether the primary pointer button was released this frame.
+input_frame_left_released :: #force_inline proc(frame: Input_Frame) -> bool {
+    return .Left in frame.mouse_released
+}
 
 //   Clamp a rectangle so width and height are never negative.
 clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
@@ -124,9 +145,10 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
 }
 
 //   Prepare frame geometry and report whether Dynview cache construction is required.
-prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
+prepare_ui_frame :: proc(
+    state: ^core.Euclid_General_State,
+    mouse_input: Input_Frame) -> bool {
     ui_runtime := &state^.ui_runtime
-    mouse_input := view_core.capture_mouse_input_state()
     frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
     update_splitters(ui_runtime, mouse_input, frame_dt)
     regions := compute_ui_regions(ui_runtime.current_layout_mode,
@@ -148,9 +170,10 @@ prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
 }
 
 //   Render all UI panels in baseline layout.
-draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
+draw_ui_panels :: proc(
+    state: ^core.Euclid_General_State,
+    input_frame: Input_Frame) {
     regions := state^.ui_runtime.ui_regions
-    mouse_input := view_core.capture_mouse_input_state()
 
     bottom_bar := rl.Rectangle{
         regions.world_rect.x,
@@ -159,7 +182,7 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         WINDOW_HEIGHT - regions.world_rect.height,
     }
     rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect, mouse_input)
+    draw_view_text_panel(state, regions.text_rect, input_frame)
 
     right_bar := rl.Rectangle{
         regions.world_rect.x + regions.world_rect.width,
@@ -168,6 +191,6 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
         WINDOW_HEIGHT,
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_tree_view(state, regions.tree_rect, mouse_input)
-    draw_splitters(&state^.ui_runtime, mouse_input.position)
+    draw_tree_view(state, regions.tree_rect, input_frame)
+    draw_splitters(&state^.ui_runtime, input_frame_mouse_position(input_frame))
 }

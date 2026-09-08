@@ -33,7 +33,7 @@ copy_interaction_tracks_hovered_and_pressed_target :: proc(t: ^testing.T) {
     hovered := copy_icon_find_hovered_index(cache, rl.Vector2{12, 22})
     copy_icon_update_hover_state(runtime, cache, hovered)
     copy_icon_begin_press_if_hovered(runtime, cache, hovered, {
-        left_pressed = true,
+        mouse_pressed = {.Left},
     })
 
     testing.expect_value(t, hovered, 0)

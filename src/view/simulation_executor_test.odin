@@ -293,6 +293,8 @@ expect_failed_dynview_rebuild :: proc(
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
+    state^.iso_scale = new(app_core.Iso_Scale, context.allocator)
+    defer free(state^.iso_scale)
     state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     state^.point_system^.next_point_index = 1
@@ -311,16 +313,16 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(0))
     testing.expect(t, !state^.dynview.compile_cache.is_valid)
 
-    run_parallel_frame_preparation(state, 0.25)
+    run_parallel_frame_preparation(state, 0.25, {})
     expect_parallel_frame_cache_ready(t, state, executor)
 
-    run_parallel_frame_preparation(state, 0.75)
+    run_parallel_frame_preparation(state, 0.75, {})
     testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
 
     dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
-    run_parallel_frame_preparation(state, 0.75)
+    run_parallel_frame_preparation(state, 0.75, {})
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
 
@@ -333,6 +335,8 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
 dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
+    state^.iso_scale = new(app_core.Iso_Scale, context.allocator)
+    defer free(state^.iso_scale)
     state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
     defer free(state^.point_system)
     state^.dynview.enabled = true
@@ -341,7 +345,7 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
     defer destroy_simulation_executor(executor)
-    run_parallel_frame_preparation(state, 0)
+    run_parallel_frame_preparation(state, 0, {})
 
     buffer := &state^.dynview.command_buffer
     buffer^.revision += 1
@@ -352,7 +356,7 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     buffer^.commands[1] = {
         kind = .Text_Run, block_id = 1, text_offset = 0, text_len = 1,
     }
-    run_parallel_frame_preparation(state, 0)
+    run_parallel_frame_preparation(state, 0, {})
 
     expect_failed_dynview_rebuild(t, state)
 }

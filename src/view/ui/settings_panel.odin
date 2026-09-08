@@ -13,7 +13,7 @@ import rlgl "vendor:raylib/rlgl"
 Settings_Toggle_Context :: struct {
     panel : rl.Rectangle,
     row_y : f32,
-    mouse_input : Mouse_Input_State,
+    mouse_input : Input_Frame,
     ui_runtime : ^core.Euclid_Ui_Runtime_State,
     font : rl.Font,
     font_resolver : view_font.Font_Resolver,
@@ -23,7 +23,7 @@ Settings_Toggle_Context :: struct {
 Settings_View_Context :: struct {
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     font: rl.Font,
     font_resolver: view_font.Font_Resolver,
 }
@@ -297,7 +297,7 @@ settings_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Settings_View_Row
 draw_settings_controls :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     rows: Settings_View_Rows) {
 
     ps := state.particle_system
@@ -336,7 +336,7 @@ draw_settings_controls :: proc(
 draw_settings_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     if state == nil || state.particle_system == nil {
         return

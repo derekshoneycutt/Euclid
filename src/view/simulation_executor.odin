@@ -414,7 +414,9 @@ run_parallel_simulation_step :: proc(executor: ^Simulation_Executor, dt: f32) {
 }
 
 //   Prepare frame-owned shape and text caches concurrently before rendering.
-run_parallel_frame_preparation :: proc(state: ^core.Euclid_General_State, alpha: f32) {
+run_parallel_frame_preparation :: proc(
+    state: ^core.Euclid_General_State, alpha: f32,
+    mouse_input: ui.Input_Frame) {
     assert(state != nil && state^.simulation_executor != nil)
     executor := state^.simulation_executor
     executor^.shape_cache_task.interpolation_alpha = alpha
@@ -422,7 +424,7 @@ run_parallel_frame_preparation :: proc(state: ^core.Euclid_General_State, alpha:
     assert(initialized)
     submit_simulation_task(executor, &fence, build_shape_cache_task,
         rawptr(&executor^.shape_cache_task))
-    if ui.prepare_ui_frame(state) {
+    if ui.prepare_ui_frame(state, mouse_input) {
         submit_simulation_task(executor, &fence, compile_dynview_task,
             rawptr(&executor^.dynview_task))
     }

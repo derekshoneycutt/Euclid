@@ -6,6 +6,7 @@ import dynlayout "../../dynview/layout"
 import julia "../../bridge"
 import view_core "../core"
 import "../font"
+import "../input"
 import ui_dynview "./dynview"
 
 import "core:strings"
@@ -454,7 +455,7 @@ apply_scratchpad_mode_transition :: proc(
 //   Updates the live scroll offset and re-pins the bottom when the user scrolls.
 scratchpad_sync_scroll :: proc(
     ctx: Scratchpad_Panel_Context,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     layout: Scratchpad_Terminal_Layout,
     scroll_step: f32) -> Scroll_Container_Begin_Result {
 
@@ -509,7 +510,7 @@ draw_scratchpad_transcript :: proc(
     ctx: Scratchpad_Panel_Context,
     output_text_legacy: string,
     terminal_panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     dyncompile.refresh_scratchpad_copy_targets(&ctx.state.dynview, {
         panel = terminal_panel,
@@ -519,7 +520,8 @@ draw_scratchpad_transcript :: proc(
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
     })
 
-    view_core.draw_copy_hover_backgrounds(&ctx.state^.dynview, mouse_input.position)
+    view_core.draw_copy_hover_backgrounds(
+        &ctx.state^.dynview, input_frame_mouse_position(mouse_input))
 
     ui_dynview.draw_scratchpad_styled_or_fallback(ctx.state, ctx.ui_runtime,
         ui_dynview.Fallback_Text_Content{output_text_legacy, UI_TEXT_COLOR},
@@ -544,7 +546,7 @@ scratchpad_input_box_params :: #force_inline proc(
     ctx: Scratchpad_Panel_Context,
     layout: Scratchpad_Terminal_Layout,
     terminal_panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) -> Input_Box_Params {
+    mouse_input: Input_Frame) -> Input_Box_Params {
 
     ui_runtime := ctx.ui_runtime
     return Input_Box_Params{
@@ -605,14 +607,15 @@ handle_scratchpad_input :: proc(
     ctx: Scratchpad_Panel_Context,
     layout: Scratchpad_Terminal_Layout,
     terminal_panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame,
+    input_frame: input.Input_Frame) {
 
     ui_runtime := ctx.ui_runtime
     previous_input_len := ui_runtime^.scratchpad_input_len
     previous_input_cursor := ui_runtime^.scratchpad_input_cursor
     input_result := handle_input_box(
         scratchpad_input_box_params(ctx, layout, terminal_panel, mouse_input),
-        &ui_runtime^.ui_press_owner)
+        &ui_runtime^.ui_press_owner, input_frame)
 
     apply_scratchpad_input_result(ctx, input_result,
         previous_input_len, previous_input_cursor)
@@ -622,7 +625,7 @@ handle_scratchpad_input :: proc(
 draw_scratchpad_input_box :: proc(
     ctx: Scratchpad_Panel_Context,
     layout: Scratchpad_Terminal_Layout,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     ui_runtime := ctx.ui_runtime
     prompt_font := font.cache_resolve(&ctx.state^.font_cache, .Bold)
@@ -662,7 +665,7 @@ scratchpad_finish_scroll :: proc(
     scroll_begin: Scroll_Container_Begin_Result,
     layout: Scratchpad_Terminal_Layout,
     terminal_panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     state := ctx.state
     ui_runtime := ctx.ui_runtime
@@ -709,8 +712,9 @@ draw_scratchpad_output_and_prompt :: proc(
     text_panel: rl.Rectangle,
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font,
-    mouse_input: Mouse_Input_State) {
+    input_frame: Input_Frame) {
 
+    mouse_input := input_frame
     output_text_legacy := julia.current_view_snapshot_text(state)
     output_text := dyncompile.scratchpad_text_or_fallback(
         &state.dynview, output_text_legacy)
@@ -733,7 +737,8 @@ draw_scratchpad_output_and_prompt :: proc(
     draw_scratchpad_transcript(panel_ctx, output_text_legacy, terminal_panel,
         mouse_input)
 
-    handle_scratchpad_input(ctx, layout, terminal_panel, mouse_input)
+    handle_scratchpad_input(
+        ctx, layout, terminal_panel, mouse_input, input_frame)
 
     layout = scratchpad_terminal_layout(ctx, output_text_legacy,
         state^.ui_runtime.view_text_scroll_y)

@@ -9,9 +9,6 @@ import view_font "../../font"
 
 import rl "vendor:raylib"
 
-
-Mouse_Input_State :: view_core.Mouse_Input_State
-
 UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
 UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
 

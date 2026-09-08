@@ -26,7 +26,7 @@ Icon_Button_Params :: struct {
     rect: rl.Rectangle,
     icon_id: Icon_Button_Id,
     toggle: bool,
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     interaction_enabled: bool,
@@ -58,7 +58,7 @@ icon_button_try_capture_press :: proc(
     owns_press: ^bool) {
 
     if press_owner^.active || !params.interaction_enabled ||
-        !params.mouse.left_pressed || !hovered {
+        !input_frame_left_pressed(params.mouse) || !hovered {
         return
     }
 
@@ -72,9 +72,9 @@ icon_button_try_capture_press :: proc(
 icon_button_release_press :: proc(
     press_owner: ^core.Ui_Press_Owner_State,
     owns_press: ^bool,
-    mouse: Mouse_Input_State) {
+    mouse: Input_Frame) {
 
-    if !owns_press^ || mouse.left_down {
+    if !owns_press^ || input_frame_left_down(mouse) {
         return
     }
 
@@ -98,11 +98,11 @@ icon_button_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Col
 
 //   Resolve local mouse position from screen-space plus scroll offset.
 icon_button_local_mouse :: #force_inline proc(
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
-    return rl.Vector2{mouse.position.x - scroll_offset.x,
-        mouse.position.y - scroll_offset.y}
+    return rl.Vector2{mouse.mouse_position.x - scroll_offset.x,
+        mouse.mouse_position.y - scroll_offset.y}
 }
 
 //   Resolve icon draw rectangle centered in slot using min-dimension sizing.
@@ -163,7 +163,7 @@ draw_icon_button :: proc(
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     owns_press := icon_button_owns_press(press_owner, params.id)
     icon_button_try_capture_press(press_owner, params, hovered, &owns_press)
-    pressed := owns_press && params.mouse.left_down
+    pressed := owns_press && input_frame_left_down(params.mouse)
 
     hover_t: f32 = 0
     if hovered {
@@ -177,7 +177,7 @@ draw_icon_button :: proc(
 
     result := draw_icon_button_with_visual_state(params, hover_t, press_t, true)
     result.pressed = pressed
-    result.clicked = owns_press && params.mouse.left_pressed
+    result.clicked = owns_press && input_frame_left_pressed(params.mouse)
     icon_button_release_press(press_owner, &owns_press, params.mouse)
     return result
 }
@@ -195,7 +195,7 @@ draw_icon_button_with_visual_state :: proc(
     hovered := params.interaction_enabled &&
         rl.CheckCollisionPointRec(local_mouse, slot_rect) &&
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
-    clicked := hovered && params.mouse.left_pressed
+    clicked := hovered && input_frame_left_pressed(params.mouse)
 
     use_hover_t :=  clamp(hover_t, 0.0, 1.0)
     use_press_t :=  clamp(press_t, 0.0, 1.0)

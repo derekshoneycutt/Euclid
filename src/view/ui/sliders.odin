@@ -16,7 +16,7 @@ SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 Integer_Slider_Params :: struct {
     panel : rl.Rectangle,
     row_y : f32,
-    mouse_input : Mouse_Input_State,
+    mouse_input : Input_Frame,
     ui_runtime : ^core.Euclid_Ui_Runtime_State,
     press_id : int,
     label : string,
@@ -32,7 +32,7 @@ Slider_Drag_Input :: struct {
     min_value : int,
     max_value : int,
     denom : int,
-    mouse_input : Mouse_Input_State,
+    mouse_input : Input_Frame,
     track : rl.Rectangle,
 }
 
@@ -93,14 +93,14 @@ slider_hit_rect :: #force_inline proc(track: rl.Rectangle) -> rl.Rectangle {
 slider_apply_wheel_step :: proc(
     clamped: ^int,
     min_value, max_value: int,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     hit: rl.Rectangle) {
 
-    if !rl.CheckCollisionPointRec(mouse_input.position, hit) {
+    if !rl.CheckCollisionPointRec(input_frame_mouse_position(mouse_input), hit) {
         return
     }
 
-    wheel := mouse_input.wheel_delta
+    wheel := mouse_input.mouse_wheel_delta
     if wheel == 0 {
         return
     }
@@ -125,12 +125,13 @@ slider_owns_press :: #force_inline proc(
 //   Capture shared press ownership for this slider if no control currently owns it.
 slider_try_capture_press :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     press_id: int,
     hovered_hit: bool,
     owns_press: ^bool) {
 
-    if ui_runtime.ui_press_owner.active || !mouse_input.left_pressed || !hovered_hit {
+    if ui_runtime.ui_press_owner.active ||
+        !input_frame_left_pressed(mouse_input) || !hovered_hit {
         return
     }
 
@@ -143,10 +144,10 @@ slider_try_capture_press :: proc(
 //   Release shared press ownership when the current mouse hold ends.
 slider_release_if_needed :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     owns_press: ^bool) {
 
-    if !owns_press^ || mouse_input.left_down {
+    if !owns_press^ || input_frame_left_down(mouse_input) {
         return
     }
 
@@ -162,11 +163,13 @@ slider_apply_drag_value :: proc(
     input: Slider_Drag_Input,
     owns_press: bool) {
 
-    if !owns_press || !input.mouse_input.left_down || input.track.width <= 0 {
+    if !owns_press || !input_frame_left_down(input.mouse_input) ||
+        input.track.width <= 0 {
         return
     }
 
-    t := clamp((input.mouse_input.position.x - input.track.x) / input.track.width,
+    t := clamp((input.mouse_input.mouse_position.x - input.track.x) /
+        input.track.width,
         0, 1)
     clamped^ = clamp(input.min_value + int(t * f32(input.denom) + 0.5),
         input.min_value, input.max_value)
@@ -176,11 +179,12 @@ slider_apply_drag_value :: proc(
 slider_knob_draw_style :: proc(
     knob: rl.Rectangle,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     pressed_knob: bool) -> (rl.Rectangle, rl.Color) {
 
-    hovered_knob := rl.CheckCollisionPointRec(mouse_input.position, knob) &&
-        rl.CheckCollisionPointRec(mouse_input.position, panel)
+    mouse_position := input_frame_mouse_position(mouse_input)
+    hovered_knob := rl.CheckCollisionPointRec(mouse_position, knob) &&
+        rl.CheckCollisionPointRec(mouse_position, panel)
 
     knob_hover_t: f32 = 0
     if hovered_knob {
@@ -225,7 +229,8 @@ slider_resolve_value :: proc(
     slider_apply_wheel_step(&clamped, params.min_value, params.max_value,
         params.mouse_input, hit)
 
-    hovered_hit := rl.CheckCollisionPointRec(params.mouse_input.position, hit)
+    hovered_hit := rl.CheckCollisionPointRec(
+        input_frame_mouse_position(params.mouse_input), hit)
     owns_press := slider_owns_press(params.ui_runtime, params.press_id)
     slider_try_capture_press(params.ui_runtime, params.mouse_input, params.press_id,
         hovered_hit, &owns_press)
@@ -269,7 +274,7 @@ draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
     ratio := f32(clamped - params.min_value) / f32(denom)
     knob_center_x, knob := build_slider_knob(track, ratio)
 
-    pressed_knob := owns_press && mouse_input.left_down
+    pressed_knob := owns_press && input_frame_left_down(mouse_input)
     knob_draw, knob_color :=
         slider_knob_draw_style(knob, panel, mouse_input, pressed_knob)
 

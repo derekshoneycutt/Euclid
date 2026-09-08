@@ -12,7 +12,7 @@ Checkbox_Params :: struct {
     rect: rl.Rectangle,
     checked: bool,
     enabled: bool,
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     interaction_enabled: bool,
@@ -78,7 +78,8 @@ checkbox_try_capture_press :: proc(
     can_interact: bool,
     owns_press: ^bool) {
 
-    if !can_interact || press_owner^.active || !params.mouse.left_pressed || !hovered {
+    if !can_interact || press_owner^.active ||
+        !input_frame_left_pressed(params.mouse) || !hovered {
         return
     }
 
@@ -96,7 +97,7 @@ checkbox_release_press :: proc(
     hovered_item: bool,
     owns_press: ^bool) -> (bool, bool) {
 
-    if !owns_press^ || !params.mouse.left_released {
+    if !owns_press^ || !input_frame_left_released(params.mouse) {
         return false, params.checked
     }
 
@@ -137,12 +138,12 @@ checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
 
 //   Convert screen-space mouse position into local interaction space.
 checkbox_local_mouse :: #force_inline proc(
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse_input.position.x - scroll_offset.x,
-        mouse_input.position.y - scroll_offset.y,
+        mouse_input.mouse_position.x - scroll_offset.x,
+        mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -205,7 +206,7 @@ checkbox_resolve_interaction :: proc(
     out.toggled = toggled
     out.checked_out = checked_out
     out.hovered = hovered
-    out.pressed = owns_press && params.mouse.left_down
+    out.pressed = owns_press && input_frame_left_down(params.mouse)
 }
 
 //   Draw one checkbox and resolve release-confirmed toggle interaction.

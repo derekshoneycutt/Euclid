@@ -5,6 +5,7 @@ package view
 
 import view_core "core"
 import "font"
+import "input"
 import "ui"
 import "../core"
 import "../audio"
@@ -80,6 +81,15 @@ SURFACE_COLOR :: view_core.SURFACE_COLOR
 SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
 SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
+
+// Display-lifetime services and optional scenario sinks used by each window frame.
+Window_Frame_Context :: struct {
+    input_runtime: ^input.Input_Runtime,
+    presentation: ^Presentation_Runtime,
+    scenario_runtime: ^Scenario_Runtime,
+    capture_sink: capture.Sink,
+    display_profile: ^evidence_profile.State,
+}
 
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
@@ -165,10 +175,11 @@ sync_window_prose_shaping :: proc(state: ^Euclid_General_State) {
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(
     state: ^Euclid_General_State,
-    presentation: ^Presentation_Runtime,
-    scenario_runtime: ^Scenario_Runtime = nil,
-    capture_sink: capture.Sink = {},
-    display_profile: ^evidence_profile.State = nil) {
+    ctx: Window_Frame_Context) {
+    input_runtime := ctx.input_runtime
+    presentation := ctx.presentation
+    scenario_runtime := ctx.scenario_runtime
+    display_profile := ctx.display_profile
     evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
@@ -177,8 +188,9 @@ run_window_frame :: proc(
     julia.publish_available_view_snapshot(state, false)
     service_presentation_runtime(state, presentation)
     ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
+    input_frame := input.input_poll_frame(input_runtime)
     alpha := accumulate_and_update_systems(state)
-    run_parallel_frame_preparation(state, alpha)
+    run_parallel_frame_preparation(state, alpha, input_frame)
     audio.update_chalk_runtime(&state^.chalk_audio)
     if scenario_runtime != nil {
         _ = scenario_runtime_update(
@@ -187,12 +199,12 @@ run_window_frame :: proc(
 
     evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
-        draw_frame(state, alpha)
+        draw_frame(state, alpha, input_frame)
     rl.EndDrawing()
     evidence_profile.zone_end(display_profile)
 
     if scenario_runtime != nil {
-        _ = scenario_runtime_after_present(scenario_runtime, capture_sink)
+        _ = scenario_runtime_after_present(scenario_runtime, ctx.capture_sink)
     }
     run_gif_capture_frame(state)
     finish_window_frame(state, display_profile)
@@ -219,13 +231,10 @@ init_display_profile :: proc(
 
 //   Process display frames until the window or active scenario requests completion.
 run_window_frames :: proc(
-    state: ^Euclid_General_State, scenario_runtime: ^Scenario_Runtime,
-    presentation: ^Presentation_Runtime, capture_sink: capture.Sink,
-    display_profile: ^evidence_profile.State) {
+    state: ^Euclid_General_State, ctx: Window_Frame_Context) {
     for !rl.WindowShouldClose() {
-        run_window_frame(
-            state, presentation, scenario_runtime, capture_sink, display_profile)
-        if scenario_runtime_finished(scenario_runtime) {
+        run_window_frame(state, ctx)
+        if scenario_runtime_finished(ctx.scenario_runtime) {
             return
         }
     }
@@ -243,29 +252,11 @@ finish_window_session :: proc(
     return exit_code
 }
 
-//   - Owns state/window setup and teardown via deferred cleanup calls.
-//   - Resets temp allocator each frame after drawing.
-//
-// Parameters:
-//   - settings: The settings describing how to operate the window
-//
-// Returns:
-//   - exit_code: non-zero when strict trace validation failed.
-run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
-    display_profile: evidence_profile.State
-    init_display_profile(&display_profile, settings^.profile_path)
-    defer evidence_profile.destroy(&display_profile)
-
-    open_window(settings)
-    defer rl.CloseWindow()
-
-    session, ok := initialize_window_runtime_with_loading(
-        settings, &display_profile)
-    evidence_profile.zone_end(&display_profile)
-    if !ok {
-        log.error("display_runtime_start_failed")
-        return 1
-    }
+//   Run frames and orderly shutdown for one initialized window session.
+run_initialized_window_session :: proc(
+    settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
+    input_runtime: ^input.Input_Runtime,
+    display_profile: ^evidence_profile.State) -> int {
     state := session.state
     log.info("display_runtime_ready")
 
@@ -285,14 +276,48 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     }
 
     free_all(context.temp_allocator)
-
-    run_window_frames(
-        state, active_scenario, session.presentation, capture_sink, &display_profile)
+    run_window_frames(state, {
+        input_runtime = input_runtime,
+        presentation = session.presentation,
+        scenario_runtime = active_scenario,
+        capture_sink = capture_sink,
+        display_profile = display_profile,
+    })
     log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
         state^.fixed_step, active_scenario != nil)
-
     return finish_window_session(
         session, active_scenario, settings^.scenario_artifact_output)
+}
+
+//   - Owns state/window setup and teardown via deferred cleanup calls.
+//   - Resets temp allocator each frame after drawing.
+//
+// Parameters:
+//   - settings: The settings describing how to operate the window
+//
+// Returns:
+//   - exit_code: non-zero when strict trace validation failed.
+run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
+    display_profile: evidence_profile.State
+    init_display_profile(&display_profile, settings^.profile_path)
+    defer evidence_profile.destroy(&display_profile)
+
+    open_window(settings)
+    defer rl.CloseWindow()
+
+    input_runtime := input.input_runtime_create(context.allocator)
+    if input_runtime == nil { return 1 }
+    defer input.input_runtime_destroy(input_runtime, context.allocator)
+
+    session, ok := initialize_window_runtime_with_loading(
+        settings, &display_profile)
+    evidence_profile.zone_end(&display_profile)
+    if !ok {
+        log.error("display_runtime_start_failed")
+        return 1
+    }
+    return run_initialized_window_session(
+        settings, session, input_runtime, &display_profile)
 }
 
 //   Release graphics-owned resources before destroying their backing runtime state.
@@ -784,12 +809,14 @@ draw_world :: proc(state: ^Euclid_General_State) {
 }
 
 //   Render one full frame including world, particles, UI panels, and capture step.
-draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
+draw_frame :: proc(
+    state : ^Euclid_General_State, alpha: f32,
+    input_frame: input.Input_Frame) {
     rl.ClearBackground(BACKGROUND_COLOR)
 
     draw_world(state)
 
-    ui.draw_ui_panels(state)
+    ui.draw_ui_panels(state, input_frame)
 
     if state^.ui_runtime.display_fps {
         fps_flags := core.Font_Variant_Flags.Medium

@@ -787,6 +787,18 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "input-runtime",
+                "src/view/input/runtime.odin",
+                "input_runtime_create",
+                :custom,
+                "The display owner allocates one fixed-layout input runtime before the " *
+                    "window loop and releases it during orderly display teardown.";
+                operation="new",
+                target="Input_Runtime",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
             # GIF Encoding Allocations ; There is a dedicated arena and some minor heap allocation
             ReviewedAllocationPolicy(
                 "files-gif-encode-lzwmem",

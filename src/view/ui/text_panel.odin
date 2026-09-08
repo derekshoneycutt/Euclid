@@ -14,7 +14,7 @@ import rl "vendor:raylib"
 View_Text_Scroll_End :: struct {
     text_panel: rl.Rectangle,
     content_h: f32,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
 }
 
 //   Compute the bordered text viewport used by normal and Scratchpad views.
@@ -35,7 +35,7 @@ view_text_scroll_begin :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     text_panel: rl.Rectangle,
     content_h: f32,
-    mouse_input: Mouse_Input_State) -> Scroll_Container_Begin_Result {
+    mouse_input: Input_Frame) -> Scroll_Container_Begin_Result {
 
     scroll_step := dynlayout.scratchpad_scroll_step_or_fallback(&state.dynview,
         TEXT_ROW_HEIGHT)
@@ -64,7 +64,7 @@ view_text_draw_content :: proc(
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     text_panel: rl.Rectangle,
     view_text: string,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     dyncompile.refresh_scratchpad_copy_targets(&state.dynview, {
         panel = text_panel,
@@ -117,12 +117,13 @@ view_text_scroll_end :: proc(
 draw_view_text_panel :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    input_frame: Input_Frame) {
     if state == nil || state.julia_interface == nil {
         return
     }
 
     ui_runtime := &state.ui_runtime
+    mouse_input := input_frame
     _ = draw_container(panel, .Dark_Red)
     text_panel := view_text_content_panel(panel)
     text_panel = draw_container(text_panel, .Grey).drawn_rect
@@ -130,7 +131,7 @@ draw_view_text_panel :: proc(
     if is_scratchpad_selected(state) {
         draw_scratchpad_output_and_prompt(
             state, text_panel, ui_runtime,
-            font.cache_borrow(&state.font_cache, .Regular), mouse_input)
+            font.cache_borrow(&state.font_cache, .Regular), input_frame)
         return
     }
 

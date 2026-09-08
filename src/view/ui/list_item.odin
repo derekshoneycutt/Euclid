@@ -11,7 +11,7 @@ List_Item_Params :: struct {
     rect: rl.Rectangle,
     can_expand_pos_y: bool,
     selected: bool,
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     interaction_enabled: bool,
@@ -26,12 +26,12 @@ List_Item_Result :: struct {
 
 //   Convert screen-space mouse position into local interaction space.
 list_item_local_mouse :: #force_inline proc(
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse_input.position.x - scroll_offset.x,
-        mouse_input.position.y - scroll_offset.y,
+        mouse_input.mouse_position.x - scroll_offset.x,
+        mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -52,7 +52,7 @@ draw_list_item :: proc(
         hovered, hovered_item)
 
     if press_owner^.active && press_owner^.kind == .List_Item &&
-        press_owner^.id == params.id && params.mouse.left_down {
+        press_owner^.id == params.id && input_frame_left_down(params.mouse) {
         rl.DrawRectangleRec(drawn_rect, rl.Color{
             UI_BORDER_COLOR.r,
             UI_BORDER_COLOR.g,
@@ -82,14 +82,14 @@ list_item_run_press :: proc(
         press_owner^.kind == .List_Item &&
         press_owner^.id == params.id
     if params.interaction_enabled && !press_owner^.active &&
-        params.mouse.left_pressed && hovered {
+        input_frame_left_pressed(params.mouse) && hovered {
         press_owner^.active = true
         press_owner^.kind = .List_Item
         press_owner^.id = params.id
         owns_press = true
     }
 
-    if owns_press && params.mouse.left_released {
+    if owns_press && input_frame_left_released(params.mouse) {
         clicked := hovered_item
         press_owner^.active = false
         press_owner^.kind = .None

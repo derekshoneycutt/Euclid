@@ -22,7 +22,7 @@ Tree_List_Params :: struct {
     ji : ^core.Euclid_Julia_Interface,
     ui_runtime : ^core.Euclid_Ui_Runtime_State,
     list_panel : rl.Rectangle,
-    mouse_input : Mouse_Input_State,
+    mouse_input : Input_Frame,
     scroll_y : ^f32,
     font : rl.Font,
     font_resolver : view_font.Font_Resolver,
@@ -36,7 +36,7 @@ Tree_Walk_Context :: struct {
     panel : rl.Rectangle,
     scroll_y : f32,
     allow_clicks : bool,
-    mouse_input : Mouse_Input_State,
+    mouse_input : Input_Frame,
     scroll_offset : rl.Vector2,
     interaction_space_rect : rl.Rectangle,
     font : rl.Font,
@@ -47,7 +47,7 @@ Tree_Walk_Context :: struct {
 draw_tree_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
@@ -611,7 +611,8 @@ tree_list_walk_and_release :: proc(
 
     ui_runtime := params.ui_runtime
     allow_tree_clicks := true
-    if scroll_begin.scroll_ref.is_hovered_thumb && params.mouse_input.left_pressed {
+    if scroll_begin.scroll_ref.is_hovered_thumb &&
+        input_frame_left_pressed(params.mouse_input) {
         allow_tree_clicks = false
     }
 
@@ -633,7 +634,7 @@ tree_list_walk_and_release :: proc(
 
     if ui_runtime.ui_press_owner.active &&
         ui_runtime.ui_press_owner.kind == .List_Item &&
-        params.mouse_input.left_released {
+        input_frame_left_released(params.mouse_input) {
 
         ui_runtime.ui_press_owner.active = false
         ui_runtime.ui_press_owner.kind = .None

@@ -1,8 +1,7 @@
 package view_core
 
 import "../../core"
-
-import "core:strings"
+import "../input"
 
 import rl "vendor:raylib"
 
@@ -91,9 +90,9 @@ copy_icon_begin_press_if_hovered :: proc(
     runtime: ^core.Dynview_System,
     cache: ^core.Dynview_Compile_Cache,
     hovered_index: int,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: input.Input_Frame) {
 
-    if !mouse_input.left_pressed || hovered_index < 0 {
+    if .Left not_in mouse_input.mouse_pressed || hovered_index < 0 {
         return
     }
 
@@ -107,10 +106,10 @@ copy_icon_begin_press_if_hovered :: proc(
 //   Advance press-release lifecycle, including short dark linger after release.
 copy_icon_update_press_and_linger :: proc(
     runtime: ^core.Dynview_System,
-    mouse_input: Mouse_Input_State,
+    mouse_input: input.Input_Frame,
     dt: f32) {
 
-    if runtime^.copy_icon_press_active && !mouse_input.left_down {
+    if runtime^.copy_icon_press_active && .Left not_in mouse_input.mouse_down {
         runtime^.copy_icon_press_active = false
         runtime^.copy_icon_linger_active = true
         runtime^.copy_icon_linger_block_id = runtime^.copy_icon_press_block_id
@@ -187,7 +186,7 @@ draw_copy_icon_button :: proc(
     hover_t: f32,
     press_t: f32,
     hovered_icon: bool,
-    mouse_input: Mouse_Input_State) -> bool {
+    mouse_input: input.Input_Frame) -> bool {
 
     slot_rect := rect
     if slot_rect.width <= 0 || slot_rect.height <= 0 {
@@ -215,16 +214,17 @@ draw_copy_icon_button :: proc(
     }
 
     draw_copy_icon(icon_rect, copy_icon_color(use_press_t))
-    return hovered_icon && mouse_input.left_released
+    return hovered_icon && .Left in mouse_input.mouse_released
 }
 
 //   Draw one copy icon with hover and click feedback, returning click hit state.
 copy_icon_draw_target :: proc(
     runtime: ^core.Dynview_System,
     target: core.Dynview_Copy_Hit_Target,
-    mouse_input: Mouse_Input_State) -> bool {
+    mouse_input: input.Input_Frame) -> bool {
 
-    mouse := mouse_input.position
+    mouse := rl.Vector2{
+        mouse_input.mouse_position.x, mouse_input.mouse_position.y}
 
     hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
     hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
@@ -259,10 +259,11 @@ copy_icon_draw_target :: proc(
 copy_icon_update_runtime_state :: proc(
     runtime: ^core.Dynview_System,
     cache: ^core.Dynview_Compile_Cache,
-    mouse_input: Mouse_Input_State,
+    mouse_input: input.Input_Frame,
     dt: f32) {
 
-    mouse := mouse_input.position
+    mouse := rl.Vector2{
+        mouse_input.mouse_position.x, mouse_input.mouse_position.y}
 
     hovered_index := copy_icon_find_hovered_index(cache, mouse)
     copy_icon_update_hover_state(runtime, cache, hovered_index)
@@ -298,7 +299,7 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
 draw_copy_icons :: proc(
     runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) -> bool {
+    mouse_input: input.Input_Frame) -> bool {
 
     if runtime == nil {
         return false
@@ -331,6 +332,6 @@ draw_copy_icons :: proc(
         return false
     }
 
-    rl.SetClipboardText(strings.clone_to_cstring(payload, context.temp_allocator))
+    input.input_set_clipboard_text(payload)
     return true
 }

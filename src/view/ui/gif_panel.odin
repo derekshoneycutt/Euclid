@@ -17,7 +17,7 @@ Gif_Slider_Rows :: struct {
 //   Shared dependencies for controls in one GIF panel frame.
 Gif_Panel_Context :: struct {
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     font: rl.Font,
     resolver: view_font.Font_Resolver,
@@ -162,7 +162,7 @@ gif_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Gif_View_Rows {
 draw_gif_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Mouse_Input_State) {
+    mouse_input: Input_Frame) {
 
     if state == nil || state.particle_system == nil {
         return

@@ -44,7 +44,7 @@ Scroll_Container_Begin_Params :: struct {
     rect:                   rl.Rectangle,
     scroll_y_in:            f32,
     content_height_hint:    f32,
-    mouse_input:            Mouse_Input_State,
+    mouse_input:            Input_Frame,
     scroll_offset:          rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     wheel_step:             f32,
@@ -55,7 +55,7 @@ Scroll_Container_Begin_Params :: struct {
 //   Mutable drag state for one scrollbar thumb interaction, grouped with the
 //   panel geometry and scroll limits it operates against.
 Scrollbar_Drag_Context :: struct {
-    mouse_input:  Mouse_Input_State,
+    mouse_input:  Input_Frame,
     thumb:        rl.Rectangle,
     panel_y:      f32,
     panel_height: f32,
@@ -84,7 +84,7 @@ Vertical_Scrollbar_Geometry :: struct {
 
 //   Pointer/drag inputs for one scrollbar thumb capture attempt.
 Scrollbar_Capture_Input :: struct {
-    mouse_input:   Mouse_Input_State,
+    mouse_input:   Input_Frame,
     hovered_thumb: bool,
     local_mouse:   rl.Vector2,
     thumb_rect:    rl.Rectangle,
@@ -113,7 +113,7 @@ Scroll_Container_End_Params :: struct {
     scroll_ref:             Scroll_Container_Ref,
     content_height_final:   f32,
     scroll_y_in:            f32,
-    mouse_input:            Mouse_Input_State,
+    mouse_input:            Input_Frame,
     scroll_offset:          rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     press_owner:            ^core.Ui_Press_Owner_State,
@@ -121,12 +121,12 @@ Scroll_Container_End_Params :: struct {
 
 //   Convert screen-space pointer position to local interaction space.
 scroll_container_local_mouse :: #force_inline proc(
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse_input.position.x - scroll_offset.x,
-        mouse_input.position.y - scroll_offset.y,
+        mouse_input.mouse_position.x - scroll_offset.x,
+        mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -156,7 +156,8 @@ scroll_container_try_capture_press :: proc(
     is_dragging_thumb: ^bool,
     drag_offset_y: ^f32) {
 
-    if press_owner^.active || !input.mouse_input.left_pressed || !input.hovered_thumb {
+    if press_owner^.active ||
+        !input_frame_left_pressed(input.mouse_input) || !input.hovered_thumb {
         return
     }
 
@@ -279,7 +280,7 @@ scroll_container_begin :: proc(
 //   Compute scrollbar geometry and apply wheel scroll when content overflows.
 scroll_overflow_hint :: proc(
     geom: Scroll_Overflow_Geometry,
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_y_out: ^f32,
     use_wheel_step: f32) -> Scroll_Overflow_Hint {
 
@@ -300,8 +301,8 @@ scroll_overflow_hint :: proc(
             geom.interaction_space_rect)
     hovered_view := in_interaction &&
         rl.CheckCollisionPointRec(geom.local_mouse, view_rect)
-    if hovered_view && mouse_input.wheel_delta != 0 && use_wheel_step > 0 {
-        scroll_y_out^ -= mouse_input.wheel_delta * use_wheel_step
+    if hovered_view && mouse_input.mouse_wheel_delta != 0 && use_wheel_step > 0 {
+        scroll_y_out^ -= mouse_input.mouse_wheel_delta * use_wheel_step
     }
     clamp_scroll_position(scroll_y_out, max_scroll_hint)
 
@@ -346,7 +347,7 @@ scroll_container_apply_drag :: proc(
     scroll_y_out: ^f32,
     state_out: ^Scroll_Container_State) {
 
-    if !params.mouse_input.left_down {
+    if !input_frame_left_down(params.mouse_input) {
         scroll_container_release_press(
             params.press_owner,
             params.scroll_ref.id,

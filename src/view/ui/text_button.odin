@@ -12,7 +12,7 @@ Text_Button_Params :: struct {
     rect : rl.Rectangle,
     label : string,
     enabled : bool,
-    mouse : Mouse_Input_State,
+    mouse : Input_Frame,
     scroll_offset : rl.Vector2,
     interaction_space_rect : rl.Rectangle,
     interaction_enabled : bool,
@@ -53,7 +53,8 @@ text_button_try_capture_press :: proc(
     can_interact: bool,
     owns_press: ^bool) {
 
-    if !can_interact || press_owner^.active || !params.mouse.left_pressed || !hovered {
+    if !can_interact || press_owner^.active ||
+        !input_frame_left_pressed(params.mouse) || !hovered {
         return
     }
 
@@ -66,12 +67,12 @@ text_button_try_capture_press :: proc(
 //   Release shared press ownership and resolve whether the button was clicked.
 text_button_release_press :: proc(
     press_owner: ^core.Ui_Press_Owner_State,
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     can_interact: bool,
     hovered_item: bool,
     owns_press: ^bool) -> bool {
 
-    if !owns_press^ || !mouse.left_released {
+    if !owns_press^ || !input_frame_left_released(mouse) {
         return false
     }
 
@@ -115,12 +116,12 @@ text_button_colors :: proc(
 
 //   Convert screen-space mouse position into local interaction space.
 text_button_local_mouse :: #force_inline proc(
-    mouse_input: Mouse_Input_State,
+    mouse_input: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse_input.position.x - scroll_offset.x,
-        mouse_input.position.y - scroll_offset.y,
+        mouse_input.mouse_position.x - scroll_offset.x,
+        mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -167,7 +168,7 @@ draw_text_button :: proc(
         hovered_item,
         &owns_press)
 
-    pressed := owns_press && params.mouse.left_down
+    pressed := owns_press && input_frame_left_down(params.mouse)
     colors := text_button_colors(params, hovered, pressed)
 
     rl.DrawRectangleRec(button_rect, colors.background)

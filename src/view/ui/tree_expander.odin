@@ -10,7 +10,7 @@ TREE_EXPANDER_PRESS_DARKEN :: 0.45
 Tree_Expander_Params :: struct {
     rect: rl.Rectangle,
     expanded: bool,
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     interaction_enabled: bool,
@@ -26,12 +26,12 @@ Tree_Expander_Result :: struct {
 
 //   Convert screen-space mouse position into local expander coordinates.
 tree_expander_local_mouse :: #force_inline proc(
-    mouse: Mouse_Input_State,
+    mouse: Input_Frame,
     scroll_offset: rl.Vector2) -> rl.Vector2 {
 
     return rl.Vector2{
-        mouse.position.x - scroll_offset.x,
-        mouse.position.y - scroll_offset.y,
+        mouse.mouse_position.x - scroll_offset.x,
+        mouse.mouse_position.y - scroll_offset.y,
     }
 }
 
@@ -72,7 +72,7 @@ draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result
     hovered := params.interaction_enabled &&
         rl.CheckCollisionPointRec(local_mouse, expander_rect) &&
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
-    pressed := hovered && params.mouse.left_down
+    pressed := hovered && input_frame_left_down(params.mouse)
 
     hover_t: f32 = 0
     if hovered {
