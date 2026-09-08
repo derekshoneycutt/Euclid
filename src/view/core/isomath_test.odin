@@ -39,6 +39,36 @@ recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {
     testing.expect_value(t, iso.quarter_scale, f32(200))
 }
 
+//   Verify viewport fitting preserves baseline projection values.
+@(test)
+fit_iso_scale_to_viewport_preserves_baseline :: proc(t: ^testing.T) {
+    iso := Iso_Scale{}
+
+    fit_iso_scale_to_viewport(&iso, VIEW_WIDTH, VIEW_HEIGHT)
+
+    testing.expect_value(t, iso.scale, f32(ISO_SCALE_VALUE))
+    testing.expect_value(t, iso.x_offset, f32(ISO_X_OFFSET))
+    testing.expect_value(t, iso.y_offset, f32(ISO_Y_OFFSET))
+    testing.expect_value(t, iso.half_scale, f32(ISO_SCALE_VALUE) * 0.5)
+    testing.expect_value(t, iso.quarter_scale, f32(ISO_SCALE_VALUE) * 0.25)
+}
+
+//   Verify viewport fitting uses the limiting axis and proportional anchors.
+@(test)
+fit_iso_scale_to_viewport_uses_limiting_axis :: proc(t: ^testing.T) {
+    iso := Iso_Scale{}
+
+    fit_iso_scale_to_viewport(&iso, VIEW_WIDTH * 0.5, VIEW_HEIGHT)
+    testing.expect_value(t, iso.scale, f32(ISO_SCALE_VALUE) * 0.5)
+    testing.expect_value(t, iso.x_offset, f32(ISO_X_OFFSET) * 0.5)
+    testing.expect_value(t, iso.y_offset, f32(ISO_Y_OFFSET))
+
+    fit_iso_scale_to_viewport(&iso, VIEW_WIDTH, VIEW_HEIGHT * 0.5)
+    testing.expect_value(t, iso.scale, f32(ISO_SCALE_VALUE) * 0.5)
+    testing.expect_value(t, iso.x_offset, f32(ISO_X_OFFSET))
+    testing.expect_value(t, iso.y_offset, f32(ISO_Y_OFFSET) * 0.5)
+}
+
 //   Verify the inline component projection matches the isometric formula.
 @(test)
 iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testing.T) {

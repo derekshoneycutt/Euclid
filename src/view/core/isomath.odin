@@ -133,6 +133,18 @@ recompute_iso_scale_precompute :: proc(scale: ^Iso_Scale) {
     scale^.quarter_scale = scale^.scale * 0.25
 }
 
+//   Uniformly fit the baseline isometric projection into one viewport extent.
+fit_iso_scale_to_viewport :: proc(
+    scale: ^Iso_Scale, viewport_width, viewport_height: f32) {
+
+    width_ratio := max(viewport_width, f32(1)) / f32(VIEW_WIDTH)
+    height_ratio := max(viewport_height, f32(1)) / f32(VIEW_HEIGHT)
+    scale^.scale = f32(ISO_SCALE_VALUE) * min(width_ratio, height_ratio)
+    scale^.x_offset = viewport_width * f32(ISO_X_OFFSET) / f32(VIEW_WIDTH)
+    scale^.y_offset = viewport_height * f32(ISO_Y_OFFSET) / f32(VIEW_HEIGHT)
+    recompute_iso_scale_precompute(scale)
+}
+
 //   Fast force-inlined projection helper using precomputed coefficients.
 //
 // Parameters:

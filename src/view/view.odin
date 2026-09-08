@@ -753,13 +753,15 @@ capture_evidence_checkpoint :: proc(
     return snapshot
 }
 
-//   Render one full frame including world, particles, UI panels, and capture step.
-draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
-    rl.ClearBackground(BACKGROUND_COLOR)
+//   Render the animation world clipped to its prepared UI region.
+draw_world :: proc(state: ^Euclid_General_State) {
+    world_rect := state^.ui_runtime.ui_regions.world_rect
+    rl.BeginScissorMode(i32(world_rect.x), i32(world_rect.y),
+        i32(world_rect.width), i32(world_rect.height))
+    defer rl.EndScissorMode()
 
     base_x_offset := state^.iso_scale^.x_offset
     base_y_offset := state^.iso_scale^.y_offset
-
     apply_world_shake := state^.particle_system != nil &&
         state^.ui_runtime.gif_capture_phase != .Recording
     if apply_world_shake {
@@ -779,6 +781,13 @@ draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
 
     state^.iso_scale^.x_offset = base_x_offset
     state^.iso_scale^.y_offset = base_y_offset
+}
+
+//   Render one full frame including world, particles, UI panels, and capture step.
+draw_frame :: proc(state : ^Euclid_General_State, alpha: f32) {
+    rl.ClearBackground(BACKGROUND_COLOR)
+
+    draw_world(state)
 
     ui.draw_ui_panels(state)
 

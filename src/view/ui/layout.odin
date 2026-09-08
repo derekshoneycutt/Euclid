@@ -4,45 +4,48 @@ import "../../core"
 
 import rl "vendor:raylib"
 
-//   Compute baseline UI region mapping for the current layout mode.
-compute_ui_regions :: proc(mode: core.Ui_Layout_Mode) -> core.Ui_Regions {
+//   Build the non-negative Scratchpad content rectangle inside the text panel.
+layout_scratchpad_rect :: proc(text_rect: rl.Rectangle) -> rl.Rectangle {
+    return clamp_non_negative_rect({
+        text_rect.x + 6,
+        text_rect.y + 6,
+        text_rect.width - 12,
+        text_rect.height - 12,
+    })
+}
+
+//   Compute UI regions from clamped vertical and horizontal split coordinates.
+compute_ui_regions :: proc(
+    mode: core.Ui_Layout_Mode,
+    vertical_split_x, horizontal_split_y: f32) -> core.Ui_Regions {
     regions := core.Ui_Regions{}
+    split_x := clamp(vertical_split_x, f32(WORLD_MIN_WIDTH),
+        f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
+    split_y := clamp(horizontal_split_y, f32(WORLD_MIN_HEIGHT),
+        f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
 
     switch mode {
     case .Baseline:
-        regions.world_rect = rl.Rectangle{0, 0, VIEW_WIDTH, VIEW_HEIGHT}
+        regions.world_rect = rl.Rectangle{0, 0, split_x, split_y}
 
         regions.tree_rect = rl.Rectangle{
-            VIEW_WIDTH + TREE_PANEL_PADDING,
+            split_x + TREE_PANEL_PADDING,
             TREE_PANEL_PADDING,
-            RIGHT_BAR_WIDTH - TREE_PANEL_PADDING * 2,
+            f32(WINDOW_WIDTH) - split_x - TREE_PANEL_PADDING * 2,
             WINDOW_HEIGHT - TREE_PANEL_PADDING * 2,
         }
 
         regions.text_rect = rl.Rectangle{
             TREE_PANEL_PADDING,
-            VIEW_HEIGHT + TREE_PANEL_PADDING,
-            VIEW_WIDTH - TREE_PANEL_PADDING * 2,
-            BOTTOM_BAR_HEIGHT - TREE_PANEL_PADDING * 2,
+            split_y + TREE_PANEL_PADDING,
+            split_x - TREE_PANEL_PADDING * 2,
+            f32(WINDOW_HEIGHT) - split_y - TREE_PANEL_PADDING * 2,
         }
 
         _, list_panel := build_tree_view_panels(regions.tree_rect)
         regions.settings_rect = list_panel
         regions.gif_rect = list_panel
-
-        text_inner := rl.Rectangle{
-            regions.text_rect.x + 6,
-            regions.text_rect.y + 6,
-            regions.text_rect.width - 12,
-            regions.text_rect.height - 12,
-        }
-        if text_inner.width < 0 {
-            text_inner.width = 0
-        }
-        if text_inner.height < 0 {
-            text_inner.height = 0
-        }
-        regions.scratchpad_rect = text_inner
+        regions.scratchpad_rect = layout_scratchpad_rect(regions.text_rect)
     }
 
     return regions

@@ -71,6 +71,61 @@ gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) 
     testing.expect_value(t, safe_minimum, 1)
 }
 
+//   Verify dynamic logical world dimensions map into the framebuffer bounds.
+@(test)
+gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
+    width, height := app_view.gif_capture_source_dimensions_for_framebuffer({
+        logical_width = 640,
+        logical_height = 360,
+        screen_width = 1280,
+        screen_height = 720,
+        render_width = 2560,
+        render_height = 1440,
+    })
+
+    testing.expect_value(t, width, 1280)
+    testing.expect_value(t, height, 720)
+
+    width, height = app_view.gif_capture_source_dimensions_for_framebuffer({
+        logical_width = 2000,
+        logical_height = 1000,
+        screen_width = 1280,
+        screen_height = 720,
+        render_width = 1280,
+        render_height = 720,
+    })
+    testing.expect_value(t, width, 1280)
+    testing.expect_value(t, height, 720)
+}
+
+//   Verify one GIF session freezes and clears its framebuffer crop dimensions.
+@(test)
+gif_capture_session_dimensions_are_stable_until_teardown :: proc(t: ^testing.T) {
+    session := app_core.Gif_Capture_Session{}
+
+    app_view.gif_capture_freeze_source_dimensions(&session, 900, 500)
+    testing.expect_value(t, session.source_width, 900)
+    testing.expect_value(t, session.source_height, 500)
+
+    changed_width, changed_height :=
+        app_view.gif_capture_source_dimensions_for_framebuffer({
+            logical_width = 640,
+            logical_height = 360,
+            screen_width = 1280,
+            screen_height = 720,
+            render_width = 1280,
+            render_height = 720,
+        })
+    testing.expect_value(t, changed_width, 640)
+    testing.expect_value(t, changed_height, 360)
+    testing.expect_value(t, session.source_width, 900)
+    testing.expect_value(t, session.source_height, 500)
+
+    app_view.gif_capture_clear_source_dimensions(&session)
+    testing.expect_value(t, session.source_width, 0)
+    testing.expect_value(t, session.source_height, 0)
+}
+
 //   Verify a cycle boundary is consumed exactly once per generation.
 @(test)
 gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^testing.T) {
@@ -90,9 +145,14 @@ gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^test
 //   Verify aborting an inactive GIF capture session is a safe no-op.
 @(test)
 gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
-    session := app_core.Gif_Capture_Session{}
+    session := app_core.Gif_Capture_Session{
+        source_width = 900,
+        source_height = 500,
+    }
     app_view.gif_capture_abort_session(&session)
     testing.expect(t, !session.active)
+    testing.expect_value(t, session.source_width, 0)
+    testing.expect_value(t, session.source_height, 0)
 }
 
 //   Verify GIF lifecycle transitions retain required typed display evidence.

@@ -1877,6 +1877,8 @@ Gif_Encode_State :: struct {
 Gif_Capture_Session :: struct {
     encoder: Gif_Encode_State,
     active: bool,
+    source_width: int,
+    source_height: int,
 }
 
 Font_Key :: enum {
@@ -2241,6 +2243,7 @@ Ui_Press_Owner_Kind :: enum {
     Input_Box,
     Slider,
     Scrollbar,
+    Splitter,
 }
 
 Ui_Press_Owner_State :: struct {
@@ -2266,6 +2269,12 @@ Euclid_Ui_Runtime_State :: struct {
 
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,
+
+    vertical_split_x: f32,
+    horizontal_split_y: f32,
+    vertical_split_hover: f32,
+    horizontal_split_hover: f32,
+    splitter_drag_offset: f32,
 
     limit_fps : bool,
     display_fps : bool,

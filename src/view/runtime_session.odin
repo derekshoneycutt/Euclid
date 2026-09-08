@@ -252,6 +252,8 @@ init_runtime_fields :: proc(
     state^.ui_runtime.use_simd_batch_projection =
         settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
     state^.ui_runtime.use_gpu_dust_instancing = false
+    state^.ui_runtime.vertical_split_x = view_core.VIEW_WIDTH
+    state^.ui_runtime.horizontal_split_y = view_core.VIEW_HEIGHT
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
     state^.ui_runtime.gif_downsample_factor = 2
     state^.ui_runtime.gif_frame_step = 2

@@ -4,6 +4,7 @@ import "core:testing"
 
 import app_core "../../core"
 import app_bridge "../../bridge"
+import app_dynview "../../dynview"
 
 import rl "vendor:raylib"
 
@@ -11,7 +12,7 @@ import rl "vendor:raylib"
 @(test)
 ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     // Verifies baseline UI region construction is internally consistent and matches fixed panel sizing contracts.
-    regions := compute_ui_regions(.Baseline)
+    regions := compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
 
     testing.expect(t, validate_ui_regions(regions))
     testing.expect_value(t, regions.world_rect.width, VIEW_WIDTH)
@@ -24,6 +25,112 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     testing.expect_value(t, regions.settings_rect.height, regions.gif_rect.height)
     testing.expect(t, regions.scratchpad_rect.width >= 0)
     testing.expect(t, regions.scratchpad_rect.height >= 0)
+}
+
+//   Verify split coordinates preserve minimum sizes for all four panes.
+@(test)
+ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
+    minimums := compute_ui_regions(.Baseline, 0, 0)
+    testing.expect_value(t, minimums.world_rect.width, f32(WORLD_MIN_WIDTH))
+    testing.expect_value(t, minimums.world_rect.height, f32(WORLD_MIN_HEIGHT))
+
+    maximums := compute_ui_regions(.Baseline, WINDOW_WIDTH, WINDOW_HEIGHT)
+    testing.expect_value(t, maximums.world_rect.width,
+        f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
+    testing.expect_value(t, maximums.world_rect.height,
+        f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
+    testing.expect(t, maximums.tree_rect.width >= 0)
+    testing.expect(t, maximums.text_rect.height >= 0)
+}
+
+//   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
+@(test)
+splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
+    vertical := splitter_geometry(.Vertical, VIEW_WIDTH, VIEW_HEIGHT)
+    horizontal := splitter_geometry(.Horizontal, VIEW_WIDTH, VIEW_HEIGHT)
+
+    testing.expect_value(t, vertical.hit_rect.width, f32(8))
+    testing.expect_value(t, vertical.visible_rect.width, f32(3))
+    testing.expect_value(t, horizontal.hit_rect.height, f32(8))
+    testing.expect_value(t, horizontal.visible_rect.height, f32(3))
+    testing.expect_value(t, horizontal.hit_rect.width, f32(VIEW_WIDTH))
+}
+
+//   Verify a changed split width invalidates Dynview panel layout for reflow.
+@(test)
+split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
+    runtime := new(app_core.Dynview_System, context.allocator)
+    defer free(runtime)
+    baseline := compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
+    resized := compute_ui_regions(.Baseline, VIEW_WIDTH - 100, VIEW_HEIGHT)
+
+    app_dynview.track_panel(runtime, view_text_content_panel(baseline.text_rect))
+    runtime^.pending_invalidation_mask = 0
+    runtime^.compile_cache.is_valid = true
+    app_dynview.track_panel(runtime, view_text_content_panel(resized.text_rect))
+
+    testing.expect(t, runtime^.pending_invalidation_mask &
+        app_dynview.DYNVIEW_INVALIDATE_PANEL != 0)
+    testing.expect(t, !runtime^.compile_cache.is_valid)
+}
+
+//   Verify overlapping splitter targets select the nearest visible line.
+@(test)
+splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
+    axis, hovered := splitter_hovered_axis({VIEW_WIDTH - 1, VIEW_HEIGHT - 3},
+        VIEW_WIDTH, VIEW_HEIGHT)
+    testing.expect(t, hovered)
+    testing.expect_value(t, axis, Splitter_Axis.Vertical)
+
+    axis, hovered = splitter_hovered_axis({VIEW_WIDTH - 3, VIEW_HEIGHT - 1},
+        VIEW_WIDTH, VIEW_HEIGHT)
+    testing.expect(t, hovered)
+    testing.expect_value(t, axis, Splitter_Axis.Horizontal)
+
+    axis, hovered = splitter_hovered_axis({VIEW_WIDTH - 2, VIEW_HEIGHT - 2},
+        VIEW_WIDTH, VIEW_HEIGHT)
+    testing.expect(t, hovered)
+    testing.expect_value(t, axis, Splitter_Axis.Vertical)
+}
+
+//   Verify splitter capture persists off-target, clamps, and releases on mouse-up.
+@(test)
+splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+    }
+    update_splitters(&ui_runtime, {
+        position = {VIEW_WIDTH, 20}, left_pressed = true, left_down = true}, 0.05)
+    testing.expect(t, splitter_owns_press(
+        ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID))
+
+    update_splitters(&ui_runtime, {
+        position = {0, 20}, left_down = true}, 0.05)
+    testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
+    testing.expect(t, ui_runtime.ui_press_owner.active)
+
+    update_splitters(&ui_runtime, {position = {0, 20}}, 0.05)
+    testing.expect(t, !ui_runtime.ui_press_owner.active)
+}
+
+//   Verify active GIF phases lock and release splitter interaction.
+@(test)
+gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
+    phases := [3]app_core.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    for phase in phases {
+        ui_runtime := app_core.Euclid_Ui_Runtime_State{
+            vertical_split_x = VIEW_WIDTH,
+            horizontal_split_y = VIEW_HEIGHT,
+            gif_capture_phase = phase,
+            ui_press_owner = {active = true, kind = .Splitter,
+                id = SPLITTER_VERTICAL_PRESS_ID},
+        }
+        update_splitters(&ui_runtime, {
+            position = {VIEW_WIDTH, 20}, left_pressed = true, left_down = true}, 0.05)
+        testing.expect(t, !ui_runtime.ui_press_owner.active)
+        testing.expect_value(t, ui_runtime.vertical_split_x, f32(VIEW_WIDTH))
+    }
 }
 
 //   Verify UI region validation rejects negative dimensions.

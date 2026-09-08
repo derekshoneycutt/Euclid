@@ -12,6 +12,10 @@ import "core:fmt"
 import rl "vendor:raylib"
 
 TREE_PANEL_PADDING :: 10
+WORLD_MIN_WIDTH :: 320
+WORLD_MIN_HEIGHT :: 240
+RIGHT_PANEL_MIN_WIDTH :: 240
+BOTTOM_PANEL_MIN_HEIGHT :: 140
 TREE_ROW_HEIGHT :: 22
 TREE_INDENT :: 16
 TREE_FONT_SIZE :: 16
@@ -121,12 +125,19 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
 
 //   Prepare frame geometry and report whether Dynview cache construction is required.
 prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
-    regions := compute_ui_regions(state^.ui_runtime.current_layout_mode)
+    ui_runtime := &state^.ui_runtime
+    mouse_input := view_core.capture_mouse_input_state()
+    frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
+    update_splitters(ui_runtime, mouse_input, frame_dt)
+    regions := compute_ui_regions(ui_runtime.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
     if !validate_ui_regions(regions) {
         fmt.println("[ui] Warning: invalid regions; using baseline fallback")
-        regions = compute_ui_regions(.Baseline)
+        regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
     }
     state^.ui_runtime.ui_regions = regions
+    view_core.fit_iso_scale_to_viewport(
+        state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
     text_panel := view_text_content_panel(regions.text_rect)
     dynview.track_panel(&state^.dynview, text_panel)
@@ -158,4 +169,5 @@ draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
     draw_tree_view(state, regions.tree_rect, mouse_input)
+    draw_splitters(&state^.ui_runtime, mouse_input.position)
 }

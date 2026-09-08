@@ -19,6 +19,30 @@ GIF_CAPTURE_QUALITY :: 12
 
 Gif_Capture_Session :: core.Gif_Capture_Session
 
+//   Logical, screen, and render extents used to resolve a framebuffer crop.
+Gif_Capture_Extents :: struct {
+    logical_width: int,
+    logical_height: int,
+    screen_width: int,
+    screen_height: int,
+    render_width: int,
+    render_height: int,
+}
+
+//   Freeze one framebuffer crop for the complete active GIF session.
+gif_capture_freeze_source_dimensions :: proc(
+    session: ^Gif_Capture_Session, width, height: int) {
+
+    session.source_width = max(1, width)
+    session.source_height = max(1, height)
+}
+
+//   Clear the framebuffer crop owned by a completed or aborted GIF session.
+gif_capture_clear_source_dimensions :: proc(session: ^Gif_Capture_Session) {
+    session.source_width = 0
+    session.source_height = 0
+}
+
 
 //   Clear transient GIF status note displayed in the settings panel.
 clear_gif_status_note :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
@@ -65,7 +89,8 @@ cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: st
 gif_capture_normalized_frame :: proc(
     state: ^core.Euclid_General_State, downsample: int) -> (rl.Image, bool) {
 
-    capture_w, capture_h := gif_capture_source_dimensions()
+    capture_w := max(1, state^.gif_capture.source_width)
+    capture_h := max(1, state^.gif_capture.source_height)
 
     image := rl.LoadImageFromScreen()
     if image.data == nil {
@@ -208,15 +233,14 @@ gif_capture_advance_recording :: proc(
 // Returns:
 //   - none.
 gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
-    if !session.active {
-        return
-    }
-
-    result := files.gif_encode_end(&session.encoder)
-    if len(result.data) > 0 {
-        files.gif_encode_free(&result)
+    if session.active {
+        result := files.gif_encode_end(&session.encoder)
+        if len(result.data) > 0 {
+            files.gif_encode_free(&result)
+        }
     }
     session.active = false
+    gif_capture_clear_source_dimensions(session)
 }
 
 //   Destroy GIF capture session resources, including encoder arena state.
@@ -306,19 +330,30 @@ gif_capture_scaled_extent :: #force_inline proc(
     return max(1, scaled)
 }
 
-//   Compute capture dimensions in framebuffer pixels for the world view area.
-gif_capture_source_dimensions :: proc() -> (int, int) {
-    screen_w := max(1, int(rl.GetScreenWidth()))
-    screen_h := max(1, int(rl.GetScreenHeight()))
-    render_w := max(1, int(rl.GetRenderWidth()))
-    render_h := max(1, int(rl.GetRenderHeight()))
+//   Scale logical world dimensions into bounded framebuffer capture dimensions.
+gif_capture_source_dimensions_for_framebuffer :: proc(
+    extents: Gif_Capture_Extents) -> (int, int) {
 
-    capture_w := gif_capture_scaled_extent(VIEW_WIDTH, screen_w, render_w)
-    capture_h := gif_capture_scaled_extent(VIEW_HEIGHT, screen_h, render_h)
+    capture_w := gif_capture_scaled_extent(
+        extents.logical_width, extents.screen_width, extents.render_width)
+    capture_h := gif_capture_scaled_extent(
+        extents.logical_height, extents.screen_height, extents.render_height)
 
-    capture_w = min(capture_w, render_w)
-    capture_h = min(capture_h, render_h)
+    capture_w = min(capture_w, extents.render_width)
+    capture_h = min(capture_h, extents.render_height)
     return capture_w, capture_h
+}
+
+//   Compute current world capture dimensions in framebuffer pixels.
+gif_capture_source_dimensions :: proc(world_rect: rl.Rectangle) -> (int, int) {
+    return gif_capture_source_dimensions_for_framebuffer({
+        logical_width = max(1, int(world_rect.width)),
+        logical_height = max(1, int(world_rect.height)),
+        screen_width = max(1, int(rl.GetScreenWidth())),
+        screen_height = max(1, int(rl.GetScreenHeight())),
+        render_width = max(1, int(rl.GetRenderWidth())),
+        render_height = max(1, int(rl.GetRenderHeight())),
+    })
 }
 
 //   Write encoded GIF bytes to disk at the provided path.
@@ -338,7 +373,8 @@ gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
 gif_capture_begin_session :: proc(
     state: ^core.Euclid_General_State) -> bool {
     ui_runtime := &state.ui_runtime
-    capture_w, capture_h := gif_capture_source_dimensions()
+    capture_w, capture_h := gif_capture_source_dimensions(
+        ui_runtime.ui_regions.world_rect)
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
     out_w := max(1, capture_w / downsample)
     out_h := max(1, capture_h / downsample)
@@ -348,6 +384,8 @@ gif_capture_begin_session :: proc(
     }
 
     state^.gif_capture.active = true
+    gif_capture_freeze_source_dimensions(
+        &state^.gif_capture, capture_w, capture_h)
     ui_runtime.gif_capture_frame_counter = 0
     ui_runtime.gif_captured_frames = 0
     return true
@@ -365,6 +403,7 @@ gif_capture_finalize_session :: proc(
 
     result := files.gif_encode_end(&state^.gif_capture.encoder)
     state^.gif_capture.active = false
+    gif_capture_clear_source_dimensions(&state^.gif_capture)
     if len(result.data) == 0 {
         return false
     }
