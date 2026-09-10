@@ -261,6 +261,17 @@ Terminal_Prompt_Draw :: struct {
     theme: Terminal_Draw_Theme,
 }
 
+// Complete state for drawing one single-line prompt and its overlays.
+Terminal_Single_Line_Prompt_Draw :: struct {
+    term: ^core.Terminal_State,
+    resolver: font.Font_Resolver,
+    layout: Terminal_Draw_Layout,
+    position: rl.Vector2,
+    regular: rl.Font,
+    current_text: string,
+    prompt_prefix: string,
+}
+
 // Complete state for drawing one physical row of a multiline prompt.
 Terminal_Multiline_Prompt_Row_Draw :: struct {
     term: ^core.Terminal_State,
@@ -307,6 +318,7 @@ Terminal_Prompt_Text_Draw :: struct {
 
 // Shared text, placement, font, and theme for cursor and selection overlays.
 Terminal_Text_Overlay_Draw :: struct {
+    resolver: font.Font_Resolver,
     font: rl.Font,
     text: string,
     position: rl.Vector2,
@@ -317,8 +329,8 @@ Terminal_Text_Overlay_Draw :: struct {
 Terminal_Shaped_Run_Workspace :: struct {
     text_storage: [TERMINAL_SHAPING_CAPACITY]u8,
     cell_offsets: [TERMINAL_SHAPING_RUN_COLUMNS + 1]int,
+    cell_columns: [TERMINAL_SHAPING_RUN_COLUMNS + 1]int,
     shaped_glyphs: [TERMINAL_SHAPING_CAPACITY]font.Shaped_Glyph,
     source_columns: [TERMINAL_SHAPING_CAPACITY]int,
-    atlas: rl.Font,
     glyph_count: int,
 }

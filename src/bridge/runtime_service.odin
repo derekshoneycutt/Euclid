@@ -37,9 +37,12 @@ Julia_Runtime_Host :: struct {
     terminal_start_session: ^julialib.jl_value_t,
     terminal_close_session: ^julialib.jl_value_t,
     terminal_ingest_evaluation: ^julialib.jl_value_t,
+    terminal_ingest_completion_preview: ^julialib.jl_value_t,
+    terminal_ingest_completion_candidates: ^julialib.jl_value_t,
     terminal_pump: ^julialib.jl_value_t,
     terminal_shutdown: ^julialib.jl_value_t,
     terminal_take_evaluation: ^julialib.jl_value_t,
+    terminal_take_completion: ^julialib.jl_value_t,
     terminal_take_session_lifecycle: ^julialib.jl_value_t,
     terminal_ingest_tick_configuration: ^julialib.jl_value_t,
     terminal_ingest_tick_pulse: ^julialib.jl_value_t,
@@ -2250,9 +2253,10 @@ initialize_julia_worker_host :: proc(
     return true
 }
 
-//   Construct and validate the rooted runtime host after native state exists.
-bind_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) -> bool {
-    main_module := julialib.julia_main_module()
+//   Bind Julia functions that accept native Terminal requests.
+bind_julia_terminal_ingress_callbacks :: proc(
+    host: ^Julia_Runtime_Host, main_module: ^julialib.jl_module_t) {
+
     host^.terminal_startup_banner = julialib.jl_get_function(
         main_module, "terminal_host_startup_banner")
     host^.terminal_start_session = julialib.jl_get_function(
@@ -2261,28 +2265,56 @@ bind_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) -> bool {
         main_module, "terminal_host_close_session")
     host^.terminal_ingest_evaluation = julialib.jl_get_function(
         main_module, "terminal_host_ingest_evaluation")
+    host^.terminal_ingest_completion_preview = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_completion_preview")
+    host^.terminal_ingest_completion_candidates = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_completion_candidates")
     host^.terminal_pump = julialib.jl_get_function(main_module, "terminal_host_pump")
     host^.terminal_shutdown = julialib.jl_get_function(
         main_module, "terminal_host_shutdown")
-    host^.terminal_take_evaluation = julialib.jl_get_function(
-        main_module, "terminal_host_take_evaluation")
-    host^.terminal_take_session_lifecycle = julialib.jl_get_function(
-        main_module, "terminal_host_take_session_lifecycle")
     host^.terminal_ingest_tick_configuration = julialib.jl_get_function(
         main_module, "terminal_host_ingest_tick_stream_configuration")
     host^.terminal_ingest_tick_pulse = julialib.jl_get_function(
         main_module, "terminal_host_ingest_tick_pulse")
+}
+
+//   Bind Julia functions that expose Terminal results to the native host.
+bind_julia_terminal_egress_callbacks :: proc(
+    host: ^Julia_Runtime_Host, main_module: ^julialib.jl_module_t) {
+
+    host^.terminal_take_evaluation = julialib.jl_get_function(
+        main_module, "terminal_host_take_evaluation")
+    host^.terminal_take_completion = julialib.jl_get_function(
+        main_module, "terminal_host_take_completion")
+    host^.terminal_take_session_lifecycle = julialib.jl_get_function(
+        main_module, "terminal_host_take_session_lifecycle")
     host^.terminal_take_tick_stream = julialib.jl_get_function(
         main_module, "terminal_host_take_tick_stream")
+}
+
+//   Report whether every required Terminal callback was bound.
+julia_terminal_callbacks_complete :: proc(host: ^Julia_Runtime_Host) -> bool {
     return host^.terminal_startup_banner != nil &&
         host^.terminal_start_session != nil &&
         host^.terminal_close_session != nil &&
-        host^.terminal_ingest_evaluation != nil && host^.terminal_pump != nil &&
+        host^.terminal_ingest_evaluation != nil &&
+        host^.terminal_ingest_completion_preview != nil &&
+        host^.terminal_ingest_completion_candidates != nil &&
+        host^.terminal_pump != nil &&
         host^.terminal_shutdown != nil && host^.terminal_take_evaluation != nil &&
+        host^.terminal_take_completion != nil &&
         host^.terminal_take_session_lifecycle != nil &&
         host^.terminal_ingest_tick_configuration != nil &&
         host^.terminal_ingest_tick_pulse != nil &&
         host^.terminal_take_tick_stream != nil
+}
+
+//   Construct and validate the rooted runtime host after native state exists.
+bind_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) -> bool {
+    main_module := julialib.julia_main_module()
+    bind_julia_terminal_ingress_callbacks(host, main_module)
+    bind_julia_terminal_egress_callbacks(host, main_module)
+    return julia_terminal_callbacks_complete(host)
 }
 
 //   Report which required Terminal callbacks were absent during host construction.
@@ -2293,9 +2325,12 @@ report_missing_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) {
         " start=", host^.terminal_start_session != nil,
         " close=", host^.terminal_close_session != nil,
         " ingest=", host^.terminal_ingest_evaluation != nil,
+        " completion_preview=", host^.terminal_ingest_completion_preview != nil,
+        " completion_candidates=", host^.terminal_ingest_completion_candidates != nil,
         " pump=", host^.terminal_pump != nil,
         " shutdown=", host^.terminal_shutdown != nil,
         " evaluation=", host^.terminal_take_evaluation != nil,
+        " completion=", host^.terminal_take_completion != nil,
         " lifecycle=", host^.terminal_take_session_lifecycle != nil)
 }
 
@@ -2472,6 +2507,40 @@ julia_terminal_ingest_evaluation :: proc(
     host^.terminal_request_id = request.request_id
     host^.terminal_generation = request.animation_generation
     return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Register one borrowed completion source with the rooted Julia Terminal host.
+julia_terminal_ingest_completion :: proc(
+    host: ^Julia_Runtime_Host, request: protocol.Completion_Requested) -> bool {
+    if host == nil || host^.runtime == nil {
+        return false
+    }
+    gc_stack := julialib.jl_get_pgcstack()
+    callback := host^.terminal_ingest_completion_preview
+    if request.show_candidates {
+        callback = host^.terminal_ingest_completion_candidates
+    }
+    if callback == nil || gc_stack == nil {
+        return false
+    }
+    frame := Julia_Terminal_Request_Gc_Frame{
+        encoded_root_count = (5 << 2) | 1,
+        previous = gc_stack^,
+    }
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_box_uint64(u64(request.request_id))
+    frame.roots[2] = julialib.jl_pchar_to_string(
+        cstring(raw_data(request.code)), len(request.code))
+    frame.roots[3] = julialib.jl_box_int32(i32(request.cursor_byte))
+    frame.roots[4] = julialib.jl_box_uint64(request.animation_generation)
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    result := julialib.jl_call(callback, &frame.roots[0], 5)
+    gc_stack^ = frame.previous
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_completion")
+        return false
+    }
+    return true
 }
 
 //   Deliver one native tick-stream configuration result on the Julia owner thread.
@@ -2693,6 +2762,72 @@ julia_terminal_emit_tick_stream :: proc(
     }
 }
 
+//   Publish one rooted Julia completion command through the native protocol.
+julia_terminal_send_completion :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    command: ^julialib.jl_value_t, kind: i32,
+    request_id: protocol.Request_Id) -> bool {
+    if kind == 2 {
+        return send_terminal_value_until_sent(service, protocol.Completion_Failed{
+            request_id = request_id,
+            animation_generation = host^.terminal_generation,
+            reason = protocol.Completion_Failure_Reason(julialib.jl_unbox_int32(
+                julialib.jl_get_nth_field(command, 7))),
+        })
+    }
+    insertion_value := julialib.jl_get_nth_field(command, 6)
+    insertion := string(julialib.jl_string_ptr(insertion_value))
+    for {
+        outcome := send_terminal_completion_result(service, {
+                    request_id = request_id,
+                    animation_generation = host^.terminal_generation,
+                    found = julialib.jl_unbox_bool(
+                        julialib.jl_get_nth_field(command, 2)) != 0,
+                    replacement_start = int(julialib.jl_unbox_int32(
+                        julialib.jl_get_nth_field(command, 3))),
+                    replacement_end = int(julialib.jl_unbox_int32(
+                        julialib.jl_get_nth_field(command, 4))),
+                    insertion = insertion,
+                    show_candidates = julialib.jl_unbox_bool(
+                        julialib.jl_get_nth_field(command, 5)) != 0,
+        })
+        if outcome == .Sent { return true }
+        if outcome == .Runtime_Stopping { return false }
+        time.sleep(time.Millisecond)
+    }
+}
+
+//   Publish every ready completion result through producer-owned pooled bytes.
+julia_terminal_emit_completions :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
+    for {
+        command := julialib.jl_call1(host^.terminal_take_completion, host^.runtime)
+        if command == nil || julialib.jl_exception_occurred() != nil {
+            print_julia_exception("terminal_host_take_completion")
+            return false
+        }
+        gc_stack := julialib.jl_get_pgcstack()
+        if gc_stack == nil { return false }
+        frame := Julia_Terminal_Command_Gc_Frame{
+            encoded_root_count = (1 << 2) | 1,
+            previous = gc_stack^,
+            command = command,
+        }
+        gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+        kind := i32(julialib.jl_unbox_int32(julialib.jl_get_nth_field(command, 0)))
+        if kind == 0 {
+            gc_stack^ = frame.previous
+            return true
+        }
+        request_id := protocol.Request_Id(julialib.jl_unbox_uint64(
+            julialib.jl_get_nth_field(command, 1)))
+        sent := julia_terminal_send_completion(
+            service, host, command, kind, request_id)
+        gc_stack^ = frame.previous
+        if !sent { return false }
+    }
+}
+
 //   Pump bounded Julia Terminal work and publish every ready evaluation command.
 julia_terminal_service :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
@@ -2708,6 +2843,7 @@ julia_terminal_service :: proc(
         return false
     }
     if !julia_terminal_emit_tick_stream(service, host) { return false }
+    if !julia_terminal_emit_completions(service, host) { return false }
     for {
         command := julialib.jl_call1(
             host^.terminal_take_evaluation, host^.runtime)
@@ -2731,13 +2867,19 @@ julia_terminal_dispatch_ingress :: proc(
     message: ^core.Julia_Host_Ingress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Session_Started:
-        return julia_terminal_session_call(
+        accepted := julia_terminal_session_call(
             host, host^.terminal_start_session, payload.animation_generation)
+        if accepted {
+            host^.terminal_generation = payload.animation_generation
+        }
+        return accepted
     case protocol.Terminal_Session_Closed:
         return julia_terminal_session_call(
             host, host^.terminal_close_session, payload.animation_generation)
     case protocol.Evaluation_Requested:
         return julia_terminal_ingest_evaluation(host, payload)
+    case protocol.Completion_Requested:
+        return julia_terminal_ingest_completion(host, payload)
     case protocol.Tick_Stream_Configuration_Acknowledged:
         return julia_terminal_ingest_tick_configuration(host, payload)
     case protocol.Tick_Pulse:

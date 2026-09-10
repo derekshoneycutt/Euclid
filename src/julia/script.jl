@@ -151,6 +151,27 @@ function terminal_host_take_evaluation(host::EuclidRuntimeHost)
     return EuclidHost.take_evaluation_for_host(host.terminal)
 end
 
+"""Register one automatic completion-preview request with the active Terminal host."""
+function terminal_host_ingest_completion_preview(
+    host::EuclidRuntimeHost, request_id::UInt64, source::String,
+    cursor_byte::Int32, session_generation::UInt64)
+    return EuclidHost.ingest_completion_preview_for_host(
+        host.terminal, request_id, source, cursor_byte, session_generation)
+end
+
+"""Register one explicit completion candidate request with the active Terminal host."""
+function terminal_host_ingest_completion_candidates(
+    host::EuclidRuntimeHost, request_id::UInt64, source::String,
+    cursor_byte::Int32, session_generation::UInt64)
+    return EuclidHost.ingest_completion_candidates_for_host(
+        host.terminal, request_id, source, cursor_byte, session_generation)
+end
+
+"""Take one primitive Terminal completion command without blocking."""
+function terminal_host_take_completion(host::EuclidRuntimeHost)
+    return EuclidHost.take_completion_for_host(host.terminal)
+end
+
 """Take one primitive Terminal session lifecycle command without blocking."""
 function terminal_host_take_session_lifecycle(host::EuclidRuntimeHost)
     return EuclidHost.take_session_lifecycle_for_host(host.terminal)

@@ -4,6 +4,7 @@ import "base:runtime"
 import bridge "../bridge"
 import "../core"
 import protocol "../core/protocol"
+import termhist "../terminal/history"
 import "input"
 import terminalview "terminal"
 import "ui"
@@ -273,6 +274,40 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
     testing.expect(t, terminal_service_test_contains(state, "first"))
     testing.expect(t, terminal_service_test_contains(state, "second"))
     testing.expect(t, !state^.terminal.awaiting_eval)
+    terminalview.terminal_destroy(&state^.terminal)
+}
+
+// Verify only a current ambiguous completion may append its candidate table.
+@(test)
+terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: core.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 16)
+    defer core.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminal_service_enter(state))
+    testing.expect(t, termhist.termhist_insert_text(state^.terminal.history, "pri"))
+    request := terminalview.terminal_request_completion(&state^.terminal)
+    result := core.Julia_Host_Egress(protocol.Completion_Result{
+        request_id = request.request_id,
+        animation_generation = 16,
+        found = false,
+        insertion = "print  println\n",
+        show_candidates = true,
+    })
+    testing.expect(t, terminal_service_dispatch_completion_result(state, &result))
+    testing.expect(t, terminal_service_test_contains(state, "print  println"))
+
+    stale_request := terminalview.terminal_request_completion(&state^.terminal)
+    stale := core.Julia_Host_Egress(protocol.Completion_Result{
+        request_id = stale_request.request_id,
+        animation_generation = 15,
+        found = false,
+        insertion = "stale candidate\n",
+        show_candidates = true,
+    })
+    testing.expect(t, !terminal_service_dispatch_completion_result(state, &stale))
+    testing.expect(t, !terminal_service_test_contains(state, "stale candidate"))
     terminalview.terminal_destroy(&state^.terminal)
 }
 

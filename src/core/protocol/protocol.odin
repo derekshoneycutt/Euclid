@@ -257,9 +257,10 @@ Completion_Result :: struct {
 // Stable reason one correlated completion request could not produce a result.
 Completion_Failure_Reason :: enum i32 {
     Mailbox_Full = 1,
-    Runtime_Stopped,
-    Internal_Failure,
-    Duplicate_Request,
+    Actor_Stopped = 2,
+    Runtime_Stopped = 3,
+    Internal_Failure = 4,
+    Duplicate_Request = 5,
 }
 
 // Terminal failure for one correlated completion request.

@@ -145,7 +145,7 @@ terminal_service_dispatch_completion_result :: proc(
     #partial switch payload in message^ {
     case protocol.Completion_Result:
         if terminal_service_generation_matches(state, payload.animation_generation) {
-            return terminalview.terminal_set_completion_preview(
+            accepted := terminalview.terminal_set_completion_preview(
                 &state^.terminal, {
                     request_id = payload.request_id,
                     found = payload.found,
@@ -153,6 +153,12 @@ terminal_service_dispatch_completion_result :: proc(
                     replacement_end = payload.replacement_end,
                     insertion = payload.insertion,
                 })
+            if accepted && payload.show_candidates && !payload.found &&
+                len(payload.insertion) > 0 {
+                terminalview.terminal_append_ansi_output(
+                    &state^.terminal, payload.insertion)
+            }
+            return accepted
         }
     case protocol.Completion_Failed:
         if terminal_service_generation_matches(state, payload.animation_generation) {
@@ -269,6 +275,28 @@ terminal_service_apply_submission :: proc(
     }
 }
 
+// Send one correlated completion snapshot through the Julia-host ingress link.
+terminal_service_send_completion :: proc(
+    state: ^core.Euclid_General_State,
+    completion: terminalview.Terminal_Completion_Request) {
+
+    if !completion.requested {
+        return
+    }
+    outcome := julia.send_terminal_completion_request(
+        state^.julia_runtime_service, {
+            request_id = completion.request_id,
+            animation_generation = state^.terminal.animation_generation,
+            code = completion.code,
+            cursor_byte = completion.cursor_byte,
+            show_candidates = completion.show_candidates,
+        })
+    if outcome != .Sent {
+        _ = terminalview.terminal_fail_completion(
+            &state^.terminal, completion.request_id)
+    }
+}
+
 // Update the selected fixed-panel Terminal before simulation preparation.
 terminal_service_update :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
@@ -284,10 +312,11 @@ terminal_service_update :: proc(
         return
     }
     bounds := ui.terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
-    terminal_font := font.cache_resolve(&state^.font_cache, .Terminal_Regular)
+    terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
     shell_was_running := state^.shell.phase == .Running
     update := ui.terminal_update(&state^.terminal, frame, terminal_font, bounds)
     terminal_service_apply_submission(state, update.submission)
+    terminal_service_send_completion(state, update.completion)
     shell_frame := terminalview.terminal_resolve_mouse_frame(
         &state^.terminal, frame, bounds)
     shell_service_update(

@@ -34,6 +34,61 @@ function drain_runtime_host_evaluation(host::EuclidRuntimeHost, request_id::UInt
     error("runtime host evaluation did not complete within the bounded pump limit")
 end
 
+"""Drain one correlated completion command through the Terminal actor services."""
+function drain_runtime_host_completion(
+    host::EuclidRuntimeHost, request_id::UInt64)
+    for _ in 1:4096
+        pump_euclid_terminal!(host)
+        command = EuclidHost.take_completion_for_host(host.terminal)
+        command.kind == Int32(0) && continue
+        command.request_id == request_id && return command
+    end
+    error("runtime host completion did not complete within the bounded pump limit")
+end
+
+"""Pump until the requested Terminal generation reports session readiness."""
+function await_runtime_host_session(host::EuclidRuntimeHost, generation::UInt64)
+    for _ in 1:4096
+        pump_euclid_terminal!(host)
+        command = EuclidHost.take_session_lifecycle_for_host(host.terminal)
+        command.kind == Int32(1) && command.generation == generation && return true
+    end
+    return false
+end
+
+@testset "runtime host terminal completion" begin
+    host = create_euclid_runtime_host(Ptr{Cvoid}(1))
+    @test start_euclid_terminal_session!(host, UInt64(4))
+    @test await_runtime_host_session(host, UInt64(4))
+
+    source = "α = printl"
+    cursor_byte = Int32(ncodeunits(source))
+    EuclidHost.ingest_completion_preview_for_host(
+        host.terminal, UInt64(41), source, cursor_byte, UInt64(4))
+    preview = drain_runtime_host_completion(host, UInt64(41))
+    @test preview.kind == Int32(1)
+    @test preview.found
+    @test preview.replacement_start == Int32(ncodeunits("α = "))
+    @test preview.replacement_end == cursor_byte
+    @test preview.insertion == "println"
+    @test !preview.show_candidates
+
+    EuclidHost.ingest_completion_candidates_for_host(
+        host.terminal, UInt64(42), "Base.", Int32(5), UInt64(4))
+    candidates = drain_runtime_host_completion(host, UInt64(42))
+    @test candidates.kind == Int32(1)
+    @test !candidates.found
+    @test candidates.show_candidates
+    @test !isempty(candidates.insertion)
+
+    @test close_euclid_terminal_session!(host, UInt64(4))
+    while host.terminal.session.phase !== EuclidHost.HostSessionQuiescent
+        pump_euclid_terminal!(host)
+        EuclidActorRuntime.take_outgoing!(host.terminal.actors)
+    end
+    @test shutdown_euclid_terminal!(host)
+end
+
 @testset "runtime host terminal evaluation" begin
     host = create_euclid_runtime_host(Ptr{Cvoid}(1))
     @test start_euclid_terminal_session!(host, UInt64(1))

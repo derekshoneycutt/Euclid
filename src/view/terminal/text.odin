@@ -1,11 +1,11 @@
 package terminalview
 
 import "../../core"
+import termgrid "../../terminal/grid"
 import termhist "../../terminal/history"
 
 import "core:fmt"
 import "core:math"
-import "core:unicode/utf8"
 
 import rl "vendor:raylib"
 
@@ -174,37 +174,29 @@ terminal_byte_offset_for_x :: proc(
         return 0
     }
 
-    if len(line_text) == 0 {
-        return int(relative_x / column_width + 0.5)
-    }
+    target_column := int(relative_x / column_width + 0.5)
+    return terminal_byte_offset_for_column(line_text, target_column)
+}
 
-    codepoint_count := utf8.rune_count_in_string(line_text)
-    if codepoint_count == 0 {
-        return int(relative_x / column_width + 0.5)
+// Map a terminal column to its containing grapheme's UTF-8 byte boundary.
+terminal_byte_offset_for_column :: proc(
+    line_text: string, target_column: int) -> int {
+    cells: [TERMINAL_SHAPING_RUN_COLUMNS]termgrid.Cell
+    cell_count, built := terminal_prompt_cells(line_text, cells[:])
+    if !built {
+        return target_column
     }
-
-    line_width := rl.MeasureTextEx(font, fmt.ctprintf("%s", line_text),
-        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING).x
-    if line_width <= 0 {
-        return int(relative_x / column_width + 0.5)
+    column := 0
+    byte_offset := 0
+    for cell in cells[:cell_count] {
+        next_column := column + max(int(cell.width), 1)
+        if target_column < next_column {
+            return byte_offset
+        }
+        column = next_column
+        byte_offset += int(cell.grapheme_len)
     }
-
-    if relative_x >= line_width {
-        extra_columns := int((relative_x - line_width) / column_width + 0.5)
-        return len(line_text) + extra_columns
-    }
-
-    // Font is guaranteed monospace, so a uniform advance is a valid approximation.
-    glyph_advance := line_width / f32(codepoint_count)
-    codepoint_index := int(relative_x / glyph_advance + 0.5)
-    codepoint_index = math.clamp(codepoint_index, 0, codepoint_count)
-
-    offset := 0
-    for i := 0; i < codepoint_index && offset < len(line_text); i += 1 {
-        _, width := utf8.decode_rune(line_text[offset:])
-        offset += width
-    }
-    return offset
+    return len(line_text) + max(target_column - column, 0)
 }
 
 //   Compute a line's selected byte sub-range, if the line falls within the

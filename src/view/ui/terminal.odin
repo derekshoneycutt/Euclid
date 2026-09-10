@@ -90,5 +90,5 @@ terminal_draw :: proc(
     })
     terminalview.terminal_commit_scroll(
         term, scroll_end.scroll_y_out, layout.content_height)
-    terminalview.terminal_draw_overlays(term, layout)
+    terminalview.terminal_draw_overlays(term, resolver, layout)
 }

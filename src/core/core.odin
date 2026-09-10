@@ -78,7 +78,7 @@ DYNVIEW_MAX_DOCUMENT_BREAK_WORK :: 1024 * 1024
 DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS ::
     DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS + DYNVIEW_MAX_DOCUMENT_INLINES
 
-FONT_KEY_COUNT :: int(Font_Key.Terminal_Regular) + 1
+FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
 FONT_SOURCE_PATH_CAPACITY :: 1024
 FONT_GLYPH_PAGE_CAPACITY :: 32
 FONT_SEED_CODEPOINT_CAPACITY :: 512
@@ -1871,7 +1871,6 @@ Font_Key :: enum {
     Black,
     Black_Italic,
     Math_Regular,
-    Terminal_Regular,
 }
 
 Font_Load_State :: enum {

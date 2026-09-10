@@ -28,11 +28,49 @@ Terminal_Test_Hyperlink_Activation :: struct {
 Terminal_Test_Clipboard_Text ::
     [termclipboard.CLIPBOARD_TEXT_BYTE_CAPACITY]u8
 
+// Fake paged-font state used to verify terminal shaped-run publication boundaries.
+Terminal_Test_Shaped_Font :: struct {
+    resident: bool,
+    resolve_count: int,
+    pending_fallback_count: int,
+}
+
 // Fake display adapter facts captured by clipboard publication tests.
 Terminal_Test_Clipboard_Writes :: struct {
     values: [termclipboard.CLIPBOARD_ACTION_CAPACITY]Terminal_Test_Clipboard_Text,
     lengths: [termclipboard.CLIPBOARD_ACTION_CAPACITY]int,
     count: int,
+}
+
+// Return one high glyph ID for every bounded terminal shaping request.
+terminal_test_shape_high_glyph :: proc(
+    _: rawptr, _: font.Font_Key, _: string,
+    output: []font.Shaped_Glyph) -> (int, bool) {
+
+    if len(output) == 0 { return 0, false }
+    output[0] = {glyph_id = 4000, x_advance = 10}
+    return 1, true
+}
+
+// Resolve the fake high glyph only after the test marks its page resident.
+terminal_test_resolve_high_glyph :: proc(
+    user_data: rawptr, _: font.Font_Key,
+    glyph_id: u32) -> (font.Resolved_Glyph, bool) {
+
+    state := cast(^Terminal_Test_Shaped_Font)user_data
+    state.resolve_count += 1
+    if !state.resident || glyph_id != 4000 { return {}, false }
+    return {base_size = 32}, true
+}
+
+// Record pending-glyph fallback without retaining test request data.
+terminal_test_record_shape_fallback :: proc(
+    user_data: rawptr, reason: font.Shape_Fallback_Reason) {
+
+    if reason == .Pending_Glyph {
+        state := cast(^Terminal_Test_Shaped_Font)user_data
+        state.pending_fallback_count += 1
+    }
 }
 
 // Verify container theme replaces only semantic default foreground references.
@@ -958,7 +996,7 @@ terminal_test_shape_run_utf8_mapping :: proc(t: ^testing.T) {
     testing.expect_value(t, second, 1)
 }
 
-// Verify composed narrow clusters shape as one cell while wide emoji use fallback.
+// Verify composed narrow and wide clusters shape while continuation cells do not.
 @(test)
 terminal_test_unicode_cluster_shaping_boundaries :: proc(t: ^testing.T) {
     combining := terminal_test_cell("e\u0301")
@@ -968,7 +1006,7 @@ terminal_test_unicode_cluster_shaping_boundaries :: proc(t: ^testing.T) {
     cells := [3]termgrid.Cell{combining, emoji, continuation}
 
     testing.expect(t, terminal_cell_shape_eligible(&cells[0]))
-    testing.expect(t, !terminal_cell_shape_eligible(&cells[1]))
+    testing.expect(t, terminal_cell_shape_eligible(&cells[1]))
     testing.expect(t, !terminal_cell_shape_eligible(&cells[2]))
     storage: [16]u8
     offsets: [2]int
@@ -977,6 +1015,48 @@ terminal_test_unicode_cluster_shaping_boundaries :: proc(t: ^testing.T) {
     testing.expect(t, built)
     testing.expect_value(t, text, "e\u0301")
     testing.expect_value(t, offsets, [2]int{0, len("e\u0301")})
+}
+
+// Verify prompt UTF-8 uses the same bounded grapheme and width policy as the grid.
+@(test)
+terminal_test_prompt_cells_preserve_unicode_clusters :: proc(t: ^testing.T) {
+    cells: [8]termgrid.Cell
+    count, built := terminal_prompt_cells("A界e\u0301👩‍💻", cells[:])
+
+    testing.expect(t, built)
+    testing.expect_value(t, count, 4)
+    testing.expect_value(t, string(cells[0].grapheme[:cells[0].grapheme_len]), "A")
+    testing.expect_value(t, cells[0].width, u8(1))
+    testing.expect_value(t, string(cells[1].grapheme[:cells[1].grapheme_len]), "界")
+    testing.expect_value(t, cells[1].width, u8(2))
+    testing.expect_value(
+        t, string(cells[2].grapheme[:cells[2].grapheme_len]), "e\u0301")
+    testing.expect_value(t, cells[2].width, u8(1))
+    testing.expect_value(
+        t, string(cells[3].grapheme[:cells[3].grapheme_len]), "👩‍💻")
+    testing.expect_value(t, cells[3].width, u8(2))
+}
+
+// Verify regional indicators remain one bounded prompt grapheme.
+@(test)
+terminal_test_prompt_cells_join_regional_pair :: proc(t: ^testing.T) {
+    cells: [2]termgrid.Cell
+    count, built := terminal_prompt_cells("🇺🇸", cells[:])
+
+    testing.expect(t, built)
+    testing.expect_value(t, count, 1)
+    testing.expect_value(
+        t, string(cells[0].grapheme[:cells[0].grapheme_len]), "🇺🇸")
+}
+
+// Verify prompt cursor geometry counts terminal columns rather than UTF-8 bytes.
+@(test)
+terminal_test_unicode_text_column_count :: proc(t: ^testing.T) {
+    testing.expect_value(t, terminal_text_column_count("ASCII"), 5)
+    testing.expect_value(t, terminal_text_column_count("e\u0301"), 1)
+    testing.expect_value(t, terminal_text_column_count("A界B"), 4)
+    testing.expect_value(t, terminal_text_column_count("👩‍💻"), 2)
+    testing.expect_value(t, terminal_text_column_count("🇺🇸"), 2)
 }
 
 // Verify maximum-width rows partition completely into bounded shaping chunks.
@@ -995,20 +1075,46 @@ terminal_test_shape_workspace_accepts_maximum_width :: proc(t: ^testing.T) {
     testing.expect_value(t, chunks, 2)
 }
 
-// Verify shaped output must preserve one equal horizontal advance per source cell.
+// Verify shaped output accepts ligatures and combining marks but remains horizontal.
 @(test)
 terminal_test_shaped_run_advance_validation :: proc(t: ^testing.T) {
-    atlas := font_test_atlas(8)
     glyphs := [2]font.Shaped_Glyph{
-        {glyph_id = 2, x_advance = 10},
-        {glyph_id = 3, cluster = 1, x_advance = 10},
+        {glyph_id = 2000, x_advance = 20},
+        {glyph_id = 3000, cluster = 1, x_advance = 0},
     }
-    testing.expect(t, terminal_shaped_run_is_valid(glyphs[:], 2, 2, atlas))
-    glyphs[1].x_advance = 9
-    testing.expect(t, !terminal_shaped_run_is_valid(glyphs[:], 2, 2, atlas))
-    glyphs[1].x_advance = 10
-    glyphs[1].glyph_id = 8
-    testing.expect(t, !terminal_shaped_run_is_valid(glyphs[:], 2, 2, atlas))
+    testing.expect(t, terminal_shaped_run_is_valid(glyphs[:], 2, 2))
+    glyphs[0].x_advance = 0
+    testing.expect(t, !terminal_shaped_run_is_valid(glyphs[:], 2, 2))
+    glyphs[0].x_advance = 20
+    glyphs[1].y_advance = 1
+    testing.expect(t, !terminal_shaped_run_is_valid(glyphs[:], 2, 2))
+}
+
+// Verify a paged Unicode glyph defers the whole run until it becomes resident.
+@(test)
+terminal_test_shaped_run_waits_for_paged_glyph :: proc(t: ^testing.T) {
+    state: Terminal_Test_Shaped_Font
+    resolver := font.Font_Resolver{
+        user_data = &state,
+        resolve_glyph = terminal_test_resolve_high_glyph,
+        shape = terminal_test_shape_high_glyph,
+        record_shape_fallback = terminal_test_record_shape_fallback,
+    }
+    cell := terminal_test_cell("λ")
+    request := Terminal_Shaped_Run_Draw{
+        resolver = resolver,
+        cells = []termgrid.Cell{cell},
+        column_width = 10,
+        key = .Regular,
+    }
+    workspace: Terminal_Shaped_Run_Workspace
+
+    testing.expect(t, !terminal_prepare_shaped_run(request, &workspace))
+    testing.expect_value(t, state.resolve_count, 1)
+    testing.expect_value(t, state.pending_fallback_count, 1)
+    state.resident = true
+    testing.expect(t, terminal_prepare_shaped_run(request, &workspace))
+    testing.expect_value(t, workspace.shaped_glyphs[0].glyph_id, u32(4000))
 }
 
 // Verify shaped whitespace has no drawable atlas area.
@@ -1039,6 +1145,16 @@ terminal_test_prompt_line :: proc(t: ^testing.T) {
     testing.expect_value(t, terminal_prompt_line(""), "julia> ")
     testing.expect_value(t, terminal_prompt_draw_color(.Shell),
         TERMINAL_SHELL_PROMPT_COLOR)
+}
+
+// Verify prompt hit testing follows grapheme widths and returns UTF-8 boundaries.
+@(test)
+terminal_test_prompt_hit_testing_uses_unicode_columns :: proc(t: ^testing.T) {
+    testing.expect_value(t, terminal_byte_offset_for_column("A界B", 1), 1)
+    testing.expect_value(t, terminal_byte_offset_for_column("A界B", 2), 1)
+    testing.expect_value(t, terminal_byte_offset_for_column("A界B", 3), 4)
+    testing.expect_value(t, terminal_byte_offset_for_column("e\u0301x", 1), 3)
+    testing.expect_value(t, terminal_byte_offset_for_column("e\u0301x", 2), 4)
 }
 
 // Verify copy requires Shift so plain Ctrl+C remains a foreground interrupt.
